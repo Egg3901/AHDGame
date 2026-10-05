@@ -3,6 +3,7 @@ import { useSyncExternalStore } from "react";
 import { useGameEvents } from "@/hooks/useGameEvents";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { ResetSystem, ResetSystemVersion } from "@/lib/resetVersions/rules";
 
 export interface WorldFlags {
   maastrichtEligibleCountries?: string[];
@@ -24,6 +25,12 @@ export interface WorldFlags {
   incomeBandIndexByCountry: Partial<Record<string, number>> | null;
   /** Live election results page master gate; gates "Live Results" links. */
   liveElectionResultsEnabled: boolean;
+  /** Effective, seed-verified versions; admin selections for a future reset are excluded. */
+  resetSystemVersions: Record<ResetSystem, ResetSystemVersion>;
+  /** Only these countries may use a v2 selection; all others remain on v1. */
+  resetV2Countries: readonly string[];
+  /** Version-dependent screens must not interpret a failed flag read as v1. */
+  failed: boolean;
   /**
    * False until the fetch settles. Callers that pick era-specific assets should
    * wait on this — otherwise they render the 2019 default for a frame and then
@@ -43,6 +50,9 @@ const DEFAULT_FLAGS: WorldFlags = {
   startingYear: null,
   incomeBandIndexByCountry: null,
   liveElectionResultsEnabled: false,
+  resetSystemVersions: { metrics: "v1", legislation: "v1", cabinet: "v1" },
+  resetV2Countries: [],
+  failed: false,
   loaded: false,
 };
 
@@ -61,11 +71,21 @@ function refreshFlags(): Promise<void> {
       return response.json();
     })
     .then((data: WorldFlags) => {
-      currentFlags = { ...DEFAULT_FLAGS, ...data, loaded: true };
+      if (
+        !Array.isArray(data.resetV2Countries) ||
+        !data.resetSystemVersions ||
+        (["metrics", "legislation", "cabinet"] as const).some(
+          (system) =>
+            data.resetSystemVersions[system] !== "v1" && data.resetSystemVersions[system] !== "v2"
+        )
+      ) {
+        throw new Error("world version metadata is incomplete");
+      }
+      currentFlags = { ...DEFAULT_FLAGS, ...data, loaded: true, failed: false };
     })
     .catch((err) => {
       console.debug("world flags fetch failed", err);
-      currentFlags = { ...currentFlags, loaded: true };
+      currentFlags = { ...currentFlags, loaded: true, failed: true };
     })
     .finally(() => {
       inFlight = null;

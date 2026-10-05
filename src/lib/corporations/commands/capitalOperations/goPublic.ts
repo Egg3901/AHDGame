@@ -232,7 +232,7 @@ export async function goPublic(input: GoPublicInput): Promise<GoPublicResult> {
       ];
       const settlementInput: PrimaryUnderwritingFillInput = {
         bank: underwriting.bank,
-        issuer: { _id: corporation._id, name: corporation.name },
+        issuer: corporation,
         issuerCurrencyCode: underwriting.offer.currencyCode,
         offer: underwritingOffer,
         instrumentId: underwritingId,

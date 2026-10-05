@@ -8,9 +8,15 @@ import type {
   PoliticalMetricsHistoryDoc,
 } from "@/lib/db/types/politicalMetrics";
 import { resolveCountryIdentity } from "@/lib/country/countryIdentity";
+import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { loadDemocraticCompetition } from "@/lib/governanceStyle/loadCompetition";
 import { scoreGovernanceStyle, type GovernanceStyleScore } from "@/lib/governanceStyle/score";
 import { getEnactedLevels } from "@/lib/politicalLegislation/enactedLevels";
+import {
+  loadPublicHealthDeliveryMultiplier,
+  US_PUBLIC_HEALTH_POLITICAL_LAW_ID,
+} from "@/lib/governmentFinance/deliveryMultiplier";
+import { loadDepartmentDeliveryMultipliersByCountry } from "@/lib/governmentFinance/deliveryMultipliers";
 import { lawTargets } from "@/lib/politicalLegislation/dynamics";
 import {
   CABINET_RESIDUAL_CAP_PER_SOURCE,
@@ -132,6 +138,8 @@ export async function loadCountryPoliticalMetrics(
           currentTurn: 1,
           startingYear: 1,
           preset: 1,
+          departmentProgramSliceEnabled: 1,
+          departmentFinanceEnabled: 1,
           presidentialTenureByCountry: 1,
         },
       }
@@ -149,6 +157,27 @@ export async function loadCountryPoliticalMetrics(
     countryId,
     states
   );
+  const generalizedFinanceEnabled = gameState?.departmentFinanceEnabled === true;
+  const nationalContributionMultipliers = generalizedFinanceEnabled
+    ? (
+        await loadDepartmentDeliveryMultipliersByCountry(db, gameState?.currentTurn ?? 1, true, [
+          countryId,
+        ])
+      ).get(countryId)
+    : countryId === COUNTRY_CONFIGS.US.id
+      ? new Map([
+          [
+            US_PUBLIC_HEALTH_POLITICAL_LAW_ID,
+            (
+              await loadPublicHealthDeliveryMultiplier(
+                db,
+                gameState?.currentTurn ?? 1,
+                gameState?.departmentProgramSliceEnabled === true
+              )
+            ).multiplier,
+          ],
+        ])
+      : undefined;
 
   // SP2 (§5/§6): trend history + the modifiers decomposition — the dynamics
   // engine's own arithmetic served read-time. The stored series caps at 365
@@ -158,7 +187,7 @@ export async function loadCountryPoliticalMetrics(
   const historyDoc = await db
     .collection<PoliticalMetricsHistoryDoc>("politicalMetricsHistory")
     .findOne({ _id: countryId }, { projection: { entries: { $slice: -SERVED_HISTORY_ENTRIES } } });
-  const nationalLawPoints = lawTargets(countryId, enactedLevels);
+  const nationalLawPoints = lawTargets(countryId, enactedLevels, nationalContributionMultipliers);
   const totalPopulation = states.reduce((sum, s) => sum + (s.population ?? 0), 0);
   const meanResidual = (metricId: PoliticalMetricId): number => {
     if (totalPopulation <= 0) return 0;
@@ -243,6 +272,7 @@ export async function loadCountryPoliticalMetrics(
       countryId,
       metricId,
       nationalLevels: enactedLevels,
+      nationalContributionMultipliers,
       regionalLevels: new Map(),
       nationalPoints: nationalLawPoints[metricId],
       regionalSupplementPoints: 0,

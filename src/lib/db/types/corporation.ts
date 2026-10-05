@@ -1,5 +1,9 @@
 import type { ObjectId } from "mongodb";
-import type { ManufacturingDevelopmentCashReceiptV2 } from "@/lib/products/manufacturingProject";
+import type {
+  ManufacturingDevelopmentCashReceiptV2,
+  ManufacturingProductAdvertisingObligationV2,
+  ManufacturingProductAdvertisingReceiptV2,
+} from "@/lib/products/manufacturingProject";
 import type {
   MediaProductAdvertisingReceipt,
   MediaProductDevelopmentReceipt,
@@ -12,6 +16,7 @@ import type {
 import type { CountryId } from "../../constants/countries";
 import type { CurrencyCode } from "../../constants/currencies";
 import type { ExtractableResource } from "../../constants/commodities";
+import type { ProductAdvertisingDenominationWitness } from "@/lib/products/rules/productAdvertising";
 
 export interface Shareholder {
   /** Character holder, present for character-owned positions */
@@ -42,11 +47,15 @@ export interface MediaProductAdvertisingObligationV1 {
   buyerAmountLocal: number;
   buyerCurrencyCode: CurrencyCode;
   buyerLocalPerAnchor: number;
+  /** Absent on obligations persisted before raw-denomination guards were added. */
+  buyerDenomination?: ProductAdvertisingDenominationWitness;
   sellerAllocations: Array<{
     corporationId: string;
     amountLocal: number;
     currencyCode: CurrencyCode;
     localPerAnchor: number;
+    /** Absent on obligations persisted before raw-denomination guards were added. */
+    denomination?: ProductAdvertisingDenominationWitness;
   }>;
 }
 
@@ -216,6 +225,13 @@ export interface Corporation {
   };
   /** Issuer-selected primary-market underwriter for future issues. */
   primaryUnderwritingMandate?: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingMandate;
+  primaryUnderwritingMandateRevision?: number;
+  /** Incoming funded proceeds pin the issuer's native cash denomination until ACK. */
+  primaryUnderwritingIncomingFunding?: {
+    key: string;
+    currencySnapshot: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingCurrencySnapshot;
+    turn: number;
+  };
   /** Frozen unpaid founding IPO plan. The corporation remains private until its journal publishes it. */
   foundingIpoUnderwritingPending?: {
     offer: import("@/lib/banking/underwritingTypes").PrimaryUnderwritingOffer & {
@@ -241,6 +257,27 @@ export interface Corporation {
     issuerName: string;
     poolCollection: "equityMarketPools" | "bondMarketPools";
     instrumentProjection: import("@/lib/banking/rules/boundary").TransitionProjection;
+  };
+  /** Frozen relocation-bond quote held until the matching bond and HQ update ACK. */
+  headquartersRelocationBondFunding?: {
+    operationKey: string;
+    targetStateId: string;
+    targetCountryId: CountryId;
+    turn: number;
+    relocationCostAnchor: number;
+    crossCountry: boolean;
+    relocationSpreadAnchor: number;
+    currencyCode: CurrencyCode;
+    nativeFxRate: number;
+    sourceCountryIdPresent: boolean;
+    sourceCountryId?: CountryId;
+    sourceLiquidCurrencyCodePresent: boolean;
+    sourceLiquidCurrencyCode?: CurrencyCode;
+    bondId: ObjectId;
+    preflight: import("@/lib/corporations/issueRelocationBond").RelocationBondPreflight;
+    ceoVacated: boolean;
+    ceoId?: ObjectId;
+    ceoType?: Corporation["ceoType"];
   };
   /** Cumulative fees from actually funded primary placements, by native currency. */
   bankUnderwritingIncomeByCurrency?: Partial<Record<CurrencyCode, number>>;
@@ -577,6 +614,8 @@ export interface Corporation {
   ownershipState?: "private" | "stateOwned";
   /** Turn this corp was last nationalized. Powers the re-nationalization cooldown (P4+). */
   nationalizedAtTurn?: number;
+  /** Stable mode marker for an interrupted funded whole-corporation taking. */
+  pendingFundedNationalization?: { operationKey: string };
   /**
    * Turn this corp was spun out of a National Corporation (privatization). Powers
    * the re-nationalization cooldown (spec §13.4). Distinct from `lastPrivatizationTurn`
@@ -678,6 +717,8 @@ export interface Corporation {
   averageQuality?: number;
   /** Project-bound cash receipt written beside the R&D cash debit while product lines v2 is on. */
   manufacturingProductDevelopmentReceiptV2?: ManufacturingDevelopmentCashReceiptV2;
+  manufacturingProductAdvertisingObligationsV2?: ManufacturingProductAdvertisingObligationV2[];
+  manufacturingProductAdvertisingReceiptV2?: ManufacturingProductAdvertisingReceiptV2;
   mediaProductDevelopmentReceiptV1?: MediaProductDevelopmentReceipt;
   mediaProductAdvertisingReceiptV1?: MediaProductAdvertisingReceipt;
   /** Frozen original buyer quote, including seller allocations, until durable settlement completes. */
@@ -1255,6 +1296,8 @@ export interface CorporateSector {
   constructionFinancing?: import("@/lib/banking/rules/constructionBuild").ConstructionBuildClaim;
   /** A durable owner mutation excludes new construction claims until completion. */
   constructionPropertyTransition?: { key: string; kind: string };
+  /** Stable mode marker for an interrupted funded single-sector nationalization. */
+  pendingFundedNationalization?: { operationKey: string };
   /**
    * Plants tier (P3a): construction in progress, in ₳ (anchor), the sum of
    * `costPaidAnchor` across the outstanding `buildQueue` orders (D10).

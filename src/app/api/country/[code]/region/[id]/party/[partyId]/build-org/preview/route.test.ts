@@ -106,7 +106,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
     });
   });
 
-  it("returns ok=true with effective cost + projected gain + factors", async () => {
+  it("returns ok=true with effective cost and a fixed bucket contribution", async () => {
     const { GET } = await import("./route");
     const response = await GET(makeRequest(), {
       params: Promise.resolve({ code: "us", id: stateId, partyId }),
@@ -116,20 +116,15 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
     expect(body.ok).toBe(true);
     expect(body.effectiveCost).toBeGreaterThanOrEqual(1);
     expect(body.projectedGain).toBeGreaterThan(0);
-    expect(body.factors).toMatchObject({
-      base: expect.any(Number),
-      headroom: expect.any(Number),
-      ownDiminishing: expect.any(Number),
-      psLeverage: expect.any(Number),
-      catchup: expect.any(Number),
-    });
+    expect(body.contributionUnits).toBe(1);
+    expect(body.projectedOrganizationUnits).toBe(41);
     expect(body.scope).toBe("state");
     expect(body.pressureValue).toBe(1);
   });
 
-  it("returns ok=true with poaches in a saturated state with PS-weak rivals", async () => {
-    // Saturated (60 + 20 + 20 = 100, no pool); spender PS 29 dominates rivals
-    // (6, 4) → Build Org projects a poach-only gain.
+  it("returns projected dilution in a saturated bucket", async () => {
+    // Saturated (60 + 20 + 20 = 100): a fixed unit increases the denominator
+    // and proportionally dilutes both rivals, regardless of their PS.
     db.collectionMocks["statePartyOrg"]!.findOne.mockResolvedValue({
       _id: spenderRowId,
       stateId,
@@ -180,7 +175,8 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
     const body = await response.json();
     expect(body.ok).toBe(true);
     expect(body.projectedGain).toBeGreaterThan(0);
-    expect(body.poaches).toHaveLength(2);
+    expect(body.contributionUnits).toBe(1);
+    expect(body.dilutions).toHaveLength(2);
   });
 
   it("returns ok=false reason=no-presence when there is no live presence", async () => {
@@ -281,10 +277,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
     expect(db.collectionMocks["statePartyOrg"]!.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
-  it("returns ok=false reason=no-headroom when saturated AND no rival holds Org", async () => {
-    // Under the Org+PS poach blend a rival out-reserving the spender is no longer
-    // immune; the only no-headroom case is an empty pool with no poachable rival
-    // Org (spender holds 100%).
+  it("keeps building bucket units when the spender holds all party-owned units", async () => {
     db.collectionMocks["statePartyOrg"]!.find.mockReturnValue({
       toArray: async () => [
         {
@@ -293,6 +286,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
           partyId,
           countryId: "US",
           organization: 100,
+          organizationUnits: 100,
           politicalStrength: 10,
           treasury: 10_000_000,
         },
@@ -313,6 +307,7 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
       partyId,
       countryId: "US",
       organization: 100,
+      organizationUnits: 100,
       politicalStrength: 10,
       treasury: 10_000_000,
       hasPresence: true,
@@ -323,8 +318,10 @@ describe("GET /api/country/[code]/region/[id]/party/[partyId]/build-org/preview"
       params: Promise.resolve({ code: "us", id: stateId, partyId }),
     });
     const body = await response.json();
-    expect(body.ok).toBe(false);
-    expect(body.reason).toBe("no-headroom");
+    expect(body.ok).toBe(true);
+    expect(body.contributionUnits).toBe(1);
+    expect(body.projectedOrganizationUnits).toBe(101);
+    expect(body.projectedGain).toBeGreaterThan(0);
   });
 
   it("returns scope=national-targeted when actor is national chair", async () => {

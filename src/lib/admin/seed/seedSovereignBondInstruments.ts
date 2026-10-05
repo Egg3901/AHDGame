@@ -16,13 +16,7 @@
  * rollover keeping surplus-country float stable).
  */
 import { ObjectId, type Db } from "mongodb";
-import type {
-  Bond,
-  BondMaturityTurns,
-  CentralBank,
-  Corporation,
-  FederalBudget,
-} from "@/lib/db/types";
+import type { Bond, CentralBank, Corporation, FederalBudget } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { COUNTRY_ORDER, getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { getBankId } from "@/lib/centralBank/helpers";
@@ -33,6 +27,7 @@ import {
   getSovereignIssuerName,
   SOVEREIGN_RECONCILE_DISTRIBUTION,
 } from "@/lib/bonds/sovereign";
+import { planOpeningSovereignMaturityCohorts } from "@/lib/bonds/rules/openingMaturity";
 
 export interface SeedSovereignBondInstrumentsResult {
   countriesSeeded: number;
@@ -165,13 +160,14 @@ export async function seedSovereignBondInstruments(
     });
 
     const bondDocs: Omit<Bond, "_id">[] = [];
-    for (const [maturityStr, fraction] of Object.entries(SOVEREIGN_RECONCILE_DISTRIBUTION)) {
-      if (!fraction || fraction <= 0) continue;
-      const maturityTurns = Number(maturityStr) as BondMaturityTurns;
-      const trancheAmount =
-        Math.floor((gap * fraction) / BOND_UNIT_FACE_VALUE) * BOND_UNIT_FACE_VALUE;
-      if (trancheAmount < BOND_UNIT_FACE_VALUE) continue;
-
+    const openingCohorts = planOpeningSovereignMaturityCohorts({
+      totalFace: gap,
+      faceValue: BOND_UNIT_FACE_VALUE,
+      distribution: SOVEREIGN_RECONCILE_DISTRIBUTION,
+    });
+    for (const cohort of openingCohorts) {
+      const maturityTurns = cohort.maturityTurns;
+      const trancheAmount = cohort.amount;
       const totalUnits = Math.floor(trancheAmount / BOND_UNIT_FACE_VALUE);
       const couponRate = getSovereignCouponRate(primeRate, maturityTurns);
 
@@ -183,8 +179,11 @@ export async function seedSovereignBondInstruments(
         faceValue: BOND_UNIT_FACE_VALUE,
         couponRate,
         maturityTurns,
-        issuedAtTurn: turn,
-        maturityTurn: turn + maturityTurns,
+        // This is an established opening stock, not debt created on reset day.
+        // Historical issue turns preserve the contractual tenor while the
+        // remaining maturity is distributed across quarterly cohorts.
+        issuedAtTurn: turn + cohort.issuedAtOffset,
+        maturityTurn: turn + cohort.maturityOffset,
         marketPrice: 1.0,
         totalIssued: trancheAmount,
         publicFloat: totalUnits,

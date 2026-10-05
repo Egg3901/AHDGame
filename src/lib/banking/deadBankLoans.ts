@@ -63,6 +63,10 @@ type DeadBank = {
   charteredTurn: number;
   nextCharteredTurn?: number;
   historyId?: BankCharterHistoryEntry["_id"];
+  /** Completion turn of the deposit-insurance resolution for this epoch. */
+  resolvedTurn?: number;
+  /** Resolution that actually paid a measured insurance claim. */
+  measuredClaimTurn?: number;
   /** True once the deposit book has been returned and the estate is closed. */
   resolved: boolean;
 };
@@ -120,6 +124,8 @@ export async function findDeadBanksWithLoans(db: Db): Promise<DeadBank[]> {
       name: corp.name,
       currency: corp.bankCharter!.currency as CurrencyCode,
       charteredTurn: corp.bankCharter!.charteredTurn,
+      resolvedTurn: corp.bankCharter!.insuranceResolutionTurn,
+      measuredClaimTurn: corp.bankCharter!.insuranceMeasuredClaimTurn,
       ...nextEpochField(corp._id, corp.bankCharter!.charteredTurn),
       // A revoked charter has already run the waterfall on the way out, so its
       // estate is closed the moment it is revoked. A failed one is closed only
@@ -140,6 +146,8 @@ export async function findDeadBanksWithLoans(db: Db): Promise<DeadBank[]> {
         name: nameById.get(entry.corporationId.toString()) ?? "Former bank",
         currency: entry.charter.currency as CurrencyCode,
         charteredTurn: entry.charter.charteredTurn,
+        resolvedTurn: entry.charter.insuranceResolutionTurn,
+        measuredClaimTurn: entry.charter.insuranceMeasuredClaimTurn,
         ...nextEpochField(entry.corporationId, entry.charter.charteredTurn),
         historyId: entry._id,
         // Once replaced, a failed snapshot has no live waterfall to distribute
@@ -206,7 +214,8 @@ export async function processDeadBankLoans(
   serviceLoan: (
     loan: BankLoan,
     bank: DeadBank,
-    creditTarget: MoneyTarget
+    creditTarget: MoneyTarget,
+    trackInsuranceRecovery: boolean
   ) => Promise<{ collected: number }>
 ): Promise<DeadBankLoanSummary> {
   const summary: DeadBankLoanSummary = { ...ZERO_DEAD_BANK_SUMMARY };
@@ -226,17 +235,22 @@ export async function processDeadBankLoans(
     if (loans.length === 0) continue;
 
     const target = recoveryTargetFor(bank);
+    let trackInsuranceRecovery = false;
     if (bank.resolved || bank.historyId) {
       // The fund document has to exist before anything is paid into it: a
       // recovery credited to a missing fund is money that silently stops
       // existing, which is the whole class of bug this work is about.
-      await ensureFund(db, bank.currency);
+      const fund = await ensureFund(db, bank.currency);
+      trackInsuranceRecovery =
+        typeof bank.measuredClaimTurn === "number" &&
+        typeof fund.pricingEvidenceStartTurn === "number" &&
+        bank.measuredClaimTurn >= fund.pricingEvidenceStartTurn;
     }
 
     // Serial per bank: two loans from the same borrower must see each other's
     // debit, exactly as the live path does.
     for (const loan of loans) {
-      const { collected } = await serviceLoan(loan, bank, target);
+      const { collected } = await serviceLoan(loan, bank, target, trackInsuranceRecovery);
       summary.loansServiced += 1;
       if (bank.resolved) summary.recoveredToInsurer += collected;
       else summary.recoveredToEstate += collected;

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import {
@@ -8,6 +8,11 @@ import {
 } from "./sovereign";
 import { ObjectId } from "mongodb";
 import type { Bond } from "@/lib/db/types/bond";
+import { BASE_DEMAND } from "@/lib/sovereignDefault/constants";
+
+vi.mock("@/lib/db/runRequiredTransaction", () => ({
+  runRequiredTransaction: async (body: (session: unknown) => Promise<unknown>) => body({} as never),
+}));
 
 function setup(treasuryBalance = 100000, principal = 3000) {
   const memory = createInMemoryDb();
@@ -28,6 +33,134 @@ function setup(treasuryBalance = 100000, principal = 3000) {
 const bond = { countryId: "US", currencyCode: "USD", totalIssued: 3000, couponRate: 0 } as const;
 
 describe("sovereign maturity cash and debt", () => {
+  it("novates only public float at par and pays the residual non-pool holders", async () => {
+    const memory = setup(10_000, 3_000);
+    memory.collection("federalBudget").docs[0]!.treasuryCashLocal = 1_000;
+    memory.collection("federalBudget").docs[0]!.spending = { total: 150, debtInterest: 150 };
+    memory.seed("centralBanks", [{ _id: "US", primeRate: 7 }]);
+    memory.seed("bondMarketPools", [
+      { _id: "USD", cashLocal: 20_000, appetiteByCountry: { US: BASE_DEMAND } },
+    ]);
+    const holderId = new ObjectId();
+    const dueBond = {
+      _id: new ObjectId(),
+      corporationId: new ObjectId(),
+      issuerName: "Fixture Treasury",
+      ...bond,
+      issuerType: "sovereign",
+      totalIssued: 3_000,
+      couponRate: 5,
+      maturityTurn: 48,
+      matured: false,
+      defaulted: false,
+      holders: [{ characterId: holderId, units: 1 }],
+      publicFloat: 2,
+    } as unknown as Bond;
+    memory.seed("bonds", [dueBond] as unknown as Record<string, unknown>[]);
+    memory.seed("characters", [{ _id: holderId, cashOnHand: 0 }]);
+
+    const result = await settleFundedSovereignBondMaturity(memory as unknown as Db, {
+      bond: dueBond,
+      turn: 48,
+      dueTurn: 48,
+      currencyCode: "USD",
+      treasuryLocalPerAnchor: 1,
+      nonBankRepaymentLocal: 3_000,
+      holderLegs: [
+        {
+          collection: "characters",
+          filter: { _id: holderId },
+          path: "cashOnHand",
+          amount: 1_000,
+          currencyCode: "USD",
+          localPerAnchor: 1,
+          note: "Pay the original character holder",
+        },
+        {
+          collection: "bondMarketPools",
+          filter: { _id: "USD" },
+          path: "cashLocal",
+          amount: 2_000,
+          currencyCode: "USD",
+          localPerAnchor: 1,
+          note: "Pay public float only for its unswapped residual",
+        },
+      ],
+      now: new Date("2026-10-05T00:00:00Z"),
+    });
+
+    expect(result?.status).toBe("applied");
+    expect(memory.collection("bondMarketPools").docs[0]?.cashLocal).toBe(20_000);
+    expect(memory.collection("characters").docs[0]?.cashOnHand).toBe(1_000);
+    expect(memory.collection("federalBudget").docs[0]).toMatchObject({
+      treasuryCashLocal: 0,
+      debt: { principal: 2_000 },
+      spending: { debtInterest: 140 },
+    });
+    const bonds = memory.collection("bonds").docs;
+    expect(bonds).toHaveLength(2);
+    expect(bonds.find((row) => String(row._id) === dueBond._id.toHexString())).toMatchObject({
+      matured: true,
+      totalIssued: 1_000,
+      sovereignMaturityClaim: {
+        publicFloatDisposition: { mode: "novation", status: "applied", acceptedUnits: 2 },
+      },
+    });
+    expect(bonds.find((row) => String(row._id) !== dueBond._id.toHexString())).toMatchObject({
+      totalIssued: 2_000,
+      publicFloat: 2,
+      maturityTurn: 96,
+      currencyCode: "USD",
+    });
+  });
+
+  it("freezes a cash disposition when issuer appetite is missing", async () => {
+    const memory = setup(10_000, 2_000);
+    memory.collection("federalBudget").docs[0]!.treasuryCashLocal = 2_000;
+    const dueBond = {
+      _id: new ObjectId(),
+      ...bond,
+      issuerType: "sovereign",
+      totalIssued: 2_000,
+      couponRate: 5,
+      maturityTurn: 48,
+      matured: false,
+      defaulted: false,
+      holders: [],
+      publicFloat: 2,
+    } as unknown as Bond;
+    memory.seed("bonds", [dueBond] as unknown as Record<string, unknown>[]);
+    memory.seed("characters", [{ _id: "public-holder", cashOnHand: 0 }]);
+    const args = {
+      bond: dueBond,
+      turn: 48,
+      dueTurn: 48,
+      currencyCode: "USD" as const,
+      treasuryLocalPerAnchor: 1,
+      nonBankRepaymentLocal: 2_000,
+      holderLegs: [
+        {
+          collection: "characters",
+          filter: { _id: "public-holder" },
+          path: "cashOnHand",
+          amount: 2_000,
+          currencyCode: "USD" as const,
+          localPerAnchor: 1,
+          note: "Pay the frozen cash maturity claim",
+        },
+      ],
+      now: new Date("2026-10-05T00:00:00Z"),
+    };
+    const missingAppetite = await settleFundedSovereignBondMaturity(memory as unknown as Db, args);
+    expect(missingAppetite?.status).toBe("applied");
+    expect(memory.collection("bonds").docs).toHaveLength(1);
+    expect(memory.collection("bonds").docs[0]?.sovereignMaturityClaim).toMatchObject({
+      publicFloatDisposition: { mode: "cash", status: "refused", acceptedUnits: 0 },
+      paid: true,
+    });
+    expect(memory.collection("federalBudget").docs[0]?.debt).toMatchObject({ principal: 0 });
+  });
+
   it("applies concurrent bond debt deltas without losing either maturity", async () => {
     const memory = setup(100000, 2000);
     const budgetRow = memory.collection("federalBudget").docs[0] as {
@@ -246,7 +379,7 @@ describe("funded sovereign maturity receipt", () => {
       turn: 49,
       now: new Date("2026-01-02T00:00:00.000Z"),
     });
-    expect(replay).toBeNull();
+    expect(replay?.status).toBe("applied");
     expect(memory.collection("characters").docs[0]?.cashOnHand).toBe(3_000);
   });
 
@@ -360,7 +493,7 @@ describe("funded sovereign maturity receipt", () => {
     budget.findOne = async (filter?: Record<string, unknown>) => {
       const row = await originalFindOne(filter);
       budgetReads += 1;
-      if (!raced && budgetReads === 2) {
+      if (!raced && budgetReads === 3) {
         raced = true;
         await budget.updateOne({ _id: "federal" }, { $set: { treasuryCashLocal: 0 } });
         return { ...row, treasuryCashLocal: 1_000 };

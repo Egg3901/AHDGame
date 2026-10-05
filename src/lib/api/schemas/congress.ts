@@ -178,6 +178,25 @@ export const endEmbargoProvisionSchema = z.object({
   direction: z.enum(["export", "import", "both"]),
 });
 
+export const resetLawSelectionSchema = z
+  .object({
+    type: z.literal("reset_law"),
+    familyId: z.string().regex(/^L\d{2}$/),
+    scope: z.enum(["national", "regional"]),
+    regionId: z.string().min(1).max(24).optional(),
+    choice: z.enum([
+      "far_left",
+      "center_left",
+      "center",
+      "center_right",
+      "far_right",
+      "leave_to_states",
+    ]),
+  })
+  .refine((selection) => (selection.scope === "regional") === Boolean(selection.regionId), {
+    message: "Regional law selections require a regionId",
+  });
+
 /**
  * Strict policy-provision schema for SUB-NATIONAL (state/regional) bills.
  * Unlike the permissive national `policyProvisionSchema`, this requires a
@@ -204,6 +223,7 @@ export const stateBillPolicyProvisionSchema = z.object({
 export const stateBillProvisionSchema = z.union([
   subsidyProvisionSchema,
   endSubsidyProvisionSchema,
+  resetLawSelectionSchema,
   stateBillPolicyProvisionSchema,
 ]);
 
@@ -302,6 +322,7 @@ export const proposeBillSchema = z
           economicSystemReformProvisionSchema,
           euroAdoptionProvisionSchema,
           europeanTreatyProvisionSchema,
+          resetLawSelectionSchema,
           policyProvisionSchema,
         ])
       )

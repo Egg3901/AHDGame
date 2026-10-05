@@ -1,6 +1,7 @@
 /** Pure planning and claim construction for bank-held sovereign coupons. */
 import type { Bond } from "@/lib/db/types/bond";
 import type { BankSovereignClaim } from "@/lib/db/types/budget";
+import type { BankCharter } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import {
@@ -15,6 +16,76 @@ export interface BankCouponPlan {
   charteredTurn: number;
   amountLocal: number;
   bondIds: string[];
+}
+
+export interface UnbookedSovereignAssetIncome {
+  couponIncome: number;
+  realizedGain: number;
+}
+
+/** Paid cash not yet consumed into a bank's most recently published income pass. */
+export function unbookedSovereignAssetIncome(
+  charter: Pick<
+    BankCharter,
+    | "sovereignCouponIncomePaidLifetime"
+    | "sovereignCouponIncomeBookedLifetime"
+    | "treasuryRealizedGainPaidLifetime"
+    | "treasuryRealizedGainBookedLifetime"
+  >
+): UnbookedSovereignAssetIncome {
+  const finite = (value: number | undefined): number =>
+    typeof value === "number" && Number.isFinite(value) ? value : 0;
+  return {
+    couponIncome: Math.max(
+      0,
+      finite(charter.sovereignCouponIncomePaidLifetime) -
+        finite(charter.sovereignCouponIncomeBookedLifetime)
+    ),
+    realizedGain:
+      finite(charter.treasuryRealizedGainPaidLifetime) -
+      finite(charter.treasuryRealizedGainBookedLifetime),
+  };
+}
+
+/** Published bank income plus funded asset earnings awaiting the next bank stamp. */
+export function bankIncomeIncludingUnbookedSovereignAssets(
+  charter: Pick<BankCharter, "lastBankingIncome"> &
+    Parameters<typeof unbookedSovereignAssetIncome>[0]
+): number {
+  const unbooked = unbookedSovereignAssetIncome(charter);
+  return (
+    (Number.isFinite(charter.lastBankingIncome) ? charter.lastBankingIncome! : 0) +
+    unbooked.couponIncome +
+    unbooked.realizedGain
+  );
+}
+
+/** Complete cost basis for one bank epoch's frozen sovereign maturity units. */
+export function bankSovereignMaturityCostBasis(
+  holders: readonly {
+    bankId: string;
+    charteredTurn: number;
+    units: number;
+    avgCostPerUnit?: number;
+    tradeId?: string;
+  }[],
+  bankId: string,
+  charteredTurn: number,
+  currencyCode: CurrencyCode
+): number | null {
+  const owned = holders.filter(
+    (holder) =>
+      holder.bankId === bankId &&
+      holder.charteredTurn === charteredTurn &&
+      !holder.tradeId &&
+      holder.units > 0
+  );
+  if (owned.length === 0 || owned.some((holder) => !Number.isFinite(holder.avgCostPerUnit)))
+    return null;
+  return roundSavingsAmount(
+    owned.reduce((sum, holder) => sum + holder.units * holder.avgCostPerUnit!, 0),
+    currencyCode
+  );
 }
 
 /** Freeze the eligible bank coupon slice from the opening sovereign bond snapshot. */

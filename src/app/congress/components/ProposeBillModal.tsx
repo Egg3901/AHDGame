@@ -56,6 +56,7 @@ import { fetchJson } from "@/lib/observability/fetchJson";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { BillProposalAutoFailWarning } from "@/lib/legislature/billAutoFailWarning";
+import { GuidedLegislationModal } from "@/components/legislation/GuidedLegislationModal";
 
 interface LegislationPolicyOption {
   id: string;
@@ -134,7 +135,7 @@ function SupplementaryLoadError({ message, onRetry }: { message: string; onRetry
   );
 }
 
-export function ProposeBillModal({
+function LegacyProposeBillModal({
   chamber,
   adminOverride,
   myChamber,
@@ -202,6 +203,7 @@ export function ProposeBillModal({
   const [typesError, setTypesError] = useState(false);
   const [categoriesError, setCategoriesError] = useState(false);
   const [budgetError, setBudgetError] = useState(false);
+
   const [policiesError, setPoliciesError] = useState(false);
 
   const isSubsidyCat = SUBSIDY_BILL_CATEGORIES.has(cat as BillCategory);
@@ -1449,4 +1451,32 @@ export function ProposeBillModal({
       </div>
     </div>
   );
+}
+
+export function ProposeBillModal(props: Parameters<typeof LegacyProposeBillModal>[0]) {
+  const flags = useWorldFlags();
+  const useV2 =
+    flags.loaded &&
+    !flags.failed &&
+    flags.resetSystemVersions.legislation === "v2" &&
+    flags.resetV2Countries.includes(props.countryId);
+  if (useV2) {
+    const initial = props.myChamber ?? props.chamber;
+    return (
+      <GuidedLegislationModal
+        countryId={props.countryId}
+        endpoint="/api/congress/bills"
+        chambers={[
+          { value: "house", label: "House" },
+          { value: "senate", label: "Senate" },
+          { value: "joint", label: "Joint" },
+        ]}
+        initialChamber={initial}
+        adminOverride={props.adminOverride}
+        onClose={props.onClose}
+        onSuccess={props.onSuccess}
+      />
+    );
+  }
+  return <LegacyProposeBillModal {...props} />;
 }

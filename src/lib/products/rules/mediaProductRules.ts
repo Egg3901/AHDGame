@@ -5,7 +5,14 @@
 import type { MediaProductKind } from "../mediaProductCatalog";
 import { MEDIA_PRODUCT_KINDS, tailDemandFactor } from "../mediaProductCatalog";
 import { getMediaOperatingModel } from "@/lib/mediaOperatingModels/catalog";
-import { advanceProductLifecycle, type ProductLifecycleStage } from "./productLifecycle";
+import {
+  accumulatePaidProductBrand,
+  advanceProductLifecycle,
+  averagePaidProductBrandAnchor,
+  paidProductBrandQualityBonus,
+  productQualityForPriceDefense,
+  type ProductLifecycleStage,
+} from "./productLifecycle";
 
 export interface MediaProductState {
   id: string;
@@ -179,17 +186,20 @@ export function mediaProductBrand(
   developmentAdvertisingAnchor: number,
   developmentAdvertisingTurns: number
 ): number {
-  const turns = Number.isSafeInteger(developmentAdvertisingTurns)
-    ? Math.max(0, developmentAdvertisingTurns)
-    : 0;
-  return turns > 0 ? nonNegative(developmentAdvertisingAnchor) / turns : 0;
+  return averagePaidProductBrandAnchor({
+    paidAdvertisingAnchor: developmentAdvertisingAnchor,
+    advertisingTurns: developmentAdvertisingTurns,
+  });
 }
 
 /** Bounded loyalty points from actual paid brand investment and model audience coverage. */
 export function mediaProductBrandBonus(productBrand: number, coverage: number): number {
-  const brand = nonNegative(productBrand);
-  const audience = Number.isFinite(coverage) ? Math.min(1, Math.max(0, coverage)) : 0;
-  return Math.round(Math.min(10, (10 * brand) / (brand + BRAND_REF_ANCHOR)) * audience * 10) / 10;
+  return paidProductBrandQualityBonus({
+    averagePaidAdvertisingAnchor: nonNegative(productBrand),
+    referenceAnchor: BRAND_REF_ANCHOR,
+    maximumBonus: 10,
+    coverage,
+  });
 }
 
 /** Resolve a new durable product from one eligible sector, without inventing costs or output. */
@@ -279,15 +289,13 @@ export function advanceMediaProduct(input: {
     elapsedDevelopmentTurns: progress.elapsedDevelopmentTurns,
   };
   if (input.product.stage === "development") {
-    next.developmentAdvertisingAnchor = Math.min(
-      ANCHOR_CAP,
-      nonNegative(input.product.developmentAdvertisingAnchor) +
-        nonNegative(receipt.deliveredAdvertisingAnchor)
-    );
-    next.developmentAdvertisingTurns = Math.min(
-      Number.MAX_SAFE_INTEGER,
-      Math.max(0, input.product.developmentAdvertisingTurns) + 1
-    );
+    const brandProgress = accumulatePaidProductBrand({
+      priorPaidAdvertisingAnchor: input.product.developmentAdvertisingAnchor,
+      priorAdvertisingTurns: input.product.developmentAdvertisingTurns,
+      paidAdvertisingAnchor: receipt.deliveredAdvertisingAnchor,
+    });
+    next.developmentAdvertisingAnchor = Math.min(ANCHOR_CAP, brandProgress.paidAdvertisingAnchor);
+    next.developmentAdvertisingTurns = brandProgress.advertisingTurns;
   }
   if (input.product.stage === "development" && progress.stage === "launch") {
     const quality = mediaLaunchQuality({
@@ -343,6 +351,7 @@ export function aggregateMediaProductSectorEffects(input: {
   let remaining = 1;
   let allocatedShare = 0;
   let qualityDelta = 0;
+  let brandQualityBonus = 0;
   let loyaltyBonus = 0;
   for (const { project, kind } of candidates) {
     if (remaining <= 0) break;
@@ -353,15 +362,19 @@ export function aggregateMediaProductSectorEffects(input: {
       project.stage === "decline"
         ? tailDemandFactor(project.stage, kind.tail)
         : (STAGE_QUALITY_FACTOR[project.stage] ?? 0);
-    qualityDelta += nonNegative(project.qualityBonus) * stageFactor * share;
-    loyaltyBonus +=
-      mediaProductBrandBonus(project.productBrand ?? 0, kind.coverage) * stageFactor * share;
+    qualityDelta += nonNegative(project.qualityBonus) * stageFactor * share * kind.coverage;
+    const brandQuality = mediaProductBrandBonus(project.productBrand ?? 0, kind.coverage);
+    const weightedBrand = brandQuality * stageFactor * share;
+    brandQualityBonus += weightedBrand;
+    loyaltyBonus += weightedBrand;
   }
   const quality =
     allocatedShare > 0
-      ? clampQuality(
-          (Number.isFinite(input.baseQuality) ? (input.baseQuality as number) : 50) + qualityDelta
-        )
+      ? productQualityForPriceDefense({
+          baseQuality: input.baseQuality,
+          paidQualityBonus: qualityDelta,
+          brandBonus: brandQualityBonus,
+        })
       : input.baseQuality;
   return {
     quality,

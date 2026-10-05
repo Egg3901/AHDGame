@@ -354,7 +354,7 @@ export async function startNppMediaProductsV1(input: {
       isNpp: corporation.ceoType === "npp",
       currentYear: input.currentYear,
       hasActiveDevelopment: activeDevelopment,
-      liveTitleCount: projects.length,
+      liveTitleCount: projects.filter((project) => project.stage !== "retired").length,
       existingKindCounts: kindCounts,
       sectors: sectors.map((sector) => ({
         sectorId: sector._id.toString(),

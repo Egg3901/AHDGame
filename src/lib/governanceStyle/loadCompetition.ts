@@ -5,6 +5,7 @@ import type { GameState } from "@/lib/db/types/gameState";
 import type { SupremeCourtSeat } from "@/lib/db/types/scotus";
 import {
   assessDemocraticCompetition,
+  type CourtJusticeAlignment,
   type DemocraticCompetition,
   type SeatControlHistoryRow,
 } from "./competition";
@@ -50,13 +51,20 @@ export async function loadDemocraticCompetition(
           .project<
             Pick<
               SupremeCourtSeat,
-              "justiceParty" | "justiceMode" | "justiceCharacterId" | "justiceNppId"
+              | "justiceParty"
+              | "justiceMode"
+              | "justiceCharacterId"
+              | "justiceNppId"
+              | "economicLean"
+              | "socialLean"
             >
           >({
             justiceParty: 1,
             justiceMode: 1,
             justiceCharacterId: 1,
             justiceNppId: 1,
+            economicLean: 1,
+            socialLean: 1,
           })
           .toArray()
       : Promise.resolve([]),
@@ -73,25 +81,26 @@ export async function loadDemocraticCompetition(
   const executiveTenure = gameState?.presidentialTenureByCountry?.[countryId];
   const hasSeparateExecutive = config.governmentType === "presidential";
 
-  const justicesByParty: Record<string, number> = {};
-  let seatedJustices = 0;
+  const justices: CourtJusticeAlignment[] = [];
   for (const seat of courtSeats) {
     const occupied =
       seat.justiceCharacterId != null ||
       seat.justiceNppId != null ||
       seat.justiceMode === "historical";
     if (!occupied) continue;
-    seatedJustices += 1;
-    if (!seat.justiceParty) continue;
-    justicesByParty[seat.justiceParty] = (justicesByParty[seat.justiceParty] ?? 0) + 1;
+    justices.push({
+      economicLean: seat.economicLean,
+      socialLean: seat.socialLean,
+      partyId: seat.justiceParty,
+    });
   }
 
   return assessDemocraticCompetition({
     chambersByParty: chamberKeys.map((key) => chamberTallies.get(key) ?? {}),
     history,
+    executiveSystem: hasSeparateExecutive ? "presidential" : "parliamentary",
     executivePartyId: hasSeparateExecutive ? executiveTenure?.party : null,
     consecutiveExecutiveTerms: hasSeparateExecutive ? (executiveTenure?.consecutiveTerms ?? 0) : 0,
-    justicesByParty,
-    seatedJustices,
+    justices,
   });
 }

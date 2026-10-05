@@ -6,8 +6,13 @@ import type { MilitaryCommand, CommanderRef, ThreatLevel } from "@/lib/military/
 import type { ConflictAssignment } from "@/lib/military/assignments";
 import type { CorpsMember } from "@/lib/db/collections/characterGenerals";
 import type { CabinetLeverScope } from "@/lib/cabinet/actingScope";
+import type {
+  DepartmentFinanceReadModel,
+  DepartmentProgramReadModel,
+} from "@/lib/governmentFinance/readModel";
 
 export interface CabinetOfficeData {
+  cabinetVersion?: "v1" | "v2";
   /** Live in-game year for era-resolved roster chrome (null/absent = unavailable).
    *  Optional: payloads served by a pre-era-gating API omit it (rolling deploys). */
   liveYear?: number | null;
@@ -71,6 +76,29 @@ export interface CabinetOfficeData {
     issuedTurn: number;
     expiresTurn: number;
   }>;
+  resetCabinetActions?: {
+    charges: number;
+    nextRechargeTurn: number | null;
+    actions: Array<{
+      id: string;
+      title: string;
+      target: string;
+      targetNames: readonly string[];
+      strength: number;
+      costClass: "Ops" | "Staff" | "Surge";
+      scope: "Nat" | "Vet" | "NI" | "SCT" | "WAL";
+      brief: string;
+      description: string;
+      operatingCost: number;
+    }>;
+    active: Array<{
+      actionId: string;
+      target: string;
+      strength: number;
+      startsTurn: number;
+      expiresTurn: number;
+    }>;
+  } | null;
   targetCountries: Array<{
     id: string;
     label: string;
@@ -156,6 +184,10 @@ export interface CabinetOfficeData {
   /** Finance seat only: the read-only monetary dossier + debt-op state. */
   monetary?: MonetaryView;
   currentTurn: number;
+  /** US health vertical slice only: read-only department settlement explanation. */
+  departmentProgram?: DepartmentProgramReadModel;
+  /** Generalized institution-owned accounts controlled by this office. */
+  departmentFinances?: DepartmentFinanceReadModel[];
 }
 
 export interface MonetaryView {

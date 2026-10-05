@@ -1,0 +1,2297 @@
+[
+  {
+    "id": "L01",
+    "title": "Household relief and work credits",
+    "domain": "Economy, work, trade, and fiscal affairs",
+    "scope": "N/R; separately funded transfers or credits",
+    "ownerCode": "FIN",
+    "primaryMetricIds": ["02", "03", "04", "09", "10"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": false,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Household Dividend Act",
+        "description": "Pay refundable relief to a wide income band; high take-up raises the treasury commitment."
+      },
+      {
+        "position": "center_left",
+        "title": "Family Relief Credit",
+        "description": "Concentrate refundable credits on households below a verified income threshold."
+      },
+      {
+        "position": "center",
+        "title": "Work and Relief Compact",
+        "description": "Fund modest refundable relief for low-income households alongside a verified work credit."
+      },
+      {
+        "position": "center_right",
+        "title": "Earned Income Credit Reform",
+        "description": "Raise the reward for sustained employment, with eligibility checks that can miss irregular workers."
+      },
+      {
+        "position": "far_right",
+        "title": "Work Rewards Act",
+        "description": "Use a broad work credit and narrower cash relief; non-workers receive less support."
+      }
+    ]
+  },
+  {
+    "id": "L02",
+    "title": "Social-insurance benefits and coverage",
+    "domain": "Economy, work, trade, and fiscal affairs",
+    "scope": "N/R where competent; floor/parallel",
+    "ownerCode": "SOC",
+    "primaryMetricIds": ["01", "02", "03", "09", "56"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": false,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Universal Security Charter",
+        "description": "Pool core sickness, unemployment and old-age risks nationally, with a large continuing obligation."
+      },
+      {
+        "position": "center_left",
+        "title": "Essential Benefit Guarantee",
+        "description": "Extend pooled coverage first to workers and households with the largest gaps."
+      },
+      {
+        "position": "center",
+        "title": "Portable Security Compact",
+        "description": "Fund a basic pooled benefit and allow additional portable, actuarially funded coverage."
+      },
+      {
+        "position": "center_right",
+        "title": "Solvency and Coverage Reform",
+        "description": "Make benefits portable across jobs while keeping a limited pooled backstop."
+      },
+      {
+        "position": "far_right",
+        "title": "Personal Security Account Act",
+        "description": "Favor individually funded portable accounts, with explicit protection for high-risk claimants."
+      }
+    ]
+  },
+  {
+    "id": "L03",
+    "title": "Enterprise investment incentives",
+    "domain": "Economy, work, trade, and fiscal affairs",
+    "scope": "N/R where competent; parallel",
+    "ownerCode": "FIN",
+    "primaryMetricIds": ["05", "06", "09", "15"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": false,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "National Investment Partnership",
+        "description": "Co-invest directly in priority projects and reclaim grants that miss job or output milestones."
+      },
+      {
+        "position": "center_left",
+        "title": "Strategic Capital Grants",
+        "description": "Offer grants only for verified investment in lagging sectors or places."
+      },
+      {
+        "position": "center",
+        "title": "Productive Investment Compact",
+        "description": "Offer verified new-investment grants and bounded expensing with anti-avoidance checks."
+      },
+      {
+        "position": "center_right",
+        "title": "Verified Expensing Credit",
+        "description": "Allow bounded expensing for new equipment after an additionality check."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Investment Code",
+        "description": "Permit broad expensing and lighter approval, accepting greater windfall and revenue risk."
+      }
+    ]
+  },
+  {
+    "id": "L04",
+    "title": "Work and wage standards",
+    "domain": "Economy, work, trade, and fiscal affairs",
+    "scope": "N/R; floor; LTS in US",
+    "ownerCode": "LAB",
+    "primaryMetricIds": ["01", "02", "03"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Fair Work Charter",
+        "description": "Set a higher wage floor and fund enforcement across the labor market; hiring may adjust."
+      },
+      {
+        "position": "center_left",
+        "title": "Wage Enforcement Act",
+        "description": "Target wage-theft inspection and bargaining enforcement at high-risk sectors."
+      },
+      {
+        "position": "center",
+        "title": "Wages and Mobility Compact",
+        "description": "Enforce a basic wage floor and wage-theft rules while allowing portable benefits and simpler compliant hiring."
+      },
+      {
+        "position": "center_right",
+        "title": "Portable Work Standards",
+        "description": "Pair portable benefits with simpler compliant hiring in selected industries."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Hiring Code",
+        "description": "Make flexible hiring the default and use a narrower earned-income credit to protect pay."
+      }
+    ]
+  },
+  {
+    "id": "L05",
+    "title": "Competition and market entry",
+    "domain": "Economy, work, trade, and fiscal affairs",
+    "scope": "N/R for local licensing; national antitrust remains national; floor/parallel",
+    "ownerCode": "ECO",
+    "primaryMetricIds": ["05", "06", "07"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": false,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Market Power Accountability Act",
+        "description": "Expand merger scrutiny and enforcement against entrenched firms; cases take time to resolve."
+      },
+      {
+        "position": "center_left",
+        "title": "Fair Competition Tribunal",
+        "description": "Focus investigators on concentrated markets with measurable consumer harm."
+      },
+      {
+        "position": "center",
+        "title": "Competition and Entry Compact",
+        "description": "Review concentrated mergers while removing unnecessary entry and licensing barriers for smaller competitors."
+      },
+      {
+        "position": "center_right",
+        "title": "Small Firm Access Act",
+        "description": "Remove selected licensing barriers for small entrants while retaining merger review."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Entry Code",
+        "description": "Sweep away broad entry restrictions; weak oversight could let new concentration emerge."
+      }
+    ]
+  },
+  {
+    "id": "L06",
+    "title": "Employment and regional opportunity",
+    "domain": "Economy, work, trade, and fiscal affairs",
+    "scope": "N/R; grant/parallel; LTS in US",
+    "ownerCode": "LAB",
+    "primaryMetricIds": ["01", "03", "13", "40"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "National Jobs Guarantee",
+        "description": "Guarantee publicly backed jobs and training in persistently weak regions at high recurring cost."
+      },
+      {
+        "position": "center_left",
+        "title": "Regional Skills Corps",
+        "description": "Fund placement and retraining for displaced workers in high-unemployment places."
+      },
+      {
+        "position": "center",
+        "title": "Jobs Partnership Compact",
+        "description": "Combine public placement support with employer training slots and hiring incentives tied to sustained jobs."
+      },
+      {
+        "position": "center_right",
+        "title": "Portable Training Credit",
+        "description": "Give firms limited hiring credits only after jobs last beyond a verification period."
+      },
+      {
+        "position": "far_right",
+        "title": "Enterprise Opportunity Zones",
+        "description": "Create wide enterprise zones and portable training accounts, with risk of subsidizing jobs that would exist anyway."
+      }
+    ]
+  },
+  {
+    "id": "L07",
+    "title": "Trade and customs regime",
+    "domain": "Economy, work, trade, and fiscal affairs",
+    "scope": "N only; exclusive national competence",
+    "ownerCode": "FIN",
+    "primaryMetricIds": ["05", "07", "08", "01"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": []
+    },
+    "leaveToStates": false,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Fair Trade Adjustment Act",
+        "description": "Attach labor and environmental conditions to trade access, and fund workers facing disruption."
+      },
+      {
+        "position": "center_left",
+        "title": "Import Transition Fund",
+        "description": "Apply import adjustment and retraining to a short list of exposed sectors."
+      },
+      {
+        "position": "center",
+        "title": "Reciprocal Trade Compact",
+        "description": "Keep reciprocal market access while applying narrow, reviewable safeguards and transition aid to exposed workers."
+      },
+      {
+        "position": "center_right",
+        "title": "Mutual Market Access Act",
+        "description": "Open markets reciprocally while retaining time-limited safeguards where injury is shown."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Customs Code",
+        "description": "Simplify customs and remove broad barriers; cheaper inputs come with greater import exposure."
+      }
+    ]
+  },
+  {
+    "id": "L08",
+    "title": "Budget and debt framework",
+    "domain": "Economy, work, trade, and fiscal affairs",
+    "scope": "N/R for each government's own budget; not one shared debt account",
+    "ownerCode": "FIN",
+    "primaryMetricIds": ["09", "10", "05"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": false,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Public Investment Mandate",
+        "description": "Authorize large countercyclical investment with published repayment and upkeep plans."
+      },
+      {
+        "position": "center_left",
+        "title": "Targeted Renewal Rule",
+        "description": "Protect high-return projects while scheduling debt service and maintenance."
+      },
+      {
+        "position": "center",
+        "title": "Investment and Debt Compact",
+        "description": "Permit time-limited productive investment within a published debt-service limit and maintenance plan."
+      },
+      {
+        "position": "center_right",
+        "title": "Fiscal Reserve Rule",
+        "description": "Set a reserve trigger and debt-service ceiling with limited emergency exceptions."
+      },
+      {
+        "position": "far_right",
+        "title": "Balanced Budget Charter",
+        "description": "Require strict spending limits and larger reserves, risking deferred repairs or stranded obligations."
+      }
+    ]
+  },
+  {
+    "id": "L09",
+    "title": "Supply and price-shock resilience",
+    "domain": "Economy, work, trade, and fiscal affairs",
+    "scope": "N/R; grant/parallel; LTS in US",
+    "ownerCode": "ECO",
+    "primaryMetricIds": ["07", "02", "42", "58"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "National Essential Reserves Act",
+        "description": "Hold public food and medicine stocks and finance temporary shock relief; storage has waste risk."
+      },
+      {
+        "position": "center_left",
+        "title": "Emergency Stockpile Fund",
+        "description": "Maintain smaller emergency stores for essential goods and high-risk communities."
+      },
+      {
+        "position": "center",
+        "title": "Reserves and Supply Compact",
+        "description": "Maintain a limited emergency reserve while easing entry and diversifying private suppliers."
+      },
+      {
+        "position": "center_right",
+        "title": "Supply Access Reform",
+        "description": "Keep a minimum reserve while clearing bottlenecks for competing suppliers."
+      },
+      {
+        "position": "far_right",
+        "title": "Private Supply Resilience Act",
+        "description": "Rely primarily on diverse private supply and fast entry, with a thin public emergency buffer."
+      }
+    ]
+  },
+  {
+    "id": "L10",
+    "title": "School access and finance",
+    "domain": "Education, skills, and research",
+    "scope": "N grants/floor plus R delivery; LTS in US",
+    "ownerCode": "EDU",
+    "primaryMetricIds": ["11", "12", "40"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Every Child School Guarantee",
+        "description": "Distribute needs-weighted school grants broadly for seats, transport and support staff."
+      },
+      {
+        "position": "center_left",
+        "title": "Priority School Access Fund",
+        "description": "Direct access grants to districts with verified enrollment or transport gaps."
+      },
+      {
+        "position": "center",
+        "title": "Pupil Access Compact",
+        "description": "Fund a minimum access and transport floor while allowing accountable per-pupil support across eligible schools."
+      },
+      {
+        "position": "center_right",
+        "title": "Portable Pupil Grant",
+        "description": "Make limited per-pupil aid portable to schools meeting access and quality tests."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Schools Charter",
+        "description": "Open funding to a wider range of schools; access depends on supply and oversight."
+      }
+    ]
+  },
+  {
+    "id": "L11",
+    "title": "Teacher capacity and facilities",
+    "domain": "Education, skills, and research",
+    "scope": "N/R; grant/parallel; LTS in US",
+    "ownerCode": "EDU",
+    "primaryMetricIds": ["11", "12"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "National Classroom Renewal",
+        "description": "Fund teacher posts, training and major repairs nationwide, with a multi-year staffing ramp."
+      },
+      {
+        "position": "center_left",
+        "title": "Teacher Vacancy Fund",
+        "description": "Pay for vacancies and unsafe facilities in the most affected schools."
+      },
+      {
+        "position": "center",
+        "title": "Schools Workforce Compact",
+        "description": "Fund hard-to-staff placements and repairs while giving schools bounded flexibility in hiring and pay."
+      },
+      {
+        "position": "center_right",
+        "title": "Flexible Teacher Pathway",
+        "description": "Test flexible certification and pay in hard-to-staff schools under quality checks."
+      },
+      {
+        "position": "far_right",
+        "title": "Local Hiring Charter",
+        "description": "Give schools broad hiring control; oversight must catch uneven training and retention."
+      }
+    ]
+  },
+  {
+    "id": "L12",
+    "title": "Curriculum, testing and standards",
+    "domain": "Education, skills, and research",
+    "scope": "N floor where competent plus R standards; LTS in US",
+    "ownerCode": "EDU",
+    "primaryMetricIds": ["12", "11"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Common Curriculum Guarantee",
+        "description": "Fund common curriculum and remediation in every school, limiting local variation."
+      },
+      {
+        "position": "center_left",
+        "title": "Core Skills Recovery Act",
+        "description": "Offer intensive core-skill remediation where attainment is lowest."
+      },
+      {
+        "position": "center",
+        "title": "Standards and Choice Compact",
+        "description": "Guarantee funded core-skill standards and remediation while allowing local choice beyond the common core."
+      },
+      {
+        "position": "center_right",
+        "title": "School Standards Flexibility Act",
+        "description": "Permit curricular flexibility within published core-skill and reporting requirements."
+      },
+      {
+        "position": "far_right",
+        "title": "Local Curriculum Charter",
+        "description": "Give local schools wider curriculum autonomy, accepting more variable provision."
+      }
+    ]
+  },
+  {
+    "id": "L13",
+    "title": "Apprenticeships and adult skills",
+    "domain": "Education, skills, and research",
+    "scope": "N/R; grant/parallel; LTS in US",
+    "ownerCode": "LAB",
+    "primaryMetricIds": ["13", "01", "40"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Lifelong Skills Guarantee",
+        "description": "Create paid public training places for displaced adults, with costly capacity to maintain."
+      },
+      {
+        "position": "center_left",
+        "title": "Displaced Worker Training Fund",
+        "description": "Target retraining seats to workers with weak reemployment prospects."
+      },
+      {
+        "position": "center",
+        "title": "Apprenticeship Partnership",
+        "description": "Offer paid public training places alongside employer-designed apprenticeships subject to completion and job-quality checks."
+      },
+      {
+        "position": "center_right",
+        "title": "Employer Training Credit",
+        "description": "Pay employers for apprenticeships after completion and job-quality checks."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Skills Market Act",
+        "description": "Use a broad employer-led training market; poor providers can absorb vouchers without durable jobs."
+      }
+    ]
+  },
+  {
+    "id": "L14",
+    "title": "Higher-education access",
+    "domain": "Education, skills, and research",
+    "scope": "N/R where institution authority exists; parallel",
+    "ownerCode": "EDU",
+    "primaryMetricIds": ["14", "13", "40"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": false,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Public University Access Act",
+        "description": "Expand publicly funded university places and tuition support for eligible applicants."
+      },
+      {
+        "position": "center_left",
+        "title": "First Generation Scholars Fund",
+        "description": "Reserve tuition aid for low-income entrants and completion support."
+      },
+      {
+        "position": "center",
+        "title": "Tuition and Repayment Compact",
+        "description": "Support public places for low-income applicants and use income-contingent repayment for additional access."
+      },
+      {
+        "position": "center_right",
+        "title": "Need-Based Loan Reform",
+        "description": "Use contingent repayment and need-based grants at accredited institutions."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Campus Finance Act",
+        "description": "Expand competitive finance with narrower subsidies; debt and weak programs require supervision."
+      }
+    ]
+  },
+  {
+    "id": "L15",
+    "title": "Science and research capability",
+    "domain": "Education, skills, and research",
+    "scope": "N/R; parallel; no blanket regional-discretion replacement of national research",
+    "ownerCode": "SCI",
+    "primaryMetricIds": ["15", "06", "05"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": false,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "National Discovery Mission",
+        "description": "Build public labs and mission teams for long-horizon research, with a slow payoff."
+      },
+      {
+        "position": "center_left",
+        "title": "Research Excellence Fund",
+        "description": "Award focused research grants for capability gaps and shared equipment."
+      },
+      {
+        "position": "center",
+        "title": "Science Partnership Compact",
+        "description": "Fund a limited public research mission and award additional grants competitively with verified university-industry collaboration."
+      },
+      {
+        "position": "center_right",
+        "title": "Competitive Discovery Grants",
+        "description": "Compete grants across universities and firms on open, verifiable milestones."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Innovation Credit",
+        "description": "Use broad research tax credits and partnerships; audit whether research is genuinely additional."
+      }
+    ]
+  },
+  {
+    "id": "L16",
+    "title": "Effective health coverage",
+    "domain": "Health, care, and preparedness",
+    "scope": "N/R; floor/parallel; LTS in US",
+    "ownerCode": "HLT",
+    "primaryMetricIds": ["16", "17", "19"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Universal Care Guarantee",
+        "description": "Extend public coverage broadly and automate enrollment, creating a substantial fiscal duty."
+      },
+      {
+        "position": "center_left",
+        "title": "Coverage Gap Fund",
+        "description": "Close the largest uninsured gaps through eligibility and enrollment outreach."
+      },
+      {
+        "position": "center",
+        "title": "Coverage and Choice Compact",
+        "description": "Guarantee a basic enrollment and affordability floor while allowing regulated competing plans with risk adjustment."
+      },
+      {
+        "position": "center_right",
+        "title": "Portable Health Subsidy",
+        "description": "Subsidize portable plans in selected markets with risk adjustment and minimum benefits."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Plan Access Act",
+        "description": "Use wide plan choice and portable support; weak risk adjustment could strand costly patients."
+      }
+    ]
+  },
+  {
+    "id": "L17",
+    "title": "Care affordability and prices",
+    "domain": "Health, care, and preparedness",
+    "scope": "N/R; floor/parallel; LTS in US",
+    "ownerCode": "HLT",
+    "primaryMetricIds": ["17", "02", "16"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Patient Price Protection Act",
+        "description": "Negotiate essential prices and cap patient payments across a broad set of services."
+      },
+      {
+        "position": "center_left",
+        "title": "Essential Care Cost Cap",
+        "description": "Cap out-of-pocket costs for high-need patients and essential treatments."
+      },
+      {
+        "position": "center",
+        "title": "Care Price Compact",
+        "description": "Cap essential patient costs and publish comparable prices while allowing new providers subject to quality oversight."
+      },
+      {
+        "position": "center_right",
+        "title": "Transparent Provider Access",
+        "description": "Require comparable prices and support entry in concentrated care markets."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Health Market Act",
+        "description": "Open provider and insurer competition widely; local monopolies may persist without enforcement."
+      }
+    ]
+  },
+  {
+    "id": "L18",
+    "title": "Clinical capacity and treatment waits",
+    "domain": "Health, care, and preparedness",
+    "scope": "N/R; grant/parallel; LTS in US",
+    "ownerCode": "HLT",
+    "primaryMetricIds": ["18", "19", "20"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "National Treatment Capacity Act",
+        "description": "Add public clinical staff and facilities, accepting a long recruitment and construction ramp."
+      },
+      {
+        "position": "center_left",
+        "title": "Priority Backlog Fund",
+        "description": "Fund extra staffing against measured priority treatment backlogs."
+      },
+      {
+        "position": "center",
+        "title": "Care Capacity Compact",
+        "description": "Fund public staffing for priority waits and purchase audited extra capacity from qualified providers."
+      },
+      {
+        "position": "center_right",
+        "title": "Audited Provider Contracts",
+        "description": "Purchase audited treatment capacity from qualified providers for specific waiting lists."
+      },
+      {
+        "position": "far_right",
+        "title": "Fast Care Access Charter",
+        "description": "Relax provider entry and reward throughput broadly, with patient-selection and quality risks."
+      }
+    ]
+  },
+  {
+    "id": "L19",
+    "title": "Prevention and public-health readiness",
+    "domain": "Health, care, and preparedness",
+    "scope": "N/R; floor/parallel; LTS in US",
+    "ownerCode": "HLT",
+    "primaryMetricIds": ["23", "19", "20"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Community Health Shield",
+        "description": "Build a public clinic and surveillance network for underserved areas and future shocks."
+      },
+      {
+        "position": "center_left",
+        "title": "Prevention Gap Fund",
+        "description": "Concentrate vaccination and outreach in communities with documented coverage gaps."
+      },
+      {
+        "position": "center",
+        "title": "Public Health Partnership",
+        "description": "Maintain core clinics and surveillance while using risk-based outreach and audited outside delivery for gaps."
+      },
+      {
+        "position": "center_right",
+        "title": "Risk-Based Prevention Contract",
+        "description": "Contract risk-based prevention where outcomes can be independently checked."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Prevention Network",
+        "description": "Use interoperable private delivery at scale, preserving public reporting and emergency coordination."
+      }
+    ]
+  },
+  {
+    "id": "L20",
+    "title": "Mental-health access",
+    "domain": "Health, care, and preparedness",
+    "scope": "N/R; grant/parallel; LTS in US",
+    "ownerCode": "HLT",
+    "primaryMetricIds": ["21", "18", "34"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Community Mental Health Guarantee",
+        "description": "Fund community mental-health teams and school outreach across regions."
+      },
+      {
+        "position": "center_left",
+        "title": "Priority Mental Health Fund",
+        "description": "Enforce parity and staff outreach in places with the longest waits."
+      },
+      {
+        "position": "center",
+        "title": "Parity and Access Compact",
+        "description": "Enforce basic mental-health coverage and continuity while expanding qualified telehealth and provider scope."
+      },
+      {
+        "position": "center_right",
+        "title": "Qualified Telehealth Act",
+        "description": "Expand qualified telehealth and scope of practice with continuity checks."
+      },
+      {
+        "position": "far_right",
+        "title": "Outcome Care Contract Act",
+        "description": "Pay for measured outcomes through competing providers; difficult cases must not be excluded."
+      }
+    ]
+  },
+  {
+    "id": "L21",
+    "title": "Elder and long-term care",
+    "domain": "Health, care, and preparedness",
+    "scope": "N/R; grant/parallel; LTS in US",
+    "ownerCode": "SOC",
+    "primaryMetricIds": ["22", "20", "56"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "National Home Care Guarantee",
+        "description": "Guarantee home-care hours and workforce standards for a broad eligible population."
+      },
+      {
+        "position": "center_left",
+        "title": "Care Workforce Fund",
+        "description": "Fund care workers and home support for the most dependent older people."
+      },
+      {
+        "position": "center",
+        "title": "Care Choice Compact",
+        "description": "Guarantee a modest home-care benefit and workforce standards while permitting accredited provider choice."
+      },
+      {
+        "position": "center_right",
+        "title": "Portable Care Allowance",
+        "description": "Offer portable care support at accredited providers with a basic service floor."
+      },
+      {
+        "position": "far_right",
+        "title": "Accredited Care Market Act",
+        "description": "Open care markets and family-carer accounts broadly, guarding against poor-quality or unaffordable services."
+      }
+    ]
+  },
+  {
+    "id": "L22",
+    "title": "Land use and housing supply",
+    "domain": "Housing and physical infrastructure",
+    "scope": "N incentive/floor plus R planning; LTS in US",
+    "ownerCode": "HOU",
+    "primaryMetricIds": ["25", "24"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Homes for All Construction Act",
+        "description": "Build public and affordable homes on a large scale, with land and construction lead times."
+      },
+      {
+        "position": "center_left",
+        "title": "Social Housing Accelerator",
+        "description": "Fund social housing only where verified shortages and viable sites coincide."
+      },
+      {
+        "position": "center",
+        "title": "Homes and Permits Compact",
+        "description": "Fund a targeted affordable-housing program and shorten permits for additional compliant private homes."
+      },
+      {
+        "position": "center_right",
+        "title": "Permit and Land Incentive",
+        "description": "Reward faster permitting and service-ready land in selected housing markets."
+      },
+      {
+        "position": "far_right",
+        "title": "By-Right Housing Charter",
+        "description": "Permit compliant private homes by right; infrastructure and local opposition can slow delivery."
+      }
+    ]
+  },
+  {
+    "id": "L23",
+    "title": "Housing cost relief",
+    "domain": "Housing and physical infrastructure",
+    "scope": "N/R; grant/parallel; LTS in US",
+    "ownerCode": "HOU",
+    "primaryMetricIds": ["24", "41", "02"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Housing Affordability Guarantee",
+        "description": "Expand rent support and social homes widely; aid can be captured by landlords when supply is fixed."
+      },
+      {
+        "position": "center_left",
+        "title": "Rent Burden Relief Fund",
+        "description": "Pay rent support to households with the greatest verified burden."
+      },
+      {
+        "position": "center",
+        "title": "Rent and Supply Compact",
+        "description": "Provide aid to highly burdened households while linking additional vouchers to verified local housing supply."
+      },
+      {
+        "position": "center_right",
+        "title": "Supply-Linked Housing Voucher",
+        "description": "Add vouchers only where jurisdictions also enable new homes."
+      },
+      {
+        "position": "far_right",
+        "title": "Home Ownership Relief Act",
+        "description": "Favor ownership and property-tax relief; renters without savings can be left out."
+      }
+    ]
+  },
+  {
+    "id": "L24",
+    "title": "Homelessness response",
+    "domain": "Housing and physical infrastructure",
+    "scope": "N grants plus R service; LTS in US",
+    "ownerCode": "HOU",
+    "primaryMetricIds": ["41", "24", "21"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Housing First Guarantee",
+        "description": "Guarantee permanent placements with wraparound care for people experiencing homelessness."
+      },
+      {
+        "position": "center_left",
+        "title": "Priority Placement Fund",
+        "description": "Prioritize housing-first placements for the highest-need households."
+      },
+      {
+        "position": "center",
+        "title": "Housing Stability Compact",
+        "description": "Prioritize permanent placements for highest-need households and fund local prevention for those at imminent risk."
+      },
+      {
+        "position": "center_right",
+        "title": "Rapid Rehousing Network",
+        "description": "Fund rapid rehousing and eviction prevention with measured follow-up."
+      },
+      {
+        "position": "far_right",
+        "title": "Local Prevention Contract Act",
+        "description": "Contract local prevention groups broadly; incentives must still serve complex cases."
+      }
+    ]
+  },
+  {
+    "id": "L25",
+    "title": "Roads and bridges",
+    "domain": "Housing and physical infrastructure",
+    "scope": "N/R; grant/parallel; LTS in US for non-national roads",
+    "ownerCode": "TRN",
+    "primaryMetricIds": ["26", "05"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "National Bridge Renewal Act",
+        "description": "Replace failing roads and bridges under a public capital schedule, with long construction lead times."
+      },
+      {
+        "position": "center_left",
+        "title": "Critical Road Repairs Fund",
+        "description": "Target maintenance grants at structures with the greatest safety risk."
+      },
+      {
+        "position": "center",
+        "title": "Infrastructure Maintenance Compact",
+        "description": "Guarantee essential bridge and road maintenance while contracting measurable repairs where cost-effective."
+      },
+      {
+        "position": "center_right",
+        "title": "Performance Repair Contracts",
+        "description": "Pay contractors for verified condition and availability, not just completion."
+      },
+      {
+        "position": "far_right",
+        "title": "User-Funded Highways Act",
+        "description": "Finance broad upgrades through user fees and concessions, protecting essential access."
+      }
+    ]
+  },
+  {
+    "id": "L26",
+    "title": "Public transit",
+    "domain": "Housing and physical infrastructure",
+    "scope": "N/R; grant/parallel; LTS in US",
+    "ownerCode": "TRN",
+    "primaryMetricIds": ["27", "01"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Public Transit Guarantee",
+        "description": "Expand publicly operated transit frequency on a wide network, including low-demand routes."
+      },
+      {
+        "position": "center_left",
+        "title": "Essential Routes Fund",
+        "description": "Protect reliable service on corridors with weak access or long waits."
+      },
+      {
+        "position": "center",
+        "title": "Transit Service Compact",
+        "description": "Protect essential route frequency and access while competitively contracting suitable supplementary services."
+      },
+      {
+        "position": "center_right",
+        "title": "Competitive Route Contracts",
+        "description": "Competitively contract supplemental routes to an enforceable service floor."
+      },
+      {
+        "position": "far_right",
+        "title": "Integrated Fares Charter",
+        "description": "Integrate fares and contracting broadly; poorly designed bids can cut marginal routes."
+      }
+    ]
+  },
+  {
+    "id": "L27",
+    "title": "Broadband availability",
+    "domain": "Housing and physical infrastructure",
+    "scope": "N/R; grant/parallel; LTS in US",
+    "ownerCode": "COM",
+    "primaryMetricIds": ["28", "40"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Universal Broadband Guarantee",
+        "description": "Build public or cooperative networks into hard-to-reach areas at substantial capital cost."
+      },
+      {
+        "position": "center_left",
+        "title": "Rural Access Fund",
+        "description": "Subsidize connections only for verified unserved households."
+      },
+      {
+        "position": "center",
+        "title": "Broadband Buildout Compact",
+        "description": "Fund hard-to-reach broadband gaps and award open buildout credits against verified service and price targets."
+      },
+      {
+        "position": "center_right",
+        "title": "Verified Network Credit",
+        "description": "Offer competitive credits after providers demonstrate speed, price and coverage."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Spectrum Charter",
+        "description": "Open spectrum and permitting widely; firms may still bypass expensive remote areas."
+      }
+    ]
+  },
+  {
+    "id": "L28",
+    "title": "Water and sanitation",
+    "domain": "Housing and physical infrastructure",
+    "scope": "N minimum floor plus R utilities; LTS in US only for supplemental programs, not abandonment of safety floor",
+    "ownerCode": "ENV",
+    "primaryMetricIds": ["29", "19"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Clean Water Renewal Act",
+        "description": "Replace aging public pipes and treatment facilities at scale over multiple years."
+      },
+      {
+        "position": "center_left",
+        "title": "High-Risk Pipe Fund",
+        "description": "Prioritize contaminated systems and high-risk service lines."
+      },
+      {
+        "position": "center",
+        "title": "Safe Water Compact",
+        "description": "Fund the highest-risk pipe replacements and require independently checked utility performance targets."
+      },
+      {
+        "position": "center_right",
+        "title": "Utility Performance Contract",
+        "description": "Fund upgrades against independent water-quality and reliability targets."
+      },
+      {
+        "position": "far_right",
+        "title": "Risk-Based Water Charter",
+        "description": "Use risk-based utility contracts broadly; oversight is needed to prevent deferred maintenance."
+      }
+    ]
+  },
+  {
+    "id": "L29",
+    "title": "Grid reliability and modernization",
+    "domain": "Energy, environment, and resilience",
+    "scope": "N/R; standards/grant/parallel; LTS in US for optional buildout",
+    "ownerCode": "ENE",
+    "primaryMetricIds": ["30", "58"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "National Grid Renewal Act",
+        "description": "Build public transmission, storage and backup assets, with long permitting and construction lags."
+      },
+      {
+        "position": "center_left",
+        "title": "Priority Resilience Fund",
+        "description": "Fund critical substations and outage-prone corridors first."
+      },
+      {
+        "position": "center",
+        "title": "Reliable Grid Compact",
+        "description": "Set reliability and maintenance standards while rewarding verified utility upgrades and distributed backup."
+      },
+      {
+        "position": "center_right",
+        "title": "Distributed Power Incentive",
+        "description": "Reward distributed backup where measured reliability improves."
+      },
+      {
+        "position": "far_right",
+        "title": "Fast Siting Grid Charter",
+        "description": "Accelerate regulated utility investment and siting; maintenance obligations remain."
+      }
+    ]
+  },
+  {
+    "id": "L30",
+    "title": "Energy mix and security",
+    "domain": "Energy, environment, and resilience",
+    "scope": "N/R for local siting and programs; national reserves/import rules remain national",
+    "ownerCode": "ENE",
+    "primaryMetricIds": ["58", "37", "36", "07"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": false,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Clean Energy Mission Act",
+        "description": "Back clean generation, efficiency and storage widely; costs arrive before much of the benefit."
+      },
+      {
+        "position": "center_left",
+        "title": "Efficiency and Storage Fund",
+        "description": "Target efficiency and storage where fuel dependence or outages are worst."
+      },
+      {
+        "position": "center",
+        "title": "Energy Security Compact",
+        "description": "Set a clean and reliability floor, then procure additional supply through technology-neutral competitive auctions."
+      },
+      {
+        "position": "center_right",
+        "title": "Neutral Power Auctions",
+        "description": "Auction technology-neutral capacity subject to clean and reliability requirements."
+      },
+      {
+        "position": "far_right",
+        "title": "Domestic Energy Access Act",
+        "description": "Diversify domestic energy supply rapidly; emissions depend on the resulting mix."
+      }
+    ]
+  },
+  {
+    "id": "L31",
+    "title": "Clean air and industrial emissions",
+    "domain": "Energy, environment, and resilience",
+    "scope": "N floor plus R enforcement; LTS in US only for additional federal stringency",
+    "ownerCode": "ENV",
+    "primaryMetricIds": ["35", "36", "19"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Clean Air Enforcement Act",
+        "description": "Set tight emissions limits and fund inspections and cleanup at high-exposure sites."
+      },
+      {
+        "position": "center_left",
+        "title": "Priority Remediation Fund",
+        "description": "Inspect and remediate the worst industrial pollution sources first."
+      },
+      {
+        "position": "center",
+        "title": "Pollution Cap Compact",
+        "description": "Set a monitored exposure cap and permit verified trading or abatement credits within it."
+      },
+      {
+        "position": "center_right",
+        "title": "Verified Abatement Credit",
+        "description": "Credit only independently verified abatement under a binding exposure cap."
+      },
+      {
+        "position": "far_right",
+        "title": "Tradable Permit Charter",
+        "description": "Trade permits under a firm monitored cap; weak baselines would erase the gain."
+      }
+    ]
+  },
+  {
+    "id": "L32",
+    "title": "Disaster and climate resilience",
+    "domain": "Energy, environment, and resilience",
+    "scope": "N/R; grant/parallel; LTS in US for optional projects",
+    "ownerCode": "ENV",
+    "primaryMetricIds": ["38", "23", "29"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "National Resilience Works Act",
+        "description": "Construct public defenses and response capacity across exposed regions."
+      },
+      {
+        "position": "center_left",
+        "title": "Flood and Shelter Fund",
+        "description": "Fund flood protection and shelters for the most vulnerable communities."
+      },
+      {
+        "position": "center",
+        "title": "Disaster Mitigation Compact",
+        "description": "Protect the most exposed areas with public defenses and support safer buildings through audited mitigation credits."
+      },
+      {
+        "position": "center_right",
+        "title": "Safer Buildings Credit",
+        "description": "Credit safer buildings and mitigation only where avoided loss can be checked."
+      },
+      {
+        "position": "far_right",
+        "title": "Risk-Priced Resilience Act",
+        "description": "Price disaster risk more fully; unaided high-risk households may be priced out."
+      }
+    ]
+  },
+  {
+    "id": "L33",
+    "title": "Land and habitat conservation",
+    "domain": "Energy, environment, and resilience",
+    "scope": "N/R by land ownership and competence; parallel; LTS in US for eligible lands",
+    "ownerCode": "ENV",
+    "primaryMetricIds": ["39", "38"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "National Habitat Restoration Act",
+        "description": "Protect large connected landscapes and restore degraded public habitat."
+      },
+      {
+        "position": "center_left",
+        "title": "Priority Habitat Fund",
+        "description": "Restore high-value corridors and threatened ecosystems first."
+      },
+      {
+        "position": "center",
+        "title": "Conservation Compact",
+        "description": "Keep key habitats publicly protected while paying landowners for measured conservation elsewhere."
+      },
+      {
+        "position": "center_right",
+        "title": "Verified Easement Credit",
+        "description": "Pay for easements only after habitat outcomes are verified."
+      },
+      {
+        "position": "far_right",
+        "title": "Land Stewardship Market Act",
+        "description": "Open broad landowner conservation markets, with reversal and monitoring risks."
+      }
+    ]
+  },
+  {
+    "id": "L34",
+    "title": "Policing and violence prevention",
+    "domain": "Safety and justice",
+    "scope": "N grants/special federal remit plus R police law; LTS in US for local policing",
+    "ownerCode": "JUS",
+    "primaryMetricIds": ["31", "32", "49"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Community Safety Guarantee",
+        "description": "Fund violence interruption and neighborhood services broadly, with a slow trust-building ramp."
+      },
+      {
+        "position": "center_left",
+        "title": "Violence Interruption Fund",
+        "description": "Concentrate prevention teams where repeat harm is highest."
+      },
+      {
+        "position": "center",
+        "title": "Safety and Justice Compact",
+        "description": "Fund targeted violence interruption alongside focused investigations with explicit due-process safeguards."
+      },
+      {
+        "position": "center_right",
+        "title": "Focused Investigation Grants",
+        "description": "Fund focused investigations with independent review of police conduct."
+      },
+      {
+        "position": "far_right",
+        "title": "Hotspot Response Charter",
+        "description": "Expand hotspot deterrence and investigation while guarding against rights violations."
+      }
+    ]
+  },
+  {
+    "id": "L35",
+    "title": "Sentencing, diversion and reentry",
+    "domain": "Safety and justice",
+    "scope": "N/R, each over own offenses/courts; LTS in US for non-federal crimes",
+    "ownerCode": "JUS",
+    "primaryMetricIds": ["33", "34", "31", "32"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Second Chance Justice Act",
+        "description": "Make treatment diversion and reentry support widely available to eligible defendants."
+      },
+      {
+        "position": "center_left",
+        "title": "Treatment Diversion Fund",
+        "description": "Offer diversion for lower-risk cases with treatment capacity and follow-up."
+      },
+      {
+        "position": "center",
+        "title": "Diversion and Reentry Compact",
+        "description": "Offer treatment diversion for eligible cases and pair predictable sanctions with education and reentry support."
+      },
+      {
+        "position": "center_right",
+        "title": "Prison Education Reform",
+        "description": "Combine predictable sanctions with prison education for selected cohorts."
+      },
+      {
+        "position": "far_right",
+        "title": "Earned Reentry Charter",
+        "description": "Use work and earned reentry pathways broadly; longer custody alone is not credited."
+      }
+    ]
+  },
+  {
+    "id": "L36",
+    "title": "Courts, legal aid and due process",
+    "domain": "Safety and justice",
+    "scope": "N/R over their court systems; LTS in US for state-court services",
+    "ownerCode": "JUS",
+    "primaryMetricIds": ["50", "33", "49"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Equal Justice Access Act",
+        "description": "Guarantee legal representation and expand court staffing for major case backlogs."
+      },
+      {
+        "position": "center_left",
+        "title": "Priority Legal Aid Fund",
+        "description": "Provide counsel and bail review first for people at highest risk of unfair detention."
+      },
+      {
+        "position": "center",
+        "title": "Justice Delivery Compact",
+        "description": "Guarantee representation in priority cases while modernizing case flow and testing fair dispute resolution."
+      },
+      {
+        "position": "center_right",
+        "title": "Court Caseflow Reform",
+        "description": "Modernize scheduling and records while preserving representation rights."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Resolution Charter",
+        "description": "Expand fair dispute resolution and limited-scope service, with judicial review for coercion."
+      }
+    ]
+  },
+  {
+    "id": "L50",
+    "title": "Firearms ownership and safety",
+    "domain": "Safety and justice",
+    "scope": "N in US/UK/JP; R US only for competent state law; LTS in US for optional federal supplements only",
+    "ownerCode": "JUS",
+    "primaryMetricIds": ["31", "19", "49"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Community Firearm Safety Act",
+        "description": "Fund broad safety licensing, safe-storage access and firearm-injury prevention; preserve reviewable lawful ownership."
+      },
+      {
+        "position": "center_left",
+        "title": "Verified Transfer and Storage Act",
+        "description": "Check additional transfers and support secure storage with traceable, appealable administration."
+      },
+      {
+        "position": "center",
+        "title": "Dealer Accountability Compact",
+        "description": "Maintain licensed-dealer records, prohibited-person enforcement and safety education while protecting lawful access and review rights."
+      },
+      {
+        "position": "center_right",
+        "title": "Lawful Ownership and Enforcement Act",
+        "description": "Simplify compliant ownership while concentrating enforcement on trafficking and prohibited possession."
+      },
+      {
+        "position": "far_right",
+        "title": "Firearm Access and Targeted Crime Act",
+        "description": "Widen lawful access while funding targeted violent-misuse investigations; injury and victimization remain uncertain."
+      }
+    ]
+  },
+  {
+    "id": "L37",
+    "title": "Food access and agricultural resilience",
+    "domain": "Households, opportunity, and demography",
+    "scope": "N/R; grants/parallel; LTS in US for food-assistance supplements",
+    "ownerCode": "AGR",
+    "primaryMetricIds": ["42", "03", "07"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Food Security Guarantee",
+        "description": "Fund broad nutrition benefits and local food access, with substantial recurring cost."
+      },
+      {
+        "position": "center_left",
+        "title": "Household Nutrition Fund",
+        "description": "Target food assistance at households facing verified insecurity."
+      },
+      {
+        "position": "center",
+        "title": "Food Access Compact",
+        "description": "Protect access for food-insecure households while reducing distribution bottlenecks and supporting farm resilience."
+      },
+      {
+        "position": "center_right",
+        "title": "Targeted Food Voucher",
+        "description": "Use portable vouchers while removing specific distribution bottlenecks."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Food Distribution Act",
+        "description": "Open food distribution competition; poor households still need a minimum safety net."
+      }
+    ]
+  },
+  {
+    "id": "L38",
+    "title": "Childcare and family formation",
+    "domain": "Households, opportunity, and demography",
+    "scope": "N/R; grant/parallel; LTS in US",
+    "ownerCode": "SOC",
+    "primaryMetricIds": ["55", "54", "45", "02"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "National Childcare Guarantee",
+        "description": "Build public childcare places and paid leave across eligible families."
+      },
+      {
+        "position": "center_left",
+        "title": "Priority Childcare Places",
+        "description": "Add subsidized places and benefits first where care shortages are acute."
+      },
+      {
+        "position": "center",
+        "title": "Family Care Compact",
+        "description": "Provide basic childcare places and a portable credit usable at accredited providers, with targeted leave support."
+      },
+      {
+        "position": "center_right",
+        "title": "Portable Childcare Credit",
+        "description": "Offer portable credits at accredited providers and limited leave support."
+      },
+      {
+        "position": "far_right",
+        "title": "Family Choice Tax Act",
+        "description": "Use flexible work and family tax relief broadly; scarce childcare places can blunt the gain."
+      }
+    ]
+  },
+  {
+    "id": "L51",
+    "title": "Reproductive care and abortion law",
+    "domain": "Households, opportunity, and demography",
+    "scope": "N in US/UK/JP; R US only under national and constitutional floors; LTS in US for optional federal services only",
+    "ownerCode": "HLT",
+    "primaryMetricIds": ["17", "19", "45", "55"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Reproductive Health Access Guarantee",
+        "description": "Fund broad lawful reproductive-care access, contraception and clinic capacity, including appropriate clinical exceptions."
+      },
+      {
+        "position": "center_left",
+        "title": "Clinic Access and Family Planning Act",
+        "description": "Target clinic capacity and family planning where access and affordability gaps are largest."
+      },
+      {
+        "position": "center",
+        "title": "Reproductive Care and Consent Compact",
+        "description": "Protect then-lawful clinical access and informed consent while funding basic contraception, prenatal care and independently reviewed exceptions."
+      },
+      {
+        "position": "center_right",
+        "title": "Maternal Support and Viability Act",
+        "description": "Add reviewable informed-consent and post-viability rules with prenatal and adoption support, subject to controlling rights and medical exceptions."
+      },
+      {
+        "position": "far_right",
+        "title": "Pregnancy Protection and Care Act",
+        "description": "Narrow elective later-pregnancy access where lawful and expand prenatal, adoption and family care; emergency care and controlling rights remain in force."
+      }
+    ]
+  },
+  {
+    "id": "L39",
+    "title": "Newcomer integration",
+    "domain": "Households, opportunity, and demography",
+    "scope": "N integration standards plus R services; no regional control of national entry rules",
+    "ownerCode": "LAB",
+    "primaryMetricIds": ["46", "01", "43"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": false,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Newcomer Integration Act",
+        "description": "Provide language classes, credential help and rights enforcement across newcomer communities."
+      },
+      {
+        "position": "center_left",
+        "title": "Language and Credential Fund",
+        "description": "Focus credential and language support on newcomers facing the largest employment gaps."
+      },
+      {
+        "position": "center",
+        "title": "Integration and Work Compact",
+        "description": "Speed credential recognition and pair language support with employer training under enforceable worker protections."
+      },
+      {
+        "position": "center_right",
+        "title": "Employer Training Sponsorship",
+        "description": "Pay employers for supervised training with enforceable worker protections."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Credential Charter",
+        "description": "Accelerate recognition and licensing broadly, with monitoring for exploitation."
+      }
+    ]
+  },
+  {
+    "id": "L49",
+    "title": "Entry and residence",
+    "domain": "Households, opportunity, and demography",
+    "scope": "N only; national visa, residence and protection rules; no regional entry power or LTS",
+    "ownerCode": "JUS",
+    "primaryMetricIds": ["54", "56", "46", "01"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": []
+    },
+    "leaveToStates": false,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Family and Refuge Charter",
+        "description": "Expand family reunion and protected entry with funded casework and appeal capacity."
+      },
+      {
+        "position": "center_left",
+        "title": "Priority Entry and Protection Act",
+        "description": "Prioritize family and humanitarian backlogs with lawful status decisions and local settlement support."
+      },
+      {
+        "position": "center",
+        "title": "Entry and Residence Compact",
+        "description": "Maintain a mixed family, protection and skills route with funded casework, review rights and employer checks."
+      },
+      {
+        "position": "center_right",
+        "title": "Verified Skills Admission Act",
+        "description": "Expand verified skills routes while retaining protected-entry review and employer compliance checks."
+      },
+      {
+        "position": "far_right",
+        "title": "Selective Entry and Removal Code",
+        "description": "Narrow discretionary admissions with intensive screening and removals; lawful claims and due process remain."
+      }
+    ]
+  },
+  {
+    "id": "L40",
+    "title": "Equal opportunity and mobility",
+    "domain": "Households, opportunity, and demography",
+    "scope": "N rights floor plus R enforcement/programs; LTS in US for optional grants only",
+    "ownerCode": "JUS",
+    "primaryMetricIds": ["45", "40", "04"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Equal Opportunity Guarantee",
+        "description": "Expand opportunity enforcement and access grants where barriers are documented."
+      },
+      {
+        "position": "center_left",
+        "title": "Priority Access Fund",
+        "description": "Fund targeted entry support and enforce anti-discrimination claims."
+      },
+      {
+        "position": "center",
+        "title": "Rights and Mobility Compact",
+        "description": "Enforce a clear anti-discrimination floor while removing needless licensing barriers and offering portable access aid."
+      },
+      {
+        "position": "center_right",
+        "title": "Portable Opportunity Grant",
+        "description": "Make aid portable while removing specific licensing barriers."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Entry and Rights Act",
+        "description": "Open hiring and licensing broadly under a binding civil-rights floor."
+      }
+    ]
+  },
+  {
+    "id": "L41",
+    "title": "Civic and community institutions",
+    "domain": "Households, opportunity, and demography",
+    "scope": "N/R; parallel; LTS in US",
+    "ownerCode": "GOV",
+    "primaryMetricIds": ["44", "43", "49"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "National Civic Commons Act",
+        "description": "Fund civic institutions and participatory programs across communities."
+      },
+      {
+        "position": "center_left",
+        "title": "Local Participation Fund",
+        "description": "Offer small grants to places with weak participation infrastructure."
+      },
+      {
+        "position": "center",
+        "title": "Civic Matching Compact",
+        "description": "Match locally raised civic funds with small public grants under open-access and transparency rules."
+      },
+      {
+        "position": "center_right",
+        "title": "Community Matching Credit",
+        "description": "Match community funds against open-access and disclosure tests."
+      },
+      {
+        "position": "far_right",
+        "title": "Voluntary Association Charter",
+        "description": "Favor voluntary associations and tax relief; wealthy districts may raise more matching money."
+      }
+    ]
+  },
+  {
+    "id": "L42",
+    "title": "Regional renewal and population adaptation",
+    "domain": "Households, opportunity, and demography",
+    "scope": "N/R; grant/parallel; LTS in US",
+    "ownerCode": "ECO",
+    "primaryMetricIds": ["54", "56", "01", "40"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Regional Renewal Mission",
+        "description": "Rebuild transport, care and jobs in declining regions through long-lived public projects."
+      },
+      {
+        "position": "center_left",
+        "title": "Essential Services Fund",
+        "description": "Protect essential services and jobs in the most affected places."
+      },
+      {
+        "position": "center",
+        "title": "Renewal and Mobility Compact",
+        "description": "Keep essential services in declining regions while offering voluntary mobility and local business support."
+      },
+      {
+        "position": "center_right",
+        "title": "Local Enterprise Credit",
+        "description": "Combine basic local services with voluntary relocation support."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Regional Opportunity Act",
+        "description": "Cut formation barriers and support mobility; those unable to move need a service floor."
+      }
+    ]
+  },
+  {
+    "id": "L43",
+    "title": "Elections and ballot access",
+    "domain": "Democratic government and information",
+    "scope": "N/R over their elections; national constitutional/legal floors remain; LTS in US for permissible procedures",
+    "ownerCode": "GOV",
+    "primaryMetricIds": ["51", "49"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Universal Ballot Access Act",
+        "description": "Register eligible voters automatically and expand accessible polling widely."
+      },
+      {
+        "position": "center_left",
+        "title": "Polling Access Fund",
+        "description": "Fund polling access in communities with long travel or wait times."
+      },
+      {
+        "position": "center",
+        "title": "Secure Access Compact",
+        "description": "Expand practical ballot access alongside transparent rolls, reliable polling capacity, and independent checks."
+      },
+      {
+        "position": "center_right",
+        "title": "Reliable Polling Reform",
+        "description": "Pair convenient voting with transparent rolls and independent checks."
+      },
+      {
+        "position": "far_right",
+        "title": "Transparent Elections Charter",
+        "description": "Standardize secure polling capacity; tight verification must not block eligible voters."
+      }
+    ]
+  },
+  {
+    "id": "L44",
+    "title": "Public records and transparency",
+    "domain": "Democratic government and information",
+    "scope": "N/R for each government's records; LTS in US for extra state transparency programs",
+    "ownerCode": "GOV",
+    "primaryMetricIds": ["47", "49"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Open Government Guarantee",
+        "description": "Require broad proactive disclosure and staff response offices to clear records backlogs."
+      },
+      {
+        "position": "center_left",
+        "title": "Records Access Fund",
+        "description": "Fund access to the records most often requested by the public."
+      },
+      {
+        "position": "center",
+        "title": "Open Records Compact",
+        "description": "Guarantee timely access to core records and publish machine-readable data with narrow, reviewable exemptions."
+      },
+      {
+        "position": "center_right",
+        "title": "Usable Data Reform",
+        "description": "Publish machine-readable records and enforce measured response deadlines."
+      },
+      {
+        "position": "far_right",
+        "title": "Rapid Disclosure Charter",
+        "description": "Make rapid disclosure the default while retaining narrow, reviewable exemptions."
+      }
+    ]
+  },
+  {
+    "id": "L45",
+    "title": "Ethics, audit and procurement",
+    "domain": "Democratic government and information",
+    "scope": "N/R; parallel",
+    "ownerCode": "GOV",
+    "primaryMetricIds": ["48", "47", "09"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": false,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Independent Integrity Commission",
+        "description": "Empower independent inspectors to investigate misconduct and enforce disclosure."
+      },
+      {
+        "position": "center_left",
+        "title": "Public Inspectors Fund",
+        "description": "Target audit staff at high-risk contracts and conflicts of interest."
+      },
+      {
+        "position": "center",
+        "title": "Audit and Purchasing Compact",
+        "description": "Maintain independent ethics review while making procurement competitive and recording clear digital audit trails."
+      },
+      {
+        "position": "center_right",
+        "title": "Competitive Procurement Code",
+        "description": "Require competitive bids and independent review for major purchasing."
+      },
+      {
+        "position": "far_right",
+        "title": "Automated Integrity Charter",
+        "description": "Automate audit trails broadly; a human authority must still investigate anomalies."
+      }
+    ]
+  },
+  {
+    "id": "L46",
+    "title": "Civil liberties and privacy",
+    "domain": "Democratic government and information",
+    "scope": "N rights floor plus R protections; LTS in US only for supplementary rulemaking",
+    "ownerCode": "JUS",
+    "primaryMetricIds": ["50", "49"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": true,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Civil Liberties Guarantee",
+        "description": "Establish strong privacy and due-process limits with independent enforcement."
+      },
+      {
+        "position": "center_left",
+        "title": "Independent Rights Review",
+        "description": "Fund oversight and remedies for the most intrusive state powers."
+      },
+      {
+        "position": "center",
+        "title": "Warrants and Remedies Compact",
+        "description": "Define narrow lawful powers, require reviewable warrants, and provide fast independent remedies for violations."
+      },
+      {
+        "position": "center_right",
+        "title": "Judicial Safeguards Reform",
+        "description": "Require reviewable warrants and judicial remedies for specified searches."
+      },
+      {
+        "position": "far_right",
+        "title": "Clear Powers Charter",
+        "description": "Clarify enforcement powers and fast remedies, guarding against overly broad exceptions."
+      }
+    ]
+  },
+  {
+    "id": "L47",
+    "title": "Press and information integrity",
+    "domain": "Democratic government and information",
+    "scope": "N/R only where competent; independent regulator/press protections; no ministerial editorial control",
+    "ownerCode": "COM",
+    "primaryMetricIds": ["52", "53", "49"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": ["US", "UK", "JP"]
+    },
+    "leaveToStates": false,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "Independent Media Commons",
+        "description": "Support independent public-interest journalism and literacy without directing editorial decisions."
+      },
+      {
+        "position": "center_left",
+        "title": "Media Literacy Fund",
+        "description": "Fund nonpartisan media literacy for underserved audiences."
+      },
+      {
+        "position": "center",
+        "title": "Free Press Integrity Compact",
+        "description": "Support nonpartisan media literacy and require ownership disclosure while protecting editorial independence."
+      },
+      {
+        "position": "center_right",
+        "title": "Ownership Disclosure Reform",
+        "description": "Require clear ownership disclosure and narrow fraud controls."
+      },
+      {
+        "position": "far_right",
+        "title": "Open Platform Charter",
+        "description": "Open platform competition and tightly defined fraud remedies; protect lawful dissent."
+      }
+    ]
+  },
+  {
+    "id": "L48",
+    "title": "Armed-forces readiness",
+    "domain": "Defense and strategic security",
+    "scope": "N only; no \"leave it\" or regional military duplicate",
+    "ownerCode": "DEF",
+    "primaryMetricIds": ["57"],
+    "availability": {
+      "national": ["US", "UK", "JP"],
+      "regional": []
+    },
+    "leaveToStates": false,
+    "review": {
+      "legalComponents": "required",
+      "allocation": "required",
+      "outcomeCalibration": "required"
+    },
+    "levels": [
+      {
+        "position": "far_left",
+        "title": "National Readiness Renewal Act",
+        "description": "Rebuild personnel, maintenance and logistics capacity across the forces over several years."
+      },
+      {
+        "position": "center_left",
+        "title": "Retention and Maintenance Fund",
+        "description": "Target retention and repairs at the least available units."
+      },
+      {
+        "position": "center",
+        "title": "Readiness and Reform Compact",
+        "description": "Fund critical personnel and equipment upkeep while testing procurement competition and reserve training against readiness."
+      },
+      {
+        "position": "center_right",
+        "title": "Reserve Procurement Reform",
+        "description": "Compete procurement and expand reserve training against measurable readiness tests."
+      },
+      {
+        "position": "far_right",
+        "title": "Lean Force Modernization Act",
+        "description": "Restructure widely for lower unit cost; transition gaps can reduce near-term availability."
+      }
+    ]
+  }
+]

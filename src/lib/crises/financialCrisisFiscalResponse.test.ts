@@ -84,6 +84,18 @@ describe("financial crisis fiscal transmission", () => {
     expect(budget?.treasuryBalance).toBe(800);
     expect(centralBank?.externalBroadMoney).toBe(2200);
   });
+  it("freezes the Treasury currency and monetary authority identity in funded journal legs", async () => {
+    const { memory, ctx } = world("stimulus");
+    await applyFinancialFiscalResponse(ctx, "stimulus");
+    const move = memory.collection("bankMoneyMoves").docs[0] as unknown as {
+      legs: { filter: Record<string, unknown> }[];
+    };
+    expect(move.legs[0]?.filter.currencyCode).toEqual({ $exists: true, $eq: "USD" });
+    expect(move.legs[1]?.filter).toMatchObject({
+      _id: getBankId("US"),
+      monetaryAuthorityId: { $exists: false },
+    });
+  });
   it("routes a funded sovereign support grant from Treasury cash to the recipient", async () => {
     const { memory, ctx } = world("sovereign_support");
     ctx.treasuryCashLedgerEnabled = true;
@@ -171,5 +183,26 @@ describe("financial crisis fiscal transmission", () => {
     expect(recipient?.debt.principal).toBe(300);
     const donor = await ctx.db.collection("federalBudget").findOne({ countryId: "US" });
     expect(donor?.treasuryBalance + recipient?.treasuryBalance).toBe(1050);
+  });
+  it("freezes the recipient currency on a sovereign support grant", async () => {
+    const { ctx, memory } = world("sovereign_support");
+    memory.seed("federalBudget", [
+      {
+        _id: "national-budget-ie",
+        countryId: "IE",
+        currencyCode: "USD",
+        treasuryBalance: 10,
+        sovereignCrisisState: "crisisPending",
+      },
+    ]);
+    await applyFinancialFiscalResponse(ctx, "sovereign_support");
+    const move = memory.collection("bankMoneyMoves").docs[0] as unknown as {
+      legs: { filter: Record<string, unknown> }[];
+    };
+    expect(move.legs[1]?.filter).toMatchObject({
+      _id: "national-budget-ie",
+      countryId: "IE",
+      currencyCode: { $exists: true, $eq: "USD" },
+    });
   });
 });

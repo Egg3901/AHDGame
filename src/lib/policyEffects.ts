@@ -53,6 +53,11 @@ import { isMetricActive, getEraBand } from "@/lib/era/metricCatalog";
 import { resolveGameYear } from "@/lib/era/era";
 import { findMergedRegionMetrics, findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import { isMacroMetricPath } from "@/lib/macroMetrics/paths";
+import {
+  loadDepartmentDeliveryMultipliersByCountry,
+  loadRegionalDeliveryMultipliersByRegion,
+} from "@/lib/governmentFinance/deliveryMultipliers";
+import { clampRatio } from "@/lib/governmentFinance/rules/implementation";
 
 /**
  * Map of legislation type IDs to their documents
@@ -64,6 +69,24 @@ export type LegislationTypeMap = Map<string, LegislationType>;
  */
 export interface ActivePolicy extends StatePolicy {
   scopeMultiplier: number;
+  /** Delivered share for outcome effects. Absent preserves the legacy path. */
+  deliveryMultiplier?: number;
+}
+
+export function resolvePolicyDeliveryMultiplier(
+  policy: StatePolicy,
+  legTypeMap: LegislationTypeMap,
+  multipliers: ReadonlyMap<string, number> | undefined
+): number {
+  const delivered = multipliers?.get(policy.legislationTypeId);
+  if (delivered !== undefined) return clampRatio(delivered);
+  const type = legTypeMap.get(policy.legislationTypeId);
+  const option =
+    type?.policyOptions?.find((candidate) => candidate.id === policy.policyOptionId) ??
+    (typeof policy.policyOptionIndex === "number"
+      ? type?.policyOptions?.[policy.policyOptionIndex]
+      : undefined);
+  return option?.implementation ? 0 : 1;
 }
 
 /**
@@ -233,6 +256,7 @@ export function calculateMetricTarget(
     // multiplier so their decay effect is uniform across countries; state laws (scope 1)
     // are unchanged. The tick path (computeTickRates) keeps the per-country multiplier.
     const decayScope = nationalDecayScope(policy.scopeMultiplier);
+    const deliveryMultiplier = clampRatio(policy.deliveryMultiplier ?? 1);
 
     // Check for weighted effect targets (preferred)
     if (legType.effectTargetsWeighted && legType.effectTargetsWeighted.length > 0) {
@@ -256,7 +280,7 @@ export function calculateMetricTarget(
           contribution *= decayFactor;
         }
 
-        totalContribution += contribution;
+        totalContribution += contribution * deliveryMultiplier;
       }
     } else if (legType.effectTarget) {
       // Fallback to legacy single effect target
@@ -266,7 +290,9 @@ export function calculateMetricTarget(
       ) {
         // Legacy targets have implicit weight of 1.0
         const contribution =
-          calculatePolicyContribution(strength, 1.0, decayScope, isHigherBetter) * rangeScale;
+          calculatePolicyContribution(strength, 1.0, decayScope, isHigherBetter) *
+          rangeScale *
+          deliveryMultiplier;
         totalContribution += contribution;
       }
     }
@@ -315,7 +341,8 @@ export function computeTickRates(
       if (!isMetricActive(metricId, countryId, year)) continue;
       if (!rates[category]) rates[category] = {};
       rates[category][metricId] =
-        (rates[category][metricId] ?? 0) + ratePerTurn * policy.scopeMultiplier;
+        (rates[category][metricId] ?? 0) +
+        ratePerTurn * policy.scopeMultiplier * clampRatio(policy.deliveryMultiplier ?? 1);
     }
   }
 
@@ -499,6 +526,33 @@ export async function processStatePolicyEffects(
     legTypeMap.set(legType._id, legType);
   }
 
+  // The political-board phase owns US and UK outcomes. This legacy policy
+  // pass currently needs migrated delivery only for non-board initial-scope
+  // countries (JP), so avoid decoding unrelated national and regional ledgers.
+  const legacyFinanceStates = states.filter(
+    (state) =>
+      !isPoliticalApprovalCountry(state.countryId) && ["US", "UK", "JP"].includes(state.countryId)
+  );
+  const legacyFinanceCountryIds = [...new Set(legacyFinanceStates.map((state) => state.countryId))];
+  const [nationalDeliveryByCountry, regionalDeliveryByRegion] = await Promise.all([
+    legacyFinanceCountryIds.length > 0
+      ? loadDepartmentDeliveryMultipliersByCountry(
+          db,
+          currentTurn,
+          gameState?.departmentFinanceEnabled === true,
+          legacyFinanceCountryIds
+        )
+      : Promise.resolve(new Map<string, Map<string, number>>()),
+    legacyFinanceStates.length > 0
+      ? loadRegionalDeliveryMultipliersByRegion(
+          db,
+          currentTurn,
+          gameState?.regionalLegislationFinanceEnabled === true,
+          legacyFinanceStates.map((state) => String(state._id))
+        )
+      : Promise.resolve(new Map<string, Map<string, number>>()),
+  ]);
+
   // Group policies by stateId
   const policiesByState = new Map<string, StatePolicy[]>();
   for (const policy of allStatePolicies) {
@@ -513,12 +567,45 @@ export async function processStatePolicyEffects(
   const federalPolicies: ActivePolicy[] = (policiesByState.get("federal") ?? []).map((p) => ({
     ...p,
     scopeMultiplier: getFederalMultiplier("US"),
+    ...(gameState?.departmentFinanceEnabled === true
+      ? {
+          deliveryMultiplier: resolvePolicyDeliveryMultiplier(
+            p,
+            legTypeMap,
+            nationalDeliveryByCountry.get("US")
+          ),
+        }
+      : {}),
   }));
   const ukNationalPolicies: ActivePolicy[] = (policiesByState.get("uk_national") ?? []).map(
-    (p) => ({ ...p, scopeMultiplier: getFederalMultiplier("UK") })
+    (p) => ({
+      ...p,
+      scopeMultiplier: getFederalMultiplier("UK"),
+      ...(gameState?.departmentFinanceEnabled === true
+        ? {
+            deliveryMultiplier: resolvePolicyDeliveryMultiplier(
+              p,
+              legTypeMap,
+              nationalDeliveryByCountry.get("UK")
+            ),
+          }
+        : {}),
+    })
   );
   const jpNationalPolicies: ActivePolicy[] = (policiesByState.get("jp_national") ?? []).map(
-    (p) => ({ ...p, scopeMultiplier: getFederalMultiplier("JP") })
+    (p) => ({
+      ...p,
+      scopeMultiplier: getFederalMultiplier("JP"),
+      ...(gameState?.departmentFinanceEnabled === true
+        ? {
+            deliveryMultiplier: resolvePolicyDeliveryMultiplier(
+              p,
+              legTypeMap,
+              nationalDeliveryByCountry.get("JP")
+            ),
+          }
+        : {}),
+    })
   );
   const deNationalPolicies: ActivePolicy[] = (policiesByState.get("de_national") ?? []).map(
     (p) => ({ ...p, scopeMultiplier: getFederalMultiplier("DE") })
@@ -554,6 +641,15 @@ export async function processStatePolicyEffects(
     const stateWithMultiplier: ActivePolicy[] = statePoliciesArray.map((p) => ({
       ...p,
       scopeMultiplier: 1.0,
+      ...(gameState?.regionalLegislationFinanceEnabled === true
+        ? {
+            deliveryMultiplier: resolvePolicyDeliveryMultiplier(
+              p,
+              legTypeMap,
+              regionalDeliveryByRegion.get(String(state._id))
+            ),
+          }
+        : {}),
     }));
     const policies = [...stateWithMultiplier, ...nationalPolicies];
 

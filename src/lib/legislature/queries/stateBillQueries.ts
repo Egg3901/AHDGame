@@ -177,7 +177,12 @@ export async function listStateLegislatureBills(
   for (const bill of activeStateBills) {
     if (!bill.provisions) continue;
     for (const provision of bill.provisions) {
-      if (provision.type === "subsidy" || provision.type === "end_subsidy") continue;
+      if (
+        provision.type === "subsidy" ||
+        provision.type === "end_subsidy" ||
+        provision.type === "reset_law"
+      )
+        continue;
       const policyProvision = provision as { legislationTypeId?: string; policyOptionId?: string };
       if (policyProvision.legislationTypeId && policyProvision.policyOptionId) {
         blockedProvisions.push({
@@ -237,7 +242,10 @@ export async function listStateLegislatureBills(
       myVote: myCharacterId ? (bill.votes[myCharacterId] ?? null) : null,
       voteShiftPreview: buildVoteShiftPreview({
         provisions: (bill.provisions ?? []).filter(
-          (provision) => provision.type !== "subsidy" && provision.type !== "end_subsidy"
+          (provision) =>
+            provision.type !== "subsidy" &&
+            provision.type !== "end_subsidy" &&
+            provision.type !== "reset_law"
         ),
         ledger: bill.policyShiftLedger,
         characterId: myCharacterId,
@@ -264,6 +272,21 @@ export async function listStateLegislatureBills(
             type: provision.type,
             scopeType: provision.scopeType,
             targetSectorType: provision.targetSectorType ?? null,
+          };
+        }
+        if (provision.type === "reset_law") {
+          return {
+            legislationTypeName: provision.titleSnapshot,
+            current: {
+              name: provision.currentLawSnapshot,
+              explanation: provision.currentLawDescriptionSnapshot,
+            },
+            proposed: {
+              name: provision.titleSnapshot,
+              explanation: provision.descriptionSnapshot,
+            },
+            effectDirection: 0,
+            directionLabel: "Center",
           };
         }
         const legislationType = getLegislationTypeById(
@@ -533,6 +556,21 @@ export async function getStateLegislatureBillDetail(
           targetSectorType: provision.targetSectorType ?? null,
         };
       }
+      if (provision.type === "reset_law") {
+        return {
+          legislationTypeName: provision.titleSnapshot,
+          current: {
+            name: provision.currentLawSnapshot,
+            explanation: provision.currentLawDescriptionSnapshot,
+          },
+          proposed: {
+            name: provision.titleSnapshot,
+            explanation: provision.descriptionSnapshot,
+          },
+          effectDirection: 0,
+          directionLabel: "Center",
+        };
+      }
 
       const legislationType = getLegislationTypeById(
         legislationTypeMap,
@@ -636,7 +674,10 @@ export async function getStateLegislatureBillDetail(
     canVote,
     voteShiftPreview: buildVoteShiftPreview({
       provisions: (bill.provisions ?? []).filter(
-        (provision) => provision.type !== "subsidy" && provision.type !== "end_subsidy"
+        (provision) =>
+          provision.type !== "subsidy" &&
+          provision.type !== "end_subsidy" &&
+          provision.type !== "reset_law"
       ),
       ledger: bill.policyShiftLedger,
       characterId: myCharacterId,

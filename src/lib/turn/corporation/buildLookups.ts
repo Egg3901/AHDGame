@@ -152,6 +152,8 @@ export async function buildCorporationLookups(
     canonicalFreightBillingEnabled?: boolean;
     /** Project editorial positions and audience lean only while the rule is enabled. */
     mediaEditorialEnabled?: boolean;
+    /** Project treasury currency only while political-media settlement is active. */
+    politicalMediaMarketEnabled?: boolean;
   }
 ): Promise<CorporationLookups> {
   await reconcileSignedTariffBills(db);
@@ -223,6 +225,8 @@ export async function buildCorporationLookups(
             ...(options?.productLinesV2Enabled === true
               ? {}
               : {
+                  manufacturingProductAdvertisingObligationsV2: 0,
+                  manufacturingProductAdvertisingReceiptV2: 0,
                   manufacturingProductDevelopmentReceiptV2: 0,
                   manufacturingProductDevelopmentPaidTurnV2: 0,
                 }),
@@ -333,6 +337,13 @@ export async function buildCorporationLookups(
             minimumWageKaitzRatio: 1,
             unionLawBias: 1,
             unionsBanned: 1,
+            ...(options?.politicalMediaMarketEnabled === true
+              ? {
+                  currencyCode: 1,
+                  treasuryCashLocal: 1,
+                  treasuryBalance: 1,
+                }
+              : {}),
           },
         }
       )

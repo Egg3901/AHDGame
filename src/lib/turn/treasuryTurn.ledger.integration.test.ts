@@ -35,6 +35,76 @@ function world(bankTreasuryEnabled = false) {
 }
 
 describe("treasury accrual stock-flow ownership", () => {
+  function fundedCouponWorld(maturityTurn: number, treasuryCashLocal: number) {
+    const db = world(true);
+    const bankId = new ObjectId("650000000000000000000081");
+    const bondId = new ObjectId("650000000000000000000082");
+    db.collection("gameConfig").docs[0].treasuryCashLedgerEnabled = true;
+    db.seed("corporations", [
+      {
+        _id: bankId,
+        bankCharter: {
+          status: "active",
+          currency: "USD",
+          charteredTurn: 4,
+          cashReserves: 5,
+        },
+      },
+    ]);
+    db.seed("bondMarketPools", [{ _id: "USD", cashLocal: 0 }]);
+    db.seed("bonds", [
+      {
+        _id: bondId,
+        issuerType: "sovereign",
+        countryId: "US",
+        currencyCode: "USD",
+        couponRate: 4.8,
+        maturityTurn,
+        matured: false,
+        defaulted: false,
+        publicFloat: 50,
+        holders: [{ bankId, charteredTurn: 4, units: 50 }],
+      },
+    ]);
+    const budget = db.collection("federalBudget").docs[0];
+    budget.treasuryCashLocal = treasuryCashLocal;
+    return { db, bondId };
+  }
+
+  it.each([10, 11])("pays contract coupons through maturity turn %i", async (maturityTurn) => {
+    const { db } = fundedCouponWorld(maturityTurn, 1_000);
+
+    await processTreasuryTurn(10);
+    await processTreasuryTurn(10);
+
+    expect(db.collection("federalBudget").docs[0].treasuryCashLocal).toBe(900);
+    expect(db.collection("corporations").docs[0].bankCharter).toMatchObject({ cashReserves: 55 });
+    expect(db.collection("bondMarketPools").docs[0].cashLocal).toBe(50);
+  });
+
+  it("pays frozen coupon arrears without accruing new coupons after maturity", async () => {
+    const { db, bondId } = fundedCouponWorld(9, 0);
+    await processTreasuryTurn(8);
+    const budget = db.collection("federalBudget").docs[0];
+    expect(budget.bankSovereignClaims).toEqual([
+      expect.objectContaining({ turn: 8, amountLocal: 50 }),
+    ]);
+    expect(budget.sovereignCouponClaims).toEqual([
+      expect.objectContaining({ dueTurn: 8, amountLocal: 50 }),
+    ]);
+
+    budget.treasuryCashLocal = 1_000;
+    await processTreasuryTurn(10);
+    await processTreasuryTurn(10);
+
+    expect(budget.treasuryCashLocal).toBe(900);
+    expect(budget.bankSovereignClaims).toEqual([]);
+    expect(budget.sovereignCouponClaims).toEqual([]);
+    expect(budget.sovereignCouponFrozenThrough).toEqual({ [`b${bondId.toHexString()}`]: 8 });
+    expect(db.collection("corporations").docs[0].bankCharter).toMatchObject({ cashReserves: 55 });
+    expect(db.collection("bondMarketPools").docs[0].cashLocal).toBe(50);
+  });
+
   it("does not treat modeled revenue totals as spendable cash under the funded-cash flag", async () => {
     const db = world(false);
     await db
@@ -79,6 +149,7 @@ describe("treasury accrual stock-flow ownership", () => {
       countryId: "US",
       currencyCode: "USD",
       couponRate: 4.8,
+      maturityTurn: 48,
       defaulted: false,
       holders: [{ bankId, charteredTurn: 4, units: 100 }],
     });

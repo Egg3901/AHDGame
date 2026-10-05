@@ -16,6 +16,11 @@ describe("googlePrivacyMessaging", () => {
     expect(shouldRenderConsentManagedGoogleTags("/news")).toBe(true);
   });
 
+  it("never renders Google tags inside the store app", () => {
+    expect(shouldRenderConsentManagedGoogleTags("/news", { storeApp: true })).toBe(false);
+    expect(shouldRenderConsentManagedGoogleTags("/news", { storeApp: false })).toBe(true);
+  });
+
   it("only treats configured production hosts as CMP-eligible", () => {
     expect(isGoogleCmpSiteHost("ahousedividedgame.com")).toBe(true);
     expect(isGoogleCmpSiteHost("www.ahousedividedgame.com")).toBe(true);

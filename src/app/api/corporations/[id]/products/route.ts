@@ -62,6 +62,7 @@ type ManufacturingPlantSector = Pick<
 const noStore = { "Cache-Control": "private, no-store" };
 const startProjectSchema = z.object({
   kindId: z.string().min(1).max(80),
+  advertisingAllocationShare: z.number().finite().min(0).max(1).default(0),
   allocations: z
     .array(
       z.object({
@@ -112,6 +113,10 @@ function projectView(project: ManufacturingProductProject | null) {
     paidThresholdAnchor: project.paidThresholdAnchor,
     elapsedDevelopmentTurns: project.elapsedDevelopmentTurns,
     elapsedThresholdTurns: project.elapsedThresholdTurns,
+    advertisingAllocationShare: project.advertisingAllocationShare ?? 0,
+    developmentAdvertisingAnchor: project.developmentAdvertisingAnchor ?? 0,
+    developmentAdvertisingTurns: project.developmentAdvertisingTurns ?? 0,
+    productBrand: project.productBrand ?? 0,
   };
 }
 
@@ -387,6 +392,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       allocations: parsed.data.allocations as ProductPlantAllocation[],
       startedTurn: currentTurn,
       developmentPaidAnchor: 0,
+      advertisingAllocationShare: parsed.data.advertisingAllocationShare,
+      developmentAdvertisingAnchor: 0,
+      developmentAdvertisingTurns: 0,
+      productBrand: 0,
       paidThresholdAnchor: manufacturingDevelopmentThresholdAnchor(
         allocatedManufacturingCapitalAnchor(plants, parsed.data.allocations)
       ),

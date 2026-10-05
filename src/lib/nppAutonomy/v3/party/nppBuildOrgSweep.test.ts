@@ -21,10 +21,11 @@ const CHAIR_ID = new ObjectId();
 const CHAIR_USER_ID = new ObjectId();
 const POPS: Record<string, number> = { CA: 39_000_000, TX: 30_000_000 };
 
-function orgFor(state: string, party: number): number {
-  // Saturated states: pool nearly empty so gain must come through poaches.
+function orgFor(party: number): number {
+  // Saturated states: every fixed contribution dilutes the other shares.
   if (party === 1) return 5;
-  return state === "CA" ? 45 : 40;
+  if (party === 2) return 55;
+  return 40;
 }
 
 interface Fixture {
@@ -42,7 +43,9 @@ function seedDb(): Fixture {
       stateId,
       partyId: String(seq),
       countryId,
-      organization: orgFor(stateId, seq),
+      organization: orgFor(seq),
+      organizationUnits: orgFor(seq) * 10,
+      lastOrganizationBuildTurn: 100,
       politicalStrength: 50,
       treasury: 10_000_000,
       hasPresence: true,
@@ -72,6 +75,43 @@ function seedDb(): Fixture {
           ),
       }) as never
   );
+  spo.findOneAndUpdate.mockImplementation(async (filter: Record<string, unknown>) => {
+    const current = rowsById.get(String(filter._id));
+    if (
+      !current ||
+      current.countryId !== filter.countryId ||
+      current.stateId !== filter.stateId ||
+      current.partyId !== filter.partyId
+    ) {
+      return null;
+    }
+    current.organizationUnits += 1;
+    current.lastOrganizationBuildTurn = 100;
+    return { ...current };
+  });
+  spo.bulkWrite.mockImplementation(async (operations: unknown[]) => {
+    let modifiedCount = 0;
+    for (const operation of operations as Array<{
+      updateOne?: {
+        filter: { _id?: string; organizationUnits?: number };
+        update: { $set?: Record<string, unknown> };
+      };
+    }>) {
+      const updateOne = operation.updateOne;
+      if (!updateOne?.filter._id) continue;
+      const current = rowsById.get(updateOne.filter._id);
+      if (!current) continue;
+      if (
+        updateOne.filter.organizationUnits !== undefined &&
+        current.organizationUnits !== updateOne.filter.organizationUnits
+      ) {
+        continue;
+      }
+      Object.assign(current, updateOne.update.$set ?? {});
+      modifiedCount += 1;
+    }
+    return { modifiedCount };
+  });
 
   const parties = PARTIES.map((seq) => ({
     _id: new ObjectId(),
@@ -198,15 +238,15 @@ describe("nppBuildPartyOrg command profile", { timeout: 60000 }, () => {
     clearOrgBuildSizeCache();
   });
 
-  it("fires poaches in the fixture (precondition for the batching tests)", async () => {
+  it("produces passive dilution in the fixture (precondition for batching)", async () => {
     const { db, actorNppId } = seedDb();
     mockSuccess(await mocks());
     const { nppBuildPartyOrg } = await import("./nppBuildOrg");
     const result = await nppBuildPartyOrg(db as unknown as Db, actorNppId, countryId, "CA", 1, 100);
     expect(result.ok).toBe(true);
     const sig = ledgerSignature(db);
-    const poaches = sig.filter((d) => (d as { source: string }).source === "poach");
-    expect(poaches.length).toBeGreaterThan(0);
+    const dilutions = sig.filter((d) => (d as { source: string }).source === "passive");
+    expect(dilutions.length).toBeGreaterThan(0);
     console.log(
       `MEASURE ledgerDocs=${sig.length} insertOne=${counts(db, "orgRegLedger", "insertOne")} insertMany=${counts(db, "orgRegLedger", "insertMany")}`
     );
@@ -248,17 +288,20 @@ describe("nppBuildPartyOrg command profile", { timeout: 60000 }, () => {
     const batches = db.collectionMocks["orgRegLedger"]!.insertMany.mock.calls as unknown[][];
     expect(batches).toHaveLength(1);
     const docs = batches[0][0] as Record<string, unknown>[];
-    // Same poaches-then-own order the old per-write inserts used.
+    // Bucket rows retain state row order: spender first, then passive dilutions.
     expect(docs.length).toBeGreaterThan(1);
-    expect(docs.slice(0, -1).every((d) => d.source === "poach")).toBe(true);
-    expect(docs[docs.length - 1]!.source).toBe("action");
+    expect(docs[0]!.source).toBe("action");
+    expect(docs.slice(1).every((d) => d.source === "passive")).toBe(true);
     const own = docs.find((d) => d.source === "action")!;
     expect(own.delta).toBe(result.orgGain);
     expect(own.value).toBe(result.newOrg);
-    const poachLoss = docs
-      .filter((d) => d.source === "poach")
+    const dilutionLoss = docs
+      .filter((d) => d.source === "passive")
       .reduce((s, d) => s + (d.delta as number), 0);
-    expect((own.delta as number) + poachLoss).toBeGreaterThan(0);
+    // Some of the new share comes from diluting the permanent Unaffiliated
+    // stake, so rival losses no longer sum to the spender's entire gain.
+    expect((own.delta as number) + dilutionLoss).toBeGreaterThan(0);
+    expect(Math.abs(dilutionLoss)).toBeLessThan(own.delta as number);
     console.log(`MEASURE-AFTER ledgerDocs=${docs.length} insertOne=0 insertMany=1`);
   });
 
@@ -333,7 +376,7 @@ describe("nppBuildPartyOrg command profile", { timeout: 60000 }, () => {
     );
   });
 
-  it("flushes completed receipts when a rival write fails mid-poach", async () => {
+  it("writes no receipts when the bucket bulk write fails", async () => {
     const m = await mocks();
     const { nppBuildPartyOrg } = await import("./nppBuildOrg");
     for (const useCache of [false, true]) {
@@ -344,21 +387,12 @@ describe("nppBuildPartyOrg command profile", { timeout: 60000 }, () => {
             mod.preloadNppBuildOrgSweepCache(db as unknown as Db, [countryId])
           )
         : undefined;
-      let calls = 0;
-      db.collectionMocks["statePartyOrg"]!.updateOne.mockImplementation(async () => {
-        calls += 1;
-        // Own update (1st) plus first poach (2nd) succeed; 2nd poach throws.
-        if (calls === 3) throw new Error("boom");
-        return { modifiedCount: 1, matchedCount: 1 };
-      });
+      db.collectionMocks["statePartyOrg"]!.bulkWrite.mockRejectedValue(new Error("boom"));
       await expect(
         nppBuildPartyOrg(db as unknown as Db, actorNppId, countryId, "CA", 1, 100, cache)
       ).rejects.toThrow("boom");
-      // The one completed poach receipt still persists, via a single flush.
       expect(counts(db, "orgRegLedger", "insertOne")).toBe(0);
-      const batches = db.collectionMocks["orgRegLedger"]!.insertMany.mock.calls as unknown[][];
-      expect(batches).toHaveLength(1);
-      expect(batches[0][0] as unknown[]).toHaveLength(1);
+      expect(counts(db, "orgRegLedger", "insertMany")).toBe(0);
     }
   });
 

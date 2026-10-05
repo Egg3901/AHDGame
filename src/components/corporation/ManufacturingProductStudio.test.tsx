@@ -93,11 +93,15 @@ describe("ManufacturingProductStudio", () => {
     });
     expect(await screen.findByText(/Estimated development cost: 1,250 anchor units/)).toBeTruthy();
     expect(screen.getByText(/Standard/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Product advertising allocation"), {
+      target: { value: "25" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Start product project" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
       kindId: "cement",
+      advertisingAllocationShare: 0.25,
       allocations: [{ sectorId: "plant-1", share: 0.5 }],
     });
     expect(await screen.findByText("development · building_materials")).toBeTruthy();

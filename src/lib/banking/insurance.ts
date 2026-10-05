@@ -33,6 +33,7 @@ import {
 export {
   INSURED_CAP_REFERENCE_USD,
   BASE_PREMIUM_ANNUAL,
+  computeEvidenceBasedPremiumAnnualRate,
   computeInsurancePremium,
   sumInsuredPlayerDeposits,
   computeReserveRatioActual,
@@ -96,6 +97,10 @@ export async function ensureFund(db: Db, currency: CurrencyCode): Promise<Deposi
         premiumsCollectedLifetime: 0,
         payoutsLifetime: 0,
         treasuryBackstopLifetime: 0,
+        insuredDepositExposureTurnsLifetime: 0,
+        measuredGrossClaimsSincePricingStart: 0,
+        measuredRecoveriesSincePricingStart: 0,
+        measuredPaidClaimsSincePricingStart: 0,
       },
     },
     { upsert: true }
@@ -110,6 +115,10 @@ export async function ensureFund(db: Db, currency: CurrencyCode): Promise<Deposi
     premiumsCollectedLifetime: 0,
     payoutsLifetime: 0,
     treasuryBackstopLifetime: 0,
+    insuredDepositExposureTurnsLifetime: 0,
+    measuredGrossClaimsSincePricingStart: 0,
+    measuredRecoveriesSincePricingStart: 0,
+    measuredPaidClaimsSincePricingStart: 0,
   };
 }
 

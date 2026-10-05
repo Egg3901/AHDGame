@@ -24,6 +24,8 @@ describe("shared world flags", () => {
         preset: "1991-default",
         eurozoneEnabled: false,
         euroMemberCurrencies: [],
+        resetV2Countries: ["US", "UK", "JP"],
+        resetSystemVersions: { metrics: "v1", legislation: "v1", cabinet: "v1" },
       }),
     });
     vi.stubGlobal("fetch", fetch);
@@ -38,6 +40,8 @@ describe("shared world flags", () => {
         preset: "1991-default",
         eurozoneEnabled: true,
         euroMemberCurrencies: ["EUR", "IEP", "GBP"],
+        resetV2Countries: ["US", "UK", "JP"],
+        resetSystemVersions: { metrics: "v1", legislation: "v1", cabinet: "v1" },
       }),
     });
     act(() => {
@@ -51,6 +55,7 @@ describe("shared world flags", () => {
     });
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
     expect(b.result.current.euroMemberCurrencies).toContain("GBP");
+    await waitFor(() => expect(b.result.current.failed).toBe(true));
     expect(fetch).toHaveBeenLastCalledWith("/api/world/flags", { cache: "no-store" });
   });
 });

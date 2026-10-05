@@ -84,6 +84,7 @@ describe("processBankingTurn", () => {
   };
   let loans: BankLoan[];
   let fundState: DepositInsuranceFund;
+  let persisted: ReturnType<typeof createInMemoryDb>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -159,11 +160,20 @@ describe("processBankingTurn", () => {
       const u = update as {
         $setOnInsert?: Partial<DepositInsuranceFund>;
         $inc?: Record<string, number>;
+        $min?: Record<string, number>;
       };
       if (u.$inc) {
         for (const [k, v] of Object.entries(u.$inc)) {
           (fundState as unknown as Record<string, number>)[k] =
             ((fundState as unknown as Record<string, number>)[k] ?? 0) + v;
+        }
+      }
+      if (u.$min) {
+        for (const [k, v] of Object.entries(u.$min)) {
+          const current = (fundState as unknown as Record<string, number>)[k];
+          if (current === undefined || v < current) {
+            (fundState as unknown as Record<string, number>)[k] = v;
+          }
         }
       }
       return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
@@ -329,7 +339,7 @@ describe("processBankingTurn", () => {
 
     // Settlement effects need durable document receipts, not write-count stubs.
     // Keep the phase's mutable fixture handles while delegating affected storage.
-    const persisted = createInMemoryDb();
+    persisted = createInMemoryDb();
     liveCorp = bankCorp;
     persisted.collection("corporations").docs.push({ ...liveCorp });
     liveCorp = persisted.collection("corporations").docs[0] as unknown as Corporation;
@@ -394,7 +404,7 @@ describe("processBankingTurn", () => {
     );
   });
 
-  it("is a no-op when private banking is disabled", async () => {
+  it("recovers paid underwriting receipts without running the bank pass when private banking is disabled", async () => {
     db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
       _id: "default",
       privateBankingEnabled: false,
@@ -425,7 +435,14 @@ describe("processBankingTurn", () => {
         estatesStillResolving: 0,
       },
     });
-    expect(db.collectionMocks.corporations!.find).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations!.find.mock.calls.map((call) => call[0])).toEqual([
+      { "bankUnderwritingFunding.turn": { $lt: TURN } },
+      {
+        "bankCharter.resolutionClaimedTurn": { $lt: TURN },
+        "bankCharter.depositorsResolvedTurn": { $exists: false },
+      },
+    ]);
+    expect(db.collectionMocks.centralBanks!.find).not.toHaveBeenCalled();
   });
 
   it("reads the feature policy exactly once per turn", async () => {
@@ -456,6 +473,143 @@ describe("processBankingTurn", () => {
     expect(cbState.externalBroadMoney).toBe(cbBefore);
     expect(liveCorp.bankCharter!.cashReserves).toBe(liqBefore);
     expect(characterState.savings).toBe(savBefore);
+  });
+
+  it("does not publish turn aggregates onto a replacement charter", async () => {
+    const originalUpdate = db.collectionMocks.corporations!.updateOne.getMockImplementation();
+    expect(originalUpdate).toBeDefined();
+    let publicationFilter: Record<string, unknown> | undefined;
+    db.collectionMocks.corporations!.updateOne.mockImplementation(async (filter, update) => {
+      const selector = filter as Record<string, unknown>;
+      const patch = update as { $set?: Record<string, unknown> };
+      if (patch.$set?.["bankCharter.lastBankingTurn"] === TURN) {
+        publicationFilter = selector;
+        liveCorp.bankCharter = makeCharter({
+          ...liveCorp.bankCharter,
+          charteredTurn: TURN + 1,
+          currency: "EUR",
+        });
+        const current = liveCorp.bankCharter;
+        const epochMatches =
+          selector["bankCharter.charteredTurn"] === undefined ||
+          selector["bankCharter.charteredTurn"] === current.charteredTurn;
+        const currencyMatches =
+          selector["bankCharter.currency"] === undefined ||
+          selector["bankCharter.currency"] === current.currency;
+        if (!epochMatches || !currencyMatches) return { matchedCount: 0, modifiedCount: 0 };
+      }
+      return originalUpdate!(filter, update);
+    });
+
+    await processBankingTurn(db as unknown as Db, TURN);
+
+    expect(publicationFilter?.["bankCharter.charteredTurn"]).toBe(1);
+    expect(publicationFilter?.["bankCharter.currency"]).toBe("USD");
+    expect(publicationFilter?.countryId).toBe("US");
+    expect(liveCorp.bankCharter?.charteredTurn).toBe(TURN + 1);
+    expect(liveCorp.bankCharter?.currency).toBe("EUR");
+    expect(liveCorp.bankCharter?.lastBankingTurn).toBeUndefined();
+  });
+
+  it("does not overwrite a funded coupon that lands after the banking snapshot", async () => {
+    const originalUpdate = db.collectionMocks.corporations!.updateOne.getMockImplementation();
+    expect(originalUpdate).toBeDefined();
+    const publicationFilters: Array<Record<string, unknown>> = [];
+    db.collectionMocks.corporations!.updateOne.mockImplementation(async (filter, update) => {
+      const selector = filter as Record<string, unknown>;
+      const patch = update as { $set?: Record<string, unknown> };
+      if (patch.$set?.["bankCharter.lastBankingTurn"] === TURN) {
+        publicationFilters.push(selector);
+        const charter = liveCorp.bankCharter!;
+        charter.sovereignCouponIncomePaidLifetime = 20;
+        charter.treasuryRealizedGainPaidLifetime = 6;
+        const observedIncomeTurn = selector["bankCharter.lastBankingIncomeTurn"];
+        const observedCoupon = selector["bankCharter.lastBankingSovereignCouponIncome"];
+        const observedGain = selector["bankCharter.lastBankingTreasuryRealizedGain"];
+        const observedCouponPaid = selector["bankCharter.sovereignCouponIncomePaidLifetime"];
+        const observedGainPaid = selector["bankCharter.treasuryRealizedGainPaidLifetime"];
+        const incomeTurnMatches =
+          observedIncomeTurn !== null && typeof observedIncomeTurn === "object"
+            ? "$exists" in observedIncomeTurn &&
+              observedIncomeTurn.$exists === false &&
+              charter.lastBankingIncomeTurn === undefined
+            : observedIncomeTurn === charter.lastBankingIncomeTurn;
+        const couponMatches =
+          observedCoupon !== null && typeof observedCoupon === "object"
+            ? "$exists" in observedCoupon &&
+              observedCoupon.$exists === false &&
+              charter.lastBankingSovereignCouponIncome === undefined
+            : observedCoupon === charter.lastBankingSovereignCouponIncome;
+        const gainMatches =
+          observedGain !== null && typeof observedGain === "object"
+            ? "$exists" in observedGain &&
+              observedGain.$exists === false &&
+              charter.lastBankingTreasuryRealizedGain === undefined
+            : observedGain === charter.lastBankingTreasuryRealizedGain;
+        const couponPaidMatches =
+          observedCouponPaid !== null && typeof observedCouponPaid === "object"
+            ? "$exists" in observedCouponPaid &&
+              observedCouponPaid.$exists === false &&
+              charter.sovereignCouponIncomePaidLifetime === undefined
+            : observedCouponPaid === charter.sovereignCouponIncomePaidLifetime;
+        const gainPaidMatches =
+          observedGainPaid !== null && typeof observedGainPaid === "object"
+            ? "$exists" in observedGainPaid &&
+              observedGainPaid.$exists === false &&
+              charter.treasuryRealizedGainPaidLifetime === undefined
+            : observedGainPaid === charter.treasuryRealizedGainPaidLifetime;
+        if (
+          !incomeTurnMatches ||
+          !couponMatches ||
+          !gainMatches ||
+          !couponPaidMatches ||
+          !gainPaidMatches
+        )
+          return { matchedCount: 0, modifiedCount: 0 };
+      }
+      return originalUpdate!(filter, update);
+    });
+
+    const summary = await processBankingTurn(db as unknown as Db, TURN);
+
+    expect(publicationFilters).toHaveLength(2);
+    expect(publicationFilters[0]["bankCharter.lastBankingIncomeTurn"]).toEqual({
+      $exists: false,
+    });
+    expect(publicationFilters[0]["bankCharter.lastBankingSovereignCouponIncome"]).toEqual({
+      $exists: false,
+    });
+    expect(publicationFilters[0]["bankCharter.lastBankingTreasuryRealizedGain"]).toEqual({
+      $exists: false,
+    });
+    expect(publicationFilters[1]["bankCharter.lastBankingIncomeTurn"]).toEqual({
+      $exists: false,
+    });
+    expect(publicationFilters[0]["bankCharter.sovereignCouponIncomePaidLifetime"]).toEqual({
+      $exists: false,
+    });
+    expect(publicationFilters[0]["bankCharter.treasuryRealizedGainPaidLifetime"]).toEqual({
+      $exists: false,
+    });
+    expect(publicationFilters[1]["bankCharter.sovereignCouponIncomePaidLifetime"]).toBe(20);
+    expect(publicationFilters[1]["bankCharter.treasuryRealizedGainPaidLifetime"]).toBe(6);
+    expect(liveCorp.bankCharter?.lastBankingIncome).toBeCloseTo(
+      (liveCorp.bankCharter?.lastBankingLoanInterest ?? 0) +
+        (liveCorp.bankCharter?.lastBankingLoanOriginationFees ?? 0) -
+        (liveCorp.bankCharter?.lastBankingDepositInterest ?? 0) -
+        (liveCorp.bankCharter?.lastBankingInsurancePremium ?? 0) -
+        (liveCorp.bankCharter?.lastBankingWriteoffs ?? 0) +
+        (liveCorp.bankCharter?.lastBankingSovereignCouponIncome ?? 0) +
+        (liveCorp.bankCharter?.lastBankingTreasuryRealizedGain ?? 0) +
+        (liveCorp.bankCharter?.lastBankingUnderwritingFees ?? 0),
+      5
+    );
+    expect(liveCorp.bankCharter?.lastBankingTurn).toBe(TURN);
+    expect(summary.banksProcessed).toBe(1);
+    expect(liveCorp.bankCharter?.lastBankingSovereignCouponIncome).toBe(20);
+    expect(liveCorp.bankCharter?.lastBankingTreasuryRealizedGain).toBe(6);
+    expect(liveCorp.bankCharter?.sovereignCouponIncomeBookedLifetime).toBe(20);
+    expect(liveCorp.bankCharter?.treasuryRealizedGainBookedLifetime).toBe(6);
   });
 
   it.each(["current", "legacy"])(
@@ -575,9 +729,11 @@ describe("processBankingTurn", () => {
     expect(liveCorp.bankCharter!.lastBankingIncomeTurn).toBe(TURN);
   });
 
-  it("stamps the per-turn earnings split behind lastBankingIncome (issue 1748)", async () => {
+  it("includes already-paid Treasury coupons in the per-turn earnings split", async () => {
     liveCorp.bankCharter!.depositOffset = 0;
     liveCorp.bankCharter!.npcDeposits = 0;
+    liveCorp.bankCharter!.sovereignCouponIncomePaidLifetime = 25;
+    liveCorp.bankCharter!.treasuryRealizedGainPaidLifetime = 8;
     bankCorp.bankCharter!.npcDeposits = 0;
     // Zero broad money → no NPC deposit flow; npc interest = 0
     cbState.externalBroadMoney = 0;
@@ -618,6 +774,10 @@ describe("processBankingTurn", () => {
     expect(charter.lastBankingDepositInterest!).toBeCloseTo(expectedInterest, 5);
     expect(charter.lastBankingDepositInterest!).toBeCloseTo(summary.depositInterestPaid, 5);
     expect(charter.lastBankingLoanInterest!).toBeCloseTo(summary.loanInterestCollected, 5);
+    expect(charter.lastBankingSovereignCouponIncome).toBe(25);
+    expect(charter.lastBankingTreasuryRealizedGain).toBe(8);
+    expect(charter.sovereignCouponIncomeBookedLifetime).toBe(25);
+    expect(charter.treasuryRealizedGainBookedLifetime).toBe(8);
     expect(charter.lastBankingInsurancePremium!).toBeCloseTo(premiumPaid, 5);
     expect(charter.lastBankingWriteoffs!).toBeCloseTo(summary.defaultsWrittenOff, 5);
     // No interbank or facility legs in this fixture: those lines stay zero.
@@ -629,7 +789,9 @@ describe("processBankingTurn", () => {
       charter.lastBankingLoanInterest! -
         charter.lastBankingDepositInterest! -
         charter.lastBankingInsurancePremium! -
-        charter.lastBankingWriteoffs!,
+        charter.lastBankingWriteoffs! +
+        charter.lastBankingSovereignCouponIncome! +
+        charter.lastBankingTreasuryRealizedGain!,
       5
     );
   });
@@ -679,12 +841,21 @@ describe("processBankingTurn", () => {
 
     const cap = await getInsuredCap(db as unknown as Db, "USD");
     const insured = sumInsuredPlayerDeposits([characterState.savings], cap);
+    expect(fundState.insuredDepositExposureTurnsLifetime).toBeCloseTo(insured, 8);
+    expect(fundState.pricingEvidenceStartTurn).toBe(TURN);
+    const premiumKey = `insurance-premium:${bankId.toString()}:${liveCorp.bankCharter!.charteredTurn}:${TURN}`;
+    const premiumReceipts = persisted.collection("bankMoneyMoves").docs as Array<{ _id: string }>;
+    expect(premiumReceipts.filter((receipt) => receipt._id === premiumKey)).toHaveLength(1);
     // Premium was computed on post-interest balances; reverse-check magnitude.
     const liqAfterInterest = liqBefore - interestPaid;
     const actual = computeReserveRatioActual(liqAfterInterest, characterState.savings);
     const expectedPremium = computeInsurancePremium(insured, actual, 0.1);
     expect(premiumPaid).toBeCloseTo(expectedPremium, 5);
     expect(BASE_PREMIUM_ANNUAL).toBe(0.004);
+
+    await processBankingTurn(db as unknown as Db, TURN);
+    expect(fundState.insuredDepositExposureTurnsLifetime).toBeCloseTo(insured, 8);
+    expect(premiumReceipts.filter((receipt) => receipt._id === premiumKey)).toHaveLength(1);
   });
 
   it("conserves NPC deposit flow: delta == -externalBroadMoney delta", async () => {

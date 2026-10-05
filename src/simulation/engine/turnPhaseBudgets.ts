@@ -64,6 +64,8 @@ export const PHASE_ROUND_TRIP_BUDGETS: Readonly<Record<string, number>> = {
   autoCrisisTurn: 600,
   nppCorporateAttacks: 600,
   stateOwnershipConcentration: 400,
+  // One bounded aggregate plus at most one recovery transaction per turn.
+  resetLawEnactmentReconciliation: 40,
 };
 
 export function roundTripBudgetFor(phase: string): number {

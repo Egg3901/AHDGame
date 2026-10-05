@@ -3,6 +3,17 @@ import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { loadDemocraticCompetition } from "./loadCompetition";
 
+function historicalJustice(economicLean: number | null, socialLean: number | null, party = "1") {
+  return {
+    justiceMode: "historical",
+    justiceParty: party,
+    justiceCharacterId: null,
+    justiceNppId: null,
+    economicLean,
+    socialLean,
+  };
+}
+
 describe("loadDemocraticCompetition", () => {
   let db: MockDb;
 
@@ -24,6 +35,7 @@ describe("loadDemocraticCompetition", () => {
     expect(result).toMatchObject({
       dominantPartyId: "dem",
       dominantSeatShare: 70,
+      executiveSystem: "presidential",
       penalty: 9,
     });
     expect(db.collectionMocks.electedOfficials.find).toHaveBeenCalledWith({
@@ -88,7 +100,7 @@ describe("loadDemocraticCompetition", () => {
     expect(result.penalty).toBe(15);
   });
 
-  it("adds a Court-packing penalty from seated US justices", async () => {
+  it("adds a Court concentration penalty from seated US justices", async () => {
     db.collection("electedOfficials")
       .find()
       .toArray.mockResolvedValue([
@@ -100,106 +112,38 @@ describe("loadDemocraticCompetition", () => {
     db.collection("supremeCourtSeats")
       .find()
       .toArray.mockResolvedValue([
-        {
-          justiceMode: "historical",
-          justiceParty: "1",
-          justiceCharacterId: null,
-          justiceNppId: null,
-        },
-        {
-          justiceMode: "historical",
-          justiceParty: "1",
-          justiceCharacterId: null,
-          justiceNppId: null,
-        },
-        { justiceMode: "npp", justiceParty: "1", justiceNppId: "n1" },
-        { justiceMode: "npp", justiceParty: "1", justiceNppId: "n2" },
-        { justiceMode: "npp", justiceParty: "1", justiceNppId: "n3" },
-        { justiceMode: "character", justiceParty: "1", justiceCharacterId: "c1" },
-        { justiceMode: "npp", justiceParty: "2", justiceNppId: "n4" },
-        { justiceMode: null, justiceParty: null, justiceCharacterId: null, justiceNppId: null },
-        { justiceMode: null, justiceParty: null, justiceCharacterId: null, justiceNppId: null },
-      ]);
-
-    const result = await loadDemocraticCompetition(db as unknown as Db, "US", "1953-default", null);
-
-    expect(result).toMatchObject({
-      courtSeated: 7,
-      courtDominantPartyId: "1",
-      courtDominantShare: 85.7,
-      courtPenalty: 15.4,
-    });
-    expect(result.penalty).toBe(result.seatMarginPenalty + 15.4);
-  });
-
-  it("counts occupied seats without a party toward the seated bench", async () => {
-    db.collection("electedOfficials").find().toArray.mockResolvedValue([]);
-    db.collection("supremeCourtSeats")
-      .find()
-      .toArray.mockResolvedValue([
-        {
-          justiceMode: "historical",
-          justiceParty: "1",
-          justiceCharacterId: null,
-          justiceNppId: null,
-        },
-        {
-          justiceMode: "historical",
-          justiceParty: "1",
-          justiceCharacterId: null,
-          justiceNppId: null,
-        },
-        {
-          justiceMode: "historical",
-          justiceParty: "1",
-          justiceCharacterId: null,
-          justiceNppId: null,
-        },
-        {
-          justiceMode: "historical",
-          justiceParty: "1",
-          justiceCharacterId: null,
-          justiceNppId: null,
-        },
-        {
-          justiceMode: "historical",
-          justiceParty: "1",
-          justiceCharacterId: null,
-          justiceNppId: null,
-        },
-        {
-          justiceMode: "historical",
-          justiceParty: "1",
-          justiceCharacterId: null,
-          justiceNppId: null,
-        },
-        {
-          justiceMode: "historical",
-          justiceParty: null,
-          justiceCharacterId: null,
-          justiceNppId: null,
-        },
-        {
-          justiceMode: "historical",
-          justiceParty: null,
-          justiceCharacterId: null,
-          justiceNppId: null,
-        },
-        {
-          justiceMode: "historical",
-          justiceParty: null,
-          justiceCharacterId: null,
-          justiceNppId: null,
-        },
+        ...Array.from({ length: 7 }, () => historicalJustice(3, 3, "1")),
+        ...Array.from({ length: 2 }, () => historicalJustice(-3, -3, "2")),
       ]);
 
     const result = await loadDemocraticCompetition(db as unknown as Db, "US", "1953-default", null);
 
     expect(result).toMatchObject({
       courtSeated: 9,
-      courtDominantPartyId: "1",
-      courtDominantShare: 66.7,
+      courtDominantBloc: "conservative",
+      courtDominantShare: 77.8,
       courtPenalty: 4,
+    });
+    expect(result.penalty).toBe(result.seatMarginPenalty + 4);
+  });
+
+  it("counts occupied seats without lean data toward the seated bench", async () => {
+    db.collection("electedOfficials").find().toArray.mockResolvedValue([]);
+    db.collection("supremeCourtSeats")
+      .find()
+      .toArray.mockResolvedValue([
+        ...Array.from({ length: 6 }, () => historicalJustice(3, 3, "1")),
+        ...Array.from({ length: 3 }, () => historicalJustice(null, null, "")),
+      ]);
+
+    const result = await loadDemocraticCompetition(db as unknown as Db, "US", "1953-default", null);
+
+    expect(result).toMatchObject({
+      courtSeated: 9,
+      courtDominantBloc: "conservative",
+      courtDominantShare: 66.7,
+      courtUnclassifiedSeats: 3,
+      courtPenalty: 0,
     });
   });
 
@@ -220,6 +164,7 @@ describe("loadDemocraticCompetition", () => {
       dominantPartyId: "labour",
       chambersMeasured: 1,
       executivePartyId: null,
+      executiveSystem: "parliamentary",
       executiveAlignedWithLegislature: null,
       consecutiveExecutiveTerms: 0,
       executiveContinuityPenalty: 0,

@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 import type { Holder } from "./bondTypes";
+import { getBondHolderPresentation } from "./bondHolderPresentation";
 
 const HOLDER_COLORS = [
   "#3b82f6",
@@ -289,13 +290,7 @@ export function BondOwnersSection({
                     );
                   }
                   const holder = h!;
-                  const href =
-                    holder.type === "character" && holder.sequentialId != null
-                      ? `/character/${holder.id}`
-                      : holder.type === "corporation" && holder.sequentialId != null
-                        ? `/corporation/${holder.sequentialId}`
-                        : null;
-                  const imgSrc = holder.type === "character" ? holder.avatarUrl : holder.logoUrl;
+                  const { href, imageUrl: imgSrc, typeLabel } = getBondHolderPresentation(holder);
                   return (
                     <tr key={holder.id}>
                       <td className="py-2.5 pr-4">
@@ -344,7 +339,7 @@ export function BondOwnersSection({
                               </span>
                             )}
                             <span className="text-[10px] text-muted uppercase tracking-wide">
-                              {holder.type === "character" ? "Character" : "Corporation"}
+                              {typeLabel}
                             </span>
                           </div>
                         </div>

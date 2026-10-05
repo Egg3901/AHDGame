@@ -47,6 +47,12 @@ export async function loadNppProductProjectsV2(
         startedTurn: 1,
         lastProcessedTurn: 1,
         lastDevelopmentReceiptTurn: 1,
+        advertisingAllocationShare: 1,
+        developmentAdvertisingAnchor: 1,
+        developmentAdvertisingTurns: 1,
+        lastAdvertisingReceiptTurn: 1,
+        productBrand: 1,
+        developmentCompletedTurn: 1,
         developmentPaidAnchor: 1,
         paidThresholdAnchor: 1,
         elapsedDevelopmentTurns: 1,
@@ -111,6 +117,10 @@ export function createNppManufacturingProductProjectV2(input: {
         selectedProduct.allocations
       )
     ),
+    advertisingAllocationShare: 0.25,
+    developmentAdvertisingAnchor: 0,
+    developmentAdvertisingTurns: 0,
+    productBrand: 0,
     elapsedDevelopmentTurns: 0,
     elapsedThresholdTurns: MANUFACTURING_DEVELOPMENT_ELAPSED_TURNS,
   };

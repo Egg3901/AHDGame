@@ -92,6 +92,7 @@ import { processNppUnionBehavior } from "@/lib/turn/unions/nppUnionBehavior";
 import { processDecolonizationTurn } from "@/lib/turn/decolonizationTurn";
 import { runNppCorporateAttacksPhase } from "@/lib/turn/nppCorporateAttacks";
 import { processTreasuryTurn } from "@/lib/turn/treasuryTurn";
+import { processDepartmentProgramSettlement } from "@/lib/turn/departmentProgramSettlement";
 import { processCommodityPriceTurn } from "@/lib/turn/commodityPriceTurn";
 import { processMacroCountryTurn } from "@/lib/world/macro";
 import { processSphereSponsorTurn } from "@/lib/world/spheres";
@@ -101,6 +102,10 @@ import { resolveProspects } from "@/lib/turn/prospecting/resolveProspects";
 import { settleExtractionContracts } from "@/lib/turn/extraction/contractSettlement";
 import { isProspectingEnabled, isContractIssuanceEnabled } from "@/lib/extraction/featureFlag";
 import { processBondTurn } from "@/lib/turn/bondTurn";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { settleResetTreasuryCashTurn } from "@/lib/resetFinance/settleCashTurn";
+import { resetSystemVersionsFrom } from "@/lib/resetVersions/rules";
+import { reconcileResetLawEnactments } from "@/lib/resetLegislation/reconcileEnactments";
 import { processFederationFacilityPaymentTurn } from "@/lib/world/succession/facilityPaymentTurn";
 import { processDefenceWindfallRecoveryTurn } from "@/lib/turn/defenceWindfallRecoveryTurn";
 import { recomputeSharePricesAfterBondTurn } from "@/lib/turn/corporation/recomputeSharePrices";
@@ -381,6 +386,13 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           };
         }
 
+        const departmentProgramResult = await runtime.runPhase("departmentProgramSettlement", () =>
+          processDepartmentProgramSettlement(context.db, newTurn, context.gameState)
+        );
+        if (departmentProgramResult) {
+          phaseResults.departmentProgramSettlement = departmentProgramResult;
+        }
+
         const nppFundResult = await runtime.runPhase("nppFundGeneration", () =>
           processNppFundGeneration(context.db, newTurn, stateMap)
         );
@@ -522,14 +534,30 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           };
         }
 
+        const captureV2SovereignCash =
+          resetSystemVersionsFrom(context.gameState, RESET_V2_READY).cabinet === "v2";
         const [bondTurnResult, commodityResult] = await Promise.all([
           runtime.runPhase("bondTurn", () =>
             processBondTurn(newTurn, {
               treasuryCashLedgerEnabled: context.config?.treasuryCashLedgerEnabled,
+              captureSovereignCashProceeds: captureV2SovereignCash,
             })
           ),
           runtime.runPhase("commodityPrices", () => processCommodityPriceTurn(newTurn)),
         ]);
+        if (captureV2SovereignCash) {
+          if (!bondTurnResult) throw new Error("V2 treasury requires completed bond settlement");
+          (phaseResults as Record<string, unknown>).resetTreasuryCash = await runtime.runPhase(
+            "resetTreasuryCash",
+            () =>
+              settleResetTreasuryCashTurn({
+                db: context.db,
+                gameState: context.gameState,
+                turn: newTurn,
+                bondFlows: bondTurnResult,
+              })
+          );
+        }
 
         // Creditor servicing takes priority over private facility compensation.
         if (bondTurnResult !== null) {
@@ -667,7 +695,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
             newTurn
           )
         );
-        await runtime.runPhase("partyOrgTurn", () => processPartyOrgTurn());
+        await runtime.runPhase("partyOrgTurn", () => processPartyOrgTurn(newTurn, realNow));
 
         // Phase 3 turn-pipeline additions: drift→decay (Phase 0.5 §8.3 steps 3-4),
         // PS pressure decay, and Priority Region cluster validation. Run sequentially
@@ -982,6 +1010,14 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           const result = countryBillResults[index] ?? null;
           phaseResultsRecord[entry.phaseName] = result ?? entry.emptyResult;
         });
+
+        const resetLawReconciliation = await runtime.runPhase(
+          "resetLawEnactmentReconciliation",
+          () => reconcileResetLawEnactments(db, newTurn)
+        );
+        if (resetLawReconciliation) {
+          phaseResultsRecord.resetLawEnactmentReconciliation = resetLawReconciliation;
+        }
 
         // Country social-axis drift, runs sequentially AFTER bill enactment so
         // it reads the statePolicies rows the bill phases just wrote this turn.
