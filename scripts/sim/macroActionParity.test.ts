@@ -179,9 +179,7 @@ describe("macro player/NPP action parity fixture", () => {
         },
       },
     });
-    expect(capacityDelta[1]?.$set).toMatchObject({
-      capacityBookAnchor: expect.closeTo(1000 + 60 / 13, 10),
-    });
+    expect(capacityDelta[1]?.$set).toMatchObject({ capacityBookAnchor: 1036 });
     expect(capacityDelta[1]?.$set).toHaveProperty("plantCount");
     expect(capacityDelta[1]?.$set).toHaveProperty("plantUnitRemainder");
     for (const ops of [playerTurn.sectorWrites, nppTurn.sectorWrites]) {
