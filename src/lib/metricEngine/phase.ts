@@ -66,7 +66,10 @@ import {
   repairProgress,
   repairedCapitalAt,
 } from "@/lib/livingConflict/rules/capacityDestruction";
-import type { ConflictCapacityObligation } from "@/lib/db/types/conflictCapacity";
+import type {
+  ConflictCapacityApplied,
+  ConflictCapacityObligation,
+} from "@/lib/db/types/conflictCapacity";
 import { METRIC_REGISTRY_SORTED } from "./registry";
 import type { SectorRevenueTaxPayload } from "./registry/economic";
 import type { NodeId } from "./types";
@@ -488,7 +491,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     updateOne: {
       filter: { _id: string };
       update: {
-        $set: Record<string, number | string | RevenueSnapshot[]>;
+        $set: Record<string, number | string | RevenueSnapshot[] | ConflictCapacityApplied>;
         $unset?: Record<string, "">;
       };
     };
