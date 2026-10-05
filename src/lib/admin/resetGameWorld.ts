@@ -19,6 +19,7 @@ import { getRuntimeCollectionNames } from "@/lib/admin/seed/seedManifest";
 import {
   DEFAULT_GAME_STATE_FLAGS,
   FRESH_WORLD_GAME_CONFIG_FLAGS,
+  NON_GAMEPLAY_GAME_STATE_FIELDS,
 } from "@/lib/seeds/reference/featureFlagDefaults";
 import { buildSeasonRecaps } from "@/lib/recap/buildSeasonRecaps";
 import type { CharacterRecap } from "@/lib/recap/types";
@@ -96,6 +97,140 @@ export const FULL_RESET_DELETABLE_USERS_FILTER = Object.freeze({
   isBanned: { $ne: true },
 });
 
+const GAME_STATE_OPERATOR_FLAG_AUDIT_FIELDS = [
+  "playerRandomEventsEnabledBy",
+  "playerRandomEventsEnabledAt",
+  "worldEventsEnabledBy",
+  "worldEventsEnabledAt",
+  "crisisInteractionEnabledBy",
+  "crisisInteractionEnabledAt",
+  "autoDisastersEnabledBy",
+  "autoDisastersEnabledAt",
+  "nppAutonomyEnabledBy",
+  "nppAutonomyEnabledAt",
+  "nppForeignPolicyModeBy",
+  "nppForeignPolicyModeAt",
+  "nppForeignPolicyStageBy",
+  "nppForeignPolicyStageAt",
+  "nppOffensiveInitiationEnabledBy",
+  "nppOffensiveInitiationEnabledAt",
+  "nppOffensiveJoinEnabledBy",
+  "nppOffensiveJoinEnabledAt",
+  "intelligenceMilitarySabotageEnabledBy",
+  "intelligenceMilitarySabotageEnabledAt",
+  "nppIntelligenceOperationsEnabledBy",
+  "nppIntelligenceOperationsEnabledAt",
+  "crisisAidBillsEnabledBy",
+  "crisisAidBillsEnabledAt",
+  "demographicsLayer1PositionsEnabledBy",
+  "demographicsLayer1PositionsEnabledAt",
+  "conflictsEnabledBy",
+  "conflictsEnabledAt",
+  "livingConflictsEnabledBy",
+  "livingConflictsEnabledAt",
+  "defenceProcurementPausedBy",
+  "defenceProcurementPausedAt",
+  "coldWarEnabledBy",
+  "coldWarEnabledAt",
+  "corpDealsEnabledBy",
+  "corpDealsEnabledAt",
+  "rpgStatsEnabledBy",
+  "rpgStatsEnabledAt",
+  "autoSectorSeedEnabledBy",
+  "autoSectorSeedEnabledAt",
+  "extractionAutoStrategyEnabledBy",
+  "extractionAutoStrategyEnabledAt",
+  "nppEntryViabilityModeBy",
+  "nppEntryViabilityModeAt",
+  "frontierEntryExperimentEnabledBy",
+  "frontierEntryExperimentEnabledAt",
+  "nppCorpStrategyEnabledBy",
+  "nppCorpStrategyEnabledAt",
+  "redistrictingEnabledBy",
+  "redistrictingEnabledAt",
+  "sectorTechTreesEnabledBy",
+  "sectorTechTreesEnabledAt",
+  "subsidiaryCorporationsEnabledBy",
+  "subsidiaryCorporationsEnabledAt",
+  "embargoTradeExposureEnabledBy",
+  "embargoTradeExposureEnabledAt",
+  "liveElectionResultsEnabledBy",
+  "liveElectionResultsEnabledAt",
+  "legislationDemographicEffectsV2EnabledBy",
+  "legislationDemographicEffectsV2EnabledAt",
+  "metricsSystemVersionBy",
+  "metricsSystemVersionAt",
+  "legislationSystemVersionBy",
+  "legislationSystemVersionAt",
+  "cabinetSystemVersionBy",
+  "cabinetSystemVersionAt",
+  "onboardingChecklistEnabledBy",
+  "onboardingChecklistEnabledAt",
+  "seasonRecapEnabledBy",
+  "seasonRecapEnabledAt",
+  "intOrgAlignmentEnabledBy",
+  "intOrgAlignmentEnabledAt",
+  "departmentProgramSliceEnabledBy",
+  "departmentProgramSliceEnabledAt",
+  "departmentFinanceEnabledBy",
+  "departmentFinanceEnabledAt",
+  "lawAdministrationEnabledBy",
+  "lawAdministrationEnabledAt",
+  "regionalLegislationFinanceEnabledBy",
+  "regionalLegislationFinanceEnabledAt",
+  "canonicalPoliticalMetricsEnabledBy",
+  "canonicalPoliticalMetricsEnabledAt",
+  "settlementCrisisEnabledBy",
+  "settlementCrisisEnabledAt",
+  "eraSystemEnabledBy",
+  "eraSystemEnabledAt",
+  "macroGrowthV1By",
+  "macroGrowthV1At",
+  "granularPollEnabledBy",
+  "granularPollEnabledAt",
+] as const;
+
+/**
+ * GameState fields reset does not overwrite intentionally. Every name is
+ * explicit; adding a GameState field still requires either a reset write or a
+ * reviewed preservation reason here. The existing NON_GAMEPLAY map supplies
+ * per-field reasons for operator controls and turn-runner ownership.
+ */
+export const GAME_STATE_RESET_PRESERVED_FIELD_REASONS: Readonly<Record<string, string>> =
+  Object.freeze({
+    ...NON_GAMEPLAY_GAME_STATE_FIELDS,
+    _id: "Singleton identity for the current gameState document.",
+    createdAt: "Creation timestamp for the persistent gameState singleton.",
+    mediaRegulationSnapshot:
+      "Admin market configuration snapshot; the market config route owns refreshes.",
+    singleplayerConfig: "Launcher-owned singleplayer setup and user preferences.",
+    iteration: "Retained only when a reset caller does not supply a replacement iteration.",
+    iterationHistory: "Durable archive of every iteration known to the generated office pages.",
+    crisisSpawnChanceMultiplier:
+      "Explicit worldsim tuning written by the isolated simulation harness.",
+    resetSystemSelectionsAudit: "Audit provenance for the operator's next-reset selections.",
+    isProcessing:
+      "Turn-runner lock owned by processTurn and its shutdown recovery; teardown does not release it.",
+    processingKind: "Turn-runner lock kind owned by processTurn and its shutdown recovery.",
+    processingStartedAt:
+      "Turn-runner lock timestamp owned by processTurn and its shutdown recovery.",
+    processingTargetTurn: "Turn-runner lock target owned by processTurn and its shutdown recovery.",
+    processingHeartbeatAt:
+      "Turn-runner lease heartbeat owned by processTurn and its shutdown recovery.",
+    processingAbandonedAt:
+      "Evidence for an interrupted partially committed turn; shutdown recovery owns it.",
+    processingPhase:
+      "Turn-runner recovery evidence owned by processTurn and its shutdown recovery.",
+    processingPhaseStatuses:
+      "Turn-runner recovery evidence owned by processTurn and its shutdown recovery.",
+    ...Object.fromEntries(
+      GAME_STATE_OPERATOR_FLAG_AUDIT_FIELDS.map((field) => [
+        field,
+        "Most recent explicit operator for this flag; reset defaults do not impersonate a toggle.",
+      ])
+    ),
+  });
+
 /**
  * `gameState._id: "current"` survives every reset in place (it is re-initialized,
  * never dropped — see RUNTIME_WIPE_SPECIAL_CASES), and the reset's `$set` covers
@@ -118,6 +253,10 @@ export const STALE_PROGRESS_GAME_STATE_UNSET: Readonly<Record<string, "">> = Obj
   // (src/lib/turn/census.ts). Carrying 2010 into a 1953 world suppresses every
   // census/reapportionment until game-year 2020.
   lastCensusYear: "",
+  // Current-world outcome and turn telemetry cannot carry into the new timeline.
+  singleplayerTurnMetrics: "",
+  coldWarEndedTurn: "",
+  lastResumedAt: "",
   // Electoral laws from the outgoing world must not redefine a fresh
   // electorate or registration baseline.
   votingAgeEligibleByCountry: "",
