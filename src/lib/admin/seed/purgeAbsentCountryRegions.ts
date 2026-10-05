@@ -46,10 +46,26 @@ export async function purgeAbsentCountryRegions(
 ): Promise<{ countryIds: CountryId[]; deleted: Record<string, number> }> {
   const countryIds = absentCountryIds(preset);
   const deleted: Record<string, number> = {};
-  if (countryIds.length === 0) return { countryIds, deleted };
-  for (const name of ABSENT_COUNTRY_REGION_COLLECTIONS) {
-    const result = await db.collection(name).deleteMany({ countryId: { $in: countryIds } });
-    if (result.deletedCount > 0) deleted[name] = result.deletedCount;
+  if (!isShippingPreset(preset)) return { countryIds, deleted };
+  if (countryIds.length > 0) {
+    for (const name of ABSENT_COUNTRY_REGION_COLLECTIONS) {
+      const result = await db.collection(name).deleteMany({ countryId: { $in: countryIds } });
+      if (result.deletedCount > 0) deleted[name] = result.deletedCount;
+    }
+  }
+
+  // `politicalMetrics` is keyed by region id, and some retired RU rows have a
+  // still-present countryId even though their regions are no longer seeded.
+  // Use the completed states roster as the authority. Keep the non-empty guard
+  // so a partial bootstrap cannot erase the entire board.
+  const stateIds = (
+    await db.collection<{ _id: string }>("states").find({}).project({ _id: 1 }).toArray()
+  ).map((state) => state._id);
+  if (stateIds.length > 0) {
+    const result = await db.collection("politicalMetrics").deleteMany({ _id: { $nin: stateIds } });
+    if (result.deletedCount > 0) {
+      deleted.politicalMetrics = (deleted.politicalMetrics ?? 0) + result.deletedCount;
+    }
   }
   return { countryIds, deleted };
 }

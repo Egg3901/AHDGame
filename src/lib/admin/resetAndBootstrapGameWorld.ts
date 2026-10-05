@@ -64,6 +64,7 @@ import {
 } from "@/lib/resetVersions/rules";
 import { getValidatedEnv } from "@/lib/env";
 import { assertResetDatabaseMatchesApplication } from "@/lib/admin/resetPreflight";
+import { resetPoliticalMetricsRuntimeState } from "@/lib/admin/seed/resetPoliticalMetricsRuntimeState";
 
 export interface ResetAndBootstrapOptions {
   /** 1991 only: leave political offices vacant for player-created parties. */
@@ -305,6 +306,14 @@ export async function resetAndBootstrapGameWorld(
       log: collect,
     });
     collect(reset.message);
+
+    // Political metrics are reference rows, but several fields on each row are
+    // mutable momentum from the outgoing world. Clear those fields only here,
+    // after teardown has succeeded and before bootstrap re-seeds every country.
+    const politicalRuntimeFieldsCleared = await resetPoliticalMetricsRuntimeState(db);
+    collect(
+      `Cleared embedded political runtime fields from ${politicalRuntimeFieldsCleared} region(s)`
+    );
 
     // 2) BUILD. `seedOnly` short-circuits before election + officials spawn.
     phaseReached = "build";

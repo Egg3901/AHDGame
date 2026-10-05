@@ -157,6 +157,46 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
     expect(db.collectionMocks.unownedSectors?.deleteMany).toHaveBeenCalledWith({});
   });
 
+  it("clears embedded political runtime channels after teardown and before the new seed", async () => {
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
+    const order: string[] = [];
+    vi.mocked(resetGameWorld).mockImplementation(async () => {
+      order.push("teardown");
+      return okTeardown as never;
+    });
+    db.collection("politicalMetrics").updateMany.mockImplementation(async () => {
+      order.push("clear-political-runtime");
+      return { modifiedCount: 14 } as never;
+    });
+    vi.mocked(bootstrapGameWorld).mockImplementation(async () => {
+      order.push("bootstrap");
+      return {} as never;
+    });
+
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    await resetAndBootstrapGameWorld({
+      db: db as unknown as Db,
+      preset: "1991-default",
+      resetReference: false,
+      startingParties: "none",
+    });
+
+    expect(order).toEqual(["teardown", "clear-political-runtime", "bootstrap"]);
+    expect(db.collectionMocks.politicalMetrics?.updateMany).toHaveBeenCalledWith(
+      {},
+      {
+        $unset: {
+          appliedEventEffects: "",
+          cabinetResiduals: "",
+          cabinetResidualsBySource: "",
+          labourResiduals: "",
+          livingConflictResiduals: "",
+        },
+      }
+    );
+  });
+
   it("preserves unowned markets when reset does not request a 1991 reference rebuild", async () => {
     const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
     await resetAndBootstrapGameWorld({
