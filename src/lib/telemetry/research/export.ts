@@ -248,8 +248,8 @@ export async function runResearchExport(
                 {
                   turn: position.turn,
                   commodity: position.inclusive
-                    ? { $gte: position.commodity }
-                    : { $gt: position.commodity },
+                    ? { $gte: position.commodity as CommoditySourcingDoc["commodity"] }
+                    : { $gt: position.commodity as CommoditySourcingDoc["commodity"] },
                 },
               ],
             }
