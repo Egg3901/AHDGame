@@ -16,6 +16,7 @@ describe("1991 political opening qualification", () => {
   for (const cc of ["US", "UK"] as const) {
     it(`preserves ${cc}'s national levels with distinct regional profiles`, () => {
       const regions = (cc === "US" ? US_GEOGRAPHY : UK_GEOGRAPHY).regionBundles["1991-default"];
+      if (!regions?.length) throw new Error(`Missing ${cc} 1991 regions`);
       expect(Object.keys(REGIONAL_TEXTURE_1991[cc]).sort()).toEqual(
         regions.map((r) => r._id).sort()
       );
