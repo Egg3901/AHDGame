@@ -464,60 +464,13 @@ async function ensureLedgerWitness(
   }
 }
 
-function realizedIncomeUpdate(
-  charter: CorporationCharterState["bankCharter"],
-  turn: number,
-  couponIncome: number,
-  realizedGain: number
-): { update: Record<string, unknown>; guard: Record<string, unknown> } {
-  if (couponIncome === 0 && realizedGain === 0) return { update: {}, guard: {} };
-  if ((charter?.lastBankingIncomeTurn ?? -1) > turn) return { update: {}, guard: {} };
-  const sameTurn = charter?.lastBankingIncomeTurn === turn;
-  const guard: Record<string, unknown> = {};
-  for (const [field, value] of [
-    ["lastBankingIncomeTurn", charter?.lastBankingIncomeTurn],
-    ["lastBankingIncome", charter?.lastBankingIncome],
-    ["lastBankingSovereignCouponIncome", charter?.lastBankingSovereignCouponIncome],
-    ["lastBankingTreasuryRealizedGain", charter?.lastBankingTreasuryRealizedGain],
-  ] as const) {
-    guard[`bankCharter.${field}`] = value === undefined ? { $exists: false } : value;
-  }
-  const update: Record<string, unknown> = {};
-  if (sameTurn) {
-    const inc: Record<string, number> = {};
-    if (couponIncome !== 0) {
-      inc["bankCharter.lastBankingIncome"] = couponIncome;
-      inc["bankCharter.lastBankingSovereignCouponIncome"] = couponIncome;
-    }
-    if (realizedGain !== 0) {
-      inc["bankCharter.lastBankingIncome"] =
-        (inc["bankCharter.lastBankingIncome"] ?? 0) + realizedGain;
-      inc["bankCharter.lastBankingTreasuryRealizedGain"] = realizedGain;
-    }
-    if (Object.keys(inc).length > 0) update.$inc = inc;
-  } else {
-    update.$set = {
-      "bankCharter.lastBankingIncome": couponIncome + realizedGain,
-      "bankCharter.lastBankingIncomeTurn": turn,
-      "bankCharter.lastBankingSovereignCouponIncome": couponIncome,
-      "bankCharter.lastBankingTreasuryRealizedGain": realizedGain,
-    };
-  }
-  return { update, guard };
-}
-
-function bankPayoutTransition(
-  claim: BankSovereignClaim,
-  attemptTurn: number,
-  charter: CorporationCharterState["bankCharter"]
-): BankingTransition {
+function bankPayoutTransition(claim: BankSovereignClaim, attemptTurn: number): BankingTransition {
   const key = `${claim.id}:bank:${attemptTurn}`;
   const couponIncome = claim.kind === "coupon" ? claim.amountLocal : 0;
   const realizedGain =
     claim.kind === "maturity" && Number.isFinite(claim.costBasisLocal)
       ? claim.amountLocal - claim.costBasisLocal!
       : 0;
-  const income = realizedIncomeUpdate(charter, attemptTurn, couponIncome, realizedGain);
   const projection: BankingTransition["projections"][number] = {
     collection: "corporations",
     filter: { _id: oid(claim.bankId) },
@@ -525,9 +478,13 @@ function bankPayoutTransition(
       $inc: {
         [escrowPath(claim)]: -claim.amountLocal,
         "bankCharter.cashReserves": claim.amountLocal,
-        ...((income.update.$inc as Record<string, number> | undefined) ?? {}),
+        ...(couponIncome > 0
+          ? { "bankCharter.sovereignCouponIncomePaidLifetime": couponIncome }
+          : {}),
+        ...(realizedGain !== 0
+          ? { "bankCharter.treasuryRealizedGainPaidLifetime": realizedGain }
+          : {}),
       },
-      ...("$set" in income.update ? { $set: income.update.$set } : {}),
     },
     note: `Atomically release funded sovereign ${claim.kind} cash to the matching charter epoch`,
   };
@@ -645,21 +602,13 @@ async function payFromEscrow(
     (charter?.status === "failed" && charter.depositorsResolvedTurn != null) ||
     charter?.status === "revoked";
   if (exactEpoch && charter?.status === "active") {
-    const transition = bankPayoutTransition(claim, attemptTurn, charter);
+    const transition = bankPayoutTransition(claim, attemptTurn);
     let settled = await settleAtomicDocumentTransition(db, transition, {
       identity: { _id: oid(claim.bankId) },
       guard: {
         "bankCharter.currency": claim.currencyCode,
         "bankCharter.charteredTurn": claim.charteredTurn,
         "bankCharter.status": "active",
-        ...realizedIncomeUpdate(
-          charter,
-          attemptTurn,
-          claim.kind === "coupon" ? claim.amountLocal : 0,
-          claim.kind === "maturity" && Number.isFinite(claim.costBasisLocal)
-            ? claim.amountLocal - claim.costBasisLocal!
-            : 0
-        ).guard,
       },
     });
     if (settled.status === "partial" || (settled.status === "replayed" && settled.error))

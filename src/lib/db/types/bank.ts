@@ -153,6 +153,14 @@ export interface BankCharter {
   lastBankingSovereignCouponIncome?: number;
   /** Realized gain or loss on paid sovereign sales/redemptions with known cost basis. */
   lastBankingTreasuryRealizedGain?: number;
+  /** Lifetime cash-paid sovereign coupons; incremented atomically with vault credit. */
+  sovereignCouponIncomePaidLifetime?: number;
+  /** Lifetime coupons consumed into published banking income. */
+  sovereignCouponIncomeBookedLifetime?: number;
+  /** Lifetime known-basis Treasury gain/loss; incremented atomically with vault credit. */
+  treasuryRealizedGainPaidLifetime?: number;
+  /** Lifetime Treasury gain/loss consumed into published banking income. */
+  treasuryRealizedGainBookedLifetime?: number;
   /** Actual primary underwriting fees included in lastBankingIncome. */
   lastBankingUnderwritingFees?: number;
   lastBankingUnderwritingFeesTurn?: number;
@@ -291,8 +299,6 @@ export interface BankTreasuryTradeReceipt {
   amountLocal: number;
   /** Complete frozen basis of allocated sale lots; absent if any lot basis is unknown. */
   costBasisLocal?: number;
-  /** Income turn frozen when sale escrow is first paid; retries preserve it. */
-  realizedIncomeTurn?: number;
   turn: number;
   /** A failed-estate sale that must finish before depositor resolution closes. */
   resolutionSale?: true;

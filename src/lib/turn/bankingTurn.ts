@@ -34,6 +34,7 @@ import {
   settleInsurancePremiumForTurn,
   type FrozenInsurancePremiumReceipt,
 } from "@/lib/banking/insurancePremium";
+import { unbookedSovereignAssetIncome } from "@/lib/banking/rules/sovereignClaims";
 import {
   ARREARS_DEFAULT_TURNS,
   MAX_NPC_FLOW_PER_TURN_FRACTION,
@@ -904,14 +905,9 @@ async function processOneBank(
   let superseded = false;
   const corporations = db.collection<Corporation>("corporations");
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    sovereignCouponIncomeForTurn =
-      publicationCharter.lastBankingIncomeTurn === turn
-        ? Math.max(0, publicationCharter.lastBankingSovereignCouponIncome ?? 0)
-        : 0;
-    treasuryRealizedGainForTurn =
-      publicationCharter.lastBankingIncomeTurn === turn
-        ? (publicationCharter.lastBankingTreasuryRealizedGain ?? 0)
-        : 0;
+    const unbooked = unbookedSovereignAssetIncome(publicationCharter);
+    sovereignCouponIncomeForTurn = unbooked.couponIncome;
+    treasuryRealizedGainForTurn = unbooked.realizedGain;
     underwritingFeesForTurn =
       publicationCharter.lastBankingUnderwritingFeesTurn === turn
         ? (publicationCharter.lastBankingUnderwritingFees ?? 0)
@@ -932,6 +928,11 @@ async function processOneBank(
         observedIncomeTurn: publicationCharter.lastBankingIncomeTurn,
         observedSovereignCouponIncome: publicationCharter.lastBankingSovereignCouponIncome,
         observedTreasuryRealizedGain: publicationCharter.lastBankingTreasuryRealizedGain,
+        observedSovereignCouponPaidLifetime: publicationCharter.sovereignCouponIncomePaidLifetime,
+        observedSovereignCouponBookedLifetime:
+          publicationCharter.sovereignCouponIncomeBookedLifetime,
+        observedTreasuryGainPaidLifetime: publicationCharter.treasuryRealizedGainPaidLifetime,
+        observedTreasuryGainBookedLifetime: publicationCharter.treasuryRealizedGainBookedLifetime,
       }),
       {
         $set: {
@@ -955,6 +956,10 @@ async function processOneBank(
           "bankCharter.lastBankingLoanInterest": result.loanInterestCollected,
           "bankCharter.lastBankingSovereignCouponIncome": sovereignCouponIncomeForTurn,
           "bankCharter.lastBankingTreasuryRealizedGain": treasuryRealizedGainForTurn,
+          "bankCharter.sovereignCouponIncomeBookedLifetime":
+            publicationCharter.sovereignCouponIncomePaidLifetime ?? 0,
+          "bankCharter.treasuryRealizedGainBookedLifetime":
+            publicationCharter.treasuryRealizedGainPaidLifetime ?? 0,
           "bankCharter.lastBankingLoanOriginationFees": result.loanOriginationFeesCollected,
           "bankCharter.lastBankingUnderwritingFees": underwritingFeesForTurn,
           "bankCharter.lastBankingUnderwritingFeesTurn": turn,

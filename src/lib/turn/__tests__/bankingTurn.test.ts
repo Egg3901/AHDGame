@@ -520,13 +520,13 @@ describe("processBankingTurn", () => {
       const patch = update as { $set?: Record<string, unknown> };
       if (patch.$set?.["bankCharter.lastBankingTurn"] === TURN) {
         publicationFilters.push(selector);
-        liveCorp.bankCharter!.lastBankingIncome = 75;
-        liveCorp.bankCharter!.lastBankingIncomeTurn = TURN;
-        liveCorp.bankCharter!.lastBankingSovereignCouponIncome = 20;
-        liveCorp.bankCharter!.lastBankingTreasuryRealizedGain = 6;
+        liveCorp.bankCharter!.sovereignCouponIncomePaidLifetime = 20;
+        liveCorp.bankCharter!.treasuryRealizedGainPaidLifetime = 6;
         const observedIncomeTurn = selector["bankCharter.lastBankingIncomeTurn"];
         const observedCoupon = selector["bankCharter.lastBankingSovereignCouponIncome"];
         const observedGain = selector["bankCharter.lastBankingTreasuryRealizedGain"];
+        const observedCouponPaid = selector["bankCharter.sovereignCouponIncomePaidLifetime"];
+        const observedGainPaid = selector["bankCharter.treasuryRealizedGainPaidLifetime"];
         const incomeTurnMatches =
           typeof observedIncomeTurn === "object"
             ? "$exists" in observedIncomeTurn &&
@@ -545,7 +545,25 @@ describe("processBankingTurn", () => {
               observedGain.$exists === false &&
               liveCorp.bankCharter.lastBankingTreasuryRealizedGain === undefined
             : observedGain === liveCorp.bankCharter.lastBankingTreasuryRealizedGain;
-        if (!incomeTurnMatches || !couponMatches || !gainMatches)
+        const couponPaidMatches =
+          typeof observedCouponPaid === "object"
+            ? "$exists" in observedCouponPaid &&
+              observedCouponPaid.$exists === false &&
+              liveCorp.bankCharter.sovereignCouponIncomePaidLifetime === undefined
+            : observedCouponPaid === liveCorp.bankCharter.sovereignCouponIncomePaidLifetime;
+        const gainPaidMatches =
+          typeof observedGainPaid === "object"
+            ? "$exists" in observedGainPaid &&
+              observedGainPaid.$exists === false &&
+              liveCorp.bankCharter.treasuryRealizedGainPaidLifetime === undefined
+            : observedGainPaid === liveCorp.bankCharter.treasuryRealizedGainPaidLifetime;
+        if (
+          !incomeTurnMatches ||
+          !couponMatches ||
+          !gainMatches ||
+          !couponPaidMatches ||
+          !gainPaidMatches
+        )
           return { matchedCount: 0, modifiedCount: 0 };
       }
       return originalUpdate!(filter, update);
@@ -563,9 +581,17 @@ describe("processBankingTurn", () => {
     expect(publicationFilters[0]["bankCharter.lastBankingTreasuryRealizedGain"]).toEqual({
       $exists: false,
     });
-    expect(publicationFilters[1]["bankCharter.lastBankingIncomeTurn"]).toBe(TURN);
-    expect(publicationFilters[1]["bankCharter.lastBankingSovereignCouponIncome"]).toBe(20);
-    expect(publicationFilters[1]["bankCharter.lastBankingTreasuryRealizedGain"]).toBe(6);
+    expect(publicationFilters[1]["bankCharter.lastBankingIncomeTurn"]).toEqual({
+      $exists: false,
+    });
+    expect(publicationFilters[0]["bankCharter.sovereignCouponIncomePaidLifetime"]).toEqual({
+      $exists: false,
+    });
+    expect(publicationFilters[0]["bankCharter.treasuryRealizedGainPaidLifetime"]).toEqual({
+      $exists: false,
+    });
+    expect(publicationFilters[1]["bankCharter.sovereignCouponIncomePaidLifetime"]).toBe(20);
+    expect(publicationFilters[1]["bankCharter.treasuryRealizedGainPaidLifetime"]).toBe(6);
     expect(liveCorp.bankCharter?.lastBankingIncome).toBeCloseTo(
       (liveCorp.bankCharter?.lastBankingLoanInterest ?? 0) +
         (liveCorp.bankCharter?.lastBankingLoanOriginationFees ?? 0) -
@@ -581,6 +607,8 @@ describe("processBankingTurn", () => {
     expect(summary.banksProcessed).toBe(1);
     expect(liveCorp.bankCharter?.lastBankingSovereignCouponIncome).toBe(20);
     expect(liveCorp.bankCharter?.lastBankingTreasuryRealizedGain).toBe(6);
+    expect(liveCorp.bankCharter?.sovereignCouponIncomeBookedLifetime).toBe(20);
+    expect(liveCorp.bankCharter?.treasuryRealizedGainBookedLifetime).toBe(6);
   });
 
   it.each(["current", "legacy"])(
@@ -703,9 +731,8 @@ describe("processBankingTurn", () => {
   it("includes already-paid Treasury coupons in the per-turn earnings split", async () => {
     liveCorp.bankCharter!.depositOffset = 0;
     liveCorp.bankCharter!.npcDeposits = 0;
-    liveCorp.bankCharter!.lastBankingIncomeTurn = TURN;
-    liveCorp.bankCharter!.lastBankingSovereignCouponIncome = 25;
-    liveCorp.bankCharter!.lastBankingTreasuryRealizedGain = 8;
+    liveCorp.bankCharter!.sovereignCouponIncomePaidLifetime = 25;
+    liveCorp.bankCharter!.treasuryRealizedGainPaidLifetime = 8;
     bankCorp.bankCharter!.npcDeposits = 0;
     // Zero broad money → no NPC deposit flow; npc interest = 0
     cbState.externalBroadMoney = 0;
@@ -748,6 +775,8 @@ describe("processBankingTurn", () => {
     expect(charter.lastBankingLoanInterest!).toBeCloseTo(summary.loanInterestCollected, 5);
     expect(charter.lastBankingSovereignCouponIncome).toBe(25);
     expect(charter.lastBankingTreasuryRealizedGain).toBe(8);
+    expect(charter.sovereignCouponIncomeBookedLifetime).toBe(25);
+    expect(charter.treasuryRealizedGainBookedLifetime).toBe(8);
     expect(charter.lastBankingInsurancePremium!).toBeCloseTo(premiumPaid, 5);
     expect(charter.lastBankingWriteoffs!).toBeCloseTo(summary.defaultsWrittenOff, 5);
     // No interbank or facility legs in this fixture: those lines stay zero.

@@ -17,4 +17,6 @@ areas: [backend, frontend, engine]
   between proceeds and a frozen, known purchase basis. Unknown basis remains
   unclassified; returned principal is not earnings.
 - Receipt replay and the BankingTurn publication compare-and-set preserve the
-  original income turn and cannot overwrite concurrent payout lines.
+  original cash payment. Lifetime paid counters let BankingTurn consume
+  earnings through monotonic watermarks without making cash settlement depend
+  on mutable income-period fields.

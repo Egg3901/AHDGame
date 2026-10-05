@@ -874,11 +874,7 @@ async function finishTransition(db: Db, transition: BankingTransition): Promise<
   return result;
 }
 
-async function paySaleEscrow(
-  db: Db,
-  receipt: BankTreasuryTradeReceipt,
-  settlementTurn: number
-): Promise<SettlementResult> {
+async function paySaleEscrow(db: Db, receipt: BankTreasuryTradeReceipt): Promise<SettlementResult> {
   const corporations = db.collection<BankState>("corporations");
   const bank = await corporations.findOne(
     { _id: receipt.bankId },
@@ -890,57 +886,13 @@ async function paySaleEscrow(
     charter?.currency === receipt.currency && charter.charteredTurn === receipt.charteredTurn;
   const estateOpen = charter?.status === "failed" && charter.depositorsResolvedTurn == null;
   if (matchingEpoch && (charter?.status === "active" || estateOpen)) {
-    if (receipt.realizedIncomeTurn === undefined) {
-      await db
-        .collection<BankTreasuryTradeReceipt>(BANK_TREASURY_TRADES_COLLECTION)
-        .updateOne(
-          { _id: receipt._id, realizedIncomeTurn: { $exists: false } },
-          { $set: { realizedIncomeTurn: settlementTurn, updatedAt: new Date() } }
-        );
-      const frozen = await db
-        .collection<BankTreasuryTradeReceipt>(BANK_TREASURY_TRADES_COLLECTION)
-        .findOne({ _id: receipt._id }, { projection: { realizedIncomeTurn: 1 } });
-      receipt.realizedIncomeTurn = frozen?.realizedIncomeTurn ?? settlementTurn;
-    }
-    const incomeTurn = receipt.realizedIncomeTurn;
     const realizedGain = Number.isFinite(receipt.costBasisLocal)
       ? receipt.amountLocal - receipt.costBasisLocal!
       : 0;
-    const sameIncomeTurn = charter?.lastBankingIncomeTurn === incomeTurn;
-    const incomeIsStale = (charter?.lastBankingIncomeTurn ?? -1) > incomeTurn;
-    const incomeUpdate =
-      realizedGain === 0 || incomeIsStale
-        ? {}
-        : sameIncomeTurn
-          ? {
-              $inc: {
-                "bankCharter.lastBankingIncome": realizedGain,
-                "bankCharter.lastBankingTreasuryRealizedGain": realizedGain,
-              },
-            }
-          : {
-              $set: {
-                "bankCharter.lastBankingIncome": realizedGain,
-                "bankCharter.lastBankingIncomeTurn": incomeTurn,
-                "bankCharter.lastBankingSovereignCouponIncome": 0,
-                "bankCharter.lastBankingTreasuryRealizedGain": realizedGain,
-              },
-            };
-    const incomeGuard: Record<string, unknown> = {};
-    for (const [field, value] of realizedGain === 0
-      ? []
-      : ([
-          ["lastBankingIncomeTurn", charter?.lastBankingIncomeTurn],
-          ["lastBankingIncome", charter?.lastBankingIncome],
-          ["lastBankingSovereignCouponIncome", charter?.lastBankingSovereignCouponIncome],
-          ["lastBankingTreasuryRealizedGain", charter?.lastBankingTreasuryRealizedGain],
-        ] as const)) {
-      incomeGuard[`bankCharter.${field}`] = value === undefined ? { $exists: false } : value;
-    }
     const transition: BankingTransition = {
       key: `bank-treasury:${receipt._id}:vault`,
       kind: "bank_treasury_sale_to_vault",
-      turn: incomeTurn,
+      turn: receipt.turn,
       currency: receipt.currency,
       legs: [
         {
@@ -965,11 +917,12 @@ async function paySaleEscrow(
           collection: "corporations",
           filter: { _id: oid(receipt.bankId.toHexString()) },
           update: {
-            ...incomeUpdate,
             $inc: {
               [escrowPath]: -receipt.amountLocal,
               "bankCharter.cashReserves": receipt.amountLocal,
-              ...("$inc" in incomeUpdate ? incomeUpdate.$inc : {}),
+              ...(realizedGain !== 0
+                ? { "bankCharter.treasuryRealizedGainPaidLifetime": realizedGain }
+                : {}),
             },
           },
           note: "Atomically release sale cash from escrow to the matching bank estate",
@@ -990,7 +943,6 @@ async function paySaleEscrow(
         "bankCharter.currency": receipt.currency,
         "bankCharter.charteredTurn": receipt.charteredTurn,
         "bankCharter.status": charter?.status,
-        ...incomeGuard,
       },
     });
     if (settled.status === "partial" || (settled.status === "replayed" && settled.error)) {
@@ -1116,8 +1068,7 @@ async function updateReceipt(
 async function runReceipt(
   db: Db,
   receipt: BankTreasuryTradeReceipt,
-  policy: BankingPolicySnapshot,
-  settlementTurn = receipt.turn
+  policy: BankingPolicySnapshot
 ): Promise<BankTreasuryTradeResult> {
   if (!policy.bankTreasury)
     return {
@@ -1200,7 +1151,7 @@ async function runReceipt(
       }
       if (resumed.status === "applied" || (resumed.status === "replayed" && !resumed.error)) {
         if (receipt.side === "sell") {
-          const paid = await paySaleEscrow(db, receipt, settlementTurn);
+          const paid = await paySaleEscrow(db, receipt);
           if (paid.status === "partial" || (paid.status === "replayed" && paid.error)) {
             return {
               status: "pending",
@@ -1224,7 +1175,7 @@ async function runReceipt(
       await finishTransition(db, releaseReservationTransition(receipt));
     } else if (cashRecord?.status === "applied") {
       if (receipt.side === "sell") {
-        const paid = await paySaleEscrow(db, receipt, settlementTurn);
+        const paid = await paySaleEscrow(db, receipt);
         if (paid.status !== "applied" && !(paid.status === "replayed" && !paid.error)) {
           return {
             status: "pending",
@@ -1331,7 +1282,7 @@ async function runReceipt(
   }
 
   if (receipt.side === "sell") {
-    const paid = await paySaleEscrow(db, receipt, settlementTurn);
+    const paid = await paySaleEscrow(db, receipt);
     if (paid.status !== "applied" && !(paid.status === "replayed" && !paid.error)) {
       return {
         status: "pending",
@@ -1435,7 +1386,7 @@ export async function tradeBankTreasuryBill(
         return { ...terminal, status: "pending", error: finished.error };
     }
     if (terminal) return terminal;
-    return runReceipt(db, prior, input.policy, input.turn);
+    return runReceipt(db, prior, input.policy);
   }
   const [bank, bond] = await Promise.all([
     db
@@ -1711,17 +1662,16 @@ export async function tradeBankTreasuryBill(
     }
     const terminal = terminalTradeResult(saved);
     if (terminal) return terminal;
-    return runReceipt(db, saved, input.policy, input.turn);
+    return runReceipt(db, saved, input.policy);
   }
-  return runReceipt(db, receipt, input.policy, input.turn);
+  return runReceipt(db, receipt, input.policy);
 }
 
 /** Resume open receipts before any new automatic sweep orders. */
 export async function recoverBankTreasuryTrades(
   db: Db,
   policy: BankingPolicySnapshot,
-  limit = 100,
-  settlementTurn?: number
+  limit = 100
 ): Promise<{ completed: number; pending: number; rejected: number }> {
   if (!policy.bankTreasury) return { completed: 0, pending: 0, rejected: 0 };
   const receipts = await db
@@ -1732,7 +1682,7 @@ export async function recoverBankTreasuryTrades(
     .toArray();
   const summary = { completed: 0, pending: 0, rejected: 0 };
   for (const receipt of receipts) {
-    const result = await runReceipt(db, receipt, policy, settlementTurn ?? receipt.turn);
+    const result = await runReceipt(db, receipt, policy);
     summary[result.status] += 1;
   }
   return summary;
@@ -1746,7 +1696,7 @@ export async function liquidateFailedBankTreasury(
   turn: number
 ): Promise<{ soldUnits: number; proceedsLocal: number; pending: boolean; error?: string }> {
   if (!policy.bankTreasury) return { soldUnits: 0, proceedsLocal: 0, pending: false };
-  const recovery = await recoverBankTreasuryTrades(db, policy, 100, turn);
+  const recovery = await recoverBankTreasuryTrades(db, policy);
   if (recovery.pending > 0) {
     return {
       soldUnits: 0,
@@ -1937,7 +1887,7 @@ export async function processBankTreasuryTurn(
 }> {
   if (!policy.bankTreasury)
     return { banksMarked: 0, tradesCompleted: 0, tradesPending: 0, sweepsCompleted: 0 };
-  const recovered = await recoverBankTreasuryTrades(db, policy, 100, turn);
+  const recovered = await recoverBankTreasuryTrades(db, policy);
   if (recovered.pending > 0)
     throw new Error("Bank treasury has a trade receipt that remains partial after recovery");
   const banks = await db

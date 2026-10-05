@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
+import type { BankCharter } from "@/lib/db/types/bank";
 import { quoteSovereignPrimaryBankPurchase } from "../rules/sovereignPrimary";
 import { resumeSettlement } from "../settlementJournal";
 import { bankTransferConflict } from "../transferCharter";
@@ -15,6 +16,7 @@ import {
 } from "../bankTreasury";
 import { returnDepositBook } from "../depositBookReturn";
 import { InjectedCrash, withInjectedCrash } from "@/lib/test-utils/faultyDb";
+import { bankIncomeIncludingUnbookedSovereignAssets } from "../rules/sovereignClaims";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -183,9 +185,7 @@ describe("funded bank treasury settlement", () => {
     const expectedGain = receipt!.amountLocal - receipt!.costBasisLocal!;
     expect(expectedGain).toBeGreaterThan(0);
     expect(db.collection("corporations").docs[0].bankCharter).toMatchObject({
-      lastBankingIncome: expectedGain,
-      lastBankingIncomeTurn: TURN,
-      lastBankingTreasuryRealizedGain: expectedGain,
+      treasuryRealizedGainPaidLifetime: expectedGain,
     });
   });
 
@@ -221,10 +221,15 @@ describe("funded bank treasury settlement", () => {
       tradeId: "treasury-old-gain-sell",
     });
     expect(sale.status).toBe("completed");
+    const receipt = db
+      .collection("bankTreasuryTrades")
+      .docs.find((row) => row._id === "treasury-old-gain-sell");
+    const expectedGain = receipt!.amountLocal - receipt!.costBasisLocal!;
     expect(db.collection("corporations").docs[0].bankCharter).toMatchObject({
       lastBankingIncome: 77,
       lastBankingIncomeTurn: TURN + 1,
       lastBankingTreasuryRealizedGain: 3,
+      treasuryRealizedGainPaidLifetime: expectedGain,
     });
   });
 
@@ -266,11 +271,16 @@ describe("funded bank treasury settlement", () => {
     const expectedGain = receipt!.amountLocal - receipt!.costBasisLocal!;
     expect(sale.status).toBe("completed");
     expect(db.collection("corporations").docs[0].bankCharter).toMatchObject({
-      lastBankingIncome: 50 + expectedGain,
+      lastBankingIncome: 50,
       lastBankingIncomeTurn: TURN,
       lastBankingSovereignCouponIncome: 5,
-      lastBankingTreasuryRealizedGain: expectedGain,
+      treasuryRealizedGainPaidLifetime: expectedGain,
     });
+    expect(
+      bankIncomeIncludingUnbookedSovereignAssets(
+        db.collection("corporations").docs[0].bankCharter as BankCharter
+      )
+    ).toBeCloseTo(50 + expectedGain);
   });
 
   it("skips a negative-carry automatic bill while leaving the same bill available manually", async () => {

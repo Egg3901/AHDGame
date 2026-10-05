@@ -97,6 +97,10 @@ export function bankingTurnPublicationFilter(input: {
   observedIncomeTurn?: number;
   observedSovereignCouponIncome?: number;
   observedTreasuryRealizedGain?: number;
+  observedSovereignCouponPaidLifetime?: number;
+  observedSovereignCouponBookedLifetime?: number;
+  observedTreasuryGainPaidLifetime?: number;
+  observedTreasuryGainBookedLifetime?: number;
 }): Record<string, unknown> {
   return {
     _id: input.bankId,
@@ -117,6 +121,27 @@ export function bankingTurnPublicationFilter(input: {
     ...(input.observedTreasuryRealizedGain === undefined
       ? { "bankCharter.lastBankingTreasuryRealizedGain": { $exists: false } }
       : { "bankCharter.lastBankingTreasuryRealizedGain": input.observedTreasuryRealizedGain }),
+    ...(input.observedSovereignCouponPaidLifetime === undefined
+      ? { "bankCharter.sovereignCouponIncomePaidLifetime": { $exists: false } }
+      : {
+          "bankCharter.sovereignCouponIncomePaidLifetime":
+            input.observedSovereignCouponPaidLifetime,
+        }),
+    ...(input.observedSovereignCouponBookedLifetime === undefined
+      ? { "bankCharter.sovereignCouponIncomeBookedLifetime": { $exists: false } }
+      : {
+          "bankCharter.sovereignCouponIncomeBookedLifetime":
+            input.observedSovereignCouponBookedLifetime,
+        }),
+    ...(input.observedTreasuryGainPaidLifetime === undefined
+      ? { "bankCharter.treasuryRealizedGainPaidLifetime": { $exists: false } }
+      : { "bankCharter.treasuryRealizedGainPaidLifetime": input.observedTreasuryGainPaidLifetime }),
+    ...(input.observedTreasuryGainBookedLifetime === undefined
+      ? { "bankCharter.treasuryRealizedGainBookedLifetime": { $exists: false } }
+      : {
+          "bankCharter.treasuryRealizedGainBookedLifetime":
+            input.observedTreasuryGainBookedLifetime,
+        }),
     $or: [
       { "bankCharter.lastBankingTurn": { $ne: input.turn } },
       { "bankCharter.lastBankingTurn": { $exists: false } },
