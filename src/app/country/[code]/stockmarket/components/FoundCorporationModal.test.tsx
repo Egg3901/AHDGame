@@ -124,3 +124,20 @@ describe("FoundCorporationModal — mobile reachability (ticket #1003)", () => {
     expect(input.step).toBe("1");
   });
 });
+
+describe("FoundCorporationModal — sector pickers", () => {
+  it("does not offer the retired automobiles and entertainment sectors", () => {
+    renderModal(1);
+    const selects = screen.getAllByRole("combobox") as HTMLSelectElement[];
+    expect(selects.length).toBeGreaterThan(0);
+    for (const select of selects) {
+      const values = Array.from(select.options).map((o) => o.value);
+      expect(values).not.toContain("automobiles");
+      expect(values).not.toContain("entertainment");
+    }
+    const primary = selects[0];
+    const values = Array.from(primary.options).map((o) => o.value);
+    expect(values).toContain("manufacturing");
+    expect(values).toContain("media");
+  });
+});
