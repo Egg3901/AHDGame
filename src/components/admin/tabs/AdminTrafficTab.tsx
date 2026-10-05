@@ -189,7 +189,7 @@ function StatCard({
         highlight ? "border-primary/40" : "border-card-border"
       }`}
     >
-      <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
+      <p className="text-body-sm font-medium text-muted">{label}</p>
       <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{value}</p>
       {sub && <p className="mt-0.5 text-xs text-muted">{sub}</p>}
     </div>
@@ -373,9 +373,7 @@ export function AdminTrafficTab() {
             <div className="hidden h-6 w-px bg-card-border sm:block" aria-hidden />
 
             <div className="flex flex-col gap-1">
-              <span className="text-body-xs font-medium uppercase tracking-wide text-muted">
-                Breakdown bars
-              </span>
+              <span className="text-body-sm font-medium text-muted">Breakdown bars</span>
               <div className="inline-flex overflow-hidden rounded-md border border-card-border">
                 <button
                   type="button"

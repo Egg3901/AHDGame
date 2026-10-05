@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { loadSavingsApyByCurrency } from "@/lib/api/savings/savingsApy";
 import { turnsUntilSavingsCredit } from "@/lib/currency/savingsInterest";
@@ -23,7 +23,7 @@ async function handleGET() {
     ]);
 
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const apyByCurrency = await loadSavingsApyByCurrency(db);

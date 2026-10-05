@@ -64,19 +64,34 @@ npm run build          # Next build + postbuild quality publishing
 A pull request must pass, and you should reproduce these locally before opening
 one:
 
-1. **`verify`**: lint, format, typecheck, architecture audit, and tests. This is the required gate.
+1. **`verify`**: aggregates the CI jobs (lint with architecture audit, format, typecheck, sharded tests, Next build, federation transactions). This is the required gate.
 2. **`verify:build`**: the Next build run by CI. `npm run build` also runs postbuild quality publishing.
 3. **Semgrep `custom-rules`** — project-specific rules in `.semgrep/`. A hit here
    is a real bug, not a style nit; fix the code, do not silence the rule.
 4. **Dependency Review** — fails on a new high-severity or license-incompatible
    dependency.
 5. **PR Title** — must be a Conventional Commit (`feat:`, `fix:`, `ci:`, ...).
-   Feature PRs squash-merge, so the **PR title becomes the commit message** on a
-   permanent branch. Write it like one.
+   Feature PRs squash-merge into `development`, so the **PR title becomes the
+   commit message** on a permanent branch. Write it like one. Promotions
+   (`development` to `staging` to `main`) use merge commits, never squash.
 
-The architecture audit runs in `verify` locally and as an advisory step in CI
-(it has known pre-existing findings). New findings your change introduces are
-yours to fix; old ones are not.
+The architecture audit runs in `verify` locally and in the CI lint job. New
+findings your change introduces are yours to fix.
+
+## Persistence and reset coverage
+
+Run `npm run architecture:contracts` when adding persisted state or turn work.
+Every production collection needs a lifecycle entry in the seed manifest.
+Every GameState field needs an actual reset write or a named preservation reason.
+Region state and political or macro metric fields need explicit reset coverage;
+optional seed writes do not prove reset coverage.
+New world collections need indexes in the bootstrap seed plan or a reviewed
+primary-key policy; a migration marker alone cannot restore indexes after reset.
+The contracts discover generic calls and forwarded collection names, and flag
+new direct Mongo calls inside loops on the turn import graph. Collect ids and
+batch reads and writes. The exact legacy boundaries record existing debt; do
+not regenerate them to make a new violation pass. Any necessary exception must
+explain its lifecycle or concurrency requirement in the PR.
 
 ## Turn phase performance rules
 

@@ -3,7 +3,7 @@
 // Errors: 403, 404
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getDb } from "@/lib/mongodb";
 import { loadAdminLoanTracker } from "@/lib/monetaryPolicy/queries/adminLoanTracker";
@@ -20,13 +20,13 @@ export async function GET(_request: Request, context: RouteContext) {
     const { code } = await context.params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Country not found" }, { status: 404 });
+      return errorResponse(404, "Country not found");
     }
 
     const db = await getDb();
     const detail = await loadAdminLoanTracker({ db, countryId });
     if (!detail.ok) {
-      return NextResponse.json({ error: detail.error }, { status: detail.status });
+      return errorResponse(detail.status, detail.error);
     }
 
     return NextResponse.json(detail.body);

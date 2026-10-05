@@ -5,6 +5,7 @@ import { getMessageStyle } from "@/lib/utils/formatters";
 import { regionPartyUrl, partyUrl } from "@/lib/urls";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type PartyElectionStatus = "voting" | "completed" | "cancelled";
 type ElectionType = "state" | "national" | "committee";
@@ -76,7 +77,7 @@ export function PartyElectionsPanel() {
         setMessage("");
       } else {
         setRows([]);
-        setMessage(`✗ Failed to load elections: ${data?.error ?? `HTTP ${res.status}`}`);
+        setMessage(`✗ Failed to load elections: ${apiErrorText(data, `HTTP ${res.status}`)}`);
       }
     } catch {
       setRows([]);
@@ -119,7 +120,7 @@ export function PartyElectionsPanel() {
         }),
       });
       const data = await res.json();
-      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${data.error ?? "Failed"}`);
+      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Failed")}`);
       if (res.ok) await fetchRows();
     } catch {
       setMessage("Network error");
@@ -135,7 +136,7 @@ export function PartyElectionsPanel() {
     try {
       const res = await fetch(`/api/admin/state-party-elections/${id}`, { method: "DELETE" });
       const data = await res.json();
-      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${data.error}`);
+      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Request failed")}`);
       if (res.ok) await fetchRows();
     } catch {
       setMessage("✗ Network error");
@@ -152,9 +153,9 @@ export function PartyElectionsPanel() {
       {/* Summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Active Elections", value: active, color: "text-green-400" },
+          { label: "Active elections", value: active, color: "text-green-400" },
           { label: "Ending ≤ 24 Turns", value: endingSoon, color: "text-yellow-400" },
-          { label: "Current Turn", value: currentTurn, color: "text-primary" },
+          { label: "Current turn", value: currentTurn, color: "text-primary" },
           { label: "Shown", value: rows.length, color: "text-muted" },
         ].map((s) => (
           <div
@@ -173,7 +174,7 @@ export function PartyElectionsPanel() {
 
       {/* Batch actions */}
       <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
-        <h3 className="font-semibold">Batch Actions</h3>
+        <h3 className="font-semibold">Batch actions</h3>
         <div className="flex flex-wrap gap-3 items-end">
           <div>
             <label className="text-xs text-muted block mb-1">
@@ -195,7 +196,7 @@ export function PartyElectionsPanel() {
                 onChange={(e) => setIncludeNational(e.target.checked)}
                 className="rounded border-card-border"
               />
-              <span className="text-xs text-muted">Include National</span>
+              <span className="text-xs text-muted">Include national</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -204,7 +205,7 @@ export function PartyElectionsPanel() {
                 onChange={(e) => setIncludeCommittee(e.target.checked)}
                 className="rounded border-card-border"
               />
-              <span className="text-xs text-muted">Include Committee</span>
+              <span className="text-xs text-muted">Include committee</span>
             </label>
           </div>
           <button
@@ -212,36 +213,36 @@ export function PartyElectionsPanel() {
             disabled={loading}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-50"
           >
-            Create Missing
+            Create missing
           </button>
           <button
             onClick={() => batchAction("batch-resolve")}
             disabled={loading}
             className="rounded-lg bg-secondary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
           >
-            Process Now
+            Process now
           </button>
           <button
             onClick={() => batchAction("batch-restart")}
             disabled={loading}
             className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/20 disabled:opacity-50"
           >
-            Restart All
+            Restart all
           </button>
         </div>
         <p className="text-xs text-muted/60">
-          <strong>Create Missing</strong> — generates elections for any party × position combo with
+          <strong>Create missing</strong> — generates elections for any party × position combo with
           no active election.
           <br />
-          <strong>Process Now</strong> — force-resolves all elections whose end turn ≤ current turn.
+          <strong>Process now</strong> — force-resolves all elections whose end turn ≤ current turn.
           <br />
-          <strong>Restart All</strong> — cancels all voting elections, withdraws all candidates, and
+          <strong>Restart all</strong> — cancels all voting elections, withdraws all candidates, and
           creates new elections.
           <br />
-          <strong>Include National</strong> — batch actions include national party leadership
+          <strong>Include national</strong> — batch actions include national party leadership
           elections (Chair, Vice Chair, Treasurer).
           <br />
-          <strong>Include Committee</strong> — batch actions include national committee elections.
+          <strong>Include committee</strong> — batch actions include national committee elections.
         </p>
       </div>
 
@@ -254,7 +255,7 @@ export function PartyElectionsPanel() {
             onChange={(e) => setFilterCountry(e.target.value)}
             className="w-24 rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
           >
-            <option value="">All Countries</option>
+            <option value="">All countries</option>
             {registered.map((id) => (
               <option key={id} value={id}>
                 {COUNTRY_CONFIGS[id].name}
@@ -278,7 +279,7 @@ export function PartyElectionsPanel() {
             onChange={(e) => setFilterType(e.target.value)}
             className="rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
           >
-            <option value="all">All Types</option>
+            <option value="all">All types</option>
             <option value="state">State</option>
             <option value="national">National</option>
             <option value="committee">Committee</option>
@@ -288,9 +289,9 @@ export function PartyElectionsPanel() {
             onChange={(e) => setFilterPosition(e.target.value)}
             className="rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
           >
-            <option value="">All Positions</option>
+            <option value="">All positions</option>
             <option value="chair">Chair</option>
-            <option value="viceChair">Vice Chair</option>
+            <option value="viceChair">Vice chair</option>
             <option value="treasurer">Treasurer</option>
             <option value="committee">Committee</option>
           </select>
@@ -299,7 +300,7 @@ export function PartyElectionsPanel() {
             onChange={(e) => setFilterStatus(e.target.value)}
             className="rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
           >
-            <option value="">All Statuses</option>
+            <option value="">All statuses</option>
             <option value="voting">Voting</option>
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>

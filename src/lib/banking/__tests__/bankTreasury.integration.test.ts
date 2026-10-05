@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
-import type { BankCharter } from "@/lib/db/types/bank";
+import type { BankCharter, BankTreasuryTradeReceipt } from "@/lib/db/types/bank";
 import { quoteSovereignPrimaryBankPurchase } from "../rules/sovereignPrimary";
 import { resumeSettlement } from "../settlementJournal";
 import { bankTransferConflict } from "../transferCharter";
@@ -28,6 +28,11 @@ const POLICY = resolveBankingPolicy({
   bankTreasuryEnabled: true,
   savingsAccountsMode: "off",
 });
+
+function treasuryReceipt(db: InMemoryDb, id: string): BankTreasuryTradeReceipt | undefined {
+  return db.collection("bankTreasuryTrades").docs.find((row) => row._id === id) as
+    BankTreasuryTradeReceipt | undefined;
+}
 
 function world(): InMemoryDb {
   const db = createInMemoryDb();
@@ -178,10 +183,7 @@ describe("funded bank treasury settlement", () => {
       tradeId: "treasury-gain-sell",
     });
     expect(sale.status).toBe("completed");
-    const receipt = db
-      .collection("bankTreasuryTrades")
-      .docs.find((row) => row._id === "treasury-gain-sell") as
-      { amountLocal: number; costBasisLocal?: number } | undefined;
+    const receipt = treasuryReceipt(db, "treasury-gain-sell");
     expect(receipt?.costBasisLocal).toBeGreaterThan(0);
     const expectedGain = receipt!.amountLocal - receipt!.costBasisLocal!;
     expect(expectedGain).toBeGreaterThan(0);
@@ -222,10 +224,7 @@ describe("funded bank treasury settlement", () => {
       tradeId: "treasury-old-gain-sell",
     });
     expect(sale.status).toBe("completed");
-    const receipt = db
-      .collection("bankTreasuryTrades")
-      .docs.find((row) => row._id === "treasury-old-gain-sell") as
-      { amountLocal: number; costBasisLocal?: number } | undefined;
+    const receipt = treasuryReceipt(db, "treasury-old-gain-sell");
     const expectedGain = receipt!.amountLocal - receipt!.costBasisLocal!;
     expect(db.collection("corporations").docs[0].bankCharter).toMatchObject({
       lastBankingIncome: 77,
@@ -267,10 +266,7 @@ describe("funded bank treasury settlement", () => {
       policy: POLICY,
       tradeId: "treasury-after-stamp-sell",
     });
-    const receipt = db
-      .collection("bankTreasuryTrades")
-      .docs.find((row) => row._id === "treasury-after-stamp-sell") as
-      { amountLocal: number; costBasisLocal?: number } | undefined;
+    const receipt = treasuryReceipt(db, "treasury-after-stamp-sell");
     const expectedGain = receipt!.amountLocal - receipt!.costBasisLocal!;
     expect(sale.status).toBe("completed");
     expect(db.collection("corporations").docs[0].bankCharter).toMatchObject({

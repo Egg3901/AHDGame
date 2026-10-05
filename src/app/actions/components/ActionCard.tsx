@@ -12,7 +12,12 @@ import {
   convertCashConversion,
   isFundraiseEligible,
 } from "@/lib/actions";
-import { CARD_PHOTO_SCRIM, CATEGORY_LABELS } from "../actionsConstants";
+import {
+  CARD_PHOTO_SCRIM,
+  CATEGORY_LABELS,
+  FUND_LINE_TERMS,
+  fundLineKind,
+} from "../actionsConstants";
 
 const FLIPFLOP_AXIS_LABELS = { economic: "Economic", social: "Social" } as const;
 import type { ActionCardProps } from "../actionsTypes";
@@ -114,8 +119,9 @@ const ActionCard = memo(function ActionCard({
     effectiveFundLabel = `+${formatCurrencyFaceAmount(fundraiseYield, campaignCurrency)}`;
   else if (isConvertCash) {
     effectiveFundLabel =
-      displayPersonalWealth > 0 ? `${formatAmount(personalAnchor)} available` : "No cash";
+      displayPersonalWealth > 0 ? `${formatAmount(personalAnchor)} to convert` : "No cash";
   } else effectiveFundLabel = card.fundLabel(character);
+  const fundKind = fundLineKind(card.type);
 
   const didFlash = flash?.type === card.type;
   const noDonor = card.requiresDonorBase && !isFundraiseEligible(character.donorBaseLevel);
@@ -164,16 +170,30 @@ const ActionCard = memo(function ActionCard({
 
         {/* Cost and effect: two plain rows */}
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 border-t border-card-border pt-3 text-body">
-          <dt className="text-muted">Cost</dt>
+          <dt className="text-muted">{FUND_LINE_TERMS.cost}</dt>
           <dd className="font-medium tabular-nums text-foreground">
             <span className={cantAffordActions ? "text-error" : ""}>{effectiveActionCost} AP</span>
-            <span className="mx-1.5 text-muted" aria-hidden>
-              ·
-            </span>
-            <span className={cantAffordFunds ? "text-error" : isFundraise ? "text-success" : ""}>
-              {effectiveFundLabel}
-            </span>
+            {fundKind === "cost" && (
+              <>
+                <span className="mx-1.5 text-muted" aria-hidden>
+                  ·
+                </span>
+                <span className={cantAffordFunds ? "text-error" : ""}>{effectiveFundLabel}</span>
+              </>
+            )}
           </dd>
+          {fundKind !== "cost" && (
+            <>
+              <dt className="text-muted">{FUND_LINE_TERMS[fundKind]}</dt>
+              <dd
+                className={`font-medium tabular-nums ${
+                  fundKind === "yield" ? "text-success" : noCash ? "text-error" : "text-foreground"
+                }`}
+              >
+                {effectiveFundLabel}
+              </dd>
+            </>
+          )}
           <dt className="text-muted">Effect</dt>
           <dd className="text-foreground">
             {card.effect}
@@ -388,7 +408,7 @@ const ActionCard = memo(function ActionCard({
                   return (
                     <div className="animate-in slide-in-from-bottom-2 duration-200 space-y-2">
                       <div className="flex items-center justify-between px-1">
-                        <span className="text-body-sm text-muted">Cash on hand</span>
+                        <span className="text-body-sm text-muted">Cash you can convert</span>
                         <span className="text-body-sm font-semibold tabular-nums">
                           {inputSymbol}
                           {displayCash.toLocaleString("en-US")}

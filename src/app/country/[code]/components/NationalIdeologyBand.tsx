@@ -5,7 +5,7 @@ import Link from "next/link";
 import { positionBucketHex } from "@/lib/utils/politics";
 import { policyUrl } from "@/lib/urls";
 import { AxisSpectrumBar } from "./AxisSpectrumBar";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import type { EconomicModelView } from "@/lib/economicModels/present";
 
 const EUROPEAN_COLOUR_COUNTRIES = new Set(["UK", "DE"]);
@@ -41,14 +41,12 @@ export interface NationalAxesData {
   };
 }
 
+/**
+ * Game-calendar month the law was enacted ("Feb 1976"). Falls back to the
+ * enacted game year; never mixes the game year with a real-world day.
+ */
 function EnactedStamp({ enactedYear, enactedAt }: { enactedYear: number; enactedAt: string }) {
-  const date = new Date(enactedAt);
-  if (Number.isNaN(date.getTime())) return <>{enactedYear}</>;
-  return (
-    <>
-      {enactedYear} · <LocalTime value={date} options={{ month: "short", day: "numeric" }} />
-    </>
-  );
+  return <GameMonthTime value={enactedAt} fallback={<>{enactedYear}</>} />;
 }
 
 /** How the national average on the mover's axis moved: "Average -1.1 → -1.2". */

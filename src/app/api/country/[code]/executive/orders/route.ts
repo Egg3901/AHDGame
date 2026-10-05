@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireHumanSessionWithCharacter, requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -30,7 +30,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const auth = await requireHumanSessionWithCharacter(request);
@@ -47,17 +47,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         adminOverride: z.boolean().optional(),
       })
     );
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const isAdmin = auth.user.isAdmin === true;
     const adminOverride = parsed.data.adminOverride === true && isAdmin;
     const leader = await isSittingLeader(db, countryId, auth.user.character._id);
     if (!leader && !adminOverride) {
-      return NextResponse.json(
-        { error: "Only the sitting leader can issue national orders" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the sitting leader can issue national orders");
     }
 
     const stateId = getNationalStateId(countryId);
@@ -72,7 +68,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       scope: "national",
       adminOverride,
     });
-    return NextResponse.json(result.body, { status: result.status });
+    return statusResponse(result.status, result.body);
   } catch (error) {
     return handleRouteError(error);
   }
@@ -85,7 +81,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const auth = await requireAuth();
@@ -97,7 +93,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
       : false;
     const isAdmin = auth.user.isAdmin === true;
     if (!leader && !isAdmin) {
-      return NextResponse.json({ error: "Not the sitting leader" }, { status: 403 });
+      return errorResponse(403, "Not the sitting leader");
     }
 
     const stateId = getNationalStateId(countryId);

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { fireRallyOneShot } from "@/lib/campaigns/commands/campaignCommands";
@@ -21,7 +21,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const { id: campaignId } = await params;
 
     if (!ObjectId.isValid(campaignId)) {
-      return NextResponse.json({ error: "Invalid campaign ID" }, { status: 400 });
+      return errorResponse(400, "Invalid campaign ID");
     }
 
     const auth = await requireAuthWithCharacter();

@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createModAuditLog } from "@/lib/modAuditLog";
 import { getSupporterRequestsCollection } from "@/lib/db/collections/supporterRequests";
@@ -28,14 +28,14 @@ export async function POST(request: Request, { params }: RouteContext) {
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid request ID." }, { status: 400 });
+      return errorResponse(400, "Invalid request ID.");
     }
 
     let reason: string | undefined;
     if (request.headers.get("content-length")) {
       const parsed = await parseJsonBody(request, bodySchema);
       if (!parsed.success) {
-        return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+        return errorResponse(parsed.status, parsed.error);
       }
       reason = parsed.data.reason;
     }
@@ -44,10 +44,10 @@ export async function POST(request: Request, { params }: RouteContext) {
     const requestsCol = await getSupporterRequestsCollection(db);
     const req = await requestsCol.findOne({ _id: new ObjectId(id) });
     if (!req) {
-      return NextResponse.json({ error: "Request not found." }, { status: 404 });
+      return errorResponse(404, "Request not found.");
     }
     if (req.status !== "pending") {
-      return NextResponse.json({ error: "Request has already been decided." }, { status: 409 });
+      return errorResponse(409, "Request has already been decided.");
     }
 
     const requester = await db

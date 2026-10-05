@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { CorporateSector, GameConfig, GameState } from "@/lib/db/types";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
@@ -67,7 +67,7 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
     const { id, sectorId } = await params;
     const parsed = await parseJsonBody(request, setStrategySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { strategyId } = parsed.data;
@@ -83,7 +83,7 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
 
     // Resolve sector
     if (!ObjectId.isValid(sectorId)) {
-      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+      return errorResponse(400, "Invalid sector ID");
     }
 
     const sector = await db
@@ -91,7 +91,7 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
       .findOne({ _id: new ObjectId(sectorId), corporationId: corporation._id });
 
     if (!sector) {
-      return NextResponse.json({ error: "Sector not found" }, { status: 404 });
+      return errorResponse(404, "Sector not found");
     }
 
     // Validate strategy exists for this sector type
@@ -102,10 +102,7 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
     ) as CorporationType;
     const strategies = SECTOR_STRATEGIES[sectorType];
     if (!strategies) {
-      return NextResponse.json(
-        { error: "No strategies available for this sector type" },
-        { status: 400 }
-      );
+      return errorResponse(400, "No strategies available for this sector type");
     }
 
     const operatingModel = getMediaOperatingModel(strategyId);
@@ -116,13 +113,10 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
         .findOne({ _id: "default" }, { projection: { mediaOperatingModelsEnabled: 1 } });
       operatingModelsEnabled = config?.mediaOperatingModelsEnabled === true;
       if (!operatingModelsEnabled) {
-        return NextResponse.json(
-          { error: "Media operating models are not available." },
-          { status: 404 }
-        );
+        return errorResponse(404, "Media operating models are not available.");
       }
       if (!operatingModel.sectorTypes.includes(sectorType as "media" | "entertainment")) {
-        return NextResponse.json({ error: "Invalid model for this sector type." }, { status: 400 });
+        return errorResponse(400, "Invalid model for this sector type.");
       }
     }
 
@@ -132,21 +126,18 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
         ? getMediaOperatingModelStrategies(sectorType).find((s) => s.id === strategyId)
         : undefined);
     if (!targetStrategy) {
-      return NextResponse.json({ error: "Invalid strategy for this sector type" }, { status: 400 });
+      return errorResponse(400, "Invalid strategy for this sector type");
     }
 
     // Check not already on this strategy
     const currentStrategyId = sector.strategyId ?? "standard";
     if (currentStrategyId === strategyId && !sector.transitionFromStrategyId) {
-      return NextResponse.json({ error: "Already using this strategy" }, { status: 400 });
+      return errorResponse(400, "Already using this strategy");
     }
 
     // Check not currently transitioning
     if (sector.transitionFromStrategyId) {
-      return NextResponse.json(
-        { error: "Already transitioning to a new strategy. Wait for completion." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Already transitioning to a new strategy. Wait for completion.");
     }
 
     // Get current turn
@@ -161,10 +152,7 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
       gameState?.currentYear ??
       STARTING_YEAR + Math.floor((Math.max(1, currentTurn) - 1) / TURNS_PER_YEAR);
     if (operatingModel && currentYear < operatingModel.availableFromYear) {
-      return NextResponse.json(
-        { error: "This business model is not available in this era yet." },
-        { status: 400 }
-      );
+      return errorResponse(400, "This business model is not available in this era yet.");
     }
     const availability = getStrategyAvailability(
       {
@@ -178,14 +166,11 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
       techTreesEnabled
     );
     if (availability.locked) {
-      return NextResponse.json(
-        {
-          error:
-            availability.reason === "era"
-              ? "This production method is not available in this era yet."
-              : "Unlock this production method in the Tech tree first.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        availability.reason === "era"
+          ? "This production method is not available in this era yet."
+          : "Unlock this production method in the Tech tree first."
       );
     }
 
@@ -195,10 +180,7 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
       currentTurn < sector.transitionCooldownUntilTurn
     ) {
       const remaining = sector.transitionCooldownUntilTurn - currentTurn;
-      return NextResponse.json(
-        { error: `Strategy change on cooldown. ${remaining} turns remaining.` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Strategy change on cooldown. ${remaining} turns remaining.`);
     }
 
     if (sectorType === "extraction") {
@@ -208,11 +190,9 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
       const stateResources = capDoc ? (capDoc.resources ?? null) : undefined;
 
       if (isExtractionStrategyZeroYield(targetStrategy, stateResources)) {
-        return NextResponse.json(
-          {
-            error: "Selected extraction strategy has no matching resource deposits in this state.",
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "Selected extraction strategy has no matching resource deposits in this state."
         );
       }
     }
@@ -264,17 +244,14 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
       corpFxRate
     );
     if (corpCapitalAnchor < totalCostAnchor) {
-      return NextResponse.json(
-        {
-          error:
-            insufficientCapitalMessage(
-              "Retooling",
-              anchorToCorpLiquidCapital(totalCostAnchor, corporation, corpFxRate),
-              corporation.liquidCapital,
-              resolveCorpLiquidCurrencyCode(corporation)
-            ) + " (25% of daily revenue, incl. FX on foreign sector).",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        insufficientCapitalMessage(
+          "Retooling",
+          anchorToCorpLiquidCapital(totalCostAnchor, corporation, corpFxRate),
+          corporation.liquidCapital,
+          resolveCorpLiquidCurrencyCode(corporation)
+        ) + " (25% of daily revenue, incl. FX on foreign sector)."
       );
     }
 

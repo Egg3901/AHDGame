@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 import { fetchActivityLog } from "@/lib/admin/activityLog";
@@ -51,30 +51,30 @@ export async function GET(request: Request) {
     );
 
     if (typeParam && !ALLOWED_TYPES.includes(typeParam as (typeof ALLOWED_TYPES)[number])) {
-      return NextResponse.json({ error: "Invalid type filter" }, { status: 400 });
+      return errorResponse(400, "Invalid type filter");
     }
     if (userIdParam && !/^[0-9a-f]{24}$/i.test(userIdParam)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+      return errorResponse(400, "Invalid userId");
     }
     if (characterIdParam && !/^[0-9a-f]{24}$/i.test(characterIdParam)) {
-      return NextResponse.json({ error: "Invalid characterId" }, { status: 400 });
+      return errorResponse(400, "Invalid characterId");
     }
     if (cursorParam && !/^[0-9a-f]{24}$/i.test(cursorParam)) {
-      return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
+      return errorResponse(400, "Invalid cursor");
     }
 
     let from: Date | undefined;
     if (fromParam) {
       from = new Date(fromParam);
       if (isNaN(from.getTime())) {
-        return NextResponse.json({ error: "Invalid from date" }, { status: 400 });
+        return errorResponse(400, "Invalid from date");
       }
     }
     let to: Date | undefined;
     if (toParam) {
       to = new Date(toParam);
       if (isNaN(to.getTime())) {
-        return NextResponse.json({ error: "Invalid to date" }, { status: 400 });
+        return errorResponse(400, "Invalid to date");
       }
     }
 
@@ -85,7 +85,7 @@ export async function GET(request: Request) {
           .filter(Boolean)
       : [];
     if (flagSeverities.some((s) => !ALLOWED_FLAG_SEVERITIES.includes(s))) {
-      return NextResponse.json({ error: "Invalid flagSeverity" }, { status: 400 });
+      return errorResponse(400, "Invalid flagSeverity");
     }
 
     const db = await getDb();
@@ -94,10 +94,10 @@ export async function GET(request: Request) {
     if (countryParam) {
       const upper = countryParam.toUpperCase() as CountryId;
       if (!COUNTRY_CONFIGS[upper]) {
-        return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+        return errorResponse(400, "Invalid country");
       }
       if (!(await isCountryEnabledForPlayers(db, upper))) {
-        return NextResponse.json({ error: "Country not enabled for players" }, { status: 400 });
+        return errorResponse(400, "Country not enabled for players");
       }
       countryId = upper;
     }

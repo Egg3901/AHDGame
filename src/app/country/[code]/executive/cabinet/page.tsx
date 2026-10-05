@@ -13,7 +13,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { code } = await params;
   const id = code.toUpperCase() as CountryId;
   const config = COUNTRY_CONFIGS[id];
-  if (!config) return { title: "Cabinet Not Found | A House Divided" };
+  if (!config) return { title: "Cabinet not found | A House Divided" };
   return {
     title: `Cabinet | ${config.name} | A House Divided`,
     description: `${config.name} cabinet positions and appointments.`,

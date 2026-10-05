@@ -76,7 +76,7 @@ describe("summarize", () => {
     expect(s.nextDeadlineTurn).toBe(96);
   });
 
-  it("excludes presidential races from the competitive count", () => {
+  it("counts every race that carries the Close badge, presidential included", () => {
     const polled = (shares: Record<string, number>) =>
       ({
         leaderId: "a",
@@ -90,8 +90,10 @@ describe("summarize", () => {
     const s = summarize([
       race({ electionType: "president", state: "US", polling: polled({ a: 51, b: 49 }) }),
       race({ polling: polled({ a: 51, b: 49 }) }),
+      race({ polling: polled({ a: 70, b: 30 }) }),
+      race({ inPrimary: true, polling: polled({ a: 100, b: 100 }) }),
     ]);
-    expect(s.competitive).toBe(1);
+    expect(s.competitive).toBe(2);
   });
 
   it("returns an all-zero summary for an empty set", () => {

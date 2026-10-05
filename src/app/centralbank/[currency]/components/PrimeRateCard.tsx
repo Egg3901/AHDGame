@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import {
@@ -313,7 +314,7 @@ export function PrimeRateCard({
           >
             {submitting ? "Updating..." : "Confirm rate change"}
           </button>
-          {rateError && <p className="text-body-sm text-error">{rateError}</p>}
+          <InlineError error={rateError} className="text-body-sm text-error" />
         </div>
       )}
     </CentralBankSection>

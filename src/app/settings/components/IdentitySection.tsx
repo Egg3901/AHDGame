@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { MessageBanner, SpinnerIcon } from "./shared";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 function getDiscordAvatarUrl(discordId: string, avatarHash: string | null | undefined): string {
   if (avatarHash) {
@@ -68,7 +69,7 @@ function ProviderCard({
         setMsg({ text: t("identity.unlinked", { provider }), ok: true });
       } else {
         const data = await res.json();
-        setMsg({ text: data.error ?? t("identity.unlinkFailed"), ok: false });
+        setMsg({ text: apiErrorText(data, t("identity.unlinkFailed")), ok: false });
       }
     } catch {
       setMsg({ text: t("common.networkError"), ok: false });

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useEnabledCountries } from "@/contexts/RegisteredCountriesContext";
 import { CountryFlag } from "@/components/CountryFlag";
+import { hasSandboxAccess } from "@/lib/sandbox/access";
 import { countryUrl } from "@/lib/urls";
 import {
   DROPDOWN_PANEL_CLASS,
@@ -25,6 +26,7 @@ interface SettingsDropdownProps {
     singleplayer?: boolean;
     patreonTier?: string | null;
     isPatronActive?: boolean;
+    sandboxTesterAccess?: boolean;
   };
   onSignOut: () => void;
   pageCountry: CountryId;
@@ -111,11 +113,14 @@ export function SettingsDropdown({
     };
   }, [isOpen, showNationPicker]);
 
-  const canAccessSandbox =
-    user.isAdmin ||
-    user.isModerator ||
-    ((user.patreonTier === "supporter-plus" || user.patreonTier === "supporter-plus-plus") &&
-      user.isPatronActive);
+  const canAccessSandbox = hasSandboxAccess({
+    isAdmin: user.isAdmin,
+    isModerator: user.isModerator,
+    patreonTier: user.patreonTier,
+    isPatronActive: user.isPatronActive,
+    testerAccessEnabled: user.sandboxTesterAccess,
+    testerGranted: user.sandboxTesterAccess,
+  });
   const showSandboxToggle = !user.singleplayer && canAccessSandbox;
   const { url: sandboxUrl, isSandbox } = getSandboxToggleInfo();
 
@@ -158,7 +163,7 @@ export function SettingsDropdown({
                   </svg>
                   {t("common.back")}
                 </button>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted/70">
+                <p className="text-body-sm font-medium text-muted">
                   {t("countrySwitcher.selectNation")}
                 </p>
               </div>
@@ -198,9 +203,7 @@ export function SettingsDropdown({
               <div className="flex items-center gap-2.5 border-b border-card-border/60 px-3.5 py-3">
                 <AvatarInitial name={user.username} size="sm" />
                 <div className="min-w-0">
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-muted/70">
-                    {t("userMenu.signedInAs")}
-                  </p>
+                  <p className="text-body-sm font-medium text-muted">{t("userMenu.signedInAs")}</p>
                   <p className="truncate text-sm font-semibold text-foreground">{user.username}</p>
                 </div>
               </div>

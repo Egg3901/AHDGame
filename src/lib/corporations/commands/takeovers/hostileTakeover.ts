@@ -5,7 +5,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { hostileTakeoverSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import {
   corporationQueryFromParamId,
   resolveCorporation,
@@ -147,7 +147,7 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
     const { id } = await params;
     const parsed = await parseJsonBody(request, hostileTakeoverSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -160,34 +160,29 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
 
     const parentQuery = corporationQueryFromParamId(parsed.data.parentCorporationId);
     if (!parentQuery) {
-      return NextResponse.json({ error: "Invalid parent corporation ID" }, { status: 400 });
+      return errorResponse(400, "Invalid parent corporation ID");
     }
     const parent = await db.collection<Corporation>("corporations").findOne(parentQuery);
     if (!parent) {
-      return NextResponse.json({ error: "Parent corporation not found" }, { status: 404 });
+      return errorResponse(404, "Parent corporation not found");
     }
 
     const ceoCheck = requireCeo(parent, auth.user.userId);
     if (ceoCheck) return ceoCheck;
 
     if (parent._id.equals(target._id)) {
-      return NextResponse.json({ error: "Invalid takeover target" }, { status: 400 });
+      return errorResponse(400, "Invalid takeover target");
     }
 
     if (target.countryOwnerId) {
-      return NextResponse.json(
-        { error: "National corporations cannot be merged via hostile takeover." },
-        { status: 400 }
-      );
+      return errorResponse(400, "National corporations cannot be merged via hostile takeover.");
     }
 
     const pct = acquirerOwnershipPercent(parent._id, target);
     if (pct <= HOSTILE_TAKEOVER_OWNERSHIP_THRESHOLD_PERCENT) {
-      return NextResponse.json(
-        {
-          error: `Your corporation must hold more than ${HOSTILE_TAKEOVER_OWNERSHIP_THRESHOLD_PERCENT}% of outstanding shares (${pct.toFixed(2)}% currently).`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Your corporation must hold more than ${HOSTILE_TAKEOVER_OWNERSHIP_THRESHOLD_PERCENT}% of outstanding shares (${pct.toFixed(2)}% currently).`
       );
     }
 
@@ -198,7 +193,7 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
     // pair, so the retry sails straight through).
     const reviewTurn = await getCurrentTurn(db);
     const barred = acquisitionsBarredByDivestiture(parent, reviewTurn);
-    if (barred) return NextResponse.json({ error: barred }, { status: 403 });
+    if (barred) return errorResponse(403, barred);
     const clearance = await assertMergerClearance(
       db,
       parent,
@@ -207,7 +202,7 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
       reviewTurn
     );
     if (!clearance.ok) {
-      return NextResponse.json({ error: clearance.error }, { status: clearance.status });
+      return errorResponse(clearance.status, clearance.error);
     }
 
     // Banked subsidiary (ticket-1267): the charter is a sub-document on the
@@ -218,7 +213,7 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
     // money moves.
     const bankConflict = bankTransferConflict(target, parent);
     if (bankConflict) {
-      return NextResponse.json({ error: bankConflict }, { status: 400 });
+      return errorResponse(400, bankConflict);
     }
 
     // Outstanding bonds transfer to the parent automatically (see bond
@@ -346,11 +341,9 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
     const cashToParentLocal = anchorToCorpLiquidCapital(targetCashAnchor, parent, parentFxPre);
 
     if ((parent.liquidCapital ?? 0) + 1e-9 < totalInParentCapital) {
-      return NextResponse.json(
-        {
-          error: `Insufficient liquid capital on the parent corporation to fund the squeeze-out (need ${Math.round(totalInParentCapital).toLocaleString()} in the parent’s operating currency).`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient liquid capital on the parent corporation to fund the squeeze-out (need ${Math.round(totalInParentCapital).toLocaleString()} in the parent’s operating currency).`
       );
     }
 
@@ -365,10 +358,7 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
         .find({ corporationId: target._id })
         .toArray();
       if (targetSectors.some(hasProtectedConstructionProperty)) {
-        return NextResponse.json(
-          { error: "Resolve secured construction before completing this takeover" },
-          { status: 409 }
-        );
+        return errorResponse(409, "Resolve secured construction before completing this takeover");
       }
 
       const debitResult = await db.collection<Corporation>("corporations").updateOne(
@@ -386,10 +376,7 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
         // moved. This early return is before every mutation by construction;
         // keep it that way — anything added after the debit below must run
         // inside the try so the catch refund covers it.
-        return NextResponse.json(
-          { error: "Insufficient liquid capital (race with another transaction)." },
-          { status: 400 }
-        );
+        return errorResponse(400, "Insufficient liquid capital (race with another transaction).");
       }
 
       // Track whether the target→parent cash transfer has landed. On rollback
@@ -946,13 +933,10 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
           );
         }
         if (err instanceof BankCharterRaceError) {
-          return NextResponse.json({ error: err.message }, { status: err.status });
+          return errorResponse(err.status, err.message);
         }
         if (err instanceof Error && err.message === "RATE_UNAVAILABLE") {
-          return NextResponse.json(
-            { error: "Exchange rate unavailable, try again shortly" },
-            { status: 503 }
-          );
+          return errorResponse(503, "Exchange rate unavailable, try again shortly");
         }
         throw err;
       }

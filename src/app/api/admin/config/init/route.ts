@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { GameConfig } from "@/lib/db/types";
 
 export async function POST() {
@@ -88,10 +88,7 @@ export async function GET() {
     const config = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
 
     if (!config) {
-      return NextResponse.json(
-        { error: "Game config not found. Please initialize it first." },
-        { status: 404 }
-      );
+      return errorResponse(404, "Game config not found. Please initialize it first.");
     }
 
     return NextResponse.json({

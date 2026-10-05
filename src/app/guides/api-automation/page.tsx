@@ -3,7 +3,7 @@ import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "API Automation Guide | A House Divided",
+  title: "API automation guide | A House Divided",
   description:
     "What A House Divided API keys can and cannot automate: fund transfers, forex orders, donations, plus the security checklist and how to get started with a scoped key.",
   pathname: "/guides/api-automation",
@@ -17,10 +17,10 @@ export default function ApiAutomationGuidePage() {
           Guides
         </Link>
         <span>/</span>
-        <span className="text-foreground">API Automation</span>
+        <span className="text-foreground">API automation</span>
       </nav>
 
-      <h1 className="text-3xl font-bold">API Automation Guide</h1>
+      <h1 className="text-3xl font-bold">API automation guide</h1>
       <p className="mt-2 text-sm text-muted">Last updated: September 3, 2026 (UTC)</p>
 
       <section className="mt-8 space-y-3 rounded-2xl border border-card-border bg-card/70 p-6">

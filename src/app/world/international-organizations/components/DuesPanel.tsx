@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import { MAX_ORG_DUES_RATE_ANNUAL } from "@/lib/constants/internationalOrganizations";
@@ -14,6 +15,7 @@ import {
   requiresUnanimity,
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -68,7 +70,7 @@ export function DuesPanel({ org, viewer, currentTurn, votingWindowTurns, onChang
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to propose dues change");
+        throw new Error(apiErrorText(body, "Failed to propose dues change"));
       }
       setShowForm(false);
       onChange();
@@ -91,7 +93,7 @@ export function DuesPanel({ org, viewer, currentTurn, votingWindowTurns, onChang
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error ?? "Vote failed");
+      throw new Error(apiErrorText(body, "Vote failed"));
     }
     onChange();
   }
@@ -147,7 +149,7 @@ export function DuesPanel({ org, viewer, currentTurn, votingWindowTurns, onChang
             />
             <p className="mt-1 text-[11px] text-muted">Max {MAX_DUES_PCT}% / year.</p>
           </div>
-          {error && <p className="mt-2 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-2 text-xs text-error" />
           <div className="mt-4 flex gap-2">
             <Button variant="primary" size="md" onClick={submit} isLoading={submitting}>
               Submit for a vote
@@ -160,9 +162,7 @@ export function DuesPanel({ org, viewer, currentTurn, votingWindowTurns, onChang
       )}
 
       <div className="space-y-3">
-        <h4 className="text-xs font-semibold uppercase tracking-widest text-muted">
-          Pending dues votes
-        </h4>
+        <h4 className="text-body-sm font-medium text-muted">Pending dues votes</h4>
         {pending.length === 0 ? (
           <div className="rounded-xl border border-card-border bg-card p-5">
             <p className="text-sm text-muted">No pending dues changes.</p>

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { closeMoneyMove, listUnfinishedMoneyMoves } from "@/lib/banking/moneyMove";
 
@@ -53,13 +53,13 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, closeSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     const closed = await closeMoneyMove(db, parsed.data.key, parsed.data.note);
     if (!closed) {
-      return NextResponse.json({ error: "No unfinished move with that key" }, { status: 404 });
+      return errorResponse(404, "No unfinished move with that key");
     }
     return NextResponse.json({ success: true });
   } catch (error) {

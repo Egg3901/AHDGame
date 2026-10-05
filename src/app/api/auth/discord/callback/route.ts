@@ -365,7 +365,10 @@ async function handleDiscordLogin(
   } catch (err) {
     if (err instanceof Error && "status" in err && (err as { status: number }).status === 403) {
       return NextResponse.redirect(
-        new URL("/auth/discord/result?status=error&reason=registration_blocked", baseUrl)
+        new URL(
+          `/auth/discord/result?status=error&reason=registration_blocked&next=${encodeURIComponent("/login")}`,
+          baseUrl
+        )
       );
     }
     throw err;

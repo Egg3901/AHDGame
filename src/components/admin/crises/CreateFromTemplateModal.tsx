@@ -40,7 +40,7 @@ export function CreateFromTemplateModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-card border border-border rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold">Create Crisis from Template</h3>
+          <h3 className="text-lg font-bold">Create crisis from template</h3>
           <button onClick={onClose} className="text-muted hover:text-foreground">
             ✕
           </button>
@@ -96,7 +96,7 @@ export function CreateFromTemplateModal({
               )}
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-1">
+              <p className="text-body-sm font-medium text-muted mb-1">
                 Effects ({ALL_CRISIS_TEMPLATES[selectedTemplate].effects.length})
               </p>
               <ul className="space-y-0.5">
@@ -127,7 +127,7 @@ export function CreateFromTemplateModal({
         {selectedTemplate && ALL_CRISIS_TEMPLATES[selectedTemplate].scope !== "global" && (
           <div>
             <label className="block text-sm text-muted mb-1">
-              Target Countries
+              Target countries
               {ALL_CRISIS_TEMPLATES[selectedTemplate].scope === "country" && (
                 <span className="text-amber-400"> *</span>
               )}
@@ -205,7 +205,7 @@ export function CreateFromTemplateModal({
             disabled={templateSubmitting || !selectedTemplate}
             className="rounded border border-primary bg-primary px-4 py-1.5 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity"
           >
-            {templateSubmitting ? "Creating..." : "Create from Template"}
+            {templateSubmitting ? "Creating..." : "Create from template"}
           </button>
         </div>
       </div>

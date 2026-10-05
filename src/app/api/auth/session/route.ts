@@ -9,6 +9,7 @@ import { isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { getDb } from "@/lib/mongodb";
 import type { User } from "@/lib/db/types";
+import { errorResponse, statusResponse } from "@/lib/api/errors";
 
 const claimsSchema = z.object({
   userId: z.string().regex(/^[a-fA-F0-9]{24}$/),
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
     .map((part) => part.trim())
     .filter((part) => part.startsWith(`${AUTH_COOKIE_NAME}=`))
     .map((part) => part.slice(AUTH_COOKIE_NAME.length + 1));
-  const inactive = () => NextResponse.json({ active: false }, { status: 401, headers });
+  const inactive = () => statusResponse(401, { active: false }, { headers });
   // Never select between duplicate cookies or accept another deployment's cookie.
   if (values.length !== 1 || !values[0] || values[0].length > 8192) return inactive();
 
@@ -87,6 +88,6 @@ export async function GET(request: Request) {
   } catch (error) {
     if (error instanceof joseErrors.JOSEError) return inactive();
     // A dependency failure is not evidence that the browser session is invalid.
-    return NextResponse.json({ error: "Session check unavailable" }, { status: 503, headers });
+    return errorResponse(503, "Session check unavailable", { headers });
   }
 }

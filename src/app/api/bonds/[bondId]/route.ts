@@ -4,7 +4,7 @@ import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth"; // Optional auth with current account state.
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Bond, Corporation, BondHistory, IndexFund, NPP, User } from "@/lib/db/types";
 import type { Character } from "@/lib/db/types/character";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
@@ -60,7 +60,7 @@ export const GET = withNoStore(async function GET(_request: Request, { params }:
       bond = await db.collection<Bond>("bonds").findOne({ _id: new ObjectId(bondId) });
     }
     if (!bond) {
-      return NextResponse.json({ error: "Bond not found" }, { status: 404 });
+      return errorResponse(404, "Bond not found");
     }
 
     const [gameState, corporation, user] = await Promise.all([

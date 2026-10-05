@@ -1,7 +1,6 @@
-import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter, type AuthUserWithCharacter } from "@/lib/auth"; // Optional auth - intentionally uses getAuthUserWithCharacter()
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getCampaignDetail } from "@/lib/campaigns/queries/campaignQueries";
 import { ObjectId } from "mongodb";
 import { conditionalJson } from "@/lib/api/conditionalJson";
@@ -18,7 +17,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { id: campaignId } = await params;
 
     if (!ObjectId.isValid(campaignId)) {
-      return NextResponse.json({ error: "Invalid campaign ID" }, { status: 400 });
+      return errorResponse(400, "Invalid campaign ID");
     }
 
     // Auth is optional - public can view with fog of war.

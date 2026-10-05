@@ -6,7 +6,7 @@ import { BillVoteIndicator } from "./BillVoteIndicator";
 import { BillProposalChip } from "./BillProposalChip";
 import { KickerLabel, StatusPill, TheCountRail } from "@/components/legislature/dispatch";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { useGameClock } from "@/contexts/useGameClock";
 
 // Humanized chamber labels for the broadsheet row's dateline.
@@ -216,11 +216,7 @@ export function BillCard({
             {chamberLabel(isNationalOverride ? bill.overrideChamber! : bill.currentChamber)}
           </span>
           <span className="text-card-border">·</span>
-          <LocalTime
-            className="text-muted/70"
-            value={bill.proposedAt}
-            options={{ dateStyle: "medium" }}
-          />
+          <GameMonthTime value={bill.proposedAt} className="text-muted/70" />
         </div>
         <div className="mt-3">
           <BillVoteIndicator

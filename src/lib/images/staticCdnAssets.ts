@@ -14,6 +14,9 @@
  *
  * Action card images: `scripts/upload-action-images-to-r2.mjs`.
  */
+
+import { getActionImage } from "./actionImages";
+
 export const CDN_LOGO_URL = "https://cdn.ahousedividedgame.com/static/ahd-logo.png";
 export const CDN_HERO_LINCOLN_URL =
   "https://cdn.ahousedividedgame.com/static/lincoln-memorial.webp";
@@ -96,21 +99,24 @@ export function getCreateCharacterImage(era: string | number): string {
   return CDN_CREATE_CHARACTER_IMAGES[String(era)] ?? CDN_HERO_LINCOLN_URL;
 }
 
-const CDN_ACTIONS_BASE = "https://cdn.ahousedividedgame.com/static/actions";
-
-/** Action card + actions-page hero images (WebP on R2). */
+/**
+ * Era-neutral action card + actions-page hero images (WebP on R2). Used by
+ * surfaces that are not tied to a world's era; era-aware surfaces go through
+ * `getActionImage`. Resolved through it too, so a replaced neutral image keeps
+ * its versioned URL in one place.
+ */
 export const CDN_ACTION_IMAGE_URLS = {
-  campaign: `${CDN_ACTIONS_BASE}/campaign.webp`,
-  advertise: `${CDN_ACTIONS_BASE}/advertise.webp`,
-  fundraise: `${CDN_ACTIONS_BASE}/fundraise.webp`,
-  flipflop: `${CDN_ACTIONS_BASE}/flipflop.webp`,
-  debatePrep: `${CDN_ACTIONS_BASE}/debatePrep.webp`,
-  canvass: `${CDN_ACTIONS_BASE}/canvass.webp`,
-  convertCash: `${CDN_ACTIONS_BASE}/convertCash.webp`,
-  buildDonorBase: `${CDN_ACTIONS_BASE}/buildDonorBase.webp`,
-  poll: `${CDN_ACTIONS_BASE}/poll.webp`,
-  pollLarge: `${CDN_ACTIONS_BASE}/pollLarge.webp`,
-  hero: `${CDN_ACTIONS_BASE}/hero.webp`,
+  campaign: getActionImage("campaign"),
+  advertise: getActionImage("advertise"),
+  fundraise: getActionImage("fundraise"),
+  flipflop: getActionImage("flipflop"),
+  debatePrep: getActionImage("debatePrep"),
+  canvass: getActionImage("canvass"),
+  convertCash: getActionImage("convertCash"),
+  buildDonorBase: getActionImage("buildDonorBase"),
+  poll: getActionImage("poll"),
+  pollLarge: getActionImage("pollLarge"),
+  hero: getActionImage("hero"),
 } as const;
 
 export const CDN_HERO_ACTIONS_URL = CDN_ACTION_IMAGE_URLS.hero;

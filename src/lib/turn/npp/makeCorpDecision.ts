@@ -59,6 +59,7 @@ import {
   strategyLevers,
   type StrategySituation,
 } from "@/lib/turn/npp/corpStrategy";
+import { memoizeOnce } from "@/lib/turn/npp/rules/strategyCadence";
 import { lossChronicityUpdates } from "@/lib/turn/npp/costMothball";
 import {
   resolveFoundingShortfallReason,
@@ -253,19 +254,26 @@ export function makeNppCorpDecision(
   const lowFillSectors = sectorProfits.filter(
     (sp) => sp.sector.soldFraction != null && sp.sector.soldFraction < CHRONIC_LOW_FILL_THRESHOLD
   ).length;
-  const situation: StrategySituation = {
-    score: corpMargin,
-    debtDominant,
-    // "Mostly cannot sell what it makes": a majority of the corp's sectors.
-    chronicLowFill: sectorProfits.length > 0 && lowFillSectors * 2 > sectorProfits.length,
-    hasHeadroom: hasEnterableHeadroom(
+  const readHeadroom = memoizeOnce(() =>
+    hasEnterableHeadroom(
       corp,
       sectors,
       unownedByCountry,
       stateControlled,
       plants?.enabled === true,
       plants?.eraUnitScale ?? 1
-    ),
+    )
+  );
+  const situation: StrategySituation = {
+    score: corpMargin,
+    debtDominant,
+    // "Mostly cannot sell what it makes": a majority of the corp's sectors.
+    chronicLowFill: sectorProfits.length > 0 && lowFillSectors * 2 > sectorProfits.length,
+    // Lazy: the headroom scan walks the unowned pools and is only read by the
+    // switch evaluation, which most corp-turns never reach (#2693).
+    get hasHeadroom() {
+      return readHeadroom();
+    },
     // Derived from the corp, NOT passed in. An `isCaretaker` the caller had
     // to remember to set is one more way to get this wrong, which is the
     // exact bug class this module keeps producing: the seeded-margin read,
@@ -734,6 +742,7 @@ export function makeNppCorpDecision(
               // Greenfield entry uses the sector-type default strategy.
               strategyId: null,
               year: plants.year,
+              preset: plants.preset,
               eraUnitScale: plants.eraUnitScale,
               marketSharePercent: 0,
               nationalMarketSharePercent: nationalShare(
@@ -1224,6 +1233,7 @@ export function makeNppCorpDecision(
               units: 1,
               strategyId: sector.strategyId ?? null,
               year: plants.year,
+              preset: plants.preset,
               eraUnitScale: plants.eraUnitScale,
               marketSharePercent: growthShare,
               nationalMarketSharePercent: nationalShare(
@@ -1320,6 +1330,7 @@ export function makeNppCorpDecision(
         units,
         strategyId: sector.strategyId ?? null,
         year: plants.year,
+        preset: plants.preset,
         eraUnitScale: plants.eraUnitScale,
         marketSharePercent,
         nationalMarketSharePercent: nationalShare(

@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useRef } from "react";
 import Image from "next/image";
 import { Avatar } from "@/components/Avatar";
@@ -70,7 +72,7 @@ export function NewsComposer({
       });
       const data = (await res.json()) as { url?: string; error?: string };
       if (!res.ok) {
-        setError(data.error ?? "Image upload failed");
+        setError(apiErrorText(data, "Image upload failed"));
         return;
       }
       if (data.url) setImageUrl(data.url);
@@ -102,7 +104,7 @@ export function NewsComposer({
 
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error ?? "Failed to post");
+        setError(apiErrorText(data, "Failed to post"));
         return;
       }
 
@@ -228,7 +230,7 @@ export function NewsComposer({
               </span>
             </button>
           </div>
-          {error && <p className="mt-1 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-1 text-xs text-error" />
         </div>
       </div>
     </form>

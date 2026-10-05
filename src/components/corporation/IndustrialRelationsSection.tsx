@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Button, LoadingSpinner } from "@/components/ui";
@@ -109,7 +110,7 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
           return;
         }
         const data = (await response.json().catch(() => null)) as { error?: string } | null;
-        setLoadError(data?.error ?? "Industrial relations could not be loaded.");
+        setLoadError(apiErrorText(data, "Industrial relations could not be loaded."));
         return;
       }
       const data = (await response.json()) as {
@@ -178,7 +179,7 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
       const data = await response.json();
       setMessage({
         ok: response.ok,
-        text: response.ok ? "Bargaining response recorded." : (data.error ?? "Action failed."),
+        text: response.ok ? "Bargaining response recorded." : apiErrorText(data, "Action failed."),
       });
       if (response.ok) await load();
     } catch {
@@ -196,7 +197,7 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
 
   if (loading) {
     return (
-      <section aria-label="Industrial Relations" className="py-2">
+      <section aria-label="Industrial relations" className="py-2">
         <LoadingSpinner label="Loading industrial relations..." centered />
       </section>
     );
@@ -219,7 +220,7 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
   if (enabled !== true) return null;
 
   return (
-    <section aria-label="Industrial Relations" className="min-w-0 space-y-3">
+    <section aria-label="Industrial relations" className="min-w-0 space-y-3">
       <div className="flex min-h-8 flex-wrap items-baseline gap-x-2 border-b border-card-border pb-1.5">
         <h3 className="text-sm font-semibold text-foreground">Industrial relations</h3>
         <p className="text-xs text-muted">

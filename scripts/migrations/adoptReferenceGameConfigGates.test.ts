@@ -106,6 +106,15 @@ describe("adoptReferenceGameConfigGates — gates", () => {
     expect(updates[0].nppCorpsAttackable).toBe(referenceGameConfig.nppCorpsAttackable);
   });
 
+  it("never fills an absent fresh-world gameplay flag on a running world", async () => {
+    const { db, updates } = fakeDb(
+      fullyPopulated({ treasuryCashLedgerEnabled: undefined, bankUnderwritingEnabled: undefined }),
+      500
+    );
+    await runAdoptReferenceGameConfigGates(db, {});
+    expect(updates).toHaveLength(0);
+  });
+
   it("re-adopts a diverging gate on a world still in its first day", async () => {
     // The shadow-ledger case: seeded false by an older build's reference, which
     // is a fossil of that build rather than a decision.

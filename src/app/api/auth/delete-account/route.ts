@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import type { User } from "@/lib/db/types";
 import { getDb } from "@/lib/mongodb";
@@ -43,25 +43,25 @@ export const DELETE = withNoStore(async () => {
     // Verify user exists
     const user = await usersCollection.findOne({ _id: objectId });
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
     // Reject accounts already fenced before starting legacy deletion.
     // This pre-read does not serialize deletion with concurrent fence acquisition.
     if (isAuthMigrationFenced(user)) {
-      return NextResponse.json(
-        { error: "Your account changed during this request. Please sign in and try again." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Your account changed during this request. Please sign in and try again."
       );
     }
     // Recheck the verified session against the fresh account before any
     // destructive work. The shared account cache is not sufficient here.
     if (!credentialSessionIsCurrent(userId, user, await verifyAuth())) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+      return errorResponse(401, "Authentication required");
     }
     if (user.isAdmin === true || user.role === "admin") {
-      return NextResponse.json(
-        { error: "Admin accounts cannot be self-deleted. Please contact another admin." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Admin accounts cannot be self-deleted. Please contact another admin."
       );
     }
 

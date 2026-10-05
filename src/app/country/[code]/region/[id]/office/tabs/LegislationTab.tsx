@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -85,7 +87,7 @@ export function LegislationTab({
     );
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      setQueueError(data?.error ?? "Cancel failed.");
+      setQueueError(apiErrorText(data, "Cancel failed."));
     } else {
       router.refresh();
     }
@@ -107,7 +109,7 @@ export function LegislationTab({
       );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setSignError(data?.error ?? "Sign failed.");
+        setSignError(apiErrorText(data, "Sign failed."));
       } else {
         router.refresh();
       }
@@ -141,7 +143,7 @@ export function LegislationTab({
             </button>
           )}
         </div>
-        {queueError && <p className="text-sm text-error mb-2">{queueError}</p>}
+        <InlineError error={queueError} className="text-sm text-error mb-2" />
         {legislationActivity ? (
           <ActivityRow
             activity={legislationActivity}
@@ -170,7 +172,7 @@ export function LegislationTab({
 
       <section className="rounded-xl border border-card-border bg-card p-5">
         <h2 className="text-sm font-semibold mb-3">Awaiting your assent</h2>
-        {signError && <p className="mb-3 text-sm text-error">{signError}</p>}
+        <InlineError error={signError} className="mb-3 text-sm text-error" />
         {awaitingAssentBills.length === 0 ? (
           <p className="text-sm text-muted">No bills are currently awaiting your assent.</p>
         ) : (

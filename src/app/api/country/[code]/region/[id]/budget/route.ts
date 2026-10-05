@@ -9,7 +9,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getCountryConfig, isParliamentarySystem, type CountryId } from "@/lib/constants/countries";
 import type { StateBudget, EnactedLaw } from "@/lib/db/types/budget";
 import type { RegionalBudget } from "@/lib/db/types/regionalBudget";
@@ -34,7 +34,7 @@ export async function GET(
     const countryId = code.toUpperCase() as CountryId;
     const config = getCountryConfig(countryId);
     if (!config) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+      return errorResponse(404, "Invalid country code");
     }
 
     const stateId = id;
@@ -101,7 +101,7 @@ async function serveRegionalBudget(
       }
     }
     if (!fallbackStateBudget) {
-      return NextResponse.json({ error: "Regional budget not found" }, { status: 404 });
+      return errorResponse(404, "Regional budget not found");
     }
 
     const enactedLaws = await db
@@ -205,7 +205,7 @@ async function serveStateBudget(
     .collection<StateBudget>("stateBudgets")
     .findOne({ _id: stateId, countryId });
   if (!stateBudget) {
-    return NextResponse.json({ error: "State budget not found" }, { status: 404 });
+    return errorResponse(404, "State budget not found");
   }
 
   const enactedLaws = await db

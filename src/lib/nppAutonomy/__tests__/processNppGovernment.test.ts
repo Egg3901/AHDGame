@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { POLITICAL_METRIC_FAMILIES } from "@/lib/politicalMetrics/families";
-import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createAsyncIterableCursor, createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { tier1DecisionTurnForCycle } from "../tier1DecisionSchedule";
 
 const {
@@ -53,6 +53,7 @@ vi.mock("../foreignPolicy", () => ({
 }));
 
 import { processNppGovernment, AGENDA_RECOMPUTE_INTERVAL_TURNS } from "../processNppGovernment";
+import { agendaReviewSnapshot } from "../rules/agendaReview";
 
 let db: MockDb;
 const now = new Date("2026-06-23T12:00:00Z");
@@ -243,13 +244,75 @@ describe("processNppGovernment", () => {
     setup({
       gov: {
         ...formedPresidentialGov,
-        governingAgenda: { items: [], archetype: "reformer", computedTurn: turn },
+        governingAgenda: {
+          items: [],
+          archetype: "reformer",
+          computedTurn: turn,
+          reviewSnapshot: agendaReviewSnapshot(
+            { weakDomains: { healthcare: 0.8 } },
+            { signals: {}, latestStartTurn: 0, effectFingerprintByDomain: {} }
+          ),
+          performanceReviewedTurn: turn,
+        },
       },
       headNpp,
     });
     const res = await processNppGovernment(db as unknown as Db, "BR", turn, now);
     expect(res.agendaUpdated).toBe(false);
     expect(db.collectionMocks["governmentFormations"].updateOne).not.toHaveBeenCalled();
+  });
+
+  it("runs annual accountability at turns 48 and 96 despite early replans at 24 and 78", async () => {
+    atLeastMock.mockResolvedValue(true);
+    const baseTurn = dueTurn("BR", 16);
+    const gov = {
+      ...formedPresidentialGov,
+      governingPartyId: "5",
+      governingAgenda: {
+        items: [{ domain: "healthcare", target: 65, direction: "raise", priority: 1 }],
+        archetype: "reformer",
+        computedTurn: baseTurn,
+        reviewSnapshot: agendaReviewSnapshot(
+          { weakDomains: { healthcare: 0.8 }, inflationRate: 4 },
+          { signals: {}, latestStartTurn: 0, effectFingerprintByDomain: {} }
+        ),
+        performanceReviewedTurn: baseTurn,
+      },
+    };
+    setup({ gov, headNpp, politicalBoard: boardWith(60, { health: 10 }) });
+
+    const processAtOffset = async (offset: number) => {
+      const cycle = 16 + offset / 6;
+      const turn = dueTurn("BR", cycle);
+      const result = await processNppGovernment(db as unknown as Db, "BR", turn, now);
+      expect(result.agendaUpdated).toBe(true);
+      const updates = (
+        db.collectionMocks["governmentFormations"].updateOne as ReturnType<typeof vi.fn>
+      ).mock.calls;
+      gov.governingAgenda = updates[updates.length - 1][1].$set.governingAgenda;
+      return { turn, agenda: gov.governingAgenda };
+    };
+
+    conditionsMock.mockResolvedValue({ weakDomains: { healthcare: 0.5 }, inflationRate: 4 });
+    const at24 = await processAtOffset(24);
+    expect(at24.agenda.performanceReviewedTurn).toBe(baseTurn);
+    expect(db.collectionMocks["npps"].updateMany).not.toHaveBeenCalled();
+
+    await processAtOffset(48);
+    expect(at24.agenda.computedTurn).toBe(baseTurn + 24);
+    expect(gov.governingAgenda.performanceReviewedTurn).toBe(baseTurn + 48);
+    const updateMany = db.collectionMocks["npps"].updateMany as ReturnType<typeof vi.fn>;
+    expect(updateMany).toHaveBeenCalledTimes(1);
+
+    updateMany.mockClear();
+    conditionsMock.mockResolvedValue({ weakDomains: { healthcare: 0.9 }, inflationRate: 4 });
+    const at78 = await processAtOffset(78);
+    expect(at78.agenda.performanceReviewedTurn).toBe(baseTurn + 48);
+    expect(updateMany).not.toHaveBeenCalled();
+
+    await processAtOffset(96);
+    expect(gov.governingAgenda.performanceReviewedTurn).toBe(baseTurn + 96);
+    expect(updateMany).toHaveBeenCalledTimes(1);
   });
 
   it("recomputes when the agenda is stale", async () => {
@@ -293,6 +356,107 @@ describe("processNppGovernment", () => {
     const updateMany = db.collectionMocks["npps"].updateMany as ReturnType<typeof vi.fn>;
     expect(updateMany).toHaveBeenCalledTimes(1);
     expect(updateMany.mock.calls[0][0]).toMatchObject({ countryId: "BR", party: "5" });
+  });
+
+  describe("electoral mandate (#2321)", () => {
+    const neutralHead = { ...headNpp, policies: { economic: 0, social: 0 } };
+    const parliamentaryGov = {
+      _id: "UK",
+      status: "formed",
+      pmNppId: headId,
+      governingPartyId: "7",
+      seatsByParty: { "7": 330, "8": 270 },
+      totalSeats: 600,
+    };
+
+    async function runWithParty(
+      party: Record<string, unknown>,
+      pledgeIds: string[] = [],
+      gov: Record<string, unknown> = parliamentaryGov
+    ) {
+      atLeastMock.mockResolvedValue(true);
+      conditionsMock.mockResolvedValue({ weakDomains: {} });
+      setup({ gov, headNpp: neutralHead });
+      db.collectionMocks["politicalParties"] = {
+        ...db.collection("politicalParties"),
+        findOne: vi.fn().mockResolvedValue(party),
+      } as MockDb["collectionMocks"][string];
+      db.collectionMocks["manifestos"] = {
+        ...db.collection("manifestos"),
+        find: vi
+          .fn()
+          .mockReturnValue(
+            createAsyncIterableCursor(
+              pledgeIds.length > 0
+                ? [{ pledges: pledgeIds.map((catalogEntryId) => ({ catalogEntryId })) }]
+                : []
+            )
+          ),
+      } as MockDb["collectionMocks"][string];
+      await processNppGovernment(db as unknown as Db, "UK", dueTurn("UK"), now);
+      const calls = (
+        db.collectionMocks["governmentFormations"].updateOne as ReturnType<typeof vi.fn>
+      ).mock.calls;
+      return calls[0]?.[1].$set as {
+        governingAgenda: { items: Array<{ domain: string; direction: string }> };
+        electoralMandate: { partyId: string; sources: string[]; domains: Record<string, number> };
+      };
+    }
+
+    it("steers identical heads under identical conditions toward what their party won on", async () => {
+      const left = await runWithParty({ economicPosition: -4, socialPosition: 0 });
+      const right = await runWithParty({ economicPosition: 4, socialPosition: 0 });
+
+      expect(left.electoralMandate).toMatchObject({ partyId: "7", sources: ["platform"] });
+      const leftRaise = left.governingAgenda.items
+        .filter((i) => i.direction === "raise")
+        .map((i) => i.domain);
+      const rightRaise = right.governingAgenda.items
+        .filter((i) => i.direction === "raise")
+        .map((i) => i.domain);
+      expect(leftRaise).toContain("poverty");
+      expect(rightRaise).toContain("economic_growth");
+      expect(rightRaise).not.toContain("poverty");
+      expect(leftRaise).not.toContain("economic_growth");
+    });
+
+    it("carries locked manifesto pledges into the agenda", async () => {
+      const res = await runWithParty({ economicPosition: 0, socialPosition: 0 }, [
+        "uk.education.secondaryForAll",
+      ]);
+      expect(res.electoralMandate.sources).toEqual(["platform", "manifesto"]);
+      expect(res.electoralMandate.domains.education).toBeGreaterThan(0);
+      expect(res.governingAgenda.items.map((i) => i.domain)).toContain("education");
+    });
+
+    it("recomputes a fresh agenda when the governing party changes", async () => {
+      const turn = dueTurn("UK");
+      const res = await runWithParty({ economicPosition: 4, socialPosition: 0 }, [], {
+        ...parliamentaryGov,
+        governingAgenda: { items: [], archetype: "reformer", computedTurn: turn },
+        electoralMandate: { partyId: "8", sources: [], domains: {}, strength: 1, computedTurn: 1 },
+      });
+      expect(res?.electoralMandate.partyId).toBe("7");
+    });
+
+    it("keeps the cadence for a fresh agenda when the governing party is unchanged", async () => {
+      const turn = dueTurn("UK");
+      const res = await runWithParty({ economicPosition: 4, socialPosition: 0 }, [], {
+        ...parliamentaryGov,
+        governingAgenda: {
+          items: [],
+          archetype: "reformer",
+          computedTurn: turn,
+          reviewSnapshot: agendaReviewSnapshot(
+            {},
+            { signals: {}, latestStartTurn: 0, effectFingerprintByDomain: {} }
+          ),
+          performanceReviewedTurn: turn,
+        },
+        electoralMandate: { partyId: "7", sources: [], domains: {}, strength: 1, computedTurn: 1 },
+      });
+      expect(res).toBeUndefined();
+    });
   });
 
   it("does not compute an agenda when the head of government is player-held", async () => {

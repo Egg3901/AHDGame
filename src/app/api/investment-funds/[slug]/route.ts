@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { isIndexFundsEnabled, INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFunds/featureFlag";
 import {
@@ -27,7 +27,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
   try {
     const db = await getDb();
     if (!(await isIndexFundsEnabled())) {
-      return NextResponse.json({ error: INDEX_FUNDS_DISABLED_MESSAGE }, { status: 403 });
+      return errorResponse(403, INDEX_FUNDS_DISABLED_MESSAGE);
     }
 
     const { slug } = await params;

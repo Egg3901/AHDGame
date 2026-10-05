@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 
 interface CountRow {
@@ -53,7 +54,7 @@ interface LedgerResponse {
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-md border border-card-border bg-background/50 p-3">
-      <div className="text-[10px] uppercase tracking-wider text-muted">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div className="mt-1 text-lg font-semibold tabular-nums">{value}</div>
     </div>
   );
@@ -90,7 +91,7 @@ export function ForeignPolicyLedgerPanel() {
       const response = await fetch("/api/admin/npp/foreign-policy", { cache: "no-store" });
       const body = (await response.json()) as LedgerResponse & { error?: string };
       if (!response.ok) {
-        setError(body.error || "Failed to load foreign policy ledger.");
+        setError(apiErrorText(body, "Failed to load foreign policy ledger."));
         return;
       }
       setData(body);
@@ -158,7 +159,7 @@ export function ForeignPolicyLedgerPanel() {
 
       <div className="mt-4 overflow-x-auto border-t border-card-border pt-4">
         <table className="w-full min-w-[32rem] text-left text-xs">
-          <thead className="text-[10px] uppercase tracking-wider text-muted">
+          <thead className="text-body-sm font-medium text-muted">
             <tr>
               <th className="pb-2">Country</th>
               <th className="pb-2 text-right">Decisions</th>

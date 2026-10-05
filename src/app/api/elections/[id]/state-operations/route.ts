@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
 import { buildStateOperations } from "@/lib/elections/primaryStateOperations";
@@ -33,9 +33,9 @@ export async function GET(request: Request, { params }: RouteParams) {
     const resolved = await resolveElectionRouteParam(db, id);
     if (!resolved.ok) {
       const invalid = resolved.reason === "invalid_id";
-      return NextResponse.json(
-        { error: invalid ? "Invalid election id" : "Election not found" },
-        { status: invalid ? 400 : 404 }
+      return errorResponse(
+        invalid ? 400 : 404,
+        invalid ? "Invalid election id" : "Election not found"
       );
     }
 
@@ -44,7 +44,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       character: auth.user.character,
     });
     if (!view) {
-      return NextResponse.json({ error: "Nothing to act on in this race" }, { status: 404 });
+      return errorResponse(404, "Nothing to act on in this race");
     }
 
     return NextResponse.json(view);

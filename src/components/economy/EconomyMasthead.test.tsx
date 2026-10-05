@@ -21,13 +21,13 @@ describe("EconomyMasthead", () => {
     expect(screen.getByText("United States · National Accounts Registry")).toBeTruthy();
     expect(screen.getByText("Economic Outlook")).toBeTruthy();
     expect(screen.getByText("Bureau of National Accounts")).toBeTruthy();
-    expect(screen.getByText(/Live · Turn 412/)).toBeTruthy();
+    expect(screen.getByText(/Live · turn 412/)).toBeTruthy();
     // the verdict is a single badge-row pill at every breakpoint (no rotated seal)
     expect(screen.getAllByText("STEADY").length).toBe(1);
     expect(screen.queryByText("economic outlook")).toBeNull();
     expect(screen.getByText(/price pressure elevated/)).toBeTruthy();
     expect(screen.getByTestId("pulse-strip")).toBeTruthy();
-    const budgetLink = screen.getByRole("link", { name: /National Budget/ });
+    const budgetLink = screen.getByRole("link", { name: /National budget/ });
     expect(budgetLink.getAttribute("href")).toBe("/country/us/budget");
   });
 

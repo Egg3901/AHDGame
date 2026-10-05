@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { VETO_MESSAGE_MIN_LENGTH, VETO_MESSAGE_MAX_LENGTH } from "@/lib/constants/governorOffice";
 
@@ -48,7 +50,7 @@ export function VetoMessageModal({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data?.error ?? "Veto failed.");
+        setError(apiErrorText(data, "Veto failed."));
         setSubmitting(false);
         return;
       }
@@ -93,7 +95,7 @@ export function VetoMessageModal({
             {trimmedLength}/{VETO_MESSAGE_MAX_LENGTH}
           </span>
         </div>
-        {error && <p className="mt-3 text-sm text-error">{error}</p>}
+        <InlineError error={error} className="mt-3 text-sm text-error" />
         <div className="mt-5 flex justify-end gap-2">
           <button
             onClick={onClose}

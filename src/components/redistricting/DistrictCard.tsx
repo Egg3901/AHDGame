@@ -4,6 +4,7 @@ import { useState } from "react";
 import { buildSquareCells, netLeanIndicator, POOL_COLORS } from "@/lib/redistricting/cardView";
 import type { DistrictSquareView } from "@/lib/redistricting/districtSquareResponse";
 import { DistrictLeanBar } from "./DistrictLeanBar";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export interface CampaignContext {
   countryId: string;
@@ -36,7 +37,7 @@ export function DistrictCard({
         }
       );
       const data = await res.json();
-      setMsg(res.ok ? `Boost ${Number(data.boost).toFixed(1)}%` : (data.error ?? "Failed"));
+      setMsg(res.ok ? `Boost ${Number(data.boost).toFixed(1)}%` : apiErrorText(data, "Failed"));
     } catch {
       setMsg("Network error");
     } finally {
@@ -111,7 +112,7 @@ export function DistrictCard({
             disabled={busy}
             className="ml-2 rounded border border-card-border px-2 py-0.5 text-[10px] hover:border-primary disabled:opacity-40"
           >
-            {busy ? "…" : "Campaign Here"}
+            {busy ? "…" : "Campaign here"}
           </button>
         )}
         {msg && <span className="ml-2 text-[10px] text-muted">{msg}</span>}

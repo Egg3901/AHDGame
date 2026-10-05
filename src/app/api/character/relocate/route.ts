@@ -21,7 +21,7 @@ import { withNoStore } from "@/lib/api/withNoStore";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
 import type { State } from "@/lib/db/types";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
@@ -65,9 +65,9 @@ export async function POST(request: Request) {
     const auth = authResult.user;
 
     if (auth.character.federationPendingResidenceId) {
-      return NextResponse.json(
-        { error: "Choose a playable residence through your federation settlement first." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Choose a playable residence through your federation settlement first."
       );
     }
 
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, relocateBodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const normalizedTarget = parsed.data.targetStateId.trim();
     const targetCountryId = (
@@ -89,21 +89,18 @@ export async function POST(request: Request) {
       .collection<State>("states")
       .findOne({ _id: normalizedTarget, countryId: targetCountryId });
     if (!targetState) {
-      return NextResponse.json({ error: "Invalid target state or region" }, { status: 400 });
+      return errorResponse(400, "Invalid target state or region");
     }
 
     if (targetCountryId === "US") {
       const { admittedIds, preset } = await loadUsPoliticalStateIds(db);
       if (!isUsResidentPoliticalRegion(normalizedTarget, preset, admittedIds)) {
-        return NextResponse.json(
-          { error: unplayableTerritoryHomeError(targetState.name) },
-          { status: 400 }
-        );
+        return errorResponse(400, unplayableTerritoryHomeError(targetState.name));
       }
     }
 
     if (auth.character.homeState === normalizedTarget) {
-      return NextResponse.json({ error: "Already in this state/region" }, { status: 400 });
+      return errorResponse(400, "Already in this state/region");
     }
 
     // Turn-first relocation cooldown (72 turns); legacy Date fallback inside the
@@ -116,12 +113,10 @@ export async function POST(request: Request) {
       Date.now()
     );
     if (cooldown.onCooldown) {
-      return NextResponse.json(
-        {
-          error: `Relocation cooldown active. You can relocate again in ${cooldown.cooldownRemainingDays} day(s).`,
-          cooldownRemainingDays: cooldown.cooldownRemainingDays,
-        },
-        { status: 429 }
+      return errorResponse(
+        429,
+        `Relocation cooldown active. You can relocate again in ${cooldown.cooldownRemainingDays} day(s).`,
+        { extra: { cooldownRemainingDays: cooldown.cooldownRemainingDays } }
       );
     }
 
@@ -130,10 +125,7 @@ export async function POST(request: Request) {
     if (isChangingCountry && auth.isAdmin !== true) {
       const { enabledForPlayers } = await getCountryAccess(targetState.countryId);
       if (!enabledForPlayers) {
-        return NextResponse.json(
-          { error: "Relocation to this country is not currently available." },
-          { status: 403 }
-        );
+        return errorResponse(403, "Relocation to this country is not currently available.");
       }
     }
 

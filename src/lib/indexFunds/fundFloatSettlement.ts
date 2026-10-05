@@ -28,6 +28,12 @@ export type FundFloatPlan = {
   holdingsAfter: IndexFundHolding[];
   transition: BankingTransition;
   inverseCustody: TransitionLeg;
+  /**
+   * A batched plan settles several corporations' custody in one transition.
+   * Entry `i` is the inverse of the transition's `i`th asset leg; a single
+   * trade leaves this unset and uses `inverseCustody`.
+   */
+  inverseCustodies?: TransitionLeg[];
   reversalProjections?: TransitionProjection[];
   compensation?: BankingTransition;
   undoRequested?: boolean;
@@ -143,9 +149,13 @@ async function compensateRefusal(
   if (reverseCompleted) {
     if (record.status !== "applied" || !record.legs.every((leg) => leg.applied)) return false;
   } else if (!record.legs.some((leg) => leg.refusal)) return false;
+  const assetOrdinals = new Map<MoneyMoveRecordLeg, number>();
+  for (const leg of record.legs)
+    if (leg.kind === "asset") assetOrdinals.set(leg, assetOrdinals.size);
   const reversed: TransitionLeg[] = record.legs.flatMap((leg) => {
     if (!leg.applied) return [];
-    if (leg.kind === "asset") return [plan.inverseCustody];
+    if (leg.kind === "asset")
+      return [plan.inverseCustodies?.[assetOrdinals.get(leg) ?? 0] ?? plan.inverseCustody];
     if (leg.kind === "mint" || leg.kind === "burn")
       return [
         {

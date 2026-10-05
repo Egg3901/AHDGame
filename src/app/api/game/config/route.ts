@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { GameConfig } from "@/lib/db/types";
 import { toPublicGameConfig } from "@/lib/gameConfig/publicGameConfig";
@@ -13,10 +13,7 @@ export async function GET() {
     const config = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
 
     if (!config) {
-      return NextResponse.json(
-        { error: "Game config not found. Run npm run seed first." },
-        { status: 404 }
-      );
+      return errorResponse(404, "Game config not found. Run npm run seed first.");
     }
 
     return NextResponse.json(toPublicGameConfig(config), {

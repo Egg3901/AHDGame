@@ -67,7 +67,43 @@ describe("Hungarian modern constituency race header", () => {
         "Constituency by-election: HU_BUD:1. One seat for the remaining Assembly term."
       )
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Enter Race" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enter race" }));
     expect(onEnter).toHaveBeenCalledOnce();
+  });
+});
+
+describe("presidential race header", () => {
+  function renderHeader(electionType: ElectionDetail["electionType"]) {
+    render(
+      <NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}>
+        <ElectionHeader
+          election={{ ...election, electionType, hungarianModernByElection: undefined }}
+          electionYear={2013}
+          localInPrimary
+          localIsEnded={false}
+          localIsUpcoming={false}
+          canEnter={false}
+          canWithdraw={false}
+          actionLoading={false}
+          onEnter={() => {}}
+          onWithdraw={() => {}}
+        />
+      </NextIntlClientProvider>
+    );
+  }
+
+  it("links presidential races to the powers explainer and the running guide", () => {
+    renderHeader("president");
+    expect(
+      screen.getByRole("link", { name: "What the presidency can do" }).getAttribute("href")
+    ).toBe("/wiki/reference-offices");
+    expect(
+      screen.getByRole("link", { name: "How to run for president" }).getAttribute("href")
+    ).toBe("/guides/running-for-office");
+  });
+
+  it("does not show the presidency links on other races", () => {
+    renderHeader("nationalAssembly");
+    expect(screen.queryByRole("link", { name: "What the presidency can do" })).toBeNull();
   });
 });

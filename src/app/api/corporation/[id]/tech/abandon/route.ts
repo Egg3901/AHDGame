@@ -9,7 +9,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isSectorTechTreesEnabled } from "@/lib/corporations/techTree/featureFlag";
@@ -36,13 +36,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, abandonSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
     if (!(await isSectorTechTreesEnabled(gameState ?? undefined))) {
-      return NextResponse.json({ error: "Tech trees are not enabled" }, { status: 404 });
+      return errorResponse(404, "Tech trees are not enabled");
     }
 
     const resolved = await resolveCorporation(db, id);
@@ -60,7 +60,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const result = await abandonTechDecade(db, corporation, parsed.data.decadeId, currentYear);
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json({

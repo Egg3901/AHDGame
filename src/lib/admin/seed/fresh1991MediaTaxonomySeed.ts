@@ -68,7 +68,8 @@ export async function prepareFresh1991MediaTaxonomySeed(
           startedAt: previous?.startedAt ?? new Date(),
         },
       },
-    }
+    },
+    { upsert: true }
   );
   return { enabled: true, ready: true, resumed: resumable, counts };
 }

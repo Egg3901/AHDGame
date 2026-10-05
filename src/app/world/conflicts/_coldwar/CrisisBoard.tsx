@@ -265,7 +265,7 @@ export function CrisisBoard({ side }: { side: Side }) {
                 color: "#f3f1ea",
               }}
             >
-              The Cuban Brigade Crisis
+              The Cuban brigade crisis
             </h1>
             <p
               style={{

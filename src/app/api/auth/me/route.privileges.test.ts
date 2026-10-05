@@ -38,7 +38,8 @@ vi.mock("@/lib/auth/characterGateCookie", () => ({
   setCharacterGateCookie: vi.fn(),
 }));
 
-vi.mock("@/lib/api/errors", () => ({
+vi.mock("@/lib/api/errors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/errors")>()),
   handleRouteError: (error: unknown) => {
     throw error;
   },
@@ -164,7 +165,7 @@ describe("GET /api/auth/me privilege flags", () => {
       );
       expect(response.status).toBe(401);
       expect(response.headers.get("cache-control")).toContain("no-store");
-      expect(await response.json()).toEqual({ error: "Authentication required" });
+      expect(await response.json()).toMatchObject({ error: "Authentication required" });
     }
   );
   it.each([null, {}, "malformed", undefined])(
@@ -186,7 +187,7 @@ describe("GET /api/auth/me privilege flags", () => {
       );
       expect(response.status).toBe(401);
       expect(response.headers.get("cache-control")).toContain("no-store");
-      expect(await response.json()).toEqual({ error: "Authentication required" });
+      expect(await response.json()).toMatchObject({ error: "Authentication required" });
     }
   );
 });

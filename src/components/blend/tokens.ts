@@ -69,6 +69,17 @@ export const FONT = {
 } as const;
 
 /**
+ * A Blend label: sentence case, 12px, medium weight, secondary ink. It sits
+ * above or beside a figure, and the figure carries the weight.
+ */
+export const BLEND_LABEL: React.CSSProperties = {
+  fontFamily: FONT.sans,
+  fontSize: 12,
+  fontWeight: 500,
+  color: BLEND.muted,
+};
+
+/**
  * The app's standard page container, so a Blend screen sits in the same centred
  * column as every other page rather than running to the viewport edges. Matches
  * the `mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8` pattern used across

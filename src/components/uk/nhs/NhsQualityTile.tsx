@@ -25,7 +25,7 @@ export function NhsQualityTile({
   return (
     <div className="rounded-2xl border border-card-border bg-card p-6 shadow-card">
       <div className="flex items-baseline justify-between">
-        <h3 className="text-caption font-semibold text-muted">National Health Service</h3>
+        <h3 className="text-caption font-semibold text-muted">National health service</h3>
         <span className="text-body-sm font-medium" style={{ color: band.color }}>
           {band.label}
         </span>

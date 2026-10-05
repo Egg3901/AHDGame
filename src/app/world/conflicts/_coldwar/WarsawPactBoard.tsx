@@ -248,7 +248,7 @@ export function WarsawPactBoard() {
                   color: "#f3f1ea",
                 }}
               >
-                Warsaw Treaty Organization
+                Warsaw treaty organization
               </h1>
               <div style={{ display: "flex", gap: 8, marginTop: 9, flexWrap: "wrap" }}>
                 <span

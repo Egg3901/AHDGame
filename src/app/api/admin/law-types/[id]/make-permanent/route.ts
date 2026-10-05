@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { LegislationType } from "@/lib/db/types";
 import { writeAdminSeedFile, ADMIN_SEED_FILE } from "@/lib/admin/seedFileGenerator";
 
@@ -20,7 +20,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const lawType = await db.collection<LegislationType>("legislationTypes").findOne({ _id: id });
 
     if (!lawType) {
-      return NextResponse.json({ error: `Law type "${id}" not found` }, { status: 404 });
+      return errorResponse(404, `Law type "${id}" not found`);
     }
 
     // Set isPermanent to true

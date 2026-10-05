@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { getMessageStyle } from "@/lib/utils/formatters";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ElectionAdminPanelProps {
   electionId: string;
@@ -33,7 +34,7 @@ export function ElectionAdminPanel({
         method: "POST",
       });
       const data = await res.json();
-      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${data.error}`);
+      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Request failed")}`);
       if (res.ok) onSuccess();
     } catch {
       setMessage("✗ Network error");
@@ -45,7 +46,7 @@ export function ElectionAdminPanel({
   return (
     <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
       <div className="mb-3 flex items-center gap-2">
-        <span className="text-sm font-medium text-amber-400">Admin Controls</span>
+        <span className="text-sm font-medium text-amber-400">Admin controls</span>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         {!isEnded && (
@@ -59,7 +60,7 @@ export function ElectionAdminPanel({
                 : "Resolve election now and determine winner(s)"
             }
           >
-            {loading ? "…" : "Resolve Election"}
+            {loading ? "…" : "Resolve election"}
           </button>
         )}
       </div>

@@ -180,9 +180,7 @@ export function ElectorateDossier({
     <div className="overflow-hidden rounded-xl border border-card-border bg-card">
       {/* toolbar: title + Simple/Analyst view */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-card-border bg-card-muted/30 px-4 py-3">
-        <span className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-          Electorate — strategy board
-        </span>
+        <span className="text-body-sm font-medium text-muted">Electorate — strategy board</span>
         <div className="flex overflow-hidden rounded-lg border border-card-border">
           {(["simple", "analyst"] as const).map((v) => (
             <button
@@ -222,9 +220,7 @@ export function ElectorateDossier({
       {projection.length > 0 && (
         <div className="border-b border-card-border px-5 py-4">
           <div className="mb-2 flex flex-wrap items-baseline gap-3">
-            <span className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-              State Projection
-            </span>
+            <span className="text-body-sm font-medium text-muted">State projection</span>
             <span
               className="text-xl font-bold tabular-nums"
               style={{ color: leader?.color ?? "var(--foreground)" }}
@@ -382,15 +378,13 @@ export function ElectorateDossier({
             {/* real stat tiles (both views) */}
             <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-xl border border-card-border bg-card-muted/30 px-3 py-2.5">
-                <div className="text-[9px] uppercase tracking-widest text-muted">
-                  Share of electorate
-                </div>
+                <div className="text-body-sm font-medium text-muted">Share of electorate</div>
                 <div className="text-xl font-bold tabular-nums text-foreground">
                   {selected.sharePct.toFixed(1)}%
                 </div>
               </div>
               <div className="rounded-xl border border-card-border bg-card-muted/30 px-3 py-2.5">
-                <div className="text-[9px] uppercase tracking-widest text-muted">Turnout habit</div>
+                <div className="text-body-sm font-medium text-muted">Turnout habit</div>
                 <div className="text-sm font-bold text-foreground">
                   {turnoutWord(selected.turnout)}
                 </div>
@@ -400,9 +394,7 @@ export function ElectorateDossier({
                 className="rounded-xl border bg-card-muted/30 px-3 py-2.5"
                 style={{ borderColor: `${selected.lean.color}55` }}
               >
-                <div className="text-[9px] uppercase tracking-widest text-muted">
-                  Leaning toward
-                </div>
+                <div className="text-body-sm font-medium text-muted">Leaning toward</div>
                 <div className="text-sm font-bold" style={{ color: selected.lean.color }}>
                   {selected.lean.isTossUp
                     ? "No clear favorite"
@@ -419,9 +411,7 @@ export function ElectorateDossier({
               <>
                 <div className="mb-4 grid grid-cols-2 gap-2">
                   <div className="rounded-xl border border-card-border bg-card-muted/30 px-3 py-2.5">
-                    <div className="text-[9px] uppercase tracking-widest text-muted">
-                      Economic lean
-                    </div>
+                    <div className="text-body-sm font-medium text-muted">Economic lean</div>
                     <div className={`text-sm font-bold ${leanTextClass(selected.economicLean)}`}>
                       {econWord(selected.economicLean)}
                     </div>
@@ -430,9 +420,7 @@ export function ElectorateDossier({
                     </div>
                   </div>
                   <div className="rounded-xl border border-card-border bg-card-muted/30 px-3 py-2.5">
-                    <div className="text-[9px] uppercase tracking-widest text-muted">
-                      Social lean
-                    </div>
+                    <div className="text-body-sm font-medium text-muted">Social lean</div>
                     <div className={`text-sm font-bold ${leanTextClass(selected.socialLean)}`}>
                       {socWord(selected.socialLean)}
                     </div>
@@ -444,9 +432,7 @@ export function ElectorateDossier({
 
                 {selected.matches.length > 0 && (
                   <div className="mb-4">
-                    <div className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted">
-                      Party match
-                    </div>
+                    <div className="mb-2 text-body-sm font-medium text-muted">Party match</div>
                     <div className="space-y-2">
                       {selected.matches.map((m) => (
                         <div key={m.partyId}>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import type { RegionalTargetConfig } from "@/lib/constants/cabinetMechanicsTypes";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface RegionRow {
   regionId: string;
@@ -51,7 +52,7 @@ export function RegionalTargetPanel({
       );
       if (!res.ok) {
         const json = (await res.json()) as { error?: string };
-        setFeedback({ type: "error", message: json.error ?? "Failed to save" });
+        setFeedback({ type: "error", message: apiErrorText(json, "Failed to save") });
         return;
       }
       setFeedback({ type: "success", message: "Target updated." });
@@ -76,7 +77,7 @@ export function RegionalTargetPanel({
             htmlFor="regional-target-select"
             className="block text-xs font-medium text-muted mb-1"
           >
-            Target Region
+            Target region
           </label>
           <select
             id="regional-target-select"
@@ -107,7 +108,7 @@ export function RegionalTargetPanel({
             isLoading={saving}
             onClick={handleSave}
           >
-            Set Target
+            Set target
           </Button>
           {feedback && (
             <span

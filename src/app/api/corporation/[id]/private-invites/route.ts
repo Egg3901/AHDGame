@@ -20,7 +20,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -115,7 +115,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, inviteSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { invitedCharacterId, shares, pricePerShare } = parsed.data;
 
@@ -128,48 +128,40 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     if (!corporation.isPrivate) {
-      return NextResponse.json(
-        {
-          error:
-            "Private share invitations are for private corporations only. Public corps issue shares through the market.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Private share invitations are for private corporations only. Public corps issue shares through the market."
       );
     }
 
     const legalStructure = getLegalStructureForCorp(corporation);
     const maxShareholders = legalStructure.maxShareholders ?? 1;
     if (maxShareholders <= 1) {
-      return NextResponse.json(
-        {
-          error: `${legalStructure.name} corporations are CEO-only and cannot bring in outside shareholders. Convert to an S-Corp (or similar) to enable private placements.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `${legalStructure.name} corporations are CEO-only and cannot bring in outside shareholders. Convert to an S-Corp (or similar) to enable private placements.`
       );
     }
 
     if (!ObjectId.isValid(invitedCharacterId)) {
-      return NextResponse.json({ error: "Invalid invitedCharacterId" }, { status: 400 });
+      return errorResponse(400, "Invalid invitedCharacterId");
     }
     const inviteeId = new ObjectId(invitedCharacterId);
 
     if (corporation.ceoId && inviteeId.equals(corporation.ceoId)) {
-      return NextResponse.json({ error: "CEO is already the sole shareholder" }, { status: 400 });
+      return errorResponse(400, "CEO is already the sole shareholder");
     }
 
     const invitee = await db.collection<Character>("characters").findOne({ _id: inviteeId });
     if (!invitee) {
-      return NextResponse.json({ error: "Invited character not found" }, { status: 404 });
+      return errorResponse(404, "Invited character not found");
     }
 
     const existingShareholder = (corporation.shareholders ?? []).find(
       (sh) => sh.characterId?.toString() === invitedCharacterId && (sh.shares ?? 0) > 0
     );
     if (existingShareholder) {
-      return NextResponse.json(
-        { error: `${invitee.name} is already a shareholder of this corporation.` },
-        { status: 400 }
-      );
+      return errorResponse(400, `${invitee.name} is already a shareholder of this corporation.`);
     }
 
     const now = new Date();
@@ -184,11 +176,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       });
     const projected = shareholderCount(corporation) + pendingInviteCount + 1;
     if (projected > maxShareholders) {
-      return NextResponse.json(
-        {
-          error: `Adding another shareholder would exceed the ${legalStructure.name} cap of ${maxShareholders} shareholders (${shareholderCount(corporation)} current + ${pendingInviteCount} pending).`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Adding another shareholder would exceed the ${legalStructure.name} cap of ${maxShareholders} shareholders (${shareholderCount(corporation)} current + ${pendingInviteCount} pending).`
       );
     }
 
@@ -221,11 +211,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     const reserved = reservedByInvites[0]?.total ?? 0;
     const available = unissued - reserved;
     if (shares > available) {
-      return NextResponse.json(
-        {
-          error: `Only ${available.toLocaleString()} unissued shares available (after reserving ${reserved.toLocaleString()} for other pending invites).`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Only ${available.toLocaleString()} unissued shares available (after reserving ${reserved.toLocaleString()} for other pending invites).`
       );
     }
 

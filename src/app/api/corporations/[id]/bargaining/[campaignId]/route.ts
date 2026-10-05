@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
@@ -35,13 +35,13 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     if (!(await isLabourFullMode())) {
-      return NextResponse.json({ error: "Player-run unions are not enabled." }, { status: 403 });
+      return errorResponse(403, "Player-run unions are not enabled.");
     }
     const rateLimit = checkRateLimit(auth.user.userId, 20, 60_000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
     const parsed = await parseJsonBody(request, actionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { id, campaignId } = await params;
     const db = await getDb();
@@ -55,7 +55,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       await getCurrentTurn(db),
       terms
     );
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return handleRouteError(error);

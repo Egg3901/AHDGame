@@ -24,6 +24,12 @@ const COLLECTIONS_DIR = join(process.cwd(), "src/lib/db/collections");
  * module declares must carry a manifest classification.
  */
 describe("seed manifest classification coverage", () => {
+  it("clears population receipts and frozen projections on reset", () => {
+    for (const name of ["demographicFlowReceipts", "demographicFlowProjections"]) {
+      expect(getCollectionCategory(name)).toBe("runtime");
+      expect(getRuntimeCollectionNames()).toContain(name);
+    }
+  });
   it("wipes funded bank-failure receipts with the world they belong to", () => {
     expect(getCollectionCategory("bankFailurePoliticalEvents")).toBe("runtime");
     expect(getRuntimeCollectionNames()).toContain("bankFailurePoliticalEvents");
@@ -143,10 +149,26 @@ describe("runtime lifecycle category determines reset selection", () => {
     expect(getRuntimeCollectionNames()).not.toContain(name);
   });
 
+  it("preserves Patreon leases and support audit history across world resets", () => {
+    for (const name of ["cronLocks", "patreonReconcileUnmatched", "patreonReconcileRuns"]) {
+      expect(getCollectionCategory(name)).toBe("preserved");
+      expect(getPreservedCollectionNames()).toContain(name);
+      expect(getRuntimeCollectionNames()).not.toContain(name);
+      expect(getReferenceCollectionNames()).not.toContain(name);
+    }
+  });
+
   it("keeps actual world reference and account collections in their own lifecycle", () => {
     expect(getReferenceCollectionNames()).toContain("states");
     expect(getRuntimeCollectionNames()).not.toContain("states");
     expect(getPreservedCollectionNames()).toContain("users");
     expect(getRuntimeCollectionNames()).not.toContain("users");
+  });
+});
+describe("refugee reception runtime lifecycle", () => {
+  it("clears immutable reception history with the reset runtime", () => {
+    expect(getCollectionCategory("refugeeReceptionHistory")).toBe("runtime");
+    expect(getCollectionCategory("conflictCivilianLossHistory")).toBe("runtime");
+    expect(getCollectionCategory("conflictCapacityObligations")).toBe("runtime");
   });
 });

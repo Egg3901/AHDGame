@@ -104,7 +104,7 @@ export function TasksWidget() {
         {/* Summary Stats */}
         <div className="grid grid-cols-4 divide-x divide-card-border border-b border-card-border">
           <div className="p-4 bg-red-500/5">
-            <p className="text-[10px] text-red-500 font-bold uppercase tracking-wider">Critical</p>
+            <p className="text-body-sm font-medium text-red-500">Critical</p>
             <p className="text-2xl font-bold mt-1 text-foreground">{data.byPriority.critical}</p>
           </div>
           <div className="p-4 bg-orange-500/5">
@@ -112,11 +112,11 @@ export function TasksWidget() {
             <p className="text-2xl font-bold mt-1 text-foreground">{data.byPriority.high}</p>
           </div>
           <div className="p-4 bg-blue-500/5">
-            <p className="text-[10px] text-blue-500 font-bold uppercase tracking-wider">Active</p>
+            <p className="text-body-sm font-medium text-blue-500">Active</p>
             <p className="text-2xl font-bold mt-1 text-foreground">{data.byStatus.in_progress}</p>
           </div>
           <div className="p-4 bg-card-muted/30">
-            <p className="text-[10px] text-muted font-bold uppercase tracking-wider">Pending</p>
+            <p className="text-body-sm font-medium text-muted">Pending</p>
             <p className="text-2xl font-bold mt-1 text-foreground">{data.byStatus.pending}</p>
           </div>
         </div>
@@ -124,12 +124,12 @@ export function TasksWidget() {
         {/* Active Tasks List */}
         <div className="p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-foreground">Top Priority</h3>
+            <h3 className="text-sm font-semibold text-foreground">Top priority</h3>
             <button
               onClick={() => setShowForm(true)}
               className="text-xs font-medium text-primary hover:text-primary-dark transition-colors flex items-center gap-1"
             >
-              <span className="text-lg leading-none">+</span> New Task
+              <span className="text-lg leading-none">+</span> New task
             </button>
           </div>
 
@@ -155,7 +155,7 @@ export function TasksWidget() {
                       {task.status === "in_progress" && (
                         <span
                           className="shrink-0 w-2 h-2 rounded-full bg-blue-500 animate-pulse"
-                          title="In Progress"
+                          title="In progress"
                         />
                       )}
                     </div>
@@ -178,13 +178,13 @@ export function TasksWidget() {
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-muted flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-              Recently Completed
+              Recently completed
             </h3>
             <Link
               href="/admin/tasks?status=completed"
               className="text-xs text-muted hover:text-foreground transition-colors"
             >
-              View All
+              View all
             </Link>
           </div>
 
@@ -213,7 +213,7 @@ export function TasksWidget() {
           href="/admin/tasks"
           className="text-xs font-medium text-muted hover:text-foreground transition-colors border-b border-transparent hover:border-muted inline-block pb-0.5"
         >
-          Open Task Board →
+          Open task board →
         </Link>
       </div>
 

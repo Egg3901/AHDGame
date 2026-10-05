@@ -356,7 +356,7 @@ export function EconOnlyMapPlaceholder({
         <div className="mb-4 flex flex-wrap gap-2 sm:mb-6">
           {[
             { id: "regions", label: "Regions" },
-            { id: "sectorBonuses", label: "Sector Bonus" },
+            { id: "sectorBonuses", label: "Sector bonus" },
           ].map((m) => (
             <button
               key={m.id}

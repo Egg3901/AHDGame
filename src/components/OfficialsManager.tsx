@@ -6,6 +6,7 @@ import { getMessageStyle } from "@/lib/utils/formatters";
 import { US_STATES } from "@/lib/constants";
 import { OfficialsFilters } from "./officials/OfficialsFilters";
 import { OfficialsList } from "./officials/OfficialsList";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ElectedOfficial {
   _id: string;
@@ -98,7 +99,7 @@ export function OfficialsManager() {
       } else {
         dispatch({
           type: "SET_MESSAGE",
-          payload: `✗ ${data.error || `Failed to initialize ${type ?? "all"} positions`}`,
+          payload: `✗ ${apiErrorText(data, `Failed to initialize ${type ?? "all"} positions`)}`,
         });
       }
     } catch {
@@ -134,7 +135,7 @@ export function OfficialsManager() {
       } else {
         dispatch({
           type: "SET_MESSAGE",
-          payload: `✗ ${data.error || "Failed to reset officials"}`,
+          payload: `✗ ${apiErrorText(data, "Failed to reset officials")}`,
         });
       }
     } catch {
@@ -169,7 +170,7 @@ export function OfficialsManager() {
         await fetchOfficials();
         await fetchCharacters();
       } else {
-        dispatch({ type: "SET_MESSAGE", payload: `✗ ${data.error || "Failed to appoint"}` });
+        dispatch({ type: "SET_MESSAGE", payload: `✗ ${apiErrorText(data, "Failed to appoint")}` });
       }
     } catch {
       dispatch({ type: "SET_MESSAGE", payload: "✗ Network error" });
@@ -212,7 +213,7 @@ export function OfficialsManager() {
       } else {
         dispatch({
           type: "SET_MESSAGE",
-          payload: `✗ ${data.error || "Failed to create house representative"}`,
+          payload: `✗ ${apiErrorText(data, "Failed to create house representative")}`,
         });
       }
     } catch {
@@ -246,7 +247,7 @@ export function OfficialsManager() {
       } else {
         dispatch({
           type: "SET_CLEANUP_RESULT",
-          result: { ok: false, message: data.error ?? "Unknown error" },
+          result: { ok: false, message: apiErrorText(data, "Unknown error") },
         });
       }
     } catch {
@@ -335,7 +336,7 @@ export function OfficialsManager() {
                 disabled={state.loading}
                 className="rounded border border-primary/40 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
               >
-                Initialize All
+                Initialize all
               </button>
             )}
             {!state.status?.byOfficeType?.senate && (
@@ -344,7 +345,7 @@ export function OfficialsManager() {
                 disabled={state.loading}
                 className="rounded border border-card-border px-3 py-1.5 text-sm font-medium hover:bg-background disabled:opacity-50"
               >
-                Senate Only
+                Senate only
               </button>
             )}
             {!state.status?.byOfficeType?.house && (
@@ -353,7 +354,7 @@ export function OfficialsManager() {
                 disabled={state.loading}
                 className="rounded border border-card-border px-3 py-1.5 text-sm font-medium hover:bg-background disabled:opacity-50"
               >
-                House Only
+                House only
               </button>
             )}
             {(!state.status?.byOfficeType?.president ||
@@ -392,14 +393,14 @@ export function OfficialsManager() {
           {/* House Representative Form */}
           {state.showHouseForm && (
             <div className="mb-4 rounded-lg border border-card-border bg-background p-4">
-              <h3 className="mb-3 text-sm font-medium">Appoint House Representative</h3>
+              <h3 className="mb-3 text-sm font-medium">Appoint House representative</h3>
               <div className="flex flex-wrap gap-3">
                 <select
                   value={state.houseState}
                   onChange={(e) => dispatch({ type: "SET_HOUSE_STATE", state: e.target.value })}
                   className="rounded-lg border border-card-border bg-card px-3 py-2 text-sm"
                 >
-                  <option value="">Select State</option>
+                  <option value="">Select state</option>
                   {US_STATES.map((s) => (
                     <option key={s} value={s}>
                       {s}
@@ -423,7 +424,7 @@ export function OfficialsManager() {
                   onChange={(e) => dispatch({ type: "SET_HOUSE_CHARACTER", id: e.target.value })}
                   className="flex-1 rounded-lg border border-card-border bg-card px-3 py-2 text-sm"
                 >
-                  <option value="">Select Character</option>
+                  <option value="">Select character</option>
                   {state.characters
                     .filter((c) => !c.currentOffice)
                     .map((char) => (
@@ -478,7 +479,7 @@ export function OfficialsManager() {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="text-sm font-medium text-yellow-400">
-                    Remove Duplicate Officials
+                    Remove duplicate officials
                   </div>
                   <p className="mt-0.5 text-xs text-muted">
                     Deletes vacant placeholder rows for House/State Senate races and clears orphaned
@@ -504,14 +505,14 @@ export function OfficialsManager() {
                   disabled={state.loading}
                   className="shrink-0 rounded border border-yellow-500/40 bg-yellow-500/10 px-3 py-1.5 text-sm font-medium text-yellow-400 hover:bg-yellow-500/20 disabled:opacity-50"
                 >
-                  Run Cleanup
+                  Run cleanup
                 </button>
               </div>
 
               {/* Reset All Officials */}
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="flex-1">
-                  <div className="text-sm font-medium text-red-400">Reset All Officials</div>
+                  <div className="text-sm font-medium text-red-400">Reset all officials</div>
                   <p className="mt-0.5 text-xs text-muted">
                     Deletes every elected official and clears currentOffice on all characters and
                     NPPs. Elections are unaffected. Cannot be undone.
@@ -522,7 +523,7 @@ export function OfficialsManager() {
                   disabled={state.loading}
                   className="shrink-0 rounded border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-sm font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-50"
                 >
-                  Reset All
+                  Reset all
                 </button>
               </div>
             </div>
@@ -539,17 +540,17 @@ export function OfficialsManager() {
             </h3>
 
             <div className="mb-4">
-              <label className="mb-2 block text-sm font-medium">Select Character</label>
+              <label className="mb-2 block text-sm font-medium">Select character</label>
               <select
                 value={state.selectedCharacterId}
                 onChange={(e) => dispatch({ type: "SET_SELECTED_CHARACTER", id: e.target.value })}
                 className="w-full rounded-lg border border-card-border bg-background px-3 py-2"
               >
-                <option value="">-- Vacate Position --</option>
+                <option value="">-- Vacate position --</option>
                 {state.characters.map((char) => (
                   <option key={char._id} value={char._id}>
                     {char.name} ({char.party}) - {char.homeState}
-                    {char.currentOffice && " [Has Office]"}
+                    {char.currentOffice && " [Has office]"}
                   </option>
                 ))}
               </select>

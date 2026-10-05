@@ -9,7 +9,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdminOrApiKey } from "@/lib/api/requireAdminOrApiKey";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { runSeedDiagnostic } from "@/lib/admin/seedDiagnostic";
 
 const postSchema = z.object({
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       try {
         raw = JSON.parse(text);
       } catch {
-        return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+        return errorResponse(400, "Invalid JSON body");
       }
     }
     const parsed = postSchema.safeParse(raw);
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
       const first = parsed.error.issues[0];
       const path = first?.path?.join(".") || "body";
       const message = first ? `${path}: ${first.message}` : "Validation failed";
-      return NextResponse.json({ error: message }, { status: 400 });
+      return errorResponse(400, message);
     }
 
     const db = await getDb();

@@ -100,7 +100,7 @@ describe("POST /api/corporations/[id]/shares/consolidate", () => {
     const response = await runConsolidate({ corp, targetTotalShares: 1_000_000 });
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       error: "Cannot restructure shares while a shareholder vote is open",
     });
     expect(db.collectionMocks["corporations"]).toBeUndefined();

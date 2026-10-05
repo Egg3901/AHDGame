@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useMemo } from "react";
 import { Button, Slider, useDialogA11y } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -118,7 +120,7 @@ export default function ShareIssuanceModal({
         });
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error ?? "Failed to issue shares");
+          setError(apiErrorText(data, "Failed to issue shares"));
           return;
         }
         if (typeof data.underwritingFeeLocal === "number") {
@@ -136,7 +138,7 @@ export default function ShareIssuanceModal({
         });
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error ?? "Failed to purchase shares");
+          setError(apiErrorText(data, "Failed to purchase shares"));
           return;
         }
       }
@@ -188,7 +190,7 @@ export default function ShareIssuanceModal({
         <div className="flex items-start justify-between border-b border-card-border px-6 py-4">
           <div>
             <h2 id={titleId} className="text-base font-semibold text-foreground">
-              Issue Shares
+              Issue shares
             </h2>
             <p className="mt-0.5 text-sm text-muted">
               {corporation.name}
@@ -233,7 +235,7 @@ export default function ShareIssuanceModal({
                   : "bg-card-elevated text-muted hover:text-foreground",
               ].join(" ")}
             >
-              To Public Float
+              To public float
             </button>
             <button
               type="button"
@@ -248,7 +250,7 @@ export default function ShareIssuanceModal({
                   : "bg-card-elevated text-muted hover:text-foreground",
               ].join(" ")}
             >
-              CEO Purchase
+              CEO purchase
             </button>
           </div>
           <p className="mt-2 text-xs text-muted">
@@ -445,7 +447,7 @@ export default function ShareIssuanceModal({
             </div>
           )}
 
-          {error && <p className="text-xs text-error">{error}</p>}
+          <InlineError error={error} className="text-xs text-error" />
           {resultMessage && (
             <p role="status" className="text-xs text-success">
               {resultMessage}
@@ -461,7 +463,7 @@ export default function ShareIssuanceModal({
               shareholder vote.
             </p>
           )}
-          {voteError && <p className="text-xs text-error">{voteError}</p>}
+          <InlineError error={voteError} className="text-xs text-error" />
           <div className="flex items-center justify-end gap-3">
             <Button variant="ghost" onClick={onClose} className="text-sm">
               Cancel
@@ -486,7 +488,7 @@ export default function ShareIssuanceModal({
               >
                 {mode === "public"
                   ? `Issue ${newSharesToIssue.toLocaleString("en-US")} Shares`
-                  : "Purchase at Premium"}
+                  : "Purchase at premium"}
               </Button>
             )}
           </div>

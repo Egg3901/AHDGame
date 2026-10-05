@@ -109,7 +109,7 @@ export default function CharacterPortfolioPage() {
               href={`/character/${characterId}`}
               className="mt-4 inline-block text-primary hover:underline"
             >
-              Back to Profile
+              Back to profile
             </Link>
           </div>
         </main>
@@ -132,9 +132,7 @@ export default function CharacterPortfolioPage() {
                   <p className="text-muted">Investment holdings and assets</p>
                 </div>
                 <div className="flex flex-col items-end">
-                  <span className="text-[10px] uppercase tracking-widest text-muted font-bold">
-                    Total Net Worth
-                  </span>
+                  <span className="text-body-sm font-medium text-muted">Total net worth</span>
                   <span className="text-3xl font-bold text-foreground tabular-nums tracking-tight">
                     {formatAmount(combinedTotal)}
                   </span>
@@ -146,33 +144,29 @@ export default function CharacterPortfolioPage() {
                 stocks + bonds + cash on hand - loans. */}
             <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-card-border">
               <div className="p-6">
-                <span className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-1">
-                  Stock Holdings
+                <span className="block text-body-sm font-medium text-muted mb-1">
+                  Stock holdings
                 </span>
                 <span className="block text-xl font-bold text-foreground tabular-nums">
                   {formatAmount(totalValue)}
                 </span>
               </div>
               <div className="p-6">
-                <span className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-1">
-                  Bond Holdings
+                <span className="block text-body-sm font-medium text-muted mb-1">
+                  Bond holdings
                 </span>
                 <span className="block text-xl font-bold text-foreground tabular-nums">
                   {formatAmount(totalBondValue)}
                 </span>
               </div>
               <div className="p-6">
-                <span className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-1">
-                  Cash on Hand
-                </span>
+                <span className="block text-body-sm font-medium text-muted mb-1">Cash on hand</span>
                 <span className="block text-xl font-bold text-foreground tabular-nums">
                   {formatAmount(cashOnHand)}
                 </span>
               </div>
               <div className="p-6">
-                <span className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-1">
-                  Loans
-                </span>
+                <span className="block text-body-sm font-medium text-muted mb-1">Loans</span>
                 <span
                   className={`block text-xl font-bold tabular-nums ${
                     locDebtValue > 0 ? "text-error" : "text-foreground"
@@ -182,9 +176,7 @@ export default function CharacterPortfolioPage() {
                 </span>
               </div>
               <div className="p-6">
-                <span className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-1">
-                  Bond Income
-                </span>
+                <span className="block text-body-sm font-medium text-muted mb-1">Bond income</span>
                 <span className="block text-xl font-bold text-success tabular-nums">
                   +{formatAmount(totalBondIncomePerTurn)}/turn
                 </span>
@@ -198,7 +190,7 @@ export default function CharacterPortfolioPage() {
           <div className="rounded-xl border border-card-border bg-card p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-sm font-semibold text-foreground">Portfolio Value Over Time</h2>
+                <h2 className="text-sm font-semibold text-foreground">Portfolio value over time</h2>
                 <p className="text-xs text-muted">
                   {chartView === "total"
                     ? seriesView === "total"

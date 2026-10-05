@@ -9,6 +9,7 @@ import {
   BlendProse,
   BlendSubPanel,
 } from "@/components/blend/BlendControls";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface RunningMateSurrogatePanelProps {
   electionId: string;
@@ -61,7 +62,7 @@ export function RunningMateSurrogatePanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setMessage(data.error || "Could not set the campaign state");
+        setMessage(apiErrorText(data, "Could not set the campaign state"));
         return;
       }
       setMessage(data.message || `Now campaigning in ${target}`);

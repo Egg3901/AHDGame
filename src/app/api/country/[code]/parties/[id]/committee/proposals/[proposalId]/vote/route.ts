@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
@@ -24,13 +24,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId, proposalId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
     if (authResult.user.isBanned) {
-      return NextResponse.json({ error: "Account is banned" }, { status: 403 });
+      return errorResponse(403, "Account is banned");
     }
     const { user } = authResult;
 
@@ -39,21 +39,21 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
 
     let proposalObjectId: ObjectId;
     try {
       proposalObjectId = new ObjectId(proposalId);
     } catch {
-      return NextResponse.json({ error: "Invalid proposal ID" }, { status: 400 });
+      return errorResponse(400, "Invalid proposal ID");
     }
 
     const proposal = await db
       .collection<CommitteeProposal>("committeeProposals")
       .findOne({ _id: proposalObjectId });
-    if (!proposal) return NextResponse.json({ error: "Proposal not found" }, { status: 404 });
+    if (!proposal) return errorResponse(404, "Proposal not found");
     if (proposal.status !== "open") {
-      return NextResponse.json({ error: "This proposal is no longer open" }, { status: 400 });
+      return errorResponse(400, "This proposal is no longer open");
     }
 
     // Determine which side the voter is on based on the route party [id]
@@ -68,18 +68,15 @@ export async function POST(request: Request, { params }: RouteParams) {
     } else if (proposal.type === "merge" && partyObjectIdStr === targetPartyStr) {
       side = "target";
     } else {
-      return NextResponse.json(
-        { error: "Your party is not party to this proposal" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Your party is not party to this proposal");
     }
 
     const characterId = user.character._id;
     const eligibleVoterSet = getEligibleVoterSet(party);
     if (!eligibleVoterSet.has(characterId.toString())) {
-      return NextResponse.json(
-        { error: "Only committee members and national leadership may vote on proposals" },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only committee members and national leadership may vote on proposals"
       );
     }
 
@@ -90,12 +87,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       proposal.removeOfficeHolder?.targetCharacterId &&
       characterId.equals(proposal.removeOfficeHolder.targetCharacterId)
     ) {
-      return NextResponse.json({ error: "You cannot vote on your own removal" }, { status: 403 });
+      return errorResponse(403, "You cannot vote on your own removal");
     }
 
     const parsed = await parseJsonBody(request, castProposalVoteSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { vote } = parsed.data;
 

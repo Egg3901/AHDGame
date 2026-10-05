@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { primaryMetrics } from "@/lib/resetMetrics/catalog";
 import { readResetMetricBoard } from "@/lib/resetMetrics/readBoard";
@@ -42,22 +42,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const { code } = await params;
     const countryId = code.toUpperCase();
     if (countryId !== "US" && countryId !== "UK" && countryId !== "JP") {
-      return NextResponse.json(
-        { error: "V2 metrics are not available for this country" },
-        { status: 404 }
-      );
+      return errorResponse(404, "V2 metrics are not available for this country");
     }
     const regionId = new URL(request.url).searchParams.get("region") ?? undefined;
     const db = await getDb();
     const board = await readResetMetricBoard(db, countryId, regionId);
     if (board.status === "not_enabled") {
-      return NextResponse.json({ error: "V2 metrics are not enabled" }, { status: 409 });
+      return errorResponse(409, "V2 metrics are not enabled");
     }
     if (board.status !== "ready") {
-      return NextResponse.json(
-        { error: "V2 metrics board is unavailable", reason: board.status },
-        { status: 503, headers: { "Cache-Control": "no-store" } }
-      );
+      return errorResponse(503, "V2 metrics board is unavailable", {
+        extra: { reason: board.status },
+        headers: { "Cache-Control": "no-store" },
+      });
     }
     const [
       observations,
@@ -129,10 +126,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
       ),
     ]);
     if (!observations) {
-      return NextResponse.json(
-        { error: "V2 national metric rollup is unavailable", reason: "regional_rollup" },
-        { status: 503, headers: { "Cache-Control": "no-store" } }
-      );
+      return errorResponse(503, "V2 national metric rollup is unavailable", {
+        extra: { reason: "regional_rollup" },
+        headers: { "Cache-Control": "no-store" },
+      });
     }
     const temporaryEffects = new Map(
       mergeApplicableActionEffects(

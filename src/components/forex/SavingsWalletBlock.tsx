@@ -6,6 +6,7 @@ import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/contexts/ToastContext";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 function formatBalance(amount: number, currency: CurrencyCode): string {
   const symbol = CURRENCY_SYMBOLS[currency] ?? currency;
@@ -54,7 +55,7 @@ export function SavingsWalletBlock({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        showToast(data.error ?? "Request failed", "error");
+        showToast(apiErrorText(data, "Request failed"), "error");
         return;
       }
       showToast("Updated", "success");
@@ -98,16 +99,14 @@ export function SavingsWalletBlock({
     <div className="mt-3 space-y-2 rounded-lg border border-primary/15 bg-primary/[0.04] p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-primary">
-            Savings · {apyLabel}
-          </div>
+          <div className="text-body-sm font-medium text-primary">Savings · {apyLabel}</div>
           <div className="text-xs text-muted">
             Yield follows the displayed APY, including any central-bank deposit bonus. Interest
             accrues every turn; it is added to your savings balance every 12 turns.
           </div>
         </div>
         <div className="text-right">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-muted">Balance</div>
+          <div className="text-body-sm font-medium text-muted">Balance</div>
           <div className="text-sm font-bold tabular-nums text-foreground">
             {formatBalance(savingsBalance, currency)}
           </div>

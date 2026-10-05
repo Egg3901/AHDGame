@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { CentralBank, Corporation, CorporateSector } from "@/lib/db/types";
 import {
@@ -52,13 +52,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
 
     const parsed = await parseJsonBody(request, adjustGrowthSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { sectorId, direction } = parsed.data;
@@ -67,19 +67,19 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Get player's character and corporation
     const character = auth.user.character;
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const corporation = await db
       .collection<Corporation>("corporations")
       .findOne({ ceoId: character._id, ceoVacant: { $ne: true } });
     if (!corporation) {
-      return NextResponse.json({ error: "You don't own a corporation" }, { status: 400 });
+      return errorResponse(400, "You don't own a corporation");
     }
 
     // Find the sector
     if (!ObjectId.isValid(sectorId)) {
-      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+      return errorResponse(400, "Invalid sector ID");
     }
 
     const sector = await db.collection<CorporateSector>("corporateSectors").findOne({
@@ -88,7 +88,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       stateId,
     });
     if (!sector) {
-      return NextResponse.json({ error: "Sector not found or not yours" }, { status: 404 });
+      return errorResponse(404, "Sector not found or not yours");
     }
 
     // The growth slider is vestigial under plants: the corporation phase sets
@@ -101,12 +101,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // targetGrowthRate, but it converts its own judgement into build orders in
     // the same phase; it never pays this charge.)
     if (marketAtLeast(await getMarketSystemModeForDb(db), "plants")) {
-      return NextResponse.json(
-        {
-          error:
-            "Growth is set by building capacity now, not by this slider. Open the sector and use Build Capacity.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Growth is set by building capacity now, not by this slider. Open the sector and use Build Capacity."
       );
     }
 
@@ -122,22 +119,17 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (direction === "expand") {
       newGrowthRate = (sector.targetGrowthRate ?? 0) + 1;
       if (newGrowthRate > MAX_GROWTH_RATE) {
-        return NextResponse.json(
-          { error: `Growth rate cannot exceed ${MAX_GROWTH_RATE}%` },
-          { status: 400 }
-        );
+        return errorResponse(400, `Growth rate cannot exceed ${MAX_GROWTH_RATE}%`);
       }
       if (corporation.liquidCapital < adjustCost) {
-        return NextResponse.json(
-          {
-            error: insufficientCapitalMessage(
-              "Expanding",
-              adjustCost,
-              corporation.liquidCapital,
-              corpCurrencyCode
-            ),
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          insufficientCapitalMessage(
+            "Expanding",
+            adjustCost,
+            corporation.liquidCapital,
+            corpCurrencyCode
+          )
         );
       }
       // Deduct capital (corp's local currency)
@@ -150,10 +142,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     } else {
       newGrowthRate = (sector.targetGrowthRate ?? 0) - 1;
       if (newGrowthRate < MIN_GROWTH_RATE) {
-        return NextResponse.json(
-          { error: `Growth rate cannot go below ${MIN_GROWTH_RATE}%` },
-          { status: 400 }
-        );
+        return errorResponse(400, `Growth rate cannot go below ${MIN_GROWTH_RATE}%`);
       }
       // Return capital (corp's local currency)
       await db

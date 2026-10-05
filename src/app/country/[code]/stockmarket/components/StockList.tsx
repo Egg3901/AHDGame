@@ -16,7 +16,7 @@ import { finitePriceChange, isTradableListing } from "@/lib/stockExchange/listin
 export type PriceChangeTimeframe = "1h" | "24h" | "48h";
 
 const SORT_OPTIONS: { field: SortField; label: string }[] = [
-  { field: "marketCap", label: "Market Cap" },
+  { field: "marketCap", label: "Market cap" },
   { field: "sharePrice", label: "Price" },
   { field: "priceChange", label: "Change %" },
   { field: "income", label: "Income" },
@@ -211,7 +211,7 @@ export function StockList({
   /** Viewer share positions by corporation id (and sequential id). */
   owned?: Map<string, { shares: number; pnl: number | null }>;
 }) {
-  const { formatAmount, formatPrice } = useCurrency();
+  const { formatAmount, formatListingPrice } = useCurrency();
   const countryName = useCountryDisplayName();
   const [sortField, setSortField] = useState<SortField>("marketCap");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -432,10 +432,11 @@ export function StockList({
       </td>
       <td className="px-4 py-3 text-right">
         <div className="font-mono font-bold tabular-nums text-foreground">
-          {formatPrice(
-            listing.sharePriceAnchor ?? listing.sharePrice,
-            (listing.liquidCurrencyCode as CurrencyCode | undefined) ?? undefined
-          )}
+          {/* The listing-currency quote, the same figure the corporation
+              header and status bar print. Sorting still uses the anchor. */}
+          {listing.liquidCurrencyCode
+            ? formatListingPrice(listing.sharePrice, listing.liquidCurrencyCode as CurrencyCode)
+            : formatListingPrice(listing.sharePriceAnchor ?? listing.sharePrice)}
         </div>
       </td>
       <td className="px-4 py-3 text-right">
@@ -629,9 +630,7 @@ export function StockList({
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 w-full sm:w-auto">
-          <span className="text-xs font-semibold text-muted uppercase tracking-wider shrink-0">
-            Sort by:
-          </span>
+          <span className="text-body-sm font-medium text-muted shrink-0">Sort by:</span>
           {SORT_OPTIONS.map((opt) => (
             <button
               key={opt.field}
@@ -653,37 +652,35 @@ export function StockList({
           <table className="w-full text-left text-sm">
             <thead className="bg-card-elevated border-b border-card-border">
               <tr>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider w-[80px]">
-                  Ticker
-                </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider w-[40%]">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium w-[80px]">Ticker</th>
+                <th className="px-4 py-3 text-muted text-body-sm font-medium w-[40%]">
                   Corporation
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
-                  Share Price
-                  <Tooltip content="Current price per share on this exchange" />
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">
+                  Share price
+                  <Tooltip content="Price per share in the listing's own currency, as of the snapshot time shown under the market summary. The corporation page shows the live quote." />
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">
                   {MARKET_TIMEFRAMES[timeframe].label} Change
                   <Tooltip content="Percentage change in share price over the selected period" />
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">
-                  Market Cap
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden sm:table-cell">
+                  Market cap
                   <Tooltip content="Total market value — share price × total shares issued" />
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden md:table-cell">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden md:table-cell">
                   Revenue
                   <Tooltip content="Gross revenue earned per game day (24 turns)" />
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden md:table-cell">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden md:table-cell">
                   Income
                   <Tooltip content="Net income per game day (24 turns) after mandatory dividend distributions: operating income − corporate tax + bond coupon income − bond interest expense − dividends paid to shareholders. Matches the corporation page Income/Hr × 24." />
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden md:table-cell">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden md:table-cell">
                   Dividend
                   <Tooltip content="Dividend payout rate: percent of income the CEO distributes to shareholders each turn" />
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden lg:table-cell">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden lg:table-cell">
                   Float
                   <Tooltip content="Shares available for immediate purchase. Zero means no shares are on the open market." />
                 </th>

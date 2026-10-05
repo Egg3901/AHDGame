@@ -14,7 +14,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { CONGRESS_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolvePresidentialCountry } from "@/lib/executive/presidentialCountry";
@@ -46,7 +46,7 @@ async function requirePresident(
   if (!presidentOfficial?.characterId) {
     return {
       ok: false,
-      response: NextResponse.json({ error: "No President in office" }, { status: 400 }),
+      response: errorResponse(400, "No President in office"),
     };
   }
   const myCharacter = await db
@@ -55,10 +55,7 @@ async function requirePresident(
   if (!myCharacter || !presidentOfficial.characterId.equals(myCharacter._id)) {
     return {
       ok: false,
-      response: NextResponse.json(
-        { error: "Only the President can manage caretaker ministers" },
-        { status: 403 }
-      ),
+      response: errorResponse(403, "Only the President can manage caretaker ministers"),
     };
   }
   return { ok: true, characterId: myCharacter._id };
@@ -68,26 +65,17 @@ async function requirePresident(
 function ministerErrorResponse(error: CaretakerMinisterError): NextResponse {
   switch (error) {
     case "invalid-position":
-      return NextResponse.json({ error: "Invalid cabinet position." }, { status: 400 });
+      return errorResponse(400, "Invalid cabinet position.");
     case "head-of-gov-seat":
-      return NextResponse.json(
-        { error: "The head-of-government seat cannot be filled by a caretaker." },
-        { status: 400 }
-      );
+      return errorResponse(400, "The head-of-government seat cannot be filled by a caretaker.");
     case "npp-not-found":
-      return NextResponse.json({ error: "Caretaker not found." }, { status: 404 });
+      return errorResponse(404, "Caretaker not found.");
     case "npp-wrong-country":
-      return NextResponse.json(
-        { error: "That caretaker is not from this country." },
-        { status: 400 }
-      );
+      return errorResponse(400, "That caretaker is not from this country.");
     case "npp-retired":
-      return NextResponse.json({ error: "That caretaker is retired." }, { status: 400 });
+      return errorResponse(400, "That caretaker is retired.");
     case "npp-already-seated":
-      return NextResponse.json(
-        { error: "That caretaker already holds a cabinet seat." },
-        { status: 400 }
-      );
+      return errorResponse(400, "That caretaker already holds a cabinet seat.");
   }
 }
 
@@ -102,7 +90,7 @@ async function gate(
   if (!countryId) {
     return {
       ok: false,
-      response: NextResponse.json({ error: "Unknown country" }, { status: 400 }),
+      response: errorResponse(400, "Unknown country"),
     };
   }
   const db = await getDb();
@@ -111,10 +99,7 @@ async function gate(
   if (!(await nppAutonomyAtLeast(db, countryId, "v2"))) {
     return {
       ok: false,
-      response: NextResponse.json(
-        { error: "Caretaker ministers are not enabled in this country." },
-        { status: 403 }
-      ),
+      response: errorResponse(403, "Caretaker ministers are not enabled in this country."),
     };
   }
   return { ok: true, db, countryId, characterId: pres.characterId };
@@ -132,8 +117,7 @@ export async function POST(request: Request) {
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
 
     const parsed = await parseJsonBody(request, appointSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const gated = await gate(request, auth.user.userId);
     if (!gated.ok) return gated.response;
@@ -170,7 +154,7 @@ export async function DELETE(request: Request) {
 
     const positionId = new URL(request.url).searchParams.get("positionId");
     if (!positionId) {
-      return NextResponse.json({ error: "positionId required" }, { status: 400 });
+      return errorResponse(400, "positionId required");
     }
 
     const gated = await gate(request, auth.user.userId);
@@ -181,10 +165,7 @@ export async function DELETE(request: Request) {
       positionId,
     });
     if (!result.ok) {
-      return NextResponse.json(
-        { error: "That seat is not held by a caretaker minister." },
-        { status: 400 }
-      );
+      return errorResponse(400, "That seat is not held by a caretaker minister.");
     }
     return NextResponse.json({ success: true });
   } catch (error) {

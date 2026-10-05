@@ -114,7 +114,7 @@ describe("GET/PATCH /api/admin/config/freight-settlement", () => {
     const res = await PATCH(makePatchRequest({ mode: "active", intervention }));
 
     expect(res.status).toBe(409);
-    expect((await res.json()) as { error: string }).toEqual({
+    expect((await res.json()) as { error: string }).toMatchObject({
       error: "Freight settlement requires market system mode clearing or higher.",
     });
     expect(db.collectionMocks.gameConfig!.updateOne).not.toHaveBeenCalled();

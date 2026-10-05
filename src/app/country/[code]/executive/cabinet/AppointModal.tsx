@@ -103,7 +103,7 @@ export function AppointModal({
                   {isOnePartyState ? "Citizens of this country" : `Members of the ${chamberName}`}
                 </li>
                 <li>Not already in cabinet</li>
-                <li>Not the sitting Prime Minister</li>
+                <li>Not the sitting prime minister</li>
               </ul>
             </div>
           ) : (
@@ -176,7 +176,7 @@ export function AppointModal({
               disabled={!selectedCharacterId || loading || characters.length === 0}
               className="flex-1"
             >
-              {loading ? "Appointing..." : "Confirm Appointment"}
+              {loading ? "Appointing..." : "Confirm appointment"}
             </Button>
           </div>
         </div>

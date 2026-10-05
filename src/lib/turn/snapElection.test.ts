@@ -181,6 +181,63 @@ describe("triggerSnapElection", () => {
     expect(govUpdate[1].$set.lastSnapElectionTurn).toBe(100);
   });
 
+  it("freezes the approved mixed Shugiin rules and statutory capacity on new snap races", async () => {
+    const regions = ["HOK", "TOH", "KAN", "CHU", "KNS", "CGK", "SHI", "KYU"].map((_id) => ({
+      _id,
+    }));
+    setupMocks({
+      currentTurn: 100,
+      gameState: { preset: "1991-default" },
+      govDoc: {
+        _id: "JP",
+        countryId: "JP",
+        status: "formed",
+        pmCharacterId: new ObjectId(),
+      },
+      regions,
+      seats: regions.map(({ _id }) => ({ state: _id, totalSeats: 64 })),
+    });
+    db.collectionMocks["countryGameStates"] = {
+      ...db.collection("countryGameStates"),
+      findOne: vi.fn().mockResolvedValue({
+        _id: "JP",
+        jpShugiinElectoralMandate: {
+          law: "mixed-1994-v1",
+          passedTurn: 88,
+          billId: "bill-1994-reform",
+        },
+      }),
+    } as MockDb["collectionMocks"][string];
+
+    await triggerSnapElection(db as unknown as Db, "JP", new Date(), { reason: "pm-trigger" });
+
+    const inserted = db.collectionMocks["elections"]!.insertMany.mock.calls[0]?.[0] as Array<{
+      state: string;
+      totalSeats: number;
+      allocationMethod?: string;
+      japanShugiinRules?: {
+        ruleVersion: string;
+        districtSeats: number;
+        listSeats: number;
+        authorizedOnTurn?: number;
+        reformBillId?: string;
+      };
+    }>;
+    expect(inserted).toHaveLength(8);
+    expect(inserted.reduce((sum, election) => sum + election.totalSeats, 0)).toBe(500);
+    expect(inserted.every((election) => election.allocationMethod === undefined)).toBe(true);
+    expect(inserted.find((election) => election.state === "KAN")).toMatchObject({
+      totalSeats: 148,
+      japanShugiinRules: {
+        ruleVersion: "mixed-1994-v1",
+        districtSeats: 85,
+        listSeats: 63,
+        authorizedOnTurn: 88,
+        reformBillId: "bill-1994-reform",
+      },
+    });
+  });
+
   it("cancels in-progress regular elections by id and withdraws their candidate rows", async () => {
     await triggerSnapElection(db as unknown as Db, "JP", new Date(), { reason: "pm-trigger" });
 

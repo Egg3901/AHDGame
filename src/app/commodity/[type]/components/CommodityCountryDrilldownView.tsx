@@ -102,13 +102,13 @@ export default function CommodityCountryDrilldownView({
             >
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
-            <span className="hidden sm:inline">World Map</span>
+            <span className="hidden sm:inline">World map</span>
           </button>
           <div className="h-4 w-px bg-card-border" />
           <div className="flex items-center gap-2">
             <CountryFlag country={countryId} size="md" />
             <div>
-              <h3 className="text-sm font-bold text-foreground">{config.name} National Map</h3>
+              <h3 className="text-sm font-bold text-foreground">{config.name} National map</h3>
               <p className="text-[10px] text-muted">
                 {commodityLabel} by {config.regionLabelPlural.toLowerCase()} or regional price
               </p>
@@ -153,18 +153,16 @@ export default function CommodityCountryDrilldownView({
       {/* Regional data table */}
       <div className="border-t border-card-border">
         <div className="px-4 py-2 bg-card-elevated/30">
-          <h4 className="text-xs font-semibold text-muted uppercase tracking-wider">
-            {config.regionLabel} Breakdown
-          </h4>
+          <h4 className="text-body-sm font-medium text-muted">{config.regionLabel} Breakdown</h4>
         </div>
         <div className="max-h-64 overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-card">
-              <tr className="border-b border-card-border text-[10px] font-semibold text-muted uppercase tracking-wider">
+              <tr className="border-b border-card-border text-sm font-semibold text-foreground">
                 <th className="px-4 py-2 text-left">{config.regionLabel}</th>
                 {capacityByState && <th className="px-4 py-2 text-right">Deposits</th>}
                 <th className="px-4 py-2 text-right">
-                  {mode === "price" ? "Regional Price" : "Price"}
+                  {mode === "price" ? "Regional price" : "Price"}
                 </th>
                 <th className="px-4 py-2 text-right">Supply</th>
                 <th className="px-4 py-2 text-right">Demand</th>

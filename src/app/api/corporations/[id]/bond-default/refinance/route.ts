@@ -4,7 +4,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { parseJsonBody } from "@/lib/api/validate";
 import { bondDefaultRefinanceSchema } from "@/lib/api/schemas/bondDefault";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { BondMaturityTurns } from "@/lib/db/types";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getGameState } from "@/lib/gameState";
@@ -32,7 +32,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, bondDefaultRefinanceSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { maturityTurns } = parsed.data;
 
@@ -51,17 +51,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     if (corporation.countryOwnerId) {
-      return NextResponse.json(
-        { error: "Not available for national corporations" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Not available for national corporations");
     }
 
     if (corporation.imfBailoutActive) {
-      return NextResponse.json(
-        { error: "IMF restructuring is active — bond refinance is not available." },
-        { status: 400 }
-      );
+      return errorResponse(400, "IMF restructuring is active — bond refinance is not available.");
     }
 
     // Cap lifetime refinances to prevent default → refi cash-extraction loops.
@@ -70,11 +64,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // lib re-enforces the same cap defensively.
     const refiCount = corporation.bondDefaultRefinanceCount ?? 0;
     if (refiCount >= MAX_BOND_DEFAULT_REFINANCES) {
-      return NextResponse.json(
-        {
-          error: `Refinance limit reached. A corporation can refinance defaulted debt at most ${MAX_BOND_DEFAULT_REFINANCES} times. Dissolution is the only remaining option for the defaulted bonds.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Refinance limit reached. A corporation can refinance defaulted debt at most ${MAX_BOND_DEFAULT_REFINANCES} times. Dissolution is the only remaining option for the defaulted bonds.`
       );
     }
 
@@ -86,10 +78,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const gameState = await getGameState();
     const currentTurn = gameState?.currentTurn ?? 0;
     if (currentTurn <= 0) {
-      return NextResponse.json(
-        { error: "Game state unavailable; refinance cannot be processed." },
-        { status: 503 }
-      );
+      return errorResponse(503, "Game state unavailable; refinance cannot be processed.");
     }
 
     const now = new Date();
@@ -112,7 +101,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           : result.reason === "Refinance limit reached"
             ? `Refinance limit reached. A corporation can refinance defaulted debt at most ${MAX_BOND_DEFAULT_REFINANCES} times. Dissolution is the only remaining option for the defaulted bonds.`
             : "Cannot refinance within debt limits. The defaulted principal exceeds the 2× equity issuance cap (or falls below the minimum issuance size).";
-      return NextResponse.json({ error }, { status });
+      return errorResponse(status, error);
     }
 
     return NextResponse.json({

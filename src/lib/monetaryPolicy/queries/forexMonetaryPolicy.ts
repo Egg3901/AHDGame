@@ -1,6 +1,11 @@
+/**
+ * Monetary policy views list the active scenario's currencies and central banks.
+ * loadForexMonetaryPolicy includes transition economies when their books exist.
+ */
+import { getPresetMonetaryScope } from "../presetMonetaryScope";
 import type { Db } from "mongodb";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { FOREX_ACTIVE_COUNTRIES, getSeedCurrencyCode } from "@/lib/constants/currencies";
+import { getSeedCurrencyCode } from "@/lib/constants/currencies";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import type { CentralBank, TurnSnapshot } from "@/lib/db/types";
 
@@ -12,10 +17,11 @@ export async function loadForexMonetaryPolicy(params: { db: Db }) {
   }
   // Preset-aware labels: 2027 euro members list EUR. One route-path read.
   const preset = await getGameStatePresetOrDefault(db);
+  const activeCountries = getPresetMonetaryScope(preset).forexCountries;
 
   const banks = await db
     .collection<CentralBank>("centralBanks")
-    .find({ countryId: { $in: FOREX_ACTIVE_COUNTRIES } })
+    .find({ countryId: { $in: activeCountries } })
     .project({
       countryId: 1,
       primeRate: 1,
@@ -29,7 +35,7 @@ export async function loadForexMonetaryPolicy(params: { db: Db }) {
   return {
     ok: true as const,
     body: {
-      countries: FOREX_ACTIVE_COUNTRIES.map((countryId) => {
+      countries: activeCountries.map((countryId) => {
         const bank = byCountry.get(countryId);
         return {
           countryId,

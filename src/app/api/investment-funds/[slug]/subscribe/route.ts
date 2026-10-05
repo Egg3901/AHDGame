@@ -9,7 +9,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { parseJsonBody } from "@/lib/api/validate";
 import {
@@ -48,14 +48,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   let claimedOperationId: string | undefined;
   try {
     const auth = await getAuthUserWithCharacter();
-    if (!auth) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    if (!auth) return errorResponse(401, "Authentication required");
 
     const rateLimit = checkRateLimit(auth.userId, 10, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     const characterId = auth.character?._id;
     if (!characterId) {
-      return NextResponse.json({ error: "No active character" }, { status: 400 });
+      return errorResponse(400, "No active character");
     }
 
     const db = await getDb();
@@ -65,7 +65,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
     const parsed = await parseJsonBody(request, subscribeIndexFundSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { units, operationId, payCurrency } = parsed.data;
     claimedOperationId = operationId;
@@ -78,14 +78,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (command.response) return command.response;
     const execute = async () => {
       if (!(await isIndexFundsEnabled())) {
-        return NextResponse.json({ error: INDEX_FUNDS_DISABLED_MESSAGE }, { status: 403 });
+        return errorResponse(403, INDEX_FUNDS_DISABLED_MESSAGE);
       }
       if (!(await isIndexFundsFullMode())) {
-        return NextResponse.json({ error: INDEX_FUNDS_PARTIAL_MESSAGE }, { status: 403 });
+        return errorResponse(403, INDEX_FUNDS_PARTIAL_MESSAGE);
       }
 
       if (fund.status !== "active") {
-        return NextResponse.json({ error: "Fund is not accepting subscriptions" }, { status: 400 });
+        return errorResponse(400, "Fund is not accepting subscriptions");
       }
 
       const quote = quoteIndexFundSubscription(fund.quotedNav, units);
@@ -107,10 +107,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       if (forexEnabled) {
         const fxResult = await loadCharacterFxRate(db, fundCurrency);
         if (!fxResult.ok) {
-          return NextResponse.json(
-            { error: "Exchange rate unavailable, try again shortly" },
-            { status: 503 }
-          );
+          return errorResponse(503, "Exchange rate unavailable, try again shortly");
         }
         fundFxRate = fxResult.rate;
       }
@@ -139,7 +136,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             forexEnabled,
           });
           if (!convertResult.success) {
-            return NextResponse.json({ error: convertResult.error }, { status: 400 });
+            return errorResponse(400, convertResult.error);
           }
           subscribeSpreadCharged = convertResult.spreadCharged;
         } else {
@@ -151,7 +148,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
             forexEnabled,
           });
           if (convertResult.needed && !convertResult.success) {
-            return NextResponse.json({ error: convertResult.error }, { status: 400 });
+            return errorResponse(400, convertResult.error);
           }
           subscribeSpreadCharged = convertResult.spreadCharged;
         }
@@ -336,14 +333,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         );
 
         if (debitError) {
-          return NextResponse.json(
-            {
-              error:
-                debitError === "Insufficient funds"
-                  ? `Insufficient funds. Need ${totalCostAnchor.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${fundCurrency}.`
-                  : debitError,
-            },
-            { status: 400 }
+          return errorResponse(
+            400,
+            debitError === "Insufficient funds"
+              ? `Insufficient funds. Need ${totalCostAnchor.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${fundCurrency}.`
+              : debitError
           );
         }
 

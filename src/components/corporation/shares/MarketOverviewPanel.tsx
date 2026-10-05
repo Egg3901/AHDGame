@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { CorporationDetail, ShareholderInfo, VoteTally } from "../CorporationPageTypes";
@@ -163,7 +164,7 @@ export default function MarketOverviewPanel({
         refreshTallies();
         onRefresh();
       } else {
-        setActionError(data.error || "Failed to cast vote");
+        setActionError(apiErrorText(data, "Failed to cast vote"));
       }
     } catch {
       setActionError("Network error");
@@ -185,7 +186,7 @@ export default function MarketOverviewPanel({
         refreshTallies();
         onRefresh();
       } else {
-        setActionError(data.error || "Failed to withdraw vote");
+        setActionError(apiErrorText(data, "Failed to withdraw vote"));
       }
     } catch {
       setActionError("Network error");

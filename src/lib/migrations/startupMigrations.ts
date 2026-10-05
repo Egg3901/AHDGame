@@ -16,6 +16,7 @@ import { migration as constructionServiceLeaseIndex } from "./entries/2026-10-04
 import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-media-product-projects-v1-index";
 import { migration as manufacturingProductProjectsV2Index } from "./entries/2026-10-04-manufacturing-product-projects-v2-index";
 import { migration as underwritingRecoveryIndexes } from "./entries/2026-10-04-underwriting-recovery-indexes";
+import { migration as advertisingAgreementIndexes } from "./entries/2026-10-05-advertising-agreement-indexes";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -60,6 +61,7 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   manufacturingProductProjectsV2Index,
   // Original funding leases must remain discoverable even when underwriting is disabled.
   underwritingRecoveryIndexes,
+  advertisingAgreementIndexes,
 ];
 
 /** Index metadata can disappear on reset even when migration markers survive. */

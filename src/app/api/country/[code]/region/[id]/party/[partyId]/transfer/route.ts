@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { type ClientSession, type MongoServerError, type UpdateFilter } from "mongodb";
 import { getDb, getMongoClient } from "@/lib/mongodb";
 import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
-import { badRequest, handleRouteError, notFound } from "@/lib/api/errors";
+import { badRequest, handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { statePartyTransferSchema } from "@/lib/api/schemas/settings";
@@ -29,7 +29,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
 
@@ -43,7 +43,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, statePartyTransferSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { amount } = parsed.data;
 
@@ -52,13 +52,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Verify state exists
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     // Verify party exists
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const partyKey = String(party.sequentialId);
@@ -68,7 +68,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .findOne({ _id: statePartyKey });
 
     if (!stateParty) {
-      return NextResponse.json({ error: "State party not found" }, { status: 404 });
+      return errorResponse(404, "State party not found");
     }
 
     // Check authorization: admin, national chair, state chair, vice chair, or state treasurer
@@ -79,30 +79,27 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isStateTreasurer = stateParty.treasurerId?.equals(authUser.character._id);
 
     if (!isAdmin && !isNationalChair && !isStateChair && !isStateViceChair && !isStateTreasurer) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the state chair, vice chair, treasurer, national chair, or an admin can transfer funds",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the state chair, vice chair, treasurer, national chair, or an admin can transfer funds"
       );
     }
 
     // Defense-in-depth: even if the actor's _id matches a chair/treasurer
     // record, refuse if their character somehow belongs to another country.
     if (!isAdmin && !isSameCountry(authUser.character, { countryId })) {
-      return NextResponse.json(
-        { error: "You must be a citizen of this country to transfer state party funds" },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "You must be a citizen of this country to transfer state party funds"
       );
     }
 
     // Check treasury balance
     const treasury = stateParty.treasury ?? 0;
     if (amount > treasury) {
-      return NextResponse.json(
-        { error: `Insufficient treasury balance. Available: $${treasury.toLocaleString()}` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient treasury balance. Available: $${treasury.toLocaleString()}`
       );
     }
     const budgetCollection = await getPartyBudgetCollection();
@@ -154,9 +151,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         .updateOne({ _id: statePartyKey, treasury: { $gte: amount } }, statePartyDebit);
 
       if (debitResult.matchedCount === 0) {
-        return NextResponse.json(
-          { error: `Insufficient treasury balance. Available: $${treasury.toLocaleString()}` },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Insufficient treasury balance. Available: $${treasury.toLocaleString()}`
         );
       }
 
@@ -210,7 +207,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
       if (creditResult.matchedCount === 0) {
         await refundDebit("recipient not found");
-        return NextResponse.json({ error: "Party not found" }, { status: 404 });
+        return errorResponse(404, "Party not found");
       }
 
       return null;

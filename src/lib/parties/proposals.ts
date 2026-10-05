@@ -1,4 +1,4 @@
-import type { Db, ObjectId } from "mongodb";
+import type { AnyBulkWriteOperation, Db, ObjectId } from "mongodb";
 import type {
   CommitteeProposal,
   CommitteeProposalVote,
@@ -640,6 +640,7 @@ export async function processMergeProposal(
     rowsByState.set(row.stateId, rows);
   }
 
+  const targetOrgWrites: AnyBulkWriteOperation<StatePartyOrg>[] = [];
   for (const org of proposingOrgs) {
     const stateRows = rowsByState.get(org.stateId) ?? [org];
     const resolved = deriveOrganizationShares(
@@ -662,39 +663,54 @@ export async function processMergeProposal(
       resolved.rows.find((row) => row.id === (target?._id ?? targetOrgId))?.organizationUnits ?? 0;
 
     if (target) {
-      await statePartyOrgCol.updateOne({ _id: targetOrgId }, [
-        {
-          $set: {
-            organizationUnits: {
-              $add: [{ $max: [{ $ifNull: ["$organizationUnits", targetUnits] }, 0] }, bonusUnits],
+      targetOrgWrites.push({
+        updateOne: {
+          filter: { _id: targetOrgId },
+          update: [
+            {
+              $set: {
+                organizationUnits: {
+                  $add: [
+                    { $max: [{ $ifNull: ["$organizationUnits", targetUnits] }, 0] },
+                    bonusUnits,
+                  ],
+                },
+                lastOrganizationBuildTurn: currentTurn,
+                hasPresence: true,
+                updatedAt: now,
+              },
             },
+          ],
+        },
+      });
+    } else {
+      // Create minimal state org record for target in this state
+      targetOrgWrites.push({
+        insertOne: {
+          document: {
+            _id: targetOrgId,
+            countryId,
+            stateId: org.stateId,
+            partyId: targetStrId,
+            organization: 0,
+            organizationUnits: bonusUnits,
             lastOrganizationBuildTurn: currentTurn,
+            chairId: null,
+            viceChairId: null,
+            treasurerId: null,
+            treasury: 0,
+            stateTaxRate: 0,
+            politicalStrength: 0,
             hasPresence: true,
+            createdAt: now,
             updatedAt: now,
           },
         },
-      ]);
-    } else {
-      // Create minimal state org record for target in this state
-      await statePartyOrgCol.insertOne({
-        _id: targetOrgId,
-        countryId,
-        stateId: org.stateId,
-        partyId: targetStrId,
-        organization: 0,
-        organizationUnits: bonusUnits,
-        lastOrganizationBuildTurn: currentTurn,
-        chairId: null,
-        viceChairId: null,
-        treasurerId: null,
-        treasury: 0,
-        stateTaxRate: 0,
-        politicalStrength: 0,
-        hasPresence: true,
-        createdAt: now,
-        updatedAt: now,
       });
     }
+  }
+  if (targetOrgWrites.length > 0) {
+    await statePartyOrgCol.bulkWrite(targetOrgWrites, { ordered: false });
   }
 
   // 4b. Wipe the absorbed party's state footprint. The target kept 50% of each

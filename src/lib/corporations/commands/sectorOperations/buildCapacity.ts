@@ -12,7 +12,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type {
   Character,
@@ -215,7 +215,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     const { id, sectorId } = await params;
     const parsed = await parseJsonBody(request, buildCapacitySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
 
@@ -226,10 +226,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     // Plants gate. Same read shape as setSectorPricing's clearing gate.
     const mode = await getMarketSystemMode();
     if (!isMarketSystemMode(mode) || !marketAtLeast(mode, "plants")) {
-      return NextResponse.json(
-        { error: "Capacity building is not enabled in this world" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Capacity building is not enabled in this world");
     }
 
     const resolved = await resolveCorporation(db, id);
@@ -240,21 +237,21 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     if (corporation.ceoType === "npp" && body.action === "build") {
-      return NextResponse.json(
-        { error: "Resume player control before building capacity for this corporation" },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Resume player control before building capacity for this corporation"
       );
     }
 
     if (!ObjectId.isValid(sectorId)) {
-      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+      return errorResponse(400, "Invalid sector ID");
     }
     const sector = await db.collection<CorporateSector>("corporateSectors").findOne({
       _id: new ObjectId(sectorId),
       corporationId: corporation._id,
     });
     if (!sector) {
-      return NextResponse.json({ error: "Sector not found" }, { status: 404 });
+      return errorResponse(404, "Sector not found");
     }
 
     if (body.action === "withdraw_financing") {
@@ -266,7 +263,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
         !ObjectId.isValid(claim.bankId) ||
         !ObjectId.isValid(claim.loanId)
       )
-        return NextResponse.json({ error: "That construction request changed" }, { status: 409 });
+        return errorResponse(409, "That construction request changed");
       const result = await rejectConstructionFinance(
         db,
         new ObjectId(claim.bankId),
@@ -276,7 +273,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       );
       return result.ok
         ? NextResponse.json({ success: true, message: "Unfunded construction request withdrawn" })
-        : NextResponse.json({ error: result.error }, { status: 409 });
+        : errorResponse(409, result.error);
     }
 
     const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
@@ -297,11 +294,9 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       );
       if (retailCapacityExpansionPaused(transition, currentTurn)) {
         const remaining = retailDemandTransitionTurnsRemaining(transition, currentTurn);
-        return NextResponse.json(
-          {
-            error: `New Retail capacity is paused while consumer demand is rebalanced (${remaining} turns remaining). Existing stores may still operate, mothball, or cancel builds.`,
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          `New Retail capacity is paused while consumer demand is rebalanced (${remaining} turns remaining). Existing stores may still operate, mothball, or cancel builds.`
         );
       }
     }
@@ -341,19 +336,16 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
         sector.constructionFinancing?.status === "funding") &&
         !(body.action === "build" && body.financing))
     )
-      return NextResponse.json(
-        { error: "Finish or withdraw the reserved construction request before changing capacity" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Finish or withdraw the reserved construction request before changing capacity"
       );
 
     // A sector under offer must not have its capacity gutted mid-sale: CIP and
     // the build queue feed the valuation a buyer is quoted, and cancelling every
     // order refunds 75% to the seller while delivering a hollowed-out asset.
     if (sector.forSale != null) {
-      return NextResponse.json(
-        { error: "Unlist this sector before changing its capacity." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Unlist this sector before changing its capacity.");
     }
 
     const queue: SectorBuildOrder[] = Array.isArray(sector.buildQueue) ? sector.buildQueue : [];
@@ -382,10 +374,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
         (sector.mothballed === true) === mothballed &&
         (sector.activeCapacityPercent ?? 100) === activeCapacityPercent
       ) {
-        return NextResponse.json(
-          { error: "Sector already has these capacity settings." },
-          { status: 400 }
-        );
+        return errorResponse(400, "Sector already has these capacity settings.");
       }
       const changed = await db
         .collection<CorporateSector>("corporateSectors")
@@ -394,10 +383,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
           { $set: { mothballed, activeCapacityPercent, updatedAt: now } }
         );
       if (changed.matchedCount === 0) {
-        return NextResponse.json(
-          { error: "Sector ownership or listing changed. Refresh and try again." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Sector ownership or listing changed. Refresh and try again.");
       }
       void logEconomicAction(db, {
         characterId: corporation.ceoId,
@@ -436,7 +422,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
           (body.constructionClaimId && claim.claimId !== body.constructionClaimId) ||
           (order?.constructionLoanId && order.constructionLoanId !== claim.loanId)
         )
-          return NextResponse.json({ error: "That financed build claim changed" }, { status: 409 });
+          return errorResponse(409, "That financed build claim changed");
         // A persisted pledge remains recoverable if admission of new finance is disabled.
         const cancelled = await cancelFinancedConstruction({
           db,
@@ -447,16 +433,13 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
         });
         return cancelled.ok
           ? NextResponse.json({ success: true, ...cancelled })
-          : NextResponse.json({ error: cancelled.error }, { status: 409 });
+          : errorResponse(409, cancelled.error);
       }
       if (!order) {
-        return NextResponse.json({ error: "No such build order" }, { status: 404 });
+        return errorResponse(404, "No such build order");
       }
       if (order.onlineTurn <= currentTurn) {
-        return NextResponse.json(
-          { error: "That build has already been delivered" },
-          { status: 400 }
-        );
+        return errorResponse(400, "That build has already been delivered");
       }
       const nextQueue = queue.filter((_, i) => i !== body.orderIndex);
       // Refund only the part still UNDER construction. A smooth order has
@@ -486,10 +469,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
         }
       );
       if (cancelWrite.modifiedCount !== 1) {
-        return NextResponse.json(
-          { error: "That build queue changed while you were cancelling. Try again." },
-          { status: 409 }
-        );
+        return errorResponse(409, "That build queue changed while you were cancelling. Try again.");
       }
       if (refundInCorpCapital > 0) {
         await db
@@ -633,6 +613,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       // the sector-type default price, which is the 326.9x rare-earth subsidy.
       strategyId: sector.strategyId ?? null,
       year: currentYear,
+      preset: resolvePresetIdFromGameState(gameState),
       eraUnitScale,
       marketSharePercent: marketSharePct,
       nationalMarketSharePercent: nationalMarketSharePct,
@@ -722,7 +703,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     if (body.financing) {
       const policy = await loadBankingPolicy(db);
       if (!policy.constructionFinance)
-        return NextResponse.json({ error: "Construction finance is not enabled" }, { status: 400 });
+        return errorResponse(400, "Construction finance is not enabled");
       const finance = await requestConstructionFinance({
         db,
         enabled: true,
@@ -744,7 +725,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
           growthUnits: units,
         },
       });
-      if (!finance.ok) return NextResponse.json({ error: finance.error }, { status: 409 });
+      if (!finance.ok) return errorResponse(409, finance.error);
       void observe("order", "placed");
       return NextResponse.json({
         success: true,
@@ -758,11 +739,9 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
 
     if (queue.length >= MAX_OUTSTANDING_BUILD_ORDERS) {
       void observe("order", "queue_full");
-      return NextResponse.json(
-        {
-          error: `This sector already has ${MAX_OUTSTANDING_BUILD_ORDERS} builds under way. Wait for one to finish or cancel it.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `This sector already has ${MAX_OUTSTANDING_BUILD_ORDERS} builds under way. Wait for one to finish or cancel it.`
       );
     }
 
@@ -770,16 +749,14 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     // different-currency country pays the reduced sector FX spread on top.
     if (corpCapitalAnchor < totalCostAnchor) {
       void observe("order", "insufficient_cash");
-      return NextResponse.json(
-        {
-          error: insufficientCapitalMessage(
-            "This build",
-            anchorToCorpLiquidCapital(totalCostAnchor, corporation, corpFxRate),
-            corporation.liquidCapital,
-            resolveCorpLiquidCurrencyCode(corporation)
-          ),
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        insufficientCapitalMessage(
+          "This build",
+          anchorToCorpLiquidCapital(totalCostAnchor, corporation, corpFxRate),
+          corporation.liquidCapital,
+          resolveCorpLiquidCurrencyCode(corporation)
+        )
       );
     }
 
@@ -798,16 +775,14 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       );
     if (debit.modifiedCount !== 1) {
       void observe("order", "insufficient_cash");
-      return NextResponse.json(
-        {
-          error: insufficientCapitalMessage(
-            "This build",
-            anchorToCorpLiquidCapital(totalCostAnchor, corporation, corpFxRate),
-            corporation.liquidCapital,
-            resolveCorpLiquidCurrencyCode(corporation)
-          ),
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        insufficientCapitalMessage(
+          "This build",
+          anchorToCorpLiquidCapital(totalCostAnchor, corporation, corpFxRate),
+          corporation.liquidCapital,
+          resolveCorpLiquidCurrencyCode(corporation)
+        )
       );
     }
     // Then queue the order under the same CAS the cancel path uses. If another
@@ -832,10 +807,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
           { $inc: { liquidCapital: costInCorpCapital }, $set: { updatedAt: now } }
         );
       void observe("order", "concurrent_change");
-      return NextResponse.json(
-        { error: "That build queue changed while you were ordering. Try again." },
-        { status: 409 }
-      );
+      return errorResponse(409, "That build queue changed while you were ordering. Try again.");
     }
     if (spread.spreadAnchor > 0 && spread.from && spread.to) {
       const feeInCorp = Math.round(

@@ -9,7 +9,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
@@ -36,18 +36,18 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, positionId, unitId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (DEFENSE_POSITION_BY_COUNTRY[countryId] !== positionId) {
-      return NextResponse.json({ error: "Not a defense cabinet position" }, { status: 404 });
+      return errorResponse(404, "Not a defense cabinet position");
     }
     if (!ObjectId.isValid(unitId)) {
-      return NextResponse.json({ error: "Invalid unit id" }, { status: 400 });
+      return errorResponse(400, "Invalid unit id");
     }
 
     const parsed = await parseJsonBody(request, assignSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { assignedGeneralId } = parsed.data;
 
@@ -56,7 +56,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       await getGameStateCollection(db)
     ).findOne({ _id: "current" }, { projection: { conflictsEnabled: 1 } });
     if (!gs?.conflictsEnabled) {
-      return NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 });
+      return errorResponse(404, "Conflicts subsystem disabled");
     }
 
     const member = await getCabinetMembersCollection(db).findOne({ countryId, positionId });
@@ -65,21 +65,18 @@ export async function POST(request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the defence minister may assign units." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the defence minister may assign units.");
     }
 
     // A unit may only be assigned to a commissioned general of THIS country.
     if (assignedGeneralId) {
       const commission = await getCharacterCommission(db, assignedGeneralId);
       if (!commission.commissioned) {
-        return NextResponse.json({ error: "Not a commissioned general" }, { status: 400 });
+        return errorResponse(400, "Not a commissioned general");
       }
       const generals = await listCountryGenerals(db, countryId);
       if (!generals.some((g) => g.id === assignedGeneralId)) {
-        return NextResponse.json({ error: "General not in this country" }, { status: 400 });
+        return errorResponse(400, "General not in this country");
       }
     }
 
@@ -92,7 +89,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       { projection: { posture: 1 } }
     );
     if (!existing) {
-      return NextResponse.json({ error: "Unit not found" }, { status: 404 });
+      return errorResponse(404, "Unit not found");
     }
     const set = assignmentSet(assignedGeneralId, conflictAssignments, existing.posture);
     const theaterId = set.theaterId;

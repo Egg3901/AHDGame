@@ -11,7 +11,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { createNotification } from "@/lib/notifications";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -37,19 +37,19 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const idQuery = corporationQueryFromParamId(id);
     if (!idQuery) {
-      return NextResponse.json({ error: "Invalid corporation ID" }, { status: 400 });
+      return errorResponse(400, "Invalid corporation ID");
     }
 
     const parsed = await parseJsonBody(request, appointSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     if (!ObjectId.isValid(parsed.data.nomineeCharacterId)) {
-      return NextResponse.json({ error: "Invalid nominee ID" }, { status: 400 });
+      return errorResponse(400, "Invalid nominee ID");
     }
     const nomineeId = new ObjectId(parsed.data.nomineeCharacterId);
 
@@ -58,44 +58,32 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Authority: seated finance minister, or head of government if vacant.
     const authorized = await assertTreasuryAuthority(db, countryId, auth.user.character._id);
     if (!authorized) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the Secretary of the Treasury (or equivalent), or the head of government if that seat is vacant, may appoint a National Corporation CEO.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the Secretary of the Treasury (or equivalent), or the head of government if that seat is vacant, may appoint a National Corporation CEO."
       );
     }
 
     const corps = db.collection<Corporation>("corporations");
     const target = await corps.findOne({ ...idQuery, countryOwnerId: countryId });
     if (!target || !isStateOwned(target)) {
-      return NextResponse.json(
-        { error: "National Corporation not found for this country." },
-        { status: 404 }
-      );
+      return errorResponse(404, "National Corporation not found for this country.");
     }
 
     // Nominee must exist and reside in this country (country-wide appointment).
     const nominee = await db.collection<Character>("characters").findOne({ _id: nomineeId });
     if (!nominee) {
-      return NextResponse.json({ error: "Nominee not found" }, { status: 404 });
+      return errorResponse(404, "Nominee not found");
     }
     if (nominee.countryId !== countryId) {
-      return NextResponse.json(
-        { error: "The nominee must reside in this country." },
-        { status: 400 }
-      );
+      return errorResponse(400, "The nominee must reside in this country.");
     }
 
     // Eligibility: nominee must not currently be CEO of any corporation
     // (player or national) — the same rule the accept route enforces.
     const existingCeo = await corps.findOne({ ceoId: nomineeId, ceoVacant: { $ne: true } });
     if (existingCeo) {
-      return NextResponse.json(
-        { error: `${nominee.name} is already CEO of ${existingCeo.name}.` },
-        { status: 409 }
-      );
+      return errorResponse(409, `${nominee.name} is already CEO of ${existingCeo.name}.`);
     }
 
     const now = new Date();

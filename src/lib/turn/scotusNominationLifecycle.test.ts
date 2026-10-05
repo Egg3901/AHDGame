@@ -162,4 +162,153 @@ describe("processScotusNominationLifecycle", { timeout: 60000 }, () => {
       expect.objectContaining({ title: "Supreme Court Nomination Rejected" })
     );
   });
+
+  it("publishes terminal court cards once and preloads optional portraits in two bounded reads", async () => {
+    const nominations = [
+      ...Array.from({ length: 3 }, (_, index) => ({
+        _id: new ObjectId(),
+        countryId: "US",
+        seatNumber: index + 1,
+        status: "active",
+        nomineeMode: "character",
+        nomineeCharacterId: new ObjectId(),
+        nomineeNppId: null,
+        nomineeName: `Character Nominee ${index + 1}`,
+        nomineeParty: "12",
+        votes: {},
+        votingEndsOnTurn: 90,
+      })),
+      ...Array.from({ length: 3 }, (_, index) => ({
+        _id: new ObjectId(),
+        countryId: "US",
+        seatNumber: index + 4,
+        status: "active",
+        nomineeMode: "npp",
+        nomineeCharacterId: null,
+        nomineeNppId: new ObjectId(),
+        nomineeName: `NPP Nominee ${index + 4}`,
+        nomineeParty: "12",
+        votes: {},
+        votingEndsOnTurn: 90,
+      })),
+    ];
+    db.collectionMocks.scotusNominations!.find.mockImplementation(
+      (query: Record<string, unknown>) => {
+        const ends = (query?.$or as Array<{ votingEndsOnTurn?: Record<string, unknown> }>)?.[0]
+          ?.votingEndsOnTurn;
+        const isExpiredQuery = !!ends && "$lte" in ends;
+        return { toArray: vi.fn().mockResolvedValue(isExpiredQuery ? nominations : []) } as never;
+      }
+    );
+    const characters = nominations
+      .filter((nom) => nom.nomineeCharacterId)
+      .map((nom) => ({
+        _id: nom.nomineeCharacterId!,
+        avatarUrl: `https://cdn.example/${nom.seatNumber}.png`,
+      }));
+    const npps = nominations
+      .filter((nom) => nom.nomineeNppId)
+      .map((nom) => ({
+        _id: nom.nomineeNppId!,
+        avatarUrl: `https://cdn.example/${nom.seatNumber}.png`,
+      }));
+    db.collectionMocks.characters!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue(characters),
+    } as never);
+    db.collectionMocks.npps!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue(npps),
+    } as never);
+
+    const { computeCabinetNominationTally } =
+      await import("@/lib/congress/governmentVoteBreakdown");
+    vi.mocked(computeCabinetNominationTally).mockResolvedValue({
+      votesFor: 40,
+      votesAgainst: 60,
+      votesAbstain: 2,
+    } as never);
+
+    const { processScotusNominationLifecycle } = await import("./scotusNominationLifecycle");
+    const result = await processScotusNominationLifecycle(new Date(0), db as unknown as Db);
+
+    expect(result.rejected).toBe(6);
+    expect(db.collectionMocks.characters!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.npps!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.characters!.find).toHaveBeenCalledWith(
+      { _id: { $in: nominations.slice(0, 3).map((nom) => nom.nomineeCharacterId) } },
+      { projection: { avatarUrl: 1 } }
+    );
+    expect(db.collectionMocks.npps!.find).toHaveBeenCalledWith(
+      { _id: { $in: nominations.slice(3).map((nom) => nom.nomineeNppId) } },
+      { projection: { avatarUrl: 1 } }
+    );
+    expect(db.collectionMocks.characters!.findOne).not.toHaveBeenCalledWith(expect.anything(), {
+      projection: { avatarUrl: 1 },
+    });
+    expect(db.collectionMocks.npps!.findOne).not.toHaveBeenCalled();
+
+    const { sendCountryGameEvent } = await import("@/lib/discordWebhooks");
+    expect(sendCountryGameEvent).toHaveBeenCalledTimes(6);
+    expect(sendCountryGameEvent).toHaveBeenCalledWith(
+      "US",
+      expect.objectContaining({
+        title: "Supreme Court Nomination Rejected",
+        description: expect.stringContaining("40–60"),
+        cardVoteSplit: [
+          expect.objectContaining({ votesFor: 40, votesAgainst: 60, votesAbstain: 2 }),
+        ],
+      })
+    );
+    for (const nomination of nominations) {
+      const avatar = `https://cdn.example/${nomination.seatNumber}.png`;
+      expect(sendCountryGameEvent).toHaveBeenCalledWith(
+        "US",
+        expect.objectContaining({
+          description: expect.stringContaining(nomination.nomineeName),
+          thumbnail: { url: avatar },
+        })
+      );
+    }
+  });
+
+  it("does not publish a terminal card when another worker already claimed rejection", async () => {
+    const nomination = {
+      _id: new ObjectId(),
+      countryId: "US",
+      seatNumber: 7,
+      status: "active",
+      nomineeMode: "character",
+      nomineeCharacterId: new ObjectId(),
+      nomineeNppId: null,
+      nomineeName: "Racing Nominee",
+      nomineeParty: "12",
+      votes: {},
+      votingEndsOnTurn: 90,
+    };
+    db.collectionMocks.scotusNominations!.find.mockImplementation(
+      (query: Record<string, unknown>) => {
+        const ends = (query?.$or as Array<{ votingEndsOnTurn?: Record<string, unknown> }>)?.[0]
+          ?.votingEndsOnTurn;
+        const isExpiredQuery = !!ends && "$lte" in ends;
+        return { toArray: vi.fn().mockResolvedValue(isExpiredQuery ? [nomination] : []) } as never;
+      }
+    );
+    db.collectionMocks.scotusNominations!.updateOne.mockResolvedValue({
+      modifiedCount: 0,
+      matchedCount: 1,
+    } as never);
+    const { computeCabinetNominationTally } =
+      await import("@/lib/congress/governmentVoteBreakdown");
+    vi.mocked(computeCabinetNominationTally).mockResolvedValue({
+      votesFor: 40,
+      votesAgainst: 60,
+      votesAbstain: 0,
+    } as never);
+
+    const { processScotusNominationLifecycle } = await import("./scotusNominationLifecycle");
+    const result = await processScotusNominationLifecycle(new Date(0), db as unknown as Db);
+
+    expect(result.rejected).toBe(0);
+    const { sendCountryGameEvent } = await import("@/lib/discordWebhooks");
+    expect(sendCountryGameEvent).not.toHaveBeenCalled();
+  });
 });

@@ -10,6 +10,7 @@ vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({
     formatAmount: (x: number) => `Amt${x}`,
     formatPrice: (x: number) => `Px${x}`,
+    formatListingPrice: (x: number, code?: string | null) => (code ? `${code}${x}` : `Px${x}`),
   }),
 }));
 
@@ -110,5 +111,24 @@ describe("StockList non-tradable state", () => {
 
     expect(document.body.textContent).not.toContain("NaN%");
     expect(screen.getByText("Non-tradable")).toBeDefined();
+  });
+});
+
+describe("StockList quote", () => {
+  it("prints the listing-currency price, not a converted anchor mirror", () => {
+    render(
+      <StockList
+        listings={[
+          { ...tradable, sharePrice: 72.84, sharePriceAnchor: 53.96, liquidCurrencyCode: "USD" },
+        ]}
+      />
+    );
+    expect(screen.getByText("USD72.84")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("53.96");
+  });
+
+  it("falls back to the anchor mirror for legacy rows without a currency", () => {
+    render(<StockList listings={[{ ...tradable, sharePrice: 9, sharePriceAnchor: 7 }]} />);
+    expect(screen.getByText("Px7")).toBeTruthy();
   });
 });

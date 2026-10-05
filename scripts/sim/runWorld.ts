@@ -121,6 +121,13 @@ interface SimRunDoc {
     expectedLastTurn: number;
     families: number;
   };
+  /** End-of-turn observed CPI/rate/scrutiny, separate from operational arrays. */
+  centralBankCredibilityTelemetry?: {
+    schemaVersion: 1;
+    expectedFirstTurn: number;
+    expectedLastTurn: number;
+    bankIds: string[];
+  };
   /** Effective-run actor-coverage manifest evaluated from live sandbox counts. */
   actorCoverage?: ActorCoverageManifest;
   preservePlayerRail?: boolean;
@@ -1236,8 +1243,56 @@ async function main() {
     );
     const { snapshotSectorInvestment, assertInvestmentTurnComplete } =
       await import("./sectorInvestmentSnapshot");
-    if (investmentSnapshots) await snapshotSectorInvestment(db, investmentSnapshots, startTurn);
+    const investmentSnapshotSource =
+      sourceCommit !== undefined && source.executedCommit
+        ? { runId, seed, codeVersion: source.executedCommit }
+        : undefined;
+    if (investmentSnapshots) {
+      await snapshotSectorInvestment(
+        db,
+        investmentSnapshots,
+        startTurn,
+        investmentSnapshotSource,
+        "opening-state"
+      );
+    }
     const targetTurn = startTurn + turns;
+    let captureCentralBankCredibilityTurn:
+      | (typeof import("./centralBankCredibilitySnapshot"))["captureCentralBankCredibilityTurn"]
+      | undefined;
+    let assertCredibilityPhasesCompleted:
+      | (typeof import("./centralBankCredibilitySnapshot"))["assertCredibilityPhasesCompleted"]
+      | undefined;
+    if (sourceCommit !== undefined && (simTurnPhaseMode ?? "full") === "full") {
+      if (!source.executedCommit) throw new Error("Credibility evidence requires a pinned source");
+      ({ captureCentralBankCredibilityTurn, assertCredibilityPhasesCompleted } =
+        await import("./centralBankCredibilitySnapshot"));
+      const credibilityBankIds = await captureCentralBankCredibilityTurn(db, {
+        runId,
+        turn: startTurn,
+        seed,
+        codeVersion: source.executedCommit,
+        observation:
+          !existing?.centralBankCredibilityTelemetry ||
+          existing.centralBankCredibilityTelemetry.expectedFirstTurn === startTurn
+            ? "opening-state"
+            : "completed-turn-state",
+      });
+      await simRuns.updateOne(
+        { _id: runId },
+        {
+          $set: {
+            centralBankCredibilityTelemetry: {
+              schemaVersion: 1,
+              expectedFirstTurn:
+                existing?.centralBankCredibilityTelemetry?.expectedFirstTurn ?? startTurn,
+              expectedLastTurn: targetTurn,
+              bankIds: existing?.centralBankCredibilityTelemetry?.bankIds ?? credibilityBankIds,
+            },
+          },
+        }
+      );
+    }
     // Retain complete crisis snapshots only for long, full, source-pinned 1991
     // sandbox runs. The collector itself also enforces the sandbox database.
     const crisisHorizonTelemetry =
@@ -1317,13 +1372,9 @@ async function main() {
       }
       skippedSinceMs = null;
       lastTurn = result.turn;
-      if (investmentSnapshots || captureCrisisHorizonTurn) {
+      if (investmentSnapshots || captureCrisisHorizonTurn || captureCentralBankCredibilityTurn) {
         if (isCrashRecovery)
-          throw new Error(
-            investmentSnapshots
-              ? "Crashed turn invalidates the balance comparison"
-              : "Crashed turn invalidates crisis horizon telemetry"
-          );
+          throw new Error("Crashed turn invalidates the sandbox evidence interval");
         const [checkedState, completedLog] = await Promise.all([
           db
             .collection<GameState>("gameState")
@@ -1336,7 +1387,23 @@ async function main() {
             ),
         ]);
         assertInvestmentTurnComplete(lastTurn, checkedState?.currentTurn, completedLog);
-        if (investmentSnapshots) await snapshotSectorInvestment(db, investmentSnapshots, lastTurn);
+        if (captureCentralBankCredibilityTurn) {
+          assertCredibilityPhasesCompleted!(completedLog);
+          await captureCentralBankCredibilityTurn(db, {
+            runId,
+            turn: lastTurn,
+            seed,
+            codeVersion: source.executedCommit!,
+          });
+        }
+        if (investmentSnapshots) {
+          await snapshotSectorInvestment(
+            db,
+            investmentSnapshots,
+            lastTurn,
+            investmentSnapshotSource
+          );
+        }
       }
 
       // Sim-harness-only snapshots (seats, corporations-by-country) for the

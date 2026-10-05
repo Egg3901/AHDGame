@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { Button, Input, Label } from "@/components/ui";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { CountryId } from "@/lib/constants/countries";
@@ -52,7 +53,7 @@ export function IssueSovereignDebtCard() {
       const json = await response.json();
       setResult({
         success: response.ok && json.success,
-        message: json.message ?? json.error ?? "Unknown response",
+        message: json.message ?? apiErrorText(json, "Unknown response"),
         result: json.result,
       });
     } catch {
@@ -65,7 +66,7 @@ export function IssueSovereignDebtCard() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Issue Sovereign Debt (Test)</h3>
+        <h3 className="font-semibold text-sm">Issue sovereign debt (test)</h3>
         <p className="mt-1 text-xs text-muted">
           Admin-only route for manually issuing a sovereign bond series. By default it issues one
           quarter of the current annual deficit and updates national debt immediately.
@@ -104,7 +105,7 @@ export function IssueSovereignDebtCard() {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="custom-face-value">Custom Face Value (optional)</Label>
+          <Label htmlFor="custom-face-value">Custom face value (optional)</Label>
           <Input
             id="custom-face-value"
             value={customFaceValue}
@@ -126,7 +127,7 @@ export function IssueSovereignDebtCard() {
       </label>
 
       <Button variant="primary" onClick={submit} isLoading={loading}>
-        Issue Sovereign Debt
+        Issue sovereign debt
       </Button>
 
       {result ? (
@@ -141,11 +142,11 @@ export function IssueSovereignDebtCard() {
           {result.result ? (
             <div className="mt-2 space-y-1 text-xs text-foreground">
               <p>Bond ID: {result.result.bondId}</p>
-              <p>Issue Amount: {result.result.issueAmount.toLocaleString("en-US")}</p>
-              <p>Coupon Rate: {result.result.couponRate.toFixed(2)}%</p>
-              <p>New Debt Principal: {result.result.newPrincipal.toLocaleString("en-US")}</p>
-              <p>Annual Debt Interest: {result.result.newDebtInterest.toLocaleString("en-US")}</p>
-              <p>Budget Balance: {result.result.newSurplus.toLocaleString("en-US")}</p>
+              <p>Issue amount: {result.result.issueAmount.toLocaleString("en-US")}</p>
+              <p>Coupon rate: {result.result.couponRate.toFixed(2)}%</p>
+              <p>New debt principal: {result.result.newPrincipal.toLocaleString("en-US")}</p>
+              <p>Annual debt interest: {result.result.newDebtInterest.toLocaleString("en-US")}</p>
+              <p>Budget balance: {result.result.newSurplus.toLocaleString("en-US")}</p>
             </div>
           ) : null}
         </div>

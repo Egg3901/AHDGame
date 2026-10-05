@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   applyElectoralLawProvision,
   clampRegistrationAccess,
@@ -8,6 +8,7 @@ import {
   registrationDriftMultiplier,
   REGISTRATION_ACCESS_MAX,
   REGISTRATION_ACCESS_MIN,
+  validateElectoralLawProvision,
 } from "./electoralLaws";
 import { resolveVotingAgeEligible } from "@/lib/constants/votingAge";
 
@@ -105,6 +106,81 @@ describe("electoral law", () => {
     expect(written).not.toHaveProperty("registrationAccessBias");
   });
 
+  it("allows the Japan transition proposal only in the 1991 world from 1994", () => {
+    const proposal = { type: "electoral_law", japanShugiinReform: true };
+    expect(
+      validateElectoralLawProvision(proposal, "social", {
+        countryId: "JP",
+        preset: "1991-default",
+        currentYear: 1994,
+      })
+    ).toEqual({ ok: true, provision: proposal });
+    for (const context of [
+      { countryId: "US", preset: "1991-default", currentYear: 1994 },
+      { countryId: "JP", preset: "2019-default", currentYear: 1994 },
+      { countryId: "JP", preset: "1991-default", currentYear: 1993 },
+      {},
+    ]) {
+      expect(validateElectoralLawProvision(proposal, "social", context).ok).toBe(false);
+    }
+  });
+
+  it("persists an approved Japan reform once and preserves its first bill identity", async () => {
+    let mandate: { law: string; passedTurn: number; billId: string } | undefined;
+    const updateCountry = async (
+      filter: { jpShugiinElectoralMandate?: { $exists: boolean } },
+      update: { $set: { jpShugiinElectoralMandate: typeof mandate } }
+    ) => {
+      if (!mandate && filter.jpShugiinElectoralMandate?.$exists === false) {
+        mandate = update.$set.jpShugiinElectoralMandate ?? undefined;
+        return { modifiedCount: 1 };
+      }
+      return { modifiedCount: 0 };
+    };
+    const db = {
+      collection: (name: string) =>
+        name === "gameState"
+          ? {
+              findOne: async () => ({ preset: "1991-default", currentYear: 1994 }),
+              updateOne: async () => ({ modifiedCount: 0 }),
+            }
+          : {
+              findOne: async () => ({ _id: "JP", jpShugiinElectoralMandate: mandate }),
+              updateOne: updateCountry,
+            },
+    } as never;
+    const provision = { type: "electoral_law" as const, japanShugiinReform: true as const };
+    await applyElectoralLawProvision(db, provision, "JP", { turn: 577, billId: "passed-1" });
+    await applyElectoralLawProvision(db, provision, "JP", { turn: 578, billId: "replay" });
+    expect(mandate).toEqual({ law: "mixed-1994-v1", passedTurn: 577, billId: "passed-1" });
+  });
+
+  it("rechecks the shared reform window at enactment before writing either law", async () => {
+    const updateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+    const db = {
+      collection: (name: string) =>
+        name === "gameState"
+          ? {
+              findOne: async () => ({ preset: "1991-default", currentYear: 1993 }),
+              updateOne,
+            }
+          : {
+              findOne: async () => ({ _id: "JP" }),
+              updateOne,
+            },
+    } as never;
+
+    await expect(
+      applyElectoralLawProvision(
+        db,
+        { type: "electoral_law", votingAge: 18, japanShugiinReform: true },
+        "JP",
+        { turn: 576, billId: "too-early" }
+      )
+    ).rejects.toThrow("unavailable before its 1994 decision window");
+    expect(updateOne).not.toHaveBeenCalled();
+  });
+
   it("reads back per country, and does not leak across countries", () => {
     const gs = { votingAgeEligibleByCountry: { JP: 18 } };
     expect(resolveVotingAgeEligible(gs, 1953, "JP")).toBe(18);
@@ -157,5 +233,6 @@ describe("electoral law", () => {
     );
     expect(describeElectoralLaw({ registrationAccess: -20 })).toBe("Registration access: -20");
     expect(describeElectoralLaw({})).toBe("No change");
+    expect(describeElectoralLaw({ japanShugiinReform: true })).toContain("300 districts + 200");
   });
 });

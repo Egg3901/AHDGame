@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { State, StateDemographics, DemographicCategory, GameState } from "@/lib/db/types";
 import type { StatePartyOrg } from "@/lib/db/types/statePartyOrg";
@@ -62,15 +62,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const countryId = code.toUpperCase() as CountryId;
     const config = COUNTRY_CONFIGS[countryId];
     if (!config) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+      return errorResponse(404, "Invalid country code");
     }
 
     // Currently only UK, CN, DE, and NG have map overview support
     if (countryId !== "UK" && countryId !== "CN" && countryId !== "DE" && countryId !== "NG") {
-      return NextResponse.json(
-        { error: `Map overview not yet supported for ${config.name}` },
-        { status: 404 }
-      );
+      return errorResponse(404, `Map overview not yet supported for ${config.name}`);
     }
 
     const db = await getDb();

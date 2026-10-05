@@ -1,7 +1,11 @@
 import type { Db } from "mongodb";
-import type { GameState } from "@/lib/db/types/gameState";
+import type { CountryGameState, GameState } from "@/lib/db/types/gameState";
 import type { ElectoralLawProvision } from "@/lib/db/types/legislation";
 import { ELECTORAL_LAW_BILL_CATEGORIES } from "@shared/constants/legislation";
+import {
+  approveJapanShugiinReform,
+  isJapanShugiinReformEligible,
+} from "@/lib/countries/jp/rules/shugiinElectoralLaw";
 
 /**
  * Enacted electoral law: the franchise, and how easily voters reach the rolls.
@@ -95,11 +99,60 @@ export async function applyElectoralLawProvision(
    * American voting age, and a UK registration law scales Brazil's Org→Reg
    * drift. Same per-country shape `incomeBandIndexByCountry` already uses.
    */
-  countryId: string
+  countryId: string,
+  enactment?: { turn: number; billId: string }
 ): Promise<{ votingAgeSet?: number; registrationAccessSet?: number }> {
   const update: Record<string, number> = {};
   const applied: { votingAgeSet?: number; registrationAccessSet?: number } = {};
   const cc = countryId.toUpperCase();
+
+  if (provision.japanShugiinReform) {
+    if (countryId !== "JP" || !enactment || !Number.isSafeInteger(enactment.turn)) {
+      throw new Error("Japan Shugiin reform requires a passed bill in a Japan election year");
+    }
+    const game = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { preset: 1, currentYear: 1 } });
+    if (
+      !isJapanShugiinReformEligible({
+        preset: game?.preset,
+        countryId,
+        currentYear: game?.currentYear,
+      })
+    ) {
+      throw new Error("Japan Shugiin reform is unavailable before its 1994 decision window");
+    }
+    const countryStates = db.collection<CountryGameState>("countryGameStates");
+    const existing = await countryStates.findOne(
+      { _id: "JP" },
+      { projection: { jpShugiinElectoralMandate: 1 } }
+    );
+    const mandate = approveJapanShugiinReform({
+      preset: game?.preset,
+      countryId,
+      currentYear: game?.currentYear,
+      outcome: "approved",
+      turn: enactment.turn,
+      billId: enactment.billId,
+      current: existing?.jpShugiinElectoralMandate,
+    });
+    if (!mandate) throw new Error("Japan Shugiin reform approval did not produce a mandate");
+    if (!existing?.jpShugiinElectoralMandate) {
+      const changed = await countryStates.updateOne(
+        { _id: "JP", jpShugiinElectoralMandate: { $exists: false } },
+        { $set: { jpShugiinElectoralMandate: mandate } }
+      );
+      if (changed.modifiedCount !== 1) {
+        const raced = await countryStates.findOne(
+          { _id: "JP" },
+          { projection: { jpShugiinElectoralMandate: 1 } }
+        );
+        if (!raced?.jpShugiinElectoralMandate) {
+          throw new Error("Japan runtime row is missing; cannot persist approved Shugiin reform");
+        }
+      }
+    }
+  }
 
   if (provision.votingAge !== undefined && isValidVotingAge(provision.votingAge)) {
     update[`votingAgeEligibleByCountry.${cc}`] = provision.votingAge;
@@ -111,9 +164,11 @@ export async function applyElectoralLawProvision(
     applied.registrationAccessSet = bias;
   }
 
-  if (Object.keys(update).length === 0) return applied;
-
-  await db.collection<GameState>("gameState").updateOne({ _id: "current" }, { $set: update });
+  if (Object.keys(update).length > 0) {
+    await db.collection<GameState>("gameState").updateOne({ _id: "current" }, { $set: update });
+  }
+  // The mandate is persisted separately from election snapshots: only future
+  // elections consult it, and the previous rules remain the default otherwise.
   return applied;
 }
 
@@ -121,6 +176,7 @@ export async function applyElectoralLawProvision(
 export function describeElectoralLaw(p: {
   votingAge?: number;
   registrationAccess?: number;
+  japanShugiinReform?: true;
 }): string {
   const parts: string[] = [];
   if (p.votingAge !== undefined) parts.push(`Voting age ${p.votingAge}`);
@@ -132,6 +188,9 @@ export function describeElectoralLaw(p: {
           ? `Registration access: ${p.registrationAccess}`
           : "Registration access: neutral"
     );
+  }
+  if (p.japanShugiinReform) {
+    parts.push("Japan Shūgiin: 300 districts + 200 regional-list seats for future elections");
   }
   return parts.length > 0 ? parts.join(" · ") : "No change";
 }
@@ -145,7 +204,8 @@ export function describeElectoralLaw(p: {
  */
 export function validateElectoralLawProvision(
   raw: unknown,
-  category: string
+  category: string,
+  context: { countryId?: string; preset?: string; currentYear?: number } = {}
 ): { ok: true; provision: ElectoralLawProvision } | { ok: false; error: string } {
   if (
     !ELECTORAL_LAW_BILL_CATEGORIES.has(
@@ -154,9 +214,17 @@ export function validateElectoralLawProvision(
   ) {
     return { ok: false, error: "Electoral-law provisions can only be included in social bills." };
   }
-  const p = raw as { votingAge?: unknown; registrationAccess?: unknown };
+  const p = raw as {
+    votingAge?: unknown;
+    registrationAccess?: unknown;
+    japanShugiinReform?: unknown;
+  };
 
-  if (p.votingAge === undefined && p.registrationAccess === undefined) {
+  if (
+    p.votingAge === undefined &&
+    p.registrationAccess === undefined &&
+    p.japanShugiinReform === undefined
+  ) {
     return {
       ok: false,
       error: "An electoral-law provision must set the voting age, registration access, or both.",
@@ -164,6 +232,24 @@ export function validateElectoralLawProvision(
   }
 
   const provision: ElectoralLawProvision = { type: "electoral_law" };
+
+  if (p.japanShugiinReform !== undefined) {
+    if (
+      p.japanShugiinReform !== true ||
+      !isJapanShugiinReformEligible({
+        countryId: context.countryId ?? "",
+        preset: context.preset,
+        currentYear: context.currentYear,
+      })
+    ) {
+      return {
+        ok: false,
+        error:
+          "Japan's 1994 lower-house reform is available only in a 1991 Japan world from 1994 onward.",
+      };
+    }
+    provision.japanShugiinReform = true;
+  }
 
   if (p.votingAge !== undefined) {
     if (!isValidVotingAge(p.votingAge)) {

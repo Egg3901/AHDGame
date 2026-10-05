@@ -34,9 +34,7 @@ export function AgePyramid({
   return (
     <div className="rounded-lg border border-card-border bg-card p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h4 className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-          Age &amp; Sex Pyramid
-        </h4>
+        <h4 className="text-body-sm font-medium text-muted">Age &amp; sex pyramid</h4>
         <div className="flex gap-3 text-[11px]">
           <span className="flex items-center gap-1">
             <span className="h-2 w-2 rounded-full" style={{ background: MALE }} />

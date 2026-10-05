@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { IssueOrderModal } from "./orders/IssueOrderModal";
@@ -86,7 +88,7 @@ export function OrdersTab(props: Props) {
       );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data?.error ?? "Failed to rescind.");
+        setError(apiErrorText(data, "Failed to rescind."));
       } else {
         router.refresh();
       }
@@ -145,11 +147,11 @@ export function OrdersTab(props: Props) {
                 : ""
             }
           >
-            + Admin Override
+            + Admin override
           </button>
         </section>
       )}
-      {error && <p className="text-sm text-error">{error}</p>}
+      <InlineError error={error} className="text-sm text-error" />
       {props.activeOrders.length === 0 ? (
         <div className="rounded-xl border border-card-border bg-card p-8 text-sm text-muted text-center">
           No active {orderNamePluralLower}.

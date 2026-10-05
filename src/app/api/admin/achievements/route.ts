@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { withAdminAuth } from "@/lib/api/withAdminAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import type { Achievement } from "@/lib/db/types";
@@ -63,7 +63,7 @@ export const POST = withAdminAuth(async (_auth, request: Request) => {
   try {
     const parsed = await parseJsonBody(request, createSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { slug, name, description, icon, category, order } = parsed.data;
@@ -71,10 +71,7 @@ export const POST = withAdminAuth(async (_auth, request: Request) => {
 
     const existing = await db.collection<Achievement>("achievements").findOne({ slug });
     if (existing) {
-      return NextResponse.json(
-        { error: "Achievement with this slug already exists" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Achievement with this slug already exists");
     }
 
     const now = new Date();

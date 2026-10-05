@@ -85,7 +85,7 @@ describe("POST /api/corporations/[id]/shares/self-issue", () => {
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       error: "Cannot issue shares while a shareholder vote is open",
     });
     expect(db.collectionMocks["corporations"]).toBeUndefined();

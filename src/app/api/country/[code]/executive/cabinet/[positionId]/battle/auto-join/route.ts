@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { authorizeBattleAction, canActAtTheater } from "@/lib/api/battleAuthz";
 import { getConflict } from "@/lib/db/collections/conflicts";
 import { getTheaterStateCollection } from "@/lib/db/collections/theaterState";
@@ -30,13 +30,13 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { theaterId, enabled } = parsed.data;
 
     const conflict = await getConflict(db, theaterId);
     if (!conflict) {
-      return NextResponse.json({ error: "No such conflict" }, { status: 400 });
+      return errorResponse(400, "No such conflict");
     }
     const denied = await canActAtTheater(db, countryId, theaterId, {
       characterId,
@@ -49,10 +49,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     // is better than storing a flag that silently does nothing forever.
     const blocs = await loadMilitaryBlocs(db);
     if (!sideOf(conflict, countryId, blocs)) {
-      return NextResponse.json(
-        { error: "Your nation has no side in this conflict" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Your nation has no side in this conflict");
     }
 
     await getTheaterStateCollection(db).updateOne(

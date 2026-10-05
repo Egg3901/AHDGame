@@ -11,6 +11,7 @@ import { getGameStateCollection } from "@/lib/db/collections/gameState";
 import { getMilitaryFormations } from "@/lib/db/collections/militaryFormations";
 import { theaterCommanderOf } from "@/lib/military/assignments";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
+import { errorResponse } from "@/lib/api/errors";
 
 export type BattleAuthzResult =
   | { error: NextResponse; db?: undefined }
@@ -42,11 +43,11 @@ export async function authorizeBattleAction(
   const { code, positionId } = await params;
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) {
-    return { error: NextResponse.json({ error: "Invalid country" }, { status: 400 }) };
+    return { error: errorResponse(400, "Invalid country") };
   }
   if (DEFENSE_POSITION_BY_COUNTRY[countryId] !== positionId) {
     return {
-      error: NextResponse.json({ error: "Not a defense cabinet position" }, { status: 404 }),
+      error: errorResponse(404, "Not a defense cabinet position"),
     };
   }
 
@@ -55,7 +56,7 @@ export async function authorizeBattleAction(
     await getGameStateCollection(db)
   ).findOne({ _id: "current" }, { projection: { conflictsEnabled: 1, currentTurn: 1 } });
   if (!gs?.conflictsEnabled) {
-    return { error: NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 }) };
+    return { error: errorResponse(404, "Conflicts subsystem disabled") };
   }
 
   const member = await getCabinetMembersCollection(db).findOne({ countryId, positionId });
@@ -94,15 +95,9 @@ export async function canActAtTheater(
   if (tc) {
     return tc === caller.characterId
       ? null
-      : NextResponse.json(
-          { error: "Only the theater commander may act on this conflict" },
-          { status: 403 }
-        );
+      : errorResponse(403, "Only the theater commander may act on this conflict");
   }
   return caller.isHolder
     ? null
-    : NextResponse.json(
-        { error: "Only the defense holder or admin can declare offensives" },
-        { status: 403 }
-      );
+    : errorResponse(403, "Only the defense holder or admin can declare offensives");
 }

@@ -74,3 +74,21 @@ describe("fetchJson", () => {
     expect(captureException).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("fetchJson error envelope", () => {
+  it("exposes code, ref and server message on HttpError", async () => {
+    mockFetch(
+      () =>
+        new Response(JSON.stringify({ error: "Slow down", code: "RATE_LIMITED", ref: "r1" }), {
+          status: 429,
+        })
+    );
+    const err = await fetchJson("/api/x").catch((e) => e);
+    expect(err).toMatchObject({
+      status: 429,
+      code: "RATE_LIMITED",
+      ref: "r1",
+      serverMessage: "Slow down",
+    });
+  });
+});

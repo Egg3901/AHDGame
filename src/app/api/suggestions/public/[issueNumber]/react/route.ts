@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -32,12 +32,12 @@ export async function POST(
     const { issueNumber: raw } = await params;
     const issueNum = parseInt(raw, 10);
     if (isNaN(issueNum) || issueNum < 1) {
-      return NextResponse.json({ error: "Invalid suggestion id" }, { status: 400 });
+      return errorResponse(400, "Invalid suggestion id");
     }
 
     const parsed = await parseJsonBody(request, reactSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { reaction } = parsed.data;
 
@@ -47,7 +47,7 @@ export async function POST(
 
     const s = await suggestions.findOne({ issueNumber: issueNum });
     if (!s) {
-      return NextResponse.json({ error: "Suggestion not found" }, { status: 404 });
+      return errorResponse(404, "Suggestion not found");
     }
 
     const userId = new ObjectId(user.userId);

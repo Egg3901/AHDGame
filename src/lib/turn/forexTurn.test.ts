@@ -191,6 +191,39 @@ describe("processForexTurn", () => {
     expect(result.countriesUpdated).toBe(3);
   });
 
+  it("updates every newly active 1991 transition currency and leaves absent DDM out", async () => {
+    const { getInitialRates, getSeedCurrencyCode } = await import("@/lib/constants/currencies");
+    const countries = ["PL", "HU", "RO", "BG", "CS", "YU"] as const;
+    const rates = getInitialRates("1991-default");
+    db.collectionMocks.centralBanks.find.mockReturnValue({
+      toArray: async () => [
+        ...countries.map((country) => makeCentralBank(country, { primeRate: 5 })),
+        makeCentralBank("DD"),
+      ],
+    });
+    db.collectionMocks.exchangeRates.find.mockReturnValue({
+      toArray: async () =>
+        countries.map((country) =>
+          makeExchangeRate(
+            country,
+            getSeedCurrencyCode(country, "1991-default"),
+            rates[country]!,
+            rates[country]!
+          )
+        ),
+    });
+    const result = await processForexTurn(db as unknown as Db, 2, "1991-default", 1991);
+    expect(result.countriesUpdated).toBe(6);
+    const updates = db.collectionMocks.exchangeRates.updateOne.mock.calls;
+    for (const country of countries) {
+      const update = updates.find(([filter]) => filter._id === country)![1].$set;
+      expect(update).not.toHaveProperty("currencyCode");
+      expect(Number.isFinite(update.rate)).toBe(true);
+      expect(update.rate).toBeGreaterThan(0);
+    }
+    expect(updates.some(([filter]) => filter._id === "DD")).toBe(false);
+  });
+
   it("writes updated rate and history to exchangeRates", async () => {
     await processForexTurn(db as unknown as Db, 50);
 

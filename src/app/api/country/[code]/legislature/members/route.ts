@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import {
   COUNTRY_CONFIGS,
   getCountryConfigForRuntime,
@@ -15,7 +15,10 @@ import {
 } from "@/lib/constants/countries";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
-import { getLiveLowerChamberSeats, getLiveUpperChamberSeats } from "@/lib/turn/lowerChamberSeats";
+import {
+  getLiveLowerChamberSeats,
+  getLiveUpperChamberSeats,
+} from "@/lib/legislature/lowerChamberSeats";
 import type { PoliticalParty, ElectedOfficial, State, Character, NPP } from "@/lib/db/types";
 
 export async function GET(request: Request, { params }: { params: Promise<{ code: string }> }) {
@@ -23,7 +26,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+      return errorResponse(404, "Invalid country code");
     }
 
     const db = await getDb();

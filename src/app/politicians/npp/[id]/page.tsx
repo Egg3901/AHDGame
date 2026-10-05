@@ -233,7 +233,7 @@ export default async function NppProfilePage({ params }: PageProps) {
               <div className="flex flex-wrap items-center gap-2 mb-1">
                 <h1 className="text-2xl font-bold tracking-tight truncate">{npp.name}</h1>
                 <span className="rounded-full border border-slate-500/40 bg-slate-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                  Non-Player Politician
+                  Non-player politician
                 </span>
                 {npp.retiredAt && (
                   <span className="rounded-full border border-zinc-600 bg-zinc-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
@@ -324,7 +324,7 @@ export default async function NppProfilePage({ params }: PageProps) {
 
               <div>
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm text-zinc-400">Political Influence</span>
+                  <span className="text-sm text-zinc-400">Political influence</span>
                   <span className="font-bold tabular-nums">{influence.toFixed(1)} / 100</span>
                 </div>
                 <StatMeter value={influence} max={100} fillClass="bg-cyan-400" />
@@ -350,7 +350,7 @@ export default async function NppProfilePage({ params }: PageProps) {
                 </tr>
                 <tr>
                   <td className="py-1.5 pr-2 align-top text-zinc-500 font-medium">Type</td>
-                  <td className="py-1.5 text-foreground">Non-Player Politician</td>
+                  <td className="py-1.5 text-foreground">Non-player politician</td>
                 </tr>
                 {ledCorporation && (
                   <tr>
@@ -388,7 +388,7 @@ export default async function NppProfilePage({ params }: PageProps) {
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-lg bg-zinc-950/40 border border-zinc-800 p-4">
               <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">
-                Campaign Funds
+                Campaign funds
               </p>
               <p className="text-xl font-bold tabular-nums text-emerald-400">
                 {formatMoney(funds, nppCurrencySymbol ?? "$")}
@@ -397,7 +397,7 @@ export default async function NppProfilePage({ params }: PageProps) {
 
             <div className="rounded-lg bg-zinc-950/40 border border-zinc-800 p-4">
               <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">
-                Donor Base Level
+                Donor base level
               </p>
               <p className="text-xl font-bold tabular-nums">
                 {donorBaseLevel} / {NPP_MAX_DONOR_BASE_LEVEL}
@@ -406,7 +406,7 @@ export default async function NppProfilePage({ params }: PageProps) {
 
             <div className="rounded-lg bg-zinc-950/40 border border-zinc-800 p-4">
               <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">
-                Action Points
+                Action points
               </p>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xl font-bold tabular-nums">{actionPoints}</span>
@@ -470,7 +470,7 @@ export default async function NppProfilePage({ params }: PageProps) {
             href="/politicians"
             className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
           >
-            ← Back to Politicians
+            ← Back to politicians
           </Link>
         </div>
       </main>

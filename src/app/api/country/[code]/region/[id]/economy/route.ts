@@ -3,7 +3,7 @@ import { loadWorkforceSkillByState } from "@/lib/politicalLegislation/workforceS
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getGdpAnchorRate, loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
@@ -74,7 +74,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
 
@@ -174,7 +174,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       loadActiveFtaPairs(db),
     ]);
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
     const workforceSkill = stateMetricsDoc?.education?.workforceSkill?.value ?? null;
 

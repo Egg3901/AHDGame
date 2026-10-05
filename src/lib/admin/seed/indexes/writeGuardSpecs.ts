@@ -1,5 +1,6 @@
 import type { CreateIndexesOptions, IndexSpecification } from "mongodb";
 import { BOUNDED_NPC_CANDIDATE_GUARDS } from "./boundedNpcCandidates";
+import { JAPAN_SHUGIIN_FILING_INDEXES } from "@/lib/countries/jp/elections/shugiinFilingIndexes";
 
 /**
  * THE write-guard index specs. One definition, two consumers.
@@ -26,6 +27,7 @@ export type IndexSpecTuple = [string, IndexSpecification, CreateIndexesOptions];
 /** Election-entry and endorsement guards. */
 export const ELECTION_WRITE_GUARD_INDEXES: IndexSpecTuple[] = [
   ...BOUNDED_NPC_CANDIDATE_GUARDS,
+  ...JAPAN_SHUGIIN_FILING_INDEXES,
   [
     "statePartyCandidates",
     { stateId: 1, partyId: 1, characterId: 1 },
@@ -149,6 +151,13 @@ export const GOVERNANCE_WRITE_GUARD_INDEXES: IndexSpecTuple[] = [
     "corporationCeoVotes",
     { corporationId: 1, voterCharacterId: 1 },
     { name: "unique_corporation_ceo_vote_per_shareholder", unique: true },
+  ],
+  // Mirrored from the ratification-ballot migration. This is the exact upsert
+  // identity, so fresh reset worlds need the same race guard as migrated worlds.
+  [
+    "bargainingRatificationBallots",
+    { campaignId: 1, offerRevision: 1, voterCharacterId: 1 },
+    { name: "unique_ratification_ballot_per_organizer", unique: true, background: true },
   ],
   // Race guard against duplicate open privatization votes per corp. The
   // vote-open code checks for an existing open vote, but two concurrent opens

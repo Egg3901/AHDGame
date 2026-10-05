@@ -7,7 +7,7 @@ import { isPlayerSubmittableCategory } from "@/lib/wiki/categories";
 import { WIKI_CREATE_COOLDOWN_HOURS } from "@/lib/wiki/createCooldown";
 
 export const metadata: Metadata = wikiPublicPageMetadata({
-  title: "Create Wiki Page | A House Divided",
+  title: "Create wiki page | A House Divided",
   description:
     "Create or edit a wiki article for A House Divided: document mechanics, country rules, and strategy for other players (sign-in required).",
   pathname: "/wiki/new",
@@ -33,7 +33,7 @@ export default async function WikiNewPage({ searchParams }: WikiNewPageProps) {
     <div className="min-h-screen bg-background pb-16">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground">Create New Wiki Page</h1>
+          <h1 className="text-2xl font-bold text-foreground">Create new wiki page</h1>
           <p className="mt-1 text-sm text-muted">
             {canPublishDirectly
               ? "Create and publish a new wiki page immediately."

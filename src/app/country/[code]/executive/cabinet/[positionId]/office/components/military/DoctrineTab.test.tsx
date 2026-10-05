@@ -25,8 +25,8 @@ function renderTab(currentEra = latestEraIndex(), onAdopt = () => {}) {
 describe("DoctrineTab (smoke render)", () => {
   it("renders the points header and category nav", () => {
     renderTab();
-    expect(screen.getByText("Doctrine Points")).toBeTruthy();
-    expect(screen.getByText("National Doctrine")).toBeTruthy();
+    expect(screen.getByText("Doctrine points")).toBeTruthy();
+    expect(screen.getByText("National doctrine")).toBeTruthy();
     expect(screen.getByText(/gains 1 more at the start of each/)).toBeTruthy();
     // land category is selected by default; its firepower path is shown
     expect(screen.getByText("Firepower Warfare")).toBeTruthy();

@@ -26,7 +26,7 @@ function formatBig(value: number): string {
 export function ActiveSovereignBailoutsPanel({ bailouts }: Props) {
   return (
     <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-      <h2 className="text-sm font-semibold">Active Sovereign Bailouts</h2>
+      <h2 className="text-sm font-semibold">Active sovereign bailouts</h2>
       {bailouts.length === 0 ? (
         <p className="mt-2 text-xs text-zinc-500">No active sovereign IMF facilities.</p>
       ) : (

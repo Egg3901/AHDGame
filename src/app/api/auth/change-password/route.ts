@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
 import { verifyAuth } from "@/lib/auth";
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, changePasswordSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { currentPassword, newPassword } = parsed.data;
 
@@ -39,22 +39,21 @@ export async function POST(request: Request) {
     const user = await usersCollection.findOne({ _id: new ObjectId(userId) });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     // Credential changes require the uncached account state read above.
     if (!credentialSessionIsCurrent(userId, user, await verifyAuth())) {
-      return NextResponse.json(
-        { error: "Please sign in again before changing your password." },
-        { status: 401, headers: { "Cache-Control": "private, no-store" } }
-      );
+      return errorResponse(401, "Please sign in again before changing your password.", {
+        headers: { "Cache-Control": "private, no-store" },
+      });
     }
 
     // Verify current password
     const isValidPassword = await bcrypt.compare(currentPassword, user.password);
 
     if (!isValidPassword) {
-      return NextResponse.json({ error: "Current password is incorrect" }, { status: 401 });
+      return errorResponse(401, "Current password is incorrect");
     }
 
     // Hash new password
@@ -79,9 +78,10 @@ export async function POST(request: Request) {
     );
 
     if (updated.matchedCount !== 1) {
-      return NextResponse.json(
-        { error: "Your account changed during this request. Please sign in and try again." },
-        { status: 409, headers: { "Cache-Control": "private, no-store" } }
+      return errorResponse(
+        409,
+        "Your account changed during this request. Please sign in and try again.",
+        { headers: { "Cache-Control": "private, no-store" } }
       );
     }
 

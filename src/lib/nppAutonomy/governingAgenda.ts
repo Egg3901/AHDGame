@@ -42,7 +42,7 @@
  * and persists the result on `governmentFormation.governingAgenda`.
  */
 
-import type { ConditionsSignal } from "./selectNppBill";
+import type { ConditionsSignal } from "@/lib/nppAutonomy/selectNppBill";
 import {
   deriveGoverningArchetype,
   GOVERNING_ARCHETYPE_MODIFIERS,
@@ -72,11 +72,24 @@ export interface GoverningAgendaItem {
   crisis?: boolean;
 }
 
+export interface GoverningAgendaReviewSnapshot {
+  weakDomains: Record<string, number>;
+  strongDomains: Record<string, number>;
+  inflationRate: number | null;
+  crisisSignals: Record<string, number>;
+  /** Current metric-effect magnitudes and chain stage by domain. */
+  crisisEffectFingerprintByDomain: Record<string, string>;
+}
+
 export interface GoverningAgenda {
   items: GoverningAgendaItem[];
   archetype: GoverningArchetype;
-  /** Game turn the agenda was computed — drives the recompute cadence. */
+  /** Game turn the agenda was computed — drives the annual recompute cadence. */
   computedTurn: number;
+  /** Input baseline for event-driven early review; absent on legacy persisted agendas. */
+  reviewSnapshot?: GoverningAgendaReviewSnapshot;
+  /** Last annual accountability report card, independent of early strategic replans. */
+  performanceReviewedTurn?: number;
 }
 
 /** Inputs the (DB-reading) phase layer assembles and hands to the pure compute. */

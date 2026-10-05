@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { publicApiGuard } from "@/lib/publicApi/middleware";
 import { queryIndexFunds, queryIndexFundDetail } from "@/lib/publicApi/funds";
 
@@ -17,10 +17,7 @@ export async function GET(request: Request) {
     if (slug) {
       const detail = await queryIndexFundDetail(db, slug);
       if (!detail) {
-        return NextResponse.json(
-          { ok: false, error: "Fund not found", code: "NOT_FOUND" },
-          { status: 404 }
-        );
+        return errorResponse(404, "Fund not found", { code: "NOT_FOUND", extra: { ok: false } });
       }
       return NextResponse.json({ ok: true, ...detail }, { headers: guard.headers });
     }

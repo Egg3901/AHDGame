@@ -9,7 +9,7 @@ import { NextRequest } from "next/server";
 import { ObjectId } from "mongodb";
 import { eraForPreset } from "@/lib/seeds/presetSelector";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth, requireHumanSession } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -46,9 +46,17 @@ import {
 } from "@/lib/campaigns/shiftPrimaryElectorate";
 import type { PoliticalParty } from "@/lib/db/types";
 import { getElectionOpponents } from "@/lib/actions/electionOpponents";
+import { loadPollPartyColors } from "@/lib/actions/pollPartyColors";
 import { buildLiveTurnouts } from "@/lib/electionEngine/resolvedTurnout";
 import { getAllVoterArchetypeIds } from "@/lib/demographics/countryDemographics";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import type { CountryId } from "@/lib/constants/countries";
+import type { PersonalStatTenureContext } from "@/lib/electionEngine/rules/tenureRetention";
+import {
+  isHeadOfGovernmentRace,
+  resolvePresidentApproval,
+} from "@/lib/electionEngine/presidentialCoattail";
+import { getPresidentialConsecutiveTerms } from "@/lib/turn/election/presidentialTenureLedger";
 
 // Poll pricing lives in the shared rules module: quotePollAction is the single
 // source of truth the effect, validation and this route's debit all call.
@@ -77,7 +85,7 @@ async function handleGET(request: NextRequest) {
       : { userId: new ObjectId(user.userId) };
     const character = await db.collection<Character>("characters").findOne(characterQuery);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const [state, demographics, categories, statePartyOrgs, turnoutDoc, forexEnabled] =
@@ -100,7 +108,7 @@ async function handleGET(request: NextRequest) {
       ]);
 
     if (!demographics || !state) {
-      return NextResponse.json({ error: "State or demographics not found" }, { status: 404 });
+      return errorResponse(404, "State or demographics not found");
     }
 
     const userEP = character.policies.economic;
@@ -221,6 +229,11 @@ async function handleGET(request: NextRequest) {
       ? campaignLocalRate(character.countryId ?? "US", campaignRates)
       : 1;
 
+    const partyColors = await loadPollPartyColors(db, character.countryId ?? "US", [
+      character.party,
+      ...(electionContext?.opponents?.map((o) => o.party) ?? []),
+    ]);
+
     const base = {
       pollType,
       homeState: character.homeState,
@@ -263,6 +276,8 @@ async function handleGET(request: NextRequest) {
         : null,
       electionContext,
       demographicTurnout,
+      partyColors,
+      myParty: character.party ?? null,
     };
 
     return NextResponse.json(base);
@@ -287,7 +302,7 @@ export async function POST(request: NextRequest) {
 
     const parsed = await parseJsonBody(request, pollCommissionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const pollType = parsed.data.type;
     const actionKey = pollType === "large" ? "pollLarge" : "poll";
@@ -307,14 +322,14 @@ export async function POST(request: NextRequest) {
       isForexEnabled(),
     ]);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     // Price the debit from the same quote the effect and validation use. A
     // missing intellect rejects here before any state is read or charged.
     const quote = quotePollAction({ intellect: character.stats?.intellect }, tier, priceLevel);
     if (!quote.ok) {
-      return NextResponse.json({ error: quote.error }, { status: 400 });
+      return errorResponse(400, quote.error);
     }
     const fundCost = quote.fundCostAnchor;
     const actionCost = quote.apCost;
@@ -332,7 +347,7 @@ export async function POST(request: NextRequest) {
       priceLevel,
     });
     if (!validation.canPerform) {
-      return NextResponse.json({ error: validation.reason }, { status: 400 });
+      return errorResponse(400, validation.reason);
     }
 
     // Compute the poll results now so we can persist them
@@ -356,18 +371,12 @@ export async function POST(request: NextRequest) {
 
     // Validate before charging — never charge if we cannot produce poll data
     if (!state) {
-      return NextResponse.json(
-        { error: `State not found for ${character.homeState}. Contact support.` },
-        { status: 404 }
-      );
+      return errorResponse(404, `State not found for ${character.homeState}. Contact support.`);
     }
     if (!demographics) {
-      return NextResponse.json(
-        {
-          error:
-            "Demographic data not found for your state. Run Admin → Demographics → Reseed Demographics, then try again.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Demographic data not found for your state. Run Admin → Demographics → Reseed Demographics, then try again."
       );
     }
     // No hard gate on a `voterGroups` archetype category existing: a poll runs
@@ -480,6 +489,32 @@ export async function POST(request: NextRequest) {
     if (pollSnapshot && isGranularPollEnabled(gameState)) {
       try {
         const countryId = state.countryId ?? "US";
+        const isPresidentialGeneral =
+          electionContext != null &&
+          !electionContext.inPrimary &&
+          isHeadOfGovernmentRace(electionContext.electionType, countryId as CountryId);
+        const presidentialIncumbent = isPresidentialGeneral
+          ? await resolvePresidentApproval(db, countryId as CountryId)
+          : null;
+        const executiveConsecutiveTerms = isPresidentialGeneral
+          ? getPresidentialConsecutiveTerms(
+              gameState,
+              countryId as CountryId,
+              presidentialIncumbent?.partyId
+            )
+          : 0;
+        const incumbency: PersonalStatTenureContext | undefined =
+          electionContext?.incumbency || presidentialIncumbent
+            ? {
+                ...electionContext?.incumbency,
+                ...(presidentialIncumbent
+                  ? {
+                      executivePartyId: presidentialIncumbent.partyId,
+                      executiveConsecutiveTerms,
+                    }
+                  : {}),
+              }
+            : undefined;
         const preset = gameState?.preset ?? DEFAULT_SEED_PRESET;
         const era = eraForPreset(preset);
         // Live era clock — the poll must describe the SAME electorate the vote
@@ -497,20 +532,30 @@ export async function POST(request: NextRequest) {
             year: pollEraYear.year,
             startingYear: pollEraYear.startingYear,
             character: {
+              candidateId: electionContext?.candidateId,
+              party: character.party,
               economicPosition: character.policies.economic,
               socialPosition: character.policies.social,
               favorability: character.favorability,
+              archetypeApprovals: character.archetypeApprovals,
               politicalInfluence: character.politicalInfluence ?? 0,
+              nationalInfluence: character.nationalInfluence,
             },
             opponents:
               electionContext?.opponents?.map((o) => ({
                 candidateId: o.candidateId,
                 name: o.name ?? o.candidateId,
+                party: o.party,
                 economicPosition: o.economicPosition,
                 socialPosition: o.socialPosition,
                 favorability: o.favorability,
+                archetypeApprovals: o.archetypeApprovals,
+                isNPP: o.isNPP,
                 politicalInfluence: o.politicalInfluence,
+                nationalInfluence: o.nationalInfluence,
               })) ?? [],
+            incumbency,
+            useNationalInfluenceForReach: isPresidentialGeneral,
           });
           pollSnapshot.granular = granularPayload;
         }
@@ -540,9 +585,9 @@ export async function POST(request: NextRequest) {
       },
     });
     if (spendResult.modifiedCount === 0) {
-      return NextResponse.json(
-        { error: "Your available actions or campaign funds changed. Please try again." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Your available actions or campaign funds changed. Please try again."
       );
     }
 

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/publicApi/middleware", () => ({ publicApiGuard: vi.fn() }));
-vi.mock("@/lib/api/errors", () => ({
+vi.mock("@/lib/api/errors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/errors")>()),
   handleRouteError: vi.fn(() => new Response("boom", { status: 500 })),
 }));
 

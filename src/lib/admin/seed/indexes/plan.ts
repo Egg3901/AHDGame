@@ -1,5 +1,6 @@
 import type { CreateIndexesOptions, Db, IndexSpecification } from "mongodb";
 import { seedIndexes } from "../seedIndexes";
+import { CORPORATE_SECTOR_IDENTITY_INDEX_KEY, CORPORATE_SECTOR_IDENTITY_INDEX_NAME } from "./core";
 
 /** One index `seedIndexes` creates, as captured without touching a database. */
 export type SeedIndexPlanEntry = {
@@ -21,32 +22,26 @@ export type SeedIndexPlanEntry = {
  */
 export async function collectSeedIndexPlan(): Promise<SeedIndexPlanEntry[]> {
   const plan: SeedIndexPlanEntry[] = [];
-  // bootstrapGameWorld runs these registered identity migrations before
-  // seedIndexes. Model their resulting index in the stand-in so seedCoreIndexes
-  // sees the same prerequisite it requires on a real bootstrap. Its subsequent
-  // idempotent createIndex call still places the index in the captured plan.
-  const startupIndexes: Record<string, Array<Record<string, unknown>>> = {
-    corporateSectors: [
-      {
-        v: 2,
-        key: {
-          corporationId: 1,
-          stateId: 1,
-          sectorType: 1,
-          industryModel: 1,
-          mediaDiscriminator: 1,
-        },
-        name: "corporateSectors_corporation_state_type_models_unique",
-        unique: true,
-      },
-    ],
-  };
-  const recorded = (collection: string) => [
-    ...(startupIndexes[collection] ?? []),
-    ...plan
+  const recorded = (collection: string) => {
+    const indexes = plan
       .filter((entry) => entry.collection === collection)
-      .map((entry) => ({ v: 2, key: entry.key, name: entry.options.name, ...entry.options })),
-  ];
+      .map((entry) => ({ v: 2, key: entry.key, name: entry.options.name, ...entry.options }));
+    // Model the registered startup migration prerequisite without running data
+    // migrations in this recording database. The seeder still records its own
+    // ensureIndex call, so the guard remains part of the reconciliation plan.
+    if (
+      collection === "corporateSectors" &&
+      !indexes.some((index) => index.name === CORPORATE_SECTOR_IDENTITY_INDEX_NAME)
+    ) {
+      indexes.push({
+        v: 2,
+        key: CORPORATE_SECTOR_IDENTITY_INDEX_KEY,
+        name: CORPORATE_SECTOR_IDENTITY_INDEX_NAME,
+        unique: true,
+      });
+    }
+    return indexes;
+  };
   const emptyCursor = () => {
     const cursor = {
       toArray: async () => [],
@@ -106,6 +101,56 @@ export const isTextIndex = (entry: SeedIndexPlanEntry) =>
 
 export const isTtlIndex = (entry: SeedIndexPlanEntry) =>
   typeof entry.options.expireAfterSeconds === "number";
+
+/**
+ * Seed indexes the reconcile migration deliberately does not build on a live
+ * world, each with the reason it needs an operator decision instead (#2699).
+ * Every other seed index reaches a running world through
+ * `2026-10-01-reconcile-seed-indexes`. The guard test in `plan.test.ts`
+ * fails when a new text or TTL index is added to a seed module without an
+ * entry here, so a seed index can never silently lack a live-world path.
+ * Fresh worlds still get all of them at bootstrap.
+ */
+const TEXT_REASON = "text index: insert-cost decision before building on a live world";
+const TTL_REASON = "TTL index: building it deletes every already-expired document";
+export const LIVE_WORLD_MANUAL_SEED_INDEXES: Readonly<Record<string, string>> = {
+  "actionAuditLog.actionAuditLog_text_search": TEXT_REASON,
+  "activityLog.activityLog_text_search": TEXT_REASON,
+  "characters.characters_text_search": TEXT_REASON,
+  "corporations.corporations_text_search": TEXT_REASON,
+  "electedOfficials.electedOfficials_text_search": TEXT_REASON,
+  "elections.elections_text_search": TEXT_REASON,
+  "financialTxLog.financialTxLog_text_search": TEXT_REASON,
+  "legislation.legislation_text_search": TEXT_REASON,
+  "npps.npps_text_search": TEXT_REASON,
+  "stateBills.stateBills_text_search": TEXT_REASON,
+  "wikiPages.wikiPages_text_search": TEXT_REASON,
+  "actionAuditLog.actionAuditLog_expiresAt_ttl": TTL_REASON,
+  "activityLog.activityLog_timestamp_ttl": TTL_REASON,
+  "altScoringRuns.altScoringRuns_at_ttl": TTL_REASON,
+  "apiAbuseScans.aas_detectedAt_ttl": TTL_REASON,
+  "apiAccessLog.aal_timestamp_ttl": TTL_REASON,
+  "auditAnomalies.auditAnomalies_detectedAt_ttl": TTL_REASON,
+  "financialTxLog.financialTxLog_expiresAt_ttl": TTL_REASON,
+  "gameHealthSnapshots.ghs_timestamp_ttl": TTL_REASON,
+  "identityObservations.identityObservations_lastSeen_ttl": TTL_REASON,
+  "ipGeoCache.ipGeoCache_expiresAt_ttl": TTL_REASON,
+  "nonAtomicMoneyFlowReceipts.nonAtomicMoneyFlowReceipts_terminal_updatedAt_ttl": TTL_REASON,
+  "rateLimitBuckets.rlb_expiresAt_ttl": TTL_REASON,
+  "siteTrafficPageviews.stpv_recordedAt_ttl": TTL_REASON,
+};
+
+/** `collection.name` label used in reports and in the manual-index list. */
+export const seedIndexLabel = (entry: SeedIndexPlanEntry) =>
+  `${entry.collection}.${entry.options.name ?? JSON.stringify(entry.key)}`;
+
+/**
+ * True when the reconcile migration builds this index on a live world (subject
+ * to a duplicate check for unique indexes). False for the reviewed text and
+ * TTL indexes above.
+ */
+export const isAutoReconciledSeedIndex = (entry: SeedIndexPlanEntry) =>
+  !isTextIndex(entry) && !isTtlIndex(entry);
 
 /** Stable identity for comparing a planned index with an existing one. */
 export const indexKeySignature = (key: Record<string, unknown>) => JSON.stringify(key);

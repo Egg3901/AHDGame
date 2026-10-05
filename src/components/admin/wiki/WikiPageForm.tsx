@@ -40,7 +40,7 @@ export function WikiPageForm({
       onSubmit={onSubmit}
       className="rounded-xl border border-card-border bg-card p-6 space-y-4"
     >
-      <h3 className="font-semibold">{mode === "create" ? "New Wiki Page" : "Edit Wiki Page"}</h3>
+      <h3 className="font-semibold">{mode === "create" ? "New wiki page" : "Edit wiki page"}</h3>
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium">Slug (URL path)</label>
@@ -82,7 +82,7 @@ export function WikiPageForm({
         />
       </div>
       <div>
-        <label className="mb-1 block text-sm font-medium">Content (Markdown)</label>
+        <label className="mb-1 block text-sm font-medium">Content (markdown)</label>
         <textarea
           value={content}
           onChange={(e) => onContentChange(e.target.value)}
@@ -99,7 +99,7 @@ export function WikiPageForm({
           onChange={(e) => onFeaturedChange(e.target.checked)}
         />
         <label htmlFor="featured" className="text-sm">
-          Featured (show in Start Here)
+          Featured (show in start here)
         </label>
       </div>
       <div className="flex gap-2">

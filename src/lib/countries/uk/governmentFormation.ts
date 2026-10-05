@@ -19,7 +19,7 @@ import type { PoliticalParty } from "@/lib/db/types/party";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import { getTotalUkCommonsSeats } from "@/lib/constants/states";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
-import { lowerChamberMajorityThreshold } from "@/lib/turn/lowerChamberSeats";
+import { lowerChamberMajorityThreshold } from "@/lib/legislature/lowerChamberSeats";
 import {
   resetConfidenceGauge,
   tickConfidenceForGov,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface DiagnosticResult {
   orphanOfficials: number;
@@ -25,7 +26,7 @@ export function HealSenateClasses() {
       if (res.ok) {
         setDiagnostic(data);
       } else {
-        setResult({ ok: false, message: data.error ?? "Diagnostic failed" });
+        setResult({ ok: false, message: apiErrorText(data, "Diagnostic failed") });
       }
     } catch {
       setResult({ ok: false, message: "Network error" });
@@ -48,7 +49,7 @@ export function HealSenateClasses() {
     try {
       const res = await fetch("/api/admin/officials/heal-senate", { method: "POST" });
       const data = await res.json();
-      setResult({ ok: res.ok, message: data.message ?? data.error ?? "Unknown response" });
+      setResult({ ok: res.ok, message: data.message ?? apiErrorText(data, "Unknown response") });
     } catch {
       setResult({ ok: false, message: "Network error" });
     } finally {
@@ -59,7 +60,7 @@ export function HealSenateClasses() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Senate Classes</h3>
+        <h3 className="font-semibold text-sm">Heal Senate classes</h3>
         <p className="mt-1 text-xs text-muted">
           Removes ElectedOfficial and Election records whose senate class does not belong to their
           state. Fixes states incorrectly showing all 3 classes instead of their correct 2.
@@ -79,7 +80,7 @@ export function HealSenateClasses() {
           disabled={loading}
           className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
         >
-          {loading ? "Healing…" : "Heal Now"}
+          {loading ? "Healing…" : "Heal now"}
         </button>
       </div>
 

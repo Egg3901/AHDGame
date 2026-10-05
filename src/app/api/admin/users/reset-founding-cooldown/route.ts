@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
@@ -33,11 +33,11 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     if (!ObjectId.isValid(parsed.data.userId)) {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+      return errorResponse(400, "Invalid user ID");
     }
 
     const db = await getDb();
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     const user = await db.collection<User>("users").findOne({ _id: userId });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     if (user.lastCorporationFoundedTurn == null) {

@@ -1,5 +1,3 @@
-import type { SingleplayerDifficulty } from "@/lib/db/types";
-
 /**
  * DIFFICULTY BEHAVIOR POLICY
  *
@@ -29,6 +27,9 @@ import type { SingleplayerDifficulty } from "@/lib/db/types";
  * no pre-V5 equivalent, so `normal` there is simply the intended V5 baseline.
  */
 
+import type { SingleplayerDifficulty } from "@/lib/db/types";
+import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+
 /** Hard ceiling on concurrently tracked governing goals, at any difficulty. */
 export const GOAL_SLOT_CAP = 5;
 
@@ -42,7 +43,7 @@ export interface NppBehaviorPolicy {
   goalSlots: number;
   /**
    * How long a committed goal is held before a better-ranked domain may take its
-   * slot. The anti-oscillation window: a short hold produces a government that
+   * slot, measured in game-calendar turns. The anti-oscillation window: a short hold produces a government that
    * re-decides every cycle, a long one produces follow-through. Consumed by
    * `reconcileGoverningGoals`.
    */
@@ -87,10 +88,12 @@ export interface NppBehaviorPolicy {
   oppositionCoordination: number;
 }
 
+// Provisional game-calendar calibration for #2320: one/two/three years by
+// difficulty. The authored scale must be checked against a multi-term worldsim.
 const POLICIES: Record<SingleplayerDifficulty, NppBehaviorPolicy> = {
   easy: {
     goalSlots: 2,
-    goalHoldTurns: 168,
+    goalHoldTurns: TURNS_PER_YEAR,
     replanShortfallThreshold: 0.6,
     candidateLimit: 6,
     minBillScore: 0,
@@ -99,7 +102,7 @@ const POLICIES: Record<SingleplayerDifficulty, NppBehaviorPolicy> = {
   },
   normal: {
     goalSlots: 3,
-    goalHoldTurns: 336,
+    goalHoldTurns: 2 * TURNS_PER_YEAR,
     replanShortfallThreshold: 0.45,
     candidateLimit: null,
     minBillScore: 0,
@@ -108,7 +111,7 @@ const POLICIES: Record<SingleplayerDifficulty, NppBehaviorPolicy> = {
   },
   hard: {
     goalSlots: GOAL_SLOT_CAP,
-    goalHoldTurns: 504,
+    goalHoldTurns: 3 * TURNS_PER_YEAR,
     replanShortfallThreshold: 0.3,
     candidateLimit: null,
     minBillScore: 0.3,

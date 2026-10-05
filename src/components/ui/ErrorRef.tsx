@@ -22,7 +22,7 @@ interface ErrorRefProps {
   label?: string;
 }
 
-export function ErrorRef({ error, code, label = "Error code" }: ErrorRefProps) {
+export function ErrorRef({ error, code, label = "Ref" }: ErrorRefProps) {
   const ref = code ?? error?.digest ?? extractEventId(error);
 
   if (!ref) return null;

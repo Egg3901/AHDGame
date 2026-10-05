@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, badRequest, notFound } from "@/lib/api/errors";
+import { handleRouteError, badRequest, notFound, errorResponse } from "@/lib/api/errors";
 import { checkWikiDisabled } from "@/lib/api/wikiGuard";
 import type { ManualOfficeHistoryEntry } from "@/lib/db/types/manualOfficeHistory";
 import {
@@ -50,7 +50,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     const parsed = await parseJsonBody(request, patchSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { startDate, endDate, ...d } = parsed.data;
     assertTenureFields({ startWeek: d.startWeek, startYear: d.startYear, startDate });

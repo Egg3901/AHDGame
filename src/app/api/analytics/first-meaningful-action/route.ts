@@ -5,7 +5,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import { claimCharacterActivation } from "@/lib/analytics/characterActivation";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 
 const schema = z.object({
   characterId: z.string().regex(/^[a-f0-9]{24}$/i),
@@ -17,8 +17,7 @@ export async function POST(request: Request) {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const db = await getDb();
     const character = await db
       .collection("characters")
@@ -26,7 +25,7 @@ export async function POST(request: Request) {
         { _id: new ObjectId(parsed.data.characterId), userId: new ObjectId(auth.user.userId) },
         { projection: { _id: 1 } }
       );
-    if (!character) return NextResponse.json({ error: "Character unavailable" }, { status: 404 });
+    if (!character) return errorResponse(404, "Character unavailable");
     return NextResponse.json({
       activation: await claimCharacterActivation(db, parsed.data.characterId),
     });

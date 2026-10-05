@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import type { CountryId } from "@/lib/constants/countries";
 import { Button } from "@/components/ui";
@@ -122,7 +124,7 @@ export function CentralBankInterventionTab({
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "Request failed.");
+        setError(apiErrorText(json, "Request failed."));
       } else {
         setSuccess(json.action === "widen" ? "Band widened." : "Band updated.");
         onChanged();
@@ -145,7 +147,7 @@ export function CentralBankInterventionTab({
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "Cancel failed.");
+        setError(apiErrorText(json, "Cancel failed."));
       } else {
         setSuccess("Band cancelled.");
         setFloor("");
@@ -259,7 +261,7 @@ export function CentralBankInterventionTab({
           </form>
         )}
 
-        {error && <p className="mt-2 text-body text-error">{error}</p>}
+        <InlineError error={error} className="mt-2 text-body text-error" />
         {success && <p className="mt-2 text-body text-success">{success}</p>}
       </CentralBankSection>
 

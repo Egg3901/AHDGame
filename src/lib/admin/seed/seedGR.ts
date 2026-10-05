@@ -26,6 +26,7 @@ export async function seedGRRegions(
   }
   const { grRegions } = await import("@/lib/seeds/gr/grRegions");
   const { grRegions1953 } = await import("@/lib/seeds/gr/grRegions1953");
+  const { grRegions1991 } = await import("@/lib/countries/gr/data/grRegions1991");
   const { selectPresetBundle } = await import("@/lib/seeds/presetSelector");
   const bundle = selectPresetBundle(
     preset,
@@ -33,6 +34,7 @@ export async function seedGRRegions(
       "2019-default": grRegions,
       "1953-default": grRegions1953,
       "1979-default": grRegions,
+      "1991-default": grRegions1991,
     },
     "seedGR:grRegions"
   );

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { Button, Input } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ConstituencyOption {
   id: string;
@@ -80,7 +81,7 @@ export function ConstituencySelector() {
     const payload = await response.json().catch(() => null);
     setSaving(false);
     if (!response.ok) {
-      setMessage(payload?.error ?? t("saveFailed"));
+      setMessage(apiErrorText(payload, t("saveFailed")));
       setMessageIsError(true);
       return;
     }

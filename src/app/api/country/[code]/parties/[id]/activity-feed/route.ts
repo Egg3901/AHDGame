@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { getDb } from "@/lib/mongodb";
@@ -21,7 +21,7 @@ export async function GET(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuth();
@@ -29,14 +29,14 @@ export async function GET(
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
 
     const url = new URL(request.url);
     const beforeRaw = url.searchParams.get("before");
     const limitRaw = url.searchParams.get("limit");
     const before = beforeRaw ? new Date(beforeRaw) : null;
     if (before && Number.isNaN(before.getTime())) {
-      return NextResponse.json({ error: "Invalid 'before' timestamp" }, { status: 400 });
+      return errorResponse(400, "Invalid 'before' timestamp");
     }
     // `Math.max(1, Math.min(100, NaN))` is NaN, not 1, so an unparseable
     // `?limit` used to reach Mongo's `.limit()` as NaN. Validate before

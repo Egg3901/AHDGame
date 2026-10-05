@@ -15,7 +15,7 @@ import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimizatio
 import { formatEffectiveCouponPct, formatMarketingStrength } from "@/lib/utils/formatters";
 import { loyaltyLabel } from "@/lib/market/brandLoyalty";
 import { CorpEconomicModelBadge } from "@/components/economy/CorpEconomicModelBadge";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { corpIncomeBasis, netMarginPct } from "./financials/financialsModel";
 import { CAPACITY_UNIT_LABEL, formatUnits } from "./plantsPresentation";
@@ -334,6 +334,21 @@ const VOTE_LABEL: Record<string, string> = {
   adopt_supershares: "Supershares",
   ticker_change: "Ticker change",
 };
+
+/**
+ * Signed per-turn change for an operations metric. Absent when the route
+ * redacts a private corporation's books for an outside viewer, which is
+ * unknown rather than zero, so no hint is shown.
+ */
+function perTurnChangeHint(change: number | undefined) {
+  if (change == null || !Number.isFinite(change)) return undefined;
+  return (
+    <span className={signTone(change)}>
+      {change >= 0 ? "+" : ""}
+      {change.toFixed(2)}
+    </span>
+  );
+}
 
 export default function OverviewTab({
   corporation,
@@ -689,32 +704,17 @@ export default function OverviewTab({
             <KVRow
               label="Marketing strength"
               value={formatMarketingStrength(corporation.marketingStrength)}
-              hint={
-                <span className={signTone(corporation.marketingStrengthGrowth)}>
-                  {corporation.marketingStrengthGrowth >= 0 ? "+" : ""}
-                  {corporation.marketingStrengthGrowth.toFixed(2)}
-                </span>
-              }
+              hint={perTurnChangeHint(corporation.marketingStrengthGrowth)}
             />
             <KVRow
               label="Logistics"
               value={formatMarketingStrength(corporation.logisticsStrength)}
-              hint={
-                <span className={signTone(corporation.logisticsStrengthNetChange)}>
-                  {corporation.logisticsStrengthNetChange >= 0 ? "+" : ""}
-                  {corporation.logisticsStrengthNetChange.toFixed(2)}
-                </span>
-              }
+              hint={perTurnChangeHint(corporation.logisticsStrengthNetChange)}
             />
             <KVRow
               label="R&D score"
               value={formatMarketingStrength(corporation.rdScore)}
-              hint={
-                <span className={signTone(corporation.rdScoreNetChange)}>
-                  {corporation.rdScoreNetChange >= 0 ? "+" : ""}
-                  {corporation.rdScoreNetChange.toFixed(2)}
-                </span>
-              }
+              hint={perTurnChangeHint(corporation.rdScoreNetChange)}
             />
             {brand && <KVRow label="Brand loyalty" value={brand} mono={false} />}
             {corporation.averageQuality != null && (
@@ -821,10 +821,7 @@ export default function OverviewTab({
                 hint={`${sub.ownershipPct.toFixed(1)}%`}
               />
             ))}
-            <KVRow
-              label="Founded"
-              value={<LocalTime value={corporation.createdAt} options={{ dateStyle: "medium" }} />}
-            />
+            <KVRow label="Founded" value={<GameMonthTime value={corporation.createdAt} />} />
           </KVList>
         </DenseSection>
       </aside>

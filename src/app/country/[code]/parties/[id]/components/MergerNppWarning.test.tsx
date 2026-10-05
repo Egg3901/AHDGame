@@ -58,12 +58,12 @@ describe("merger NPP deletion warning", () => {
         onCreated={() => {}}
       />
     );
-    fireEvent.click(screen.getByRole("button", { name: "+ New Proposal" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ New proposal" }));
     expect(screen.queryByRole("note")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Merge" }));
     await waitFor(() => expect(screen.queryByText("Loading parties…")).toBeNull());
     assertWarning();
-    expect(screen.getByRole("button", { name: "Submit Proposal" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Submit proposal" })).toBeTruthy();
   });
   it.each(["proposing", "target"] as const)(
     "shows the same warning to the %s party before voting",

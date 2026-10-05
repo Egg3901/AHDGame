@@ -15,6 +15,7 @@ import { ListRowSkeleton } from "@/components/ui";
 import { BillListControls, type BillVoteFilter } from "@/components/bills/BillListControls";
 import { VoteDonut } from "@/components/bills/VoteDonut";
 import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import {
   getCurrentCongressBillVote,
   matchesCongressBillStatusFilter,
@@ -58,7 +59,7 @@ function NominationCard({ nom }: { nom: NominationDisplay }) {
             {nom.nomineeCharacterName} → {nom.positionName}
           </span>
           <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-medium text-yellow-400 shrink-0">
-            Voting Open
+            Voting open
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -92,7 +93,7 @@ function NominationCard({ nom }: { nom: NominationDisplay }) {
             {nom.proposedAt && (
               <>
                 {" "}
-                · <LocalTime value={nom.proposedAt} options={{ dateStyle: "medium" }} />
+                · <GameMonthTime value={nom.proposedAt} />
               </>
             )}
           </p>
@@ -110,11 +111,7 @@ function NominationCard({ nom }: { nom: NominationDisplay }) {
       {/* Footer */}
       <div className="px-5 py-3 border-t border-card-border/40">
         <div className="flex items-center justify-between text-[10px] text-muted">
-          <span>
-            {nom.proposedAt && (
-              <LocalTime value={nom.proposedAt} options={{ dateStyle: "medium" }} />
-            )}
-          </span>
+          <span>{nom.proposedAt && <GameMonthTime value={nom.proposedAt} />}</span>
           {nom.votingEndsAt && (
             <span className="text-yellow-400">
               Closes <LocalTime value={nom.votingEndsAt} />
@@ -299,7 +296,7 @@ export function CongressBillsTab({
               onClick={() => setShowPropose(true)}
               className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
             >
-              Propose Bill
+              Propose bill
             </button>
           </div>
         )}
@@ -385,7 +382,7 @@ export function CongressBillsTab({
                   onClick={() => setShowPropose(true)}
                   className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
                 >
-                  Propose Bill
+                  Propose bill
                 </button>
               ) : undefined
             }

@@ -11,7 +11,7 @@ import {
 } from "@/app/guides/_components/GuideBlocks";
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "Bonds Guide | A House Divided",
+  title: "Bonds guide | A House Divided",
   description:
     "How bonds work in A House Divided: face value, coupons, maturity, the price and rate relationship, sovereign vs corporate bonds, credit ratings, and defaults.",
   pathname: "/guides/bonds",

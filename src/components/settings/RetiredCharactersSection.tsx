@@ -39,8 +39,8 @@ interface RetiredCharacterData {
 
 const REASON_LABELS: Record<string, { label: string; color: string }> = {
   player_deleted: { label: "Retired", color: "bg-muted/20 text-muted border-muted/30" },
-  game_reset: { label: "Game Reset", color: "bg-warning/15 text-warning border-warning/30" },
-  admin_action: { label: "Admin Action", color: "bg-error/15 text-error border-error/30" },
+  game_reset: { label: "Game reset", color: "bg-warning/15 text-warning border-warning/30" },
+  admin_action: { label: "Admin action", color: "bg-error/15 text-error border-error/30" },
 };
 
 const DATE_LABEL_OPTIONS = { month: "short", year: "numeric" } as const;

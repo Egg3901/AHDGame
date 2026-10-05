@@ -6,6 +6,7 @@ import type { CountryId, CountryStatus } from "@/lib/constants/countries";
 import { useToast } from "@/contexts/ToastContext";
 import { useRuntimeCountryConfig } from "@/hooks/useRuntimeCountryConfig";
 import { CountryFlag } from "@/components/CountryFlag";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CountrySettings {
   enabledForPlayers: boolean;
@@ -98,7 +99,7 @@ export default function CountryOverviewCard({ countryId }: Props) {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        throw new Error(json.error ?? "Failed to update status");
+        throw new Error(apiErrorText(json, "Failed to update status"));
       }
     } catch (err) {
       // Revert optimistic update
@@ -126,7 +127,7 @@ export default function CountryOverviewCard({ countryId }: Props) {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        throw new Error(json.error ?? "Failed to update");
+        throw new Error(apiErrorText(json, "Failed to update"));
       }
       setSettings((prev) => (prev ? { ...prev, enabledForPlayers: newEnabled } : prev));
       showToast(
@@ -152,7 +153,7 @@ export default function CountryOverviewCard({ countryId }: Props) {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        throw new Error(json.error ?? "Failed to update");
+        throw new Error(apiErrorText(json, "Failed to update"));
       }
       setSettings((prev) => (prev ? { ...prev, economyPreview: newPreview } : prev));
       showToast(
@@ -179,16 +180,14 @@ export default function CountryOverviewCard({ countryId }: Props) {
             <CountryFlag country={countryId} size="xl" />
             <div className="min-w-0">
               <h2 className="text-lg font-semibold text-foreground truncate">{config.name}</h2>
-              <p className="text-xs text-muted uppercase tracking-wider">{countryId}</p>
+              <p className="text-body-sm font-medium text-muted">{countryId}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
             {/* Status dropdown */}
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-medium text-muted uppercase tracking-wider">
-                Status
-              </label>
+              <label className="text-body-sm font-medium text-muted">Status</label>
               <select
                 value={settings?.status ?? "coming-soon"}
                 onChange={(e) => handleStatusChange(e.target.value as CountryStatus)}
@@ -197,15 +196,13 @@ export default function CountryOverviewCard({ countryId }: Props) {
               >
                 <option value="active">Active</option>
                 <option value="beta">Beta</option>
-                <option value="coming-soon">Coming Soon</option>
+                <option value="coming-soon">Coming soon</option>
               </select>
             </div>
 
             {/* Enabled toggle */}
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-medium text-muted uppercase tracking-wider">
-                Players Enabled
-              </label>
+              <label className="text-body-sm font-medium text-muted">Players enabled</label>
               <button
                 type="button"
                 role="switch"
@@ -227,9 +224,7 @@ export default function CountryOverviewCard({ countryId }: Props) {
             {/* Economy Preview toggle — only relevant when players are disabled */}
             {settings && !settings.enabledForPlayers && (
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-medium text-muted uppercase tracking-wider">
-                  Economy Preview
-                </label>
+                <label className="text-body-sm font-medium text-muted">Economy preview</label>
                 <button
                   type="button"
                   role="switch"
@@ -253,9 +248,7 @@ export default function CountryOverviewCard({ countryId }: Props) {
             {/* Current status badge */}
             {settings && (
               <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-medium text-muted uppercase tracking-wider">
-                  &nbsp;
-                </span>
+                <span className="text-body-sm font-medium text-muted">&nbsp;</span>
                 <span
                   className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_COLORS[settings.status]}`}
                 >
@@ -322,7 +315,7 @@ export default function CountryOverviewCard({ countryId }: Props) {
             <DetailRow label="Type" value={displayGovernmentType} />
             <DetailRow label="Executive" value={config.executiveTitle} />
             <DetailRow
-              label="Election System"
+              label="Election system"
               value={
                 config.electionSystems.lowerChamber
                   ? (ELECTION_SYSTEM_LABELS[config.electionSystems.lowerChamber] ??

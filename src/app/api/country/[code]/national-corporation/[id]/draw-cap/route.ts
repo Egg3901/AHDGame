@@ -7,7 +7,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Corporation } from "@/lib/db/types";
@@ -32,27 +32,24 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const idQuery = corporationQueryFromParamId(id);
     if (!idQuery) {
-      return NextResponse.json({ error: "Invalid corporation ID" }, { status: 400 });
+      return errorResponse(400, "Invalid corporation ID");
     }
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     const authorized = await assertTreasuryAuthority(db, countryId, auth.user.character._id);
     if (!authorized) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the Secretary of the Treasury (or equivalent), or the head of government if that seat is vacant, may set the draw cap.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the Secretary of the Treasury (or equivalent), or the head of government if that seat is vacant, may set the draw cap."
       );
     }
 
@@ -60,10 +57,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .collection<Corporation>("corporations")
       .findOne({ ...idQuery, countryOwnerId: countryId });
     if (!target || !isStateOwned(target)) {
-      return NextResponse.json(
-        { error: "National Corporation not found for this country." },
-        { status: 404 }
-      );
+      return errorResponse(404, "National Corporation not found for this country.");
     }
 
     const treasuryDrawCap = Math.max(0, Math.round(parsed.data.cap));

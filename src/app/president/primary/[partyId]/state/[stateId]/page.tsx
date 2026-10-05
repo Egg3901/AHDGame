@@ -37,6 +37,7 @@ import { resolvePrimaryTurnsToEnd } from "@/lib/elections/primaryViewModel";
 import { allocateDelegates } from "@/lib/primaryDelegateAllocation";
 import { loadRegionalBonusMaps } from "@/lib/primaryRegionalBonusLoader";
 import { StateOrganizationPanel } from "./StateOrganizationPanel";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 // This page is a live view over turn-processed delegate awards and per-state
 // projections. It must render from current DB state every request so its
@@ -391,7 +392,7 @@ export default async function PartyPrimaryStatePage({ params }: PageProps) {
       {/* Status tiles */}
       <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="rounded-xl border border-card-border bg-card p-3">
-          <div className="text-xs uppercase tracking-wider text-muted mb-1">Status</div>
+          <div className="text-body-sm font-medium text-muted mb-1">Status</div>
           {waveFired ? (
             <div className="text-sm font-semibold text-green-400">Voted</div>
           ) : turnsUntilWave !== null ? (
@@ -403,19 +404,19 @@ export default async function PartyPrimaryStatePage({ params }: PageProps) {
           )}
         </div>
         <div className="rounded-xl border border-card-border bg-card p-3">
-          <div className="text-xs uppercase tracking-wider text-muted mb-1">Delegates</div>
+          <div className="text-body-sm font-medium text-muted mb-1">Delegates</div>
           <div className="text-sm font-semibold" style={{ color: partyColor }}>
             {stateDelegates}
           </div>
         </div>
         <div className="rounded-xl border border-card-border bg-card p-3">
-          <div className="text-xs uppercase tracking-wider text-muted mb-1">Allocation</div>
+          <div className="text-body-sm font-medium text-muted mb-1">Allocation</div>
           <div className="text-sm font-semibold">
             {allocationMethod === "PR" ? "Proportional" : "Winner-take-all"}
           </div>
         </div>
         <div className="rounded-xl border border-card-border bg-card p-3">
-          <div className="text-xs uppercase tracking-wider text-muted mb-1">Wave</div>
+          <div className="text-body-sm font-medium text-muted mb-1">Wave</div>
           <div className="text-sm font-semibold">{wave ? wave.label : "—"}</div>
         </div>
       </div>
@@ -467,7 +468,7 @@ export default async function PartyPrimaryStatePage({ params }: PageProps) {
 
       {/* Candidate breakdown */}
       <div className="rounded-xl border border-card-border bg-card overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-card-border bg-background text-xs font-medium uppercase tracking-wider text-muted flex items-center justify-between">
+        <div className="px-4 py-2.5 border-b border-card-border bg-background text-sm font-semibold text-foreground flex items-center justify-between">
           <span>Candidate breakdown</span>
           <span className="text-xs normal-case text-muted/80">
             {hasVoted ? "Actual votes + delegates" : "Pre-vote projection"}
@@ -475,7 +476,7 @@ export default async function PartyPrimaryStatePage({ params }: PageProps) {
         </div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-card-border bg-background text-left text-xs uppercase tracking-wider text-muted">
+            <tr className="border-b border-card-border bg-background text-left text-sm font-semibold text-foreground">
               <th className="px-3 py-2">#</th>
               <th className="px-3 py-2">Candidate</th>
               <th className="px-3 py-2">Projection</th>
@@ -526,7 +527,7 @@ export default async function PartyPrimaryStatePage({ params }: PageProps) {
                     </Link>
                     {r.candidate.isNPP && (
                       <span className="ml-2 rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] text-purple-400">
-                        NPP
+                        <NppAbbr />
                       </span>
                     )}
                     {r.candidate.primaryCampaignState === stateId && (

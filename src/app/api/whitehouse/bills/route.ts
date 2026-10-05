@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Bill, ElectedOfficial } from "@/lib/db/types";
 import { resolvePresidentialCountry } from "@/lib/executive/presidentialCountry";
 
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   try {
     const countryId = resolvePresidentialCountry(request);
     if (!countryId) {
-      return NextResponse.json({ error: "Unknown country" }, { status: 400 });
+      return errorResponse(400, "Unknown country");
     }
     const auth = await requireAuth();
     if (!auth.ok) return auth.response;
@@ -51,6 +51,7 @@ export async function GET(request: Request) {
         summary: b.summary,
         sentToPresidentAt: b.sentToPresidentAt?.toISOString() ?? null,
         presidentActionDeadline: b.presidentActionDeadline?.toISOString() ?? null,
+        presidentActionDeadlineOnTurn: b.presidentActionDeadlineOnTurn ?? null,
       })),
       isPresident: true,
     });

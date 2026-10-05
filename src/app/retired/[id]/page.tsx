@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui";
 import { SeasonRecapStory } from "@/components/recap/SeasonRecapStory";
 import type { CharacterRecap } from "@/lib/recap/types";
 import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 
 interface RetiredCharacterResponse {
   gameDateAnchor: GameDateAnchor | null;
@@ -67,13 +68,13 @@ interface RetiredCharacterResponse {
 
 const REASON_LABELS: Record<string, { label: string; color: string }> = {
   player_deleted: { label: "Retired", color: "bg-muted/20 text-muted border-muted/30" },
-  game_reset: { label: "Game Reset", color: "bg-warning/15 text-warning border-warning/30" },
-  admin_action: { label: "Admin Action", color: "bg-error/15 text-error border-error/30" },
+  game_reset: { label: "Game reset", color: "bg-warning/15 text-warning border-warning/30" },
+  admin_action: { label: "Admin action", color: "bg-error/15 text-error border-error/30" },
 };
 
 const CAREER_EVENT_LABELS: Record<string, { label: string; color: string }> = {
   elected: { label: "Elected", color: "text-success" },
-  lost_election: { label: "Lost Election", color: "text-error" },
+  lost_election: { label: "Lost election", color: "text-error" },
   resigned: { label: "Resigned", color: "text-warning" },
   appointed: { label: "Appointed", color: "text-primary" },
   removed: { label: "Removed", color: "text-error" },
@@ -210,10 +211,8 @@ export default function RetiredCharacterProfilePage() {
                 {snap.homeState && ` · ${snap.homeState}, ${snap.countryId}`}
               </p>
               <p className="text-sm text-muted mt-1">
-                Active:{" "}
-                <LocalTime value={snap.createdAt} options={{ month: "short", year: "numeric" }} />{" "}
-                &mdash;{" "}
-                <LocalTime value={data.retiredAt} options={{ month: "short", year: "numeric" }} />
+                Active: <GameMonthTime value={snap.createdAt} /> &mdash;{" "}
+                <GameMonthTime value={data.retiredAt} />
               </p>
               {data.recap && (
                 <button
@@ -237,7 +236,7 @@ export default function RetiredCharacterProfilePage() {
             {snap.highestOffice && (
               <section className="mb-8">
                 <h2 className="text-xl font-semibold text-foreground mb-3 pb-2 border-b border-card-border">
-                  Highest Office Held
+                  Highest office held
                 </h2>
                 <p className="text-foreground">{snap.highestOffice}</p>
               </section>
@@ -247,7 +246,7 @@ export default function RetiredCharacterProfilePage() {
             {snap.careerHistory && snap.careerHistory.length > 0 && (
               <section className="mb-8">
                 <h2 className="text-xl font-semibold text-foreground mb-4 pb-2 border-b border-card-border">
-                  Career History
+                  Career history
                 </h2>
                 <div className="space-y-3">
                   {snap.careerHistory.map((event, idx) => {
@@ -281,10 +280,7 @@ export default function RetiredCharacterProfilePage() {
                           </p>
                           <p className="text-xs text-muted mt-0.5">
                             {gameDateAnchor ? (
-                              <>
-                                {formatGameMonth(event.date, gameDateAnchor)} (
-                                <LocalTime value={event.date} options={RETIRED_DATE_OPTS} />)
-                              </>
+                              formatGameMonth(event.date, gameDateAnchor)
                             ) : (
                               <LocalTime value={event.date} options={RETIRED_DATE_OPTS} />
                             )}
@@ -301,7 +297,7 @@ export default function RetiredCharacterProfilePage() {
             {(econ !== 0 || social !== 0) && (
               <section className="mb-8">
                 <h2 className="text-xl font-semibold text-foreground mb-4 pb-2 border-b border-card-border">
-                  Political Positions
+                  Political positions
                 </h2>
                 <div className="space-y-4">
                   {/* Economic */}
@@ -367,7 +363,7 @@ export default function RetiredCharacterProfilePage() {
                         key={key}
                         className="rounded-lg border border-card-border/50 bg-card/40 px-3 py-2"
                       >
-                        <p className="text-[10px] uppercase tracking-wider text-muted">{key}</p>
+                        <p className="text-body-sm font-medium text-muted">{key}</p>
                         <p className="text-sm font-medium text-foreground mt-0.5">
                           {getDemographicLabel(key, value)}
                         </p>

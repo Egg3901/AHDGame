@@ -36,7 +36,7 @@ export const GameHealthTrendChart = memo(function GameHealthTrendChart({ snapsho
 
   return (
     <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold text-foreground">Turn Processing Trend</h3>
+      <h3 className="mb-3 text-sm font-semibold text-foreground">Turn processing trend</h3>
       <ResponsiveContainer width="100%" height={250}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />

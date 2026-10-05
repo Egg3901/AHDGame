@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
@@ -122,7 +123,7 @@ export function CentralBankLoanTab({ countryId }: Props) {
       .then(async (r) => {
         const j = (await r.json()) as LocApiResponse & { error?: string };
         if (!r.ok) {
-          setError(j.error ?? "Failed to load");
+          setError(apiErrorText(j, "Failed to load"));
           setData(null);
           return;
         }
@@ -150,7 +151,7 @@ export function CentralBankLoanTab({ countryId }: Props) {
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(j.error ?? "Failed", "error");
+        showToast(apiErrorText(j, "Failed"), "error");
         return;
       }
       showToast("Account opened", "success");
@@ -186,7 +187,7 @@ export function CentralBankLoanTab({ countryId }: Props) {
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
         if (res.status < 500) sessionStorage.removeItem(storageKey);
-        showToast(j.error ?? "Failed", "error");
+        showToast(apiErrorText(j, "Failed"), "error");
         return;
       }
       sessionStorage.removeItem(storageKey);
@@ -230,7 +231,7 @@ export function CentralBankLoanTab({ countryId }: Props) {
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
         if (res.status < 500) sessionStorage.removeItem(storageKey);
-        showToast(j.error ?? "Failed", "error");
+        showToast(apiErrorText(j, "Failed"), "error");
         return;
       }
       sessionStorage.removeItem(storageKey);
@@ -697,7 +698,7 @@ function AdminFundingPicker({
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(j.error ?? "Failed to update", "error");
+        showToast(apiErrorText(j, "Failed to update"), "error");
         return;
       }
       showToast(`Funding source set to ${next}`, "success");
@@ -769,7 +770,7 @@ function PaymentModePicker({
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(j.error ?? "Failed to change mode", "error");
+        showToast(apiErrorText(j, "Failed to change mode"), "error");
         return;
       }
       showToast(next === "pi" ? "Now paying down the loan" : "Now paying interest only", "success");

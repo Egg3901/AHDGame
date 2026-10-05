@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getGameState } from "@/lib/gameState";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -49,7 +49,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       .collection<Character>("characters")
       .findOne({ _id: corporation.ceoId });
     if (!character) {
-      return NextResponse.json({ error: "CEO character not found" }, { status: 404 });
+      return errorResponse(404, "CEO character not found");
     }
 
     const gameState = await getGameState();
@@ -64,7 +64,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       forexEnabled,
     });
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     if (result.immediate) {

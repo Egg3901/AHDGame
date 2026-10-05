@@ -5,6 +5,7 @@ import { Button } from "@/components/ui";
 import type { EmergencyMechanicConfig } from "@/lib/constants/cabinetMechanicsTypes";
 import { getCabinetActionCopy } from "./actionCopy";
 import { MINISTERIAL_ACTION_RESET_HINT } from "@/lib/cabinet/ministerialActionHint";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface RegionRow {
   regionId: string;
@@ -69,7 +70,7 @@ export function EmergencyMechanicPanel({
         const json = (await response.json()) as { error?: string };
         setFeedback({
           type: "error",
-          message: json.error ?? "Failed to declare emergency",
+          message: apiErrorText(json, "Failed to declare emergency"),
         });
         return;
       }
@@ -123,7 +124,7 @@ export function EmergencyMechanicPanel({
               htmlFor="emergency-region-select"
               className="mb-1 block text-xs font-medium text-muted"
             >
-              {config.regionMetricThreshold ? "Eligible Region" : "Target Region"}
+              {config.regionMetricThreshold ? "Eligible region" : "Target region"}
             </label>
             <select
               id="emergency-region-select"

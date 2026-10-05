@@ -6,6 +6,7 @@ import { getMessageStyle } from "@/lib/utils/formatters";
 import { partyApiUrl } from "@/lib/urls";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
 import type { CommitteeElection } from "./types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 // Renders "Available in 5h 23m" / "Available in 47m" from a positive
 // remaining-ms value. Mirrors the helper in NationalElectionPanel.tsx.
@@ -62,7 +63,7 @@ export function NationalCommitteeElectionPanel({
         body: JSON.stringify({ withdraw }),
       });
       const data = await res.json();
-      setMsg(res.ok ? `✓ ${data.message}` : `✗ ${data.error}`);
+      setMsg(res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Request failed")}`);
       if (res.ok) onRefresh();
     } catch {
       setMsg("✗ Network error");
@@ -81,7 +82,7 @@ export function NationalCommitteeElectionPanel({
         body: JSON.stringify({ candidateIds: Array.from(selectedVotes) }),
       });
       const data = await res.json();
-      setMsg(res.ok ? `✓ ${data.message}` : `✗ ${data.error}`);
+      setMsg(res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Request failed")}`);
       if (res.ok) onRefresh();
     } catch {
       setMsg("✗ Network error");

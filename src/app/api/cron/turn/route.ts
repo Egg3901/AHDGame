@@ -4,7 +4,7 @@ import { getGameState } from "@/lib/gameState";
 import { processTurn } from "@/lib/turnSystem";
 import { logRequest } from "@/lib/api/requestLog";
 import { requireCron } from "@/lib/api/requireCron";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { shouldFireBackupTurn } from "@/lib/cron/backupFireGuard";
 import { captureTurnHealth } from "@/lib/observability/turnHealth";
 
@@ -46,7 +46,7 @@ export async function GET(req: Request) {
       } else {
         console.warn("[cron/turn] Unauthorized: Authorization header present but secret mismatch");
       }
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const gameState = await getGameState();

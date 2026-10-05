@@ -21,7 +21,8 @@ vi.mock("@/lib/api/validate", async (importOriginal) => ({
 vi.mock("bcryptjs", () => ({ default: { hash: mocks.hash } }));
 vi.mock("@/lib/adminLog", () => ({ createAdminLog: mocks.createAdminLog }));
 vi.mock("@/lib/auth/userDocCache", () => ({ invalidateCachedUser: mocks.invalidateCachedUser }));
-vi.mock("@/lib/api/errors", () => ({
+vi.mock("@/lib/api/errors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/errors")>()),
   handleRouteError: () => new Response(null, { status: 500 }),
 }));
 

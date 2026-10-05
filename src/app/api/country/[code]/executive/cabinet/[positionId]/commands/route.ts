@@ -8,7 +8,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
@@ -64,25 +64,22 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (DEFENSE_POSITION_BY_COUNTRY[countryId] !== positionId) {
-      return NextResponse.json(
-        { error: "Commands are managed from the defence minister’s office." },
-        { status: 404 }
-      );
+      return errorResponse(404, "Commands are managed from the defence minister’s office.");
     }
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     const gsCol = await getGameStateCollection(db);
     const gs = await gsCol.findOne({ _id: "current" }, { projection: { conflictsEnabled: 1 } });
     if (!gs?.conflictsEnabled) {
-      return NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 });
+      return errorResponse(404, "Conflicts subsystem disabled");
     }
 
     const member = await getCabinetMembersCollection(db).findOne({ countryId, positionId });
@@ -91,10 +88,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the defence minister may edit commands." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the defence minister may edit commands.");
     }
 
     // Referential integrity.
@@ -119,52 +113,41 @@ export async function PUT(request: Request, { params }: RouteParams) {
     for (const c of commands) {
       for (const uid of c.unitIds) {
         if (!ownUnits.has(uid)) {
-          return NextResponse.json(
-            { error: "That command claims a unit that does not belong to this country." },
-            { status: 400 }
+          return errorResponse(
+            400,
+            "That command claims a unit that does not belong to this country."
           );
         }
         if (seenUnit.has(uid)) {
-          return NextResponse.json(
-            { error: "A unit can belong to only one command. Remove it from the other one first." },
-            { status: 400 }
+          return errorResponse(
+            400,
+            "A unit can belong to only one command. Remove it from the other one first."
           );
         }
         seenUnit.add(uid);
       }
       if (c.regionIds.some((r) => !validRegions.has(r))) {
-        return NextResponse.json(
-          { error: "That command claims a region that does not exist." },
-          { status: 400 }
-        );
+        return errorResponse(400, "That command claims a region that does not exist.");
       }
       if (c.commanderIds.some((m) => !validCommanders.has(m))) {
-        return NextResponse.json(
-          {
-            error: "That command lists someone who is not a commissioned general of this country.",
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "That command lists someone who is not a commissioned general of this country."
         );
       }
       // The lead must be one of this command's own commanders — which the check
       // above has already proven are real commissioned generals of this country.
       if (c.commandingGeneralId !== null && !c.commanderIds.includes(c.commandingGeneralId)) {
-        return NextResponse.json(
-          {
-            error:
-              "A commanding general must first be a commander of that command. Add them to it, then promote them.",
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "A commanding general must first be a commander of that command. Add them to it, then promote them."
         );
       }
       if (c.commandingGeneralId !== null) {
         if (seenLead.has(c.commandingGeneralId)) {
-          return NextResponse.json(
-            {
-              error:
-                "A general can lead only one command. Clear their other command’s commanding general first.",
-            },
-            { status: 400 }
+          return errorResponse(
+            400,
+            "A general can lead only one command. Clear their other command’s commanding general first."
           );
         }
         seenLead.add(c.commandingGeneralId);

@@ -9,7 +9,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { spawnNppCorporation } from "@/lib/admin/spawnNppCorporation";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
@@ -34,18 +34,14 @@ export async function POST(request: Request) {
     if (!auth.ok) return auth.response;
 
     const parsed = await parseJsonBody(request, spawnSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
 
     // Validate countryId is a known CountryId
     const validCountryIds: CountryId[] = ["US", "UK", "DE", "JP", "IE", "BR", "CN", "NG"];
     if (!validCountryIds.includes(parsed.data.countryId as CountryId)) {
-      return NextResponse.json(
-        { error: `Invalid countryId: ${parsed.data.countryId}` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Invalid countryId: ${parsed.data.countryId}`);
     }
 
     const result = await spawnNppCorporation(db, {

@@ -72,9 +72,7 @@ export function OfficePlaques({
             >
               {plaque.sealGlyph}
             </span>
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-              {plaque.title}
-            </div>
+            <div className="text-body-sm font-medium text-muted">{plaque.title}</div>
             <div className="mt-2.5 flex items-center gap-2.5">
               {plaque.holder ? (
                 <>

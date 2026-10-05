@@ -8,7 +8,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { parseJsonBody } from "@/lib/api/validate";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     if (!auth.ok) return auth.response;
 
     if (!(await isLabourFullMode())) {
-      return NextResponse.json({ error: "Player-run unions are not enabled." }, { status: 403 });
+      return errorResponse(403, "Player-run unions are not enabled.");
     }
 
     const rateLimit = checkRateLimit(auth.user.userId, 20, 60000);
@@ -48,18 +48,18 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, foundUnionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const result = await foundUnion(db, character, parsed.data);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
     const { ok: _ok, status: _status, ...payload } = result;
     return NextResponse.json({ success: true, ...payload }, { status: 201 });

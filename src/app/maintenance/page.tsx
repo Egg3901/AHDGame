@@ -105,7 +105,7 @@ export default async function MaintenancePage() {
 
         {/* Heading */}
         <h1 className="mb-3 text-2xl font-bold tracking-tight sm:text-3xl">
-          {recap ? "Between iterations" : "Under Maintenance"}
+          {recap ? "Between iterations" : "Under maintenance"}
         </h1>
         <p className="mb-6 text-sm leading-relaxed text-muted sm:text-base">
           {recap
@@ -115,9 +115,7 @@ export default async function MaintenancePage() {
 
         {recap && (
           <div className="mb-6 flex flex-col items-center gap-3 rounded-xl border border-primary/25 bg-primary/5 p-6">
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-              Your Season, Wrapped
-            </p>
+            <p className="text-body-sm font-medium text-primary">Your Season, Wrapped</p>
             <MaintenanceRecapLauncher recap={recap} />
             {/* Only the newest recap is launched above; character history is the
                 way to re-watch older characters' Wrapped, so link it directly
@@ -140,9 +138,7 @@ export default async function MaintenancePage() {
           <div className="mb-6 rounded-xl border border-card-border bg-card p-5 text-left shadow-card">
             <div className="mb-2 flex items-center gap-2">
               <div className="h-3 w-0.5 rounded-full bg-warning" />
-              <span className="text-xs font-semibold uppercase tracking-widest text-muted">
-                Reason
-              </span>
+              <span className="text-body-sm font-medium text-muted">Reason</span>
             </div>
             <p className="text-sm leading-relaxed text-foreground">{reason}</p>
           </div>
@@ -157,7 +153,7 @@ export default async function MaintenancePage() {
             href="/"
             className="inline-flex h-10 items-center justify-center rounded-lg border border-card-border bg-card px-5 text-sm font-medium transition-all hover:bg-card-elevated hover:border-muted/40"
           >
-            Back to Home
+            Back to home
           </Link>
           <a
             href="https://discord.gg/DmF8zJJuqN"
@@ -174,7 +170,7 @@ export default async function MaintenancePage() {
 
         {/* Footer note */}
         <p className="mt-10 text-xs text-muted/60">
-          A House Divided &mdash; Political Simulation Game
+          A House Divided &mdash; political simulation game
         </p>
       </div>
     </div>

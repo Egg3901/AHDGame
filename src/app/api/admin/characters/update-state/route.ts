@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { z } from "zod";
 import { MAX_REGION_ID_LENGTH } from "@/lib/constants/states";
 import type { Character, State } from "@/lib/db/types";
@@ -44,7 +44,7 @@ export async function PATCH(request: Request) {
 
     const parsed = await parseJsonBody(request, updateStateSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { username, homeState } = parsed.data;
 
@@ -52,15 +52,12 @@ export async function PATCH(request: Request) {
 
     const user = await db.collection("users").findOne({ username });
     if (!user) {
-      return NextResponse.json({ error: `User '${username}' not found` }, { status: 404 });
+      return errorResponse(404, `User '${username}' not found`);
     }
 
     const character = await db.collection<Character>("characters").findOne({ userId: user._id });
     if (!character) {
-      return NextResponse.json(
-        { error: `No character found for user '${username}'` },
-        { status: 404 }
-      );
+      return errorResponse(404, `No character found for user '${username}'`);
     }
 
     const oldState = character.homeState;
@@ -81,11 +78,9 @@ export async function PATCH(request: Request) {
       // Name the country that was searched: the caller picks a region from a
       // country list, so "not found" is far more often the wrong country than
       // a bad id, and the old message could not tell those apart.
-      return NextResponse.json(
-        {
-          error: `No region "${homeState}" in ${character.countryId} — ${character.name} is a ${character.countryId} character, and this move must stay inside their own country.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `No region "${homeState}" in ${character.countryId} — ${character.name} is a ${character.countryId} character, and this move must stay inside their own country.`
       );
     }
 

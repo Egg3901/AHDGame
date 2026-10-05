@@ -42,6 +42,7 @@ import { MONETARY_BASELINES } from "@/lib/constants/currencies";
 import { getEraMonetaryBaseline, getEraTrendGdpGrowth } from "@/lib/constants/monetaryEra";
 import { transmissionMultiplier } from "@/lib/centralBank/credibility";
 import { computeCountryTariffPressure } from "@/lib/tariffs/tariffEffects";
+import { TARIFF_INFLATION_BASELINE } from "@/lib/tariffs/rules/tariffInflationExposure";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { isMoneySupplyEnabledFromConfig } from "@/lib/moneySupply/featureFlag";
@@ -130,7 +131,7 @@ const FISCAL_DEFICIT_PCT_CEILING = 50;
 
 /** Cost-push coefficients — now two-sided.
  *  Below-baseline wages/tariffs are mildly deflationary. */
-const TARIFF_BASELINE = 3.0;
+const TARIFF_BASELINE = TARIFF_INFLATION_BASELINE;
 const TARIFF_COEFF_UP = 0.05;
 const TARIFF_COEFF_DOWN = 0.025;
 const WAGE_GROWTH_BASELINE = 2.5;
@@ -680,7 +681,9 @@ export async function calculateCountryInflation(
    * `moneyGrowthCoefficient`). Omitted = the pegged-era default, so callers
    * that do not track a regime compute byte-identically to before.
    */
-  moneyGrowthCoeff?: number
+  moneyGrowthCoeff?: number,
+  /** Current-turn measured exposure rate. Omitted retains the legacy fallback for non-turn callers. */
+  tariffRateOverride?: number
 ): Promise<number> {
   // `typeof NaN === "number"`, so `?? fallback` does not catch NaN that slipped
   // into a persisted field. Any NaN reaching the inflation math recurses every
@@ -724,20 +727,26 @@ export async function calculateCountryInflation(
   // 4. Tariff cost-push — collapse active tariff layers into one macro pressure
   //    number.
   const nationalDocId = getNationalDocId(countryId);
+  const hasMeasuredTariffRate =
+    typeof tariffRateOverride === "number" && Number.isFinite(tariffRateOverride);
   const [nationalMetrics, centralBank, tariffs, sectors, activeFtaPairs] = await Promise.all([
     nationalDocId
       ? db.collection<StateMetrics>("macroMetrics").findOne({ _id: nationalDocId })
       : null,
     db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId(countryId) }),
-    db.collection<Tariff>("tariffs").find({ countryId }).toArray(),
-    db
-      .collection<CorporateSector>("corporateSectors")
-      .find(
-        { countryId },
-        { projection: { corporationId: 1, countryId: 1, sectorType: 1, revenue: 1 } }
-      )
-      .toArray(),
-    loadActiveFtaPairs(db),
+    hasMeasuredTariffRate
+      ? Promise.resolve([])
+      : db.collection<Tariff>("tariffs").find({ countryId }).toArray(),
+    hasMeasuredTariffRate
+      ? Promise.resolve([])
+      : db
+          .collection<CorporateSector>("corporateSectors")
+          .find(
+            { countryId },
+            { projection: { corporationId: 1, countryId: 1, sectorType: 1, revenue: 1 } }
+          )
+          .toArray(),
+    hasMeasuredTariffRate ? Promise.resolve(new Set<string>()) : loadActiveFtaPairs(db),
   ]);
 
   const unemployment = finiteOr(nationalMetrics?.economic?.unemploymentRate?.value, 5.0);
@@ -784,8 +793,8 @@ export async function calculateCountryInflation(
   // partnered trade no longer drives consumer-price inflation.
   const ftaCoverage = buildFtaCoverageLookup(sectors, corpById, activeFtaPairs);
   const tariffRate = finiteOr(
-    computeCountryTariffPressure(tariffs, countryId, sectors, corpById, ftaCoverage),
-    0
+    tariffRateOverride,
+    finiteOr(computeCountryTariffPressure(tariffs, countryId, sectors, corpById, ftaCoverage), 0)
   );
 
   // 5. Wage growth from economic factors

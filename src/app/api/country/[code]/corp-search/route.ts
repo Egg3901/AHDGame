@@ -4,7 +4,7 @@
 // Auth: public read. Errors: 400
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Corporation } from "@/lib/db/types";
 import { escapeRegex } from "@/lib/utils/escapeRegex";
@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const q = new URL(request.url).searchParams.get("q")?.trim() ?? "";
     if (q.length < 2) return NextResponse.json({ results: [] });

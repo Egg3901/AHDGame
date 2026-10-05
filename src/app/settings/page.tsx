@@ -1,6 +1,14 @@
 "use client";
 
-import { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
+import {
+  Suspense,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -34,6 +42,8 @@ import { CampaignSongSection } from "./components/CampaignSongSection";
 import { PoliticsSection } from "./components/PoliticsSection";
 import { AppearanceSection } from "./components/AppearanceSection";
 import { SecuritySection } from "./components/SecuritySection";
+import { EmailSection } from "./components/EmailSection";
+import { fetchJson } from "@/lib/observability/fetchJson";
 import { BlockedPlayersSection } from "./components/BlockedPlayersSection";
 import { DangerZoneSection } from "./components/DangerZoneSection";
 import { ReferralsSection } from "./components/ReferralsSection";
@@ -68,13 +78,44 @@ import {
   InterfaceQuickSettings,
 } from "./components/QuickSettingsPanels";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
+import { isStoreAppDocument } from "@/lib/displayMode";
+
+const STORE_APP_HIDDEN_SECTIONS = new Set(["patreon", "supporter-perks"]);
+// The store-app marker is set once by the root layout and never changes.
+const subscribeNever = () => () => {};
 
 export function SettingsPageContent() {
   const resolveCountryName = useCountryDisplayName();
   const t = useTranslations("settings");
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { userData, rawUser, hasCharacter, loading, refetch } = useUserData();
+  const { userData, rawUser: navUser, hasCharacter, loading, refetch } = useUserData();
+  // The shared nav bootstrap (/api/client-nav) carries no account fields: no
+  // email, hasPassword, referral count, or linked-provider ids. Settings reads
+  // those from /api/auth/me and layers them over the nav user.
+  const [accountUser, setAccountUser] = useState<Record<string, unknown> | null>(null);
+  const navUserId = navUser?.id as string | undefined;
+  useEffect(() => {
+    if (!navUserId) return;
+    let cancelled = false;
+    fetchJson<{ user?: Record<string, unknown> }>("/api/auth/me", {
+      cache: "no-store",
+      feature: "settings-account",
+    })
+      .then((data) => {
+        if (!cancelled && data?.user) setAccountUser(data.user);
+      })
+      .catch(() => {
+        // fetchJson already reported real faults; the nav user stays as the fallback.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [navUserId]);
+  const rawUser = useMemo(
+    () => (navUser && accountUser ? { ...navUser, ...accountUser } : navUser),
+    [navUser, accountUser]
+  );
   const { refetch: refetchNav } = useAuthMe();
   const { theme } = useTheme();
   // Guards against a false "signed out" redirect when the user lands on /settings
@@ -87,6 +128,9 @@ export function SettingsPageContent() {
   const characterSyncAttemptedRef = useRef(false);
   const deepLinkScrolledRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
+  // Supporter perks are bought outside the App Store, so the phone app does
+  // not show them (guideline 3.1.1). The server snapshot keeps hydration stable.
+  const storeApp = useSyncExternalStore(subscribeNever, isStoreAppDocument, () => false);
   const [oauthBannerDismissed, setOauthBannerDismissed] = useState(false);
   const discord = searchParams.get("discord");
   const google = searchParams.get("google");
@@ -231,7 +275,7 @@ export function SettingsPageContent() {
     }
   }, [searchParams, router]);
 
-  // Populate account fields from rawUser (already fetched by useUserData — no extra round-trip).
+  // Populate account fields from rawUser (nav user plus the /api/auth/me account fields).
   // One-time sync from server data to local state; these fields may be mutated by user actions later.
   useEffect(() => {
     if (!rawUser) return;
@@ -503,12 +547,7 @@ export function SettingsPageContent() {
                 {username || "..."}
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-muted mb-1">{t("page.email")}</label>
-              <div className="rounded-xl border border-card-border bg-background/50 px-4 py-2.5 text-sm text-foreground">
-                {email || t("common.notSet")}
-              </div>
-            </div>
+            <EmailSection email={email} hasPassword={hasPassword} />
             <p className="text-xs text-muted">{t("page.contactAdmin")}</p>
           </div>
         );
@@ -660,6 +699,7 @@ export function SettingsPageContent() {
   );
   const availableSections = ALL_SECTIONS.filter(
     (section) =>
+      (!storeApp || !STORE_APP_HIDDEN_SECTIONS.has(section.id)) &&
       (!rawUser?.singleplayer ||
         ![
           "identity",
@@ -805,9 +845,7 @@ export function SettingsPageContent() {
             <header className="mb-6 md:mb-8">
               <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
                 <div>
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
-                    A House Divided
-                  </p>
+                  <p className="mb-2 text-body-sm font-medium text-primary">A House Divided</p>
                   <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-5xl">
                     {t("page.title")}
                   </h1>
@@ -928,7 +966,7 @@ export function SettingsPageContent() {
                             <BucketIcon id={bucket.id} />
                           </span>
                           <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+                            <p className="text-body-sm font-medium text-muted">
                               {t(bucket.eyebrowKey)}
                             </p>
                             <h2 className="mt-0.5 text-xl font-bold tracking-tight text-foreground">
@@ -1029,7 +1067,7 @@ export function SettingsPageContent() {
                         {advancedSections.length > 0 && (
                           <div className="rounded-2xl border border-card-border bg-card-muted/50 p-4">
                             <div className="mb-3">
-                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">
+                              <p className="text-body-sm font-medium text-muted">
                                 {t("page.advancedTitle")}
                               </p>
                               <p className="mt-1 text-xs text-muted">{t("page.advancedHint")}</p>

@@ -120,7 +120,7 @@ export function TransactionHistory({ currency }: Props) {
     <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-4 border-b border-card-border">
         <div>
-          <h3 className="text-sm font-semibold">Transaction History</h3>
+          <h3 className="text-sm font-semibold">Transaction history</h3>
           <p className="text-xs text-muted mt-0.5">
             {scope === "mine"
               ? "Currency trades each turn that affect your character, across every pair, not just this page."
@@ -197,7 +197,7 @@ export function TransactionHistory({ currency }: Props) {
         <div>
           {turns.map((bucket) => (
             <section key={bucket.turn} className="border-b border-card-border last:border-b-0">
-              <header className="flex items-center justify-between bg-card-elevated px-6 py-2 text-xs font-semibold uppercase tracking-wider text-muted">
+              <header className="flex items-center justify-between bg-card-elevated px-6 py-2 text-body-sm font-medium text-muted">
                 <span>Turn {bucket.turn}</span>
                 <span className="text-[10px] font-normal normal-case">
                   {bucket.items.length === 0

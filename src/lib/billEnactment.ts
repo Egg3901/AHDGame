@@ -510,7 +510,10 @@ export async function onBillEnacted(
   if (electoralLawProvisions.length > 0) {
     const enactingCountryId = await resolveBillCountryId(db, bill as Bill);
     for (const p of electoralLawProvisions) {
-      await applyElectoralLawProvision(db, p as ElectoralLawProvision, enactingCountryId);
+      await applyElectoralLawProvision(db, p as ElectoralLawProvision, enactingCountryId, {
+        turn: currentTurn,
+        billId: bill._id.toString(),
+      });
     }
   }
 

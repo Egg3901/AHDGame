@@ -5,7 +5,15 @@ import {
   buildChapterTour,
   buildTourChapters,
   buildTourSteps,
+  chapterBlurb,
+  estimateTourMinutes,
 } from "@/lib/tutorial/chapters";
+import {
+  DEFAULT_TUTORIAL_WORLD,
+  TUTORIAL_WORLD_VARIANTS,
+  tutorialWorldFromFlags,
+  type TutorialWorld,
+} from "@/lib/tutorial/world";
 import { TUTORIAL_CHAPTER_IDS, type TutorialPlan } from "@/lib/onboarding/tutorialPlan";
 import { stockmarketUrl } from "@/lib/urls";
 import enCatalog from "../../../messages/en/tutorial.json";
@@ -13,11 +21,22 @@ import deCatalog from "../../../messages/de/tutorial.json";
 
 const CHARACTER = { countryId: "US" as const, homeState: "CA" };
 
-/** Every authored step in the registry. The shared closing card is not one. */
-const everyStep = () =>
+/** Every authored step for one world shape. The shared closing card is not one. */
+const stepsFor = (world: TutorialWorld) =>
   TUTORIAL_CHAPTER_IDS.flatMap((id) =>
-    buildChapterTour(CHARACTER, id).filter((s) => s.id !== "tour-done")
+    buildChapterTour(CHARACTER, id, world).filter((s) => s.id !== "tour-done")
   );
+
+/** Every authored step in the registry, across every world variant, once each. */
+const everyStep = () => [
+  ...new Map(TUTORIAL_WORLD_VARIANTS.flatMap(stepsFor).map((s) => [s.id, s])).values(),
+];
+
+const FOUNDING_1991: TutorialWorld = {
+  edition: "1991",
+  noStartingParties: true,
+  founding: { primaryEndTurn: 25, generalEndTurn: 49 },
+};
 
 describe("step links", () => {
   it("points the market step at the actual post-redirect path", () => {
@@ -151,6 +170,9 @@ describe("step links", () => {
     for (const id of TUTORIAL_CHAPTER_IDS) {
       keys.add(TUTORIAL_CHAPTERS[id].title);
       keys.add(TUTORIAL_CHAPTERS[id].blurb);
+      for (const world of TUTORIAL_WORLD_VARIANTS) {
+        keys.add(chapterBlurb(TUTORIAL_CHAPTERS[id], world));
+      }
     }
     keys.add("closing.title");
     keys.add("closing.bodyFull");
@@ -177,9 +199,11 @@ describe("step links", () => {
     expect(flatten(deCatalog, "", []).sort()).toEqual(flatten(enCatalog, "", []).sort());
   });
 
-  it("keeps step ids unique across the whole registry", () => {
-    const ids = everyStep().map((s) => s.id);
-    expect(new Set(ids).size).toBe(ids.length);
+  it("keeps step ids unique across the whole registry, in every world", () => {
+    for (const world of TUTORIAL_WORLD_VARIANTS) {
+      const ids = stepsFor(world).map((s) => s.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    }
   });
 });
 
@@ -277,5 +301,99 @@ describe("registry", () => {
       expect(chapter.estimatedMinutes).toBeGreaterThan(0);
       expect(buildChapterTour(CHARACTER, id).length).toBeGreaterThan(1);
     }
+  });
+});
+
+describe("world variants", () => {
+  it("shows the 1991 edition of what changed in a 1991 world", () => {
+    const ids = buildChapterTour(CHARACTER, "whats-new", FOUNDING_1991).map((s) => s.id);
+    expect(ids[0]).toBe("whats-new-1991-intro");
+    expect(ids).toContain("whats-new-1991-parties");
+    expect(ids.some((id) => id === "whats-new-unions")).toBe(false);
+  });
+
+  it("keeps the general edition everywhere else", () => {
+    const ids = buildChapterTour(CHARACTER, "whats-new").map((s) => s.id);
+    expect(ids[0]).toBe("whats-new-intro");
+    expect(ids.some((id) => id.startsWith("whats-new-1991"))).toBe(false);
+  });
+
+  it("drops the no-parties card from a 1991 world that kept its parties", () => {
+    const world: TutorialWorld = { ...FOUNDING_1991, noStartingParties: false };
+    const ids = buildChapterTour(CHARACTER, "whats-new", world).map((s) => s.id);
+    expect(ids).not.toContain("whats-new-1991-parties");
+  });
+
+  it("swaps join-party for found-party in the same slot when nobody has parties", () => {
+    const normal = buildChapterTour(CHARACTER, "office").map((s) => s.id);
+    const empty = buildChapterTour(CHARACTER, "office", FOUNDING_1991).map((s) => s.id);
+    expect(empty).toHaveLength(normal.length);
+    const slot = normal.indexOf("join-party");
+    expect(empty[slot]).toBe("found-party");
+    const step = buildChapterTour(CHARACTER, "office", FOUNDING_1991)[slot];
+    // Founding a party ends in party membership, so the same signal advances it.
+    expect(step.advanceSignal).toBe("party");
+  });
+
+  it("adds the founding-round card to core only while the round runs", () => {
+    const during = buildChapterTour(CHARACTER, "core", FOUNDING_1991).map((s) => s.id);
+    const after = buildChapterTour(CHARACTER, "core", { ...FOUNDING_1991, founding: null }).map(
+      (s) => s.id
+    );
+    expect(during).toContain("founding-round");
+    expect(after).not.toContain("founding-round");
+  });
+
+  it("keeps the founding-round card for a returning player", () => {
+    const chapters = buildTourChapters(
+      CHARACTER,
+      { experience: "returning", interests: ["office"] },
+      FOUNDING_1991
+    );
+    const core = chapters.find((c) => c.id === "core");
+    expect(core?.steps.some((s) => s.id === "founding-round")).toBe(true);
+  });
+
+  it("interpolates the founding turns rather than hardcoding them", () => {
+    const body = (enCatalog as { tutorial: { steps: { foundingRound: { body: string } } } })
+      .tutorial.steps.foundingRound.body;
+    expect(body).toContain("{primaryEndTurn}");
+    expect(body).toContain("{generalEndTurn}");
+  });
+
+  it("uses the 1991 blurb for what changed in a 1991 world", () => {
+    expect(chapterBlurb(TUTORIAL_CHAPTERS["whats-new"], FOUNDING_1991)).toBe(
+      "chapters.whatsNew.blurb1991"
+    );
+    expect(chapterBlurb(TUTORIAL_CHAPTERS["whats-new"], DEFAULT_TUTORIAL_WORLD)).toBe(
+      "chapters.whatsNew.blurb"
+    );
+  });
+
+  it("reads the world from the shared flags", () => {
+    expect(
+      tutorialWorldFromFlags({
+        preset: "1991-default",
+        startingPartiesMode: "none",
+        foundingRound: { primaryEndTurn: 25, generalEndTurn: 49 },
+      })
+    ).toEqual(FOUNDING_1991);
+    expect(tutorialWorldFromFlags({ preset: "1953-default" })).toEqual(DEFAULT_TUTORIAL_WORLD);
+    // A malformed round is ignored rather than showing "turn undefined".
+    expect(
+      tutorialWorldFromFlags({ preset: "1991-default", foundingRound: { primaryEndTurn: "25" } })
+        .founding
+    ).toBeNull();
+  });
+});
+
+describe("estimateTourMinutes", () => {
+  it("counts core and what changed alongside the chosen chapters", () => {
+    const minutes = (ids: Array<keyof typeof TUTORIAL_CHAPTERS>) =>
+      ids.reduce((total, id) => total + TUTORIAL_CHAPTERS[id].estimatedMinutes, 0);
+    expect(estimateTourMinutes({ experience: "new", interests: ["invest"] })).toBe(
+      minutes(["core", "invest", "whats-new"])
+    );
+    expect(estimateTourMinutes({ experience: "skip", interests: [] })).toBe(0);
   });
 });

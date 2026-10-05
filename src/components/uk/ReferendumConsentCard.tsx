@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import Link from "next/link";
 import type { CountryId } from "@/lib/constants/countries";
@@ -99,7 +100,7 @@ export function ReferendumConsentCard({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data?.error ?? "Action failed.");
+        setError(apiErrorText(data, "Action failed."));
         setBusyId(null);
         return;
       }
@@ -195,7 +196,7 @@ export function ReferendumConsentCard({
                     href={referendumDetailUrl(countryId, r.regionId)}
                     className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 hover:text-amber-500"
                   >
-                    View Campaign →
+                    View campaign →
                   </Link>
                 </div>
               )}

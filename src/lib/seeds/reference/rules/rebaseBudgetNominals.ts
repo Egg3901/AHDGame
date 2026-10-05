@@ -9,6 +9,10 @@ interface BudgetNominals {
   debt: { principal: number; ceiling: number };
   baselineSpendingByCategory: Record<string, number>;
   baselineStateGrants: number;
+  policyRevenueConfigs?: Array<{
+    annualRevenuePerCapitaByOptionIndex?: number[];
+    gdpRevenueMultiplierByOptionIndex?: number[];
+  }>;
 }
 
 export function rebaseBudgetNominals<T extends BudgetNominals>(config: T, gdp: number): T {
@@ -28,5 +32,15 @@ export function rebaseBudgetNominals<T extends BudgetNominals>(config: T, gdp: n
       Object.entries(config.baselineSpendingByCategory).map(([key, value]) => [key, value * scale])
     ),
     baselineStateGrants: config.baselineStateGrants * scale,
+    ...(config.policyRevenueConfigs && {
+      policyRevenueConfigs: config.policyRevenueConfigs.map((revenue) => ({
+        ...revenue,
+        ...(revenue.annualRevenuePerCapitaByOptionIndex && {
+          annualRevenuePerCapitaByOptionIndex: revenue.annualRevenuePerCapitaByOptionIndex.map(
+            (amount) => amount * scale
+          ),
+        }),
+      })),
+    }),
   };
 }

@@ -67,6 +67,7 @@ import {
 } from "@/components/navbar/experimentalNavPrimitives";
 import { ExperimentalUserMenu } from "@/components/navbar/ExperimentalUserMenu";
 import { ExperimentalMobileMenu } from "@/components/navbar/ExperimentalMobileMenu";
+import { hasSandboxAccess } from "@/lib/sandbox/access";
 import { Wordmark, WORDMARK } from "@/components/Wordmark";
 import type {
   AdminCharacter,
@@ -297,10 +298,14 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
 
   const canAccessSandbox =
     !user?.singleplayer &&
-    (user?.isAdmin ||
-      user?.isModerator ||
-      ((user?.patreonTier === "supporter-plus" || user?.patreonTier === "supporter-plus-plus") &&
-        user?.isPatronActive));
+    hasSandboxAccess({
+      isAdmin: user?.isAdmin,
+      isModerator: user?.isModerator,
+      patreonTier: user?.patreonTier,
+      isPatronActive: user?.isPatronActive,
+      testerAccessEnabled: user?.sandboxTesterAccess,
+      testerGranted: user?.sandboxTesterAccess,
+    });
   const showWiki = !!(user?.isAdmin || user?.isModerator) || !wikiDisabled;
 
   // Top-level tabs: Actions · State · Nation · World (Help and Staff are
@@ -396,7 +401,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
             {showLeaderboardHeader && (
               <>
                 <div className="px-2.5 pb-1 pt-2 flex items-center gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+                  <span className="text-body-sm font-medium text-muted">
                     {t("menus.world.headers.leaderboard")}
                   </span>
                   <span className="rounded-full bg-warning/15 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-warning">
@@ -506,7 +511,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                   </svg>
                 </button>
               ) : (
-                <div className="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted/80">
+                <div className="px-2.5 pb-1 pt-2 text-body-sm font-medium text-muted">
                   {t(section.titleKey)}
                 </div>
               )}
@@ -719,7 +724,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   return (
     <>
       <nav
-        className="ahd-navbar-enter sticky top-0 z-50 border-b border-card-border/60 bg-card/50 shadow-panel backdrop-blur-xl"
+        className="ahd-navbar-enter sticky top-0 z-50 border-b pt-[env(safe-area-inset-top,0px)] border-card-border/60 bg-card/50 shadow-panel backdrop-blur-xl"
         aria-label={t("common.mainNavigation")}
         data-feedback-ignore="true"
       >
@@ -1186,7 +1191,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               className={
                 mobileProfileOpen
                   ? "absolute right-3 top-[calc(4rem+env(safe-area-inset-top,0px))] w-[min(19rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-card-border bg-card shadow-2xl"
-                  : "absolute inset-y-0 left-0 flex w-[min(21rem,calc(100vw-3rem))] flex-col border-r border-card-border bg-card shadow-2xl"
+                  : "absolute inset-y-0 left-0 flex w-[min(21rem,calc(100vw-3rem))] flex-col border-r pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] border-card-border bg-card shadow-2xl"
               }
             >
               {!mobileProfileOpen && (

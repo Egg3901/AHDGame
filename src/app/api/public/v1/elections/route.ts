@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { publicApiGuard } from "@/lib/publicApi/middleware";
 import { queryElectionList } from "@/lib/publicApi/election";
 
@@ -19,10 +19,7 @@ export async function GET(request: Request) {
     const results = url.searchParams.get("results") === "true";
 
     if (!country) {
-      return NextResponse.json(
-        { ok: false, error: "country is required", code: "BAD_REQUEST" },
-        { status: 400 }
-      );
+      return errorResponse(400, "country is required", { code: "BAD_REQUEST", extra: { ok: false } });
     }
 
     const db = await getDb();

@@ -15,9 +15,17 @@
  * codes (e.g. 403 for a disabled feature) as a normal `null`-ish outcome the
  * caller handles, by checking `HttpError.status` in the catch.
  */
+import { parseErrorBody } from "@/lib/errors/catalog";
 import { captureClientException } from "@/lib/observability/sentryClientLazy";
 
 export class HttpError extends Error {
+  /** Catalog code from the shared error envelope, when the body carried one. */
+  public code?: string;
+  /** Sentry event id or request id from the envelope. */
+  public ref?: string;
+  /** The server's own message, when the body carried one. */
+  public serverMessage?: string;
+
   constructor(
     public readonly status: number,
     public readonly url: string
@@ -53,11 +61,25 @@ export async function fetchJson<T = unknown>(
 
   if (!res.ok) {
     const err = new HttpError(res.status, input);
+    try {
+      const parsed = parseErrorBody(await res.clone().json());
+      err.code = parsed.code;
+      err.ref = parsed.ref;
+      err.serverMessage = parsed.message;
+    } catch {
+      // Non-JSON error body: status alone is the signal.
+    }
     // 5xx is our fault and must be captured; 4xx is usually expected and is
     // surfaced to the caller without adding noise.
     if (res.status >= 500) {
       captureClientException(err, {
-        tags: { kind: "fetch", phase: "http", status: res.status, feature },
+        tags: {
+          kind: "fetch",
+          phase: "http",
+          status: res.status,
+          feature,
+          ...(err.code ? { error_code: err.code } : {}),
+        },
         extra: { url: input },
       });
     }

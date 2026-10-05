@@ -10,7 +10,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { bulkFetchCharacterNames } from "@/lib/db/characterLookup";
@@ -43,19 +43,19 @@ const voteSchema = z.object({
 async function handleGET(_request: Request, { params }: RouteParams) {
   try {
     if (!(await isLabourFullMode())) {
-      return NextResponse.json({ error: "Player-run unions are not enabled." }, { status: 403 });
+      return errorResponse(403, "Player-run unions are not enabled.");
     }
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid union ID" }, { status: 400 });
+      return errorResponse(400, "Invalid union ID");
     }
 
     const db = await getDb();
     const unionObjectId = new ObjectId(id);
     const union = await db.collection<Union>("unions").findOne({ _id: unionObjectId });
     if (!union) {
-      return NextResponse.json({ error: "Union not found" }, { status: 404 });
+      return errorResponse(404, "Union not found");
     }
 
     const [votesRaw, organizerDocs, user, weights, leader] = await Promise.all([
@@ -224,7 +224,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!auth.ok) return auth.response;
 
     if (!(await isLabourFullMode())) {
-      return NextResponse.json({ error: "Player-run unions are not enabled." }, { status: 403 });
+      return errorResponse(403, "Player-run unions are not enabled.");
     }
 
     const rateLimit = checkRateLimit(auth.user.userId, 20, 60000);
@@ -232,23 +232,23 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, voteSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid union ID" }, { status: 400 });
+      return errorResponse(400, "Invalid union ID");
     }
 
     const db = await getDb();
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const union = await db.collection<Union>("unions").findOne({ _id: new ObjectId(id) });
     if (!union) {
-      return NextResponse.json({ error: "Union not found" }, { status: 404 });
+      return errorResponse(404, "Union not found");
     }
 
     const result = await voteUnionLeader(
@@ -258,7 +258,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       new ObjectId(parsed.data.candidateCharacterId)
     );
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json({

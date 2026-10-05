@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getDb } from "@/lib/mongodb";
 import {
@@ -38,7 +38,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid NPP ID" }, { status: 400 });
+      return errorResponse(400, "Invalid NPP ID");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -49,7 +49,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -61,20 +61,16 @@ export async function POST(request: Request, { params }: RouteParams) {
       candidacyId: parsed.data.candidacyId,
     });
 
-    if ("error" in result) {
-      return NextResponse.json(
-        {
-          error: result.error,
-          ...(result.failure ? { failure: result.failure } : {}),
-        },
-        { status: result.status }
-      );
+    if (result.error !== undefined) {
+      return errorResponse(result.status, result.error, {
+        extra: { ...(result.failure ? { failure: result.failure } : {}) },
+      });
     }
 
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof DirectActionBalanceConflictError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
+      return errorResponse(409, error.message);
     }
     return handleRouteError(error);
   }
@@ -87,7 +83,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid NPP ID" }, { status: 400 });
+      return errorResponse(400, "Invalid NPP ID");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -98,8 +94,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
       characterId: auth.user.character._id,
       nppId: new ObjectId(id),
     });
-    if ("error" in result) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+    if (result.error !== undefined) {
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json(result);

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
@@ -39,10 +39,7 @@ type Context = { params: Promise<{ code: string }> };
 export async function GET(_request: Request, { params }: Context) {
   try {
     if ((await params).code.toUpperCase() !== "BG")
-      return NextResponse.json(
-        { error: "No Bulgarian constitutional decision here" },
-        { status: 404 }
-      );
+      return errorResponse(404, "No Bulgarian constitutional decision here");
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     const db = await getDb();
@@ -67,21 +64,17 @@ export async function GET(_request: Request, { params }: Context) {
 export async function POST(request: Request, { params }: Context) {
   try {
     if ((await params).code.toUpperCase() !== "BG")
-      return NextResponse.json(
-        { error: "No Bulgarian constitutional decision here" },
-        { status: 404 }
-      );
+      return errorResponse(404, "No Bulgarian constitutional decision here");
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     const limit = checkRateLimit(`bg-constitutional-reform:${auth.user.userId}`, 5, 60_000);
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
     const parsed = await parseJsonBody(request, bodySchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const db = await getDb();
     const game = await getGameState(db);
     if (game?.preset !== "1991-default")
-      return NextResponse.json({ error: "No electoral decision in this era" }, { status: 409 });
+      return errorResponse(409, "No electoral decision in this era");
     const character = await getCharacterByUserId(db, auth.user.userId);
     const official = character
       ? await db.collection("electedOfficials").findOne(
@@ -102,16 +95,13 @@ export async function POST(request: Request, { params }: Context) {
         )
       : null;
     if (!official && (parsed.data.action === "endorse" || auth.user.isAdmin !== true))
-      return NextResponse.json(
-        {
-          error:
-            parsed.data.kind === "dissolution1991"
-              ? "A continued deputy, government or President must introduce this motion"
-              : parsed.data.action === "endorse"
-                ? "A seated constituent deputy must endorse this initiative"
-                : "The Bulgarian government or President must introduce this draft",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        parsed.data.kind === "dissolution1991"
+          ? "A continued deputy, government or President must introduce this motion"
+          : parsed.data.action === "endorse"
+            ? "A seated constituent deputy must endorse this initiative"
+            : "The Bulgarian government or President must introduce this draft"
       );
     const freeze = await checkLegislationFreeze("BG");
     if (!freeze.ok) return freeze.response;
@@ -162,7 +152,7 @@ export async function POST(request: Request, { params }: Context) {
     );
   } catch (error) {
     if (error instanceof Bg1991ConstitutionalConflict || error instanceof Bg1991InitiativeConflict)
-      return NextResponse.json({ error: error.message }, { status: 409 });
+      return errorResponse(409, error.message);
     return handleRouteError(error);
   }
 }

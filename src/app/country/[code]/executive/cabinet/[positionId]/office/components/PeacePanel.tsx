@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { SectionCard, Badge } from "./dossier";
 import { type CountryId, type GovernmentType } from "@/lib/constants/countries";
@@ -297,7 +298,7 @@ export function PeacePanel({
         warResolved?: boolean;
       } | null;
       if (!res.ok) {
-        setError(payload?.error ?? "That could not be done.");
+        setError(apiErrorText(payload, "That could not be done."));
         return;
       }
       setNote(payload?.warResolved ? "Accepted. The war is over." : done);

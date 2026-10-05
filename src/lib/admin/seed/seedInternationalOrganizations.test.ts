@@ -79,6 +79,27 @@ describe("seedInternationalOrganizations — founding-year gate", () => {
     }
   });
 
+  it("seeds the 1991 Community even when a previous world's European record was carried over", async () => {
+    const { seedInternationalOrganizations } = await import("./seedInternationalOrganizations");
+    db = freshDb();
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 1,
+      europeanIntegration: {
+        stage: "community",
+        source: "legacy-settlement",
+        establishedTurn: 1262,
+        ratifications: {},
+      },
+    });
+    db.collection("gameState").updateOne.mockResolvedValue({ matchedCount: 1 });
+    await seedInternationalOrganizations(db as unknown as Db, vi.fn(), "1991-default");
+    const members = inserted("organizationMemberships").filter((r) => r.organizationId === "EU");
+    expect(members.map((r) => r.countryId).sort()).toEqual(
+      ["BE", "DE", "DK", "ES", "FR", "GR", "IE", "IT", "LU", "NL", "PT", "UK"].sort()
+    );
+  });
+
   it("seeds Commonwealth (UK, NG) at every preset", async () => {
     const { seedInternationalOrganizations } = await import("./seedInternationalOrganizations");
     for (const preset of ["1953-default", "1979-default", "1991-default", "2019-default"]) {

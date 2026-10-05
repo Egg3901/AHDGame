@@ -11,7 +11,7 @@ import { NextResponse } from "next/server";
 import type { Filter } from "mongodb";
 import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
 import { applyBoardDelta } from "@/lib/politicalLegislation/boardWrite";
 import { getNuclearProgram, putNuclearProgram } from "@/lib/db/collections/nuclearPrograms";
@@ -38,27 +38,27 @@ export async function POST(request: Request, { params }: NuclearRouteParams) {
 
     const parsed = await parseJsonBody(request, adoptSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const node = nuclearNode(parsed.data.nodeKey);
     if (!node || node.kind !== "delivery") {
-      return NextResponse.json({ error: "Not a delivery node" }, { status: 400 });
+      return errorResponse(400, "Not a delivery node");
     }
 
     const program = await getNuclearProgram(db, countryId);
     const status = nuclearNodeStatus(node, program.adopted, gate.year ?? 0);
     if (status !== "available") {
-      return NextResponse.json({ error: `Node is ${status}, not available` }, { status: 400 });
+      return errorResponse(400, `Node is ${status}, not available`);
     }
 
     const pot = await getDefenseAppropriation(db, countryId);
     if (uncommittedFrom(pot) < node.cost) {
-      return NextResponse.json({ error: "Insufficient defence appropriation" }, { status: 409 });
+      return errorResponse(409, "Insufficient defence appropriation");
     }
     const paid = await debitAppropriation(db, countryId, node.cost);
     if (!paid) {
-      return NextResponse.json({ error: "Insufficient defence appropriation" }, { status: 409 });
+      return errorResponse(409, "Insufficient defence appropriation");
     }
 
     const turn = gate.currentTurn;

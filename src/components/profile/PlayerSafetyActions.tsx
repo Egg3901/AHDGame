@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const REASONS: { value: string; label: string }[] = [
   { value: "harassment", label: "Harassment or bullying" },
@@ -50,7 +51,7 @@ export function PlayerSafetyActions({ characterId, characterName, initiallyBlock
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setMessage({ text: data.error ?? "Something went wrong. Try again.", ok: false });
+        setMessage({ text: apiErrorText(data, "Something went wrong. Try again."), ok: false });
         return;
       }
       setBlocked(!blocked);
@@ -76,7 +77,10 @@ export function PlayerSafetyActions({ characterId, characterName, initiallyBlock
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setMessage({ text: data.error ?? "Could not send the report. Try again.", ok: false });
+        setMessage({
+          text: apiErrorText(data, "Could not send the report. Try again."),
+          ok: false,
+        });
         return;
       }
       setReportOpen(false);

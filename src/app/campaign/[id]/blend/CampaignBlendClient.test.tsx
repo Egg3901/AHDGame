@@ -269,12 +269,12 @@ describe("suspended campaign", () => {
 describe("ticker", () => {
   it("renders nothing when the race has no wire traffic", () => {
     const { container } = renderClient({ wire: [] });
-    expect(container.textContent).not.toContain("WIRE");
+    expect(container.textContent).not.toContain("Wire");
   });
 
   it("shows headlines when the race has traffic", () => {
     renderClient({ wire: ["NOMINEE TAKES GROUND GAME TO LEVEL 9"] });
-    expect(screen.getAllByText("WIRE").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Wire").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/GROUND GAME TO LEVEL 9/).length).toBeGreaterThan(0);
   });
 });

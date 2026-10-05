@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError, badRequest, ApiError } from "@/lib/api/errors";
+import { handleRouteError, badRequest, ApiError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createAdminLog } from "@/lib/adminLog";
 import { getRegistrationIpMatchCandidates, normalizeIp } from "@/lib/utils/ipNormalize";
@@ -63,8 +63,7 @@ export async function POST(request: Request) {
     if (!auth.ok) return auth.response;
 
     const parsed = await parseJsonBody(request, postSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const normalized = normalizeIp(parsed.data.ip);
     if (!normalized) throw badRequest("Invalid IP address.");

@@ -14,6 +14,7 @@ import {
   normalizeServiceIds,
   type UnionServiceId,
 } from "@/lib/unions/unionServices";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface UnionServicesPanelProps {
   unionId: string;
@@ -112,7 +113,7 @@ export function UnionServicesPanel({
       const data = await res.json();
       setResult({
         ok: res.ok,
-        text: res.ok ? "Services updated." : (data.error ?? "Failed to update services."),
+        text: res.ok ? "Services updated." : apiErrorText(data, "Failed to update services."),
       });
       if (res.ok) onSaved();
     } catch {
@@ -231,7 +232,7 @@ export function UnionServicesPanel({
           onClick={handleSave}
           className="w-fit rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
         >
-          {saving ? "Saving…" : "Save Services"}
+          {saving ? "Saving…" : "Save services"}
         </button>
       )}
 

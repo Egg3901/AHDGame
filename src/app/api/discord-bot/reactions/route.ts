@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -22,12 +22,12 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     if (!requireBotToken(request, false)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { discordUserId, messageId, channelType, emoji } = parsed.data;
 
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       .collection<User>("users")
       .findOne({ discordId: discordUserId }, { projection: { _id: 1 } });
     if (!user) {
-      return NextResponse.json({ linked: false }, { status: 404 });
+      return statusResponse(404, { linked: false });
     }
     const userId = user._id;
 
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
         .collection<NewsPost>("newsPosts")
         .findOne({ discordMessageId: messageId }, { projection: { _id: 1, reactions: 1 } });
       if (!post) {
-        return NextResponse.json({ linked: true, itemFound: false }, { status: 404 });
+        return statusResponse(404, { linked: true, itemFound: false });
       }
 
       const postId = post._id;
@@ -118,7 +118,7 @@ export async function POST(request: Request) {
       { projection: { _id: 1, reactions: 1 } }
     );
     if (!suggestion) {
-      return NextResponse.json({ linked: true, itemFound: false }, { status: 404 });
+      return statusResponse(404, { linked: true, itemFound: false });
     }
 
     const suggestionId = suggestion._id;

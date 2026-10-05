@@ -242,7 +242,7 @@ function CardContent({
       <div className="grid grid-cols-2 gap-px bg-card-border/30">
         {activePrice != null && (
           <StatRow
-            label={mode === "price" ? "National Price" : "Avg Price"}
+            label={mode === "price" ? "National price" : "Avg price"}
             value={formatCommodityPrice(activePrice, currencyCode, forexEnabled, exchangeRates)}
             color="text-foreground"
           />
@@ -331,7 +331,7 @@ function CardContent({
               }}
               className="w-full px-3 py-2.5 text-sm font-semibold rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors"
             >
-              View National Map
+              View national map
             </button>
             <button
               onClick={(e) => {
@@ -340,7 +340,7 @@ function CardContent({
               }}
               className="w-full text-center text-xs text-muted hover:text-foreground transition-colors py-0.5"
             >
-              View Country Page →
+              View country page →
             </button>
           </>
         ) : (
@@ -351,7 +351,7 @@ function CardContent({
             }}
             className="w-full px-3 py-2 text-xs font-semibold rounded-lg border border-card-border bg-card hover:bg-card-elevated transition-colors text-foreground"
           >
-            View Country Page
+            View country page
           </button>
         )}
       </div>
@@ -377,7 +377,7 @@ function StatRow({
 }) {
   return (
     <div className="px-4 py-2 bg-card">
-      <div className="text-[9px] font-semibold text-muted uppercase tracking-wider">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div className={`text-sm font-bold tabular-nums ${color}`}>{value}</div>
       {sub && <div className="text-[9px] text-muted">{sub}</div>}
     </div>

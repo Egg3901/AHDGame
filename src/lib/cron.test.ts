@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
 
 // Mock node-cron
 vi.mock("node-cron", () => ({
@@ -20,8 +20,9 @@ vi.mock("./cron/backupFireGuard", () => ({
   shouldFireBackupTurn: vi.fn(),
 }));
 
-const { mockRunShareFillRecoveryPass, mockGetDb } = vi.hoisted(() => ({
+const { mockRunShareFillRecoveryPass, mockRunPatreonReconcile, mockGetDb } = vi.hoisted(() => ({
   mockRunShareFillRecoveryPass: vi.fn(),
+  mockRunPatreonReconcile: vi.fn(),
   mockGetDb: vi.fn(),
 }));
 
@@ -29,6 +30,10 @@ const { mockRunShareFillRecoveryPass, mockGetDb } = vi.hoisted(() => ({
 // gating without running real recovery. The specifier must match cron.ts.
 vi.mock("@/lib/corporations/commands/shareTrading/shareFillAudit", () => ({
   runShareFillRecoveryPass: mockRunShareFillRecoveryPass,
+}));
+
+vi.mock("@/lib/patreon/reconcile", () => ({
+  runPatreonReconcile: mockRunPatreonReconcile,
 }));
 
 // Mock mongodb: the recovery sweep calls getDb() when idle. Other callbacks
@@ -59,6 +64,16 @@ describe("cron jobs", () => {
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
   let consoleErrorSpy: ReturnType<typeof vi.fn>;
 
+  // Cold transforms belong to suite setup, outside the lifecycle assertion timeout.
+  beforeAll(async () => {
+    await import("./cron");
+  }, 30_000);
+
+  // Module loading has its own setup budget; cron callback assertions keep their timeout.
+  beforeAll(async () => {
+    await import("./cron");
+  }, 30_000);
+
   beforeEach(async () => {
     const cron = await import("node-cron");
     const turnSystem = await import("./turnSystem");
@@ -81,6 +96,21 @@ describe("cron jobs", () => {
       incomplete: 0,
     });
     mockGetDb.mockResolvedValue({});
+    mockRunPatreonReconcile.mockResolvedValue({
+      dryRun: false,
+      counts: {
+        patreonMembers: 2,
+        activePaidPatrons: 1,
+        ahdSupporters: 1,
+        toGrant: 1,
+        toDerole: 0,
+        unmatchedActivePatrons: 0,
+        unmatchedAhdSupporters: 0,
+        expired: 0,
+      },
+    });
+    // Load the dependency graph before the timed lifecycle assertions.
+    await import("./cron");
   });
 
   /** The callback registered for `expression`. Throws rather than returning
@@ -100,10 +130,81 @@ describe("cron jobs", () => {
   afterEach(() => {
     consoleLogSpy.mockRestore();
     consoleErrorSpy.mockRestore();
+    vi.unstubAllEnvs();
     vi.resetModules();
   });
 
   describe("initializeCronJobs", () => {
+    it("runs Patreon reconciliation in apply mode from the hosted worker schedule", async () => {
+      vi.stubEnv("CRON_OWNER", "worker");
+      vi.stubEnv("SINGLEPLAYER", undefined);
+      vi.stubEnv("NODE_ENV", "production");
+      const { initializeCronJobs, PATREON_RECONCILIATION_SCHEDULE } = await import("./cron");
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({ currentTurn: 1, isActive: true });
+      mockSchedule.mockReturnValue({ start: vi.fn(), stop: vi.fn(), getStatus: vi.fn() } as any);
+
+      await initializeCronJobs();
+      await findScheduledCallback(PATREON_RECONCILIATION_SCHEDULE)();
+
+      expect(mockRunPatreonReconcile).toHaveBeenCalledWith(expect.anything(), true);
+      const registration = mockSchedule.mock.calls.find(
+        ([schedule]) => schedule === PATREON_RECONCILIATION_SCHEDULE
+      );
+      expect(registration?.[2]).toMatchObject({ timezone: "UTC" });
+    });
+
+    it.each(["web", undefined])(
+      "does not schedule Patreon reconciliation with cron owner %s",
+      async (owner) => {
+        vi.stubEnv("CRON_OWNER", owner);
+        vi.stubEnv("SINGLEPLAYER", undefined);
+        vi.stubEnv("NODE_ENV", "production");
+        mockInitializeGameState.mockResolvedValue(undefined);
+        mockGetGameState.mockResolvedValue({ currentTurn: 1, isActive: true });
+        mockSchedule.mockReturnValue({ start: vi.fn(), stop: vi.fn(), getStatus: vi.fn() } as any);
+
+        const { initializeCronJobs, PATREON_RECONCILIATION_SCHEDULE } = await import("./cron");
+        await initializeCronJobs();
+
+        expect(
+          mockSchedule.mock.calls.some(([schedule]) => schedule === PATREON_RECONCILIATION_SCHEDULE)
+        ).toBe(false);
+      }
+    );
+
+    it("does not schedule Patreon reconciliation in singleplayer even if marked worker", async () => {
+      const { initializeCronJobs, PATREON_RECONCILIATION_SCHEDULE } = await import("./cron");
+      vi.stubEnv("CRON_OWNER", "worker");
+      vi.stubEnv("SINGLEPLAYER", "1");
+      vi.stubEnv("NODE_ENV", "production");
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({ currentTurn: 1, isActive: true });
+      mockSchedule.mockReturnValue({ start: vi.fn(), stop: vi.fn(), getStatus: vi.fn() } as any);
+
+      await initializeCronJobs();
+
+      expect(
+        mockSchedule.mock.calls.some(([schedule]) => schedule === PATREON_RECONCILIATION_SCHEDULE)
+      ).toBe(false);
+    });
+
+    it("does not schedule Patreon reconciliation from a development worker process", async () => {
+      const { initializeCronJobs, PATREON_RECONCILIATION_SCHEDULE } = await import("./cron");
+      vi.stubEnv("CRON_OWNER", "worker");
+      vi.stubEnv("SINGLEPLAYER", undefined);
+      vi.stubEnv("NODE_ENV", "development");
+      mockInitializeGameState.mockResolvedValue(undefined);
+      mockGetGameState.mockResolvedValue({ currentTurn: 1, isActive: true });
+      mockSchedule.mockReturnValue({ start: vi.fn(), stop: vi.fn(), getStatus: vi.fn() } as any);
+
+      await initializeCronJobs();
+
+      expect(
+        mockSchedule.mock.calls.some(([schedule]) => schedule === PATREON_RECONCILIATION_SCHEDULE)
+      ).toBe(false);
+    });
+
     it("initializes game state before scheduling cron", async () => {
       mockInitializeGameState.mockResolvedValue(undefined);
       mockGetGameState.mockResolvedValue({

@@ -20,7 +20,7 @@ export default async function ModeratorPanelPage() {
           <div className="flex items-center gap-3 py-3 sm:py-5">
             <div className="h-8 w-1 flex-shrink-0 rounded-full bg-info sm:h-10" />
             <div>
-              <h1 className="text-base font-bold sm:text-lg">Moderator Panel</h1>
+              <h1 className="text-base font-bold sm:text-lg">Moderator panel</h1>
               <p className="mt-0.5 hidden text-xs text-muted sm:block">
                 Player management &middot; Transaction review &middot; Content moderation
               </p>

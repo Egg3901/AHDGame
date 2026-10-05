@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui";
 import { StatPointAllocator, defaultStatBuild, pointsRemaining } from "./StatPointAllocator";
 import type { CharacterStats } from "@/lib/stats/statsConstants";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Own-profile control for spending the single free stat reallocation. Opens a
@@ -41,7 +42,7 @@ export function StatReallocateControl() {
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || "Failed to reallocate your stats. Please try again.");
+        throw new Error(apiErrorText(d, "Failed to reallocate your stats. Please try again."));
       }
       setOpen(false);
       router.refresh();
@@ -77,7 +78,7 @@ export function StatReallocateControl() {
           />
           <div className="relative z-10 w-full max-w-lg rounded-xl border border-card-border bg-card shadow-2xl">
             <div className="relative px-5 pt-5 pb-4">
-              <h2 className="text-lg font-semibold text-foreground">Reallocate Your Stats</h2>
+              <h2 className="text-lg font-semibold text-foreground">Reallocate your stats</h2>
               <p className="mt-1 text-xs text-muted">
                 This is your <span className="font-semibold text-foreground">one free change</span>.
                 It rewrites your stat sheet from scratch and{" "}
@@ -112,7 +113,7 @@ export function StatReallocateControl() {
                   isLoading={submitting}
                   className="min-w-[160px]"
                 >
-                  {remaining === 0 ? "Confirm Reallocation" : `${remaining} points left`}
+                  {remaining === 0 ? "Confirm reallocation" : `${remaining} points left`}
                 </Button>
               </div>
             </div>

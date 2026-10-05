@@ -13,6 +13,7 @@ import {
   type SuggestionAdminItem,
   type SuggestionAdminDetail,
 } from "./types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface State {
   activeStage: string;
@@ -151,7 +152,7 @@ export function SuggestionsTab({ initialIssueNumber }: { initialIssueNumber?: nu
       const res = await fetch(`/api/admin/suggestions?${params}`);
       const data = await res.json();
       if (!res.ok) {
-        dispatch({ type: "LIST_ERROR", error: data.error ?? "Failed" });
+        dispatch({ type: "LIST_ERROR", error: apiErrorText(data, "Failed") });
         return;
       }
       dispatch({
@@ -193,7 +194,7 @@ export function SuggestionsTab({ initialIssueNumber }: { initialIssueNumber?: nu
       const res = await fetch(`/api/admin/suggestions/${issueNumStr}`);
       const data = await res.json();
       if (!res.ok) {
-        dispatch({ type: "SET_ERR", error: data.error ?? "Failed" });
+        dispatch({ type: "SET_ERR", error: apiErrorText(data, "Failed") });
         return;
       }
       dispatch({ type: "DETAIL_SUCCESS", detail: data });
@@ -220,7 +221,7 @@ export function SuggestionsTab({ initialIssueNumber }: { initialIssueNumber?: nu
       });
       const data = await res.json();
       if (!res.ok) {
-        dispatch({ type: "SET_ERR", error: data.error ?? "Update failed" });
+        dispatch({ type: "SET_ERR", error: apiErrorText(data, "Update failed") });
         return;
       }
       dispatch({ type: "PATCH_LIST_STATUS", issueNumber, status: nextStatus });
@@ -251,7 +252,7 @@ export function SuggestionsTab({ initialIssueNumber }: { initialIssueNumber?: nu
       });
       const data = await res.json();
       if (!res.ok) {
-        dispatch({ type: "UPDATE_DONE", msg: `✗ ${data.error}` });
+        dispatch({ type: "UPDATE_DONE", msg: `✗ ${apiErrorText(data, "Request failed")}` });
         return;
       }
       dispatch({ type: "UPDATE_DONE", msg: "✓ Updated" });
@@ -297,7 +298,7 @@ export function SuggestionsTab({ initialIssueNumber }: { initialIssueNumber?: nu
       });
       const data = await res.json();
       if (!res.ok) {
-        dispatch({ type: "SET_ERR", error: data.error ?? "Merge failed" });
+        dispatch({ type: "SET_ERR", error: apiErrorText(data, "Merge failed") });
         return;
       }
       setSelectedIssueNums(new Set());
@@ -321,7 +322,7 @@ export function SuggestionsTab({ initialIssueNumber }: { initialIssueNumber?: nu
       });
       const data = await res.json();
       if (!res.ok) {
-        dispatch({ type: "SET_ERR", error: data.error ?? "Delete failed" });
+        dispatch({ type: "SET_ERR", error: apiErrorText(data, "Delete failed") });
         return;
       }
       setSelectedIssueNums(new Set());
@@ -339,7 +340,7 @@ export function SuggestionsTab({ initialIssueNumber }: { initialIssueNumber?: nu
         const res = await fetch(`/api/admin/suggestions/${issueNumber}`, { method: "DELETE" });
         if (!res.ok) {
           const data = await res.json();
-          dispatch({ type: "SET_ERR", error: data.error ?? "Delete failed" });
+          dispatch({ type: "SET_ERR", error: apiErrorText(data, "Delete failed") });
           return;
         }
         dispatch({ type: "CLEAR" });

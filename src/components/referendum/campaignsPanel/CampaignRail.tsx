@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import type { ReferendumStatus, ReferendumKind } from "@/lib/db/types/referendum";
 import { DeclarePositionControl } from "./DeclarePositionControl";
@@ -57,7 +58,7 @@ export function CampaignRail(props: Props) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data?.error ?? "Action failed.");
+        setError(apiErrorText(data, "Action failed."));
         setBusy(false);
         return;
       }

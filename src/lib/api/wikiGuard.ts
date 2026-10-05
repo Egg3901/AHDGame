@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getGameStateCollection } from "@/lib/db/collections";
 import { getAuthUser } from "@/lib/auth";
+import { errorResponse } from "@/lib/api/errors";
 
 /**
  * Returns a 403 response if the wiki is disabled and the caller is not an admin
@@ -18,5 +19,5 @@ export async function checkWikiDisabled(): Promise<NextResponse | null> {
   const user = await getAuthUser().catch(() => null);
   if (user?.isAdmin || user?.isModerator) return null;
 
-  return NextResponse.json({ error: "Wiki is currently disabled" }, { status: 403 });
+  return errorResponse(403, "Wiki is currently disabled");
 }

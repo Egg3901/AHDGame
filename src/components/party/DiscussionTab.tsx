@@ -5,6 +5,7 @@ import { CardSkeleton, Skeleton } from "@/components/ui";
 import { LocalTime } from "@/components/time/LocalTime";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const MAX_CONTENT = 1000;
 const PAGE_SIZE = 20;
@@ -135,7 +136,7 @@ export function DiscussionTab({ apiBasePath, isModerator }: DiscussionTabProps) 
       });
       const data = await res.json();
       if (!res.ok) {
-        setMessage(data.error ?? "Failed to post.");
+        setMessage(apiErrorText(data, "Failed to post."));
         if (data.retryAfter) setCooldownRemaining(data.retryAfter);
         return;
       }
@@ -156,7 +157,7 @@ export function DiscussionTab({ apiBasePath, isModerator }: DiscussionTabProps) 
       const res = await fetch(`${apiBasePath}/${postId}`, { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json();
-        setMessage(data.error ?? "Failed to delete.");
+        setMessage(apiErrorText(data, "Failed to delete."));
         return;
       }
       setPosts((prev) =>

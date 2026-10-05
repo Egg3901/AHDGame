@@ -8,7 +8,7 @@ import { getVotingUpperChamberKey } from "@/lib/countries/rules/officeLayout";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getPartyMap } from "@/lib/db/partyMap";
 import type { Bill, Character, NPP, ElectedOfficial, PoliticalParty } from "@/lib/db/types";
 import { resolveBillCountryId } from "@/lib/congress/resolveBillCountryId";
@@ -60,21 +60,17 @@ function resolveVoteOfficeType(
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    if (!ObjectId.isValid(id))
-      return NextResponse.json({ error: "Invalid bill ID" }, { status: 400 });
+    if (!ObjectId.isValid(id)) return errorResponse(400, "Invalid bill ID");
 
     const { searchParams } = new URL(request.url);
     const chamber = searchParams.get("chamber") ?? "origin";
     if (chamber !== "origin" && chamber !== "other") {
-      return NextResponse.json(
-        { error: 'Invalid chamber param — must be "origin" or "other"' },
-        { status: 400 }
-      );
+      return errorResponse(400, 'Invalid chamber param — must be "origin" or "other"');
     }
 
     const db = await getDb();
     const bill = await db.collection<Bill>("bills").findOne({ _id: new ObjectId(id) });
-    if (!bill) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+    if (!bill) return errorResponse(404, "Bill not found");
 
     // Pick the votes map for the requested chamber
     const votesMap: Record<string, "for" | "against" | "abstain"> =

@@ -52,3 +52,17 @@ export function addClientBreadcrumb(
       // ignore
     });
 }
+
+/**
+ * Capture and resolve with the Sentry event id, so an error screen can show it
+ * as the ref a player quotes in a report. Resolves undefined if the SDK is
+ * unavailable (offline / blocked) or no id was issued.
+ */
+export function captureClientExceptionWithId(
+  exception: unknown,
+  captureContext?: Parameters<SentryClient["captureException"]>[1]
+): Promise<string | undefined> {
+  return loadSentryClient()
+    .then((Sentry) => Sentry.captureException(exception, captureContext) || undefined)
+    .catch(() => undefined);
+}

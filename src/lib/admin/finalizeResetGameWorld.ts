@@ -40,6 +40,7 @@ import { realignPartyCountersToExisting, resetPartyCounters } from "@/lib/db/seq
 import { ensureImfInstitutionPlaceholder } from "@/lib/imf/ensureImfInstitutionPlaceholder";
 import type { ResetGameWorldResult } from "@/lib/admin/resetGameWorld";
 import { backfillMissingRegionLeans } from "./seed/backfillMissingRegionLeans";
+import { purgeAbsentCountryRegions } from "./seed/purgeAbsentCountryRegions";
 
 export interface FinalizeResetOptions {
   /** 1991 only: leave political offices vacant for player-created parties. */
@@ -376,6 +377,16 @@ export async function finalizeResetGameWorld(
   // `regionDemographics._id` IS the region id (matches `states._id`);
   // `unownedSectors` keys on `stateId`. Guarded on a non-empty roster so a
   // half-failed seed can never empty either collection.
+  // Region rows for countries the new preset does not seed at all (Ukraine,
+  // Belarus and the Baltic republics in a 1991 world, where they are Soviet
+  // regions) go first, so the orphan sweep below sees the final roster.
+  const absentPurge = await purgeAbsentCountryRegions(db, preset);
+  const absentPurged = Object.values(absentPurge.deleted).reduce((a, b) => a + b, 0);
+  if (absentPurged > 0) {
+    logCollector(
+      `Purged ${absentPurged} region rows for countries absent from the ${preset} roster (${absentPurge.countryIds.join(", ")}).`
+    );
+  }
   const seededStateIds = (
     await db
       .collection<{ _id: string }>("states")

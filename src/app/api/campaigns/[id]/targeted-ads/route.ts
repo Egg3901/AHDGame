@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { targetKey, purchaseSchema, quoteCountSchema } from "@/lib/campaignTargeting/schema";
 import { parseJsonBody } from "@/lib/api/validate";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { badRequest, handleRouteError } from "@/lib/api/errors";
+import { badRequest, handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getDb } from "@/lib/mongodb";
 import type { State, Character, NPP } from "@/lib/db/types";
@@ -86,8 +86,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, purchaseSchema);
     if (!ObjectId.isValid(id)) throw badRequest("Invalid campaign");
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const result = await purchaseTargetedAds(
       await getDb(),
       new ObjectId(id),

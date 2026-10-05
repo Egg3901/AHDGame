@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
@@ -37,10 +37,7 @@ type RouteContext = { params: Promise<{ code: string }> };
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
     if ((await params).code.toUpperCase() !== "RU")
-      return NextResponse.json(
-        { error: "No Russian constitutional decision here" },
-        { status: 404 }
-      );
+      return errorResponse(404, "No Russian constitutional decision here");
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     const db = await getDb();
@@ -63,24 +60,17 @@ export async function GET(_request: Request, { params }: RouteContext) {
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     if ((await params).code.toUpperCase() !== "RU")
-      return NextResponse.json(
-        { error: "No Russian constitutional decision here" },
-        { status: 404 }
-      );
+      return errorResponse(404, "No Russian constitutional decision here");
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     const limit = checkRateLimit(`ru-constitution:${auth.user.userId}`, 5, 60_000);
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
     const parsed = await parseJsonBody(request, bodySchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const db = await getDb();
     const game = await getGameState(db);
     if (game?.preset !== "1991-default")
-      return NextResponse.json(
-        { error: "No constitutional decision in this era" },
-        { status: 409 }
-      );
+      return errorResponse(409, "No constitutional decision in this era");
     const offices = await loadRuntimeCountryOffices(db, "RU", game.preset);
     const character = await getCharacterByUserId(db, auth.user.userId);
     const official = character
@@ -94,10 +84,7 @@ export async function POST(request: Request, { params }: RouteContext) {
         )
       : null;
     if (!official && auth.user.isAdmin !== true)
-      return NextResponse.json(
-        { error: "A seated Russian legislator must open this decision" },
-        { status: 403 }
-      );
+      return errorResponse(403, "A seated Russian legislator must open this decision");
     const freeze = await checkLegislationFreeze("RU");
     if (!freeze.ok) return freeze.response;
     const input = {
@@ -124,7 +111,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     );
   } catch (error) {
     if (error instanceof RussianConstitutionalDecisionConflict)
-      return NextResponse.json({ error: error.message }, { status: 409 });
+      return errorResponse(409, error.message);
     return handleRouteError(error);
   }
 }

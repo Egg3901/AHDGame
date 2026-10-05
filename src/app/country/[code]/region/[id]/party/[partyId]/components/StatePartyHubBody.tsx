@@ -26,6 +26,7 @@ import { fmt } from "./helpers";
 import type { MainTab, StatePartyData, UserData } from "./types";
 import type { StatePartyAnalyticsPayload } from "@/lib/partyAnalytics";
 import type { useStatePartyTreasuryActions } from "./useStatePartyTreasuryActions";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 type TreasuryActions = ReturnType<typeof useStatePartyTreasuryActions>;
 
@@ -415,7 +416,7 @@ export function StatePartyHubBody({
                             </Link>
                             {m.isNPP && (
                               <span className="text-[10px] text-purple-400 font-medium bg-purple-500/10 px-1.5 py-0.5 rounded w-fit mt-0.5">
-                                NPP
+                                <NppAbbr />
                               </span>
                             )}
                           </div>

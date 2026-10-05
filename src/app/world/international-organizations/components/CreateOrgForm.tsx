@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Button, Input, Label } from "@/components/ui";
 
@@ -19,6 +20,7 @@ import {
   CUSTOM_ALIGNMENT_POLE_TOKENS,
   type CustomAlignmentPoleToken,
 } from "@/lib/constants/alignmentEras";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /** Derive a URL-safe, lowercase org id from the short name (players never see the slug). */
 function slugifyOrgName(value: string): string {
@@ -111,7 +113,7 @@ export function CreateOrgForm({
       fd.append("orgId", slugifyOrgName(form.shortName.trim()));
       const res = await fetch("/api/upload/org-logo", { method: "POST", body: fd });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error ?? "Upload failed");
+      if (!res.ok) throw new Error(apiErrorText(body, "Upload failed"));
       setLogoPath(body.url as string);
     } catch (err) {
       setLogoError(err instanceof Error ? err.message : "Upload failed");
@@ -154,7 +156,7 @@ export function CreateOrgForm({
         }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error ?? "Failed to create organization");
+      if (!res.ok) throw new Error(apiErrorText(body, "Failed to create organization"));
       setShowForm(false);
       resetForm();
       if (body?.organizationId) onCreated(body.organizationId);
@@ -339,10 +341,10 @@ export function CreateOrgForm({
               <p className="mt-1 text-[11px] text-muted">
                 {logoUploading ? "Uploading…" : "Square works best. PNG/JPEG/WebP/GIF, up to 2 MB."}
               </p>
-              {logoError && <p className="mt-1 text-[11px] text-error">{logoError}</p>}
+              <InlineError error={logoError} className="mt-1 text-[11px] text-error" />
             </div>
           </div>
-          {error && <p className="mt-3 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-3 text-xs text-error" />
           <div className="mt-4 flex gap-2">
             <Button variant="primary" size="md" onClick={submit} isLoading={submitting}>
               Found organization

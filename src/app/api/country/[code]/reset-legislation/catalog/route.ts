@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { GameState } from "@/lib/db/types/gameState";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
@@ -29,7 +29,7 @@ export async function GET(request: Request, context: { params: Promise<{ code: s
     if (!auth.ok) return auth.response;
     const country = (await context.params).code.toUpperCase();
     if (!supported.has(country)) {
-      return NextResponse.json({ error: "Legislation v2 is not available here" }, { status: 404 });
+      return errorResponse(404, "Legislation v2 is not available here");
     }
     const url = new URL(request.url);
     const parsed = querySchema.safeParse({
@@ -37,7 +37,7 @@ export async function GET(request: Request, context: { params: Promise<{ code: s
       regionId: url.searchParams.get("regionId") ?? undefined,
     });
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.issues[0]?.message }, { status: 400 });
+      return errorResponse(400, parsed.error.issues[0]?.message);
     }
     const db = await getDb();
     const gameState = await db.collection<GameState>("gameState").findOne(
@@ -59,7 +59,7 @@ export async function GET(request: Request, context: { params: Promise<{ code: s
       !gameState?.resetWorldId ||
       resetSystemVersionsForCountry(gameState, RESET_V2_READY, country).legislation !== "v2"
     ) {
-      return NextResponse.json({ error: "Legislation v2 is not enabled" }, { status: 409 });
+      return errorResponse(409, "Legislation v2 is not enabled");
     }
     const year = eraYearContextFromGameState(gameState).year ?? gameState.startingYear ?? 1991;
     const scope = parsed.data.scope;

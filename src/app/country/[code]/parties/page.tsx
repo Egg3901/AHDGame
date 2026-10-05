@@ -17,6 +17,7 @@ import { CreateCoalitionModal } from "./components/CreateCoalitionModal";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import { PARTY_SECTION_HEADING_CLASS } from "@/components/party/partyPageStyles";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Parties list: a header band with the title, totals and tabs, then the balance
@@ -181,7 +182,7 @@ export default function PartiesPage() {
         setCoalitionFormColor("#6366F1");
         fetchCoalitions();
       } else {
-        showToast(data.error ?? "Failed to create coalition", "error");
+        showToast(apiErrorText(data, "Failed to create coalition"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");
@@ -317,8 +318,8 @@ export default function PartiesPage() {
             {!loading && parties.length === 0 && (
               <div className="rounded-xl border border-card-border bg-card p-12">
                 <EmptyState
-                  title="No political parties found"
-                  description="This country has no registered political parties yet."
+                  title="No parties yet"
+                  description="Every party here is founded by players. A charter names three founders from this country who live in neighbouring areas, and the party forms once all three sign."
                   {...(isInSameCountry
                     ? {
                         actionLabel: "Create party",

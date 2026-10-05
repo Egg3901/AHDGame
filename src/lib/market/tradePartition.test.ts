@@ -57,6 +57,24 @@ describe("buildCountryClearingBooks", () => {
     expect(us.demand).toBeCloseTo(250, 5); // 300 − 50 imported
   });
 
+  it("uses tariff-inclusive import budgets in corporate reachable books", () => {
+    const books = buildCountryClearingBooks({
+      countries,
+      nationalBalances: new Map<CountryId, ReturnType<typeof bal>>([
+        ["US", bal([["steel", { supply: 100, demand: 300 }]])],
+        ["RU", bal([["steel", { supply: 1000, demand: 200 }]])],
+      ]),
+      affinityFor: () => 1,
+      importCostMultiplierFor: () => 1.2,
+    });
+    const imports = 200 / 1.2;
+    expect(books.get("RU")!.get("steel")!.demand).toBeCloseTo(200 + imports, 8);
+    expect(books.get("US")!.get("steel")!.demand).toBeCloseTo(300 - imports, 8);
+    expect(
+      books.get("RU")!.get("steel")!.demand + books.get("US")!.get("steel")!.demand
+    ).toBeCloseTo(500, 8);
+  });
+
   it("skips commodities with no activity anywhere", () => {
     const books = buildCountryClearingBooks({
       countries,

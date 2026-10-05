@@ -3,6 +3,7 @@ import {
   insertManyIgnoringDuplicateKey,
   isDuplicateKeyError,
   isActiveElectionCandidateDuplicateKey,
+  isActiveJapanShugiinNominationDuplicateKey,
 } from "./duplicateKey";
 
 describe("isDuplicateKeyError", () => {
@@ -71,5 +72,24 @@ describe("bounded NPC player guard error compatibility", () => {
         new Error("E11000 duplicate key index: unique_active_bounded_npc_nominee")
       )
     ).toBe(false);
+  });
+});
+
+describe("Japanese Shugiin nomination guard error compatibility", () => {
+  it("recognizes direct and list index collisions without swallowing other duplicates", () => {
+    expect(
+      isActiveJapanShugiinNominationDuplicateKey(
+        Object.assign(new Error("duplicate"), {
+          code: 11000,
+          keyPattern: { electionId: 1, party: 1, constituencyId: 1 },
+        })
+      )
+    ).toBe(true);
+    expect(
+      isActiveJapanShugiinNominationDuplicateKey(
+        new Error("E11000 duplicate key index: unique_active_jp_shugiin_list_rank")
+      )
+    ).toBe(true);
+    expect(isActiveJapanShugiinNominationDuplicateKey(new Error("E11000 unrelated"))).toBe(false);
   });
 });

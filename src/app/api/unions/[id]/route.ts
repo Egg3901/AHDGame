@@ -9,7 +9,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type {
   Bill,
   BargainingCampaign,
@@ -85,17 +85,17 @@ interface RouteParams {
 export async function GET(_request: Request, { params }: RouteParams) {
   try {
     if (!(await isLabourFullMode())) {
-      return NextResponse.json({ error: "Player-run unions are not enabled." }, { status: 403 });
+      return errorResponse(403, "Player-run unions are not enabled.");
     }
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid union ID" }, { status: 400 });
+      return errorResponse(400, "Invalid union ID");
     }
     const db = await getDb();
     const union = await db.collection<Union>("unions").findOne({ _id: new ObjectId(id) });
     if (!union) {
-      return NextResponse.json({ error: "Union not found" }, { status: 404 });
+      return errorResponse(404, "Union not found");
     }
 
     // Code-review fix #8: self-heal a desynced Character.unionLeaderOf cache

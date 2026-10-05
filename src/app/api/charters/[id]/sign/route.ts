@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { signCharter } from "@/lib/charters/signCharter";
@@ -31,7 +31,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid charter ID" }, { status: 400 });
+      return errorResponse(400, "Invalid charter ID");
     }
 
     const db = await getDb();
@@ -54,7 +54,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
               : result.reason === "not-character-owner"
                 ? "Active character mismatch — re-authenticate and try again"
                 : "Your active character has already rejected this charter";
-      return NextResponse.json({ error: message, reason: result.reason }, { status });
+      return errorResponse(status, message, { extra: { reason: result.reason } });
     }
 
     return NextResponse.json({

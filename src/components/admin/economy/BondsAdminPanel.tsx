@@ -1,6 +1,8 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import React, { useState, useEffect, useCallback } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BondRow {
   id: string;
@@ -156,7 +158,7 @@ export function BondsAdminPanel() {
         body: JSON.stringify({ countryId: reconcileCountry }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      if (!res.ok) throw new Error(apiErrorText(json, `HTTP ${res.status}`));
       setReconcileResult(json);
       await fetchData();
     } catch (e) {
@@ -205,7 +207,7 @@ export function BondsAdminPanel() {
       <div className="rounded-xl border border-card-border bg-card p-4 space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
-            <span className="text-sm font-semibold text-foreground">Reconcile Sovereign Debt</span>
+            <span className="text-sm font-semibold text-foreground">Reconcile sovereign debt</span>
             <select
               value={reconcileCountry}
               onChange={(e) => setReconcileCountry(e.target.value)}
@@ -239,22 +241,20 @@ export function BondsAdminPanel() {
                   {[
                     { label: "Gap", value: fmt(reconcileResult.gap) },
                     { label: "Issued", value: fmt(reconcileResult.totalIssued) },
-                    { label: "New Interest", value: fmt(reconcileResult.budgetInterestDelta) },
-                    { label: "New Principal", value: fmt(reconcileResult.newPrincipal) },
+                    { label: "New interest", value: fmt(reconcileResult.budgetInterestDelta) },
+                    { label: "New principal", value: fmt(reconcileResult.newPrincipal) },
                   ].map((c) => (
                     <div
                       key={c.label}
                       className="rounded-lg border border-card-border bg-background/60 p-2"
                     >
-                      <p className="text-[10px] text-muted uppercase tracking-wider">{c.label}</p>
+                      <p className="text-body-sm font-medium text-muted">{c.label}</p>
                       <p className="font-semibold text-foreground">{c.value}</p>
                     </div>
                   ))}
                 </div>
                 <div className="text-sm space-y-1">
-                  <p className="text-xs font-semibold text-muted uppercase tracking-wider">
-                    Tranches
-                  </p>
+                  <p className="text-body-sm font-medium text-muted">Tranches</p>
                   <div className="grid gap-2">
                     {reconcileResult.tranches.map((t) => (
                       <div
@@ -280,13 +280,13 @@ export function BondsAdminPanel() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
             {
-              label: "Active Bonds",
+              label: "Active bonds",
               value: `${summary.activeBonds} (${summary.sovereignCount}S / ${summary.corporateCount}C)`,
             },
             // Aggregates are anchor-normalized (₳) — omit the currency code
             // so fmt() prefixes ₳ rather than a native-currency symbol.
-            { label: "Total Outstanding (₳)", value: fmt(summary.totalOutstanding) },
-            { label: "Annual Coupon Burden (₳)", value: fmt(summary.annualCouponBurden) },
+            { label: "Total outstanding (₳)", value: fmt(summary.totalOutstanding) },
+            { label: "Annual coupon burden (₳)", value: fmt(summary.annualCouponBurden) },
             {
               label: "Maturing Next 12t",
               value: String(summary.maturingNext12t),
@@ -297,7 +297,7 @@ export function BondsAdminPanel() {
               key={card.label}
               className="rounded-xl border border-card-border bg-card p-4 space-y-1"
             >
-              <p className="text-xs text-muted uppercase tracking-wider">{card.label}</p>
+              <p className="text-body-sm font-medium text-muted">{card.label}</p>
               <p
                 className={`text-lg font-semibold ${card.highlight ? "text-warning" : "text-foreground"}`}
               >
@@ -308,7 +308,7 @@ export function BondsAdminPanel() {
         </div>
       )}
 
-      {error && <p className="text-sm text-error bg-error/10 rounded-lg px-4 py-3">{error}</p>}
+      <InlineError error={error} className="text-sm text-error bg-error/10 rounded-lg px-4 py-3" />
       {actionError && (
         <p className="text-sm text-error bg-error/10 rounded-lg px-4 py-3">{actionError}</p>
       )}
@@ -334,7 +334,7 @@ export function BondsAdminPanel() {
                   ].map((h) => (
                     <th
                       key={h}
-                      className="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider whitespace-nowrap"
+                      className="px-4 py-3 text-left text-body-sm font-medium text-muted whitespace-nowrap"
                     >
                       {h}
                     </th>
@@ -401,7 +401,7 @@ export function BondsAdminPanel() {
                           }
                           className="text-xs px-2 py-1 rounded border border-warning/40 text-warning hover:bg-warning/10 transition-colors"
                         >
-                          Override Rate
+                          Override rate
                         </button>
                       </td>
                     </tr>

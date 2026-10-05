@@ -6,6 +6,7 @@ import { formatFundsCompact, formatCompactNumber } from "@/lib/utils/formatters"
 import { formatVotes } from "./ElectionDetailHelpers";
 import type { CandidateDetail } from "./ElectionDetailTypes";
 import { CsInfoIcon } from "./CsInfoIcon";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 /**
  * A candidate's campaign strength as it stands right now: the value the
@@ -88,7 +89,7 @@ export function PresidentialCandidateTable({
           <span
             className={`h-1.5 w-1.5 rounded-full ${isEnded ? "bg-green-400" : "bg-blue-400"}`}
           />
-          {isEnded ? "Final Results" : "Live Tally"}
+          {isEnded ? "Final results" : "Live tally"}
         </span>
         {hasTurns && (
           <span className="text-muted font-normal">
@@ -101,10 +102,10 @@ export function PresidentialCandidateTable({
       <div className="overflow-x-auto">
         <table className="w-full text-sm lg:min-w-[720px]">
           <thead>
-            <tr className="border-b border-card-border bg-background text-left text-xs font-medium uppercase tracking-wider text-muted">
+            <tr className="border-b border-card-border bg-background text-left text-sm font-semibold text-foreground">
               <th className="px-3 py-3">#</th>
               <th className="px-3 py-3">Candidate</th>
-              <th className="hidden px-3 py-3 lg:table-cell">Running Mate</th>
+              <th className="hidden px-3 py-3 lg:table-cell">Running mate</th>
               <th className="px-3 py-3 text-right">EV</th>
               <th className="px-3 py-3 text-right">Vote %</th>
               <th className="px-3 py-3 text-right">Votes</th>
@@ -170,7 +171,7 @@ export function PresidentialCandidateTable({
                           )}
                           {c.isNPP && (
                             <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] text-purple-400">
-                              NPP
+                              <NppAbbr />
                             </span>
                           )}
                           {c.campaignSuspended && (

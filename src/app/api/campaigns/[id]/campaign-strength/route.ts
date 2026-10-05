@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { contributeCampaignStrength } from "@/lib/campaigns/commands/campaignCommands";
 import { CAMPAIGN_STRENGTH_MAX_BATCH_CLICKS } from "@/lib/campaigns/campaignStrength";
@@ -62,7 +62,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id: campaignId } = await params;
 
     if (!ObjectId.isValid(campaignId)) {
-      return NextResponse.json({ error: "Invalid campaign ID" }, { status: 400 });
+      return errorResponse(400, "Invalid campaign ID");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -72,7 +72,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     const body = await parseClicks(request);
-    if (!body.ok) return NextResponse.json({ error: body.error }, { status: 400 });
+    if (!body.ok) return errorResponse(400, body.error);
 
     const db = await getDb();
     const result = await contributeCampaignStrength({

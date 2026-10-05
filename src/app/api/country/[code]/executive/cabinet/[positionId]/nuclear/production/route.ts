@@ -10,7 +10,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getNuclearProgram, putNuclearProgram } from "@/lib/db/collections/nuclearPrograms";
 import { productionCapFor } from "@/lib/military/nuclearProgram";
 import { requireDefenceHolder, requireEligible, type NuclearRouteParams } from "../shared";
@@ -29,7 +29,7 @@ export async function POST(request: Request, { params }: NuclearRouteParams) {
 
     const parsed = await parseJsonBody(request, productionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const program = await getNuclearProgram(db, countryId);

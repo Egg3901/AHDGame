@@ -452,6 +452,10 @@ function findUnsafeAuthCachedRoutes() {
     const content = fs.readFileSync(file, "utf8");
     const body = extractCacheableHandlerBodies(content);
     if (!body || !AUTH_READ_PATTERN.test(body)) continue;
+    // A GET that reads auth only to branch to a `private`/`no-store` variant for
+    // privileged callers (e.g. admins) while the shared variant stays identical
+    // for everyone else declares it with this marker plus the reason.
+    if (/audit:shared-cache-safe\b/.test(body)) continue;
     CACHE_CONTROL_VALUE.lastIndex = 0;
     let match;
     while ((match = CACHE_CONTROL_VALUE.exec(body)) !== null) {

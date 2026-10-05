@@ -78,6 +78,7 @@ interface NavbarProps {
     canSeeCampaignManager?: boolean;
     patreonTier?: string | null;
     isPatronActive?: boolean;
+    sandboxTesterAccess?: boolean;
   };
   showProfile?: boolean;
   homeState?: {
@@ -366,7 +367,7 @@ export const Navbar = React.memo(function Navbar({
 
   return (
     <nav
-      className="ahd-navbar-enter sticky top-0 z-50 border-b border-card-border/60 bg-card/50 shadow-panel backdrop-blur-xl"
+      className="ahd-navbar-enter sticky top-0 z-50 border-b pt-[env(safe-area-inset-top,0px)] border-card-border/60 bg-card/50 shadow-panel backdrop-blur-xl"
       aria-label={t("common.mainNavigation")}
       data-feedback-ignore="true"
     >
@@ -1111,7 +1112,7 @@ export const Navbar = React.memo(function Navbar({
                       </Link>
                     )}
 
-                    <div className="px-3 py-1 text-xs font-medium uppercase tracking-wider text-muted/60">
+                    <div className="px-3 py-1 text-body-sm font-medium text-muted">
                       {t("menus.nation.nationalDetailsFor", {
                         country: countryName(pageCountry),
                       })}

@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import Link from "next/link";
 import { Badge, Button, Slider } from "@/components/ui";
@@ -9,6 +10,7 @@ import {
   type CommandEconomyDashboard,
   type SoeView,
 } from "@/lib/economy/commandEconomyDashboard";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   dashboard: CommandEconomyDashboard;
@@ -47,7 +49,7 @@ export function SoeDirectorPanel({ dashboard, soe, onSaved }: Props) {
       );
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.error ?? `Save failed (${res.status})`);
+        throw new Error(apiErrorText(j, `Save failed (${res.status})`));
       }
       onSaved();
     } catch (e) {
@@ -148,7 +150,7 @@ export function SoeDirectorPanel({ dashboard, soe, onSaved }: Props) {
         </div>
       </div>
 
-      {error && <p className="mt-3 text-xs text-error">{error}</p>}
+      <InlineError error={error} className="mt-3 text-xs text-error" />
       <div className="mt-4">
         <Button size="sm" onClick={save} disabled={saving}>
           {saving ? "Saving..." : "Update enterprise"}
@@ -161,7 +163,7 @@ export function SoeDirectorPanel({ dashboard, soe, onSaved }: Props) {
 function Readout({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
-      <div className="text-[10px] font-bold uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div className="mt-0.5 text-sm font-bold tabular-nums text-foreground">{value}</div>
     </div>
   );

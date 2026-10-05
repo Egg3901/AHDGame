@@ -1,3 +1,7 @@
+/**
+ * Trade policy shapes foreign routes through tariffs, free-trade deals, blocs, embargoes, and blockades.
+ * `buildTradeAffinity` exposes route weights, unit caps, and import cost multipliers.
+ */
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { Tariff } from "@/lib/db/types/tariff";
@@ -7,6 +11,7 @@ import { computeAffinity } from "./affinity";
 import { importerTariffOnFlow } from "./tariffDrag";
 import { blockadeAffinityMultiplier } from "@/lib/navair/blockade";
 import { PRIMARY_SECTOR_BY_COMMODITY } from "./commoditySector";
+import { tariffRateToImportCostMultiplier } from "./rules/importCostMultiplier";
 
 export interface TradeAffinityContext {
   /** Active FTA country pairs. */
@@ -52,6 +57,11 @@ export interface TradeAffinityFns {
     exporter: CountryId,
     importer: CountryId
   ) => number | undefined;
+  importCostMultiplierFor: (
+    commodity: CommodityType,
+    exporter: CountryId,
+    importer: CountryId
+  ) => number;
 }
 
 /**
@@ -175,6 +185,23 @@ export function buildTradeAffinity(ctx: TradeAffinityContext): TradeAffinityFns 
   };
 
   const embargoIndex = indexEmbargoes(embargoes);
+  const tariffMultiplierByRoute = new Map<string, number>();
+  const tariffMultiplierFor = (
+    commodity: CommodityType,
+    exporter: CountryId,
+    importer: CountryId
+  ): number => {
+    const key = `${commodity}|${exporter}|${importer}`;
+    const cached = tariffMultiplierByRoute.get(key);
+    if (cached !== undefined) return cached;
+    const sectorType = PRIMARY_SECTOR_BY_COMMODITY[commodity];
+    const rate = sectorType
+      ? importerTariffOnFlow(tariffs, ftaPairs, importer, exporter, sectorType)
+      : 0;
+    const multiplier = tariffRateToImportCostMultiplier(rate);
+    tariffMultiplierByRoute.set(key, multiplier);
+    return multiplier;
+  };
 
   return {
     affinityFor: (commodity, exporter, importer) => {
@@ -194,10 +221,7 @@ export function buildTradeAffinity(ctx: TradeAffinityContext): TradeAffinityFns 
         blockadeClosure?.get(importer) ?? 0
       );
       if (closure >= 1) return 0;
-      const sectorType = PRIMARY_SECTOR_BY_COMMODITY[commodity];
-      const importerTariffRate = sectorType
-        ? importerTariffOnFlow(tariffs, ftaPairs, importer, exporter, sectorType)
-        : 0;
+      const importerTariffRate = tariffMultiplierFor(commodity, exporter, importer) - 1;
       const affinity = computeAffinity({
         exporter,
         importer,
@@ -209,6 +233,7 @@ export function buildTradeAffinity(ctx: TradeAffinityContext): TradeAffinityFns 
       });
       return closure > 0 ? affinity * blockadeAffinityMultiplier(closure) : affinity;
     },
+    importCostMultiplierFor: tariffMultiplierFor,
     capUnitsFor: (commodity, exporter, importer) => {
       const exportCap = capFor(embargoIndex.capExport, flowKey(exporter, importer), commodity);
       const importCap = capFor(embargoIndex.capImport, flowKey(importer, exporter), commodity);

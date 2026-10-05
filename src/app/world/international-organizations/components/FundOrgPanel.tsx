@@ -1,10 +1,12 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Button } from "@/components/ui";
 
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
 import { useEntityName } from "../useEntityName";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -51,7 +53,7 @@ export function FundOrgPanel({ org, viewer, onChange }: Props) {
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to propose funding");
+        throw new Error(apiErrorText(body, "Failed to propose funding"));
       }
       setSuccess("Funding appropriation sent to the legislature.");
       setShowForm(false);
@@ -102,7 +104,7 @@ export function FundOrgPanel({ org, viewer, onChange }: Props) {
               className="mt-1 w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
             />
           </div>
-          {error && <p className="mt-2 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-2 text-xs text-error" />
           <div className="mt-4 flex gap-2">
             <Button variant="primary" size="md" onClick={submit} isLoading={submitting}>
               Send to the legislature

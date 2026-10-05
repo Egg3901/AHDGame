@@ -44,7 +44,7 @@ function Group({ title, rows }: { title: string; rows: ModRow[] }) {
   if (present.length === 0) return null;
   return (
     <div>
-      <div className="mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
+      <div className="mb-1 border-b border-card-border pb-1 text-sm font-semibold text-foreground">
         {title}
       </div>
       {present.map((r) => (
@@ -141,9 +141,7 @@ export function SectorMarginDrilldown({
       {/* Effective margin build */}
       <div className="rounded-lg border border-card-border bg-card p-3.5">
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-primary">
-            Effective margin build
-          </span>
+          <span className="text-body-sm font-medium text-primary">Effective margin build</span>
           <span className="text-[11px] text-muted">
             {base != null ? `base ${base.toFixed(1)}% → ` : ""}
             <span
@@ -161,7 +159,7 @@ export function SectorMarginDrilldown({
               <span className="font-semibold tabular-nums text-foreground">100.0%</span>
             </div>
             <div className="pt-2">
-              <div className="mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
+              <div className="mb-1 border-b border-card-border pb-1 text-sm font-semibold text-foreground">
                 What this sector pays
               </div>
               <ModifierLine label="Inputs (at market prices)" value={-physical.inputsPp} />
@@ -198,7 +196,7 @@ export function SectorMarginDrilldown({
         )}
 
         {physical && (
-          <div className="mt-3 mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
+          <div className="mt-3 mb-1 border-b border-card-border pb-1 text-sm font-semibold text-foreground">
             What shapes those costs
           </div>
         )}
@@ -206,7 +204,7 @@ export function SectorMarginDrilldown({
           <Group title="State conditions" rows={stateRows} />
           {sector.regionalConditionModifiers && sector.regionalConditionModifiers.length > 0 && (
             <div>
-              <div className="mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
+              <div className="mb-1 border-b border-card-border pb-1 text-sm font-semibold text-foreground">
                 Regional conditions
               </div>
               {sector.regionalConditionModifiers.map((rc) => (
@@ -226,7 +224,7 @@ export function SectorMarginDrilldown({
           <Group title="National economy" rows={nationalRows} />
           {!physical && otherFactors != null && Math.abs(otherFactors) >= 0.05 && (
             <div>
-              <div className="mb-1 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
+              <div className="mb-1 border-b border-card-border pb-1 text-sm font-semibold text-foreground">
                 Other factors
               </div>
               <div className="flex items-center justify-between py-1 text-[12px]">
@@ -274,9 +272,7 @@ export function SectorMarginDrilldown({
       {/* Production policy */}
       <div className="rounded-lg border border-card-border bg-card p-3.5">
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-primary">
-            Production policy
-          </span>
+          <span className="text-body-sm font-medium text-primary">Production policy</span>
           <span className="text-[11px] text-muted">read-only</span>
         </div>
 
@@ -312,19 +308,19 @@ export function SectorMarginDrilldown({
 
         <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
           <div>
-            <div className="text-[9px] uppercase tracking-wide text-muted">Workers</div>
+            <div className="text-body-sm font-medium text-muted">Workers</div>
             <div className="font-bold tabular-nums text-foreground">
               {workers != null ? workers.toLocaleString("en-US") : "n/a"}
             </div>
           </div>
           <div>
-            <div className="text-[9px] uppercase tracking-wide text-muted">Mkt share</div>
+            <div className="text-body-sm font-medium text-muted">Mkt share</div>
             <div className="font-bold tabular-nums text-foreground">
               {sector.marketSharePercent.toFixed(0)}%
             </div>
           </div>
           <div>
-            <div className="text-[9px] uppercase tracking-wide text-muted">Eff. margin</div>
+            <div className="text-body-sm font-medium text-muted">Eff. margin</div>
             <div className="font-bold tabular-nums text-primary">{effective.toFixed(1)}%</div>
           </div>
         </div>

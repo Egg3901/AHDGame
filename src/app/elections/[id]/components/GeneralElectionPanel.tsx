@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { RussianPresidentialResultPanel } from "./RussianPresidentialResultPanel";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -280,7 +282,7 @@ export function GeneralElectionPanel({
             showToast("Endorsement withdrawn", "info");
           } else {
             const data = await res.json();
-            showToast(data.error ?? "Failed to withdraw endorsement", "error");
+            showToast(apiErrorText(data, "Failed to withdraw endorsement"), "error");
           }
         } else {
           const res = await fetch(`/api/elections/${electionId}/endorse`, {
@@ -293,7 +295,7 @@ export function GeneralElectionPanel({
             setEndorsedCandidateId(data.endorsement.candidateId);
             showToast("Endorsement recorded", "success");
           } else {
-            showToast(data.error ?? "Failed to endorse candidate", "error");
+            showToast(apiErrorText(data, "Failed to endorse candidate"), "error");
           }
         }
       } catch {
@@ -326,7 +328,7 @@ export function GeneralElectionPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setSupportError(data.error ?? "Failed to contribute");
+        setSupportError(apiErrorText(data, "Failed to contribute"));
         return;
       }
       if (supportingCampaignId != null && data.campaignStrength != null) {
@@ -381,7 +383,7 @@ export function GeneralElectionPanel({
   const supportModal = (
     <Modal
       open={!!supportingCampaignId}
-      title="Support Campaign"
+      title="Support campaign"
       onClose={() => {
         if (!supporting) {
           setSupportingCampaignId(null);
@@ -421,7 +423,7 @@ export function GeneralElectionPanel({
         ) : (
           <>
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted">Amount</div>
+              <div className="text-body-sm font-medium text-muted">Amount</div>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {supportClickOptions.map((opt) => {
                   const isActive =
@@ -484,7 +486,7 @@ export function GeneralElectionPanel({
                 You can afford {supportContext?.maxClicks ?? 0} of these right now.
               </p>
             )}
-            {supportError && <p className="text-error text-xs">{supportError}</p>}
+            <InlineError error={supportError} className="text-error text-xs" />
             <div className="flex gap-2">
               <button
                 onClick={handleSupportConfirm}
@@ -636,7 +638,7 @@ export function GeneralElectionPanel({
         {/* Charts */}
         {showTrends && (
           <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
-            <div className="text-sm font-semibold mb-3">Election Trends</div>
+            <div className="text-sm font-semibold mb-3">Election trends</div>
             <GeneralVoteCharts
               snapshots={tally.turnSnapshots}
               series={lineSeries}

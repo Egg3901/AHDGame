@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback } from "react";
 import { getLatestNoteText, type RetiredCharacterEntry, type UserData } from "./types";
 import { getDuplicateGroups } from "./duplicateGroups";
@@ -8,6 +9,7 @@ import { UsersTable } from "./UsersTable";
 import { DuplicateGroupsView } from "./DuplicateGroupsView";
 import { RetiredCharactersModal } from "./RetiredCharactersModal";
 import { ModNoteModal } from "./ModNoteModal";
+import { SandboxAccessSwitch } from "./SandboxAccessSwitch";
 
 interface UsersTabProps {
   context?: "admin" | "moderator";
@@ -59,7 +61,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       const res = await fetch(`${apiBase}/users`);
       const data = await res.json();
       if (res.ok) setUsers(data.users);
-      else setError(data.error || "Failed to fetch users");
+      else setError(apiErrorText(data, "Failed to fetch users"));
     } catch {
       setError("Network error - please try again");
     } finally {
@@ -87,7 +89,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       });
       const data = await res.json();
       if (res.ok) alert(`Password reset for ${username}`);
-      else alert(`Error: ${data.error}`);
+      else alert(`Error: ${apiErrorText(data, "Request failed")}`);
     } catch {
       alert("Network error");
     }
@@ -106,7 +108,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       });
       const data = await res.json();
       if (res.ok) alert(data.message);
-      else alert(`Error: ${data.error}`);
+      else alert(`Error: ${apiErrorText(data, "Request failed")}`);
     } catch {
       alert("Network error");
     }
@@ -127,7 +129,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       });
       const data = await res.json();
       if (res.ok) alert(data.message);
-      else alert(`Error: ${data.error}`);
+      else alert(`Error: ${apiErrorText(data, "Request failed")}`);
     } catch {
       alert("Network error");
     }
@@ -154,7 +156,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
         recordBanAction(userId);
         alert(data.message);
         fetchUsers();
-      } else alert(`Error: ${data.error}`);
+      } else alert(`Error: ${apiErrorText(data, "Request failed")}`);
     } catch {
       alert("Network error");
     }
@@ -181,7 +183,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       if (res.ok) {
         alert(data.message);
         fetchUsers();
-      } else alert(`Error: ${data.error}`);
+      } else alert(`Error: ${apiErrorText(data, "Request failed")}`);
     } catch {
       alert("Network error");
     }
@@ -204,7 +206,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       if (res.ok) {
         alert("Character retired successfully");
         fetchUsers();
-      } else alert(`Error: ${data.error}`);
+      } else alert(`Error: ${apiErrorText(data, "Request failed")}`);
     } catch {
       alert("Network error");
     }
@@ -271,7 +273,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
         );
         setNoteModal(null);
       } else {
-        alert(`Error: ${data.error}`);
+        alert(`Error: ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       alert("Network error");
@@ -288,7 +290,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       if (res.ok) {
         setRetiredModal({ userId, username, characters: data.retiredCharacters });
       } else {
-        alert(`Error: ${data.error}`);
+        alert(`Error: ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       alert("Network error");
@@ -319,7 +321,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       if (res.ok) {
         alert(data.message);
         fetchUsers();
-      } else alert(`Error: ${data.error}`);
+      } else alert(`Error: ${apiErrorText(data, "Request failed")}`);
     } catch {
       alert("Network error");
     }
@@ -343,10 +345,35 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
         body: JSON.stringify({ userId, entitled }),
       });
       const data = await res.json();
-      if (!res.ok) return alert(`Error: ${data.error}`);
+      if (!res.ok) return alert(`Error: ${apiErrorText(data, "Request failed")}`);
       setUsers((previous) =>
         previous.map((user) =>
           user.id === userId ? { ...user, singleplayerEntitled: entitled } : user
+        )
+      );
+    } catch {
+      alert("Network error");
+    }
+  };
+
+  const handleSetSandboxAccess = async (userId: string, username: string, granted: boolean) => {
+    if (
+      !confirm(
+        `${granted ? "Grant" : "Revoke"} sandbox tester access for ${username}? This does not change supporter status.`
+      )
+    )
+      return;
+    try {
+      const res = await fetch("/api/admin/users/sandbox-access", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, granted }),
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(`Error: ${apiErrorText(data, "Request failed")}`);
+      setUsers((previous) =>
+        previous.map((user) =>
+          user.id === userId ? { ...user, sandboxAccessGranted: granted } : user
         )
       );
     } catch {
@@ -378,6 +405,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
 
   return (
     <div className="space-y-4">
+      {!isModeratorContext && <SandboxAccessSwitch />}
       <UsersToolbar
         searchTerm={searchTerm}
         onSearchTermChange={setSearchTerm}
@@ -458,6 +486,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
           onRetireCharacter={handleRetireCharacter}
           onDeleteUser={handleDeleteUser}
           onSetSingleplayerEntitlement={handleSetSingleplayerEntitlement}
+          onSetSandboxAccess={handleSetSandboxAccess}
         />
       )}
     </div>

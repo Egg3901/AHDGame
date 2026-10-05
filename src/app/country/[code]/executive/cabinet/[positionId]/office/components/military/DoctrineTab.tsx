@@ -75,14 +75,14 @@ export function DoctrineTab({
     <div className="space-y-4">
       {/* header: points + era */}
       <SectionCard
-        title="National Doctrine"
+        title="National doctrine"
         sub={`Adopt era-gated doctrines to shape the force. Current era: ${ERASHORT[currentEra] ?? "—"}`}
         right={
           <div className="text-right">
             <div className="tabular text-3xl font-black leading-none text-gov-soft">
               {state.points}
             </div>
-            <div className="dossier-label text-muted">Doctrine Points</div>
+            <div className="dossier-label text-muted">Doctrine points</div>
           </div>
         }
       >

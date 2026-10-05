@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getCabinetMechanics } from "@/lib/constants/cabinetMechanics";
 import {
   resolveMinisterialRemaining,
@@ -47,22 +47,21 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const mechanics = getCabinetMechanics(countryId, positionId);
     if (!mechanics) {
-      return NextResponse.json({ error: "Unknown cabinet position" }, { status: 404 });
+      return errorResponse(404, "Unknown cabinet position");
     }
 
     const availableOrders = getMinisterialOrders(countryId, positionId);
     if (!availableOrders.length && !mechanics.emergency) {
-      return NextResponse.json({ error: "Unknown cabinet position" }, { status: 404 });
+      return errorResponse(404, "Unknown cabinet position");
     }
 
     const parsed = await parseJsonBody(request, orderSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const metricConfigs = [...mechanics.nationalMetrics, ...mechanics.regionalMetrics];
     // Normalize a `null` region (national orders) to `undefined` so it stores as
@@ -83,7 +82,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           }
         : availableOrders.find((o) => o.id === parsed.data.orderId);
     if (!orderConfig) {
-      return NextResponse.json({ error: "Invalid order ID" }, { status: 400 });
+      return errorResponse(400, "Invalid order ID");
     }
 
     // Regional-scope orders need a target region. Without one the effect is
@@ -91,7 +90,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // regionId), silently wasting a ministerial action — reject up front.
     const isRegionalOrder = orderConfig.effects.some((e) => e.scope === "regional");
     if (isRegionalOrder && !targetRegionId) {
-      return NextResponse.json({ error: "Select a target region" }, { status: 400 });
+      return errorResponse(400, "Select a target region");
     }
 
     const db = await getDb();
@@ -105,17 +104,14 @@ export async function POST(request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the cabinet holder or admin can issue orders" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the cabinet holder or admin can issue orders");
     }
 
     // Shared UK pool: both offices of a dual holder spend one balance (issue
     // #2049). The legacy per-row backfill lives inside the resolver.
     const actions = await resolveMinisterialRemaining(db, countryId, member!);
     if (actions < 1) {
-      return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 400 });
+      return errorResponse(400, "No ministerial actions remaining");
     }
 
     const gameState = await getGameState();
@@ -133,10 +129,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       })
       .toArray();
     if (activeSameOrder.some((order) => isMinisterialOrderActive(order, currentTurn))) {
-      return NextResponse.json(
-        { error: "This order is already active for this position" },
-        { status: 409 }
-      );
+      return errorResponse(409, "This order is already active for this position");
     }
 
     // Create the order
@@ -148,7 +141,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const spend = await spendMinisterialAction(db, countryId, member!);
     if (!spend.ok) {
-      return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 409 });
+      return errorResponse(409, "No ministerial actions remaining");
     }
 
     try {

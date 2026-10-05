@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import {
   calculateCampaignStrengthLeaderPullbacks,
@@ -23,14 +23,14 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const { id: campaignId } = await params;
     if (!ObjectId.isValid(campaignId)) {
-      return NextResponse.json({ error: "Invalid campaign ID" }, { status: 400 });
+      return errorResponse(400, "Invalid campaign ID");
     }
 
     const db = await getDb();
     const oid = new ObjectId(campaignId);
     const campaign = await db.collection("campaigns").findOne({ _id: oid });
     if (!campaign) {
-      return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+      return errorResponse(404, "Campaign not found");
     }
 
     const currentCS = campaign.campaignStrength ?? 0;

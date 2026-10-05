@@ -199,7 +199,7 @@ export function ClusterDetailView({
                   <div className="min-w-0 flex-1">
                     <SuspectNameButton member={m} />
                     <div className="flex flex-wrap items-center gap-x-2">
-                      <span className="text-[10px] font-medium uppercase tracking-wide text-muted">
+                      <span className="text-body-sm font-medium text-muted">
                         {ROLE_LABEL[m.role]}
                       </span>
                       <DiscordContact

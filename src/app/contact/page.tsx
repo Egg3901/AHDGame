@@ -14,7 +14,7 @@ export default function ContactPage() {
     <div className="min-h-screen bg-background pb-16">
       <div className="mx-auto max-w-4xl px-4 sm:px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Contact Us</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Contact us</h1>
           <p className="mt-2 text-sm text-muted">
             We&apos;re a small team — here&apos;s how to reach us.
           </p>
@@ -93,11 +93,11 @@ export default function ContactPage() {
             <p className="text-sm text-muted leading-relaxed">
               For data access or deletion requests, see our{" "}
               <Link href="/privacy" className="text-primary hover:underline">
-                Privacy Policy
+                Privacy policy
               </Link>
               . For questions about rules and conduct, see our{" "}
               <Link href="/terms" className="text-primary hover:underline">
-                Terms of Service
+                Terms of service
               </Link>
               .
             </p>

@@ -19,6 +19,7 @@ import { ElectionQuickActions } from "./ElectionQuickActions";
 import { ElectionFilterBar } from "./ElectionFilterBar";
 import { ElectionCycleTable } from "./ElectionCycleTable";
 import { CountryFlag } from "@/components/CountryFlag";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const PAGE_SIZE = 24;
 
@@ -165,7 +166,7 @@ export function ElectionsManageTab() {
           totalUpdated += data.updatedCount ?? 0;
           results.push(`${cid}: ${data.updatedCount} updated`);
         } else {
-          results.push(`${cid}: ${data.error ?? "failed"}`);
+          results.push(`${cid}: ${apiErrorText(data, "failed")}`);
         }
       }
 
@@ -200,7 +201,7 @@ export function ElectionsManageTab() {
       const data = await res.json();
       dispatch({
         type: "SET_MESSAGE",
-        payload: res.ok ? `✓ ${data.message}` : `✗ ${data.error}`,
+        payload: res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Request failed")}`,
       });
       if (res.ok) await fetchElections();
       else dispatch({ type: "LOAD_END" });
@@ -259,7 +260,7 @@ export function ElectionsManageTab() {
       const data = await res.json();
       dispatch({
         type: "SET_MESSAGE",
-        payload: res.ok ? `✓ ${data.message}` : `✗ ${data.error}`,
+        payload: res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Request failed")}`,
       });
       if (res.ok) await fetchElections();
       else dispatch({ type: "LOAD_END" });
@@ -361,9 +362,7 @@ export function ElectionsManageTab() {
       {/* Filter + Election List */}
       <div className="rounded-lg border border-card-border bg-card p-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-            Election List
-          </span>
+          <span className="text-body-sm font-medium text-muted">Election list</span>
           <ElectionFilterBar
             filterCountry={
               selectedCountry === "global" ? "" : (selectedCountry as "US" | "UK" | "DE" | "JP")

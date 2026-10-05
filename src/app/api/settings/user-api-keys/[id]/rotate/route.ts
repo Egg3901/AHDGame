@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { generateUserApiToken, type UserApiScope } from "@/lib/api/userApiAuth";
@@ -22,7 +22,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid key id" }, { status: 400 });
+      return errorResponse(400, "Invalid key id");
     }
 
     const db = await getDb();
@@ -36,7 +36,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       revokeAt: { $not: { $lte: now } },
     });
     if (!existing) {
-      return NextResponse.json({ error: "Key not found or already revoked" }, { status: 404 });
+      return errorResponse(404, "Key not found or already revoked");
     }
 
     const scope: UserApiScope = existing.scope;

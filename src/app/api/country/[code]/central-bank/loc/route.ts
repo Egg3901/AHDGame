@@ -3,7 +3,7 @@
 // Errors: 401, 404
 import { NextResponse } from "next/server";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getDb } from "@/lib/mongodb";
 import { loadCountryCentralBankLoc } from "@/lib/monetaryPolicy/queries/countryCentralBankLoc";
@@ -16,7 +16,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Country not found" }, { status: 404 });
+      return errorResponse(404, "Country not found");
     }
 
     const db = await getDb();
@@ -27,7 +27,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
       isAdmin: auth.user.isAdmin === true,
     });
     if (!detail.ok) {
-      return NextResponse.json({ error: detail.error }, { status: detail.status });
+      return errorResponse(detail.status, detail.error);
     }
 
     return NextResponse.json(detail.body);

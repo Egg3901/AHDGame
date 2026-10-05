@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button, SectionLabel } from "@/components/ui";
 import type { NatOfficialActions } from "../NationalCorporationView";
 import { natMoney } from "../natMoney";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Finance-minister control over the CEO's per-turn treasury-draw cap (spec P6g
@@ -40,7 +41,7 @@ export function CeoDrawCapPanel({
         }
       );
       const json = await res.json();
-      if (!res.ok) setFeedback({ type: "error", message: json.error ?? "Action failed." });
+      if (!res.ok) setFeedback({ type: "error", message: apiErrorText(json, "Action failed.") });
       else {
         setFeedback({ type: "success", message: "Draw cap updated." });
         official.onRefresh();

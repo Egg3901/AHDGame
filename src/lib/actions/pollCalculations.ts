@@ -35,6 +35,10 @@ export interface OpponentForShare {
   socialPosition: number;
   favorability: number;
   politicalInfluence: number;
+  /** National reach used by presidential general elections. */
+  nationalInfluence?: number;
+  /** Whether the general-election NPP weight applies. */
+  isNPP?: boolean;
   party: string;
   /** Per-archetype modifiers when known (same as Character/NPP). */
   archetypeApprovals?: Record<string, number>;

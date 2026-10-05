@@ -8,6 +8,14 @@ import { calculateBondYieldToMaturityPercent } from "@/lib/constants/bonds";
 
 export const COLD_CAPACITY_UPKEEP_FRACTION = 0.05;
 
+/** Qualified 1991 construction costs one day of nominal output. */
+export const CAPACITY_INVESTMENT_REVENUE_DAYS = 1;
+
+/** The 1991 output basket already carries era money. The caller gates this basis. */
+export function constructionPriceForDailyRevenue(dailyRevenue: number): number {
+  return dailyRevenue * CAPACITY_INVESTMENT_REVENUE_DAYS;
+}
+
 /** Both revenue governors must have expired in the observed operating turn. */
 export function hasSettledOperatingHistory(input: {
   plantsStartTurn?: number | null;

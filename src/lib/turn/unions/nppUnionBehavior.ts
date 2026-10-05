@@ -24,7 +24,9 @@ import {
   getBargainingMediationAvailability,
 } from "@/lib/unions/bargaining";
 import {
+  loadBargainingLastEnded,
   openBargainingCampaignFromLiveConditions,
+  type BargainingPhasePreload,
   type BargainingReadCache,
   persistBargainingCounter,
   persistBargainingMediationAction,
@@ -308,6 +310,17 @@ export async function processNppUnionBehavior(
 
   // One read per country / state set for the whole phase (#2690).
   const bargainingReads: BargainingReadCache = new Map();
+  // Employers come from the live corporation roster and the active-agreement
+  // set was loaded above, so the opener only needs the cooldown history, read
+  // once for every led union instead of once per attempt.
+  const bargainingPreload: BargainingPhasePreload = {
+    employerKnownToExist: true,
+    noActiveAgreement: true,
+    lastEndedAtTurn: await loadBargainingLastEnded(
+      db,
+      activeLed.map((union) => union._id)
+    ),
+  };
   for (const union of [...activeLed].sort((a, b) =>
     a._id.toHexString().localeCompare(b._id.toHexString())
   )) {
@@ -367,7 +380,8 @@ export async function processNppUnionBehavior(
         noStrikeTurns: 24,
       },
       currentTurn,
-      bargainingReads
+      bargainingReads,
+      bargainingPreload
     );
     if (opened.ok) {
       result.campaignsOpened++;

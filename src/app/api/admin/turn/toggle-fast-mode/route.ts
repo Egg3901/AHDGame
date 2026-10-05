@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { toggleFastMode } from "@/lib/turnSystem";
 
 // POST /api/admin/turn/toggle-fast-mode — Toggles fast mode (30-minute turn cycles).
@@ -14,7 +14,7 @@ export async function POST() {
     const result = await toggleFastMode();
 
     if (!result.success) {
-      return NextResponse.json({ error: result.message }, { status: 500 });
+      return errorResponse(500, result.message);
     }
 
     return NextResponse.json({

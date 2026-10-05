@@ -284,7 +284,7 @@ export default function AuditExplorer({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">Forensic Explorer</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Forensic explorer</h2>
           <p className="mt-0.5 text-xs text-muted">
             Search the unified action-audit spine — follow any action to its full trace.
           </p>
@@ -425,7 +425,7 @@ export default function AuditExplorer({
  */
 function RecordDetailPanel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md border-l border-card-border bg-background shadow-modal lg:static lg:z-auto lg:w-[26rem] lg:max-w-none lg:rounded-xl lg:border lg:shadow-card">
+    <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md border-l pt-[env(safe-area-inset-top,0px)] lg:pt-0 border-card-border bg-background shadow-modal lg:static lg:z-auto lg:w-[26rem] lg:max-w-none lg:rounded-xl lg:border lg:shadow-card">
       {children}
     </div>
   );

@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 import { requireSingleplayer } from "@/lib/api/requireSingleplayer";
 import { getDb } from "@/lib/mongodb";
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
     db.collection("corporations").countDocuments(),
     db.collection("politicalParties").countDocuments(),
   ]);
-  if (!state) return NextResponse.json({ error: "No local world" }, { status: 409 });
+  if (!state) return errorResponse(409, "No local world");
   return NextResponse.json(
     {
       turn: state.currentTurn,

@@ -113,7 +113,7 @@ export default async function FAQPage() {
     <div className="min-h-screen bg-background pb-16">
       <div className="mx-auto max-w-3xl px-4 sm:px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Frequently Asked Questions</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Frequently asked questions</h1>
           <p className="mt-2 text-sm text-muted">
             Common questions about gameplay, accounts, and technical support.
           </p>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
+import { errorResponse } from "@/lib/api/errors";
 
 /**
  * Gate a National Corporation operational route to its seated CEO. Returns a 403
@@ -9,9 +10,9 @@ import type { Corporation } from "@/lib/db/types";
  */
 export function requireSeatedCeo(corp: Corporation, characterId: ObjectId): NextResponse | null {
   if (corp.ceoVacant || corp.ceoId == null || corp.ceoId.toString() !== characterId.toString()) {
-    return NextResponse.json(
-      { error: "Only the seated CEO of this National Corporation may take this action." },
-      { status: 403 }
+    return errorResponse(
+      403,
+      "Only the seated CEO of this National Corporation may take this action."
     );
   }
   return null;

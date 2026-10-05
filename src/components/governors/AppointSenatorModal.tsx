@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Candidate {
   appointeeId: string;
@@ -38,7 +39,7 @@ export default function AppointSenatorModal({
         const data = await res.json();
 
         if (!res.ok) {
-          throw new Error(data.error || "Failed to fetch candidates");
+          throw new Error(apiErrorText(data, "Failed to fetch candidates"));
         }
 
         setCandidates(data.candidates ?? []);
@@ -76,7 +77,7 @@ export default function AppointSenatorModal({
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to appoint senator");
+        throw new Error(apiErrorText(data, "Failed to appoint senator"));
       }
 
       router.refresh();
@@ -109,7 +110,7 @@ export default function AppointSenatorModal({
       ) : (
         <div className="mb-4">
           <label className="mb-2 block text-sm font-medium text-foreground">
-            Select Appointee:
+            Select appointee:
           </label>
           <select
             value={selectedCandidate}
@@ -153,7 +154,7 @@ export default function AppointSenatorModal({
           disabled={loading || candidates.length === 0}
           className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark disabled:opacity-50 transition-colors"
         >
-          {loading ? "Appointing..." : "Confirm Appointment"}
+          {loading ? "Appointing..." : "Confirm appointment"}
         </button>
       </div>
     </Modal>

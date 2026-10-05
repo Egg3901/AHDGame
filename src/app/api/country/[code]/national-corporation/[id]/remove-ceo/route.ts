@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { corporationQueryFromParamId } from "@/lib/api/corporations/resolveQuery";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { createNotification } from "@/lib/notifications";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -31,11 +31,11 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const idQuery = corporationQueryFromParamId(id);
     if (!idQuery) {
-      return NextResponse.json({ error: "Invalid corporation ID" }, { status: 400 });
+      return errorResponse(400, "Invalid corporation ID");
     }
 
     const db = await getDb();
@@ -43,29 +43,20 @@ export async function POST(_request: Request, { params }: RouteParams) {
     // Authority: seated finance minister, or head of government if vacant.
     const authorized = await assertTreasuryAuthority(db, countryId, auth.user.character._id);
     if (!authorized) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the Secretary of the Treasury (or equivalent), or the head of government if that seat is vacant, may remove a National Corporation CEO.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the Secretary of the Treasury (or equivalent), or the head of government if that seat is vacant, may remove a National Corporation CEO."
       );
     }
 
     const corps = db.collection<Corporation>("corporations");
     const target = await corps.findOne({ ...idQuery, countryOwnerId: countryId });
     if (!target || !isStateOwned(target)) {
-      return NextResponse.json(
-        { error: "National Corporation not found for this country." },
-        { status: 404 }
-      );
+      return errorResponse(404, "National Corporation not found for this country.");
     }
 
     if (target.ceoVacant || !target.ceoId) {
-      return NextResponse.json(
-        { error: "This National Corporation has no seated CEO to remove." },
-        { status: 400 }
-      );
+      return errorResponse(400, "This National Corporation has no seated CEO to remove.");
     }
 
     const now = new Date();

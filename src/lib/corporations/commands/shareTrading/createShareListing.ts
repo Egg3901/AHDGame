@@ -5,7 +5,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createListingSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { assertCeoTradeNotBlocked } from "@/lib/corporations/commands/privatization/openVoteGuard";
 import {
@@ -68,8 +68,7 @@ export async function createShareListing(request: Request, { params }: RoutePara
 
     const { id } = await params;
     const parsed = await parseJsonBody(request, createListingSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const { shares, sellAsCorporation, confirmCeoVacate } = parsed.data;
     const db = await getDb();
@@ -82,12 +81,12 @@ export async function createShareListing(request: Request, { params }: RoutePara
 
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const tradeLock = await assertCeoTradeNotBlocked(db, corporation, character._id);
     if (tradeLock.blocked) {
-      return NextResponse.json({ error: tradeLock.error }, { status: tradeLock.status });
+      return errorResponse(tradeLock.status, tradeLock.error);
     }
 
     const now = new Date();
@@ -100,23 +99,17 @@ export async function createShareListing(request: Request, { params }: RoutePara
         .collection<Corporation>("corporations")
         .findOne({ ceoId: character._id, ceoVacant: { $ne: true } });
       if (!placerCorp) {
-        return NextResponse.json(
-          { error: "You must be an active CEO to list shares on behalf of a corporation" },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "You must be an active CEO to list shares on behalf of a corporation"
         );
       }
       if (placerCorp._id.equals(corporation._id)) {
-        return NextResponse.json(
-          { error: "A corporation cannot list its own shares" },
-          { status: 400 }
-        );
+        return errorResponse(400, "A corporation cannot list its own shares");
       }
 
       if (placerCorp.countryOwnerId) {
-        return NextResponse.json(
-          { error: "National corporations cannot hold equity positions" },
-          { status: 400 }
-        );
+        return errorResponse(400, "National corporations cannot hold equity positions");
       }
 
       const shareholderEntry = corporation.shareholders?.find(
@@ -155,10 +148,7 @@ export async function createShareListing(request: Request, { params }: RoutePara
       const available = ownedShares - alreadyReserved;
 
       if (available < shares) {
-        return NextResponse.json(
-          { error: `Only ${available.toLocaleString()} shares available` },
-          { status: 400 }
-        );
+        return errorResponse(400, `Only ${available.toLocaleString()} shares available`);
       }
 
       const listingId = new ObjectId();
@@ -173,10 +163,7 @@ export async function createShareListing(request: Request, { params }: RoutePara
         { requireSufficient: true }
       );
       if (remainingAfterReserve < 0) {
-        return NextResponse.json(
-          { error: "Shares were already sold or reserved by another action" },
-          { status: 409 }
-        );
+        return errorResponse(409, "Shares were already sold or reserved by another action");
       }
 
       try {
@@ -245,21 +232,16 @@ export async function createShareListing(request: Request, { params }: RoutePara
     const available = ownedShares - alreadyReserved;
 
     if (available < shares) {
-      return NextResponse.json(
-        { error: `Only ${available.toLocaleString()} shares available` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Only ${available.toLocaleString()} shares available`);
     }
 
     // Listing every unreserved share removes the CEO's effective control immediately.
     const shouldVacateCeo = character._id.equals(corporation.ceoId) && available === shares;
     if (shouldVacateCeo && !confirmCeoVacate) {
-      return NextResponse.json(
-        {
-          error: `You are the CEO of ${corporation.name}. Listing all ${shares.toLocaleString()} of your remaining shares will remove you as CEO — this can't be undone, and you'd have to be re-appointed to become CEO again.`,
-          requiresCeoVacateConfirm: true,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `You are the CEO of ${corporation.name}. Listing all ${shares.toLocaleString()} of your remaining shares will remove you as CEO — this can't be undone, and you'd have to be re-appointed to become CEO again.`,
+        { extra: { requiresCeoVacateConfirm: true } }
       );
     }
     let corporationUpdate: {
@@ -288,10 +270,7 @@ export async function createShareListing(request: Request, { params }: RoutePara
       { requireSufficient: true }
     );
     if (remainingAfterReserve < 0) {
-      return NextResponse.json(
-        { error: "Shares were already sold or reserved by another action" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Shares were already sold or reserved by another action");
     }
 
     let listingInserted = false;

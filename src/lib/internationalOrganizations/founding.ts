@@ -1,4 +1,7 @@
-import type { EuropeanIntegrationState } from "./europeanIntegration/rules";
+import {
+  isCarriedOverEuropeanIntegration,
+  type EuropeanIntegrationState,
+} from "./europeanIntegration/rules";
 import type { Db } from "mongodb";
 import type { InternationalOrganizationDef } from "@/lib/constants/internationalOrganizations";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
@@ -40,7 +43,13 @@ export async function loadOrgFoundingContext(db: Db): Promise<OrgFoundingContext
   );
   return {
     liveYear: gs ? resolveGameYear(gs) : null,
-    europeanIntegration: gs?.europeanIntegration,
+    // A record carried over from a previous world is not this world's state;
+    // callers that need it initialize the current one instead.
+    europeanIntegration:
+      gs?.europeanIntegration &&
+      !isCarriedOverEuropeanIntegration(gs.europeanIntegration, gs.currentTurn ?? 2)
+        ? gs.europeanIntegration
+        : undefined,
     preset: gs?.preset ?? DEFAULT_SEED_PRESET,
   };
 }

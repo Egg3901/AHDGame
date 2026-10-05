@@ -414,7 +414,7 @@ export default function StateElectionResultsPage({
             href={`/elections/${id}`}
             className="mt-4 inline-block text-primary hover:underline"
           >
-            ← Back to Election
+            ← Back to election
           </Link>
         </div>
       </div>
@@ -512,13 +512,13 @@ export default function StateElectionResultsPage({
             href={`/elections/${id}`}
             className="text-sm text-primary hover:underline mb-2 inline-block"
           >
-            ← Back to Election
+            ← Back to election
           </Link>
           <h1 className="text-3xl font-bold">
             {electionYear} {electionTypeTitle} in {stateName}
           </h1>
           <p className="text-muted mt-1">
-            {resultScopeLabel} · {election.status === "completed" ? "Final" : "In Progress"}
+            {resultScopeLabel} · {election.status === "completed" ? "Final" : "In progress"}
           </p>
         </div>
 
@@ -528,10 +528,10 @@ export default function StateElectionResultsPage({
           <div className="rounded-lg border border-card-border bg-card p-4">
             <h2 className="text-base font-semibold mb-3">
               {countyResults
-                ? "County Results"
+                ? "County results"
                 : subdivisionResults
                   ? `${unitLabel} Results`
-                  : "Congressional District Results"}
+                  : "Congressional district results"}
             </h2>
             <div className="h-[min(70vh,640px)] min-h-[320px] w-full">
               {subdivisionResults && (
@@ -592,7 +592,7 @@ export default function StateElectionResultsPage({
           {/* Vote Summary with donut */}
           {(countyResults || subdivisionResults) && sortedCandidates.length > 0 && (
             <div className="rounded-lg border border-card-border bg-card p-4">
-              <h2 className="text-base font-semibold mb-4">Vote Summary</h2>
+              <h2 className="text-base font-semibold mb-4">Vote summary</h2>
               <VoteDonut
                 candidates={sortedCandidates}
                 totalVotes={totalVotes}
@@ -656,7 +656,7 @@ export default function StateElectionResultsPage({
           {/* CD seat distribution */}
           {cdResults && (
             <div className="rounded-lg border border-card-border bg-card p-4">
-              <h2 className="text-base font-semibold mb-3">Seat Distribution</h2>
+              <h2 className="text-base font-semibold mb-3">Seat distribution</h2>
               <div className="space-y-2">
                 {Object.entries(
                   cdResults.districts.reduce(
@@ -703,7 +703,7 @@ export default function StateElectionResultsPage({
                     <th className="text-left px-5 py-2.5 font-medium">{unitLabel}</th>
                     <th className="text-left px-3 py-2.5 font-medium">Winner</th>
                     <th className="text-right px-3 py-2.5 font-medium">Margin</th>
-                    <th className="text-right px-3 py-2.5 font-medium">Total Votes</th>
+                    <th className="text-right px-3 py-2.5 font-medium">Total votes</th>
                     {sortedCandidates.slice(0, 3).map(([cid]) => (
                       <th
                         key={cid}
@@ -778,7 +778,7 @@ export default function StateElectionResultsPage({
         {countyTableRows.length > 0 && (
           <div className="rounded-lg border border-card-border bg-card overflow-hidden">
             <div className="px-5 py-3 border-b border-card-border">
-              <h2 className="text-base font-semibold">County Breakdown</h2>
+              <h2 className="text-base font-semibold">County breakdown</h2>
               <p className="text-xs text-muted mt-0.5">
                 Votes distributed by county population &amp; Cook PVI lean · sorted by total votes
               </p>
@@ -790,7 +790,7 @@ export default function StateElectionResultsPage({
                     <th className="text-left px-5 py-2.5 font-medium">County</th>
                     <th className="text-left px-3 py-2.5 font-medium">Winner</th>
                     <th className="text-right px-3 py-2.5 font-medium">Margin</th>
-                    <th className="text-right px-3 py-2.5 font-medium">Total Votes</th>
+                    <th className="text-right px-3 py-2.5 font-medium">Total votes</th>
                     <th className="text-right px-5 py-2.5 font-medium">Turnout</th>
                     {sortedCandidates.slice(0, 3).map(([cid]) => (
                       <th

@@ -19,7 +19,7 @@ import {
 import { subNationalChamberSeats } from "@/lib/constants/states";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import type { ElectedOfficial, Character, NPP, State } from "@/lib/db/types";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Db } from "mongodb";
 
 /** Seat total for a multi-seat group, read from the resolved State field. */
@@ -80,14 +80,14 @@ export async function POST(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+      return errorResponse(404, "Invalid country code");
     }
 
     const stateId = id;
 
     const parsed = await parseJsonBody(request, adminAssignSeatSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { seatType, senateClass, entityId, entityType, seatsToAssign } = parsed.data;
 
@@ -97,7 +97,7 @@ export async function POST(
     // Verify state exists
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     // Get entity details
@@ -109,7 +109,7 @@ export async function POST(
 
     const entityOid = parseObjectId(entityId);
     if (!entityOid) {
-      return NextResponse.json({ error: "Invalid entity ID" }, { status: 400 });
+      return errorResponse(400, "Invalid entity ID");
     }
 
     if (entityType === "player") {
@@ -117,7 +117,7 @@ export async function POST(
         _id: entityOid,
       });
       if (!character) {
-        return NextResponse.json({ error: "Player not found" }, { status: 404 });
+        return errorResponse(404, "Player not found");
       }
       characterName = character.name;
       party = character.party;
@@ -127,7 +127,7 @@ export async function POST(
         _id: entityOid,
       });
       if (!npp) {
-        return NextResponse.json({ error: "NPP not found" }, { status: 404 });
+        return errorResponse(404, "NPP not found");
       }
       characterName = npp.name;
       party = npp.party;
@@ -140,10 +140,7 @@ export async function POST(
     // npcDelegate / peoplesCongress / …). No hardcoded US offices.
     const spec = getRegionAppointableSeats(countryId).find((s) => s.officeType === seatType);
     if (!spec) {
-      return NextResponse.json(
-        { error: `${seatType} is not an appointable seat in ${state.name}` },
-        { status: 400 }
-      );
+      return errorResponse(400, `${seatType} is not an appointable seat in ${state.name}`);
     }
 
     const officeType = spec.officeType;
@@ -159,19 +156,13 @@ export async function POST(
         $or: [{ characterId: { $ne: null } }, { nppId: { $ne: null } }],
       });
       if (existingHolder) {
-        return NextResponse.json(
-          { error: `This ${spec.label} seat is already filled` },
-          { status: 400 }
-        );
+        return errorResponse(400, `This ${spec.label} seat is already filled`);
       }
       const alreadyHolds = await db
         .collection("electedOfficials")
         .findOne({ officeType, ...actorMatch });
       if (alreadyHolds) {
-        return NextResponse.json(
-          { error: `This politician already holds a ${spec.label} seat` },
-          { status: 400 }
-        );
+        return errorResponse(400, `This politician already holds a ${spec.label} seat`);
       }
 
       await db.collection("electedOfficials").updateOne(
@@ -217,19 +208,13 @@ export async function POST(
         $or: [{ characterId: { $ne: null } }, { nppId: { $ne: null } }],
       });
       if (existingHolder) {
-        return NextResponse.json(
-          { error: `${spec.label} seat is already filled` },
-          { status: 400 }
-        );
+        return errorResponse(400, `${spec.label} seat is already filled`);
       }
       const alreadyHolds = await db
         .collection("electedOfficials")
         .findOne({ officeType, ...actorMatch });
       if (alreadyHolds) {
-        return NextResponse.json(
-          { error: `This politician already holds a ${spec.label} seat` },
-          { status: 400 }
-        );
+        return errorResponse(400, `This politician already holds a ${spec.label} seat`);
       }
 
       await db.collection("electedOfficials").updateOne(
@@ -263,10 +248,7 @@ export async function POST(
     // ── Multi-seat chamber (federal lower or sub-national legislature) ───────
     const totalSeats = totalForSpec(spec, state, countryId, await getGameStatePreset(db));
     if (totalSeats === 0) {
-      return NextResponse.json(
-        { error: `${state.name} has no ${spec.label} seats` },
-        { status: 400 }
-      );
+      return errorResponse(400, `${state.name} has no ${spec.label} seats`);
     }
 
     const filledOfficials = (await db
@@ -281,10 +263,7 @@ export async function POST(
     const vacantSeats = totalSeats - filledSeats;
 
     if (seatsToAssign > vacantSeats) {
-      return NextResponse.json(
-        { error: `Only ${vacantSeats} vacant ${spec.label} seat(s) available` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Only ${vacantSeats} vacant ${spec.label} seat(s) available`);
     }
 
     const existingOffice = (await db

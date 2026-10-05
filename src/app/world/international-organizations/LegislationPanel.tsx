@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import { postBillProposalWithElectionConfirmation } from "@/components/bills/BillAutoFailWarning";
@@ -15,6 +16,7 @@ import {
   requiresUnanimity,
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -88,7 +90,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to propose FTA");
+        throw new Error(apiErrorText(body, "Failed to propose FTA"));
       }
       setSelected(new Set());
       setShowForm(false);
@@ -112,7 +114,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error ?? "Vote failed");
+      throw new Error(apiErrorText(body, "Vote failed"));
     }
     onChange();
   }
@@ -156,7 +158,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-lg font-semibold text-foreground">Free-Trade Agreements</h3>
+          <h3 className="text-lg font-semibold text-foreground">Free-trade agreements</h3>
           <p className="text-xs text-muted">
             Active FTAs zero out tariffs between every party in the agreement.
           </p>
@@ -201,7 +203,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
                 );
               })}
           </div>
-          {error && <p className="mt-2 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-2 text-xs text-error" />
           <div className="mt-4 flex gap-2">
             <Button variant="primary" size="md" onClick={submit} isLoading={submitting}>
               Submit for ratification
@@ -222,7 +224,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
 
       {/* Active FTAs */}
       <div className="space-y-3">
-        <h4 className="text-xs font-semibold uppercase tracking-widest text-muted">Active</h4>
+        <h4 className="text-body-sm font-medium text-muted">Active</h4>
         {withdrawSuccess && (
           <div className="rounded-xl border border-success/30 bg-success/5 p-4 text-sm text-success">
             {withdrawSuccess}
@@ -288,9 +290,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
 
       {/* Pending FTAs */}
       <div className="space-y-3">
-        <h4 className="text-xs font-semibold uppercase tracking-widest text-muted">
-          Awaiting ratification
-        </h4>
+        <h4 className="text-body-sm font-medium text-muted">Awaiting ratification</h4>
         {pendingFtas.length === 0 ? (
           <div className="rounded-xl border border-card-border bg-card p-5">
             <p className="text-sm text-muted">No pending legislation.</p>

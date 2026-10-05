@@ -1,7 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import { requireCron } from "@/lib/api/requireCron";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { logRequest } from "@/lib/api/requestLog";
 import { updateCampaignFogOfWar } from "@/lib/campaigns/fogOfWar";
 
@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   if (!requireCron(req)) {
     logRequest("GET", "/api/cron/fog-update", 401, Date.now() - start);
     console.warn("[cron/fog-update] Unauthorized cron attempt");
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return errorResponse(401, "Unauthorized");
   }
 
   try {
