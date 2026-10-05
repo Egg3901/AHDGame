@@ -44,9 +44,9 @@ export const JP_STRENGTH_REGION_COUNT = 8;
  */
 export const JP_ADJACENCY_MAP: Record<string, string[]> = {
   HOK: ["TOH"],
-  TOH: ["HOK", "KAN"],
+  TOH: ["HOK", "KAN", "CHU"],
   KAN: ["TOH", "CHU"],
-  CHU: ["KAN", "KNS"],
+  CHU: ["TOH", "KAN", "KNS"],
   KNS: ["CHU", "CGK", "SHI"],
   CGK: ["KNS", "SHI", "KYU"],
   SHI: ["KNS", "CGK"],
