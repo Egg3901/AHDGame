@@ -20,5 +20,4 @@ areas: [backend, engine]
 - Use the authored 1991 demographics when the census-derived seed path is disabled.
 - Correct age, education and income social attitude inputs using published 1991 survey results.
 - Show two-decimal regional averages consistently in position previews and seed output. Shared broad labels can still describe different demographic compositions.
-- Restore governing-party platform lookup for NPC electoral mandates.
 - Include error codes and support references in remaining regional policy and reset errors.
