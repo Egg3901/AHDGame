@@ -27,6 +27,7 @@ import { ukRegionCensusData2027 } from "@/lib/seeds/uk/ukRegionCensusData2027";
 import type { UKRegionLayer1 } from "@/lib/seeds/uk/ukRegionCensusData";
 import type { EraId } from "@/lib/seeds/presetSelector";
 import { ukRegionalContext1991 } from "./rules/regionalContext1991";
+import { UK_SOCIAL_ATTITUDES_1991 } from "./data/ukSocialAttitudes1991";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -379,7 +380,9 @@ const POSITIONS_1979: EraPositions = {
 };
 
 const POSITIONS_1991: EraPositions = {
-  // Calibration-fitted to the UK 1992 GE regional pattern (Major era: industrial North still Labour; suburban/rural south right via social traditionalism).
+  // Preserve the existing economic calibration. Age, education and income
+  // social inputs use the published 1991 attitude proxy documented alongside
+  // UK_SOCIAL_ATTITUDES_1991, independently of party election results.
   ethnicity: {
     white_british: { economicLean: 1.9, socialLean: 1.6 },
     asian_british: { economicLean: -2.0, socialLean: -0.3 },
@@ -388,21 +391,33 @@ const POSITIONS_1991: EraPositions = {
     other: { economicLean: -2.8, socialLean: 0.0 },
   },
   age: {
-    young: { economicLean: -4.5, socialLean: -0.4 },
-    mid: { economicLean: -2.3, socialLean: 3.1 },
-    mature: { economicLean: 3.0, socialLean: 1.5 },
-    senior: { economicLean: -4.5, socialLean: 3.2 },
+    young: { economicLean: -4.5, socialLean: UK_SOCIAL_ATTITUDES_1991.age.young },
+    mid: { economicLean: -2.3, socialLean: UK_SOCIAL_ATTITUDES_1991.age.mid },
+    mature: { economicLean: 3.0, socialLean: UK_SOCIAL_ATTITUDES_1991.age.mature },
+    senior: { economicLean: -4.5, socialLean: UK_SOCIAL_ATTITUDES_1991.age.senior },
   },
   education: {
-    no_qualifications: { economicLean: -2.9, socialLean: 1.2 },
-    gcse_equivalent: { economicLean: -2.8, socialLean: -0.4 },
-    a_level_equivalent: { economicLean: -2.0, socialLean: 2.3 },
-    degree_plus: { economicLean: -3.3, socialLean: 0.5 },
+    no_qualifications: {
+      economicLean: -2.9,
+      socialLean: UK_SOCIAL_ATTITUDES_1991.education.no_qualifications,
+    },
+    gcse_equivalent: {
+      economicLean: -2.8,
+      socialLean: UK_SOCIAL_ATTITUDES_1991.education.gcse_equivalent,
+    },
+    a_level_equivalent: {
+      economicLean: -2.0,
+      socialLean: UK_SOCIAL_ATTITUDES_1991.education.a_level_equivalent,
+    },
+    degree_plus: {
+      economicLean: -3.3,
+      socialLean: UK_SOCIAL_ATTITUDES_1991.education.degree_plus,
+    },
   },
   income: {
-    low: { economicLean: -4.5, socialLean: 0.1 },
-    middle: { economicLean: -4.5, socialLean: -3.1 },
-    high: { economicLean: 4.5, socialLean: 2.8 },
+    low: { economicLean: -4.5, socialLean: UK_SOCIAL_ATTITUDES_1991.income.low },
+    middle: { economicLean: -4.5, socialLean: UK_SOCIAL_ATTITUDES_1991.income.middle },
+    high: { economicLean: 4.5, socialLean: UK_SOCIAL_ATTITUDES_1991.income.high },
   },
   urbanization: {
     urban: { economicLean: -4.5, socialLean: 1.6 },
@@ -602,7 +617,9 @@ export function getUkModel(era: EraId): CountryLayer1Model {
     composition: COMPOSITION as Record<string, CountryLayer1Model["composition"][string]>,
     defaultLeans: DEFAULT_LEANS as Record<string, { economicLean: number; socialLean: number }>,
     census,
-    ...(era === "1991" ? { regionalContext: ukRegionalContext1991() } : {}),
+    ...(era === "1991"
+      ? { regionalContext: ukRegionalContext1991(), regionLeanDecimals: 2 as const }
+      : {}),
   };
 }
 

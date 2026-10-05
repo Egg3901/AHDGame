@@ -178,13 +178,13 @@ export async function seedUKDemographics(
   const { ukDemographicTurnout } = await import("@/lib/seeds/uk/ukDemographicTurnout");
   const { calculateStateLean } = await import("@/lib/utils/demographics");
   const is1991 = preset === "1991-default";
-  const { applyEra1991DemographicAdjustments } = is1991
-    ? await import("@/lib/seeds/reference/stateDemographics1991")
-    : { applyEra1991DemographicAdjustments: <T>(x: T): T => x };
+  const { ukRegionDemographics1991 } = is1991
+    ? await import("./data/ukRegionDemographics1991")
+    : { ukRegionDemographics1991: ukRegionDemographicsStatic };
 
   const { isLayer1PositionsEnabled } = await import("@/lib/seeds/layer1PositionsFlag");
   const useLayer1 = await isLayer1PositionsEnabled();
-  let ukRegionDemographics: typeof ukRegionDemographicsStatic = ukRegionDemographicsStatic;
+  let ukRegionDemographics: typeof ukRegionDemographicsStatic = ukRegionDemographics1991;
   if (useLayer1) {
     const { getCountryLayer1Model, buildModelRegionDemographics } =
       await import("@/lib/seeds/international");
@@ -212,8 +212,10 @@ export async function seedUKDemographics(
       .collection<DemographicCategory>("demographicCategories")
       .updateOne({ _id }, { $set: categoryData }, { upsert: true });
   }
-  for (const rawSd of ukRegionDemographics) {
-    const sd = is1991 ? applyEra1991DemographicAdjustments(rawSd, "UK") : rawSd;
+  // Both the authored 1991 fallback and the Layer-1 bundle already describe
+  // their selected era. Reapplying a modern-to-1991 transform distorts shares
+  // and rounds away population, so persist the selected bundle directly.
+  for (const sd of ukRegionDemographics) {
     const { _id, ...sdData } = sd;
     await db
       .collection<StateDemographics>("stateDemographics")
