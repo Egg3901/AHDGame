@@ -310,7 +310,7 @@ export function UKRegionPageTabsPolitics({
             </div>
             <p className="text-[11px] text-muted/60 mb-4 leading-relaxed">
               Each party&apos;s slice of the regional Org pool. Spend Political Strength on Build
-              Org to grow it; it decays passively each turn.
+              Org to grow it; organization can decay if the party becomes inactive here.
             </p>
             {(() => {
               const size = 96;

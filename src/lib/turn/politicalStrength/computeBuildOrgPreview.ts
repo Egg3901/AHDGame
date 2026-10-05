@@ -11,40 +11,24 @@ import {
 } from "@/lib/parties/access";
 import {
   BUILD_ORG_BASE_PS_COST,
-  PRIORITY_REGION_EFFECT_BONUS,
   effectivePsCost,
-  blendedComparisonPs,
 } from "@/lib/turn/politicalStrength/strengthConstants";
-import {
-  calcUnifiedBuildOrg,
-  type UnifiedBuildOrgBreakdown,
-} from "@/lib/turn/politicalStrength/buildOrgGain";
-import { isStateInPriorityRegion } from "@/lib/parties/priorityRegion";
-import { resolveUnmannedDefaultCaptureMultiplier } from "@/lib/parties/unmannedDefenseShield";
 import { orgBuildCashPrice, resolveOrgBuildFunding } from "@/lib/politicalStrength/buildOrgFunding";
 import { resolveOrgBuildSizeMultiplier } from "@/lib/politicalStrength/orgBuildStateSize";
+import { applyOrganizationBuild } from "@/lib/parties/rules/organizationBucket";
+import { ORG_BUILD_UNITS_PER_CLICK } from "@/lib/constants/partyOrg";
 
 /**
- * Canonical Build Org projection — the single source of truth shared by the
+ * Canonical Build Org projection, shared by the
  * read-only preview GET route and the spend POST route (which returns it as the
  * `nextPreview` for the following click). Centralizing it here guarantees the
- * pre-click estimate and the post-click charge/gain can never drift: both the
- * effective PS cost (pressure ladder) AND the projected Org gain (with the same
- * priority-region bonus + pool/rival clamping the POST applies) are computed in
- * one place.
+ * pre-click estimate and the post-click charge/gain use the same effective PS
+ * cost, fixed contribution, and bucket-share derivation.
  *
  * Read-only: reads `statePartyOrg`, `politicalParties`, and
  * `partyStrengthPressure` but mutates nothing, so the POST can call it *after*
  * committing a spend to project the next click against fresh state.
  */
-export interface BuildOrgPreviewFactors {
-  base: number;
-  headroom: number;
-  ownDiminishing: number;
-  psLeverage: number;
-  catchup: number;
-}
-
 export type BuildOrgPreviewResult =
   | {
       ok: true;
@@ -63,30 +47,27 @@ export type BuildOrgPreviewResult =
       /** Balance of the treasury that would pay (state or national, per `scope`). */
       treasuryAvailable: number;
       /**
-       * `min(1, treasury / cashPrice)` — the share of the click the treasury can
-       * fund. `projectedGain` and `poaches` below are ALREADY scaled by this, so
-       * consumers must not apply it a second time.
+       * `min(1, treasury / cashPrice)`. Retained for the existing soft cash
+       * charge; every successful click still deposits the same fixed unit.
        */
       fundedFraction: number;
-      /** Org% the next click actually grants — clamped exactly as the POST applies it. */
+      /** Fixed contribution deposited by the next successful click. */
+      contributionUnits: number;
+      /** Spender's contribution balance after the projected click. */
+      projectedOrganizationUnits: number;
+      /** Org% share change produced by that fixed contribution. */
       projectedGain: number;
-      /** Per-rival poach losses the next click would inflict (loss > 0 only). */
-      poaches: {
+      /** Existing parties whose percentage share would be diluted. */
+      dilutions: {
         partyId: string;
         loss: number;
-        /** Display name when the rival party doc is available. */
-        partyName?: string;
-        /** Short label (abbreviation) when available. */
-        abbreviation?: string;
       }[];
-      factors: BuildOrgPreviewFactors;
       scope: "state" | "national-targeted";
       eligibleScopes: SpenderScopeEligibility;
-      priorityRegionBonusApplied: boolean;
     }
   | {
       ok: false;
-      reason: "no-presence" | "auth" | "no-headroom" | "insufficient-funds";
+      reason: "no-presence" | "auth" | "insufficient-funds";
       message: string;
     };
 
@@ -149,67 +130,37 @@ export async function computeBuildOrgPreview(
     };
   }
 
-  const ownId = String(spenderParty.sequentialId);
   const allStateRows = await db
     .collection<StatePartyOrg>("statePartyOrg")
     .find({ countryId, stateId: upperRegionId })
     .toArray();
-
-  const totalPartyOrgPct = allStateRows.reduce((s, r) => s + (r.organization ?? 0), 0);
-  const rivalRows = allStateRows.filter((r) => r.partyId !== ownId && (r.organization ?? 0) > 0);
-  const rivalLeadOrgPct = rivalRows.reduce((max, r) => Math.max(max, r.organization ?? 0), 0);
-
-  // Resolve each rival party doc for (a) the unmanned-default shield and (b) its
-  // NATIONAL PS pool, blended into the strength comparison so the projection
-  // matches the POST route.
-  const rivalParties = rivalRows.length
-    ? await db
-        .collection<PoliticalParty>("politicalParties")
-        .find({ countryId, sequentialId: { $in: rivalRows.map((r) => Number(r.partyId)) } })
-        .toArray()
-    : [];
-  const partyBySeq = new Map(rivalParties.map((p) => [String(p.sequentialId), p]));
-  const shieldByPartyId = new Map<string, number>();
-  for (const r of rivalRows) {
-    const p = partyBySeq.get(r.partyId);
-    shieldByPartyId.set(r.partyId, p ? await resolveUnmannedDefaultCaptureMultiplier(db, p) : 1);
-  }
-
-  // Effective PS = state PS + a fraction of national PS, for spender and rivals.
-  const ownPS = blendedComparisonPs(
-    spenderRow?.politicalStrength ?? 0,
-    spenderParty.politicalStrength ?? 0
+  const previewRowId =
+    spenderRow?._id ?? `preview:${countryId}:${upperRegionId}:${spenderParty.sequentialId}`;
+  const previewRows = spenderRow
+    ? allStateRows
+    : [
+        ...allStateRows,
+        {
+          _id: previewRowId,
+          organization: 0,
+          organizationUnits: 0,
+          lastOrganizationBuildTurn: undefined,
+          partyId: String(spenderParty.sequentialId),
+        },
+      ];
+  const bucketResult = applyOrganizationBuild(
+    previewRows.map((row) => ({
+      id: row._id,
+      organization: row.organization ?? 0,
+      organizationUnits: row.organizationUnits,
+      lastOrganizationBuildTurn: row.lastOrganizationBuildTurn,
+    })),
+    previewRowId,
+    0
   );
-  const rivals = rivalRows.map((r) => ({
-    partyId: r.partyId,
-    orgPct: r.organization ?? 0,
-    ps: blendedComparisonPs(
-      r.politicalStrength ?? 0,
-      partyBySeq.get(r.partyId)?.politicalStrength ?? 0
-    ),
-    shield: shieldByPartyId.get(r.partyId) ?? 1,
-  }));
-  const rivalsWithPS = rivals.filter((r) => r.ps > 0);
-  const avgRivalPS =
-    rivalsWithPS.length > 0 ? rivalsWithPS.reduce((s, r) => s + r.ps, 0) / rivalsWithPS.length : 0;
-
-  const breakdown: UnifiedBuildOrgBreakdown = calcUnifiedBuildOrg({
-    ownOrgPct: spenderRow?.organization ?? 0,
-    ownPS,
-    totalPartyOrgPct,
-    rivalLeadOrgPct,
-    avgRivalPS,
-    rivals,
-  });
-
-  if (breakdown.totalGain <= 0) {
-    return {
-      ok: false,
-      reason: "no-headroom",
-      message:
-        "Nothing to build here — the unaffiliated pool is empty and no rival holds any Org to poach.",
-    };
-  }
+  const ownProjection = bucketResult.rows.find((row) => row.id === previewRowId);
+  if (!ownProjection) throw new Error("Build Org preview could not resolve spender bucket row");
+  const partyIdByRow = new Map(previewRows.map((row) => [row._id, row.partyId]));
 
   const scope = resolveSpenderScope(spenderParty, spenderRow, authUser, preferredScope);
   const eligibleScopes = resolveSpenderScopeEligibility(spenderParty, spenderRow, authUser);
@@ -242,32 +193,6 @@ export async function computeBuildOrgPreview(
     };
   }
 
-  // Project the gain EXACTLY as the POST applies it: priority-region bonus and
-  // funded fraction on the effect (not the cost), then re-clamp the pool slice
-  // to the unaffiliated remainder and each poach to the rival's current Org.
-  // Without this the preview over-reports gain in a saturated / oversaturated
-  // state, or for a click the treasury can only partly fund.
-  const priorityBonus = isStateInPriorityRegion(spenderParty, upperRegionId)
-    ? 1 + PRIORITY_REGION_EFFECT_BONUS
-    : 1;
-  const effectMultiplier = priorityBonus * funding.fundedFraction;
-  const poolAvailablePct = Math.max(0, 100 - totalPartyOrgPct);
-  const appliedPoolGain = Math.min(breakdown.poolGain * effectMultiplier, poolAvailablePct);
-  const rivalOrgById = new Map(rivalRows.map((r) => [r.partyId, r.organization ?? 0]));
-  const appliedPoaches = breakdown.rivalPoaches
-    .map((p) => {
-      const rivalParty = partyBySeq.get(p.partyId);
-      return {
-        partyId: p.partyId,
-        loss: Math.min(p.loss * effectMultiplier, rivalOrgById.get(p.partyId) ?? 0),
-        ...(rivalParty
-          ? { partyName: rivalParty.name, abbreviation: rivalParty.abbreviation }
-          : {}),
-      };
-    })
-    .filter((p) => p.loss > 0);
-  const projectedGain = appliedPoolGain + appliedPoaches.reduce((s, p) => s + p.loss, 0);
-
   return {
     ok: true,
     effectiveCost,
@@ -276,11 +201,16 @@ export async function computeBuildOrgPreview(
     sizeMultiplier,
     treasuryAvailable,
     fundedFraction: funding.fundedFraction,
-    projectedGain,
-    poaches: appliedPoaches,
-    factors: breakdown.factors,
+    contributionUnits: ORG_BUILD_UNITS_PER_CLICK,
+    projectedOrganizationUnits: ownProjection.organizationUnits,
+    projectedGain: ownProjection.delta,
+    dilutions: bucketResult.rows
+      .filter((row) => row.id !== previewRowId && row.delta < 0)
+      .map((row) => ({
+        partyId: partyIdByRow.get(row.id) ?? row.id,
+        loss: Math.abs(row.delta),
+      })),
     scope,
     eligibleScopes,
-    priorityRegionBonusApplied: priorityBonus > 1,
   };
 }

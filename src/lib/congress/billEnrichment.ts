@@ -590,6 +590,23 @@ export async function resolveBillProvisions(
           continue;
         }
 
+        if (provision.type === "reset_law") {
+          provisionsResolved.push({
+            legislationTypeName: provision.titleSnapshot,
+            current: {
+              name: provision.currentLawSnapshot,
+              explanation: provision.currentLawDescriptionSnapshot,
+            },
+            proposed: {
+              name: provision.titleSnapshot,
+              explanation: provision.descriptionSnapshot,
+            },
+            effectDirection: 0,
+            directionLabel: "Center",
+          });
+          continue;
+        }
+
         const subsidyProvision = formatSubsidyProvisionLabel(provision);
         provisionsResolved.push({
           legislationTypeName: subsidyProvision.legislationTypeName,

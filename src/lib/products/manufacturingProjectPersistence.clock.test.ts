@@ -57,6 +57,102 @@ describe("manufacturing completed-turn lifecycle persistence", () => {
     expect(db.collection("corporations").docs[0]?.liquidCapital).toBe(1_000_000);
   });
 
+  it("averages actual paid advertising across zero-spend development turns and freezes the window at launch", async () => {
+    const { db, corporation, projects, tick } = world();
+    const paid = { projectId: "project", turn: 1, amountAnchor: 120 };
+    corporation.manufacturingProductAdvertisingReceiptV2 = paid;
+    await db
+      .collection("corporations")
+      .updateOne(
+        { _id: corporation._id },
+        { $set: { manufacturingProductAdvertisingReceiptV2: paid } }
+      );
+    await tick(1);
+    await tick(1);
+    expect([...projects.values()][0]).toMatchObject({
+      developmentAdvertisingAnchor: 120,
+      developmentAdvertisingTurns: 1,
+      productBrand: 120,
+      lastAdvertisingReceiptTurn: 1,
+    });
+    expect(corporation.manufacturingProductAdvertisingReceiptV2).toBeUndefined();
+    for (let turn = 2; turn <= 12; turn++) await tick(turn);
+    expect([...projects.values()][0]).toMatchObject({
+      stage: "launch",
+      productBrand: 10,
+      developmentAdvertisingTurns: 12,
+      developmentCompletedTurn: 12,
+    });
+    // A late funded development order can be acknowledged without including
+    // subsequent marketing in the launched product's frozen development window.
+    const late = { projectId: "project", turn: 11, amountAnchor: 120 };
+    corporation.manufacturingProductAdvertisingReceiptV2 = late;
+    await db
+      .collection("corporations")
+      .updateOne(
+        { _id: corporation._id },
+        { $set: { manufacturingProductAdvertisingReceiptV2: late } }
+      );
+    await tick(13);
+    expect([...projects.values()][0]).toMatchObject({
+      productBrand: 20,
+      developmentAdvertisingTurns: 12,
+      lastAdvertisingReceiptTurn: 11,
+    });
+    await tick(35);
+    const postlaunch = { projectId: "project", turn: 20, amountAnchor: 99999 };
+    corporation.manufacturingProductAdvertisingReceiptV2 = postlaunch;
+    await db
+      .collection("corporations")
+      .updateOne(
+        { _id: corporation._id },
+        { $set: { manufacturingProductAdvertisingReceiptV2: postlaunch } }
+      );
+    await tick(36);
+    expect([...projects.values()][0]).toMatchObject({
+      stage: "growth",
+      productBrand: 20,
+      developmentAdvertisingTurns: 12,
+      developmentCompletedTurn: 12,
+    });
+    expect(corporation.manufacturingProductAdvertisingReceiptV2).toBeUndefined();
+  });
+
+  it("keeps paid advertising evidence across a project CAS race and acknowledges it on the next turn", async () => {
+    const { db, corporation, projects, tick } = world({
+      lastProcessedTurn: 10,
+      elapsedDevelopmentTurns: 10,
+    });
+    const paid = { projectId: "project", turn: 10, amountAnchor: 110 };
+    corporation.manufacturingProductAdvertisingReceiptV2 = paid;
+    await db
+      .collection("corporations")
+      .updateOne(
+        { _id: corporation._id },
+        { $set: { manufacturingProductAdvertisingReceiptV2: paid } }
+      );
+    const collection = db.collection(MANUFACTURING_PRODUCT_PROJECTS_V2);
+    const original = collection.bulkWrite.bind(collection);
+    vi.spyOn(collection, "bulkWrite").mockImplementationOnce(async () => {
+      await collection.updateOne(
+        { _id: "project" },
+        { $set: { lastProcessedTurn: 11, elapsedDevelopmentTurns: 11 } }
+      );
+      return { matchedCount: 0 } as never;
+    });
+    await tick(11);
+    expect(corporation.manufacturingProductAdvertisingReceiptV2).toEqual(paid);
+    expect([...projects.values()][0]?.developmentAdvertisingAnchor).toBeUndefined();
+    vi.mocked(collection.bulkWrite).mockImplementation(original);
+    await tick(12);
+    expect([...projects.values()][0]).toMatchObject({
+      developmentAdvertisingAnchor: 110,
+      developmentAdvertisingTurns: 12,
+      lastAdvertisingReceiptTurn: 10,
+    });
+    expect(corporation.manufacturingProductAdvertisingReceiptV2).toBeUndefined();
+  });
+
   it("keeps zero-budget development unlaunched despite the completed-turn clock", async () => {
     const { projects, tick } = world({ developmentPaidAnchor: 0 });
     for (let turn = 1; turn <= 20; turn++) await tick(turn);

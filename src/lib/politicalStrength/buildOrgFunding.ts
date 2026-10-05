@@ -26,9 +26,10 @@ import {
  *     `TREASURY_PS_RATE_BY_COUNTRY`, the same table the PS streams use, so it
  *     scales with each country's currency. A flat number would be crushing in
  *     sterling and free in yen.
- *  2. **Soft failure.** Short funds shrink the click rather than refusing it,
- *     down to `ORG_BUILD_MIN_FUNDED_FRACTION`; below that the click is refused
- *     BEFORE any PS is spent. See that constant for why.
+ *  2. **Soft failure.** A treasury covering at least
+ *     `ORG_BUILD_MIN_FUNDED_FRACTION` may part-fund the click. Below that the
+ *     click is refused BEFORE any PS is spent. Every successful click still
+ *     contributes the same organization unit.
  *
  * Pure (no DB / server imports) so the preview route, the spend route, the NPP
  * sweep, and the UI estimate all price a click identically.
@@ -44,7 +45,7 @@ export type OrgBuildFunding =
       price: number;
       /** Cash actually charged — `min(price, treasury)`. */
       paid: number;
-      /** `paid / price`, in `[ORG_BUILD_MIN_FUNDED_FRACTION, 1]`. Scales Org gain. */
+      /** `paid / price`, in `[ORG_BUILD_MIN_FUNDED_FRACTION, 1]`, for reporting. */
       fundedFraction: number;
     }
   | {
@@ -144,9 +145,8 @@ export function resolveOrgBuildFunding({
  * Applied AFTER the PS debit commits. `resolveOrgBuildFunding` already refused
  * anything below the floor, but the treasury read and the debit are separate
  * operations: a concurrent GOTV or transfer can drain the row in between. Without
- * this floor that race would scale the click's Org gain to ~0 while the PS and
- * the pressure increment stayed spent, which is strictly worse for the player
- * than the refusal they would have got a moment earlier.
+ * this floor the reported funding share could fall below the minimum accepted
+ * by the preflight even though the fixed bucket contribution still lands.
  */
 export function clampFundedFraction(fraction: number): number {
   if (!Number.isFinite(fraction)) return ORG_BUILD_MIN_FUNDED_FRACTION;

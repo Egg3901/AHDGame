@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
+import { clearCommodityMarket } from "@/lib/market/clearing";
+import { qualityPremiumMultiplier } from "@/lib/market/clearing";
 import { MEDIA_PRODUCT_KINDS, getMediaProductKind, tailDemandFactor } from "../mediaProductCatalog";
 import {
   advanceMediaProduct,
@@ -76,6 +79,71 @@ describe("media product lifecycle rules", () => {
     ).toBe(120);
     expect(mediaProductAdvertisingReceiptAnchor(300, 0.5)).toBe(150);
     expect(mediaProductAdvertisingReceiptAnchor(0, 0.5)).toBe(0);
+  });
+
+  it("turns paid title brand into bounded premium defense without adding market demand", () => {
+    const demand = 100;
+    const sellers = [
+      { id: "premium-media", units: 100, posture: 0.2 },
+      { id: "low-price-rival", units: 100, posture: 0 },
+    ];
+    const noBrand = clearCommodityMarket(
+      demand,
+      sellers,
+      new Map([
+        ["premium-media", 20],
+        ["low-price-rival", 20],
+      ])
+    );
+    const kind = getMediaProductKind("television_series")!;
+    const titleBonus = mediaProductBrandBonus(1e15, kind.coverage) * 0.5;
+    const productEffect = aggregateMediaProductSectorEffects({
+      projects: [
+        {
+          project: {
+            id: "title",
+            kindId: kind.id,
+            stage: "mature",
+            startedTurn: 1,
+            stageStartedTurn: 1,
+            developmentPaidAnchor: 1,
+            paidThresholdAnchor: 1,
+            elapsedDevelopmentTurns: 1,
+            elapsedThresholdTurns: 1,
+            developmentAdvertisingAnchor: 1e15,
+            developmentAdvertisingTurns: 1,
+            productBrand: 1e15,
+            allocationShare: 0.5,
+          },
+          kind,
+        },
+      ],
+      baseQuality: 60,
+    });
+    const withPaidTitle = clearCommodityMarket(
+      demand,
+      sellers,
+      new Map([
+        ["premium-media", 20 + titleBonus],
+        ["low-price-rival", 20],
+      ])
+    );
+    const premiumBasePrice = COMMODITY_BASE_PRICES.advertising;
+    const protectedUnits =
+      ((withPaidTitle.get("premium-media") ?? 0) - (noBrand.get("premium-media") ?? 0)) * 100;
+    const allUnitsBefore = [...noBrand.values()].reduce((sum, share) => sum + share * 100, 0);
+    const allUnitsAfter = [...withPaidTitle.values()].reduce((sum, share) => sum + share * 100, 0);
+
+    expect(titleBonus).toBe(4);
+    expect(productEffect.quality).toBeGreaterThan(60);
+    expect(qualityPremiumMultiplier(productEffect.quality!)).toBeGreaterThan(
+      qualityPremiumMultiplier(60)
+    );
+    expect(qualityPremiumMultiplier(productEffect.quality!)).toBeLessThanOrEqual(1.3);
+    expect(protectedUnits).toBeGreaterThan(0);
+    expect(protectedUnits).toBeLessThanOrEqual(40);
+    expect(allUnitsAfter).toBe(allUnitsBefore);
+    expect(protectedUnits * premiumBasePrice * 1.2).toBeGreaterThan(0);
   });
 
   it("requires paid R&D and model cadence before launch, then freezes quality and actual ad brand", () => {
@@ -206,7 +274,7 @@ describe("media product lifecycle rules", () => {
       ],
     });
     expect(result.allocatedShare).toBe(1);
-    expect(result.quality).toBe(68.4);
+    expect(result.quality).toBe(70.1);
     expect(result.loyaltyBonus).toBe(3.4);
   });
 

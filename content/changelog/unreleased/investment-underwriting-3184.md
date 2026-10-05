@@ -2,18 +2,15 @@
 date: 2026-10-04
 title: Investment banks underwrite funded IPOs and corporate bonds
 summary: >-
-  One or two sentences on what changed and why it matters. This is the text
-  that appears under the change in the release post, so write it for a reader
-  who was not in the pull request.
-# Free text. What the change was about: economy, elections, balance, corporations.
-tags: []
-# How big this change is, which sets how it is grouped in the release post.
-# One of: major | minor | patch | hotfix
-badges: [patch]
-# Which part of the codebase moved. Any of: backend | frontend | fullstack | engine
-areas: []
+  Enabled investment banks can fund filled IPO shares and corporate bond
+  orders. The issuer pays a 1.5% fee on proceeds that are actually placed.
+badges: [minor]
+tags: [economy, corporations]
+areas: [backend, frontend, engine]
 ---
 
 ## What changed
 
--
+Corporations can choose an eligible same-currency investment bank to underwrite a new IPO or corporate bond offering. The bank funds only the shares or bonds that buyers actually take, and receives a 1.5% fee on those placed proceeds. Unfilled orders do not generate a fee.
+
+The issuer receives proceeds in its home currency after the fee. Funded placements are recorded by the bank and appear in banking income.

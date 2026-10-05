@@ -246,7 +246,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       if (frozenUnderwritingOffer && placedShares > 0 && underwriting) {
         const settlement = await settlePrimaryUnderwritingFill(db, {
           bank: underwriting.bank,
-          issuer: { _id: corporation._id, name: corporation.name },
+          issuer: corporation,
           issuerCurrencyCode: placement.currency,
           offer: frozenUnderwritingOffer,
           instrumentId: underwritingFillId!,

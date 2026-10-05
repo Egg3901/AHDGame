@@ -9,7 +9,11 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { proposeStateBill } from "@/lib/legislature/commands/proposeStateBill";
 import { listStateLegislatureBills } from "@/lib/legislature/queries/stateBillQueries";
 import { STATE_BILL_CATEGORIES, MAX_PROVISIONS } from "@shared/constants/legislation";
-import { moderatedBillTitle, moderatedBillText } from "@/lib/api/schemas/congress";
+import {
+  moderatedBillTitle,
+  moderatedBillText,
+  stateBillProvisionSchema,
+} from "@/lib/api/schemas/congress";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 
 // GET /api/country/[code]/region/[id]/legislature/bills — Return state bills for a region.
@@ -59,38 +63,13 @@ export async function POST(
     const rateLimit = checkRateLimit(auth.user.userId, 10, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
-    const subsidyProvisionSchema = z.object({
-      type: z.literal("subsidy"),
-      scopeType: z.enum(["economy_wide", "sector"]),
-      targetSectorType: z.string().optional(),
-      targetStrategyId: z.string().optional(),
-      domesticOnly: z.boolean(),
-    });
-    const endSubsidyProvisionSchema = z.object({
-      type: z.literal("end_subsidy"),
-      scopeType: z.enum(["economy_wide", "sector"]),
-      targetSectorType: z.string().optional(),
-      targetStrategyId: z.string().optional(),
-    });
-    const policyProvisionSchema = z.object({
-      legislationTypeId: z.string().optional(),
-      policyOptionId: z.string().optional(),
-      effectDirection: z.number().optional(),
-      economic: z.number().optional(),
-      social: z.number().optional(),
-      proposedRate: z.number().optional(),
-    });
-
     const billSchema = z.object({
       title: moderatedBillTitle(),
       summary: moderatedBillText(z.string().min(1, "Summary required")),
       category: z.enum(STATE_BILL_CATEGORIES).optional(),
       legislationTypeId: z.string().optional(),
       effectDirection: z.number().optional(),
-      provisions: z
-        .array(z.union([subsidyProvisionSchema, endSubsidyProvisionSchema, policyProvisionSchema]))
-        .max(MAX_PROVISIONS)
-        .optional(),
+      provisions: z.array(stateBillProvisionSchema).max(MAX_PROVISIONS).optional(),
       adminOverride: z.boolean().optional(),
     });
 

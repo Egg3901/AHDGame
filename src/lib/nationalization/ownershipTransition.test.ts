@@ -92,6 +92,7 @@ beforeEach(() => {
   db.collection("bonds");
   db.collection("characters");
   db.collection("imperialCharacters");
+  db.collection("bankMoneyMoves");
 });
 
 function findCursor<T>(rows: T[]) {
@@ -207,6 +208,7 @@ describe("nationalizeSector", () => {
       (c) => JSON.stringify(c[0]) === JSON.stringify({ _id: donorId })
     );
     expect(donorUpdate).toBeUndefined();
+    expect(db.collectionMocks.bankMoneyMoves.findOne).not.toHaveBeenCalled();
   });
 
   // Regression for the multi-NatCorp "take the rest" invariant: once a sector type

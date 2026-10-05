@@ -71,6 +71,13 @@ export const DEFAULT_GAME_STATE_FLAGS = {
   // Runtime helper is fail-closed (absent = off) so existing worlds stay on
   // the legacy population-only channel until an admin flips the gate.
   legislationDemographicEffectsV2Enabled: true,
+  // The reset-era systems are staged independently. Existing and fresh worlds
+  // retain today's behavior until each complete v2 runtime path is released
+  // and an admin explicitly promotes it. These are version selectors, not the
+  // older legislation-demographics subfeature above.
+  metricsSystemVersion: "v1",
+  legislationSystemVersion: "v1",
+  cabinetSystemVersion: "v1",
   // Granular poll breakdowns: cross-product Layer-1 electorate cells attached
   // to poll results. Default on for new worlds; additive to existing poll math.
   granularPollEnabled: true,

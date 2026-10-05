@@ -5,7 +5,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth"; // Optional auth with current account state.
 import { handleRouteError } from "@/lib/api/errors";
-import type { Bond, Corporation, BondHistory, User } from "@/lib/db/types";
+import type { Bond, Corporation, BondHistory, IndexFund, NPP, User } from "@/lib/db/types";
 import type { Character } from "@/lib/db/types/character";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { bulkFetchCharacterNames } from "@/lib/db/characterLookup";
@@ -30,6 +30,20 @@ import { isBankPropTradingEnabled } from "@/lib/banking/featureFlag";
 
 interface RouteParams {
   params: Promise<{ bondId: string }>;
+}
+
+interface ResolvedBondHolder {
+  type: "character" | "corporation" | "fund" | "npp" | "central_bank";
+  id: string;
+  name: string;
+  avatarUrl?: string;
+  logoUrl?: string;
+  sequentialId?: number;
+  slug?: string;
+  fundCountryId?: string | null;
+  units: number;
+  percentage: number;
+  value: number;
 }
 
 /**
@@ -231,8 +245,10 @@ export const GET = withNoStore(async function GET(_request: Request, { params }:
       .filter((h) => h.imperialCharacterId)
       .map((h) => h.imperialCharacterId!);
     const corporationIds = bond.holders.filter((h) => h.corporationId).map((h) => h.corporationId!);
+    const fundIds = bond.holders.filter((h) => h.fundId).map((h) => h.fundId!);
+    const nppIds = bond.holders.filter((h) => h.nppId).map((h) => h.nppId!);
 
-    const [charMap, imperialChars, holderCorps] = await Promise.all([
+    const [charMap, imperialChars, holderCorps, holderFunds, holderNpps] = await Promise.all([
       bulkFetchCharacterNames(db, characterIds, { includeAvatar: true }),
       imperialIds.length > 0
         ? db
@@ -260,13 +276,41 @@ export const GET = withNoStore(async function GET(_request: Request, { params }:
             })
             .toArray()
         : [],
+      fundIds.length > 0
+        ? db
+            .collection<IndexFund>("indexFunds")
+            .find({ _id: { $in: fundIds } })
+            .project<Pick<IndexFund, "_id" | "name" | "slug" | "scope" | "countryId">>({
+              _id: 1,
+              name: 1,
+              slug: 1,
+              scope: 1,
+              countryId: 1,
+            })
+            .toArray()
+        : [],
+      nppIds.length > 0
+        ? db
+            .collection<NPP>("npps")
+            .find({ _id: { $in: nppIds } })
+            .project<Pick<NPP, "_id" | "name" | "avatarUrl" | "sequentialId">>({
+              _id: 1,
+              name: 1,
+              avatarUrl: 1,
+              sequentialId: 1,
+            })
+            .toArray()
+        : [],
     ]);
 
     const imperialMap = new Map(imperialChars.map((c) => [c._id.toString(), c]));
     const corpHolderMap = new Map(holderCorps.map((c) => [c._id.toString(), c]));
+    const fundHolderMap = new Map(holderFunds.map((fund) => [fund._id.toString(), fund]));
+    const nppHolderMap = new Map(holderNpps.map((npp) => [npp._id.toString(), npp]));
 
     const totalUnits = Math.floor(bond.totalIssued / BOND_UNIT_FACE_VALUE);
-    const heldUnits = bond.holders.reduce((sum, h) => sum + h.units, 0);
+    const heldUnits =
+      bond.holders.reduce((sum, h) => sum + h.units, 0) + (bond.centralBankHoldings ?? 0);
 
     // Holder values are computed from BOND_UNIT_FACE_VALUE × marketPrice, both of
     // which are denominated in the bond's own currencyCode. Normalize to ₳ so
@@ -282,7 +326,7 @@ export const GET = withNoStore(async function GET(_request: Request, { params }:
           100
       ) / 100;
 
-    const holders = bond.holders.map((h) => {
+    const holders: (ResolvedBondHolder | null)[] = bond.holders.map((h) => {
       if (h.characterId) {
         const char = charMap.get(h.characterId.toString());
         return {
@@ -319,6 +363,30 @@ export const GET = withNoStore(async function GET(_request: Request, { params }:
           percentage: totalUnits > 0 ? (h.units / totalUnits) * 100 : 0,
           value: holderValueAnchor(h.units),
         };
+      } else if (h.fundId) {
+        const fund = fundHolderMap.get(h.fundId.toString());
+        return {
+          type: "fund" as const,
+          id: h.fundId.toString(),
+          name: fund?.name ?? "Investment fund",
+          slug: fund?.slug,
+          fundCountryId: fund?.countryId ?? null,
+          units: h.units,
+          percentage: totalUnits > 0 ? (h.units / totalUnits) * 100 : 0,
+          value: holderValueAnchor(h.units),
+        };
+      } else if (h.nppId) {
+        const npp = nppHolderMap.get(h.nppId.toString());
+        return {
+          type: "npp" as const,
+          id: h.nppId.toString(),
+          name: npp?.name ?? "Non-player investor",
+          avatarUrl: npp?.avatarUrl,
+          sequentialId: npp?.sequentialId,
+          units: h.units,
+          percentage: totalUnits > 0 ? (h.units / totalUnits) * 100 : 0,
+          value: holderValueAnchor(h.units),
+        };
       } else {
         // Defensive: holder with no identifiable owner — skip rendering
         return null;
@@ -327,6 +395,16 @@ export const GET = withNoStore(async function GET(_request: Request, { params }:
 
     // Filter out null holders (defensive: entries with no owner ID) and sort by units descending
     const validHolders = holders.filter((h): h is NonNullable<typeof h> => h !== null);
+    if ((bond.centralBankHoldings ?? 0) > 0) {
+      validHolders.push({
+        type: "central_bank" as const,
+        id: `central-bank:${bond.countryId ?? bond.currencyCode ?? "unknown"}`,
+        name: "Central bank holdings",
+        units: bond.centralBankHoldings!,
+        percentage: totalUnits > 0 ? (bond.centralBankHoldings! / totalUnits) * 100 : 0,
+        value: holderValueAnchor(bond.centralBankHoldings!),
+      });
+    }
     validHolders.sort((a, b) => b.units - a.units);
 
     // Get price history

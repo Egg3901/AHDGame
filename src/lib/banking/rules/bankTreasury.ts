@@ -9,6 +9,7 @@ import { cbMarginRatePercent } from "@/lib/banking/rules/decide";
 import { discountWindowRatePercent } from "@/lib/banking/rules/discountWindow";
 import { perTurnInterest, perTurnInterestOn } from "@/lib/banking/rules/loans";
 import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
+import { perTurnCouponPayment } from "@/lib/constants/bonds";
 
 export const BANK_TREASURY_MAX_REMAINING_TURNS = 48;
 
@@ -18,6 +19,29 @@ export interface BankTreasuryHolderLot {
   lotId?: string;
   tradeId?: string;
   units: number;
+  avgCostPerUnit?: number;
+}
+
+/** Return a complete allocated-lot basis, or null when any source lot is unknown. */
+export function bankTreasuryAllocatedCostBasis(
+  holders: readonly BankTreasuryHolderLot[],
+  allocations: readonly { lotId: string; units: number }[],
+  currency: CurrencyCode
+): number | null {
+  if (allocations.length === 0) return null;
+  let basis = 0;
+  for (const allocation of allocations) {
+    const holder = holders.find((row) => row.lotId === allocation.lotId);
+    if (
+      !holder ||
+      !Number.isFinite(holder.avgCostPerUnit) ||
+      !Number.isFinite(allocation.units) ||
+      allocation.units <= 0
+    )
+      return null;
+    basis += holder.avgCostPerUnit! * allocation.units;
+  }
+  return roundSavingsAmount(basis, currency);
 }
 
 /** Count only settled units owned by this charter epoch. */
@@ -126,6 +150,38 @@ export function computeBankTreasuryDueInterest(input: BankTreasuryDueInterestInp
   return roundSavingsAmount(depositInterest + borrowingInterest, input.currency);
 }
 
+/** Annualized interest cost on the bank's current deposit and borrowing balances. */
+export function computeBankTreasuryFundingRatePercent(input: BankTreasuryDueInterestInput): number {
+  if (
+    ![
+      input.primeRate,
+      input.inflationRate,
+      input.depositOffset,
+      input.npcDeposits,
+      input.totalDeposits,
+      input.playerDeposits,
+      input.discountWindowDebt,
+      input.cbMarginDebt,
+      ...input.interbankLoans.flatMap((loan) => [loan.outstanding, loan.ratePercent]),
+    ].every(Number.isFinite)
+  )
+    return Number.POSITIVE_INFINITY;
+  const npcDeposits = nonNegative(input.npcDeposits);
+  const playerDeposits = input.playerDepositsAreLiabilities
+    ? nonNegative(input.playerDeposits)
+    : Math.max(0, nonNegative(input.totalDeposits) - npcDeposits);
+  const deposits = npcDeposits + playerDeposits;
+  const borrowing =
+    nonNegative(input.discountWindowDebt) +
+    nonNegative(input.cbMarginDebt) +
+    input.interbankLoans.reduce((sum, loan) => sum + nonNegative(loan.outstanding), 0);
+  const fundedBase = deposits + borrowing;
+  if (fundedBase <= 0) return 0;
+  return (
+    (computeBankTreasuryDueInterest(input) / fundedBase) * BANK_TREASURY_MAX_REMAINING_TURNS * 100
+  );
+}
+
 export function computeBankTreasuryCashFloor(
   input: BankTreasuryCashFloorInput
 ): BankTreasuryCashFloor {
@@ -169,6 +225,7 @@ export interface BankTreasuryQuote {
   publicFloatUnits: number;
   bidPerUnitLocal: number;
   askPerUnitLocal: number;
+  annualizedContractYieldPercent: number;
   poolCashLocal: number;
   depthUnitsAtBid: number;
   eligible: boolean;
@@ -189,6 +246,17 @@ export function quoteBankTreasuryBond(input: BankTreasuryQuoteInput): BankTreasu
   });
   const bidPerUnitLocal = Math.round(BOND_UNIT_FACE_VALUE * quote.bid * 100) / 100;
   const askPerUnitLocal = Math.round(BOND_UNIT_FACE_VALUE * quote.ask * 100) / 100;
+  const projectedProceedsLocal =
+    BOND_UNIT_FACE_VALUE +
+    perTurnCouponPayment(bond.couponRate, BOND_UNIT_FACE_VALUE) * remainingTurns;
+  const computedAnnualizedYield =
+    remainingTurns > 0 && askPerUnitLocal > 0
+      ? ((projectedProceedsLocal / askPerUnitLocal - 1) * BANK_TREASURY_MAX_REMAINING_TURNS * 100) /
+        remainingTurns
+      : Number.NEGATIVE_INFINITY;
+  const annualizedContractYieldPercent = Number.isFinite(computedAnnualizedYield)
+    ? computedAnnualizedYield
+    : Number.NEGATIVE_INFINITY;
   const publicFloatUnits = Number.isSafeInteger(bond.publicFloat)
     ? Math.max(0, bond.publicFloat)
     : 0;
@@ -204,6 +272,7 @@ export function quoteBankTreasuryBond(input: BankTreasuryQuoteInput): BankTreasu
     publicFloatUnits,
     bidPerUnitLocal,
     askPerUnitLocal,
+    annualizedContractYieldPercent,
     poolCashLocal: nonNegative(input.poolCashLocal),
     depthUnitsAtBid:
       bidPerUnitLocal > 0 ? Math.floor(nonNegative(input.poolCashLocal) / bidPerUnitLocal) : 0,
@@ -227,18 +296,39 @@ export interface BankTreasurySweepPlan {
   costLocal: number;
 }
 
-/** Buy nearest maturity first, without crossing the cash floor or float. */
+export type BankTreasurySweepCandidate = Pick<
+  BankTreasuryQuote,
+  | "bondId"
+  | "remainingTurns"
+  | "publicFloatUnits"
+  | "askPerUnitLocal"
+  | "annualizedContractYieldPercent"
+  | "eligible"
+>;
+
+/** Buy positive-carry bills with the best annualized contract yield first. */
 export function planBankTreasurySweep(
-  quotes: readonly BankTreasuryQuote[],
+  quotes: readonly BankTreasurySweepCandidate[],
   cashReserves: number,
-  floorLocal: number
+  floorLocal: number,
+  fundingRatePercent: number
 ): BankTreasurySweepPlan[] {
   let spendable = Math.max(0, nonNegative(cashReserves) - nonNegative(floorLocal));
   const plans: BankTreasurySweepPlan[] = [];
   for (const quote of [...quotes]
-    .filter((item) => item.eligible)
-    .sort((a, b) => a.remainingTurns - b.remainingTurns || a.bondId.localeCompare(b.bondId))) {
-    if (spendable < quote.askPerUnitLocal) break;
+    .filter(
+      (item) =>
+        item.eligible &&
+        Number.isFinite(item.annualizedContractYieldPercent) &&
+        item.annualizedContractYieldPercent > fundingRatePercent
+    )
+    .sort(
+      (a, b) =>
+        b.annualizedContractYieldPercent - a.annualizedContractYieldPercent ||
+        a.remainingTurns - b.remainingTurns ||
+        a.bondId.localeCompare(b.bondId)
+    )) {
+    if (spendable < quote.askPerUnitLocal) continue;
     const units = Math.min(quote.publicFloatUnits, Math.floor(spendable / quote.askPerUnitLocal));
     if (units <= 0) continue;
     const costLocal = Math.round(units * quote.askPerUnitLocal * 100) / 100;

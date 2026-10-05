@@ -251,4 +251,64 @@ describe("loans owed to a bank that no longer exists", () => {
       (db.collection("corporations").docs[0] as unknown as Corporation).bankCharter?.cashReserves
     ).toBe(900);
   });
+
+  it("counts insurer recoveries only for resolutions in the measured premium cohort", async () => {
+    const db = createInMemoryDb();
+    const beforeMeasurement = new ObjectId();
+    const measured = new ObjectId();
+    const noInsuredClaim = new ObjectId();
+    db.seed("corporations", [
+      {
+        _id: beforeMeasurement,
+        name: "Earlier resolution",
+        countryId: "US",
+        bankCharter: charter("failed", {
+          charteredTurn: 1,
+          depositorsResolvedTurn: 9,
+          insuranceResolutionTurn: 9,
+        }),
+      },
+      {
+        _id: measured,
+        name: "Measured resolution",
+        countryId: "US",
+        bankCharter: charter("failed", {
+          charteredTurn: 1,
+          depositorsResolvedTurn: 10,
+          insuranceResolutionTurn: 10,
+          insuranceMeasuredClaimTurn: 10,
+        }),
+      },
+      {
+        _id: noInsuredClaim,
+        name: "Measured resolution without insurer payout",
+        countryId: "US",
+        bankCharter: charter("failed", {
+          charteredTurn: 1,
+          depositorsResolvedTurn: 12,
+          insuranceResolutionTurn: 12,
+        }),
+      },
+    ]);
+    db.seed("depositInsuranceFunds", [
+      {
+        _id: "USD",
+        balance: 0,
+        insuredCap: 5_000_000,
+        premiumsCollectedLifetime: 0,
+        payoutsLifetime: 0,
+        treasuryBackstopLifetime: 0,
+        pricingEvidenceStartTurn: 10,
+      },
+    ]);
+    db.seed("bankLoans", [loan(beforeMeasurement), loan(measured), loan(noInsuredClaim)]);
+
+    const cohortEligibility: boolean[] = [];
+    await processDeadBankLoans(db as unknown as Db, 55, async (_loan, _bank, _target, counted) => {
+      cohortEligibility.push(counted);
+      return { collected: 100 };
+    });
+
+    expect(cohortEligibility.sort()).toEqual([false, false, true]);
+  });
 });

@@ -125,6 +125,35 @@ export interface Bond {
     escrowLocal: number;
     fundingAttemptTurn?: number;
     paid?: boolean;
+    /** Exclusive cash or public-float disposition for this frozen due quote. */
+    publicFloatDisposition?:
+      | { mode: "cash"; status: "refused"; acceptedUnits: 0; refusal: string }
+      | {
+          mode: "novation";
+          status: "reserved" | "applied";
+          acceptedUnits: number;
+          sourceCountryId: CountryId;
+          sourceIssuerName: string;
+          sourceCorporationId: ObjectId;
+          /** null records that the original bond omitted currencyCode. */
+          sourceCurrencyCode: CurrencyCode | null;
+          sourceTotalIssued: number;
+          sourceCouponRate: number;
+          sourceRestructureHaircutPercent: number | null;
+          budgetId: string;
+          budgetCountryId: string;
+          /** null records that the original treasury omitted currencyCode. */
+          budgetCurrencyCode: CurrencyCode | null;
+          novationTurn: number;
+          reservedAt: Date;
+          replacementIssuerName: string;
+          replacementCorporationId: ObjectId;
+          replacementCountryId: CountryId;
+          replacementBondId: ObjectId;
+          replacementMaturityTurns: BondMaturityTurns;
+          replacementCouponRate: number;
+          residualAmountLocal: number;
+        };
     /** Bank epoch claims already paid or routed to insurance for this due quote. */
     paidBankClaimIds?: string[];
     sourceHolders: BondHolder[];

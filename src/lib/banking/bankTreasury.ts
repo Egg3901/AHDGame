@@ -14,10 +14,14 @@ import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import {
   computeBankTreasuryCashFloor,
   computeBankTreasuryDueInterest,
+  computeBankTreasuryFundingRatePercent,
+  planBankTreasurySweep,
   bankTreasuryHolderUnits,
   allocateBankTreasuryHolderLots,
+  bankTreasuryAllocatedCostBasis,
   quoteBankTreasuryBond,
   BANK_TREASURY_MAX_REMAINING_TURNS,
+  type BankTreasurySweepCandidate,
 } from "@/lib/banking/rules/bankTreasury";
 import {
   bondPoolCurrency,
@@ -65,7 +69,9 @@ export interface BankTreasuryPosition {
   couponRate: number;
   bidPerUnitLocal: number;
   askPerUnitLocal: number;
+  annualizedContractYieldPercent?: number;
   executablePoolDepthUnits: number;
+  publicFloatUnits?: number;
   markedValueLocal: number;
   eligibleToBuy: boolean;
 }
@@ -77,6 +83,7 @@ export interface BankTreasuryOverview {
   spendableCash: number;
   markValueLocal: number;
   autoSweep: boolean;
+  fundingRatePercent: number;
   positions: BankTreasuryPosition[];
   /** Present only for explicitly enabled investment-bank primary subscriptions. */
   primaryOffers?: Array<BankTreasuryPosition & { unsoldUnits: number }>;
@@ -118,6 +125,7 @@ function holderLotInputs(holders: readonly BondHolder[]) {
     lotId: holder.bankTreasuryLotId,
     tradeId: holder.bankTreasuryTradeId,
     units: holder.units,
+    avgCostPerUnit: holder.avgCostPerUnit,
   }));
 }
 
@@ -173,7 +181,7 @@ async function bankCashFloor(
   charter: BankCharter,
   playerDepositsAreLiabilities: boolean,
   bankId: ObjectId
-): Promise<ReturnType<typeof computeBankTreasuryCashFloor>> {
+): Promise<ReturnType<typeof computeBankTreasuryCashFloor> & { fundingRatePercent: number }> {
   const countryId = getCountryIdForCurrency(charter.currency);
   const centralBankId = getBankId(countryId);
   const [reserveRatio, centralBank, interbankLoans] = await Promise.all([
@@ -204,28 +212,32 @@ async function bankCashFloor(
     (playerDepositsAreLiabilities ? Math.max(0, charter.playerDeposits ?? 0) : 0);
   // Origination fees are real cash only after a new loan's receipt settles.
   // They are not forecast against this floor, and past fees are not recurring.
-  return computeBankTreasuryCashFloor({
-    cashBackedDeposits: cashBacked,
+  const dueInterestInput = {
+    currency: charter.currency,
+    primeRate: prime,
+    inflationRate: inflation,
+    depositOffset: charter.depositOffset,
     npcDeposits: charter.npcDeposits ?? 0,
-    reserveRatio,
-    nextTurnDueInterest: computeBankTreasuryDueInterest({
-      currency: charter.currency,
-      primeRate: prime,
-      inflationRate: inflation,
-      depositOffset: charter.depositOffset,
+    totalDeposits:
+      charter.totalDeposits ?? (charter.npcDeposits ?? 0) + (charter.playerDeposits ?? 0),
+    playerDeposits: charter.playerDeposits ?? 0,
+    playerDepositsAreLiabilities,
+    discountWindowDebt: charter.discountWindowDebt ?? 0,
+    cbMarginDebt: charter.cbMarginDebt ?? 0,
+    interbankLoans: interbankLoans.map((loan) => ({
+      outstanding: loan.outstanding ?? 0,
+      ratePercent: loan.ratePercent,
+    })),
+  };
+  return {
+    ...computeBankTreasuryCashFloor({
+      cashBackedDeposits: cashBacked,
       npcDeposits: charter.npcDeposits ?? 0,
-      totalDeposits:
-        charter.totalDeposits ?? (charter.npcDeposits ?? 0) + (charter.playerDeposits ?? 0),
-      playerDeposits: charter.playerDeposits ?? 0,
-      playerDepositsAreLiabilities,
-      discountWindowDebt: charter.discountWindowDebt ?? 0,
-      cbMarginDebt: charter.cbMarginDebt ?? 0,
-      interbankLoans: interbankLoans.map((loan) => ({
-        outstanding: loan.outstanding ?? 0,
-        ratePercent: loan.ratePercent,
-      })),
+      reserveRatio,
+      nextTurnDueInterest: computeBankTreasuryDueInterest(dueInterestInput),
     }),
-  });
+    fundingRatePercent: computeBankTreasuryFundingRatePercent(dueInterestInput),
+  };
 }
 
 /** Load only same-currency sovereign bills and pool cash while the feature is enabled. */
@@ -300,7 +312,9 @@ export async function getBankTreasuryOverview(
       couponRate: bond.couponRate,
       bidPerUnitLocal: quote.bidPerUnit,
       askPerUnitLocal: quote.askPerUnit,
+      annualizedContractYieldPercent: pure.annualizedContractYieldPercent,
       executablePoolDepthUnits: quote.depthUnitsAtBid,
+      publicFloatUnits: pure.publicFloatUnits,
       markedValueLocal: roundLocal(units * quote.bidPerUnit, currency),
       eligibleToBuy: pure.eligible,
     };
@@ -326,6 +340,7 @@ export async function getBankTreasuryOverview(
       currency
     ),
     autoSweep: charter.sovereignTreasuryAutoSweep === true,
+    fundingRatePercent: cashFloor.fundingRatePercent,
     positions,
     ...(policy.sovereignPrimary ? { primaryOffers } : {}),
   };
@@ -336,7 +351,11 @@ async function loadQuoteForTrade(
   bond: Bond,
   currency: CurrencyCode,
   turn: number
-): Promise<{ quote: LoadedBondQuote; eligible: boolean }> {
+): Promise<{
+  quote: LoadedBondQuote;
+  eligible: boolean;
+  annualizedContractYieldPercent: number;
+}> {
   const pools = await loadBondPoolsByCurrency(db);
   const snapshot = poolSnapshot(pools.get(currency));
   const quote = await loadBondQuote(db, bond, { pools: new Map([[currency, snapshot]]) });
@@ -348,7 +367,11 @@ async function loadQuoteForTrade(
     poolTargetCashLocal: quote.targetCashLocal,
     appetite: quote.appetite,
   });
-  return { quote, eligible: pure.eligible };
+  return {
+    quote,
+    eligible: pure.eligible,
+    annualizedContractYieldPercent: pure.annualizedContractYieldPercent,
+  };
 }
 
 function reserveTransition(receipt: BankTreasuryTradeReceipt, bond: Bond): BankingTransition {
@@ -863,6 +886,9 @@ async function paySaleEscrow(db: Db, receipt: BankTreasuryTradeReceipt): Promise
     charter?.currency === receipt.currency && charter.charteredTurn === receipt.charteredTurn;
   const estateOpen = charter?.status === "failed" && charter.depositorsResolvedTurn == null;
   if (matchingEpoch && (charter?.status === "active" || estateOpen)) {
+    const realizedGain = Number.isFinite(receipt.costBasisLocal)
+      ? receipt.amountLocal - receipt.costBasisLocal!
+      : 0;
     const transition: BankingTransition = {
       key: `bank-treasury:${receipt._id}:vault`,
       kind: "bank_treasury_sale_to_vault",
@@ -894,6 +920,9 @@ async function paySaleEscrow(db: Db, receipt: BankTreasuryTradeReceipt): Promise
             $inc: {
               [escrowPath]: -receipt.amountLocal,
               "bankCharter.cashReserves": receipt.amountLocal,
+              ...(realizedGain !== 0
+                ? { "bankCharter.treasuryRealizedGainPaidLifetime": realizedGain }
+                : {}),
             },
           },
           note: "Atomically release sale cash from escrow to the matching bank estate",
@@ -1314,6 +1343,7 @@ export async function tradeBankTreasuryBill(
     allowFailedEstate?: boolean;
     primary?: boolean;
     maxCostLocal?: number;
+    automaticSweep?: boolean;
   }
 ): Promise<BankTreasuryTradeResult> {
   if (!input.policy.bankTreasury || (input.primary && !input.policy.sovereignPrimary))
@@ -1379,6 +1409,15 @@ export async function tradeBankTreasuryBill(
       amountLocal: 0,
       error: "Active bank or open failed estate and sovereign bill are required",
     };
+  if (input.automaticSweep && charter.sovereignTreasuryAutoSweep !== true)
+    return {
+      status: "rejected",
+      tradeId: input.tradeId ?? "automatic-sweep-disabled",
+      side: input.side,
+      units: 0,
+      amountLocal: 0,
+      error: "Automatic bill buying is no longer enabled for this bank",
+    };
   if (
     bond.issuerType !== "sovereign" ||
     bond.defaulted ||
@@ -1423,6 +1462,20 @@ export async function tradeBankTreasuryBill(
       savingsReadsAuthoritative(input.policy, charter.currency),
       input.bankId
     );
+    if (
+      input.automaticSweep &&
+      (!Number.isFinite(quoteState.annualizedContractYieldPercent) ||
+        !Number.isFinite(floor.fundingRatePercent) ||
+        quoteState.annualizedContractYieldPercent <= floor.fundingRatePercent)
+    )
+      return {
+        status: "rejected",
+        tradeId: input.tradeId ?? "negative-carry",
+        side: input.side,
+        units: 0,
+        amountLocal: 0,
+        error: "The current bill quote does not cover the bank's funded liability rate",
+      };
     const available = Math.max(0, (charter.cashReserves ?? 0) - floor.floorLocal);
     fillUnits = Math.min(
       fillUnits,
@@ -1472,6 +1525,14 @@ export async function tradeBankTreasuryBill(
       error: "Held lots changed before sale reservation",
     };
   }
+  const costBasisLocal =
+    input.side === "sell" && allocations
+      ? bankTreasuryAllocatedCostBasis(
+          holderLotInputs(bond.holders ?? []),
+          allocations,
+          charter.currency
+        )
+      : null;
   let primary: BankTreasuryTradeReceipt["primary"];
   if (input.primary) {
     if (input.side !== "buy") throw new Error("Primary offers can only be subscribed");
@@ -1564,6 +1625,7 @@ export async function tradeBankTreasuryBill(
     units: fillUnits,
     ...(primary ? { primary } : {}),
     ...(allocations ? { allocations } : {}),
+    ...(costBasisLocal !== null ? { costBasisLocal } : {}),
     ...(allocations ? { holderSnapshot: freezeHolderSnapshot(bond.holders ?? []) } : {}),
     pricePerUnitLocal,
     amountLocal,
@@ -1754,11 +1816,24 @@ export async function sweepBankTreasury(
     .findOne({ _id: bankId, "bankCharter.status": "active" }, { projection: { bankCharter: 1 } });
   if (!bank?.bankCharter || bank.bankCharter.lastTreasurySweepTurn === turn)
     return { trades: 0, completed: 0, pending: 0 };
-  const candidates = overview.positions.filter((position) => position.eligibleToBuy);
+  const plannedTrades = planBankTreasurySweep(
+    overview.positions.map((position): BankTreasurySweepCandidate => ({
+      bondId: position.bondId,
+      remainingTurns: position.remainingTurns,
+      publicFloatUnits: position.publicFloatUnits ?? 0,
+      askPerUnitLocal: position.askPerUnitLocal,
+      annualizedContractYieldPercent:
+        position.annualizedContractYieldPercent ?? Number.NEGATIVE_INFINITY,
+      eligible: position.eligibleToBuy,
+    })),
+    overview.cashReserves,
+    overview.cashFloor.floorLocal,
+    overview.fundingRatePercent
+  );
   let trades = 0;
   let completed = 0;
   let pending = 0;
-  for (const position of candidates) {
+  for (const planned of plannedTrades) {
     const current = await db
       .collection<BankState>("corporations")
       .findOne({ _id: bankId }, { projection: { bankCharter: 1 } });
@@ -1771,18 +1846,16 @@ export async function sweepBankTreasury(
       bankId
     );
     if ((charter.cashReserves ?? 0) <= freshFloor.floorLocal) break;
-    const tradeId = `sweep-${bankId.toHexString()}-${charter.charteredTurn}-${turn}-${position.bondId}`;
+    const tradeId = `sweep-${bankId.toHexString()}-${charter.charteredTurn}-${turn}-${planned.bondId}`;
     const result = await tradeBankTreasuryBill(db, {
       bankId,
-      bondId: new ObjectId(position.bondId),
+      bondId: new ObjectId(planned.bondId),
       side: "buy",
-      units: Math.floor(
-        ((charter.cashReserves ?? 0) - freshFloor.floorLocal) /
-          Math.max(position.askPerUnitLocal, 1)
-      ),
+      units: planned.units,
       turn,
       policy,
       tradeId,
+      automaticSweep: true,
     });
     trades += 1;
     if (result.status === "completed") completed += 1;

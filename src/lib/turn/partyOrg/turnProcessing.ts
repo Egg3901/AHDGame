@@ -1,66 +1,105 @@
 // src/lib/turn/partyOrg/turnProcessing.ts
 import { getDb } from "@/lib/mongodb";
+import type { Filter } from "mongodb";
 import type { StatePartyOrg } from "@/lib/db/types";
-import { ORG_DECAY_RATE, MIN_PRESENCE_ORG } from "./constants";
+import { applyOrganizationDecay } from "@/lib/parties/rules/organizationBucket";
 
 /**
  * Process party org changes for all state parties each turn.
  *
- * Applies passive Org decay (every turn, every party with Org > 0).
- *
- * Org growth is driven by the PS-spend `/build-org` route (per-click at
- * request time), not by a turn-pipeline budget gate. Decay applies
- * unconditionally — players counteract it by clicking Build Org. There
- * is no per-party cap on Org: the state-wide pool sum constraint
- * (`Σ party Org + Unaffiliated Org = 100`) is the only ceiling —
- * enforced at action time by the Unaffiliated-Org headroom check in
- * `/build-org`.
+ * The rules core owns legacy bootstrap, inactivity grace, unit decay, and share
+ * derivation. This shell performs one projected read and one batched write.
  */
-export async function processPartyOrgTurn(): Promise<void> {
+export async function processPartyOrgTurn(currentTurn: number, now = new Date()): Promise<void> {
   const db = await getDb();
   const statePartyOrgCol = db.collection<StatePartyOrg>("statePartyOrg");
 
   const allSpo = await statePartyOrgCol
     .find({})
-    .project<Pick<StatePartyOrg, "_id" | "organization" | "hasPresence">>({
+    .project<
+      Pick<
+        StatePartyOrg,
+        | "_id"
+        | "countryId"
+        | "stateId"
+        | "organization"
+        | "organizationUnits"
+        | "lastOrganizationBuildTurn"
+      >
+    >({
       _id: 1,
+      countryId: 1,
+      stateId: 1,
       organization: 1,
-      hasPresence: 1,
+      organizationUnits: 1,
+      lastOrganizationBuildTurn: 1,
     })
     .toArray();
 
+  const rowsByRegion = new Map<string, typeof allSpo>();
+  for (const row of allSpo) {
+    const key = `${row.countryId}:${row.stateId}`;
+    const rows = rowsByRegion.get(key) ?? [];
+    rows.push(row);
+    rowsByRegion.set(key, rows);
+  }
+
   const updates: Array<{
     updateOne: {
-      filter: { _id: string };
+      filter: Filter<StatePartyOrg>;
       update: { $set: Partial<StatePartyOrg> };
     };
   }> = [];
 
-  for (const spo of allSpo) {
-    let newOrg = Number.isFinite(spo.organization) ? spo.organization : 0;
+  for (const rows of rowsByRegion.values()) {
+    const result = applyOrganizationDecay(
+      rows.map((row) => ({
+        id: row._id,
+        organization: row.organization ?? 0,
+        organizationUnits: row.organizationUnits,
+        lastOrganizationBuildTurn: row.lastOrganizationBuildTurn,
+      })),
+      currentTurn
+    );
 
-    // Present parties bleed down only to MIN_PRESENCE_ORG (staying contestable);
-    // absent parties still decay all the way to 0. Prevents the all-NPP org
-    // runaway where a seed-disadvantaged major party hits 0 and is locked out.
-    const floor = spo.hasPresence ? MIN_PRESENCE_ORG : 0;
-    if (spo.organization > floor) {
-      newOrg = Math.max(floor, spo.organization - ORG_DECAY_RATE);
-    }
+    for (const resolved of result.rows) {
+      const original = rows.find((row) => row._id === resolved.id);
+      if (!original) continue;
+      const changed =
+        original.organizationUnits !== resolved.organizationUnits ||
+        original.lastOrganizationBuildTurn !== resolved.lastOrganizationBuildTurn ||
+        Math.abs((original.organization ?? 0) - resolved.organization) >= 0.00005;
+      if (!changed) continue;
 
-    updates.push({
-      updateOne: {
-        filter: { _id: spo._id },
-        update: {
-          $set: {
-            organization: Math.round(newOrg * 100) / 100,
-            updatedAt: new Date(),
+      updates.push({
+        updateOne: {
+          // Preserve a Build Org click that lands after this phase's read.
+          // Both the durable balance and activity clock must still match the
+          // snapshot before decay or legacy bootstrap may replace them.
+          filter: {
+            _id: original._id,
+            $and: [
+              original.organizationUnits === undefined
+                ? { organizationUnits: { $exists: false } }
+                : { organizationUnits: original.organizationUnits },
+              original.lastOrganizationBuildTurn === undefined
+                ? { lastOrganizationBuildTurn: { $exists: false } }
+                : { lastOrganizationBuildTurn: original.lastOrganizationBuildTurn },
+            ],
+          },
+          update: {
+            $set: {
+              organizationUnits: resolved.organizationUnits,
+              lastOrganizationBuildTurn: resolved.lastOrganizationBuildTurn,
+              organization: resolved.organization,
+              updatedAt: now,
+            },
           },
         },
-      },
-    });
+      });
+    }
   }
 
-  // Bulk write updates
   if (updates.length > 0) {
     await statePartyOrgCol.bulkWrite(updates);
   }

@@ -149,6 +149,21 @@ export interface BankCharter {
   lastBankingIncome?: number;
   /** Turn represented by `lastBankingIncome`. */
   lastBankingIncomeTurn?: number;
+  /** Funded sovereign coupon cash actually paid to this charter in the income turn. */
+  lastBankingSovereignCouponIncome?: number;
+  /** Realized gain or loss on paid sovereign sales/redemptions with known cost basis. */
+  lastBankingTreasuryRealizedGain?: number;
+  /** Lifetime cash-paid sovereign coupons; incremented atomically with vault credit. */
+  sovereignCouponIncomePaidLifetime?: number;
+  /** Lifetime coupons consumed into published banking income. */
+  sovereignCouponIncomeBookedLifetime?: number;
+  /** Lifetime known-basis Treasury gain/loss; incremented atomically with vault credit. */
+  treasuryRealizedGainPaidLifetime?: number;
+  /** Lifetime Treasury gain/loss consumed into published banking income. */
+  treasuryRealizedGainBookedLifetime?: number;
+  /** Actual primary underwriting fees included in lastBankingIncome. */
+  lastBankingUnderwritingFees?: number;
+  lastBankingUnderwritingFeesTurn?: number;
   /**
    * Per-turn earnings split behind `lastBankingIncome`, in the charter
    * currency. Stamped by the same banking pass (same turn as
@@ -179,6 +194,10 @@ export interface BankCharter {
    * resolveFailedBankDepositors finishes (insurance payouts / haircuts / holder flips).
    */
   depositorsResolvedTurn?: number;
+  /** Turn the insured cash claim fully resolved, for matched later recoveries. */
+  insuranceResolutionTurn?: number;
+  /** Resolution turn whose cash shortfall entered the measured premium cohort. */
+  insuranceMeasuredClaimTurn?: number;
   /**
    * Turn on which resolution of a failed estate was claimed. Set before the
    * waterfall moves any money, so a crashed resolution reads as `resolving`
@@ -278,6 +297,8 @@ export interface BankTreasuryTradeReceipt {
   units: number;
   pricePerUnitLocal: number;
   amountLocal: number;
+  /** Complete frozen basis of allocated sale lots; absent if any lot basis is unknown. */
+  costBasisLocal?: number;
   turn: number;
   /** A failed-estate sale that must finish before depositor resolution closes. */
   resolutionSale?: true;
@@ -367,6 +388,16 @@ export interface DepositInsuranceFund {
   premiumsCollectedLifetime: number;
   payoutsLifetime: number;
   treasuryBackstopLifetime: number;
+  /** New-cohort insured currency exposure, summed once per bank-turn. */
+  insuredDepositExposureTurnsLifetime?: number;
+  /** Gross deposit-book claims resolved after the measured cohort began. */
+  measuredGrossClaimsSincePricingStart?: number;
+  /** Post-resolution borrower cash recovered for measured-cohort claims. */
+  measuredRecoveriesSincePricingStart?: number;
+  /** Number of measured-cohort resolutions with a positive gross claim. */
+  measuredPaidClaimsSincePricingStart?: number;
+  /** First turn with measured exposure; legacy lifetime totals predate it. */
+  pricingEvidenceStartTurn?: number;
   lastProcessedTurn?: number;
 }
 

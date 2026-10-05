@@ -32,6 +32,14 @@ import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getCatalog } from "@/lib/politicalLegislation/catalog";
 import { lawTargets, structuralResidual } from "@/lib/politicalLegislation/dynamics";
 import { getEnactedLevels } from "@/lib/politicalLegislation/enactedLevels";
+import {
+  loadPublicHealthDeliveryMultiplier,
+  US_PUBLIC_HEALTH_POLITICAL_LAW_ID,
+} from "@/lib/governmentFinance/deliveryMultiplier";
+import {
+  loadDepartmentDeliveryMultipliersByCountry,
+  loadRegionalDeliveryMultipliersByRegion,
+} from "@/lib/governmentFinance/deliveryMultipliers";
 import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefaults";
 import { aggregateNationalPoliticalMetrics, categoryScore, overallScore } from "../aggregate";
 import { HISTORY_CADENCE_TURNS } from "../historyCadence";
@@ -170,6 +178,8 @@ export async function loadRegionPoliticalMetrics(
           currentTurn: 1,
           startingYear: 1,
           preset: 1,
+          departmentProgramSliceEnabled: 1,
+          departmentFinanceEnabled: 1,
           // Read by loadDemocraticCompetition for the executive-continuity
           // line. Projecting it away would silently score every region's
           // governance card as if no executive had ever been re-elected.
@@ -198,8 +208,49 @@ export async function loadRegionPoliticalMetrics(
 
   const nationalLevels = await getEnactedLevels(db, countryId);
   const regionalLevels = regionEnactedLevels(countryId, regionRows);
-  const nationalPoints = lawTargets(countryId, nationalLevels);
-  const regionalPoints = lawTargets(countryId, regionalLevels);
+  const generalizedFinanceEnabled = gameState?.departmentFinanceEnabled === true;
+  const nationalContributionMultipliers = generalizedFinanceEnabled
+    ? (
+        await loadDepartmentDeliveryMultipliersByCountry(db, gameState?.currentTurn ?? 1, true, [
+          countryId,
+        ])
+      ).get(countryId)
+    : countryId === COUNTRY_CONFIGS.US.id
+      ? new Map([
+          [
+            US_PUBLIC_HEALTH_POLITICAL_LAW_ID,
+            (
+              await loadPublicHealthDeliveryMultiplier(
+                db,
+                gameState?.currentTurn ?? 1,
+                gameState?.departmentProgramSliceEnabled === true
+              )
+            ).multiplier,
+          ],
+        ])
+      : undefined;
+  const regionalFinanceEnabled = gameState?.regionalLegislationFinanceEnabled === true;
+  const regionalContributionMultipliers = regionalFinanceEnabled
+    ? ((
+        await loadRegionalDeliveryMultipliersByRegion(db, gameState?.currentTurn ?? 1, true, [
+          regionId,
+        ])
+      ).get(regionId) ?? new Map<string, number>())
+    : undefined;
+  if (regionalContributionMultipliers) {
+    for (const law of getCatalog(countryId)) {
+      if (
+        law.kind !== "tax" &&
+        law.allowedScope !== "national" &&
+        (regionalLevels.get(law.id) ?? 0) > 0 &&
+        !regionalContributionMultipliers.has(law.id)
+      ) {
+        regionalContributionMultipliers.set(law.id, 0);
+      }
+    }
+  }
+  const nationalPoints = lawTargets(countryId, nationalLevels, nationalContributionMultipliers);
+  const regionalPoints = lawTargets(countryId, regionalLevels, regionalContributionMultipliers);
 
   /**
    * Relevant Legislation shows the law IN FORCE here, which for anything but a
@@ -255,6 +306,7 @@ export async function loadRegionPoliticalMetrics(
       countryId,
       metricId,
       nationalLevels,
+      nationalContributionMultipliers,
       regionalLevels,
       nationalPoints: nationalPoints[metricId],
       regionalSupplementPoints: regionalPoints[metricId],

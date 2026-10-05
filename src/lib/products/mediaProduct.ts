@@ -3,6 +3,7 @@
  * It attributes the sector's real output and never creates extra commodity units.
  */
 import type { ProductLifecycleStage } from "./rules/productLifecycle";
+import type { CommodityType } from "@/lib/constants/commodities";
 
 export const MEDIA_PRODUCT_PROJECTS = "mediaProductProjectsV1";
 export const MEDIA_PRODUCT_ACTIVE_INDEX =
@@ -34,6 +35,10 @@ export interface MediaProductProject {
   qualityBonus?: number;
   productBrand?: number;
   lastDeliveredOutputTurn?: number;
+  lastTurnDeliveredUnitsByCommodity?: Partial<Record<CommodityType, number>>;
+  lastTurnDeliveredRevenueAnchorByCommodity?: Partial<Record<CommodityType, number>>;
+  lifetimeDeliveredUnitsByCommodity?: Partial<Record<CommodityType, number>>;
+  lifetimeDeliveredRevenueAnchorByCommodity?: Partial<Record<CommodityType, number>>;
 }
 
 /** Settled R&D and commercial advertising attribution written with the payer debit. */
@@ -49,4 +54,6 @@ export interface MediaProductAdvertisingReceipt {
   projectId: string;
   turn: number;
   amountAnchor: number;
+  /** Seller cash targets refreshed by an interrupted same-turn settlement retry. */
+  sellerCorporationIds?: string[];
 }

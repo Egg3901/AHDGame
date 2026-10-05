@@ -21,6 +21,16 @@ import type { LegislationType, LegislationPolicyOption } from "@/lib/db/types/le
 import type { RegionalBudget } from "@/lib/db/types/regionalBudget";
 import type { CabinetSetting } from "@/lib/db/types/cabinetSetting";
 import { loadAnnualSubsidyCostMaps } from "@/lib/subsidies/subsidyBudgetCosts";
+import { withLawAdministration } from "@/lib/governmentFinance/lawAdministrationCatalog";
+import {
+  buildRegionalProgramClaims,
+  latestRegionalPoliciesByType,
+} from "@/lib/governmentFinance/regionalProgramClaims";
+import { settleRegionalBudget } from "@/lib/governmentFinance/rules/regionalSettlement";
+import { resolveAnnualRegionalGrantPool } from "@/lib/governmentFinance/grantTransfers";
+import type { FederalBudget } from "@/lib/db/types/budget";
+import type { ResetLawProgramDocument } from "@/lib/resetLegislation/program";
+import { buildResetRegionalProgramClaims } from "@/lib/resetLegislation/rules/regionalClaims";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -113,7 +123,9 @@ function getOptionCostPerCapita(
  */
 export async function processJPRegionalBudgets(
   db: import("mongodb").Db,
-  turnNumber: number
+  turnNumber: number,
+  regionalFinanceEnabled = false,
+  settlementCadence = 1
 ): Promise<{ regionsProcessed: number }> {
   const jpRegions = await db.collection<State>("states").find({ countryId: "JP" }).toArray();
   if (jpRegions.length === 0) return { regionsProcessed: 0 };
@@ -126,6 +138,28 @@ export async function processJPRegionalBudgets(
     .collection<StatePolicy>("statePolicies")
     .find({ stateId: { $in: regionIds } })
     .toArray();
+  const resetPrograms = await db
+    .collection<ResetLawProgramDocument>("resetLawPrograms")
+    .find(
+      { country: "JP", scope: "regional", regionId: { $in: regionIds } },
+      {
+        projection: {
+          _id: 1,
+          regionId: 1,
+          familyId: 1,
+          choice: 1,
+          annualAgencyAllocation: 1,
+        },
+      }
+    )
+    .toArray();
+  const resetProgramsByRegion = new Map<string, ResetLawProgramDocument[]>();
+  for (const program of resetPrograms) {
+    if (!program.regionId) continue;
+    const programs = resetProgramsByRegion.get(program.regionId) ?? [];
+    programs.push(program);
+    resetProgramsByRegion.set(program.regionId, programs);
+  }
 
   // Fetch JP national policies (for Local Allocation Tax amount)
   const nationalPolicies = await db
@@ -143,17 +177,32 @@ export async function processJPRegionalBudgets(
     .collection<LegislationType>("legislationTypes")
     .find({ _id: { $in: allLegTypeIds } })
     .toArray();
-  const legTypeMap = new Map(legTypes.map((lt) => [lt._id, lt]));
+  const materializedLegTypes = regionalFinanceEnabled ? withLawAdministration(legTypes) : legTypes;
+  const legTypeMap = new Map(materializedLegTypes.map((lt) => [lt._id, lt]));
 
   // Find national grant per capita from jp_local_allocation_tax
   const fundingPolicy = nationalPolicies.find(
     (p) => p.legislationTypeId === LOCAL_ALLOCATION_TAX_TYPE_ID
   );
-  const nationalGrantPerCapita = fundingPolicy
+  const legacyNationalGrantPerCapita = fundingPolicy
     ? getOptionCostPerCapita(fundingPolicy, legTypeMap)
     : 0;
 
   const nationalPopulation = jpRegions.reduce((sum, r) => sum + r.population, 0);
+  const nationalBudget = regionalFinanceEnabled
+    ? await db
+        .collection<FederalBudget>("federalBudget")
+        .findOne({ countryId: "JP" }, { projection: { departmentAccounts: 1 } })
+    : null;
+  const departmentGrant = regionalFinanceEnabled
+    ? resolveAnnualRegionalGrantPool({
+        accounts: nationalBudget?.departmentAccounts ?? {},
+        currentTurn: turnNumber,
+      })
+    : { hasProgram: false, annualPool: 0 };
+  const nationalGrantPerCapita = departmentGrant.hasProgram
+    ? departmentGrant.annualPool / Math.max(1, nationalPopulation)
+    : legacyNationalGrantPerCapita;
 
   // Group regional policies by stateId
   const policiesByRegion = new Map<string, StatePolicy[]>();
@@ -161,6 +210,9 @@ export async function processJPRegionalBudgets(
     const existing = policiesByRegion.get(policy.stateId) ?? [];
     existing.push(policy);
     policiesByRegion.set(policy.stateId, existing);
+  }
+  for (const [regionId, policies] of policiesByRegion) {
+    policiesByRegion.set(regionId, latestRegionalPoliciesByType(policies));
   }
 
   // Fetch existing budget documents
@@ -193,6 +245,7 @@ export async function processJPRegionalBudgets(
 
   for (const region of jpRegions) {
     const regionPolicies = policiesByRegion.get(region._id) ?? [];
+    const regionResetPrograms = resetProgramsByRegion.get(String(region._id)) ?? [];
     const existingBudget = budgetMap.get(region._id);
 
     // Find resident tax rate and fixed asset tax rate
@@ -233,24 +286,56 @@ export async function processJPRegionalBudgets(
     const spendingPolicies = regionPolicies.filter(
       (p) => !JP_TAX_TYPE_IDS.has(p.legislationTypeId)
     );
+    const annualCostByLegislationTypeId = new Map<string, number>();
     let enactedBillCosts = 0;
     for (const policy of spendingPolicies) {
       const costPerCapita = getOptionCostPerCapita(policy, legTypeMap);
-      enactedBillCosts += costPerCapita * region.population;
+      const cost = costPerCapita * region.population;
+      enactedBillCosts += cost;
+      annualCostByLegislationTypeId.set(
+        policy.legislationTypeId,
+        (annualCostByLegislationTypeId.get(policy.legislationTypeId) ?? 0) + cost
+      );
     }
+    enactedBillCosts += regionResetPrograms.reduce(
+      (sum, program) => sum + program.annualAgencyAllocation,
+      0
+    );
     // JP prefectural budgets share the same parallel-phase constraint as UK
     // regions, so subsidy spend has to be composed into the persisted budget here.
     const subsidyCosts = stateCostByStateId.get(region._id) ?? 0;
     enactedBillCosts += subsidyCosts;
 
+    const regionalSettlement =
+      regionalFinanceEnabled || regionResetPrograms.length > 0
+        ? settleRegionalBudget({
+            availableBudget: budgetResult.totalBudget,
+            reservedNonProgramSpending: subsidyCosts,
+            claims: [
+              ...buildRegionalProgramClaims({
+                policies: spendingPolicies,
+                legislationTypes: materializedLegTypes,
+                annualCostByLegislationTypeId,
+                previousProgramIds: new Set(Object.keys(existingBudget?.programSettlements ?? {})),
+              }),
+              ...buildResetRegionalProgramClaims({
+                programs: regionResetPrograms,
+                previousProgramIds: new Set(Object.keys(existingBudget?.programSettlements ?? {})),
+              }),
+            ],
+          })
+        : null;
+    const fundedBillCosts = regionalSettlement?.totalFunded ?? enactedBillCosts;
+    const unfundedBillCosts = Math.max(0, enactedBillCosts - fundedBillCosts);
+
     // Determine surplus/deficit
-    const surplus = budgetResult.totalBudget - enactedBillCosts;
-    const isOverBudget = surplus < 0;
+    const surplus = budgetResult.totalBudget - fundedBillCosts;
+    const isOverBudget = enactedBillCosts > budgetResult.totalBudget;
     const previousTurnsOver = existingBudget?.turnsOverBudget ?? 0;
     const turnsOverBudget = isOverBudget ? previousTurnsOver + 1 : 0;
 
     // Forced austerity: if over budget for more than 1 turn, downgrade most expensive programme
-    if (turnsOverBudget > 1 && spendingPolicies.length > 0) {
+    if (!regionalFinanceEnabled && turnsOverBudget > 1 && spendingPolicies.length > 0) {
       const policiesWithCost = spendingPolicies.map((p) => ({
         policy: p,
         cost: getOptionCostPerCapita(p, legTypeMap),
@@ -303,6 +388,22 @@ export async function processJPRegionalBudgets(
       nationalGrant: budgetResult.nationalGrant,
       totalBudget: budgetResult.totalBudget,
       enactedBillCosts,
+      ...(regionalFinanceEnabled || regionResetPrograms.length > 0
+        ? {
+            fundedBillCosts,
+            unfundedBillCosts,
+            programSettlements: Object.fromEntries(
+              (regionalSettlement?.programs ?? []).map((program) => [
+                program.programId,
+                {
+                  ...program,
+                  lastSettledTurn: turnNumber,
+                  validThroughTurn: turnNumber + Math.max(1, settlementCadence) - 1,
+                },
+              ])
+            ),
+          }
+        : {}),
       subsidyCosts,
       surplus,
       isOverBudget,

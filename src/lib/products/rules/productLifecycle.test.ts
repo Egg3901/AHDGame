@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { advanceProductLifecycle, type ProductLifecycleReceipt } from "./productLifecycle";
+import {
+  accumulatePaidProductBrand,
+  advanceProductLifecycle,
+  paidProductBrandQualityBonus,
+  productQualityForPriceDefense,
+  type ProductLifecycleReceipt,
+} from "./productLifecycle";
 
 const product = {
   id: "product-1",
@@ -18,6 +24,60 @@ function receipt(overrides: Partial<ProductLifecycleReceipt> = {}): ProductLifec
 }
 
 describe("shared product lifecycle", () => {
+  it("averages settled product advertising and converts it with an explicit anchor scale", () => {
+    const first = accumulatePaidProductBrand({
+      priorPaidAdvertisingAnchor: 0,
+      priorAdvertisingTurns: 0,
+      paidAdvertisingAnchor: 1_000,
+    });
+    const second = accumulatePaidProductBrand({
+      priorPaidAdvertisingAnchor: first.paidAdvertisingAnchor,
+      priorAdvertisingTurns: first.advertisingTurns,
+      paidAdvertisingAnchor: 3_000,
+    });
+    expect(second.averagePaidAdvertisingAnchor).toBe(2_000);
+    expect(
+      paidProductBrandQualityBonus({
+        averagePaidAdvertisingAnchor: second.averagePaidAdvertisingAnchor,
+        referenceAnchor: 2_000,
+        maximumBonus: 10,
+        coverage: 0.5,
+      })
+    ).toBe(2.5);
+    expect(
+      paidProductBrandQualityBonus({
+        averagePaidAdvertisingAnchor: 1e15,
+        referenceAnchor: 10_000,
+        maximumBonus: 10,
+        coverage: 1,
+      })
+    ).toBe(10);
+  });
+
+  it("adds product quality and brand evidence once inside bounded price-defense quality", () => {
+    expect(
+      productQualityForPriceDefense({
+        baseQuality: 60,
+        paidQualityBonus: 8,
+        brandBonus: 4,
+      })
+    ).toBe(72);
+    expect(
+      productQualityForPriceDefense({
+        baseQuality: 98,
+        paidQualityBonus: 15,
+        brandBonus: 10,
+      })
+    ).toBe(100);
+    expect(
+      productQualityForPriceDefense({
+        baseQuality: null,
+        paidQualityBonus: -5,
+        brandBonus: Number.NaN,
+      })
+    ).toBe(50);
+  });
+
   it("accepts a zero-cash settled turn for elapsed time without meeting an unpaid cost", () => {
     const progress = advanceProductLifecycle({ product, receipt: receipt() });
 

@@ -112,23 +112,51 @@ export async function reserveSectorsForTransition(
     >
   >,
   kind: string,
-  keyPrefix: string
+  keyPrefix: string,
+  allowSameKeyResume = false
 ): Promise<string[] | null> {
-  if (sectors.some(hasProtectedConstructionProperty)) return null;
-  const keys: string[] = [];
+  if (
+    sectors.some((sector) => {
+      const key = `${keyPrefix}:${sector._id.toHexString()}`;
+      return (
+        hasProtectedConstructionProperty(sector) &&
+        !(
+          allowSameKeyResume &&
+          sector.constructionPropertyTransition?.kind === kind &&
+          sector.constructionPropertyTransition.key === key
+        )
+      );
+    })
+  )
+    return null;
+  const keys: Array<{ key: string; newlyAcquired: boolean }> = [];
   for (const sector of sectors) {
     const key = `${keyPrefix}:${sector._id.toHexString()}`;
-    if (!(await acquireConstructionPropertyTransition(db, sector, key, kind))) {
+    const alreadyOwned = sector.constructionPropertyTransition?.key === key;
+    if (
+      !(await acquireConstructionPropertyTransition(
+        db,
+        sector,
+        key,
+        kind,
+        false,
+        allowSameKeyResume
+      ))
+    ) {
       await Promise.all(
         sectors
           .slice(0, keys.length)
-          .map((prior, index) => releaseConstructionPropertyTransition(db, prior._id, keys[index]))
+          .map((prior, index) =>
+            keys[index]!.newlyAcquired
+              ? releaseConstructionPropertyTransition(db, prior._id, keys[index]!.key)
+              : Promise.resolve()
+          )
       );
       return null;
     }
-    keys.push(key);
+    keys.push({ key, newlyAcquired: !alreadyOwned });
   }
-  return keys;
+  return keys.map(({ key }) => key);
 }
 
 export async function releaseConstructionPropertyTransition(

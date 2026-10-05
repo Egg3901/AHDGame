@@ -54,6 +54,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     db = createMockDb();
     db.collection("statePartyOrg");
     db.collection("orgRegLedger");
+    db.collection("politicalParties");
     stateChairId = new ObjectId();
     spenderRowId = `${stateId}_${partyId}`;
 
@@ -127,6 +128,35 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
         },
       ],
     } as never);
+    db.collectionMocks["statePartyOrg"]!.findOneAndUpdate.mockImplementation(async (filter) => {
+      const rows = await db.collectionMocks["statePartyOrg"]!.find().toArray();
+      const targetRowId = String(filter._id ?? spenderRowId);
+      const legacyTotal = rows.reduce(
+        (sum: number, row: { organization?: number; organizationUnits?: number }) =>
+          row.organizationUnits === undefined ? sum + (row.organization ?? 0) : sum,
+        0
+      );
+      const legacyScale = Math.min(10, 100 / Math.max(1, 100 - Math.min(99, legacyTotal)));
+      const current =
+        rows.find((row: { _id?: string }) => row._id === targetRowId) ??
+        ({
+          _id: targetRowId,
+          stateId,
+          partyId,
+          countryId: "US",
+          organization: 0,
+          politicalStrength: 10,
+          treasury: 10_000_000,
+          hasPresence: true,
+          chairId: stateChairId,
+        } as const);
+      return {
+        ...current,
+        organizationUnits:
+          (current.organizationUnits ?? (current.organization ?? 0) * legacyScale) + 1,
+        lastOrganizationBuildTurn: 100,
+      };
+    });
 
     const { spendPoliticalStrength } =
       await import("@/lib/parties/commands/spendPoliticalStrength");
@@ -399,7 +429,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     );
   });
 
-  it("national chair build-org debits the national PS pool", async () => {
+  it("national chair build-org debits the national PS pool without a refund", async () => {
     const nationalChairId = new ObjectId();
     const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
     vi.mocked(findPartyBySequentialId).mockResolvedValue({
@@ -434,6 +464,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
       expect.objectContaining({ scope: "national-targeted", stateId }),
       expect.anything()
     );
+    expect(db.collectionMocks["politicalParties"]?.updateOne).not.toHaveBeenCalled();
   });
 
   it("state chair build-org debits the state PS pool (preserved behavior)", async () => {
@@ -556,11 +587,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     expect(response.status).toBe(403);
   });
 
-  it("returns 400 when saturated AND no rival holds any Org to poach", async () => {
-    // Spender holds 100% of the Org (no pool, no rival with Org > 0) → nothing to
-    // poach, nothing to build. Under the Org+PS poach blend a rival merely
-    // out-reserving the spender is NO LONGER immune (it still exposes Org by
-    // size), so the only true no-headroom case is an empty pool with no rival Org.
+  it("adds a bucket unit when the spender holds all party-owned units", async () => {
     db.collectionMocks["statePartyOrg"]!.find.mockReturnValue({
       toArray: async () => [
         {
@@ -569,6 +596,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
           partyId,
           countryId: "US",
           organization: 100,
+          organizationUnits: 100,
           politicalStrength: 10,
           treasury: 10_000_000,
         },
@@ -589,6 +617,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
       partyId,
       countryId: "US",
       organization: 100,
+      organizationUnits: 100,
       politicalStrength: 10,
       treasury: 10_000_000,
       hasPresence: true,
@@ -599,9 +628,16 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     const response = await POST(makeRequest(), {
       params: Promise.resolve({ code: "us", id: stateId, partyId }),
     });
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.error).toMatch(/nothing to build|poachable/i);
+    expect(body.contributionUnits).toBe(1);
+    expect(body.organizationUnits).toBe(101);
+    expect(body.orgGain).toBeGreaterThan(0);
+    expect(db.collectionMocks["orgRegLedger"]!.insertMany).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ partyId, source: "action", delta: expect.any(Number) }),
+      ])
+    );
   });
 
   it("returns 400 with 'insufficient PS' when spend fails", async () => {
@@ -636,37 +672,49 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     expect(body.orgGain).toBeGreaterThan(0);
     expect(body.newOrg).toBeGreaterThan(20);
 
-    // Org update happened
-    expect(db.collectionMocks["statePartyOrg"]!.updateOne).toHaveBeenCalledWith(
-      { _id: spenderRowId },
-      expect.objectContaining({
-        $set: expect.objectContaining({ organization: expect.any(Number) }),
-      })
+    // The durable unit is deposited atomically, then cached percentages are
+    // refreshed without replacing that balance.
+    expect(db.collectionMocks["statePartyOrg"]!.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: spenderRowId, countryId: "US", stateId, partyId }),
+      expect.any(Array),
+      { returnDocument: "after" }
+    );
+    expect(db.collectionMocks["statePartyOrg"]!.bulkWrite).toHaveBeenCalled();
+    const organizationWrites = db.collectionMocks["statePartyOrg"]!.bulkWrite.mock.calls.flatMap(
+      (call) => call[0]
+    );
+    expect(organizationWrites).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: { _id: spenderRowId, organizationUnits: 41 },
+            update: expect.objectContaining({
+              $set: expect.objectContaining({ organization: expect.any(Number) }),
+            }),
+          }),
+        }),
+      ])
     );
 
     // Ledger row inserted with correct shape
-    expect(db.collectionMocks["orgRegLedger"]!.insertOne).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metric: "org",
-        source: "action",
-        note: "action:build-org",
-        delta: expect.any(Number),
-        partyId,
-        stateId,
-      })
+    expect(db.collectionMocks["orgRegLedger"]!.insertMany).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metric: "org",
+          source: "action",
+          note: "action:build-org",
+          delta: expect.any(Number),
+          partyId,
+          stateId,
+        }),
+      ])
     );
 
-    // Factors returned for tooltip
-    expect(body.factors).toHaveProperty("headroom");
-    expect(body.factors).toHaveProperty("ownDiminishing");
-    expect(body.factors).toHaveProperty("psLeverage");
-    expect(body.factors).toHaveProperty("catchup");
+    expect(body.contributionUnits).toBe(1);
+    expect(body.organizationUnits).toBe(41);
   });
 
-  it("poaches rival Org in a saturated state and writes per-rival poach ledger rows", async () => {
-    // Saturated state (60 + 20 + 20 = 100, no pool). Spender PS 29 dominates the
-    // two PS-poor rivals (6 and 4), so Build Org poaches both — the weaker-PS
-    // rival (party 3, PS 4) bleeds more than party 2 (PS 6).
+  it("dilutes rival shares proportionally in a saturated bucket", async () => {
     db.collectionMocks["statePartyOrg"]!.findOne.mockResolvedValue({
       _id: spenderRowId,
       stateId,
@@ -719,31 +767,28 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
 
     expect(body.ok).toBe(true);
     expect(body.orgGain).toBeGreaterThan(0);
-    expect(body.poaches).toHaveLength(2);
-    const a = body.poaches.find((p: { partyId: string }) => p.partyId === "2");
-    const b = body.poaches.find((p: { partyId: string }) => p.partyId === "3");
-    // Weaker-PS rival (party 3) loses more.
-    expect(b.loss).toBeGreaterThan(a.loss);
-    // Conservation: with an empty pool, the spender's gain equals the sum of poaches.
-    expect(body.orgGain).toBeCloseTo(a.loss + b.loss, 5);
+    expect(body.dilutions).toHaveLength(2);
+    const a = body.dilutions.find((p: { partyId: string }) => p.partyId === "2");
+    const b = body.dilutions.find((p: { partyId: string }) => p.partyId === "3");
+    expect(b.loss).toBeCloseTo(a.loss, 6);
+    // Part of the gain also comes from diluting the permanent Unaffiliated
+    // stake, so it is larger than the two rival losses alone.
+    expect(body.orgGain).toBeGreaterThan(a.loss + b.loss);
 
-    // Ledger: exactly one spender "action" row + one "poach" row per rival.
-    const ledgerCalls = db.collectionMocks["orgRegLedger"]!.insertOne.mock.calls.map((c) => c[0]);
-    expect(ledgerCalls.filter((r) => r.source === "action")).toHaveLength(1);
+    // Ledger: one action row plus one passive dilution row per rival.
     expect(db.collectionMocks["orgRegLedger"]!.insertMany).toHaveBeenCalledTimes(1);
     expect(db.collectionMocks["orgRegLedger"]!.insertMany.mock.calls[0][0]).toMatchObject([
-      { source: "poach", partyId: "2" },
-      { source: "poach", partyId: "3" },
+      { source: "action", partyId: "1" },
+      { source: "passive", partyId: "2" },
+      { source: "passive", partyId: "3" },
     ]);
-    expect(db.collectionMocks["statePartyOrg"]!.bulkWrite).toHaveBeenCalledTimes(1);
-    expect(db.collectionMocks["statePartyOrg"]!.bulkWrite.mock.calls[0][0]).toHaveLength(2);
+    const allWrites = db.collectionMocks["statePartyOrg"]!.bulkWrite.mock.calls.flatMap(
+      (call) => call[0]
+    );
+    expect(allWrites.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("blends national PS into the comparison — a nationally-backed rival is poached less", async () => {
-    // Saturated state; spender state PS 29 (no national). Both rivals have equal
-    // state PS (5), but rival 2 holds a large NATIONAL pool (200) and rival 3
-    // none. With the national blend, rival 2's effective PS rises, so it bleeds
-    // LESS than rival 3 despite identical state PS.
+  it("bases dilution on bucket ownership rather than national PS", async () => {
     db.collectionMocks["statePartyOrg"]!.findOne.mockResolvedValue({
       _id: spenderRowId,
       stateId,
@@ -801,9 +846,9 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     });
     expect(response.status).toBe(200);
     const body = await response.json();
-    const a = body.poaches.find((p: { partyId: string }) => p.partyId === "2"); // nationally backed
-    const b = body.poaches.find((p: { partyId: string }) => p.partyId === "3"); // no national backing
-    expect(b.loss).toBeGreaterThan(a.loss);
+    const a = body.dilutions.find((p: { partyId: string }) => p.partyId === "2");
+    const b = body.dilutions.find((p: { partyId: string }) => p.partyId === "3");
+    expect(a.loss).toBeCloseTo(b.loss, 6);
   });
 
   it("admin override works regardless of party leadership", async () => {
@@ -925,7 +970,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     expect(db.collectionMocks["statePartyOrg"]!.updateOne).not.toHaveBeenCalled();
   });
 
-  it("scales the Org gain down when the treasury only partly funds the click", async () => {
+  it("keeps the fixed contribution when the treasury only partly funds the click", async () => {
     const { POST } = await import("./route");
     const fullResponse = await POST(makeRequest(), {
       params: Promise.resolve({ code: "us", id: stateId, partyId }),
@@ -947,7 +992,8 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
 
     expect(halfResponse.status).toBe(200);
     expect(halfBody.fundedFraction).toBeCloseTo(0.5, 6);
-    expect(halfBody.orgGain).toBeCloseTo(fullBody.orgGain * 0.5, 6);
+    expect(halfBody.contributionUnits).toBe(1);
+    expect(halfBody.orgGain).toBeCloseTo(fullBody.orgGain, 6);
   });
 
   // Organizing a big state costs more than a small one. Both halves of the bill
@@ -1102,8 +1148,8 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     expect(response.status).toBe(200);
     const body = await response.json();
 
-    // The spender's own row resolved: the build proceeds from org 36.
+    // The spender's own row resolved and receives the build contribution.
     expect(body.ok).toBe(true);
-    expect(body.newOrg).toBeGreaterThanOrEqual(36);
+    expect(body.orgGain).toBeGreaterThan(0);
   });
 });

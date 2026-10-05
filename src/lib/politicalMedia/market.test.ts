@@ -116,7 +116,7 @@ describe("settlePoliticalAdMarket", () => {
   it("caps commercial plus funded political fills at editorially available output", () => {
     const mediaInput: SectorClearingInput = {
       sectorId: "sector-1",
-      revenue: 100,
+      revenue: 24_000,
       supplyRates: { advertising: 1 },
       posture: 0,
       editorialAdvertisingAvailability: 0.75,
@@ -162,6 +162,57 @@ describe("settlePoliticalAdMarket", () => {
     expect(result.clearingBySectorId.get("sector-1")?.soldByCommodity?.advertising).toBeCloseTo(
       0.75
     );
+  });
+
+  it("keeps political fills inside product-reachable output after commercial demand", () => {
+    const mediaInput: SectorClearingInput = {
+      sectorId: "sector-1",
+      revenue: 24_000,
+      supplyRates: { advertising: 1 },
+      posture: 0,
+      offerAvailabilityByCommodity: { advertising: 0.575 },
+    };
+    const realClearing = computeClearingFactors({
+      sectors: [mediaInput],
+      balances: new Map([["advertising", { supply: 100, demand: 20 }]]),
+      priceRatioByCommodity: new Map([["advertising", 1]]),
+      basePrices: { advertising: 240 } as Record<CommodityType, number>,
+      recordDelivery: true,
+    });
+    const commercialSold =
+      realClearing.get("sector-1")!.deliveredUnitsByCommodity?.advertising ?? 0;
+    const result = settlePoliticalAdMarket({
+      orders: [
+        {
+          orderId: "strong-funded-order",
+          countryId: "US",
+          stateId: "CA",
+          createdTurn: 12,
+          budgetAnchor: 10_000,
+        },
+      ],
+      offers: [
+        {
+          ...offer,
+          input: mediaInput,
+          clearing: realClearing.get("sector-1"),
+          basePrice: 240,
+          offeredUnits: 100,
+        },
+      ],
+      clearingBySectorId: realClearing,
+      clearingEnabled: true,
+      qualityPremiumEnabled: false,
+      turn: 12,
+    });
+    const politicalSold = result.allocations[0]?.deliveredUnits ?? 0;
+
+    expect(commercialSold).toBeCloseTo(11.5);
+    expect(politicalSold).toBeCloseTo(46);
+    expect(commercialSold + politicalSold).toBeCloseTo(57.5);
+    expect(
+      result.clearingBySectorId.get("sector-1")?.deliveredUnitsByCommodity?.advertising
+    ).toBeCloseTo(57.5);
   });
 
   it("sells only commercial residuals and updates the sector factor and paid local value", () => {

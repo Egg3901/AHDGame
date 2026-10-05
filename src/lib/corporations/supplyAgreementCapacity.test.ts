@@ -120,7 +120,7 @@ describe("computeSupplierCommodityCapacityUnits — parity with the production s
         productionPolicyLevel: 0,
       }) ?? 0;
     const rates = getEffectiveStrategyRates("media", "standard", null, null, 10);
-    const remapped = applyPlannedEconomyOutputMix("media", rates.supply, true);
+    const remapped = applyPlannedEconomyOutputMix("media", rates.supply, true, null);
     const args = {
       sectors: [
         { sectorType: "media" as const, capitalStock, productionPolicyLevel: 0, countryId: "RU" },

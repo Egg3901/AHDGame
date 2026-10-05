@@ -67,7 +67,7 @@ Sequential (each step depends on the previous):
 
 1. **Turnout decay**: All turnout modifiers decay 2% of their current value toward zero.
 2. **Party GOTV**: Party GOTV budget distributed to states, boosting turnout modifiers for aligned demographics.
-3. **Party org maintenance**: Cap-contribution rates applied; Org decays by a small fixed rate each turn for any party with Org above 0.
+3. **Party org maintenance**: Org bucket shares are refreshed, and organization can decay for parties that become inactive in a state or region.
 
 ### Group 3: party elections
 

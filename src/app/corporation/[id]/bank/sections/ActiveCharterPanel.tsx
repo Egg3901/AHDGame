@@ -111,7 +111,10 @@ function EarningsBreakdown({ data, onTreasury }: { data: ConsolePayload; onTreas
   const charter = data.charter!;
   const depositInterest = charter.lastBankingDepositInterest ?? 0;
   const loanInterest = charter.lastBankingLoanInterest ?? 0;
+  const sovereignCouponIncome = charter.lastBankingSovereignCouponIncome ?? 0;
+  const treasuryRealizedGain = charter.lastBankingTreasuryRealizedGain ?? 0;
   const fees = charter.lastBankingLoanOriginationFees ?? 0;
+  const underwritingFees = charter.lastBankingUnderwritingFees ?? 0;
   const ibPaid = charter.lastBankingInterbankInterestPaid ?? 0;
   const ibReceived = charter.lastBankingInterbankInterestReceived ?? 0;
   const facility = charter.lastBankingFacilityInterest ?? 0;
@@ -119,7 +122,7 @@ function EarningsBreakdown({ data, onTreasury }: { data: ConsolePayload; onTreas
   const writeoffs = charter.lastBankingWriteoffs ?? 0;
   const earned = loanInterest + ibReceived;
   const paid = depositInterest + ibPaid + facility;
-  const net = earned - paid;
+  const net = earned + sovereignCouponIncome - paid;
   const currency = charter.currency;
   // Headline percentages beside the dollar net: annualised over the book that
   // produced it, so the CEO reads margin, not just money.
@@ -150,6 +153,22 @@ function EarningsBreakdown({ data, onTreasury }: { data: ConsolePayload; onTreas
             tooltip={t("tooltips.interestEarned")}
             aboutLabel={t("about", { label: "Interest earned" })}
           />
+          <EarningsRow
+            label="Sovereign bond coupons"
+            detail="Funded coupon payments on the bank's government bills"
+            value={formatBankMoney(sovereignCouponIncome, currency)}
+            tooltip={t("tooltips.interestEarned")}
+            aboutLabel="Sovereign bond coupons"
+          />
+          {treasuryRealizedGain !== 0 && (
+            <EarningsRow
+              label="Treasury realized gain / loss"
+              detail="Paid bill sale or redemption proceeds less known purchase basis"
+              value={formatBankMoney(treasuryRealizedGain, currency)}
+              tooltip={t("tooltips.interestEarned")}
+              aboutLabel="Treasury realized gain / loss"
+            />
+          )}
           <EarningsRow
             label="Interest paid"
             detail={`deposits ${formatBankMoney(depositInterest, currency)}, interbank paid ${formatBankMoney(ibPaid, currency)}, central-bank facilities ${formatBankMoney(facility, currency)}${costOfFunds != null ? `, cost of funds ${costOfFunds.toFixed(2)}%` : ""}`}
@@ -185,6 +204,13 @@ function EarningsBreakdown({ data, onTreasury }: { data: ConsolePayload; onTreas
             value={formatBankMoney(fees, currency)}
             tooltip={t("originationFeesTooltip")}
             aboutLabel={t("about", { label: t("originationFees") })}
+          />
+          <EarningsRow
+            label="Underwriting fees"
+            detail="Funded IPO and corporate bond placements"
+            value={formatBankMoney(underwritingFees, currency)}
+            tooltip="Fees are counted only for proceeds funded by completed market fills."
+            aboutLabel="Underwriting fees"
           />
           <EarningsRow
             label="Bottom line"

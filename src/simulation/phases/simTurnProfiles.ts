@@ -32,6 +32,7 @@ export const ECONOMY_ONLY_PHASES: ReadonlySet<string> = new Set<string>([
   "bannedShareholderRelease",
   "inactiveShareholderShareRelease",
   "corporationTurn",
+  "departmentProgramSettlement",
   "unionsTurn",
   "savingsInterestTurn",
   "npcBankPolicyTurn",
@@ -99,6 +100,7 @@ export const ECONOMY_ONLY_PHASES: ReadonlySet<string> = new Set<string>([
  */
 export const MACRO_ONLY_PHASES: ReadonlySet<string> = new Set<string>([
   "macroCountryTurn",
+  "departmentProgramSettlement",
   "commodityPrices",
   "fiscalYear",
   "policyEffects",
@@ -152,6 +154,7 @@ export const ELECTIONS_SKIP_PHASES: ReadonlySet<string> = new Set<string>([
   "inactiveShareholderShareRelease",
   // resourceAndFinanceStart — economy/finance core (corporationTurn = the hotspot)
   "corporationTurn",
+  "departmentProgramSettlement",
   "unionsTurn",
   "nppUnionBehavior",
   "savingsInterestTurn",

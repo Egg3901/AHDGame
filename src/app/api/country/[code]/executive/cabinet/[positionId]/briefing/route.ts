@@ -123,6 +123,26 @@ import {
   expireMinisterialOrders,
   isMinisterialOrderActive,
 } from "@/lib/cabinet/ministerialOrderLifecycle";
+import { loadPublicHealthDeliveryMultiplier } from "@/lib/governmentFinance/deliveryMultiplier";
+import { US_HEALTH_DEPARTMENT_ID } from "@/lib/governmentFinance/departments";
+import {
+  buildDepartmentFinanceReadModel,
+  buildPublicHealthProgramReadModel,
+} from "@/lib/governmentFinance/readModel";
+import {
+  getDepartmentDefinitions,
+  resolveDepartmentDefinitionName,
+  type DepartmentCountryId,
+} from "@/lib/governmentFinance/departmentCatalog";
+import type { LegislationType } from "@/lib/db/types/legislation";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import type { ResetDepartmentAccountSnapshot } from "@/lib/resetFinance/rules/liveDepartmentAccount";
+import { buildResetDepartmentFinanceReadModel } from "@/lib/resetCabinet/readModel";
+import { resetActionsForSeat } from "@/lib/resetCabinet/catalog";
+import { actionOperatingCost, rechargeActionCharges } from "@/lib/resetCabinet/rules/actions";
+import type { ResetCabinetActionState } from "@/lib/resetCabinet/rules/actionState";
+import type { ResetLawProgramDocument } from "@/lib/resetLegislation/program";
 
 interface RouteParams {
   params: Promise<{ code: string; positionId: string }>;
@@ -722,6 +742,97 @@ export async function GET(_request: Request, { params }: RouteParams) {
       };
     }
 
+    const cabinetV2 =
+      resetSystemVersionsForCountry(gameState, RESET_V2_READY, countryId).cabinet === "v2";
+    const generalizedDepartmentFinanceEnabled = gameState?.departmentFinanceEnabled === true;
+    const legacyPublicHealthSliceEnabled =
+      gameState?.departmentProgramSliceEnabled === true &&
+      !generalizedDepartmentFinanceEnabled &&
+      !cabinetV2;
+    const departmentProgram =
+      !cabinetV2 && countryId === COUNTRY_CONFIGS.US.id && positionId === "secretary_of_health"
+        ? buildPublicHealthProgramReadModel({
+            enabled: legacyPublicHealthSliceEnabled,
+            departmentName: resolveDepartment(mechanics, liveYear),
+            account: budget?.departmentAccounts?.[US_HEALTH_DEPARTMENT_ID],
+            delivery: await loadPublicHealthDeliveryMultiplier(
+              db,
+              currentTurn,
+              legacyPublicHealthSliceEnabled
+            ),
+          })
+        : undefined;
+    const departmentDefinitions =
+      (generalizedDepartmentFinanceEnabled || cabinetV2) && ["US", "UK", "JP"].includes(countryId)
+        ? getDepartmentDefinitions(
+            countryId as DepartmentCountryId,
+            liveYear,
+            new Set(gameState?.manuallyEnabledSeats ?? [])
+          ).filter((definition) => definition.controllingPositionIds.includes(positionId))
+        : [];
+    const [resetAccounts, resetActionState, currentResetLawPrograms] = cabinetV2
+      ? await Promise.all([
+          db
+            .collection<ResetDepartmentAccountSnapshot>("resetDepartmentAccounts")
+            .find({
+              worldId: gameState?.resetWorldId,
+              countryId: countryId as "US" | "UK" | "JP",
+              controllingSeatId: positionId,
+            })
+            .toArray(),
+          db
+            .collection<ResetCabinetActionState>("resetCabinetActionStates")
+            .findOne({ _id: countryId as "US" | "UK" | "JP", worldId: gameState?.resetWorldId }),
+          db
+            .collection<ResetLawProgramDocument>("resetLawPrograms")
+            .find({
+              worldId: gameState?.resetWorldId,
+              country: countryId as "US" | "UK" | "JP",
+              scope: "national",
+            })
+            .toArray(),
+        ])
+      : [[], null, []];
+    const resetAccountById = new Map(
+      resetAccounts.map((account) => [account.departmentId, account])
+    );
+    const departmentProgramTypeIds = [
+      ...new Set(
+        (cabinetV2 ? [] : departmentDefinitions).flatMap((definition) =>
+          Object.values(budget?.departmentAccounts?.[definition.id]?.programs ?? {}).map(
+            (program) => program.legislationTypeId
+          )
+        )
+      ),
+    ];
+    const departmentLegislationTypes =
+      departmentProgramTypeIds.length === 0
+        ? []
+        : await db
+            .collection<LegislationType>("legislationTypes")
+            .find(
+              { _id: { $in: departmentProgramTypeIds } },
+              { projection: { _id: 1, name: 1, policyOptions: 1 } }
+            )
+            .toArray();
+    const departmentFinances = departmentDefinitions.map((definition) => {
+      const departmentName = resolveDepartmentDefinitionName(definition, liveYear);
+      return cabinetV2
+        ? buildResetDepartmentFinanceReadModel({
+            definition,
+            departmentName,
+            account: resetAccountById.get(definition.id),
+            currentPrograms: currentResetLawPrograms,
+          })
+        : buildDepartmentFinanceReadModel({
+            enabled: true,
+            definition,
+            departmentName,
+            account: budget?.departmentAccounts?.[definition.id],
+            legislationTypes: departmentLegislationTypes,
+          });
+    });
+
     return NextResponse.json({
       // Gates the Treasury-tab "Fund Geological Survey" action (per-surface flag
       // convention: the office page reads its own briefing GET).
@@ -740,7 +851,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
         advocacy: mechanics.advocacy ?? null,
         emergency: mechanics.emergency ?? null,
       },
-      orders: getMinisterialOrders(countryId, positionId),
+      cabinetVersion: cabinetV2 ? "v2" : "v1",
+      orders: cabinetV2 ? [] : getMinisterialOrders(countryId, positionId),
       member: buildMemberView({ includeActions: true }),
       currentSettings: setting
         ? {
@@ -754,13 +866,40 @@ export async function GET(_request: Request, { params }: RouteParams) {
             lastChangedTurn: setting.lastChangedTurn,
           }
         : null,
-      activeOrders: activeOrders.map((o) => ({
+      activeOrders: (cabinetV2 ? [] : activeOrders).map((o) => ({
         orderId: o.orderId,
         orderName: o.orderName,
         issuedTurn: o.issuedTurn,
         expiresTurn: o.expiresTurn,
         effects: o.effects,
       })),
+      resetCabinetActions:
+        cabinetV2 && resetActionState
+          ? (() => {
+              const actorId = member?.characterId?.toString();
+              const actor = rechargeActionCharges(
+                actorId ? (resetActionState.actorStates[actorId]?.charges ?? 4) : 0,
+                actorId
+                  ? (resetActionState.actorStates[actorId]?.lastRechargeTurn ??
+                      resetActionState.sourceTurn)
+                  : resetActionState.sourceTurn,
+                currentTurn
+              );
+              return {
+                charges: actor.charges,
+                nextRechargeTurn: actor.nextRechargeTurn,
+                actions: resetActionsForSeat(countryId as "US" | "UK" | "JP", positionId).map(
+                  (action) => ({
+                    ...action,
+                    operatingCost: actionOperatingCost(action, budget?.gdp ?? 0),
+                  })
+                ),
+                active: resetActionState.active.filter(
+                  (entry) => entry.seatId === positionId && entry.expiresTurn > currentTurn
+                ),
+              };
+            })()
+          : null,
       currentTurn,
       targetCountries: enabledCountryIds
         .filter((enabledCountryId) => enabledCountryId !== countryId)
@@ -792,6 +931,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
       debtPrincipal: budget?.debt?.principal ?? 0,
       sovereignBondsOutstanding: sovereignBonds.reduce((sum, b) => sum + (b.totalIssued ?? 0), 0),
       canAct,
+      departmentProgram,
+      departmentFinances,
       units,
       forceSummary,
       doctrine,

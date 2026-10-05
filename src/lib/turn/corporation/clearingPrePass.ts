@@ -43,6 +43,7 @@ import {
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
+import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
 import { mediaAudienceFit } from "@/lib/mediaEditorial/rules";
 import {
@@ -56,6 +57,7 @@ import {
   rawAdvertisingOffer,
   settlePoliticalAdMarket,
   type PoliticalAdClearingOffer,
+  type PoliticalMediaFallbackTreasuryTerms,
 } from "@/lib/politicalMedia/market";
 import type { PoliticalMediaOrderForClearing } from "@/lib/politicalMedia/journal";
 import {
@@ -70,6 +72,8 @@ import {
 } from "@/lib/products/rules/manufacturingRules";
 import { getManufacturingProductKind } from "@/lib/products/manufacturingCatalog";
 import { isLegalManufacturingProductForPlant } from "@/lib/products/rules/manufacturingEligibility";
+import { getMediaProductKind } from "@/lib/products/mediaProductCatalog";
+import { mediaProductOfferAvailability } from "@/lib/products/rules/mediaProductSales";
 
 /**
  * Clearing pre-pass for the corporation turn, extracted from index.ts so the
@@ -101,6 +105,7 @@ export interface ClearingPrePassInput {
   brandLoyaltySliceEnabled: boolean;
   qualityPremiumPricingEnabled: boolean;
   politicalMediaOrders?: readonly PoliticalMediaOrderForClearing[];
+  treasuryCashLedgerEnabled: boolean;
 }
 
 export interface ClearingPrePassResult {
@@ -132,6 +137,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     brandLoyaltySliceEnabled,
     qualityPremiumPricingEnabled,
     politicalMediaOrders = [],
+    treasuryCashLedgerEnabled,
   } = input;
   let { contractedByCorpCommodity } = input;
   let buyerDemandByCorpCommodity: Map<string, Map<string, number>> | undefined;
@@ -271,7 +277,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                 (sector as { countryId?: string }).countryId,
                 currentYear,
                 commandEconomyEnabled
-              )
+              ),
+              sector.mediaDiscriminator
             ),
             lookups.stateResourceCapacityByState.get(sector.stateId)
           ),
@@ -327,13 +334,17 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                   outputCommodity: productKind.outputCommodity,
                   basePrices,
                   currentSectorQualityByCommodity: Object.fromEntries(
-                    Object.keys(rates.supply ?? {}).map((commodity) => [
+                    [
+                      ...new Set([...Object.keys(rates.supply ?? {}), productKind.outputCommodity]),
+                    ].map((commodity) => [
                       commodity,
                       lookups.productSectorQualityById?.get(sector._id.toString()),
                     ])
                   ) as Partial<Record<CommodityType, number>>,
                   paidDevelopmentAnchor: productProject.developmentPaidAnchor,
                   paidThresholdAnchor: productProject.paidThresholdAnchor,
+                  productBrand: productProject.productBrand,
+                  elapsedThresholdTurns: productProject.elapsedThresholdTurns,
                 });
               })()
             : null;
@@ -349,7 +360,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                     (sector as { countryId?: string }).countryId,
                     currentYear,
                     commandEconomyEnabled
-                  )
+                  ),
+                  sector.mediaDiscriminator
                 ),
               militaryRetainedFraction: 1 - freshMilitaryDiversion(sector, turn ?? 0),
             }) ?? 0)
@@ -430,7 +442,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                   (sector as { countryId?: string }).countryId,
                   currentYear,
                   commandEconomyEnabled
-                )
+                ),
+                sector.mediaDiscriminator
               ),
           });
           const supplyRates = rates.supply ?? {};
@@ -466,7 +479,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                 (sector as { countryId?: string }).countryId,
                 currentYear,
                 commandEconomyEnabled
-              )
+              ),
+              sector.mediaDiscriminator
             );
           const exactOutputUnits = scaledProductOutput?.outputUnitsByCommodity;
           if (exactOutputUnits) {
@@ -513,6 +527,18 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           sectorId,
           revenue: revenueAnchor,
           supplyRates: rates.supply ?? {},
+          ...(lookups.mediaProductSlatesEnabled === true
+            ? (() => {
+                const mediaProjects = (
+                  lookups.mediaProductProjectsBySectorId?.get(sectorId) ?? []
+                ).filter(
+                  (project) => getMediaProductKind(project.kindId)?.modelId === sector.strategyId
+                );
+                return mediaProjects.length > 0
+                  ? { offerAvailabilityByCommodity: mediaProductOfferAvailability(mediaProjects) }
+                  : {};
+              })()
+            : {}),
           posture: typeof sector.pricingPosture === "number" ? sector.pricingPosture : null,
           ...(market.plantsEnabled &&
           market.explicitPlantCostsEnabled === true &&
@@ -625,7 +651,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
                         (sector as { countryId?: string }).countryId,
                         currentYear,
                         commandEconomyEnabled
-                      )
+                      ),
+                      sector.mediaDiscriminator
                     ),
                   // Arsenal-retention leg (issue #2054): the world supply
                   // ledger multiplies this same share out of supply, so an
@@ -805,7 +832,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     market.clearingBySectorId = computeClearingFactors({
       sectors: clearingInputs,
       mediaOwnership,
-      recordDelivery: market.mediaRegulationEnabled === true,
+      recordDelivery:
+        market.mediaRegulationEnabled === true || lookups.mediaProductSlatesEnabled === true,
       balances: lookups.globalCommodityBalances,
       initializedLaggedBooks: lookups.initializedLaggedBooks,
       // Era worlds: one book per seller home country, scoped to the demand the
@@ -963,6 +991,25 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
         });
       }
 
+      const fallbackTreasuryByCountry = new Map<string, PoliticalMediaFallbackTreasuryTerms>();
+      for (const budget of lookups.federalBudgets) {
+        if (!budget.countryId) continue;
+        const currencyCode = resolveCountryCurrencyCode(budget);
+        const localPerAnchor = currencyCode
+          ? lookups.exchangeRatesByCurrency.get(currencyCode)
+          : undefined;
+        if (!currencyCode || !Number.isFinite(localPerAnchor) || !(localPerAnchor! > 0)) continue;
+        const currencyCodePresent = Object.prototype.hasOwnProperty.call(budget, "currencyCode");
+        fallbackTreasuryByCountry.set(budget.countryId, {
+          budgetId: String(budget._id),
+          currencyCode,
+          currencyCodePresent,
+          ...(currencyCodePresent ? { rawCurrencyCode: budget.currencyCode ?? null } : {}),
+          localPerAnchor: localPerAnchor!,
+          balancePath: treasuryCashLedgerEnabled ? "treasuryCashLocal" : "treasuryBalance",
+        });
+      }
+
       const political = settlePoliticalAdMarket({
         orders: politicalMediaOrders
           .filter((order) => !order.settlementPlan)
@@ -973,6 +1020,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
             createdTurn: order.identity.createdTurn,
             budgetAnchor: order.identity.requestedAnchor,
           })),
+        fallbackTreasuryByCountry,
         persistedPlans: politicalMediaOrders
           .filter(
             (order) => order.settlementPlan && order.settlementPlan.plannedTurn === (turn ?? 0)

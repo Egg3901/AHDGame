@@ -202,15 +202,15 @@ export const UK_CORE5_NORMALS: Record<string, NormalAnchor[]> = {
  */
 export const UK_ADJACENCY_MAP: AdjacencyMap = {
   LON: ["SEE", "EAE"],
-  SEE: ["LON", "SWE", "EAE"],
+  SEE: ["LON", "SWE", "EAE", "EMI", "WMI"],
   SWE: ["SEE", "WMI", "WAL"],
-  EAE: ["LON", "SEE", "EMI", "YHU"],
-  EMI: ["EAE", "WMI", "YHU"],
-  WMI: ["SWE", "EMI", "NWE", "WAL"],
-  YHU: ["EAE", "EMI", "NWE", "NEE"],
-  NWE: ["WMI", "YHU", "NEE", "WAL", "NIR"],
+  EAE: ["LON", "SEE", "EMI"],
+  EMI: ["EAE", "SEE", "WMI", "YHU", "NWE"],
+  WMI: ["SEE", "SWE", "EMI", "NWE", "WAL"],
+  YHU: ["EMI", "NWE", "NEE"],
+  NWE: ["WMI", "EMI", "YHU", "NEE", "SCO", "WAL", "NIR"],
   NEE: ["YHU", "NWE", "SCO"],
-  SCO: ["NEE", "NIR"],
+  SCO: ["NEE", "NWE", "NIR"],
   WAL: ["SWE", "WMI", "NWE"],
   NIR: ["SCO", "NWE"],
 };

@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { STATE_ADJACENCY, adjacentStates } from "./stateAdjacency";
 import type { CountryId } from "./countries";
+import { UK_MAP_REGISTRY } from "@/lib/countries/uk/geographyFacts";
 import { states1953 } from "@/lib/seeds/reference/states1953";
 import { atRegions } from "@/lib/seeds/at/atRegions";
 import { balRegions } from "@/lib/seeds/bal/balRegions";
@@ -70,6 +72,84 @@ const DELIBERATE_DISCONNECTED_REGIONS: Partial<Record<CountryId, readonly string
   US: ["HI"],
   RU: ["MOL"],
 };
+
+interface GeoJsonFeature {
+  readonly id?: string | number;
+  readonly properties?: Readonly<Record<string, unknown>>;
+  readonly geometry?: { readonly coordinates?: unknown };
+}
+
+interface GeoJsonFeatureCollection {
+  readonly features: readonly GeoJsonFeature[];
+}
+
+function edgeKey(a: string, b: string): string {
+  return [a, b].sort().join("-");
+}
+
+function adjacencyEdges(map: Readonly<Record<string, readonly string[]>>): Set<string> {
+  return new Set(
+    Object.entries(map).flatMap(([from, neighbors]) => neighbors.map((to) => edgeKey(from, to)))
+  );
+}
+
+function sharedBoundaryEdges(
+  fileName: string,
+  regionForFeature: (feature: GeoJsonFeature) => unknown
+): Set<string> {
+  const collection = JSON.parse(
+    readFileSync(`public/${fileName}`, "utf8")
+  ) as GeoJsonFeatureCollection;
+  const segmentOwners = new Map<string, Set<string>>();
+
+  const visitCoordinates = (value: unknown, region: string): void => {
+    if (!Array.isArray(value)) return;
+    const first = value[0];
+    if (Array.isArray(first) && typeof first[0] === "number") {
+      for (let index = 1; index < value.length; index += 1) {
+        const previous = JSON.stringify(value[index - 1]);
+        const current = JSON.stringify(value[index]);
+        if (previous === current) continue;
+        const segment = [previous, current].sort().join("|");
+        const owners = segmentOwners.get(segment) ?? new Set<string>();
+        owners.add(region);
+        segmentOwners.set(segment, owners);
+      }
+      return;
+    }
+    for (const child of value) visitCoordinates(child, region);
+  };
+
+  for (const feature of collection.features) {
+    const region = regionForFeature(feature);
+    if (typeof region !== "string" || region.length === 0) {
+      throw new Error(
+        `${fileName}: feature ${String(feature.id ?? feature.properties?.id ?? "<unknown>")} has no region mapping`
+      );
+    }
+    if (!feature.geometry?.coordinates) {
+      throw new Error(`${fileName}: region ${region} has no geometry coordinates`);
+    }
+    visitCoordinates(feature.geometry.coordinates, region);
+  }
+
+  const edges = new Set<string>();
+  for (const owners of segmentOwners.values()) {
+    const regions = [...owners];
+    for (let left = 0; left < regions.length; left += 1) {
+      for (let right = left + 1; right < regions.length; right += 1) {
+        edges.add(edgeKey(regions[left]!, regions[right]!));
+      }
+    }
+  }
+  return edges;
+}
+
+const NON_SEGMENT_ADJACENCIES = {
+  US: [edgeKey("AK", "WA"), edgeKey("AZ", "CO"), edgeKey("NM", "UT")],
+  UK: [edgeKey("NIR", "NWE"), edgeKey("NIR", "SCO")],
+  JP: [edgeKey("CGK", "KYU"), edgeKey("HOK", "TOH"), edgeKey("KNS", "SHI")],
+} as const;
 
 describe("STATE_ADJACENCY", () => {
   describe("symmetry invariant", () => {
@@ -152,6 +232,39 @@ describe("STATE_ADJACENCY", () => {
     }
   });
 
+  describe("US, UK, and JP geometry parity", () => {
+    const geometryCases = [
+      {
+        country: "US",
+        fileName: "usa-regions.json",
+        regionForFeature: (feature: GeoJsonFeature) =>
+          feature.properties?.regionCode as string | undefined,
+      },
+      {
+        country: "UK",
+        fileName: "uk-nuts1.json",
+        regionForFeature: (feature: GeoJsonFeature) =>
+          UK_MAP_REGISTRY.featureIdToStateId?.[String(feature.id ?? feature.properties?.id ?? "")],
+      },
+      {
+        country: "JP",
+        fileName: "japan-regions.json",
+        regionForFeature: (feature: GeoJsonFeature) =>
+          feature.properties?.regionCode as string | undefined,
+      },
+    ] as const;
+
+    it.each(geometryCases)(
+      "$country matches every shared map boundary plus documented point or transport links",
+      ({ country, fileName, regionForFeature }) => {
+        const expected = sharedBoundaryEdges(fileName, regionForFeature);
+        for (const edge of NON_SEGMENT_ADJACENCIES[country]) expected.add(edge);
+
+        expect([...adjacencyEdges(STATE_ADJACENCY[country])].sort()).toEqual([...expected].sort());
+      }
+    );
+  });
+
   describe("known US adjacencies", () => {
     it("CA borders AZ, NV, OR", () => {
       expect([...adjacentStates("US", "CA")].sort()).toEqual(["AZ", "NV", "OR"]);
@@ -181,6 +294,19 @@ describe("STATE_ADJACENCY", () => {
     it("NIR borders SCO and NWE via sea ferries", () => {
       expect([...adjacentStates("UK", "NIR")].sort()).toEqual(["NWE", "SCO"]);
     });
+    it.each([
+      ["NWE", "SCO"],
+      ["EMI", "NWE"],
+      ["EMI", "SEE"],
+      ["SEE", "WMI"],
+    ])("%s borders %s by land", (from, to) => {
+      expect(adjacentStates("UK", from)).toContain(to);
+      expect(adjacentStates("UK", to)).toContain(from);
+    });
+    it("EAE does not border YHU", () => {
+      expect(adjacentStates("UK", "EAE")).not.toContain("YHU");
+      expect(adjacentStates("UK", "YHU")).not.toContain("EAE");
+    });
     it("WAL does NOT border NIR (no direct ferry)", () => {
       expect(adjacentStates("UK", "WAL")).not.toContain("NIR");
       expect(adjacentStates("UK", "NIR")).not.toContain("WAL");
@@ -205,6 +331,10 @@ describe("STATE_ADJACENCY", () => {
     });
     it("KYU only borders CGK via Kanmon Strait", () => {
       expect(adjacentStates("JP", "KYU")).toEqual(["CGK"]);
+    });
+    it("TOH borders CHU along the Niigata boundary", () => {
+      expect(adjacentStates("JP", "TOH")).toContain("CHU");
+      expect(adjacentStates("JP", "CHU")).toContain("TOH");
     });
   });
 
@@ -373,9 +503,9 @@ describe("STATE_ADJACENCY", () => {
   describe("pre-existing map regression", () => {
     const expectedHashes = {
       US: "e3651f06d9a6dd0dbd46d3ce2451254238ff17d773ce7f4990a193eeec6da0fe",
-      UK: "d8faf3c50af27363e2928f5023013390c6f8f7173a532cab2340d5ca33527962",
+      UK: "18c861a6ea48ea2fac66c6b29fc5cd9ee9073cfb4d839081ea9fbb92f281a15d",
       DE: "b90125507666e35479502e98f1133036829ce08beb19118a3e61bdce26d3a057",
-      JP: "f37d5e2c92001b8e1bded1cdda618cd0fc38b493d6526491e45ed5ef65f64a18",
+      JP: "e8fdc74be35036b2f81831fbe9c21dfc4122e949370b496350ee7ef1fc87cc3e",
       CN: "9dba610303f1f4d0743da4fe109d2de5bbcf4b4f24b89ccda064864280449e67",
       RU: "bba4abddee750c284631e8479eae5f49bba1d4d2ac4b0d0f445248917dd9a6a9",
       DD: "057f20ed1076098b4999facbb4c46d506e73caa091baa07ad99ed9ef81bfdc8c",

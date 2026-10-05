@@ -74,8 +74,16 @@ export function shouldRenderGooglePrivacyMessaging(
   );
 }
 
-export function shouldRenderConsentManagedGoogleTags(pathname: string): boolean {
-  return !isPrivacyMessagingExcludedPath(pathname);
+/**
+ * Google Analytics and Google Ads tags. Never inside the App Store / Play
+ * store app: an ad-network tag there is tracking under App Store 5.1.2 and
+ * the app's privacy manifest declares none. First-party analytics stays.
+ */
+export function shouldRenderConsentManagedGoogleTags(
+  pathname: string,
+  { storeApp = false }: { storeApp?: boolean } = {}
+): boolean {
+  return !storeApp && !isPrivacyMessagingExcludedPath(pathname);
 }
 
 export type GoogleTagConsentMode = "cmp" | "fallback" | "none";

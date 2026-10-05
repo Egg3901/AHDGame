@@ -2,7 +2,6 @@ import type { Db } from "mongodb";
 import type { PartyBudget, State, StatePartyOrg } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { regionPartyUrl } from "@/lib/urls";
-import { ORG_DECAY_RATE } from "@/lib/turn/partyOrg/constants";
 import type {
   PartyAnalyticsGrowthMetric,
   PartyAnalyticsOrgSection,
@@ -37,19 +36,15 @@ function buildGrowthMetric(metric: PartyAnalyticsStateMetric): PartyAnalyticsGro
   };
 }
 
-function roundToTenths(value: number): number {
-  return Math.round(value * 10) / 10;
-}
-
 function calculateGrowthPerTurn(
   statePartyOrg: StatePartyOrg,
   _budget: Pick<PartyBudget, "orgBuildingPercent"> | null
 ): number {
-  // Org growth no longer comes from a passive treasury budget — it's
-  // PS-driven at request time. Per-turn analytics show the passive decay
-  // baseline for parties with Org > 0; growth is event-driven and not
-  // representable as a per-turn rate.
-  return (statePartyOrg.organization ?? 0) > 0 ? roundToTenths(-ORG_DECAY_RATE) : 0;
+  // Bucket share changes depend on every party's units and whether this row is
+  // past its inactivity grace period. There is no honest context-free per-turn
+  // percentage rate to display here.
+  void statePartyOrg;
+  return 0;
 }
 
 export async function buildPartyOrgAnalytics(

@@ -1454,9 +1454,10 @@ export const PLANNED_ECONOMY_MEDIA_OUTPUT: CommodityType = "entertainment_servic
 export function applyPlannedEconomyOutputMix(
   sectorType: CorporationType,
   supply: Partial<Record<CommodityType, number>>,
-  plannedEconomy: boolean
+  plannedEconomy: boolean,
+  mediaDiscriminator: string | null | undefined
 ): Partial<Record<CommodityType, number>> {
-  if (!plannedEconomy || sectorType !== "media") return supply;
+  if (!plannedEconomy || !isNewsMediaLane(sectorType, mediaDiscriminator)) return supply;
   const advertising = supply.advertising ?? 0;
   if (!(advertising > 0)) return supply;
   const remapped: Partial<Record<CommodityType, number>> = { ...supply };
@@ -1535,11 +1536,26 @@ export const PLANNED_ECONOMY_MEDIA_SUPPLY_FACTOR = 0.25;
  */
 export const MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR = 0.1;
 
-/** The derate for one sector: 1 for everything that is not media. */
+/**
+ * True only for the news and broadcast media lane. A canonical `media` row with
+ * the `entertainment` discriminator keeps the entertainment economics it had as
+ * a legacy `entertainment` row, so the media derate and the planned-economy
+ * advertising remap never reach it. The discriminator is a required argument at
+ * every call site so the ledger and the clearing offer cannot drift apart.
+ */
+export function isNewsMediaLane(
+  sectorType: string,
+  mediaDiscriminator: string | null | undefined
+): boolean {
+  return getOperatingSectorType(sectorType, undefined, mediaDiscriminator) === "media";
+}
+
+/** The derate for one sector: 1 for everything outside the news media lane. */
 export function plannedEconomyMediaSupplyFactor(
   sectorType: CorporationType,
-  plannedEconomy: boolean
+  plannedEconomy: boolean,
+  mediaDiscriminator: string | null | undefined
 ): number {
-  if (sectorType !== "media") return 1;
+  if (!isNewsMediaLane(sectorType, mediaDiscriminator)) return 1;
   return plannedEconomy ? PLANNED_ECONOMY_MEDIA_SUPPLY_FACTOR : MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR;
 }

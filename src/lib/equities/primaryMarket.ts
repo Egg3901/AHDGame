@@ -218,7 +218,18 @@ export async function placePendingShareIssuances(
     bankIds.length > 0
       ? await db
           .collection<Corporation>("corporations")
-          .find({ _id: { $in: bankIds } }, { projection: { _id: 1, name: 1, bankCharter: 1 } })
+          .find(
+            { _id: { $in: bankIds } },
+            {
+              projection: {
+                _id: 1,
+                name: 1,
+                countryId: 1,
+                liquidCurrencyCode: 1,
+                bankCharter: 1,
+              },
+            }
+          )
           .toArray()
       : [];
   const bankById = new Map(banks.map((bank) => [bank._id.toHexString(), bank]));
@@ -339,7 +350,7 @@ export async function placePendingShareIssuances(
     if (offer && underwritingBank && offer.instrumentId) {
       const settlement = await settlePrimaryUnderwritingFill(db, {
         bank: underwritingBank,
-        issuer: { _id: corporation._id, name: corporation.name },
+        issuer: corporation,
         issuerCurrencyCode: currency,
         offer,
         instrumentId: offer.instrumentId,
