@@ -260,6 +260,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           typeof gameState?.currentYear === "number" &&
           gameState.currentYear <= 1986),
       mediaProductSlatesEnabled,
+      politicalMediaMarketEnabled: marketGovernorConfig?.politicalMediaMarketEnabled === true,
       productLinesV2Enabled:
         plantsEnabledForMarketShare &&
         (marketGovernorConfig as { productLinesV2Enabled?: boolean } | null)
@@ -479,6 +480,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     brandLoyaltySliceEnabled,
     qualityPremiumPricingEnabled,
     politicalMediaOrders,
+    treasuryCashLedgerEnabled,
   });
   const plannedPoliticalMediaOrders = new Map(
     politicalMediaSettlementPlans.map(({ orderId, plan }) => [orderId, plan])
