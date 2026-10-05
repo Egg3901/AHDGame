@@ -1,7 +1,8 @@
 import { resolveStartingPartiesMode, type StartingPartiesMode } from "./startingParties";
 import { MongoServerError, ObjectId, type Db } from "mongodb";
 import { randomUUID } from "node:crypto";
-import type { Character, GameState, User } from "@/lib/db/types";
+import type { Character, GameState, ImperialCharacter, User } from "@/lib/db/types";
+import type { Counter } from "@/lib/db/types/counter";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import {
@@ -117,6 +118,15 @@ export const STALE_PROGRESS_GAME_STATE_UNSET: Readonly<Record<string, "">> = Obj
   // (src/lib/turn/census.ts). Carrying 2010 into a 1953 world suppresses every
   // census/reapportionment until game-year 2020.
   lastCensusYear: "",
+  // Electoral laws from the outgoing world must not redefine a fresh
+  // electorate or registration baseline.
+  votingAgeEligibleByCountry: "",
+  votingAgeEligible: "",
+  registrationAccessBiasByCountry: "",
+  registrationAccessBias: "",
+  // Annual phase high-water marks belong to the outgoing calendar.
+  lastStatehoodYear: "",
+  lastMilitaryBranchYearProcessed: "",
   // UI summary of the last census's seat deltas — belongs to the census above,
   // and would otherwise show the dead world's reapportionment on the new one.
   lastCensus: "",
@@ -490,6 +500,7 @@ export async function resetGameWorld(
   const { startingYear } = resetDate;
   const gameStateUpdate: Record<string, unknown> = {
     worldEpochId: new ObjectId().toHexString(),
+    worldEpochStartedAt: now,
     resetWorldId: randomUUID(),
     currentTurn: resetDate.currentTurn,
     currentYear: resetDate.currentYear,
@@ -586,6 +597,29 @@ export async function resetGameWorld(
     .collection("counters")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .deleteMany({ _id: { $not: { $regex: /^party_/ } } } as any);
+
+  // Imperial characters are account identities, so preserve their documents,
+  // but a new world starts their personal wallets empty. Reset the legacy
+  // scalar and forex wallet together so either read path observes zero wealth.
+  await db
+    .collection<ImperialCharacter>("imperialCharacters")
+    .updateMany({}, { $set: { cashOnHand: 0, "currencyBalances.personal": {} } });
+
+  // The imperial roll also survives the reset. Restore its sequential counter
+  // from the preserved roster after the generic counter sweep, so a new
+  // country's imperial profile cannot reuse an existing profile URL.
+  const imperialCounterRows = await db
+    .collection<ImperialCharacter>("imperialCharacters")
+    .aggregate<{ _id: null; maxSeq: number }>([
+      { $group: { _id: null, maxSeq: { $max: "$sequentialId" } } },
+    ])
+    .toArray();
+  const maxImperialId = imperialCounterRows[0]?.maxSeq;
+  if (typeof maxImperialId === "number") {
+    await db
+      .collection<Counter>("counters")
+      .updateOne({ _id: "imperial" }, { $set: { seq: maxImperialId } }, { upsert: true });
+  }
 
   // Reference collections that runtime seeders re-populate with $setOnInsert (so
   // they won't overwrite stale accumulated state) must be wiped explicitly — the

@@ -295,6 +295,30 @@ describe("resetGameWorld", () => {
     expect(update?.[1]?.$set?.manuallyEnabledSeats).toEqual([]);
   });
 
+  it("preserves imperial identities while clearing wealth and realigning their ID counter", async () => {
+    db.collection("imperialCharacters");
+    db.collectionMocks.imperialCharacters.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: null, maxSeq: 7 }]),
+    });
+
+    await resetGameWorld(db as never, {
+      deleteProfiles: true,
+      preset: "2019-default",
+      seedHistorical: false,
+    });
+
+    expect(db.collectionMocks.imperialCharacters.drop).not.toHaveBeenCalled();
+    expect(db.collectionMocks.imperialCharacters.updateMany).toHaveBeenCalledWith(
+      {},
+      { $set: { cashOnHand: 0, "currencyBalances.personal": {} } }
+    );
+    expect(db.collectionMocks.counters.updateOne).toHaveBeenCalledWith(
+      { _id: "imperial" },
+      { $set: { seq: 7 } },
+      { upsert: true }
+    );
+  });
+
   it("clears corporation world collections before resetting counters", async () => {
     await resetGameWorld(db as never, {
       deleteProfiles: true,
@@ -650,6 +674,13 @@ describe("resetGameWorld", () => {
       currentEraId: "2010s",
       lastEraCrossedYear: 2010,
       lastMetricActivationYear: 2015,
+      votingAgeEligibleByCountry: { US: 25, UK: 16 },
+      votingAgeEligible: 21,
+      registrationAccessBiasByCountry: { US: -50 },
+      registrationAccessBias: 20,
+      lastStatehoodYear: 1979,
+      lastMilitaryBranchYearProcessed: 1979,
+      manuallyEnabledSeats: ["secretary_of_education"],
     });
 
     await resetGameWorld(db as never, {
@@ -683,6 +714,12 @@ describe("resetGameWorld", () => {
       "eraGdpPerCapitaBaseline",
       "incomeBandIndexByCountry",
       "presidentialTenureByCountry",
+      "votingAgeEligibleByCountry",
+      "votingAgeEligible",
+      "registrationAccessBiasByCountry",
+      "registrationAccessBias",
+      "lastStatehoodYear",
+      "lastMilitaryBranchYearProcessed",
     ]) {
       expect(unset?.[key], `gameState.${key} must be unset by the reset`).toBe("");
     }
@@ -690,6 +727,8 @@ describe("resetGameWorld", () => {
     // The $set and $unset must never share a key — MongoDB rejects that update.
     const set = (currentUpdate![1] as { $set?: Record<string, unknown> }).$set ?? {};
     expect(set.resetWorldId).toEqual(expect.any(String));
+    expect(set.worldEpochStartedAt).toEqual(expect.any(Date));
+    expect(set.manuallyEnabledSeats).toEqual([]);
     expect(Object.keys(set).filter((k) => k in (unset ?? {}))).toEqual([]);
   });
 
