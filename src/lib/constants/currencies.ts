@@ -9,6 +9,7 @@
  */
 import type { CountryId } from "./countries";
 import { STARTING_YEAR, getStartingYearForPreset } from "./turnTime";
+import { FISCAL_ANCHORS_1991 } from "./fiscalAnchors1991";
 import { BGN_PER_EUR, isEuroAdopted } from "@/lib/currency/rules/euroAdoption";
 import { isRubleAdopted, RU_2027_RUB_PER_USD } from "@/lib/currency/rules/rubleTransition";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
@@ -513,18 +514,22 @@ export const INITIAL_RATES_1991: Partial<Record<CountryId, number>> = {
   // https://www.elibrary.imf.org/view/book/9781451940589/ch002.xml
   // https://www.federalreserve.gov/releases/h10/Hist/dat96_ge.htm
   YU: 9 * 1.5075,
-  // 1979-only-modeled countries — placeholders to satisfy forex invariants (not
-  // enabled in 1991); mirror the 1979 rate.
+  // RU and DD are 1979-only placeholders to satisfy forex invariants (not
+  // enabled in 1991); they mirror the 1979 rate.
   RU: 2.22,
   DD: 2.22, // DDM placeholder (DD not enabled in 1991)
-  FR: 4.2,
-  IT: 833,
-  ES: 67,
-  SE: 4.29,
-  TR: 34.5,
-  GR: 37.0,
-  AT: 13.4,
-  FI: 3.9,
+  // FR/IT/ES/SE/TR/GR/AT/FI: WDI PA.NUS.FCRF 1991 period averages in the legacy
+  // currencies, with the GDP, budget and regional seeds authored in the same
+  // units so local GDP over the rate equals the published dollar GDP (#3034).
+  // Sources and derivations: fiscalAnchors1991.ts.
+  FR: FISCAL_ANCHORS_1991.FR.lcuPerUsd,
+  IT: FISCAL_ANCHORS_1991.IT.lcuPerUsd,
+  ES: FISCAL_ANCHORS_1991.ES.lcuPerUsd,
+  SE: FISCAL_ANCHORS_1991.SE.lcuPerUsd,
+  TR: FISCAL_ANCHORS_1991.TR.lcuPerUsd,
+  GR: FISCAL_ANCHORS_1991.GR.lcuPerUsd,
+  AT: FISCAL_ANCHORS_1991.AT.lcuPerUsd,
+  FI: FISCAL_ANCHORS_1991.FI.lcuPerUsd,
 };
 
 /**
