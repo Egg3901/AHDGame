@@ -24,6 +24,9 @@ function arm(options: { existing?: string[] } = {}) {
   db.collection("bondMarketPools").find.mockReturnValue({
     toArray: async () => (options.existing ?? []).map((id) => ({ _id: id })),
   });
+  db.collection("bondMarketPools").bulkWrite.mockImplementation((operations: unknown[]) => ({
+    upsertedCount: operations.length,
+  }));
 }
 
 beforeEach(() => {
@@ -34,7 +37,10 @@ describe("bond market pools migration", () => {
   it("seeds every traded and bond currency at a share of M2, empty where no snapshot exists", async () => {
     arm();
     const result = await migration.execute(db as unknown as Db, { dryRun: false });
-    const docs = db.collectionMocks.bondMarketPools.insertMany.mock.calls[0]![0] as Array<{
+    const docs = db.collectionMocks.bondMarketPools.bulkWrite.mock.calls[0]![0].map(
+      (operation: { updateOne: { update: { $setOnInsert: unknown } } }) =>
+        operation.updateOne.update.$setOnInsert
+    ) as Array<{
       _id: string;
       cashLocal: number;
       targetCashLocal: number;
@@ -51,7 +57,10 @@ describe("bond market pools migration", () => {
   it("skips pools that already exist", async () => {
     arm({ existing: ["USD"] });
     const result = await migration.execute(db as unknown as Db, { dryRun: false });
-    const docs = db.collectionMocks.bondMarketPools.insertMany.mock.calls[0]![0] as Array<{
+    const docs = db.collectionMocks.bondMarketPools.bulkWrite.mock.calls[0]![0].map(
+      (operation: { updateOne: { update: { $setOnInsert: unknown } } }) =>
+        operation.updateOne.update.$setOnInsert
+    ) as Array<{
       _id: string;
     }>;
     expect(docs.map((d) => d._id)).toEqual(["FRF", "GBP"]);
@@ -61,7 +70,7 @@ describe("bond market pools migration", () => {
   it("writes nothing in dry run", async () => {
     arm();
     const result = await migration.execute(db as unknown as Db, { dryRun: true });
-    expect(db.collectionMocks.bondMarketPools.insertMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks.bondMarketPools.bulkWrite).not.toHaveBeenCalled();
     expect(result.documentsInserted).toBe(0);
     expect(result.notes?.[0]).toContain("would seed 3");
   });
