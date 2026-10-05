@@ -6,6 +6,7 @@ import { Tooltip } from "@/components/Tooltip";
 import type { GenericGranularCell } from "@/lib/demographics/granularCells";
 import type { GranularCandidateShare } from "@/lib/actions/granularPollPayload";
 import { DEMOGRAPHIC_LABELS } from "@/lib/seeds/demographicLabels";
+import { partyHex } from "../../pollHelpers";
 import type { PollData, StoredPoll } from "../../types";
 
 const BASE_UNCERTAINTY_BAND = 3.0; // Illustrative points, not sample-based MoE.
@@ -25,6 +26,8 @@ interface VoteShareAggregate {
   bestOpponent: number;
   undecided: number;
   bestOpponentName: string;
+  /** Every rival's share of the subset, so the bar can color each by party. */
+  opponents: Array<{ id: string; name: string; share: number }>;
 }
 
 /** Convert a raw key into a readable label. First word capitalized, underscores
@@ -58,13 +61,14 @@ function aggregateVoteShares(
       bestOpponent: 0,
       undecided: 0,
       bestOpponentName: "",
+      opponents: [],
     };
   }
   const turnout = subset.reduce((s, c) => s + c.share * c.turnout, 0) / share;
 
   let you = 0;
   let undecided = 0;
-  const opponentTotals: Record<string, { name: string; share: number }> = {};
+  const opponentTotals: Record<string, { id: string; name: string; share: number }> = {};
 
   for (const cell of subset) {
     const cs = candidateShares[cell.id];
@@ -72,7 +76,7 @@ function aggregateVoteShares(
     you += cell.share * cs.you;
     undecided += cell.share * cs.undecided;
     for (const opp of cs.opponents) {
-      const entry = opponentTotals[opp.id] ?? { name: opp.name, share: 0 };
+      const entry = opponentTotals[opp.id] ?? { id: opp.id, name: opp.name, share: 0 };
       entry.share += cell.share * opp.share;
       opponentTotals[opp.id] = entry;
     }
@@ -94,7 +98,7 @@ function aggregateVoteShares(
   const opponentEntries = Object.values(opponentTotals);
   const best = opponentEntries.reduce(
     (bestSoFar, o) => (o.share > bestSoFar.share ? o : bestSoFar),
-    opponentEntries[0] ?? { name: "", share: 0 }
+    opponentEntries[0] ?? { id: "", name: "", share: 0 }
   );
 
   const totalOpponents = opponentEntries.reduce((s, o) => s + o.share, 0);
@@ -107,6 +111,7 @@ function aggregateVoteShares(
     bestOpponent: best.share,
     undecided,
     bestOpponentName: best.name,
+    opponents: opponentEntries,
   };
 }
 
@@ -125,44 +130,77 @@ function formatTurnout(n: number): string {
   return `${n.toFixed(1)}%`;
 }
 
+/** Display colors for the bar: the player's party, each rival's party, and neutral undecided. */
+export interface ShareColors {
+  you: string;
+  opponents: Record<string, string>;
+}
+
+const FALLBACK_YOU = "var(--primary)";
+const FALLBACK_RIVAL = "#9CA3AF";
+const UNDECIDED = "#64748b";
+
 function StackedShareBar({
   you,
   opponents,
   undecided,
   title,
+  colors,
+  rivals,
 }: {
   you: number;
   opponents: number;
   undecided: number;
   title?: string;
+  colors?: ShareColors;
+  rivals?: Array<{ id: string; share: number }>;
 }) {
-  const youPct = Math.max(0, Math.min(100, you * 100));
-  const oppPct = Math.max(0, Math.min(100, opponents * 100));
-  const undPct = Math.max(0, Math.min(100, undecided * 100));
+  const pct = (v: number) => Math.max(0, Math.min(100, v * 100));
+  // Without per-rival data (or colors) the rivals collapse into one segment.
+  const segments =
+    rivals && rivals.length > 0
+      ? rivals.map((r) => ({
+          key: r.id,
+          width: pct(r.share),
+          color: colors?.opponents[r.id] ?? FALLBACK_RIVAL,
+        }))
+      : [{ key: "opp", width: pct(opponents), color: FALLBACK_RIVAL }];
 
   return (
     <div
-      className="h-2.5 w-full rounded-full bg-card-border overflow-hidden flex"
-      title={
+      className="flex h-2.5 w-full gap-px overflow-hidden rounded-full bg-card-border"
+      role="img"
+      aria-label={
         title ??
-        `You ${formatPct(you)} · Opponents ${formatPct(opponents)} · Undecided ${formatPct(
-          undecided
-        )}`
+        `You ${formatPct(you)}, opponents ${formatPct(opponents)}, undecided ${formatPct(undecided)}`
       }
     >
       <div
-        className="h-full bg-primary transition-all duration-500"
-        style={{ width: `${youPct}%` }}
+        className="h-full transition-all duration-500"
+        style={{ width: `${pct(you)}%`, backgroundColor: colors?.you ?? FALLBACK_YOU }}
       />
+      {segments.map((seg) => (
+        <div
+          key={seg.key}
+          className="h-full transition-all duration-500"
+          style={{ width: `${seg.width}%`, backgroundColor: seg.color }}
+        />
+      ))}
       <div
-        className="h-full bg-red-500 transition-all duration-500"
-        style={{ width: `${oppPct}%` }}
-      />
-      <div
-        className="h-full bg-slate-500 transition-all duration-500"
-        style={{ width: `${undPct}%` }}
+        className="h-full transition-all duration-500"
+        style={{ width: `${pct(undecided)}%`, backgroundColor: UNDECIDED }}
       />
     </div>
+  );
+}
+
+function Swatch({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-block h-2.5 w-2.5 rounded-full"
+      style={{ backgroundColor: color }}
+      aria-hidden
+    />
   );
 }
 
@@ -183,10 +221,10 @@ function HeaderButton({
       onClick={onClick}
       aria-label={ariaLabel}
       aria-pressed={active}
-      className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+      className={`rounded-md px-3 py-1.5 text-body-sm font-medium transition-colors ${
         active
-          ? "bg-primary/10 border-primary/40 text-primary"
-          : "bg-card border-card-border text-foreground hover:bg-foreground/[0.03]"
+          ? "bg-foreground/10 text-foreground"
+          : "text-muted hover:bg-foreground/[0.05] hover:text-foreground"
       }`}
     >
       {children}
@@ -206,17 +244,21 @@ function DimensionTabs({
   onChange: (dim: string) => void;
 }) {
   return (
-    <nav className="flex flex-wrap gap-2" role="tablist" aria-label="Granular dimensions">
+    <nav
+      className="flex flex-wrap gap-x-1 border-b border-card-border"
+      role="tablist"
+      aria-label="Granular dimensions"
+    >
       {dims.map((dim) => (
         <button
           key={dim}
           role="tab"
           aria-selected={active === dim}
           onClick={() => onChange(dim)}
-          className={`px-3 py-1.5 text-sm font-medium rounded-full border transition-colors ${
+          className={`-mb-px border-b-2 px-3 py-2 text-body font-medium transition-colors ${
             active === dim
-              ? "bg-primary/10 border-primary/40 text-primary"
-              : "bg-card border-card-border text-muted hover:text-foreground hover:bg-foreground/[0.03]"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted hover:text-foreground"
           }`}
         >
           {dimLabels[dim] ?? prettifyKey(dim)}
@@ -271,6 +313,18 @@ function buildCsv(
 }
 
 export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollData: PollData }) {
+  const colors = useMemo<ShareColors>(
+    () => ({
+      you: partyHex(pollData.partyColors, pollData.myParty),
+      opponents: Object.fromEntries(
+        (pollData.electionContext?.opponents ?? []).map((o) => [
+          o.candidateId,
+          partyHex(pollData.partyColors, o.isNPP ? null : o.party),
+        ])
+      ),
+    }),
+    [pollData]
+  );
   const t = useTranslations("elections.granularPoll");
   const granular = poll.granular!;
   const { dims, dimLabels, cells, candidateShares } = granular;
@@ -421,22 +475,28 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
     { key: "margin", label: "Margin", numeric: true },
   ];
 
+  const youLabel = (
+    <span className="inline-flex items-center gap-1.5">
+      <Swatch color={colors.you} />
+      You
+    </span>
+  );
+
   return (
-    <div className="rounded-xl border border-card-border bg-card overflow-hidden">
-      {/* Header */}
-      <div className="px-5 py-4 flex flex-wrap items-center gap-3 border-b border-card-border">
-        <span className="text-xl shrink-0">🧩</span>
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+    <section
+      aria-labelledby="poll-granular-heading"
+      className="rounded-lg border border-card-border bg-card p-5 sm:p-6"
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 id="poll-granular-heading" className="text-heading font-semibold">
             <Tooltip content={t("projectionExplanation")}>
-              <span className="font-semibold">Granular electorate</span>
+              <span>Granular electorate</span>
             </Tooltip>
-            <span className="text-xs rounded-full border border-card-border px-2 py-0.5 text-muted">
-              {cells.length} segments
-            </span>
-          </div>
+          </h2>
+          <p className="text-body-sm text-muted">{cells.length} segments</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex shrink-0 items-center gap-1">
           <HeaderButton
             onClick={() => setTableOpen((v) => !v)}
             active={tableOpen}
@@ -450,8 +510,7 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
         </div>
       </div>
 
-      <div className="px-5 py-4 space-y-5">
-        {/* Dimension tabs */}
+      <div className="mt-4 space-y-5">
         <DimensionTabs
           dims={dims}
           dimLabels={dimLabels}
@@ -464,33 +523,32 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
             sits near 95%. Say that in the open instead of letting the player
             read it as a real projection (ticket-1121). */}
         {topline.totalOpponents <= 0 ? (
-          <div className="rounded-lg border border-card-border bg-foreground/[0.02] px-3 py-2 text-xs text-muted">
+          <p className="text-body text-muted">
             No rival candidates are modelled in this race yet, so every share below splits between
             you and undecided voters only. Rivals enter the model once your race reaches the general
             election, and your share drops accordingly.
-          </div>
+          </p>
         ) : null}
 
-        {/* Marginal rows */}
         <div className="space-y-3">
           {marginalRows.map((row) => {
             const empty = row.share <= 0;
             return (
               <div
                 key={row.key}
-                className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"
+                className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4"
               >
-                <div className="min-w-[140px] sm:w-40 shrink-0">
-                  <div className="text-sm font-medium">{row.label}</div>
-                  <div className="text-xs text-muted tabular-nums">
+                <div className="min-w-[140px] shrink-0 sm:w-44">
+                  <div className="text-body font-medium">{row.label}</div>
+                  <div className="text-body-sm tabular-nums text-muted">
                     {empty ? (
-                      <span className="text-muted/70">under polling floor</span>
+                      <span>under polling floor</span>
                     ) : (
-                      `${formatPct(row.share)} of electorate · ${formatTurnout(row.turnout)} turnout`
+                      `${formatPct(row.share)} of electorate, ${formatTurnout(row.turnout)} turnout`
                     )}
                   </div>
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1">
                   {empty ? (
                     <div className="h-2.5 w-full rounded-full bg-card-border/50" />
                   ) : (
@@ -498,24 +556,28 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
                       you={row.you}
                       opponents={row.totalOpponents}
                       undecided={row.undecided}
+                      colors={colors}
+                      rivals={row.opponents}
                       title={`${row.label}: You ${formatPct(row.you)}, opponents ${formatPct(
                         row.totalOpponents
                       )}, undecided ${formatPct(row.undecided)}`}
                     />
                   )}
                 </div>
-                <div className="shrink-0 text-right sm:w-36">
+                <div className="shrink-0 text-right sm:w-40">
                   {empty ? (
-                    <span className="text-xs text-muted">-</span>
+                    <span className="text-body-sm text-muted">No data</span>
                   ) : (
-                    <div className="text-xs tabular-nums">
-                      <span className="text-primary font-medium">{formatPct(row.you)}</span>
-                      <span className="text-muted mx-1">/</span>
-                      <span className="text-red-400 font-medium">
+                    <div className="text-body-sm tabular-nums">
+                      <span className="font-semibold" style={{ color: colors.you }}>
+                        {formatPct(row.you)}
+                      </span>
+                      <span className="mx-1 text-muted">/</span>
+                      <span className="font-semibold text-foreground">
                         {formatPct(row.bestOpponent)}
                       </span>
-                      <span className="text-muted mx-1">/</span>
-                      <span className="text-slate-400 font-medium">{formatPct(row.undecided)}</span>
+                      <span className="mx-1 text-muted">/</span>
+                      <span className="font-semibold text-muted">{formatPct(row.undecided)}</span>
                     </div>
                   )}
                 </div>
@@ -524,29 +586,26 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
           })}
         </div>
 
-        {/* Legend */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary" />
-            You
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500" />
-            Opponents
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-full bg-slate-500" />
+        <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-body-sm text-muted">
+          <li>{youLabel}</li>
+          <li className="inline-flex items-center gap-1.5">
+            <Swatch color="#9CA3AF" />
+            Opponents (party colors when known)
+          </li>
+          <li className="inline-flex items-center gap-1.5">
+            <Swatch color="#64748b" />
             Undecided
-          </span>
-        </div>
+          </li>
+          <li className="ml-auto">Columns: you / best opponent / undecided</li>
+        </ul>
 
         {/* Segment explorer */}
-        <div className="rounded-lg border border-card-border bg-foreground/[0.02] p-4 space-y-4">
-          <div className="text-sm font-semibold">Segment explorer</div>
+        <div className="space-y-4 border-t border-card-border pt-5">
+          <h3 className="text-body-lg font-semibold">Segment explorer</h3>
           <div className="space-y-3">
             {dims.map((dim) => (
-              <div key={dim} className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-                <div className="text-xs text-muted uppercase tracking-wide sm:w-20 shrink-0 pt-1.5">
+              <div key={dim} className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+                <div className="shrink-0 pt-1.5 text-body-sm font-medium text-muted sm:w-24">
                   {dimLabels[dim] ?? prettifyKey(dim)}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -558,10 +617,10 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
                         type="button"
                         onClick={() => toggleFilter(dim, key)}
                         aria-pressed={active}
-                        className={`px-2 py-1 text-xs rounded-full border transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50 ${
+                        className={`rounded-md px-2.5 py-1 text-body-sm transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50 ${
                           active
-                            ? "bg-primary/15 border-primary/50 text-primary"
-                            : "bg-card border-card-border text-foreground hover:bg-foreground/[0.03]"
+                            ? "bg-primary text-white"
+                            : "bg-foreground/[0.06] text-foreground hover:bg-foreground/10"
                         }`}
                       >
                         {bucketLabel(dim, key)}
@@ -575,125 +634,126 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
 
           {segmentAggregate ? (
             segmentAggregate.share > 0 ? (
-              <div className="rounded-lg border border-card-border bg-card p-4 space-y-3">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <div className="space-y-3">
+                <dl className="grid grid-cols-2 gap-x-8 gap-y-3 sm:flex sm:flex-wrap">
                   <div>
-                    <div className="text-xs text-muted">Share of electorate</div>
-                    <div className="text-lg font-bold tabular-nums">
+                    <dt className="text-body-sm text-muted">Share of electorate</dt>
+                    <dd className="text-body-lg font-semibold tabular-nums">
                       {formatPct(segmentAggregate.share)}
-                    </div>
+                    </dd>
                   </div>
                   <div>
-                    <div className="text-xs text-muted">Turnout</div>
-                    <div className="text-lg font-bold tabular-nums">
+                    <dt className="text-body-sm text-muted">Turnout</dt>
+                    <dd className="text-body-lg font-semibold tabular-nums">
                       {formatTurnout(segmentAggregate.turnout)}
-                    </div>
+                    </dd>
                   </div>
                   <div>
-                    <div className="text-xs text-muted">Your share of this segment</div>
-                    <div className="text-lg font-bold tabular-nums text-primary">
+                    <dt className="text-body-sm text-muted">Your share of this segment</dt>
+                    <dd
+                      className="text-heading font-bold tabular-nums"
+                      style={{ color: colors.you }}
+                    >
                       {formatPct(segmentAggregate.you)}
-                    </div>
+                    </dd>
                   </div>
                   <div>
-                    <div className="text-xs text-muted">vs. your race-wide share</div>
-                    <div className="flex items-baseline gap-1.5">
+                    <dt className="text-body-sm text-muted">vs. your race-wide share</dt>
+                    <dd className="flex items-baseline gap-1.5">
                       <span
-                        className={`text-lg font-bold tabular-nums ${
-                          segmentAggregate.you - topline.you >= 0
-                            ? "text-green-400"
-                            : "text-red-400"
+                        className={`text-body-lg font-semibold tabular-nums ${
+                          segmentAggregate.you - topline.you >= 0 ? "text-success" : "text-error"
                         }`}
                       >
                         {segmentAggregate.you >= topline.you ? "+" : ""}
                         {formatPct(segmentAggregate.you - topline.you)}
                       </span>
-                      <span className="text-xs text-muted tabular-nums">
+                      <span className="text-body-sm tabular-nums text-muted">
                         ({formatPct(topline.you)} race-wide)
                       </span>
-                    </div>
+                    </dd>
                   </div>
-                  <div className="ml-auto text-right">
-                    <div className="text-xs text-muted">{t("uncertaintyBand")}</div>
-                    <Tooltip content={t("uncertaintyExplanation")}>
-                      <span className="text-lg font-bold tabular-nums cursor-help">
-                        ±{segmentUncertainty?.toFixed(1) ?? "-"} pts
-                      </span>
-                    </Tooltip>
+                  <div className="sm:ml-auto sm:text-right">
+                    <dt className="text-body-sm text-muted">{t("uncertaintyBand")}</dt>
+                    <dd>
+                      <Tooltip content={t("uncertaintyExplanation")}>
+                        <span className="cursor-help text-body-lg font-semibold tabular-nums">
+                          ±{segmentUncertainty?.toFixed(1) ?? "-"} pts
+                        </span>
+                      </Tooltip>
+                    </dd>
                   </div>
-                </div>
+                </dl>
                 <StackedShareBar
                   you={segmentAggregate.you}
                   opponents={segmentAggregate.totalOpponents}
                   undecided={segmentAggregate.undecided}
+                  colors={colors}
+                  rivals={segmentAggregate.opponents}
                   title={`Segment: You ${formatPct(segmentAggregate.you)}, opponents ${formatPct(
                     segmentAggregate.totalOpponents
                   )}, undecided ${formatPct(segmentAggregate.undecided)}`}
                 />
-                {/* Spelled out in the open: the reporter should never have to
+                {/* Spelled out in the open: the reader should never have to
                     hover the bar to read what it splits into (ticket-1121). */}
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-primary" />
+                <ul className="flex flex-wrap gap-x-4 gap-y-1 text-body-sm text-muted">
+                  <li className="inline-flex items-center gap-1.5">
+                    <Swatch color={colors.you} />
                     You{" "}
-                    <span className="text-foreground font-medium tabular-nums">
+                    <span className="font-medium tabular-nums text-foreground">
                       {formatPct(segmentAggregate.you)}
                     </span>
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500" />
+                  </li>
+                  <li className="inline-flex items-center gap-1.5">
+                    <Swatch color="#9CA3AF" />
                     Opponents{" "}
-                    <span className="text-foreground font-medium tabular-nums">
+                    <span className="font-medium tabular-nums text-foreground">
                       {formatPct(segmentAggregate.totalOpponents)}
                     </span>
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-slate-500" />
+                  </li>
+                  <li className="inline-flex items-center gap-1.5">
+                    <Swatch color="#64748b" />
                     Undecided{" "}
-                    <span className="text-foreground font-medium tabular-nums">
+                    <span className="font-medium tabular-nums text-foreground">
                       {formatPct(segmentAggregate.undecided)}
                     </span>
+                  </li>
+                </ul>
+                <p className="text-body-sm text-muted">
+                  Best opponent:{" "}
+                  <span className="font-medium text-foreground">
+                    {segmentAggregate.bestOpponentName || "None"}
                   </span>
-                </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                  <span>
-                    Best opponent:{" "}
-                    <span className="text-foreground font-medium">
-                      {segmentAggregate.bestOpponentName || "-"}
-                    </span>
+                  . Margin:{" "}
+                  <span className="font-medium tabular-nums text-foreground">
+                    {formatPct(segmentAggregate.you - segmentAggregate.bestOpponent)}
                   </span>
-                  <span>
-                    Margin:{" "}
-                    <span className="text-foreground font-medium tabular-nums">
-                      {formatPct(segmentAggregate.you - segmentAggregate.bestOpponent)}
-                    </span>
-                  </span>
-                </div>
+                </p>
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-card-border p-4 text-center text-sm text-muted">
+              <p className="text-body text-muted">
                 This combination is below the polling floor and has been pruned from the model.
-              </div>
+              </p>
             )
           ) : (
-            <div className="text-xs text-muted">
+            <p className="text-body-sm text-muted">
               Tap a chip in each row to explore a single cross-tab segment.
-            </div>
+            </p>
           )}
         </div>
 
         {/* Full table */}
         {tableOpen && (
-          <div className="border border-card-border rounded-lg overflow-hidden">
-            <div className="max-h-[420px] overflow-y-auto">
-              <table className="w-full text-sm">
+          <div className="overflow-hidden rounded-md border border-card-border">
+            <div className="max-h-[420px] overflow-auto">
+              <table className="w-full text-body">
                 <thead className="sticky top-0 z-10 bg-card border-b border-card-border">
                   <tr>
                     {tableColumns.map((col) => (
                       <th
                         key={col.key}
                         scope="col"
-                        className={`px-3 py-2 text-left font-semibold text-xs text-muted whitespace-nowrap ${
+                        className={`px-3 py-2 text-left font-medium text-body-sm text-muted whitespace-nowrap ${
                           col.numeric ? "text-right" : ""
                         }`}
                       >
@@ -723,18 +783,21 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
                       <td className="px-3 py-2 text-right tabular-nums">
                         {formatTurnout(cell.turnout)}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-primary">
+                      <td
+                        className="px-3 py-2 text-right tabular-nums"
+                        style={{ color: colors.you }}
+                      >
                         {formatPct(cs?.you ?? 0)}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-red-400">
+                      <td className="px-3 py-2 text-right tabular-nums ">
                         {formatPct(bestOpp.share)}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-400">
+                      <td className="px-3 py-2 text-right tabular-nums text-muted">
                         {formatPct(cs?.undecided ?? 0)}
                       </td>
                       <td
                         className={`px-3 py-2 text-right tabular-nums font-medium ${
-                          margin >= 0 ? "text-green-400" : "text-red-400"
+                          margin >= 0 ? "text-success" : "text-error"
                         }`}
                       >
                         {margin >= 0 ? "+" : ""}
@@ -748,6 +811,6 @@ export function GranularPollPanel({ poll, pollData }: { poll: StoredPoll; pollDa
           </div>
         )}
       </div>
-    </div>
+    </section>
   );
 }

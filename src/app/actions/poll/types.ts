@@ -124,4 +124,8 @@ export interface PollData {
   storedPoll: StoredPoll | null;
   electionContext: ElectionContext | null;
   demographicTurnout: DemographicTurnoutData | null;
+  /** Display hex per party id for the player and each rival in the race. */
+  partyColors?: Record<string, string>;
+  /** The player's party id, the key into partyColors. */
+  myParty?: string | null;
 }
