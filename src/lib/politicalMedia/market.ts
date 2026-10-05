@@ -11,9 +11,19 @@ import { qualityPremiumMultiplier } from "@/lib/market/clearing";
 import type { PoliticalMediaSettlementPlan } from "./journal";
 import {
   allocatePoliticalAdOrders,
+  politicalMediaStateKey,
   type PoliticalAdOrderDemand,
   type PoliticalAdSellerOffer,
 } from "./rules";
+
+export interface PoliticalMediaFallbackTreasuryTerms {
+  budgetId: string;
+  currencyCode: string;
+  currencyCodePresent: boolean;
+  rawCurrencyCode?: string | null;
+  localPerAnchor: number;
+  balancePath: "treasuryCashLocal" | "treasuryBalance";
+}
 
 export interface PoliticalAdClearingOffer {
   input: SectorClearingInput;
@@ -46,6 +56,7 @@ export interface PoliticalAdMarketSettlement {
  */
 export function settlePoliticalAdMarket(args: {
   orders: readonly PoliticalAdOrderDemand[];
+  fallbackTreasuryByCountry?: ReadonlyMap<string, PoliticalMediaFallbackTreasuryTerms>;
   mediaOwnership?: MediaOwnershipMarket;
   persistedPlans?: readonly { orderId: string; plan: PoliticalMediaSettlementPlan }[];
   offers: readonly PoliticalAdClearingOffer[];
@@ -202,7 +213,26 @@ export function settlePoliticalAdMarket(args: {
       seller.unsoldUnits *= residual > 0 ? Math.min(1, maximum / residual) : 0;
     }
   }
-  const allocations = allocatePoliticalAdOrders(args.orders, sellers);
+  const statesWithOutlets = new Set(
+    args.offers
+      .filter((offer) => offer.stateId)
+      .map((offer) => politicalMediaStateKey(offer.countryId, offer.stateId!))
+  );
+  const fallbackEligibleStates = new Set(
+    args.orders
+      .filter(
+        (order) =>
+          !statesWithOutlets.has(politicalMediaStateKey(order.countryId, order.stateId)) &&
+          args.fallbackTreasuryByCountry?.has(order.countryId)
+      )
+      .map((order) => politicalMediaStateKey(order.countryId, order.stateId))
+  );
+  const allocations = allocatePoliticalAdOrders(
+    args.orders,
+    sellers,
+    statesWithOutlets,
+    fallbackEligibleStates
+  );
   const settlementPlans = allocations.map((allocation) => ({
     orderId: allocation.orderId,
     plan: {
@@ -210,6 +240,23 @@ export function settlePoliticalAdMarket(args: {
       deliveredAnchor: allocation.deliveredAnchor,
       unfilledAnchor: allocation.unfilledAnchor,
       deliveredUnits: allocation.deliveredUnits,
+      ...(allocation.fallbackAnchor > 0
+        ? (() => {
+            const order = args.orders.find((candidate) => candidate.orderId === allocation.orderId);
+            const terms = order
+              ? args.fallbackTreasuryByCountry?.get(order.countryId)
+              : undefined;
+            if (!order || !terms) throw new Error("Missing frozen fallback treasury terms.");
+            return {
+              fallbackSpend: {
+                ...terms,
+                amountAnchor: allocation.fallbackAnchor,
+                countryId: order.countryId,
+                amountLocal: allocation.fallbackAnchor * terms.localPerAnchor,
+              },
+            };
+          })()
+        : {}),
       sellers: allocation.sellers.map((seller) => {
         const offer = sellerDetails.get(seller.sectorId);
         if (!offer) throw new Error(`Missing ad clearing offer for ${seller.sectorId}.`);

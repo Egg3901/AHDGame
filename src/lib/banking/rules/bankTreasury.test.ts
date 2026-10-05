@@ -6,6 +6,7 @@ import {
   computeBankTreasuryFundingRatePercent,
   bankTreasuryHolderUnits,
   allocateBankTreasuryHolderLots,
+  bankTreasuryAllocatedCostBasis,
   planBankTreasurySweep,
   quoteBankTreasuryBond,
 } from "./bankTreasury";
@@ -26,6 +27,25 @@ describe("bank treasury rules", () => {
       { lotId: "lot-1", units: 3 },
       { lotId: "lot-2", units: 3 },
     ]);
+  });
+
+  it("computes realized sale basis from every allocated lot and fails closed on unknown basis", () => {
+    const holders = [
+      { bankId: "bank-a", charteredTurn: 10, lotId: "lot-1", units: 3, avgCostPerUnit: 900 },
+      { bankId: "bank-a", charteredTurn: 10, lotId: "lot-2", units: 4, avgCostPerUnit: 950 },
+    ];
+    const allocations = [
+      { lotId: "lot-1", units: 2 },
+      { lotId: "lot-2", units: 3 },
+    ];
+    expect(bankTreasuryAllocatedCostBasis(holders, allocations, "USD")).toBe(4_650);
+    expect(
+      bankTreasuryAllocatedCostBasis(
+        [{ ...holders[0] }, { ...holders[1], avgCostPerUnit: undefined }],
+        allocations,
+        "USD"
+      )
+    ).toBeNull();
   });
 
   it("keeps cash purchases on equity, prices spread loss, and excludes bills from reserve cash", () => {
