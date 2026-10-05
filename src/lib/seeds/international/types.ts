@@ -16,6 +16,8 @@ export interface CountryLayer1Model {
   composition: Record<string, CompositionEntry>;
   defaultLeans: Record<string, { economicLean: number; socialLean: number }>;
   census: Record<string, Record<string, Record<string, number>>>;
+  /** Regional preview precision after that country/era's calibration audit. */
+  regionLeanDecimals?: 1 | 2;
   /**
    * Optional per-region contextual lean offsets added to every group's derived
    * lean in that region, for contrast that census composition cannot carry.

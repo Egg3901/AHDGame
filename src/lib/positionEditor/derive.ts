@@ -204,6 +204,7 @@ export function editorConfigFromCountryModel(
     categoryId: model.categoryId,
     layer1,
     archetypes,
+    ...(model.regionLeanDecimals ? { regionLeanDecimals: model.regionLeanDecimals } : {}),
   };
 }
 
@@ -297,8 +298,11 @@ export function computeDerivedCompositionGeneric(
     econSum += w * r.economicLean;
     socialSum += w * r.socialLean;
   }
-  const stateEconomicLean = weightSum > 0 ? clampLean(econSum / weightSum) : 0;
-  const stateSocialLean = weightSum > 0 ? clampLean(socialSum / weightSum) : 0;
+  // UK 1991's audited preview retains the two-decimal calculateStateLean mean.
+  // Other models keep their calibrated one-decimal preview until audited.
+  const scale = 10 ** (cfg.regionLeanDecimals ?? 1);
+  const stateEconomicLean = weightSum > 0 ? Math.round((econSum / weightSum) * scale) / scale : 0;
+  const stateSocialLean = weightSum > 0 ? Math.round((socialSum / weightSum) * scale) / scale : 0;
 
   return {
     archetypes,
