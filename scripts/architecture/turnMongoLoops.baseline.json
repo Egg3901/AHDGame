@@ -675,7 +675,11 @@
     "64031b8d834ffca33ff823e699c79621ba423ce50214daaa53d21167d34bba81": 1,
     "2bc163f6515e1b81d42761f1c5160033fd090c6a358432a77c3758dd2669b07c": 1,
     "a26a64044e6f76ecdbe9a04330288efdc6429fb1493ce1415fcaa458d56d9df5": 1,
-    "a1122fd23863488386dcd9c1c24b06265436056852ccf72ef85f07ee9bb003c1": 1
+    "a1122fd23863488386dcd9c1c24b06265436056852ccf72ef85f07ee9bb003c1": 1,
+    "94f1b2d981615fc3db41dc40a58a04631465db2eae47dc1b1db3655cb0fa9577": 1,
+    "4b032f506d43563de28532b93be7d9978727393b7a4f0f201f0989e1955d688b": 1,
+    "e54ef0dc8a1525b6ea8904bb3e860c6282b9e49f23a9f687633ba83328afd1ad": 1,
+    "a9ede6674d692d5180505a301712299bb9a0fadd03e15dd1923e2a5d29194472": 1
   },
   "locations": [
     {
@@ -3412,7 +3416,7 @@
       "file": "src/lib/sovereignDefault/legislative/legislativeTurn.ts",
       "operation": "updateOne",
       "owner": "processSovereignLegislativeTurn",
-      "expression": "db.collection<SovereignCrisisDecision>(\"sovereignCrisisDecisions\").updateOne({ _id: decision._id as ObjectId }, { $set: { state: \"rejected\", currentChamberIndex: null, legislativePhases: updatedPhases, resolvedAt: new Date(realtimeMs), resolvedReason: \"Legislative deadlock — auto-Repudiate (phase 9b)\", }, })",
+      "expression": "db.collection<SovereignCrisisDecision>(\"sovereignCrisisDecisions\").updateOne({ _id: decision._id as ObjectId }, { $set: { state: \"rejected\", currentChamberIndex: null, legislativePhases: updatedPhases, resolvedAt: new Date(realtimeMs), resolvedReason: \"Legislative deadlock \u2014 auto-Repudiate (phase 9b)\", }, })",
       "fingerprint": "4e8be196a9e074fcca6078089c4d06cf45a38d82c7504b78e890d3ea171cd198"
     },
     {
@@ -5563,6 +5567,41 @@
       "owner": "processCompletedCaucusChairElections",
       "expression": "db .collection<CaucusMembership>(\"caucusMemberships\") .updateOne({ caucusId: caucus._id, memberType: \"character\", memberId: winnerId, status: \"active\" }, { $set: { role: \"chair\", updatedAt: now } })",
       "fingerprint": "a1122fd23863488386dcd9c1c24b06265436056852ccf72ef85f07ee9bb003c1"
+    },
+    {
+      "file": "src/lib/turn/bankingTurn.ts",
+      "operation": "updateOne",
+      "owner": "processOneBank",
+      "expression": "corporations.updateOne(bankingTurnPublicationFilter({ bankId: corp._id, countryId: live.countryId, charteredTurn: live.bankCharter.charteredTurn, currency, turn, observedIncomeTurn: publicationCharter.lastBankingIncomeTurn, observedSovereignCouponIncome: publicationCharter.lastBankingSovereignCouponIncome, observedTreasuryRealizedGain: publicationCharter.lastBankingTreasuryRealizedGain, observedSovereignCouponPaidLifetime: publicationCharter.sovereignCouponIncomePaidLifetime, observedSovereignCouponBookedLifetime: publicationCharter.sovereignCouponIncomeBookedLifetime, observedTreasuryGainPaidLifetime: publicationCharter.treasuryRealizedGainPaidLifetime, observedTreasuryGainBookedLifetime: publicationCharter.treasuryRealizedGainBookedLifetime, observedUnderwritingFeesTurn: publicationCharter.lastBankingUnderwritingFeesTurn, observedUnderwritingFees: publicationCharter.lastBankingUnderwritingFees, }), { $set: { \"bankCharter.npcDeposits\": npcDeposits, \"bankCharter.totalDeposits\": totalDeposits, \"bankCharter.depositCeiling\": depositCeiling, \"bankCharter.lastBankingTurn\": turn, \"bankCharter.lastBankingIncome\": bankingIncome, \"bankCharter.lastBankingIncomeTurn\": turn, \"bankCharter.lastBankingDepositInterest\": result.depositInterestPaid, \"bankCharter.lastBankingLoanInterest\": result.loanInterestCollected, \"bankCharter.lastBankingSovereignCouponIncome\": sovereignCouponIncomeForTurn, \"bankCharter.lastBankingTreasuryRealizedGain\": treasuryRealizedGainForTurn, \"bankCharter.sovereignCouponIncomeBookedLifetime\": publicationCharter.sovereignCouponIncomePaidLifetime ?? 0, \"bankCharter.treasuryRealizedGainBookedLifetime\": publicationCharter.treasuryRealizedGainPaidLifetime ?? 0, \"bankCharter.lastBankingLoanOriginationFees\": result.loanOriginationFeesCollected, \"bankCharter.lastBankingUnderwritingFees\": underwritingFeesForTurn, \"bankCharter.lastBankingUnderwritingFeesTurn\": turn, \"bankCharter.lastBankingInterbankInterestPaid\": 0, \"bankCharter.lastBankingInterbankInterestReceived\": 0, \"bankCharter.lastBankingFacilityInterest\": 0, \"bankCharter.lastBankingInsurancePremium\": result.insurancePremiumPaid, \"bankCharter.lastBankingWriteoffs\": result.defaultsWrittenOff, updatedAt: new Date(), }, })",
+      "fingerprint": "94f1b2d981615fc3db41dc40a58a04631465db2eae47dc1b1db3655cb0fa9577"
+    },
+    {
+      "file": "src/lib/turn/bankingTurn.ts",
+      "operation": "findOne",
+      "owner": "processOneBank",
+      "expression": "corporations.findOne({ _id: corp._id }, { projection: { countryId: 1, bankCharter: 1 } })",
+      "fingerprint": "4b032f506d43563de28532b93be7d9978727393b7a4f0f201f0989e1955d688b"
+    },
+    {
+      "file": "src/lib/turn/bankingTurn.ts",
+      "operation": "findOne",
+      "owner": "processLoanBookOnlyBank",
+      "expression": "corporations.findOne({ _id: corp._id }, { projection: { countryId: 1, bankCharter: 1 } })",
+      "fingerprint": "e54ef0dc8a1525b6ea8904bb3e860c6282b9e49f23a9f687633ba83328afd1ad"
+    },
+    {
+      "file": "src/lib/turn/bankingTurn.ts",
+      "operation": "updateOne",
+      "owner": "processLoanBookOnlyBank",
+      "expression": "corporations.updateOne(bankingTurnPublicationFilter({ bankId: corp._id, countryId: corp.countryId, charteredTurn: charter.charteredTurn, currency, turn, observedIncomeTurn: publicationCharter.lastBankingIncomeTurn, observedSovereignCouponIncome: publicationCharter.lastBankingSovereignCouponIncome, observedTreasuryRealizedGain: publicationCharter.lastBankingTreasuryRealizedGain, observedSovereignCouponPaidLifetime: publicationCharter.sovereignCouponIncomePaidLifetime, observedSovereignCouponBookedLifetime: publicationCharter.sovereignCouponIncomeBookedLifetime, observedTreasuryGainPaidLifetime: publicationCharter.treasuryRealizedGainPaidLifetime, observedTreasuryGainBookedLifetime: publicationCharter.treasuryRealizedGainBookedLifetime, observedUnderwritingFeesTurn: publicationCharter.lastBankingUnderwritingFeesTurn, observedUnderwritingFees: publicationCharter.lastBankingUnderwritingFees, }), { $set: { \"bankCharter.lastBankingTurn\": turn, \"bankCharter.lastBankingIncome\": serviced.interestCollected - serviced.writtenOff + unbooked.couponIncome + unbooked.realizedGain + underwritingFeesForTurn, \"bankCharter.lastBankingIncomeTurn\": turn, \"bankCharter.lastBankingDepositInterest\": 0, \"bankCharter.lastBankingLoanInterest\": serviced.interestCollected, \"bankCharter.lastBankingSovereignCouponIncome\": unbooked.couponIncome, \"bankCharter.lastBankingTreasuryRealizedGain\": unbooked.realizedGain, \"bankCharter.sovereignCouponIncomeBookedLifetime\": publicationCharter.sovereignCouponIncomePaidLifetime ?? 0, \"bankCharter.treasuryRealizedGainBookedLifetime\": publicationCharter.treasuryRealizedGainPaidLifetime ?? 0, \"bankCharter.lastBankingLoanOriginationFees\": 0, \"bankCharter.lastBankingUnderwritingFees\": underwritingFeesForTurn, \"bankCharter.lastBankingUnderwritingFeesTurn\": turn, \"bankCharter.lastBankingInterbankInterestPaid\": 0, \"bankCharter.lastBankingInterbankInterestReceived\": 0, \"bankCharter.lastBankingFacilityInterest\": 0, \"bankCharter.lastBankingInsurancePremium\": 0, \"bankCharter.lastBankingWriteoffs\": serviced.writtenOff, updatedAt: new Date(), }, })",
+      "fingerprint": "a9ede6674d692d5180505a301712299bb9a0fadd03e15dd1923e2a5d29194472"
     }
-  ]
+  ],
+  "adoptedReleaseCommit": "81812055b6",
+  "reviewedConcurrencyRetries": {
+    "94f1b2d981615fc3db41dc40a58a04631465db2eae47dc1b1db3655cb0fa9577": "Existing release fix #3264 bounds guarded bank publication to three compare-and-set attempts. A conflicting write must be reread before the next attempt; batching these dependent operations would invalidate the concurrency guard.",
+    "4b032f506d43563de28532b93be7d9978727393b7a4f0f201f0989e1955d688b": "Existing release fix #3264 bounds guarded bank publication to three compare-and-set attempts. A conflicting write must be reread before the next attempt; batching these dependent operations would invalidate the concurrency guard.",
+    "e54ef0dc8a1525b6ea8904bb3e860c6282b9e49f23a9f687633ba83328afd1ad": "Existing release fix #3264 bounds guarded bank publication to three compare-and-set attempts. A conflicting write must be reread before the next attempt; batching these dependent operations would invalidate the concurrency guard.",
+    "a9ede6674d692d5180505a301712299bb9a0fadd03e15dd1923e2a5d29194472": "Existing release fix #3264 bounds guarded bank publication to three compare-and-set attempts. A conflicting write must be reread before the next attempt; batching these dependent operations would invalidate the concurrency guard."
+  }
 }
