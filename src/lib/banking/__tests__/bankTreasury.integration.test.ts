@@ -180,7 +180,8 @@ describe("funded bank treasury settlement", () => {
     expect(sale.status).toBe("completed");
     const receipt = db
       .collection("bankTreasuryTrades")
-      .docs.find((row) => row._id === "treasury-gain-sell");
+      .docs.find((row) => row._id === "treasury-gain-sell") as
+      { amountLocal: number; costBasisLocal?: number } | undefined;
     expect(receipt?.costBasisLocal).toBeGreaterThan(0);
     const expectedGain = receipt!.amountLocal - receipt!.costBasisLocal!;
     expect(expectedGain).toBeGreaterThan(0);
@@ -223,7 +224,8 @@ describe("funded bank treasury settlement", () => {
     expect(sale.status).toBe("completed");
     const receipt = db
       .collection("bankTreasuryTrades")
-      .docs.find((row) => row._id === "treasury-old-gain-sell");
+      .docs.find((row) => row._id === "treasury-old-gain-sell") as
+      { amountLocal: number; costBasisLocal?: number } | undefined;
     const expectedGain = receipt!.amountLocal - receipt!.costBasisLocal!;
     expect(db.collection("corporations").docs[0].bankCharter).toMatchObject({
       lastBankingIncome: 77,
@@ -267,7 +269,8 @@ describe("funded bank treasury settlement", () => {
     });
     const receipt = db
       .collection("bankTreasuryTrades")
-      .docs.find((row) => row._id === "treasury-after-stamp-sell");
+      .docs.find((row) => row._id === "treasury-after-stamp-sell") as
+      { amountLocal: number; costBasisLocal?: number } | undefined;
     const expectedGain = receipt!.amountLocal - receipt!.costBasisLocal!;
     expect(sale.status).toBe("completed");
     expect(db.collection("corporations").docs[0].bankCharter).toMatchObject({

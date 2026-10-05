@@ -14,9 +14,10 @@ type BuildOrgPreview =
       ok: true;
       effectiveCost: number;
       projectedGain: number;
+      contributionUnits: number;
       /** Cash price of the next click. Absent on a pre-2026-09-02 response. */
       cashPrice?: number;
-      /** Below 1 when the treasury can only part-fund; `projectedGain` is already scaled. */
+      /** Below 1 when the treasury can only part-fund the cash price. */
       fundedFraction?: number;
     }
   | { ok: false };
@@ -27,8 +28,7 @@ type BuildOrgPreview =
  * legend on the Overview tab, so it carries no heading or legend of its own.
  *
  * The Build Org button spends Political Strength inline (no navigation):
- * each click grows the viewer's party from the Unaffiliated pool and poaches
- * rivals (the unified action; there is no separate Contest).
+ * each click deposits one fixed unit into the viewer party's regional bucket.
  */
 export function BuildOrgControl({
   vm,
@@ -135,7 +135,7 @@ export function BuildOrgControl({
           ? ` and ${CURRENCY_SYMBOLS[buildOrgCurrency as keyof typeof CURRENCY_SYMBOLS] ?? "$"}${Math.round(cashCost).toLocaleString("en-US")}`
           : "";
       showToast(
-        `+${(d.orgGain as number).toFixed(2)} Org for ${(d.psCost as number).toFixed(0)} PS${cash}`,
+        `+${(d.contributionUnits as number).toFixed(0)} Org unit, share ${(d.orgGain as number) >= 0 ? "+" : ""}${(d.orgGain as number).toFixed(2)}% for ${(d.psCost as number).toFixed(0)} PS${cash}`,
         "success"
       );
       // Apply the server's next-click estimate immediately so the line reflects
@@ -230,7 +230,9 @@ export function BuildOrgControl({
             </span>{" "}
             for{" "}
             <span className="font-medium tabular-nums text-foreground">
-              +{estimate.projectedGain.toFixed(2)} Org
+              +{estimate.contributionUnits.toFixed(0)} unit (
+              {estimate.projectedGain >= 0 ? "+" : ""}
+              {estimate.projectedGain.toFixed(2)}% share)
             </span>
             .
           </p>

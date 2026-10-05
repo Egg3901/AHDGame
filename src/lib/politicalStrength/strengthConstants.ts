@@ -304,13 +304,6 @@ export const PRIORITY_REGION_LOCKOUT_TURNS = 168 as const;
 export const PRIORITY_REGION_MAX_STATES = 3 as const;
 
 /**
- * Effectiveness bonus on direct national PS actions in a Priority Region
- * state. Multiplier on the action's primary effect (Org gain, Reg gain,
- * Support gain, etc.) — NOT on the PS cost.
- */
-export const PRIORITY_REGION_EFFECT_BONUS = 0.25 as const;
-
-/**
  * Extra states a party may include in its Priority Region cluster when
  * it holds the state-level executive (US governor / DE Land Minister-
  * President / JP prefectural governor / UK devolved First Minister) in
@@ -406,19 +399,16 @@ export const ORG_BUILD_TREASURY_FRACTION = 0.075 as const;
 /**
  * Floor on the funded fraction of a Build Org click (see `buildOrgFunding`).
  *
- * Build Org SOFT-fails on money: a party that cannot cover the full price pays
- * what it has and gets proportionally less Org, rather than being refused. That
- * matters because the parties least able to pay are the ones with the most
- * ground to make up — 115 of 304 US state-party rows sat at ≤ 0 treasury when
- * this shipped — and a hard gate would lock them out of the one action that
- * fixes their position, undoing `BUILD_ORG_CATCHUP_BONUS`.
+ * Build Org accepts partial payment once the treasury covers this fraction of
+ * the quote. Every successful click still deposits the same fixed bucket unit.
+ * That matters because the parties least able to pay are often the ones with
+ * the most ground to make up, while a hard gate would lock them out entirely.
  *
  * The floor bounds that in both directions. Below it the click is REFUSED
  * before any PS is spent, so nobody buys a near-worthless click; at or above
  * it the click lands at the funded fraction. After PS has been committed the
- * fraction is clamped UP to this floor (`clampFundedFraction`), so a
- * concurrent debit that drains the treasury mid-click can never turn committed
- * PS into zero Org.
+ * reported fraction is clamped UP to this floor (`clampFundedFraction`) when a
+ * concurrent debit drains the treasury after PS has already been committed.
  */
 export const ORG_BUILD_MIN_FUNDED_FRACTION = 0.25 as const;
 
@@ -457,136 +447,3 @@ export const ORG_BUILD_MIN_FUNDED_FRACTION = 0.25 as const;
  */
 export const ORG_BUILD_SIZE_MULTIPLIER_MIN = 0.5 as const;
 export const ORG_BUILD_SIZE_MULTIPLIER_MAX = 2.0 as const;
-
-/**
- * Base Org% gain at ideal conditions (full headroom, fresh own Org, full
- * PS reserve relative to rivals, behind in this state). The actual gain
- * scales by the four factors in `calcUnifiedBuildOrg`.
- */
-export const BUILD_ORG_BASE_GAIN = 2.0 as const;
-
-/**
- * Marketing-style diminishing-returns pivot for own Org, applied to Org ABOVE
- * `BUILD_ORG_DIMINISHING_THRESHOLD` (see below). Let `e = max(0, ownOrg − 50)`;
- * then `pivot / (pivot + e)` shrinks — at `e = pivot` (ownOrg = 75) the
- * multiplier is 0.5; at `e = 3× pivot` (ownOrg = 125) it is 0.25. Below the
- * threshold there is no penalty (multiplier = 1.0).
- */
-export const BUILD_ORG_DIMINISHING_PIVOT = 25 as const;
-
-/**
- * Own-Org threshold below which Build Org / Contest take NO diminishing-returns
- * penalty (`ownDiminishing = 1.0`). Above it, the marketing-style pivot curve
- * resumes, measured from this threshold: at `threshold + pivot` Org the
- * multiplier is 0.5. Keeps early growth ungrindy while still slowing dominance.
- */
-export const BUILD_ORG_DIMINISHING_THRESHOLD = 50;
-
-/**
- * PS-leverage clamp range. Effective leverage = clamp(floor, ceiling,
- * ownPS / avgRivalPSInState). A small party with a hoarded reserve maxes
- * at `ceiling`× the base gain; a party that's burned through its PS while
- * rivals stockpile bottoms at `floor`× the base.
- */
-export const BUILD_ORG_PS_LEVERAGE_FLOOR = 0.5 as const;
-export const BUILD_ORG_PS_LEVERAGE_CEILING = 1.5 as const;
-
-/**
- * Catch-up addend when at least one rival party in this state has higher Org%
- * than you. Added to `rawLeverage` (not multiplied) so a trailing party at the
- * PS floor (0.5) reaches 1.0 effective leverage instead of the old broken
- * `0.5 × 1.5 = 0.75` that punished the underdog. Applied once — "are you
- * behind" not "by how much".
- */
-export const BUILD_ORG_CATCHUP_BONUS = 0.5 as const;
-
-/**
- * Hard ceiling on `effectiveLeverage = rawLeverage + catchupAddend`. With
- * `rawLeverage` capped at `BUILD_ORG_PS_LEVERAGE_CEILING` (1.5) and
- * `catchupAddend` at most `BUILD_ORG_CATCHUP_BONUS` (0.5), the combined
- * max is 2.0 — tighter than the old multiplicative ceiling of 1.5×1.5 = 2.25.
- */
-export const BUILD_ORG_PS_EFFECTIVE_CEILING =
-  BUILD_ORG_PS_LEVERAGE_CEILING + BUILD_ORG_CATCHUP_BONUS; // 2.0
-
-/**
- * How efficiently a Build Org click converts a rival's exposed (poachable) Org
- * into headroom, relative to drawing from the open Unaffiliated pool. The
- * per-rival poachable Org is scaled by this weight before it competes with the
- * pool for the click's gain. This is the single balance knob for the unified
- * Build Org model (2026-06-24 spec).
- *
- * Raised `0.5 → 1.5` (2026-06-25) to buff Build Org in saturated states. The
- * gain in a poach-dominated state (small Unaffiliated pool) scales linearly with
- * this weight — tripling it ~3×'s the build there, where progress was painfully
- * slow (e.g. +0.06 Org/click). Open states are unaffected in TOTAL: the throttle
- * is `max(poolWeight, rivalWeight)`, so while the pool dominates the gain is
- * bounded by the pool weight regardless — the buff only reapportions that gain
- * toward poaching and takes over once a state saturates.
- */
-export const RIVAL_POACH_HEADROOM_WEIGHT = 1.5 as const;
-
-/**
- * Fraction of a party's NATIONAL PS pool that counts toward its effective
- * strength in a single-state Build Org comparison (the `psLeverage` factor and
- * the per-rival poach weighting). State PS is the primary term; national backing
- * adds a secondary boost so a nationally-strong party poaches a little harder
- * and defends a little better everywhere — without national fully eclipsing the
- * per-state contest.
- *
- * Reduced 0.1 → 0.05 (2026-06-28, ticket #0762). At 0.1 a 4.4× national PS
- * gap (e.g. 252 vs 57) added +25.3 vs +5.7 to blended PS, pinning psLeverage
- * at its extremes (floor/ceiling) across all states and cancelling the catchup
- * bonus. At 0.05 the blended contribution is halved (+12.6 vs +2.85), leaving
- * room for ps-ratio to fall between the clamp extremes in normal play.
- */
-export const NATIONAL_PS_BLEND_FRACTION = 0.05 as const;
-
-/**
- * Effective PS for a party in a single-state Build Org comparison:
- * `statePs + NATIONAL_PS_BLEND_FRACTION × nationalPs`. Applied identically to
- * the spender and every rival so the leverage + poach math compares like with
- * like. Negative inputs are floored at 0.
- */
-export function blendedComparisonPs(statePs: number, nationalPs: number): number {
-  return Math.max(0, statePs) + NATIONAL_PS_BLEND_FRACTION * Math.max(0, nationalPs);
-}
-
-/**
- * Fraction of the national PS cost for a national-targeted Build Org action
- * that is immediately refunded back to the national party's PS pool (2026-06-28,
- * ticket #0762). Rewards active national org-building for treasury-poor parties:
- * the effective net cost per national-scope Build Org click is 0.8 PS instead of
- * 1, and the recovery slowly rebuilds the pool for further activity.
- */
-export const NATIONAL_PS_ACTIVITY_RECOVERY_FRACTION = 0.2 as const;
-
-// ─── Rival poach (unified Build Org) ────────────────────────────────────────
-
-/**
- * Low-Org taper for the rival-poach slice of unified Build Org. Each rival's
- * poachable Org is scaled by `clamp(0, 1, rivalOrg / CONTEST_LOW_ORG_TAPER)`, so
- * poaching a party already near 0 Org tapers off rather than cheaply zeroing it
- * out. At or above this Org the rival exposes its full share; at half this Org it
- * exposes half, etc. (Carried over from the retired Contest action.)
- */
-export const CONTEST_LOW_ORG_TAPER = 10 as const;
-
-/**
- * Org-vs-PS blend weight for the per-rival poach exposure (2026-06-25). A rival's
- * exposed fraction of its Org is `W·orgIntensity + (1 − W)·psAdvantage`, where
- * `orgIntensity = rivalOrg / leadRivalOrg` (the strongest rival = 1) and
- * `psAdvantage = clamp(0, 1, (ownPS − rivalPS) / ownPS)`.
- *
- * The old model multiplied Org by `psAdvantage` alone, which hard-zeroed any
- * rival whose PS matched or exceeded the spender's — and since the dominant Org
- * party usually also hoards the most PS, the top party was effectively immune
- * while the weakest (lowest-PS) party bled the most. Blending in Org *size*
- * makes the leading party a primary target by virtue of its share even at PS
- * parity, while PS still rewards out-muscling lower-PS rivals.
- *
- * `W = 0.5` is the single tunable knob: raise toward Org to make size dominate,
- * lower toward PS to restore the strength-gap flavor. Bounded `[0, 1]` so the
- * exposure stays in `[0, 1]` and Org conservation/clamps are unaffected.
- */
-export const POACH_ORG_SHARE_WEIGHT = 0.5 as const;

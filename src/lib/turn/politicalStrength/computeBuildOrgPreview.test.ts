@@ -193,14 +193,16 @@ describe("computeBuildOrgPreview", () => {
     if (!result.ok) expect(result.reason).toBe("auth");
   });
 
-  it("returns ok=false reason=no-headroom when the spender holds 100% and no rival has Org", async () => {
+  it("can add a fixed bucket unit when the spender holds all party-owned units", async () => {
     const soleRow = {
       _id: `${upperRegionId}_${partySeq}`,
       stateId: upperRegionId,
       partyId: String(partySeq),
       countryId,
       organization: 100,
+      organizationUnits: 100,
       politicalStrength: 10,
+      treasury: 10_000_000,
       hasPresence: true,
     };
     db.collectionMocks["statePartyOrg"]!.findOne.mockResolvedValue(soleRow);
@@ -217,8 +219,12 @@ describe("computeBuildOrgPreview", () => {
       authUser: makeAdminUser(),
     });
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe("no-headroom");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.contributionUnits).toBe(1);
+      expect(result.projectedOrganizationUnits).toBe(101);
+      expect(result.projectedGain).toBeGreaterThan(0);
+    }
   });
 
   it("does not mutate any collection (read-only invariant)", async () => {
@@ -239,8 +245,8 @@ describe("computeBuildOrgPreview", () => {
   });
 
   // ── Treasury cost (2026-09-02) ──────────────────────────────────────────
-  // The estimate must price the cash side too, or it over-promises: a partly
-  // funded click yields proportionally less Org than the PS math alone implies.
+  // The estimate must price the cash side too. Once the minimum funding floor
+  // is met, every successful click deposits the same bucket contribution.
 
   async function preview(dbRef: MockDb) {
     const { computeBuildOrgPreview } = await import("./computeBuildOrgPreview");
@@ -292,14 +298,14 @@ describe("computeBuildOrgPreview", () => {
     }
   });
 
-  it("shrinks the projected gain in proportion to a short treasury", async () => {
+  it("keeps the fixed bucket contribution when the treasury part-funds the click", async () => {
     seedOpenState(db);
     db.collectionMocks["partyStrengthPressure"]!.findOne.mockResolvedValue(null);
     const funded = await preview(db);
     expect(funded.ok).toBe(true);
     if (!funded.ok) return;
 
-    // Half the price on hand → half the Org.
+    // Half the price on hand still buys one successful Build Org click.
     vi.clearAllMocks();
     const { checkPartyPresence } = await import("@/lib/turn/partyOrg/presence");
     vi.mocked(checkPartyPresence).mockResolvedValue(true);
@@ -314,7 +320,8 @@ describe("computeBuildOrgPreview", () => {
     expect(short.ok).toBe(true);
     if (short.ok) {
       expect(short.fundedFraction).toBeCloseTo(0.5, 6);
-      expect(short.projectedGain).toBeCloseTo(funded.projectedGain * 0.5, 6);
+      expect(short.contributionUnits).toBe(1);
+      expect(short.projectedGain).toBeCloseTo(funded.projectedGain, 6);
     }
   });
 

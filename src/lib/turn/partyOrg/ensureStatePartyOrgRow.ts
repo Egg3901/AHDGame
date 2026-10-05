@@ -103,6 +103,7 @@ export async function ensureStatePartyOrgRow(
     stateId: args.stateId,
     partyId,
     organization: 0,
+    organizationUnits: 0,
     chairId: null,
     viceChairId: null,
     treasurerId: null,

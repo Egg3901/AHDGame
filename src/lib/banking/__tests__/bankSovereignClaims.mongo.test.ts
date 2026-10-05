@@ -10,6 +10,7 @@ import {
 
 const BANK_ID = new ObjectId("66d000000000000000000002");
 const CLAIM_ID = "bank-sovereign-coupon:US:12:66d000000000000000000002:4";
+type StringIdDocument = { _id: string } & Record<string, unknown>;
 
 describe.runIf(REAL_MONGO_ENABLED)(
   "funded sovereign income counters on isolated real Mongo",
@@ -28,7 +29,7 @@ describe.runIf(REAL_MONGO_ENABLED)(
     });
 
     it("replays a lost acknowledgment without splitting vault cash from its paid-income counter", async () => {
-      await db.collection<{ _id: string } & Record<string, unknown>>("federalBudget").insertOne({
+      await db.collection<StringIdDocument>("federalBudget").insertOne({
         _id: "federal",
         countryId: "US",
         treasuryBalance: 100,
@@ -95,7 +96,9 @@ describe.runIf(REAL_MONGO_ENABLED)(
         },
       }) as unknown as Db;
 
-      const frozen = await db.collection("federalBudget").findOne({ _id: "federal" });
+      const frozen = await db.collection<StringIdDocument>("federalBudget").findOne({
+        _id: "federal",
+      });
       await expect(settleBankSovereignClaims(crashDb, frozen as never, 13)).rejects.toThrow(
         "injected lost Mongo acknowledgment after paired bank credit"
       );
@@ -111,10 +114,14 @@ describe.runIf(REAL_MONGO_ENABLED)(
       expect(afterReplay?.bankCharter?.cashReserves).toBe(15);
       expect(afterReplay?.bankCharter?.sovereignCouponIncomePaidLifetime).toBe(10);
       expect(
-        await db.collection("bankMoneyMoves").countDocuments({ _id: `${CLAIM_ID}:bank:13` })
+        await db
+          .collection<StringIdDocument>("bankMoneyMoves")
+          .countDocuments({ _id: `${CLAIM_ID}:bank:13` })
       ).toBe(1);
       expect(
-        await db.collection("federalBudget").countDocuments({ "bankSovereignClaims.id": CLAIM_ID })
+        await db
+          .collection<StringIdDocument>("federalBudget")
+          .countDocuments({ "bankSovereignClaims.id": CLAIM_ID })
       ).toBe(0);
     });
   }

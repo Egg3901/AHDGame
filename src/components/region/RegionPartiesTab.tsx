@@ -227,7 +227,7 @@ export function RegionPartiesTab({
   const heading = config.headingLabel ?? `Party Organizations in ${regionName}`;
   const description =
     config.description ??
-    `Party organization reflects each party's share of the ${regionNoun} Org pool. Org decays passively each turn; spend Political Strength on Build Org to push it back up.`;
+    `Party organization reflects each party's share of accumulated ${regionNoun} Org units. Build Org adds one fixed unit, and organization can decay if a party becomes inactive here.`;
 
   if (partyOrg.length === 0) {
     return (
