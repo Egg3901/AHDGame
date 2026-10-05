@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import {
   isClientShellUserAgent,
   isInAppWebViewUserAgent,
@@ -113,6 +113,18 @@ const siteUrl = getSiteUrl();
 const defaultDocumentTitle = `${SITE_BRAND} | ${SITE_SUBTITLE}`;
 const GA_MEASUREMENT_ID = "G-5GBG3BHWCZ";
 const GOOGLE_ADS_ID = "AW-18130975758";
+
+/**
+ * Edge to edge on notched phones. Without `cover`, iOS insets the page below
+ * the status bar and content scrolls through the strip above the sticky
+ * navbar. The navbar, drawers, modals and bottom status bar pad themselves
+ * with env(safe-area-inset-*), which only resolves to non-zero under `cover`.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 /**
  * Async so the description and the SEO keywords name the countries that are

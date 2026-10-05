@@ -578,7 +578,7 @@ export function NavbarWrapper({
     <>
       <NavbarTopFlair bootLoading={navBootLoading} />
       {state.isLoading && !useLightweightNav ? (
-        <nav className="sticky top-0 z-50 border-b border-card-border bg-card/50 backdrop-blur-md">
+        <nav className="sticky top-0 z-50 border-b pt-[env(safe-area-inset-top,0px)] border-card-border bg-card/50 backdrop-blur-md">
           <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
             <div className="flex items-center gap-2">
               <Image

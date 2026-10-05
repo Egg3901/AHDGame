@@ -70,7 +70,7 @@ export function StateDrawer({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
-      <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-sm overflow-y-auto border-l border-card-border bg-card p-5 shadow-xl">
+      <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-sm overflow-y-auto border-l border-card-border bg-card p-5 pt-[max(1.25rem,env(safe-area-inset-top))] shadow-xl">
         <div className="mb-4 flex items-start justify-between">
           <div>
             <div className="text-lg font-bold">{row.name}</div>

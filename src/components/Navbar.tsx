@@ -367,7 +367,7 @@ export const Navbar = React.memo(function Navbar({
 
   return (
     <nav
-      className="ahd-navbar-enter sticky top-0 z-50 border-b border-card-border/60 bg-card/50 shadow-panel backdrop-blur-xl"
+      className="ahd-navbar-enter sticky top-0 z-50 border-b pt-[env(safe-area-inset-top,0px)] border-card-border/60 bg-card/50 shadow-panel backdrop-blur-xl"
       aria-label={t("common.mainNavigation")}
       data-feedback-ignore="true"
     >
