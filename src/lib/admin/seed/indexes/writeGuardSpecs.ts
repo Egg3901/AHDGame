@@ -152,6 +152,13 @@ export const GOVERNANCE_WRITE_GUARD_INDEXES: IndexSpecTuple[] = [
     { corporationId: 1, voterCharacterId: 1 },
     { name: "unique_corporation_ceo_vote_per_shareholder", unique: true },
   ],
+  // Mirrored from the ratification-ballot migration. This is the exact upsert
+  // identity, so fresh reset worlds need the same race guard as migrated worlds.
+  [
+    "bargainingRatificationBallots",
+    { campaignId: 1, offerRevision: 1, voterCharacterId: 1 },
+    { name: "unique_ratification_ballot_per_organizer", unique: true, background: true },
+  ],
   // Race guard against duplicate open privatization votes per corp. The
   // vote-open code checks for an existing open vote, but two concurrent opens
   // can both pass the check before either inserts; this partial unique index

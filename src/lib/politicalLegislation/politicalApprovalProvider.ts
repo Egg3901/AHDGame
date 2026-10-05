@@ -90,6 +90,7 @@ export async function loadPoliticalApprovalBases(
   let totalPop = 0;
   for (const doc of docs) {
     const state = stateById.get(doc._id);
+    if (!state) continue;
     const lean = state ? electorateLean(state) : 0;
     const base = round1(
       clamp100(BASE_APPROVAL + approvalComponent(doc.values, lean, countryId, gameState?.preset))

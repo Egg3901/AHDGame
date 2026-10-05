@@ -41,7 +41,8 @@ export function macroResidualFor(
   familyId: string,
   lawTarget: number,
   macro: Record<string, number>,
-  countryId: string
+  countryId: string,
+  year?: number | null
 ): number {
   const paths = TIER2_SOURCES[familyId];
   if (!paths?.length) return 0;
@@ -51,7 +52,7 @@ export function macroResidualFor(
     const raw = macro[path];
     if (raw == null || !Number.isFinite(raw)) continue;
     const [category, metricId] = path.split(".");
-    const score = politicalScoreFromLegacyValue(category, metricId, raw, countryId);
+    const score = politicalScoreFromLegacyValue(category, metricId, raw, countryId, year);
     if (score != null) scores.push(score);
   }
   if (scores.length === 0) return 0;

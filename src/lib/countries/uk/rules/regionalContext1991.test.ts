@@ -66,8 +66,8 @@ describe("UK 1991 regional context", () => {
     const mean = econ.reduce((a, b) => a + b, 0) / econ.length;
     expect(mean).toBeGreaterThan(-2.2);
     expect(mean).toBeLessThan(-1.2);
-    // Social contrast stays composition driven: it is not widened by vote shares.
-    const social = leans.map((l) => l.social);
-    expect(Math.max(...social) - Math.min(...social)).toBeLessThan(0.3);
+    // Social contrast stays composition driven. Verify the actual boundary,
+    // rather than imposing a ceiling on independently authored social inputs.
+    for (const offset of Object.values(context)) expect(offset.socialLean).toBe(0);
   });
 });

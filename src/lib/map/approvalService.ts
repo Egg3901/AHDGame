@@ -1,5 +1,5 @@
 import type { Db } from "mongodb";
-import { findMergedRegionMetrics, findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
+import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import type { State } from "@/lib/db/types";
 import { getEraContext } from "@/lib/era/context";
 import type { CountryId } from "@/lib/constants/countries";
@@ -92,6 +92,7 @@ export async function computeApprovalMap(
   for (const m of allMetrics) {
     const stateId = m._id;
     const state = stateMap.get(stateId);
+    if (!state) continue;
     const approval = calculateStateApproval(
       m,
       nationalAverages,
@@ -109,7 +110,7 @@ export async function computeApprovalMap(
       tooltip: [
         state?.name ?? stateId,
         `Government Approval: ${approval.toFixed(1)}%`,
-        "Based on metrics vs national average",
+        "Political performance and regional conditions",
       ],
     };
   }

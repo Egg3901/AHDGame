@@ -77,7 +77,7 @@ export const INDEX_TARGETS = [
     id: "indexesWriteGuards",
     label: "Indexes — Write Guards",
     description:
-      "Partial-unique indexes blocking double-submit on election entry, endorsements, governance votes, share offers, cabinet nominations, leadership ballots, corp votes",
+      "Partial-unique indexes blocking double-submit on elections, endorsements, labor ratification ballots, leadership ballots, cabinet nominations, and corp votes; nomination read paths",
   },
   {
     id: "indexesPartyNppRework",
@@ -105,8 +105,7 @@ export const INDEX_TARGETS = [
   {
     id: "indexesLedger",
     label: "Indexes — Shadow Ledger",
-    description:
-      "Shadow double-entry ledger: ledgerEntries (~90d TTL), balanceSnapshots, ledgerReconciliations",
+    description: "Shadow double-entry ledger and member-scoped sphere flow history",
   },
   {
     id: "indexesCommodityPrices",
@@ -117,7 +116,7 @@ export const INDEX_TARGETS = [
     id: "indexesIndexFunds",
     label: "Indexes — Index Funds",
     description:
-      "indexFunds, indexFundPositions, indexFundTransactions, indexFundRedemptionQueue, indexFundSnapshots",
+      "index funds, listing petitions, positions, transactions, redemption queue and snapshots",
   },
   {
     id: "indexesApiAccess",
@@ -161,8 +160,7 @@ export const INDEX_TARGETS = [
   {
     id: "indexesConflict",
     label: "Indexes — Conflicts",
-    description:
-      "UNIQUE partial index on conflicts.conflictId — the public number that resolves /world/conflicts/<n>. Two conflicts sharing a number would make one unreachable.",
+    description: "Conflict public-number uniqueness and country/expiry lookup for truces",
   },
   {
     id: "indexesNavair",

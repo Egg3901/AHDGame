@@ -16,6 +16,16 @@ import type { EconomicModelState } from "@/lib/constants/economicModels";
 import type { StateMetrics, StateMetricValue } from "./stateMetrics";
 import type { CrisisEconomicExposure } from "@/lib/livingConflict/rules/economicExposure";
 
+/**
+ * Reset persistence contract:
+ * - `_id` is the authored region identity and is preserved for current regions;
+ *   the finalize pass separately removes obsolete region rows.
+ * - `countryId`, `economic`, `population`, and `lastUpdated` are baseline seed
+ *   fields rewritten by `writeSplitMetrics` after reset.
+ * - Optional runtime fields are cleared by `resetMacroMetricsRuntimeState`
+ *   before bootstrap. Optional seed fields are restored only when the incoming
+ *   preset authors them, preventing `$set` omissions from retaining old state.
+ */
 export interface MacroMetricsDoc {
   /** Bounded crisis pressure feeding actual civilian labour and GDP potential. */
   livingConflictExposure?: CrisisEconomicExposure;

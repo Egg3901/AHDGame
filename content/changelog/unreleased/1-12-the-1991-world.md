@@ -15,4 +15,5 @@ areas: [backend, engine]
 - All 24 Soviet regions are counted at the January opening, and obsolete regional statistics are gone.
 - Military escalation in the Yugoslav crisis removes civilians from the affected regions, and the accepting country pays for the people it receives.
 - War damage destroys part of the fought-over regions' capital, and the state pays to rebuild it over two game years.
+- UK 1991 regions keep their census composition, and age, education and income attitudes follow published 1991 survey data.
 - 2027 worlds get Bulgarian regional demographics, regional populations that match national totals and a modern Turkey profile.

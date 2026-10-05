@@ -17,6 +17,10 @@ export interface GovernmentApproval {
   countryId: CountryId;
   /** 0–100: percentage of population approving the government */
   approvalRating: number;
+  /** Political base and regional contribution consumed by this snapshot. */
+  approvalBase?: number;
+  activeRegionalModifiers?: import("@/lib/utils/approvalModifiers").ActiveModifier[];
+
   /** 0–100: percentage of population disapproving (computed as 100 − approvalRating) */
   disapprovalRating: number;
   /** approvalRating − disapprovalRating (can be negative) */

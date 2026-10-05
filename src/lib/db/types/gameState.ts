@@ -76,6 +76,8 @@ export interface IterationStampFields {
 export interface GameState {
   /** Unique world identity for replay receipts; replaced on each reset. */
   worldEpochId?: string;
+  /** Stable start timestamp for filtering retained event archives by world. */
+  worldEpochStartedAt?: Date;
   /** Written before journal-enabled population planning, distinguishing legacy crash recovery. */
   demographicFlowAttempt?: { worldEpochId: string; turn: number };
   /**

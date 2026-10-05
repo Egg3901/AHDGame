@@ -9,6 +9,7 @@ import {
   loadElectorateGroups,
   weightingFor,
   BASE_APPROVAL,
+  buildFlatMetrics,
   PUBLIC_EXPECTATIONS_MODIFIER,
 } from "@/lib/utils/governmentApproval";
 import { applyModifiers } from "@/lib/utils/approvalModifiers";
@@ -16,6 +17,8 @@ import {
   isPoliticalApprovalCountry,
   loadPoliticalApprovalBases,
 } from "@/lib/politicalLegislation/politicalApprovalProvider";
+import { nationalApprovalFromRegions } from "./rules/nationalApproval";
+import type { PoliticalApprovalBases } from "@/lib/politicalLegislation/politicalApprovalProvider";
 import type { CountryId } from "@/lib/constants/countries";
 
 /**
@@ -85,14 +88,8 @@ export async function recomputeNationalApproval(
   countryId: CountryId,
   prefetched?: RecomputeInputs
 ): Promise<number> {
-  // SP4: playable-country live fallback reads the hybrid political bases — never
-  // the legacy metric scorer (spec §3 no-divergence rule). Checked BEFORE the
-  // inputs are gathered because this branch reads none of them, and it is the only
-  // branch a real country takes: `BOARD_COUNTRIES` currently covers every id in
-  // `COUNTRY_ORDER`. Gathering first cost three discarded queries per call.
   if (isPoliticalApprovalCountry(countryId)) {
-    const bases = await loadPoliticalApprovalBases(db, countryId);
-    return applyModifiers(bases?.national ?? BASE_APPROVAL, [PUBLIC_EXPECTATIONS_MODIFIER]);
+    return (await recomputePoliticalNationalApproval(db, countryId, prefetched)).approval;
   }
 
   const { allStates, allMetrics, nationalAverages, preset, year } =
@@ -115,4 +112,29 @@ export async function recomputeNationalApproval(
     population: statePopMap.get(m._id) ?? 0,
   }));
   return applyModifiers(calculateNationalApproval(stateApprovals), [PUBLIC_EXPECTATIONS_MODIFIER]);
+}
+
+/** Shared fresh-world result for cards and metrics. No averaged-threshold approximation. */
+export async function recomputePoliticalNationalApproval(
+  db: Db,
+  countryId: CountryId,
+  prefetched?: RecomputeInputs,
+  prefetchedBases?: PoliticalApprovalBases | null
+): Promise<ReturnType<typeof nationalApprovalFromRegions>> {
+  const [inputs, bases] = await Promise.all([
+    prefetched ?? gatherInputs(db, countryId),
+    prefetchedBases === undefined ? loadPoliticalApprovalBases(db, countryId) : prefetchedBases,
+  ]);
+  const populations = new Map(
+    inputs.allStates.map((state) => [String(state._id), state.population ?? 0])
+  );
+  return nationalApprovalFromRegions(
+    inputs.allMetrics.map((metrics) => ({
+      base: bases?.byRegion.get(String(metrics._id)) ?? BASE_APPROVAL,
+      population: populations.get(String(metrics._id)) ?? 0,
+      metrics: buildFlatMetrics(metrics),
+    })),
+    { countryId, preset: inputs.preset, year: inputs.year },
+    [PUBLIC_EXPECTATIONS_MODIFIER]
+  );
 }

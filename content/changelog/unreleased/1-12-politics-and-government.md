@@ -17,3 +17,4 @@ areas: [fullstack, engine]
 - From 1994, Japan can pass a bill moving the lower house to 300 constituency seats and 200 regional list seats.
 - Veto-override cards show the vote that actually passed, and court nomination cards publish once.
 - Nigerian chamber leadership results keep the same winner if resolution is retried.
+- The 1991 world opens with its own political board, law levels and regional variation, and national approval uses one calculation everywhere.
