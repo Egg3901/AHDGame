@@ -28,6 +28,7 @@ interface UsersTableProps {
   onRetireCharacter: (userId: string, username: string) => void;
   onDeleteUser: (userId: string, username: string) => void;
   onSetSingleplayerEntitlement: (userId: string, username: string, entitled: boolean) => void;
+  onSetSandboxAccess: (userId: string, username: string, granted: boolean) => void;
 }
 
 export function UsersTable({
@@ -50,6 +51,7 @@ export function UsersTable({
   onRetireCharacter,
   onDeleteUser,
   onSetSingleplayerEntitlement,
+  onSetSandboxAccess,
 }: UsersTableProps) {
   const columns: ResponsiveTableColumn<UserData>[] = [
     {
@@ -338,6 +340,14 @@ export function UsersTable({
                             user.username,
                             !user.singleplayerEntitled
                           );
+                        }}
+                      />
+                      <MenuItem
+                        label={user.sandboxAccessGranted ? "Revoke sandbox" : "Grant sandbox"}
+                        title="Sandbox tester access without supporter perks (needs the Sandbox tester access switch on)"
+                        onClick={() => {
+                          setMenuUserId(null);
+                          onSetSandboxAccess(user.id, user.username, !user.sandboxAccessGranted);
                         }}
                       />
                       <MenuItem

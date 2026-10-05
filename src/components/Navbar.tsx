@@ -78,6 +78,7 @@ interface NavbarProps {
     canSeeCampaignManager?: boolean;
     patreonTier?: string | null;
     isPatronActive?: boolean;
+    sandboxTesterAccess?: boolean;
   };
   showProfile?: boolean;
   homeState?: {
