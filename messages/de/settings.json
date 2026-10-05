@@ -33,7 +33,7 @@
       "backToDashboard": "Zurück zum Dashboard",
       "username": "Benutzername",
       "email": "E-Mail",
-      "contactAdmin": "Wende dich an einen Admin, um Benutzernamen oder E-Mail zu ändern.",
+      "contactAdmin": "Wende dich an einen Admin, um deinen Benutzernamen zu ändern.",
       "name": "Name",
       "imperialContactAdmin": "Wende dich an einen Admin, um den Namen des imperialen Charakters zu ändern.",
       "avatar": "Avatar",
@@ -89,6 +89,20 @@
         "expired": "Apple-Verknüpfung abgelaufen. Bitte versuche es erneut.",
         "denied": "Apple-Autorisierung wurde abgelehnt."
       }
+    },
+    "email": {
+      "noneOnFile": "Keine E-Mail hinterlegt",
+      "noneHint": "Du hast dich mit Discord registriert, deshalb ist noch keine E-Mail hinterlegt. Füge eine hinzu, um Passwort-Resets und Kontohinweise per E-Mail zu erhalten.",
+      "add": "E-Mail hinzufügen",
+      "change": "Ändern",
+      "newEmail": "Neue E-Mail",
+      "verifyHint": "Wir senden einen Bestätigungslink an diese Adresse. Die Änderung gilt, sobald du ihn öffnest.",
+      "sendLink": "Bestätigungslink senden",
+      "sending": "Wird gesendet…",
+      "sent": "Bestätigungslink an {email} gesendet. Öffne ihn innerhalb von 1 Stunde.",
+      "failed": "Die E-Mail-Änderung konnte nicht gestartet werden.",
+      "errorRequired": "Gib eine E-Mail-Adresse ein.",
+      "errorPasswordRequired": "Gib dein aktuelles Passwort ein."
     },
     "sections": {
       "accountProfile": { "label": "Profil", "summary": "Benutzername & E-Mail" },

@@ -12,6 +12,7 @@ import { createPasswordReset, PASSWORD_RESETS_COLLECTION } from "@/lib/passwordR
 import { isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import type { PasswordResetDoc } from "@/lib/passwordReset";
 import { sendEmail } from "@/lib/email";
+import { isPlaceholderEmail } from "@/lib/auth/placeholderEmail";
 import type { User } from "@/lib/db/types";
 
 /** Per-identifier limit: 3 requests per 15 minutes. Deliberately tighter than
@@ -109,7 +110,8 @@ export async function POST(request: Request) {
     const url = `${baseUrl}/reset-password?token=${rawToken}`;
 
     let emailed = false;
-    if (user.email) {
+    // Discord sign-ups carry an undeliverable placeholder; they get the Discord DM below.
+    if (!isPlaceholderEmail(user.email)) {
       const { html, text } = resetEmailContent(url);
       const result = await sendEmail({
         to: user.email,
