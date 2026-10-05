@@ -107,8 +107,9 @@ describe("C1 — capacity exits cannot mint", () => {
       founding: true,
     }).totalAnchor;
     const list = sectorCapacityListValueAnchor({ sectorType: TYPE, capitalStock: UNITS }, YEAR, 1);
-    // Founding now pays the same undiscounted nominal construction benchmark.
-    expect(list / paid).toBeCloseTo(1, 6);
+    // The wedge that used to be minted: list is 10x what founding paid.
+    expect(list / paid).toBeCloseTo(10, 6);
+    // Restructuring used to return 0.85 x list = 8.5x the spend. Now:
     const book = sectorBookValueAnchor(
       {
         sectorType: TYPE,
@@ -319,11 +320,11 @@ describe("C1 — sectorTurn maintains the paid basis", () => {
     const book = set.capacityBookAnchor as number;
     const stock = set.capitalStock as number;
     expect(stock).toBeGreaterThan(0);
-    // The basis carries paid cash less depreciation, including when the founder
-    // pays the full nominal construction benchmark.
+    // The basis is the discounted cash, less that turn's depreciation — NOT the
+    // list price the discount was taken off.
     expect(book).toBeGreaterThan(paid * 0.99);
     expect(book).toBeLessThanOrEqual(paid);
-    expect(book).toBeLessThanOrEqual(
+    expect(book).toBeLessThan(
       sectorCapacityListValueAnchor({ sectorType: TYPE, capitalStock: stock }, YEAR, 1)
     );
     // ...and the whole point: liquidating right now loses money.

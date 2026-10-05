@@ -7,7 +7,11 @@ import {
   sumConstructionInProgressAnchor,
   sumSectorBookValueAnchor,
 } from "./sectorProfitBasis";
-import { calculateDailyGrowthCost, GROWTH_RATE_TURNS_PER_YEAR } from "@/lib/constants/corporations";
+import {
+  calculateDailyGrowthCost,
+  GROWTH_COST_MULTIPLIER,
+  GROWTH_RATE_TURNS_PER_YEAR,
+} from "@/lib/constants/corporations";
 import {
   CAPACITY_ANCHOR_YEAR,
   capacityPricePerUnit,
@@ -147,13 +151,19 @@ describe("sectorBookValueAnchor (D11)", () => {
 
   const CAPACITY = 250;
 
-  it("prices a flip-identity sector at one day of capacity revenue", () => {
+  it("prices a flip-identity sector at 3.0 × RPU × capacity at the anchor year", () => {
     const book = sectorBookValueAnchor(
       { sectorType: "manufacturing", capitalStock: CAPACITY },
       CAPACITY_ANCHOR_YEAR,
       1
     );
-    expect(book).toBeCloseTo(revenuePerCapacityUnit("manufacturing", 1) * CAPACITY, 6);
+    // GROWTH_COST_MULTIPLIER is the 3.0 in "a unit of capacity costs 3x the
+    // revenue it yields" — the identity the legacy growth path priced on.
+    expect(book).toBeCloseTo(
+      GROWTH_COST_MULTIPLIER * revenuePerCapacityUnit("manufacturing", 1) * CAPACITY,
+      6
+    );
+    expect(GROWTH_COST_MULTIPLIER).toBe(3.0);
   });
 
   it("adds construction in progress on top of built capacity", () => {
