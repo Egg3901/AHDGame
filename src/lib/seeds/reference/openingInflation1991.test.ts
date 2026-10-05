@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Db } from "mongodb";
+import { ALL_COUNTRY_IDS } from "@/lib/constants/countries";
 import type { FederalBudget } from "@/lib/db/types";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { calculateCountryInflation, MAX_INFLATION, MIN_INFLATION } from "@/lib/budget/inflation";
@@ -86,7 +87,13 @@ describe("1991 opening inflation seed contract (#3317)", () => {
     async (countryId, opening) => {
       const budget = structuredClone(opening) as unknown as FederalBudget;
       const seeded = budget.economicFactors.inflationRate;
-      const first = await calculateCountryInflation(db as unknown as Db, countryId, budget);
+      const validatedCountryId = ALL_COUNTRY_IDS.find((id) => id === countryId);
+      if (!validatedCountryId) throw new Error(`Unknown seeded country: ${countryId}`);
+      const first = await calculateCountryInflation(
+        db as unknown as Db,
+        validatedCountryId,
+        budget
+      );
       expect(Math.abs(first - seeded)).toBeLessThanOrEqual(1.5 + 1e-9);
 
       const index = advanceHouseholdPriceIndex(budget.economicFactors.householdPriceIndex, first);
