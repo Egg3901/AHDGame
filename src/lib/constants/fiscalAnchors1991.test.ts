@@ -34,34 +34,43 @@ const REGIONS = {
 describe("1991 fiscal anchors", () => {
   const budgets = getNationalBudgetSeedConfigsForPreset("1991-default");
 
-  it.each(FISCAL_ANCHOR_COUNTRIES_1991)("%s: legacy GDP over the rate is the published US$ GDP", (c) => {
-    const a = FISCAL_ANCHORS_1991[c];
-    expect(gdp1991LegacyLcu(c) / a.lcuPerUsd / a.wdiGdpUsd).toBeGreaterThan(0.9995);
-    expect(gdp1991LegacyLcu(c) / a.lcuPerUsd / a.wdiGdpUsd).toBeLessThan(1.0005);
-  });
-
-  it.each(FISCAL_ANCHOR_COUNTRIES_1991)("%s: forex table, era config, budget and regions agree", (c) => {
-    const a = FISCAL_ANCHORS_1991[c];
-    expect(INITIAL_RATES_1991[c]).toBe(a.lcuPerUsd);
-    const cfg = getCountryConfig(c, "1991-default");
-    expect(cfg.usdExchangeRate).toBeCloseTo(1 / a.lcuPerUsd, 12);
-    const budget = budgets.find((b) => b.countryId === c)!;
-    expect(budget.gdp).toBeCloseTo(gdp1991LegacyLcu(c), -2);
-    expect(budget.currencyCode).toBe(a.currencyCode);
-    const regionSum = REGIONS[c].reduce((s, r) => s + r.gdp, 0);
-    expect(regionSum * 1_000_000).toBeCloseTo(budget.gdp, -6);
-    // Converted with the era anchor, the seeded GDP is the real dollar economy.
-    expect((budget.gdp * cfg.usdExchangeRate) / a.wdiGdpUsd).toBeCloseTo(1, 3);
-  });
-
-  it.each(FISCAL_ANCHOR_COUNTRIES_1991)("%s: debt follows the sourced IMF share where one exists", (c) => {
-    const a = FISCAL_ANCHORS_1991[c];
-    const b = budgets.find((x) => x.countryId === c)!;
-    if (a.govGrossDebtPctGdp != null) {
-      expect(b.debt.principal / b.gdp).toBeCloseTo(a.govGrossDebtPctGdp / 100, 6);
+  it.each(FISCAL_ANCHOR_COUNTRIES_1991)(
+    "%s: legacy GDP over the rate is the published US$ GDP",
+    (c) => {
+      const a = FISCAL_ANCHORS_1991[c];
+      expect(gdp1991LegacyLcu(c) / a.lcuPerUsd / a.wdiGdpUsd).toBeGreaterThan(0.9995);
+      expect(gdp1991LegacyLcu(c) / a.lcuPerUsd / a.wdiGdpUsd).toBeLessThan(1.0005);
     }
-    expect(b.debt.ceiling).toBeGreaterThan(b.debt.principal);
-  });
+  );
+
+  it.each(FISCAL_ANCHOR_COUNTRIES_1991)(
+    "%s: forex table, era config, budget and regions agree",
+    (c) => {
+      const a = FISCAL_ANCHORS_1991[c];
+      expect(INITIAL_RATES_1991[c]).toBe(a.lcuPerUsd);
+      const cfg = getCountryConfig(c, "1991-default");
+      expect(cfg.usdExchangeRate).toBeCloseTo(1 / a.lcuPerUsd, 12);
+      const budget = budgets.find((b) => b.countryId === c)!;
+      expect(budget.gdp).toBeCloseTo(gdp1991LegacyLcu(c), -2);
+      expect(budget.currencyCode).toBe(a.currencyCode);
+      const regionSum = REGIONS[c].reduce((s, r) => s + r.gdp, 0);
+      expect(regionSum * 1_000_000).toBeCloseTo(budget.gdp, -6);
+      // Converted with the era anchor, the seeded GDP is the real dollar economy.
+      expect((budget.gdp * cfg.usdExchangeRate) / a.wdiGdpUsd).toBeCloseTo(1, 3);
+    }
+  );
+
+  it.each(FISCAL_ANCHOR_COUNTRIES_1991)(
+    "%s: debt follows the sourced IMF share where one exists",
+    (c) => {
+      const a = FISCAL_ANCHORS_1991[c];
+      const b = budgets.find((x) => x.countryId === c)!;
+      if (a.govGrossDebtPctGdp != null) {
+        expect(b.debt.principal / b.gdp).toBeCloseTo(a.govGrossDebtPctGdp / 100, 6);
+      }
+      expect(b.debt.ceiling).toBeGreaterThan(b.debt.principal);
+    }
+  );
 
   it.each(["AT", "FI", "GR"] as const)(
     "%s: carried 1979 mix is rescaled so spending plus interest hits the sourced share",
