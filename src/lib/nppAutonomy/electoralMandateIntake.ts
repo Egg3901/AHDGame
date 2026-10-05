@@ -46,7 +46,7 @@ export async function loadElectoralMandate(
   if (!Number.isFinite(sequentialId)) return null;
 
   const party = await db
-    .collection<Party>("parties")
+    .collection<Party>("politicalParties")
     .findOne(
       { countryId, sequentialId },
       { projection: { economicPosition: 1, socialPosition: 1 } }
