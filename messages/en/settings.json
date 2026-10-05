@@ -33,7 +33,7 @@
       "backToDashboard": "Back to Dashboard",
       "username": "Username",
       "email": "Email",
-      "contactAdmin": "Contact an admin to change your username or email.",
+      "contactAdmin": "Contact an admin to change your username.",
       "name": "Name",
       "imperialContactAdmin": "Contact an admin to change the imperial character name.",
       "avatar": "Avatar",
@@ -667,6 +667,20 @@
       },
       "mail": "Direct-message alerts",
       "mailHint": "Show unread message badges. Messages are still delivered and available in your inbox when muted."
+    },
+    "email": {
+      "noneOnFile": "No email on file",
+      "noneHint": "You signed up with Discord, so there is no email on your account yet. Add one to get password resets and account notices by email.",
+      "add": "Add email",
+      "change": "Change",
+      "newEmail": "New email",
+      "verifyHint": "We will email a confirmation link to this address. The change takes effect when you open it.",
+      "sendLink": "Send confirmation link",
+      "sending": "Sending…",
+      "sent": "Confirmation link sent to {email}. Open it within 1 hour to finish.",
+      "failed": "Could not start the email change.",
+      "errorRequired": "Enter an email address.",
+      "errorPasswordRequired": "Enter your current password."
     }
   }
 }
