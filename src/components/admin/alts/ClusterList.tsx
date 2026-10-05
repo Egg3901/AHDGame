@@ -249,9 +249,7 @@ function ClusterCard({
 
       <div className="flex items-start justify-between gap-3 pl-1">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted">
-            Wanted
-          </div>
+          <div className="text-body-sm font-medium text-muted">Wanted</div>
           <div className="mt-0.5 text-sm font-semibold tracking-tight">
             {cluster.size} account{cluster.size === 1 ? "" : "s"}
           </div>
@@ -287,9 +285,7 @@ function ClusterCard({
             <div className="min-w-0 flex-1">
               <SuspectNameButton member={m} />
               {m.role && (
-                <div className="text-[10px] font-medium uppercase tracking-wide text-muted">
-                  {ROLE_LABEL[m.role]}
-                </div>
+                <div className="text-body-sm font-medium text-muted">{ROLE_LABEL[m.role]}</div>
               )}
               <DiscordContact
                 discordId={m.discordId}

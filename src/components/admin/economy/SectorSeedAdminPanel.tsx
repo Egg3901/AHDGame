@@ -184,7 +184,7 @@ export function SectorSeedAdminPanel() {
       {/* Header + auto-seed toggle */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h3 className="text-sm font-semibold mb-1">Distress-Weighted Sector Seed</h3>
+          <h3 className="text-sm font-semibold mb-1">Distress-weighted sector seed</h3>
           <p className="text-xs text-muted max-w-xl">
             Boosts unowned sector revenue based on economic distress signals (commodity price
             ratios, supply/demand). The most-distressed sectors get the full max boost; healthiest
@@ -249,14 +249,14 @@ export function SectorSeedAdminPanel() {
           disabled={previewLoading || maxBoostPct === 0}
           className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-background/60 transition-colors disabled:opacity-40"
         >
-          {previewLoading ? "Loading…" : "Dry Run"}
+          {previewLoading ? "Loading…" : "Dry run"}
         </button>
         {preview && !result && (
           <button
             onClick={() => setConfirming((c) => !c)}
             className="text-xs px-3 py-1.5 rounded border border-warning/40 text-warning hover:bg-warning/10 transition-colors"
           >
-            Seed Underdeveloped Sectors ({maxBoostPct}% max)
+            Seed underdeveloped sectors ({maxBoostPct}% max)
           </button>
         )}
       </div>
@@ -317,7 +317,7 @@ export function SectorSeedAdminPanel() {
 
       <div className="rounded-xl border border-card-border bg-card px-4 py-4 space-y-3">
         <div>
-          <h4 className="text-sm font-semibold mb-1">Fix Captured Markets</h4>
+          <h4 className="text-sm font-semibold mb-1">Fix captured markets</h4>
           <p className="text-xs text-muted max-w-xl">
             Repairs national-corporation-captured markets: absorbs erroneous unowned revenue and
             merges player/NPC sectors only where enacted law authorized corp takings (not
@@ -330,7 +330,7 @@ export function SectorSeedAdminPanel() {
             disabled={fixLoading}
             className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-background/60 transition-colors disabled:opacity-40"
           >
-            {fixLoading && !fixConfirming ? "Loading…" : "Preview Fix"}
+            {fixLoading && !fixConfirming ? "Loading…" : "Preview fix"}
           </button>
           {fixPreview && fixPreviewTotalItems(fixPreview) > 0 && !fixConfirming && (
             <button
@@ -373,7 +373,7 @@ export function SectorSeedAdminPanel() {
               disabled={fixLoading}
               className="px-3 py-1 rounded bg-warning text-warning-foreground text-xs font-medium hover:opacity-90 disabled:opacity-50"
             >
-              {fixLoading ? "Fixing…" : "Confirm Fix"}
+              {fixLoading ? "Fixing…" : "Confirm fix"}
             </button>
             <button
               onClick={() => setFixConfirming(false)}
@@ -392,8 +392,8 @@ function PreviewTable({ preview }: { preview: SeedPreviewResponse }) {
   return (
     <div className="rounded-xl border border-card-border bg-card overflow-hidden">
       <div className="px-4 py-3 border-b border-card-border flex items-center justify-between">
-        <span className="text-xs font-semibold text-muted uppercase tracking-wider">
-          Dry Run Preview — {preview.totalDocs} docs
+        <span className="text-body-sm font-medium text-muted">
+          Dry run preview — {preview.totalDocs} docs
         </span>
         <span className="text-sm font-semibold text-success">
           +{fmtM(preview.totalProjectedDelta)} total injection
@@ -404,10 +404,7 @@ function PreviewTable({ preview }: { preview: SeedPreviewResponse }) {
           <thead className="bg-background/50">
             <tr>
               {["Sector", "Boost", "Current (all states)", "Delta"].map((h) => (
-                <th
-                  key={h}
-                  className="px-4 py-2 text-left text-[10px] font-medium text-muted uppercase tracking-wider"
-                >
+                <th key={h} className="px-4 py-2 text-left text-body-sm font-medium text-muted">
                   {h}
                 </th>
               ))}

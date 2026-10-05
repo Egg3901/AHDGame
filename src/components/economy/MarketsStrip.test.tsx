@@ -15,10 +15,10 @@ const markets = {
 };
 
 describe("MarketsStrip", () => {
-  it("renders the Stock Market and Forex handoff cards", () => {
+  it("renders the Stock market and Forex handoff cards", () => {
     render(<MarketsStrip countryId="US" markets={markets} />);
 
-    const stock = screen.getByRole("link", { name: /Stock Market/ });
+    const stock = screen.getByRole("link", { name: /Stock market/ });
     expect(stock.getAttribute("href")).toBe("/country/us/stockmarket");
     // `stockMarketCap` is anchor-denominated (lib/stockExchange/aggregate), so it
     // renders through formatAmount exactly as the same figure does on the stock
@@ -33,10 +33,10 @@ describe("MarketsStrip", () => {
     expect(forex.textContent).toContain("₳1 = $1.04");
   });
 
-  it("does not duplicate the Central Bank or National Budget cards (those live in the pulse strip)", () => {
+  it("does not duplicate the Central Bank or National budget cards (those live in the pulse strip)", () => {
     render(<MarketsStrip countryId="US" markets={markets} />);
     expect(screen.queryByRole("link", { name: /Central Bank/ })).toBeNull();
-    expect(screen.queryByRole("link", { name: /National Budget/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /National budget/ })).toBeNull();
   });
 
   it("renders dashes when market stats are missing", () => {

@@ -66,7 +66,7 @@ export function MoneyPanel({ userId, totals, recent }: MoneyPanelProps) {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] text-left text-xs">
               <thead>
-                <tr className="border-b border-card-border/70 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                <tr className="border-b border-card-border/70 text-sm font-semibold text-foreground">
                   <th className="py-1.5 pr-3 font-semibold">Type</th>
                   <th className="py-1.5 pr-3 font-semibold">Subject</th>
                   <th className="py-1.5 pr-3 font-semibold">Counterparty</th>
@@ -140,9 +140,7 @@ function TotalTile({
 }) {
   return (
     <div className="rounded-lg border border-card-border/70 bg-card-elevated/40 px-3 py-2.5">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-        {label}
-      </div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div
         className={`mt-1 text-lg font-bold tabular-nums tracking-tight ${toneClass}`}
         title={`${sign}${value.toLocaleString("en-US")} (anchor currency)`}

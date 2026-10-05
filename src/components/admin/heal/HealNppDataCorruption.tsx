@@ -64,7 +64,7 @@ export function HealNppDataCorruption() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal NPP Data Corruption</h3>
+        <h3 className="font-semibold text-sm">Heal NPP data corruption</h3>
         <p className="mt-1 text-xs text-muted">
           Fixes UK StatePartyOrg cap contribution key mismatch (house→commons) and resets any NaN
           values in NPP stats (funds, actionPoints, politicalInfluence, favorability,
@@ -103,7 +103,7 @@ export function HealNppDataCorruption() {
           </p>
           {diagnostic.totalIssues > 0 && (
             <div className="mt-2 space-y-1">
-              <p className="font-medium text-muted">UK StatePartyOrg:</p>
+              <p className="font-medium text-muted">UK statePartyOrg:</p>
               {diagnostic.ukSpoWithHouseKey > 0 && (
                 <p className="ml-2">
                   Stale house key:{" "}

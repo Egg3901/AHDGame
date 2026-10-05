@@ -190,7 +190,7 @@ export default function ShareIssuanceModal({
         <div className="flex items-start justify-between border-b border-card-border px-6 py-4">
           <div>
             <h2 id={titleId} className="text-base font-semibold text-foreground">
-              Issue Shares
+              Issue shares
             </h2>
             <p className="mt-0.5 text-sm text-muted">
               {corporation.name}
@@ -235,7 +235,7 @@ export default function ShareIssuanceModal({
                   : "bg-card-elevated text-muted hover:text-foreground",
               ].join(" ")}
             >
-              To Public Float
+              To public float
             </button>
             <button
               type="button"
@@ -250,7 +250,7 @@ export default function ShareIssuanceModal({
                   : "bg-card-elevated text-muted hover:text-foreground",
               ].join(" ")}
             >
-              CEO Purchase
+              CEO purchase
             </button>
           </div>
           <p className="mt-2 text-xs text-muted">
@@ -488,7 +488,7 @@ export default function ShareIssuanceModal({
               >
                 {mode === "public"
                   ? `Issue ${newSharesToIssue.toLocaleString("en-US")} Shares`
-                  : "Purchase at Premium"}
+                  : "Purchase at premium"}
               </Button>
             )}
           </div>

@@ -65,7 +65,7 @@ export function HealCorporationCeoVacant() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Missing CEO Vacant Field</h3>
+        <h3 className="font-semibold text-sm">Heal missing CEO vacant field</h3>
         <p className="mt-1 text-xs text-muted">
           Finds corporations with an active CEO but missing the ceoVacant field. Sets ceoVacant:
           false and creates a CEO self-vote so the field is properly initialized.
@@ -85,7 +85,7 @@ export function HealCorporationCeoVacant() {
           disabled={loading}
           className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
         >
-          {loading ? "Healing..." : "Heal All"}
+          {loading ? "Healing..." : "Heal all"}
         </button>
       </div>
 

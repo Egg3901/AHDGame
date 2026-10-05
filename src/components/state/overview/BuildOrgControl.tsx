@@ -184,7 +184,7 @@ export function BuildOrgControl({
                     : buildOrgTitle
                 }
               >
-                {busy ? "Building…" : "Build Org with state PS"}
+                {busy ? "Building…" : "Build org with state PS"}
               </button>
             )}
             {eligibleScopes?.national && (
@@ -199,7 +199,7 @@ export function BuildOrgControl({
                     : buildOrgTitle
                 }
               >
-                {busy ? "Building…" : "Build Org with national PS"}
+                {busy ? "Building…" : "Build org with national PS"}
               </button>
             )}
           </>
@@ -211,7 +211,7 @@ export function BuildOrgControl({
             className={buttonClass}
             title={buildOrgTitle}
           >
-            {busy ? "Building…" : "Build Org"}
+            {busy ? "Building…" : "Build org"}
           </button>
         )}
         {!viewerPartyId && (

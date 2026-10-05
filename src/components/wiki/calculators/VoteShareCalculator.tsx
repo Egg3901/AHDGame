@@ -31,14 +31,14 @@ export function VoteShareCalculator() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
       {/* Title */}
-      <h3 className="text-xl font-bold text-foreground mb-6">Vote Share Calculator</h3>
+      <h3 className="text-xl font-bold text-foreground mb-6">Vote share calculator</h3>
 
       {/* Input Sliders */}
       <div className="space-y-6 mb-8">
         {/* Your Influence */}
         <div className="space-y-2">
           <label htmlFor="influence-slider" className="block text-sm font-medium text-foreground">
-            Your Influence: <span className="text-muted">{influence}</span>
+            Your influence: <span className="text-muted">{influence}</span>
           </label>
           <Slider
             id="influence-slider"
@@ -57,7 +57,7 @@ export function VoteShareCalculator() {
             htmlFor="favorability-slider"
             className="block text-sm font-medium text-foreground"
           >
-            Your Favorability: <span className="text-muted">{favorability}</span>
+            Your favorability: <span className="text-muted">{favorability}</span>
           </label>
           <Slider
             id="favorability-slider"
@@ -89,7 +89,7 @@ export function VoteShareCalculator() {
         {/* Opponent Influence */}
         <div className="space-y-2">
           <label htmlFor="opponent-slider" className="block text-sm font-medium text-foreground">
-            Opponent Influence: <span className="text-muted">{opponentInfluence}</span>
+            Opponent influence: <span className="text-muted">{opponentInfluence}</span>
           </label>
           <Slider
             id="opponent-slider"
@@ -106,7 +106,7 @@ export function VoteShareCalculator() {
       {/* Result Display */}
       <div className="bg-muted/30 rounded-lg p-6 mb-4 text-center">
         <div className="mb-2">
-          <span className="text-sm font-medium text-muted">Estimated Vote Share</span>
+          <span className="text-sm font-medium text-muted">Estimated vote share</span>
         </div>
         <div className={`text-5xl font-bold mb-2 ${getColorClass()}`}>{voteShare.toFixed(1)}%</div>
         <div className={`text-lg font-semibold ${getColorClass()}`}>{getStatusText()}</div>

@@ -79,21 +79,21 @@ export function TreasuryFundingInsightsCard({
       </div>
       <div className="grid gap-4 xl:grid-cols-3">
         <MetricList
-          title="Recent Transfer Recipients"
+          title="Recent transfer recipients"
           description="States that have taken the most recent national treasury support."
           items={recentTransferRecipients}
           currencyCode={currencyCode}
           valueLabel={(item) => formatCurrency(item.recentTransferAmount, currencyCode)}
         />
         <MetricList
-          title="Lowest Treasury States"
+          title="Lowest treasury states"
           description="The most cash-starved state parties right now."
           items={lowestTreasuryStates}
           currencyCode={currencyCode}
           valueLabel={(item) => formatCurrency(item.treasury, currencyCode)}
         />
         <MetricList
-          title="Growth Leaders"
+          title="Growth leaders"
           description="State parties generating the strongest organization growth per turn."
           items={growthLeaders}
           currencyCode={currencyCode}

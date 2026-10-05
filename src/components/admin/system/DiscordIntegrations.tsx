@@ -49,24 +49,24 @@ interface ConfigPayload {
 const GENERAL_SECTIONS: { key: GeneralKey; label: string; description: string }[] = [
   {
     key: "game",
-    label: "Game Events Webhook",
+    label: "Game events webhook",
     description:
       "Receives: election results, bill passages, government formation/collapse, leadership elections, new primaries opening. Also the catch-all feed for countries with no webhook of their own.",
   },
   {
     key: "news",
-    label: "News Channel Webhook",
+    label: "News channel webhook",
     description: "Receives: player news posts from the in-game news feed.",
   },
   {
     key: "suggestions",
-    label: "Player Suggestions Webhook",
+    label: "Player suggestions webhook",
     description:
       "Receives: new posts to the player suggestion forum, including from the in-game submit flow. Use Backfill to Discord to post rich embeds for older rows that were never synced.",
   },
   {
     key: "changelog",
-    label: "Changelog Webhook",
+    label: "Changelog webhook",
     description:
       "Receives: patch notes from content/changelog/public/ posts, categorised with colour-coded embeds per section. Updates to previously posted versions only send the new items.",
   },
@@ -303,7 +303,7 @@ export function DiscordIntegrations() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold text-white mb-1">Discord Webhooks</h3>
+        <h3 className="text-lg font-semibold text-white mb-1">Discord webhooks</h3>
         <p className="text-sm text-muted">
           Configure Discord webhook URLs to broadcast game events and player news posts. Leave blank
           to disable. Country channels are listed for every country enabled for players.
@@ -335,10 +335,10 @@ export function DiscordIntegrations() {
               {section.key === "changelog"
                 ? testingChangelog === "latest"
                   ? "Sending…"
-                  : "Post Latest Version"
+                  : "Post latest version"
                 : testing === section.key
                   ? "Sending…"
-                  : "Send Test"}
+                  : "Send test"}
             </button>
 
             {section.key === "changelog" ? (
@@ -347,7 +347,7 @@ export function DiscordIntegrations() {
                 disabled={!general.changelog || testingChangelog === "updates"}
                 className={BUTTON_CLASS}
               >
-                {testingChangelog === "updates" ? "Syncing…" : "Sync All Updates"}
+                {testingChangelog === "updates" ? "Syncing…" : "Sync all updates"}
               </button>
             ) : null}
 
@@ -367,7 +367,7 @@ export function DiscordIntegrations() {
         ))}
 
         <div className="pt-2">
-          <h4 className="text-sm font-semibold text-white mb-1">Country Events</h4>
+          <h4 className="text-sm font-semibold text-white mb-1">Country events</h4>
           <p className="text-xs text-muted mb-3">
             One channel per player-enabled country. Enable or disable countries in Admin Panel &gt;
             Countries — a disabled country&apos;s URL is retained but its channel stops receiving
@@ -390,7 +390,7 @@ export function DiscordIntegrations() {
                     disabled={(!country.url && !general.game) || testing === country.countryId}
                     className={BUTTON_CLASS}
                   >
-                    {testing === country.countryId ? "Sending…" : "Send Test"}
+                    {testing === country.countryId ? "Sending…" : "Send test"}
                   </button>
                 </WebhookField>
               ))
@@ -401,7 +401,7 @@ export function DiscordIntegrations() {
         <div className="rounded-lg border border-white/10 bg-white/5 p-4 space-y-3">
           <div>
             <label className="block text-sm font-medium text-white mb-1">
-              Test Election Results
+              Test election results
             </label>
             <p className="text-xs text-muted mb-3">
               Send test election result embeds using the most recent election data. Each
@@ -465,7 +465,7 @@ export function DiscordIntegrations() {
           disabled={saving || !loaded}
           className="px-4 py-2 rounded-md bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
-          {saving ? "Saving…" : "Save Webhooks"}
+          {saving ? "Saving…" : "Save webhooks"}
         </button>
 
         {ownershipConflict && (

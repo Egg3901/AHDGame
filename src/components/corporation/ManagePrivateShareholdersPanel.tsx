@@ -164,7 +164,7 @@ export function ManagePrivateShareholdersPanel({
       <header className="flex items-baseline justify-between gap-3">
         <div>
           <h2 className="text-h4 font-semibold text-foreground">
-            {isCeo ? "Private Shareholders" : `Share Offer from ${corporationName}`}
+            {isCeo ? "Private shareholders" : `Share Offer from ${corporationName}`}
           </h2>
           {isCeo && (
             <p className="text-body-sm text-muted-foreground">

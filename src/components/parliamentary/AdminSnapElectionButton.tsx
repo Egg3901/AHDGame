@@ -62,7 +62,7 @@ export function AdminSnapElectionButton({ countryId, onDone }: Props) {
       onClick={() => setConfirming(true)}
       className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning hover:bg-warning/20 transition-colors"
     >
-      Trigger Snap Election
+      Trigger snap election
     </button>
   );
 }

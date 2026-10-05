@@ -198,7 +198,7 @@ export default function GovernmentVotePanel({
                 : "border-error/30 bg-error/10 hover:bg-error/20"
             }`}
           >
-            {viewerVote === "nay" ? "✓ Nay" : "Vote Nay"}
+            {viewerVote === "nay" ? "✓ Nay" : "Vote nay"}
           </button>
         </div>
       )}

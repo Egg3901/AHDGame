@@ -188,7 +188,7 @@ export function MailComposerModal({ mode, onClose }: MailComposerModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-foreground">
-            {isMail ? "Send Mail" : "Shareholder Address"}
+            {isMail ? "Send mail" : "Shareholder address"}
           </h2>
           <button
             onClick={onClose}
@@ -213,7 +213,7 @@ export function MailComposerModal({ mode, onClose }: MailComposerModalProps) {
                 </Link>
               </>
             ) : (
-              "To: All Shareholders"
+              "To: All shareholders"
             )}
           </p>
 
@@ -292,7 +292,7 @@ export function MailComposerModal({ mode, onClose }: MailComposerModalProps) {
               disabled={state.submitting || state.retryAfterSeconds !== null}
               className="w-full rounded-lg border border-blue-600/40 bg-blue-500/10 px-3 py-2 text-sm font-medium text-blue-300 transition-colors hover:bg-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {state.submitting ? "Sending..." : isMail ? "Send Mail" : "Send Address"}
+              {state.submitting ? "Sending..." : isMail ? "Send mail" : "Send address"}
             </button>
           )}
         </div>

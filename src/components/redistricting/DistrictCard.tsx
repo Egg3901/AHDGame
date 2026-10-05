@@ -112,7 +112,7 @@ export function DistrictCard({
             disabled={busy}
             className="ml-2 rounded border border-card-border px-2 py-0.5 text-[10px] hover:border-primary disabled:opacity-40"
           >
-            {busy ? "…" : "Campaign Here"}
+            {busy ? "…" : "Campaign here"}
           </button>
         )}
         {msg && <span className="ml-2 text-[10px] text-muted">{msg}</span>}

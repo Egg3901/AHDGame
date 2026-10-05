@@ -140,7 +140,7 @@ export function GermanQuestionManager() {
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
-        <h3 className="text-lg text-foreground">The German Question</h3>
+        <h3 className="text-lg text-foreground">The German question</h3>
         <p className="mt-0.5 max-w-2xl text-sm text-muted">
           The settlement crisis over whether West Germany stays sovereign in NATO or reunifies into
           the Warsaw Pact. It is started from here and nowhere else — the turn loop advances a live
@@ -148,17 +148,17 @@ export function GermanQuestionManager() {
         </p>
         <dl className="mt-3 grid grid-cols-3 gap-3 text-sm">
           <div>
-            <dt className="text-xs tracking-wide text-muted uppercase">Feature gate</dt>
+            <dt className="text-body-sm font-medium text-muted">Feature gate</dt>
             <dd className={state?.enabled ? "text-success" : "text-error"}>
               {state?.enabled ? "On" : "Off"}
             </dd>
           </div>
           <div>
-            <dt className="text-xs tracking-wide text-muted uppercase">Turn</dt>
+            <dt className="text-body-sm font-medium text-muted">Turn</dt>
             <dd className="text-foreground">{state?.currentTurn ?? "—"}</dd>
           </div>
           <div>
-            <dt className="text-xs tracking-wide text-muted uppercase">Status</dt>
+            <dt className="text-body-sm font-medium text-muted">Status</dt>
             <dd className="text-foreground">{crisis ? crisis.status : "none live"}</dd>
           </div>
         </dl>
@@ -217,7 +217,7 @@ export function GermanQuestionManager() {
               onClick={() => void post({ action: "open" }, "Opened.")}
               className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
             >
-              Open the German Question
+              Open the German question
             </button>
           </div>
         </section>
@@ -333,7 +333,7 @@ export function GermanQuestionManager() {
                 onClick={() => void post({ action: "close" }, "Closed.")}
                 className="rounded-lg border border-card-border px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-card-muted disabled:opacity-50"
               >
-                Close the German Question
+                Close the German question
               </button>
             </div>
           </section>

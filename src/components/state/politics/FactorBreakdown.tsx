@@ -90,11 +90,7 @@ export function FactorBreakdown({
 
   return (
     <div className="space-y-1.5">
-      {showLabel && (
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-          Why this gain
-        </div>
-      )}
+      {showLabel && <div className="text-body-sm font-medium text-muted">Why this gain</div>}
       <div className="divide-y divide-card-border/30 rounded-md border border-card-border/30 bg-card/40">
         {rows.map((row) => (
           <div key={row.key} className="flex items-start justify-between gap-3 px-2.5 py-1.5">

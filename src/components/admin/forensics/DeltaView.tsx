@@ -77,9 +77,7 @@ export function DeltaView({ record, onRefPivot }: DeltaViewProps) {
       {isMoney && isFiniteNumber(record.amount) && (
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-card-border bg-card/60 px-4 py-3">
           <div>
-            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-              Amount
-            </div>
+            <div className="mb-0.5 text-body-sm font-medium text-muted">Amount</div>
             <div
               className={`font-mono text-xl font-semibold tabular-nums tracking-tight ${
                 record.amount < 0 ? "text-red-400" : "text-green-400"
@@ -90,9 +88,7 @@ export function DeltaView({ record, onRefPivot }: DeltaViewProps) {
           </div>
           {isFiniteNumber(record.anchorAmount) && (
             <div>
-              <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-                Anchor (₳)
-              </div>
+              <div className="mb-0.5 text-body-sm font-medium text-muted">Anchor (₳)</div>
               <div className="font-mono text-sm tabular-nums text-muted">
                 {formatAmount(record.anchorAmount, undefined, false)}
               </div>

@@ -31,7 +31,7 @@ function ratingClasses(rating: CreditRating): string {
 function KV({ label, value, delta }: { label: string; value: string; delta?: ReactNode }) {
   return (
     <div>
-      <div className="text-[10px] font-bold uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div className="mt-0.5 flex items-baseline gap-1.5">
         <span className="font-mono text-[15px] font-bold tabular-nums text-foreground">
           {value}
@@ -144,9 +144,7 @@ export function DebtCreditPanel({
       {trend.length > 1 && (
         <div className="mt-4 flex items-center justify-between rounded-lg border border-card-border bg-card-muted p-3">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
-              Debt-to-GDP trend
-            </div>
+            <div className="text-body-sm font-medium text-muted">Debt-to-GDP trend</div>
             <div className="text-[11px] text-muted">{trendRange}</div>
           </div>
           <Sparkline data={trend} w={180} h={42} color={trendColor} />

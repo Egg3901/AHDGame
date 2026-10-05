@@ -207,7 +207,7 @@ export function ElectionRestartPanel() {
             }
             className="rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-medium hover:bg-background disabled:opacity-50 transition-colors"
           >
-            {loading ? "Checking…" : "Spawn Missing Elections"}
+            {loading ? "Checking…" : "Spawn missing elections"}
           </button>
           <p className="text-xs text-muted mt-1.5 max-w-xs">
             Scans all states and fills any elections that should exist but aren&apos;t running. Safe
@@ -231,7 +231,7 @@ export function ElectionRestartPanel() {
             }
             className="rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-medium hover:bg-background disabled:opacity-50 transition-colors"
           >
-            {presidentLoading ? "…" : "Spawn President Election"}
+            {presidentLoading ? "…" : "Spawn president election"}
           </button>
           <p className="text-xs text-muted mt-1.5 max-w-xs">
             Creates a presidential election if none is currently active.
@@ -254,7 +254,7 @@ export function ElectionRestartPanel() {
             }
             className="rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-medium hover:bg-background disabled:opacity-50 transition-colors"
           >
-            {spawnUKLoading ? "…" : "Spawn UK Elections"}
+            {spawnUKLoading ? "…" : "Spawn UK elections"}
           </button>
           <p className="text-xs text-muted mt-1.5 max-w-xs">
             Spawn any missing UK Commons, Regional Council, and Governor elections. Safe after
@@ -278,7 +278,7 @@ export function ElectionRestartPanel() {
             }
             className="rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-medium hover:bg-background disabled:opacity-50 transition-colors"
           >
-            {spawnJPLoading ? "…" : "Spawn JP Elections"}
+            {spawnJPLoading ? "…" : "Spawn JP elections"}
           </button>
           <p className="text-xs text-muted mt-1.5 max-w-xs">
             Spawn any missing JP Shugiin, Sangiin, and Governor elections. Safe after seeding JP
@@ -302,7 +302,7 @@ export function ElectionRestartPanel() {
             }
             className="rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-medium hover:bg-background disabled:opacity-50 transition-colors"
           >
-            {spawnDELoading ? "…" : "Spawn DE Elections"}
+            {spawnDELoading ? "…" : "Spawn DE elections"}
           </button>
           <p className="text-xs text-muted mt-1.5 max-w-xs">
             Spawn any missing DE Bundestag elections. Safe after seeding DE data.
@@ -325,7 +325,7 @@ export function ElectionRestartPanel() {
             }
             className="rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-medium hover:bg-background disabled:opacity-50 transition-colors"
           >
-            {spawnCNLoading ? "…" : "Spawn CN Elections"}
+            {spawnCNLoading ? "…" : "Spawn CN elections"}
           </button>
           <p className="text-xs text-muted mt-1.5 max-w-xs">
             Spawn any missing CN NPC Delegate, Provincial Congress, and Governor elections. Safe
@@ -349,7 +349,7 @@ export function ElectionRestartPanel() {
             }
             className="rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-medium hover:bg-background disabled:opacity-50 transition-colors"
           >
-            {spawnBRLoading ? "…" : "Spawn BR Elections"}
+            {spawnBRLoading ? "…" : "Spawn BR elections"}
           </button>
           <p className="text-xs text-muted mt-1.5 max-w-xs">
             Spawn any missing BR elections. Safe after seeding BR data.
@@ -372,7 +372,7 @@ export function ElectionRestartPanel() {
             }
             className="rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-medium hover:bg-background disabled:opacity-50 transition-colors"
           >
-            {spawnIELoading ? "…" : "Spawn IE Elections"}
+            {spawnIELoading ? "…" : "Spawn IE elections"}
           </button>
           <p className="text-xs text-muted mt-1.5 max-w-xs">
             Spawn any missing IE elections. Safe after seeding IE data.
@@ -401,7 +401,7 @@ export function ElectionRestartPanel() {
           </svg>
           <div>
             <p className="text-sm font-medium text-amber-400 mb-2">
-              Reset and Reinitialize All Elections
+              Reset and reinitialize all elections
             </p>
             <ul className="text-xs text-muted space-y-0.5 list-disc list-inside">
               <li>Resets turn to 1, year to 2020</li>
@@ -426,7 +426,7 @@ export function ElectionRestartPanel() {
           disabled={loading || syncLoading}
           className="rounded-lg border border-amber-500/50 bg-amber-500/20 px-4 py-2 text-sm font-medium text-amber-400 hover:bg-amber-500/30 disabled:opacity-50 transition-colors"
         >
-          {syncLoading ? "Resetting…" : "Reset and Reinitialize All Elections"}
+          {syncLoading ? "Resetting…" : "Reset and reinitialize all elections"}
         </button>
       </div>
 

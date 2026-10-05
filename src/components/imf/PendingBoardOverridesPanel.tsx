@@ -31,7 +31,7 @@ export function PendingBoardOverridesPanel({
 }: Props) {
   return (
     <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-      <h2 className="text-sm font-semibold">Pending Board Decisions</h2>
+      <h2 className="text-sm font-semibold">Pending board decisions</h2>
       {overrides.length === 0 ? (
         <p className="mt-2 text-xs text-zinc-500">No open override windows.</p>
       ) : (
@@ -115,7 +115,7 @@ function OverrideRow({
       </div>
       <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
         Choice: {row.crisisChoice ?? "n/a"} · Principal $
-        {(row.facilityTerms.principal / 1e9).toFixed(1)}B · Rate{" "}
+        {(row.facilityTerms.principal / 1e9).toFixed(1)}B · rate{" "}
         {row.facilityTerms.annualRate.toFixed(1)}% · Capture{" "}
         {(row.facilityTerms.incomeCaptureFraction * 100).toFixed(0)}%
       </p>
@@ -148,7 +148,7 @@ function OverrideRow({
               disabled={submitting !== null}
               className="rounded-md border border-amber-600 bg-amber-600 px-2 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
             >
-              {showModifyForm ? "Cancel Modify" : "Modify Terms"}
+              {showModifyForm ? "Cancel modify" : "Modify terms"}
             </button>
             <button
               type="button"
@@ -156,7 +156,7 @@ function OverrideRow({
               disabled={submitting !== null}
               className="rounded-md border border-zinc-300 bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-200 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
             >
-              {submitting === "no-action" ? "Submitting…" : "No Action"}
+              {submitting === "no-action" ? "Submitting…" : "No action"}
             </button>
           </div>
           {showModifyForm ? (
@@ -201,7 +201,7 @@ function OverrideRow({
                 disabled={submitting !== null}
                 className="rounded-md border border-amber-700 bg-amber-700 px-3 py-1 text-xs font-medium text-white hover:bg-amber-800 disabled:opacity-50"
               >
-                {submitting === "modify-terms" ? "Applying…" : "Apply Modification"}
+                {submitting === "modify-terms" ? "Applying…" : "Apply modification"}
               </button>
             </div>
           ) : null}

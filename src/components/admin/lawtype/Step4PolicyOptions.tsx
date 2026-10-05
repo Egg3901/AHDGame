@@ -38,7 +38,7 @@ export function Step4PolicyOptions({ options, typeId, onChange }: Step4PolicyOpt
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="font-medium">Policy Options</h3>
+        <h3 className="font-medium">Policy options</h3>
         <p className="text-xs text-muted mt-1">
           Define 5-7 policy stances from left to right. At least 3 required (left, center, right).
         </p>
@@ -151,7 +151,7 @@ export function Step4PolicyOptions({ options, typeId, onChange }: Step4PolicyOpt
         onClick={addOption}
         className="w-full rounded-lg border border-dashed border-card-border py-3 text-sm text-muted hover:text-foreground hover:border-foreground/30 transition-colors"
       >
-        + Add Policy Option
+        + Add policy option
       </button>
 
       {options.length < 3 && (

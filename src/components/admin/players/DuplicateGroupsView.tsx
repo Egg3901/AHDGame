@@ -332,7 +332,7 @@ export function DuplicateGroupsView({
                             weeks ago and concludes the members are in different
                             places, which the evidence does not say. */}
                         <div className="font-medium text-foreground mb-1">
-                          IP Intelligence for <span className="font-mono">{user.ipDetails.ip}</span>{" "}
+                          IP intelligence for <span className="font-mono">{user.ipDetails.ip}</span>{" "}
                           <span className="text-muted font-normal">
                             (
                             <LocalTime
@@ -452,14 +452,14 @@ export function DuplicateGroupsView({
                           : "Add mod note"
                       }
                     >
-                      {getLatestNoteText(user) ? "View Note" : "Mod Note"}
+                      {getLatestNoteText(user) ? "View note" : "Mod note"}
                     </button>
                     {context === "admin" && (
                       <button
                         onClick={() => onResetPassword(user.id, user.username)}
                         className={`${ACTION_BTN} bg-orange-500/20 text-orange-400 border border-orange-500/50 hover:bg-orange-500/30`}
                       >
-                        Reset Password
+                        Reset password
                       </button>
                     )}
                     {!user.isAdmin && (
@@ -480,7 +480,7 @@ export function DuplicateGroupsView({
                         onClick={() => onDeleteUser(user.id, user.username)}
                         className={`${ACTION_BTN} bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30`}
                       >
-                        Delete Account
+                        Delete account
                       </button>
                     )}
                   </div>

@@ -93,7 +93,7 @@ export function CommissionSurveyModal({
   }
 
   return (
-    <Modal open title="Commission Geological Survey" onClose={onClose}>
+    <Modal open title="Commission geological survey" onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <p className="text-sm text-muted">
           Fund a state survey crew to search for new extraction capacity. Takes{" "}
@@ -152,7 +152,7 @@ export function CommissionSurveyModal({
 
         <div className="flex gap-3 pt-1">
           <Button type="submit" disabled={submitting} className="flex-1">
-            {submitting ? "Commissioning..." : "Commission Survey"}
+            {submitting ? "Commissioning..." : "Commission survey"}
           </Button>
           <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel

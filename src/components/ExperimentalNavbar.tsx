@@ -396,7 +396,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
             {showLeaderboardHeader && (
               <>
                 <div className="px-2.5 pb-1 pt-2 flex items-center gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+                  <span className="text-body-sm font-medium text-muted">
                     {t("menus.world.headers.leaderboard")}
                   </span>
                   <span className="rounded-full bg-warning/15 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-warning">
@@ -506,7 +506,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                   </svg>
                 </button>
               ) : (
-                <div className="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted/80">
+                <div className="px-2.5 pb-1 pt-2 text-body-sm font-medium text-muted">
                   {t(section.titleKey)}
                 </div>
               )}

@@ -90,7 +90,7 @@ export function WikiReviewActions({ slug, onApprove, onReject }: WikiReviewActio
 
       <Modal
         open={showRejectModal}
-        title="Reject Submission"
+        title="Reject submission"
         onClose={() => {
           setShowRejectModal(false);
           setRejectReason("");
@@ -118,7 +118,7 @@ export function WikiReviewActions({ slug, onApprove, onReject }: WikiReviewActio
             disabled={rejecting || !rejectReason.trim()}
             className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
           >
-            {rejecting ? "Rejecting..." : "Confirm Reject"}
+            {rejecting ? "Rejecting..." : "Confirm reject"}
           </button>
         </div>
       </Modal>

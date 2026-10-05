@@ -78,7 +78,7 @@ export function PMSnapElectionButton({
         disabled={disabled}
         className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning hover:bg-warning/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
       >
-        Call Snap Election
+        Call snap election
       </button>
       <span className="text-xs text-muted">
         {snapElectionsUsed} / {total} used

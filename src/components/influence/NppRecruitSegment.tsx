@@ -79,7 +79,7 @@ export function NppRecruitSegment({
     <div className="space-y-4">
       <div className="rounded-xl border border-card-border bg-card p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Recruit a New NPP</h3>
+          <h3 className="text-sm font-semibold">Recruit a new NPP</h3>
           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
             {actionPoints} AP · {formatLocalFunds(treasury, currency)}
           </span>
@@ -118,7 +118,7 @@ export function NppRecruitSegment({
 
         <div className="grid grid-cols-3 gap-3">
           <div className="rounded-lg border border-card-border bg-card-elevated p-3">
-            <div className="text-[10px] uppercase tracking-wide text-muted">Slots</div>
+            <div className="text-body-sm font-medium text-muted">Slots</div>
             <div className="text-lg font-bold">
               {st.currentNPPs}{" "}
               <span className="text-xs font-normal text-muted">/ {st.maxSlots}</span>
@@ -126,12 +126,12 @@ export function NppRecruitSegment({
             <div className="text-[11px] text-muted">{avail} available</div>
           </div>
           <div className="rounded-lg border border-card-border bg-card-elevated p-3">
-            <div className="text-[10px] uppercase tracking-wide text-muted">Recruit quality</div>
+            <div className="text-body-sm font-medium text-muted">Recruit quality</div>
             <div className={`text-lg font-bold ${q.tone}`}>{q.label}</div>
             <div className="text-[11px] text-muted">driven by {st.stateOrg.toFixed(0)}% org</div>
           </div>
           <div className="rounded-lg border border-card-border bg-card-elevated p-3">
-            <div className="text-[10px] uppercase tracking-wide text-muted">Cost</div>
+            <div className="text-body-sm font-medium text-muted">Cost</div>
             <div className="text-lg font-bold">
               {st.actionCost} <span className="text-xs font-normal text-muted">AP</span>
             </div>
@@ -154,7 +154,7 @@ export function NppRecruitSegment({
               : !st.canRecruit
                 ? "Party NPP capacity reached"
                 : !affordable
-                  ? "Insufficient Action Points or funds"
+                  ? "Insufficient action points or funds"
                   : busy
                     ? "Recruiting…"
                     : `Recruit NPP in ${st.stateName}`}

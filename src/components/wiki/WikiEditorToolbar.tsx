@@ -17,8 +17,8 @@ const FORMAT_BUTTONS = [
   { label: "H2", icon: "H2", before: "## ", after: "", placeholder: "Heading 2" },
   { label: "H3", icon: "H3", before: "### ", after: "", placeholder: "Heading 3" },
   { label: "Link", icon: "🔗", before: "[", after: "](url)", placeholder: "link text" },
-  { label: "Bullet List", icon: "•", before: "- ", after: "", placeholder: "list item" },
-  { label: "Number List", icon: "1.", before: "1. ", after: "", placeholder: "list item" },
+  { label: "Bullet list", icon: "•", before: "- ", after: "", placeholder: "list item" },
+  { label: "Number list", icon: "1.", before: "1. ", after: "", placeholder: "list item" },
   { label: "Quote", icon: '"', before: "> ", after: "", placeholder: "quote" },
   {
     label: "Table",
@@ -28,14 +28,14 @@ const FORMAT_BUTTONS = [
     placeholder: "cell",
   },
   {
-    label: "Code Block",
+    label: "Code block",
     icon: "{ }",
     before: "```\n",
     after: "\n```",
     placeholder: "code block",
   },
   {
-    label: "Wiki Link",
+    label: "Wiki link",
     icon: "[[ ]]",
     before: "[[",
     after: "]]",

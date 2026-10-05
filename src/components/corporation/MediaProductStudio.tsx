@@ -139,7 +139,7 @@ export function MediaProductStudio({
   return (
     <Card className="space-y-4 p-4">
       <div>
-        <h3 className="text-lg font-semibold">Media Product Studio</h3>
+        <h3 className="text-lg font-semibold">Media product studio</h3>
         <p className="text-sm text-muted-foreground">
           Develop named titles with paid research. Titles use existing sector output and never add
           units.

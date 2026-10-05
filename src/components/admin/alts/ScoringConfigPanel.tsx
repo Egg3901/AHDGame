@@ -115,9 +115,7 @@ export function ScoringConfigPanel({ config, cluster, onSaved, notify }: Scoring
         {cluster && preview !== null && (
           <div className="flex items-center gap-3 rounded-lg border border-card-border/70 bg-card-muted px-3 py-2">
             <div className="text-right">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-                Live preview
-              </div>
+              <div className="text-body-sm font-medium text-muted">Live preview</div>
               <div className="text-xs tabular-nums text-muted">
                 now {formatPct(cluster.confidence)} →{" "}
                 <span

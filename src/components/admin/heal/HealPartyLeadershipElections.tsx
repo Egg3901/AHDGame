@@ -82,7 +82,7 @@ export function HealPartyLeadershipElections() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Party Leadership Elections Member Left</h3>
+        <h3 className="font-semibold text-sm">Heal party leadership elections member left</h3>
         <p className="mt-1 text-xs text-muted">
           Finds and withdraws candidates from party leadership elections (Chair, Vice Chair,
           Treasurer, National Committee) who are no longer members of that party. This can happen if
@@ -103,7 +103,7 @@ export function HealPartyLeadershipElections() {
           disabled={loading}
           className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs font-medium text-warning transition-colors hover:bg-warning/20 disabled:opacity-50"
         >
-          {loading ? "Fixing..." : "Withdraw Invalid Candidates"}
+          {loading ? "Fixing..." : "Withdraw invalid candidates"}
         </button>
       </div>
 
@@ -121,9 +121,9 @@ export function HealPartyLeadershipElections() {
                       <tr className="text-left text-muted border-b border-card-border">
                         <th className="pb-1">Name</th>
                         <th className="pb-1">Country</th>
-                        <th className="pb-1">Election Type</th>
-                        <th className="pb-1">Election Party</th>
-                        <th className="pb-1">Current Party</th>
+                        <th className="pb-1">Election type</th>
+                        <th className="pb-1">Election party</th>
+                        <th className="pb-1">Current party</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-card-border/50">

@@ -79,7 +79,7 @@ export function HealStaleAdminAppointments() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Stale Admin Appointments</h3>
+        <h3 className="font-semibold text-sm">Heal stale admin appointments</h3>
         <p className="mt-1 text-xs text-muted">
           Removes duplicate electedOfficials records for the same seat. Keeps filled records over
           vacant ones, and most recent among equal fill status. Fixes admin-appointed officials that
@@ -100,7 +100,7 @@ export function HealStaleAdminAppointments() {
           disabled={loading}
           className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
         >
-          {loading ? "Healing..." : "Heal All"}
+          {loading ? "Healing..." : "Heal all"}
         </button>
       </div>
 

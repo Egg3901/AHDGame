@@ -124,9 +124,7 @@ function TierPreviewCard({
       </div>
       <p className="mt-4 text-sm leading-relaxed text-muted">{description}</p>
       <div className="mt-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-          What&apos;s included
-        </p>
+        <p className="text-body-sm font-medium text-muted">What&apos;s included</p>
         <div className="mt-3 space-y-2">
           {benefits.map((benefit) => (
             <div key={benefit} className="flex items-start gap-2 text-sm text-foreground">
@@ -191,7 +189,7 @@ export function PatreonBenefitsSection() {
   const groups = useMemo(
     () => [
       { id: "default", label: "Default" },
-      { id: "static", label: "Tinted Static" },
+      { id: "static", label: "Tinted static" },
       { id: "animated", label: "Animated" },
       { id: "frame", label: "Frames" },
     ],
@@ -251,7 +249,7 @@ export function PatreonBenefitsSection() {
       {(accessLevel === "guest" || accessLevel === "signed-out") && (
         <div className={`store-purchase-cta ${SURFACE_CLASS} p-5 md:p-6`}>
           <div className="mb-4">
-            <h5 className="text-lg font-semibold text-foreground">Membership Tiers</h5>
+            <h5 className="text-lg font-semibold text-foreground">Membership tiers</h5>
             <p className="mt-1 text-sm text-muted">
               Pick a tier before unlocking the settings below.
             </p>
@@ -319,18 +317,14 @@ export function PatreonBenefitsSection() {
         </div>
         <div className="relative mt-5 grid gap-3 sm:grid-cols-2">
           <div className="rounded-2xl border border-card-border/70 bg-background/45 px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-              Access
-            </p>
+            <p className="text-body-sm font-medium text-muted">Access</p>
             <p className="mt-1 text-sm text-foreground">
               Supporter gets tint color, ad controls, and static borders. Supporter+ adds animated
               borders and frames.
             </p>
           </div>
           <div className="rounded-2xl border border-card-border/70 bg-background/45 px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
-              Status
-            </p>
+            <p className="text-body-sm font-medium text-muted">Status</p>
             <p className="mt-1 text-sm text-foreground">
               {state?.patreonExpiresAt ? (
                 // wall-clock by design: patreon subscription billing runs on real time
@@ -367,7 +361,7 @@ export function PatreonBenefitsSection() {
               },
               {
                 key: "player-only" as const,
-                label: "Player Ads",
+                label: "Player ads",
                 description: "Show player-run banner ads to support the community.",
               },
             ].map((option) => {
@@ -404,7 +398,7 @@ export function PatreonBenefitsSection() {
       <div className={SURFACE_CLASS}>
         <div className={`${lockedOverlay ? "opacity-60" : ""} space-y-3 p-5`}>
           <div>
-            <label className="block text-base font-semibold text-foreground">Highlight Color</label>
+            <label className="block text-base font-semibold text-foreground">Highlight color</label>
             <p className="mt-1 text-sm text-muted">
               Used for supporter accents and all tint-aware profile borders.
             </p>
@@ -433,7 +427,7 @@ export function PatreonBenefitsSection() {
 
       <div className={`${SURFACE_CLASS} p-5`}>
         <div>
-          <label className="block text-lg font-semibold text-foreground">Profile Border</label>
+          <label className="block text-lg font-semibold text-foreground">Profile border</label>
           <p className="mt-1 text-sm text-muted">
             Supporter unlocks default and tinted static borders. Supporter+ unlocks animated borders
             and frame styles.
@@ -446,9 +440,7 @@ export function PatreonBenefitsSection() {
 
           return (
             <div key={group.id} className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted">
-                {group.label}
-              </p>
+              <p className="text-body-sm font-medium text-muted">{group.label}</p>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {options.map((option) => {
                   const selected = state?.patreonProfileBorder === option.key;
@@ -517,7 +509,7 @@ export function PatreonBenefitsSection() {
 
       <div className={`${SURFACE_CLASS} p-5 md:p-6`}>
         <div className="mb-4">
-          <h5 className="text-base font-semibold text-foreground">Claiming Benefits & Support</h5>
+          <h5 className="text-base font-semibold text-foreground">Claiming benefits & support</h5>
           <p className="mt-1 text-sm text-muted">
             Patreon benefits are applied automatically when you link your Patreon account. If your
             benefits are missing or incorrect, you have two options:

@@ -29,7 +29,7 @@ export function Step3Demographics({ targeting, onChange }: Step3DemographicsProp
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="font-medium">Demographic Targeting</h3>
+        <h3 className="font-medium">Demographic targeting</h3>
         <p className="text-xs text-muted mt-1">
           Select which parts of the electorate care most about this law. This amplifies
           appeal/opposition for matching voters. Buckets are listed for every country, so pick the

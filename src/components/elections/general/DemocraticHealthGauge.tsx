@@ -89,7 +89,7 @@ export function DemocraticHealthGauge({ data }: { data?: DemocraticHealthData | 
           {t("democraticHealth.relief", { percent: data.currentRulerReliefPct.toFixed(0) })}
         </p>
       ) : null}
-      <p className="mt-2 text-[10px] uppercase tracking-wider text-muted">
+      <p className="mt-2 text-body-sm font-medium text-muted">
         {t("democraticHealth.recordedTurn", { turn: data.recordedTurn })}
       </p>
     </div>

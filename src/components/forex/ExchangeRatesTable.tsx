@@ -145,28 +145,26 @@ function RatesTableBody({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-card-border bg-card-elevated">
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted">
-              Currency
-            </th>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted">
+            <th className="px-4 py-3 text-left text-body-sm font-medium text-muted">Currency</th>
+            <th className="px-4 py-3 text-right text-body-sm font-medium text-muted">
               <span>Rate</span>
               <span className="block text-[9px] font-normal normal-case text-muted/60">
                 per 1 ₳
               </span>
             </th>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted">
+            <th className="px-4 py-3 text-right text-body-sm font-medium text-muted">
               <span>Strength vs. Base</span>
               <span className="block text-[9px] font-normal normal-case text-muted/60">
                 Positive = currency stronger
               </span>
             </th>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted hidden sm:table-cell">
-              Buy Vol
+            <th className="px-4 py-3 text-right text-body-sm font-medium text-muted hidden sm:table-cell">
+              Buy vol
             </th>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted hidden sm:table-cell">
-              Sell Vol
+            <th className="px-4 py-3 text-right text-body-sm font-medium text-muted hidden sm:table-cell">
+              Sell vol
             </th>
-            <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted">
+            <th className="px-4 py-3 text-right text-body-sm font-medium text-muted">
               {/* Trade button column */}
             </th>
           </tr>

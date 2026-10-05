@@ -119,7 +119,7 @@ export function ManufacturingProductStudio({
       <Card className="p-5">
         <div className="flex items-center gap-2 text-sm text-muted">
           <LoadingSpinner />
-          <span>Loading Product Studio</span>
+          <span>Loading product studio</span>
         </div>
       </Card>
     );
@@ -200,9 +200,9 @@ export function ManufacturingProductStudio({
   }
 
   return (
-    <Card className="space-y-4 p-5" aria-label="Manufacturing Product Studio">
+    <Card className="space-y-4 p-5" aria-label="Manufacturing product studio">
       <div>
-        <h2 className="text-lg font-bold text-foreground">Product Studio</h2>
+        <h2 className="text-lg font-bold text-foreground">Product studio</h2>
         <p className="mt-1 text-sm text-muted">
           Develop one product project, allocated across owned plants. Unallocated capacity keeps its
           current strategy output. Paid R&amp;D funds development until the project cost is paid.

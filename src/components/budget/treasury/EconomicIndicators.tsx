@@ -60,9 +60,7 @@ export function EconomicIndicators({
       <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-5">
         {indicators.map((ind) => (
           <div key={ind.label}>
-            <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
-              {ind.label}
-            </div>
+            <div className="text-body-sm font-medium text-muted">{ind.label}</div>
             <div
               className={`mt-0.5 text-[15px] font-bold tabular-nums ${ind.bad ? "text-error" : "text-foreground"}`}
             >

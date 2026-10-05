@@ -319,7 +319,7 @@ export function IndexFundsAdminPanel() {
           onClick={() => void injectCapitalAll()}
           className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-40"
         >
-          {injectAllLoading ? "Recapitalizing…" : "Inject Capital — All Funds to 100%"}
+          {injectAllLoading ? "Recapitalizing…" : "Inject capital — All Funds to 100%"}
         </button>
         {injectAllMessage && (
           <span
@@ -346,7 +346,7 @@ export function IndexFundsAdminPanel() {
           onClick={() => void deployCashAll()}
           className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-40"
         >
-          {deployAllLoading ? "Deploying…" : "Deploy Cash to All Funds"}
+          {deployAllLoading ? "Deploying…" : "Deploy cash to all funds"}
         </button>
         {deployAllMessage && (
           <span
@@ -426,9 +426,7 @@ export function IndexFundsAdminPanel() {
           )}
 
           <div className="rounded-lg border border-card-border bg-card-elevated p-4 space-y-3">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Inject Capital
-            </h4>
+            <h4 className="text-body-sm font-medium text-muted">Inject capital</h4>
             <p className="text-xs text-muted">
               Adds anchor-currency cash to the fund without minting units. Raises NAV and improves
               backing ratio.
@@ -455,7 +453,7 @@ export function IndexFundsAdminPanel() {
                 onClick={() => void injectCapital()}
                 className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-40"
               >
-                {injectLoading ? "Injecting…" : "Inject Capital"}
+                {injectLoading ? "Injecting…" : "Inject capital"}
               </button>
             </div>
             {injectMessage && (
@@ -507,7 +505,7 @@ export function IndexFundsAdminPanel() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-card-border bg-card-elevated px-3 py-2">
-      <p className="text-[10px] uppercase tracking-widest text-muted">{label}</p>
+      <p className="text-body-sm font-medium text-muted">{label}</p>
       <p className="font-semibold tabular-nums">{value}</p>
     </div>
   );

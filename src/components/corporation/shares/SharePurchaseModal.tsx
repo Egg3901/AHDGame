@@ -806,11 +806,11 @@ export default function SharePurchaseModal({
                     ← Back
                   </button>
                   <h2 id={titleId} className="text-base font-semibold text-foreground">
-                    Open Orders
+                    Open orders
                   </h2>
                 </div>
               ) : (
-                <h2 className="text-base font-semibold text-foreground">Buy / Sell Shares</h2>
+                <h2 className="text-base font-semibold text-foreground">Buy / Sell shares</h2>
               )}
               <p className="mt-0.5 text-sm text-muted">
                 {corporation.name}
@@ -1073,7 +1073,7 @@ export default function SharePurchaseModal({
                     : "bg-success hover:bg-success/90"
                 }`}
               >
-                {atMarketSide === "buy" ? "Buy Shares" : "Sell Shares"}
+                {atMarketSide === "buy" ? "Buy shares" : "Sell shares"}
               </Button>
             )}
             {mode === "limit" && (
@@ -1088,7 +1088,7 @@ export default function SharePurchaseModal({
                     : "bg-success hover:bg-success/90"
                 }`}
               >
-                {orderSide === "buy" ? "Place Buy Order" : "Place Sell Order"}
+                {orderSide === "buy" ? "Place buy order" : "Place sell order"}
               </Button>
             )}
           </div>
@@ -1117,7 +1117,7 @@ export default function SharePurchaseModal({
                 isLoading={loading}
                 className="text-sm bg-error hover:bg-error/90"
               >
-                Sell &amp; Step Down
+                Sell &amp; step down
               </Button>
             </div>
           </div>

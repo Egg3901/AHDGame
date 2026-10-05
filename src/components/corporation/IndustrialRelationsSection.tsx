@@ -197,7 +197,7 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
 
   if (loading) {
     return (
-      <section aria-label="Industrial Relations" className="py-2">
+      <section aria-label="Industrial relations" className="py-2">
         <LoadingSpinner label="Loading industrial relations..." centered />
       </section>
     );
@@ -220,7 +220,7 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
   if (enabled !== true) return null;
 
   return (
-    <section aria-label="Industrial Relations" className="min-w-0 space-y-3">
+    <section aria-label="Industrial relations" className="min-w-0 space-y-3">
       <div className="flex min-h-8 flex-wrap items-baseline gap-x-2 border-b border-card-border pb-1.5">
         <h3 className="text-sm font-semibold text-foreground">Industrial relations</h3>
         <p className="text-xs text-muted">

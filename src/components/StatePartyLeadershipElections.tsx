@@ -367,7 +367,7 @@ function ElectionPanel({
                       )}
                       {isMyVote && (
                         <span className="shrink-0 text-[10px] text-success font-medium">
-                          Your Vote
+                          Your vote
                         </span>
                       )}
                     </div>
@@ -491,7 +491,7 @@ export function StatePartyLeadershipElections({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Leadership Elections</h2>
+        <h2 className="text-lg font-semibold">Leadership elections</h2>
         <span className="text-xs text-muted">Current turn: {currentTurn}</span>
       </div>
 

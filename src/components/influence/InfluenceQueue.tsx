@@ -94,16 +94,16 @@ export function InfluenceQueueDisplay({
     <div className="mt-4 rounded-lg border border-card-border bg-card p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold">
-          Action Queue {queue.length > 0 && `(${queue.length})`}
+          Action queue {queue.length > 0 && `(${queue.length})`}
         </h3>
         {queue.length > 0 && !results && (
           <button onClick={onClear} className="text-xs text-muted hover:text-red-400">
-            Clear All
+            Clear all
           </button>
         )}
         {results && (
           <button onClick={onClear} className="text-xs text-muted hover:text-primary">
-            New Queue
+            New queue
           </button>
         )}
       </div>
@@ -159,14 +159,14 @@ export function InfluenceQueueDisplay({
           {/* Total cost */}
           <div className="rounded-md bg-background p-3 mb-3">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted">Total Action Points:</span>
+              <span className="text-muted">Total action points:</span>
               <span className={totalActions > availableActions ? "text-red-400 font-medium" : ""}>
                 {totalActions} / {availableActions}
               </span>
             </div>
             {(totalFunds > 0 || availableFunds > 0) && (
               <div className="flex items-center justify-between text-xs mt-1">
-                <span className="text-muted">Total Funds:</span>
+                <span className="text-muted">Total funds:</span>
                 <span
                   className={
                     totalFunds > availableFunds ? "text-red-400 font-medium" : "text-green-400"

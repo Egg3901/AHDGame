@@ -127,8 +127,8 @@ export function RegistrationControlsPanel() {
           {regToggling
             ? "Updating..."
             : registration?.enabled
-              ? "Close Registration"
-              : "Open Registration"}
+              ? "Close registration"
+              : "Open registration"}
         </button>
         {!registration?.enabled && registration?.disabledBy && (
           <p className="mt-2 text-xs text-muted">

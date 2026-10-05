@@ -167,7 +167,7 @@ export function FiscalStatStrip({
         delta={compare ? <Delta now={gdp} prev={prev?.gdp} kind="money" sym={sym} /> : undefined}
       />
       <StatTile
-        label={treasuryCashLedgerEnabled ? "Signed Fiscal Position" : "Treasury Balance"}
+        label={treasuryCashLedgerEnabled ? "Signed fiscal position" : "Treasury balance"}
         value={money(Math.abs(treasuryReserve))}
         tone={treasuryReserve < 0 ? "down" : "foreground"}
         sub={usdNote(
@@ -182,13 +182,13 @@ export function FiscalStatStrip({
       {treasuryCashLedgerEnabled && (
         <>
           <StatTile
-            label="Funded Treasury Cash"
+            label="Funded treasury cash"
             value={money(treasuryCashLocal)}
             tone="up"
             sub="spendable proceeds received from bond pools"
           />
           <StatTile
-            label="Bank Claims Due"
+            label="Bank claims due"
             value={money(bankClaimsDueLocal)}
             tone={bankClaimsDueLocal > 0 ? "warning" : "foreground"}
             sub="unpaid sovereign coupon and maturity claims"
