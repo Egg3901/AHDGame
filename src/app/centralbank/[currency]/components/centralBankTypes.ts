@@ -171,6 +171,8 @@ export interface BankData {
   currentSavingsPressure: number;
   currentInflation: number;
   targetInflation: number;
+  neutralPrimeRate?: number;
+  isSharedPolicyArea?: boolean;
   inflationBreakdownTotal?: number;
   inflationBreakdown: InflationBreakdown;
   effectiveRate: number;

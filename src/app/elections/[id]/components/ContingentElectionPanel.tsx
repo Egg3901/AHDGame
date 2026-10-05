@@ -4,7 +4,7 @@ import {
   CONTINGENT_EXCLUDED_HOUSE_STATE,
   HOUSE_CONTINGENT_THRESHOLD,
   SENATE_CONTINGENT_THRESHOLD,
-} from "@/lib/elections/contingentElection";
+} from "@/lib/elections/contingentConstants";
 import type { ContingentElectionDisplay } from "@/lib/elections/presidentialResolutionDisplay";
 import type { CandidateDetail } from "./ElectionDetailTypes";
 
@@ -68,7 +68,7 @@ export function ContingentElectionPanel({
   return (
     <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-amber-500/5 p-5 space-y-5">
       <div>
-        <h3 className="text-lg font-semibold text-amber-200">Contingent Election</h3>
+        <h3 className="text-lg font-semibold text-amber-200">Contingent election</h3>
         <p className="mt-1 text-sm text-muted">
           No candidate reached 270 electoral votes. Under the 12th Amendment, the House elected the
           President from the top three EV finishers (one vote per state delegation;{" "}
@@ -95,9 +95,7 @@ export function ContingentElectionPanel({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-lg border border-card-border bg-card/60 p-4">
-          <div className="text-xs font-medium uppercase tracking-wider text-muted mb-2">
-            President — House ballot
-          </div>
+          <div className="text-body-sm font-medium text-muted mb-2">President — House ballot</div>
           <p className="text-sm font-semibold text-foreground mb-3">
             {presidentWinnerName} — {houseWinnerVotes} state delegation
             {houseWinnerVotes === 1 ? "" : "s"}
@@ -120,8 +118,8 @@ export function ContingentElectionPanel({
 
         {senateRows.length > 0 && (
           <div className="rounded-lg border border-card-border bg-card/60 p-4">
-            <div className="text-xs font-medium uppercase tracking-wider text-muted mb-2">
-              Vice President — Senate ballot
+            <div className="text-body-sm font-medium text-muted mb-2">
+              Vice president — Senate ballot
             </div>
             {vpWinnerName && contingentResult.vicePresidentWinnerId && (
               <p className="text-sm font-semibold text-foreground mb-3">
@@ -150,9 +148,7 @@ export function ContingentElectionPanel({
 
       {delegationEntries.length > 0 && (
         <div className="rounded-lg border border-card-border bg-card/60 p-4">
-          <div className="text-xs font-medium uppercase tracking-wider text-muted mb-3">
-            State delegation votes
-          </div>
+          <div className="text-body-sm font-medium text-muted mb-3">State delegation votes</div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm">
             {delegationEntries.map(([stateId, choiceId]) => {
               if (stateId === CONTINGENT_EXCLUDED_HOUSE_STATE) return null;

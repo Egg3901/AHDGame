@@ -1648,5 +1648,7 @@ export function processSectors(
     ),
     strikeEvents: pendingStrikeEvents,
     capacityBindingEvents: pendingCapacityBindingEvents,
+    settledMarketingSpendAnchorByBuyerId: new Map(marketingSpendAnchorByBuyerId),
+    advertisingDeliveredAnchorBySellerId: new Map(advertisingSellerDeliveredValues),
   };
 }

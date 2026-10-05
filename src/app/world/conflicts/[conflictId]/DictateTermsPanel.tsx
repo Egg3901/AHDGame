@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { MIL_FONT } from "../military/theme";
 
@@ -76,7 +78,7 @@ export function DictateTermsPanel({ view }: { view: DictateTermsView }) {
       );
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(body.error ?? "That could not be imposed.");
+        setError(apiErrorText(body, "That could not be imposed."));
         return;
       }
       window.location.reload();
@@ -245,7 +247,7 @@ export function DictateTermsPanel({ view }: { view: DictateTermsView }) {
         )}
       </fieldset>
 
-      {error && <p className="mt-2 text-[12px] text-error">{error}</p>}
+      <InlineError error={error} className="mt-2 text-[12px] text-error" />
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button

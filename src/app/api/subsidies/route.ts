@@ -8,7 +8,7 @@
  */
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Subsidy } from "@/lib/db/types";
 import { ALL_COUNTRY_IDS, type CountryId } from "@/lib/constants/countries";
 
@@ -30,11 +30,11 @@ export async function GET(request: Request) {
     }
 
     if (requested.size === 0) {
-      return NextResponse.json({ error: "Missing countryId or countryIds" }, { status: 400 });
+      return errorResponse(400, "Missing countryId or countryIds");
     }
     for (const id of requested) {
       if (!COUNTRY_SET.has(id)) {
-        return NextResponse.json({ error: `Invalid countryId: ${id}` }, { status: 400 });
+        return errorResponse(400, `Invalid countryId: ${id}`);
       }
     }
     const countryIds = Array.from(requested) as CountryId[];

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_READ_LIMITS } from "@/lib/api/rateLimit";
 import { computeElectionPhase } from "@/lib/elections/phases";
@@ -39,7 +39,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://ahousedividedgame.
 export async function GET(request: Request) {
   try {
     if (!requireBotToken(request)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const rateLimit = checkRateLimit(
@@ -57,10 +57,7 @@ export async function GET(request: Request) {
 
     // Must provide country, and optionally state + race to narrow down
     if (!country && !electionId) {
-      return NextResponse.json(
-        { error: "Must provide country (and optionally state/race), or electionId" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Must provide country (and optionally state/race), or electionId");
     }
 
     const db = await getDb();
@@ -71,7 +68,7 @@ export async function GET(request: Request) {
       // Direct lookup by election ID
       const { ObjectId } = await import("mongodb");
       if (!ObjectId.isValid(electionId)) {
-        return NextResponse.json({ error: "Invalid electionId" }, { status: 400 });
+        return errorResponse(400, "Invalid electionId");
       }
       election = await db
         .collection<Election>("elections")
@@ -122,6 +119,7 @@ export async function GET(request: Request) {
     }
 
     if (!election) {
+      // eslint-disable-next-line local/no-uncoded-error-response -- diagnostic payload answered with 200, not an error response
       return NextResponse.json({ found: false, error: "No matching election found" });
     }
 

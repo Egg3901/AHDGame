@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { bondHistoryQuerySchema, type BondHistoryDirection } from "@/lib/api/schemas/bondHistory";
 import type { Bond, Corporation, FinancialTxLogEntry } from "@/lib/db/types";
@@ -69,10 +69,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       direction: url.searchParams.get("direction") ?? undefined,
     });
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.issues[0]?.message ?? "Invalid query" },
-        { status: 400 }
-      );
+      return errorResponse(400, parsed.error.issues[0]?.message ?? "Invalid query");
     }
     const { page: requestedPage, pageSize, direction } = parsed.data;
 

@@ -7,6 +7,10 @@
  * happen here. No FX conversion is required.
  */
 import { loadTerrorismSignal } from "@/lib/livingConflict/terrorismSignal";
+import { loadRefugeeServiceCosts } from "@/lib/livingConflict/refugeeReception";
+import { loadCapacityRepairSpending } from "@/lib/livingConflict/capacityDestruction";
+import { CAPACITY_REPAIR_SPENDING_KEY } from "@/lib/livingConflict/rules/capacityDestruction";
+import { REFUGEE_SERVICE_SPENDING_KEY } from "@/lib/livingConflict/rules/refugeeReception";
 import {
   terrorismAnnualCost,
   TERRORISM_SPENDING_KEY,
@@ -34,6 +38,8 @@ import { getNationalDocId } from "@/lib/constants/nationalScope";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
 import { keepLatestActiveLawPerType } from "./keepLatestActiveLawPerType";
 import { nonLawSpendingAmount } from "./rules/nonLawSpending";
+import { loadSovereignCouponBooks } from "@/lib/bonds/sovereignCouponBook";
+import { sovereignStockAnnualService } from "@/lib/budget/rules/sovereignDebtService";
 
 // Re-exported so existing importers of `./spending` keep working.
 export { keepLatestActiveLawPerType } from "./keepLatestActiveLawPerType";
@@ -266,7 +272,9 @@ export async function calculateFederalSpending(
   // Optional pre-fetched era context, hoisted by refreshNationalBudgetRevenue
   // so the world-constant gameState read happens once per turn instead of once
   // per budget. Omitted => resolved here (single-budget callers).
-  hoistedEraContext?: EraContext
+  hoistedEraContext?: EraContext,
+  hoistedRefugeeServiceCosts?: Readonly<Record<string, number>>,
+  hoistedCapacityRepairSpending?: Readonly<Record<string, number>>
 ): Promise<FederalBudget["spending"]> {
   const budgetCountryId = (budget.countryId ||
     (budget._id === COUNTRY_CONFIGS.UK.id
@@ -313,6 +321,8 @@ export async function calculateFederalSpending(
     }
   }
 
+  // An enacted grant law already books the transfer, including in legacy eras.
+  // Only use the distributed pool when no such law exists.
   // Config-derived central transfer pools (CN/DE/UK) are credited to regions in
   // the regional-budget processors but — unlike JP's isGrant funding law — have
   // no enacted national law to book them as spending. Sum the actual distributed
@@ -322,7 +332,7 @@ export async function calculateFederalSpending(
   // from prior region-id schemes — e.g. CN's pre-rename NORTHEAST/EAST/… docs —
   // are excluded and the pool is not double-counted. Mirrors federalBudgetDetail.
   const transferGrantField = CONFIG_DERIVED_TRANSFER_FIELD[budgetCountryId];
-  if (transferGrantField) {
+  if (transferGrantField && !items.some(({ law }) => law.isGrant)) {
     const stateIds = (
       await db
         .collection<State>("states")
@@ -370,6 +380,13 @@ export async function calculateFederalSpending(
     budget.gdpSmoothed && budget.gdpSmoothed > 0 ? budget.gdpSmoothed : budget.gdp
   );
   if (terrorismCost > 0) byCategory[TERRORISM_SPENDING_KEY] = terrorismCost;
+  const refugeeServiceCosts = hoistedRefugeeServiceCosts ?? (await loadRefugeeServiceCosts(db));
+  const refugeeServices = refugeeServiceCosts[budgetCountryId] ?? 0;
+  if (refugeeServices > 0) byCategory[REFUGEE_SERVICE_SPENDING_KEY] = refugeeServices;
+  // Rebuilding capital a conflict outcome destroyed is paid by the region's sovereign.
+  const capacityRepair =
+    (hoistedCapacityRepairSpending ?? (await loadCapacityRepairSpending(db)))[budgetCountryId] ?? 0;
+  if (capacityRepair > 0) byCategory[CAPACITY_REPAIR_SPENDING_KEY] = capacityRepair;
 
   return normalizeFederalSpending({
     byCategory,
@@ -460,7 +477,15 @@ export async function syncFederalBudgetSpending(db: Db, countryId: CountryId): P
   const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
   if (!budget) return;
 
-  const debtInterest = (budget.debt?.principal ?? 0) * (budget.debt?.interestRate ?? 0);
+  // Same stock-service rule as the turn and fiscal-year paths (#2089): bonds
+  // at their locked coupons, any uncovered remainder at the marginal rate.
+  const couponBooks = await loadSovereignCouponBooks(db, [countryId]);
+  const debtInterest = sovereignStockAnnualService({
+    principal: budget.debt?.principal ?? 0,
+    book: couponBooks.get(String(countryId)) ?? null,
+    marginalRate: budget.debt?.interestRate ?? 0,
+    imfBailoutActive: budget.imfSovereignBailoutActive,
+  });
   const spending = await calculateFederalSpending(db, budget, debtInterest);
   if (spending.total === 0) return;
 

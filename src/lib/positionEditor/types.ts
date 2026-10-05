@@ -30,6 +30,8 @@ export interface EditorStateConfig {
   categoryId: string;
   layer1: EditorLayer1Config;
   archetypes: EditorArchetype[];
+  /** Absent in legacy saved previews, which retain one-decimal aggregate rounding. */
+  regionLeanDecimals?: 1 | 2;
 }
 
 export interface DerivedArchetype {

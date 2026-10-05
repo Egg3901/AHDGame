@@ -84,7 +84,7 @@ export function RegionalBreakdownTable({
   return (
     <div className="rounded-xl border border-card-border bg-card overflow-hidden">
       <div className="p-4 sm:p-6 border-b border-card-border">
-        <h2 className="text-lg font-semibold text-foreground">Regional Breakdown</h2>
+        <h2 className="text-lg font-semibold text-foreground">Regional breakdown</h2>
         <p className="text-sm text-muted mt-0.5">Key metrics by region</p>
       </div>
       <div className="overflow-x-auto">

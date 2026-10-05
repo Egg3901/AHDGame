@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
@@ -9,7 +10,7 @@ export async function POST() {
   if (!auth.ok) return auth.response;
 
   const token = (await cookies()).get(AUTH_COOKIE_NAME)?.value;
-  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!token) return errorResponse(401, "Unauthorized");
 
   const response = NextResponse.json({ linked: true });
   response.cookies.set("auth-token", token, await getDesktopLinkCookieOptions());

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import type { PoliticianOverride } from "@/lib/db/types";
@@ -24,7 +24,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       .collection<PoliticianOverride>("politicianOverrides")
       .findOne({ politicianId: id });
     if (!override) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return errorResponse(404, "Not found");
     }
     return NextResponse.json(override);
   } catch (error) {
@@ -43,13 +43,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const rateLimit = checkRateLimit(auth.user.userId, 20, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
     if (!auth.user.isAdmin) {
-      return NextResponse.json({ error: "Admin only" }, { status: 403 });
+      return errorResponse(403, "Admin only");
     }
 
     const { id } = await params;
     const parsed = await parseJsonBody(request, overrideSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
 
@@ -97,7 +97,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     const rateLimitDel = checkRateLimit(auth.user.userId, 20, 60000);
     if (!rateLimitDel.ok) return rateLimitResponse(rateLimitDel.retryAfter);
     if (!auth.user.isAdmin) {
-      return NextResponse.json({ error: "Admin only" }, { status: 403 });
+      return errorResponse(403, "Admin only");
     }
 
     const { id } = await params;
@@ -106,7 +106,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
       .collection<PoliticianOverride>("politicianOverrides")
       .deleteOne({ politicianId: id });
     if (result.deletedCount === 0) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return errorResponse(404, "Not found");
     }
     return NextResponse.json({ ok: true });
   } catch (error) {

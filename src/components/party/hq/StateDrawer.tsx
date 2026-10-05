@@ -116,10 +116,10 @@ export function StateDrawer({
         <div className="mb-4">
           <div className="mb-1 text-xs text-muted">Leadership</div>
           {row.chairName ? (
-            <div className="text-sm">{row.chairName} · State Chair</div>
+            <div className="text-sm">{row.chairName} · State chair</div>
           ) : (
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted italic">Vacant · State Chair</span>
+              <span className="text-sm text-muted italic">Vacant · state chair</span>
               <Link
                 href={`${regionPartyUrl(countryCode, row.regionId, partyId)}?tab=overview`}
                 className="rounded-md border border-card-border px-2 py-1 text-xs hover:bg-card-elevated"

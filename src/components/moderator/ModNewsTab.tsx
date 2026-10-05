@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import type { SerializedPost } from "../news/NewsPost";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function ModNewsTab() {
   const [posts, setPosts] = useState<SerializedPost[]>([]);
@@ -58,7 +59,7 @@ export function ModNewsTab() {
       const res = await fetch(`/api/moderator/news/${postId}`, { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to delete post");
+        throw new Error(apiErrorText(data, "Failed to delete post"));
       }
       setPosts((prev) => prev.filter((p) => p._id !== postId));
     } catch (err) {
@@ -76,7 +77,7 @@ export function ModNewsTab() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-card-border bg-card p-4">
-        <h3 className="font-semibold text-foreground mb-2">News Moderation</h3>
+        <h3 className="font-semibold text-foreground mb-2">News moderation</h3>
         <p className="text-sm text-muted">{posts.length} posts loaded</p>
       </div>
 

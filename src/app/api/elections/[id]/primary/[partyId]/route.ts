@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
 import { buildPrimaryPartyDetail } from "@/lib/elections/primaryPartyDetail";
@@ -37,7 +37,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const parsedPartyId = partyIdSchema.safeParse(partyId);
     if (!parsedPartyId.success) {
-      return NextResponse.json({ error: "Invalid party id" }, { status: 400 });
+      return errorResponse(400, "Invalid party id");
     }
 
     const db = await getDb();
@@ -47,9 +47,9 @@ export async function GET(request: Request, { params }: RouteParams) {
     const resolved = await resolveElectionRouteParam(db, id);
     if (!resolved.ok) {
       const invalid = resolved.reason === "invalid_id";
-      return NextResponse.json(
-        { error: invalid ? "Invalid election id" : "Election not found" },
-        { status: invalid ? 400 : 404 }
+      return errorResponse(
+        invalid ? 400 : 404,
+        invalid ? "Invalid election id" : "Election not found"
       );
     }
 
@@ -57,7 +57,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     // else is a 404 rather than an empty shell the client has to interpret.
     const election = resolved.election;
     if (election.electionType !== "president") {
-      return NextResponse.json({ error: "Not a presidential race" }, { status: 404 });
+      return errorResponse(404, "Not a presidential race");
     }
 
     const detail = await buildPrimaryPartyDetail(db, {
@@ -71,7 +71,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       },
     });
     if (!detail) {
-      return NextResponse.json({ error: "Party not in this race" }, { status: 404 });
+      return errorResponse(404, "Party not in this race");
     }
 
     return NextResponse.json(detail);

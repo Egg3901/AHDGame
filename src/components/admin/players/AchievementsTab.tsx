@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { AchievementIcon } from "@/lib/utils/achievementIcons";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface AchievementRow {
   id: string;
@@ -90,7 +91,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
         setActionMsg({ text: data.message, ok: true });
         fetchData();
       } else {
-        setActionMsg({ text: data.error ?? "Failed", ok: false });
+        setActionMsg({ text: apiErrorText(data, "Failed"), ok: false });
       }
     } catch {
       setActionMsg({ text: "Network error", ok: false });
@@ -115,7 +116,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
         setActionMsg({ text: data.message, ok: true });
         fetchData();
       } else {
-        setActionMsg({ text: data.error ?? "Failed", ok: false });
+        setActionMsg({ text: apiErrorText(data, "Failed"), ok: false });
       }
     } catch {
       setActionMsg({ text: "Network error", ok: false });
@@ -140,7 +141,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
         setActionMsg({ text: data.message, ok: true });
         fetchData();
       } else {
-        setActionMsg({ text: data.error ?? "Failed", ok: false });
+        setActionMsg({ text: apiErrorText(data, "Failed"), ok: false });
       }
     } catch {
       setActionMsg({ text: "Network error", ok: false });
@@ -159,7 +160,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
         setActionMsg({ text: data.message, ok: true });
         fetchData();
       } else {
-        setActionMsg({ text: data.message ?? data.error ?? "Sync failed", ok: false });
+        setActionMsg({ text: data.message ?? apiErrorText(data, "Sync failed"), ok: false });
       }
     } catch {
       setActionMsg({ text: "Network error", ok: false });
@@ -178,7 +179,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
         setActionMsg({ text: data.message, ok: true });
         fetchData();
       } else {
-        setActionMsg({ text: data.message ?? data.error ?? "Seed failed", ok: false });
+        setActionMsg({ text: data.message ?? apiErrorText(data, "Seed failed"), ok: false });
       }
     } catch {
       setActionMsg({ text: "Network error", ok: false });
@@ -195,7 +196,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
       {/* Seed button */}
       <div className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
         <div>
-          <p className="text-sm font-medium">Seed Achievement Definitions</p>
+          <p className="text-sm font-medium">Seed achievement definitions</p>
           <p className="mt-0.5 text-xs text-muted">
             Creates all achievement definitions from seed data (only when collection is empty)
           </p>
@@ -206,7 +207,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
           disabled={seedLoading}
           className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
         >
-          {seedLoading ? "Seeding..." : "Seed All"}
+          {seedLoading ? "Seeding..." : "Seed all"}
         </button>
         <button
           type="button"
@@ -214,7 +215,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
           disabled={syncLoading}
           className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
         >
-          {syncLoading ? "Syncing..." : "Sync Names"}
+          {syncLoading ? "Syncing..." : "Sync names"}
         </button>
       </div>
 
@@ -232,9 +233,9 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
         {/* Tab buttons */}
         <div className="flex border-b border-card-border bg-background">
           {[
-            { id: "grant" as const, label: "Grant to Character" },
-            { id: "revoke" as const, label: "Revoke from Character" },
-            { id: "bulk" as const, label: "Bulk Grant to All" },
+            { id: "grant" as const, label: "Grant to character" },
+            { id: "revoke" as const, label: "Revoke from character" },
+            { id: "bulk" as const, label: "Bulk grant to all" },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -289,7 +290,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
                 disabled={actionLoading || !grantCharacterId || !grantSlug}
                 className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
               >
-                Grant Achievement
+                Grant achievement
               </button>
             </form>
           )}
@@ -331,7 +332,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
                 disabled={actionLoading || !revokeCharacterId || !revokeSlug}
                 className="w-full rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
               >
-                Revoke Achievement
+                Revoke achievement
               </button>
             </form>
           )}
@@ -361,7 +362,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
                 disabled={actionLoading}
                 className="w-full rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
               >
-                Grant to All Characters
+                Grant to all characters
               </button>
             </form>
           )}
@@ -371,7 +372,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
       {/* Achievement list */}
       <div className="rounded-xl border border-card-border bg-card overflow-hidden">
         <div className="border-b border-card-border bg-background px-4 py-3">
-          <h3 className="font-semibold">All Achievements</h3>
+          <h3 className="font-semibold">All achievements</h3>
           <p className="mt-0.5 text-xs text-muted">
             {achievements.length} total achievement{achievements.length !== 1 ? "s" : ""}
           </p>

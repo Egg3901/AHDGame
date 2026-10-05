@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getDb } from "@/lib/mongodb";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
-import { getLiveLowerChamberSeats } from "@/lib/turn/lowerChamberSeats";
+import { getLiveLowerChamberSeats } from "@/lib/legislature/lowerChamberSeats";
 import { bgAssemblyName } from "@/lib/countries/bg/rules/assemblyTransition";
 import { getCountryConfigForRuntime } from "@/lib/constants/countries";
 import LegislatureClient from "./LegislatureClient";
@@ -69,7 +69,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { code } = await params;
   const id = code.toUpperCase() as CountryId;
   const config = COUNTRY_CONFIGS[id];
-  if (!config) return { title: "Legislature Not Found | A House Divided" };
+  if (!config) return { title: "Legislature not found | A House Divided" };
   if (id === "BG") {
     const { name, seats } = await bgLegislaturePresentation();
     return {

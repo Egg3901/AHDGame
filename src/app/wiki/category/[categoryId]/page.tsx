@@ -13,7 +13,7 @@ interface CategoryPageProps {
 export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
   const { categoryId } = await params;
   const category = getCategoryBySlug(categoryId);
-  if (!category) return { title: "Category Not Found", robots: { index: false, follow: false } };
+  if (!category) return { title: "Category not found", robots: { index: false, follow: false } };
   return wikiPublicPageMetadata({
     title: `${category.name} | Wiki | A House Divided`,
     description: `${category.description}. Browse the official A House Divided wiki pages in this section.`,

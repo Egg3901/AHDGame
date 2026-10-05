@@ -1,6 +1,8 @@
 import type { State } from "@/lib/db/types";
 import { trRegions } from "./trRegions";
 import { allocatePopulationTotal } from "@/lib/seeds/rules/populationAllocation";
+import { scaleRegionalGdpToNational } from "@/lib/seeds/reference/rules/anchorBudget1991";
+import { gdp1991LegacyLcu } from "@/lib/constants/fiscalAnchors1991";
 import { POPULATION_TOTALS_1991 } from "@/lib/seeds/reference/populationTotals1991";
 
 /**
@@ -11,8 +13,8 @@ import { POPULATION_TOTALS_1991 } from "@/lib/seeds/reference/populationTotals19
  * definitive results, https://www.tbb.gov.tr/sites/default/files/online/dergiler/2002_ocak/files/basic-html/page7.html
  * The 1990 national total is also confirmed by TÜİK's census series.
  * Regional census shares are normalized to the dated 1991 national total.
- * GDP weights remain from the existing bundle and are reconciled to the
- * 1991 national budget at bootstrap. The Senate was abolished in 1980.
+ * GDP: existing regional weights scaled to the sourced 1991 national nominal
+ * total in old lira (WDI NY.GDP.MKTP.CN, see fiscalAnchors1991.ts). The Senate was abolished in 1980.
  */
 export const TR_1991_REGION_POPULATION: Readonly<Record<string, number>> = {
   TR_IST: 13_295_878,
@@ -25,11 +27,14 @@ export const TR_1991_REGION_POPULATION: Readonly<Record<string, number>> = {
   TR_CEN: 6_676_928,
 };
 
-export const trRegions1991: State[] = allocatePopulationTotal(
-  trRegions.map((region) => ({
-    ...region,
-    population: TR_1991_REGION_POPULATION[region._id],
-    stateSenateSeats: 0,
-  })),
-  POPULATION_TOTALS_1991.TR.population
+export const trRegions1991: State[] = scaleRegionalGdpToNational(
+  allocatePopulationTotal(
+    trRegions.map((region) => ({
+      ...region,
+      population: TR_1991_REGION_POPULATION[region._id],
+      stateSenateSeats: 0,
+    })),
+    POPULATION_TOTALS_1991.TR.population
+  ),
+  gdp1991LegacyLcu("TR")
 );

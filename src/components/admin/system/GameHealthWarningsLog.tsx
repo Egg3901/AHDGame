@@ -66,7 +66,7 @@ export function GameHealthWarningsLog() {
 
   return (
     <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold text-foreground">Warnings & Errors</h3>
+      <h3 className="mb-3 text-sm font-semibold text-foreground">Warnings & errors</h3>
 
       <div className="mb-3 flex flex-wrap gap-2">
         <select
@@ -74,7 +74,7 @@ export function GameHealthWarningsLog() {
           onChange={(e) => setPhaseFilter(e.target.value)}
           className="rounded border border-border bg-background px-2 py-1 text-xs"
         >
-          <option value="">All Phases</option>
+          <option value="">All phases</option>
           {uniquePhases.map((p) => (
             <option key={p} value={p}>
               {p}
@@ -86,7 +86,7 @@ export function GameHealthWarningsLog() {
           onChange={(e) => setSeverityFilter(e.target.value)}
           className="rounded border border-border bg-background px-2 py-1 text-xs"
         >
-          <option value="">All Severity</option>
+          <option value="">All severity</option>
           <option value="warning">Warning</option>
           <option value="error">Error</option>
         </select>
@@ -95,12 +95,12 @@ export function GameHealthWarningsLog() {
           onChange={(e) => setSourceFilter(e.target.value)}
           className="rounded border border-border bg-background px-2 py-1 text-xs"
         >
-          <option value="">All Sources</option>
+          <option value="">All sources</option>
           <option value="turnProcessing">Turn</option>
           <option value="integrity">Integrity</option>
-          <option value="turnLock">Turn Lock</option>
-          <option value="turnPhase">Phase Outcomes</option>
-          <option value="phaseBudget">Phase Budget</option>
+          <option value="turnLock">Turn lock</option>
+          <option value="turnPhase">Phase outcomes</option>
+          <option value="phaseBudget">Phase budget</option>
         </select>
       </div>
 

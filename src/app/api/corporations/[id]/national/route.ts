@@ -8,7 +8,7 @@ import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { buildNationalCorporationView } from "@/lib/nationalization/nationalCorporationView";
 
@@ -26,7 +26,7 @@ export const GET = withNoStore(async function GET(_request: Request, { params }:
     const { corporation } = resolved;
 
     if (!isStateOwned(corporation)) {
-      return NextResponse.json({ error: "Not a National Corporation." }, { status: 404 });
+      return errorResponse(404, "Not a National Corporation.");
     }
 
     const authUser = await getAuthUser();

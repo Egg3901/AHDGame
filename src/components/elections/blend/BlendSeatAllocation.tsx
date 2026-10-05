@@ -25,7 +25,7 @@ export function BlendSeatAllocation({ model, regionName }: BlendSeatAllocationPr
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-muted">
+        <span className="text-body-sm font-medium font-black text-muted">
           {model.allocLabel} · {regionName}
         </span>
         <span className="text-[11px] text-muted">{model.hemiNote}</span>
@@ -100,12 +100,10 @@ function BenchChamber({
   return (
     <>
       <div className="mb-1.5 mt-3.5 flex flex-wrap items-baseline justify-between gap-3">
-        <span className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-muted">
+        <span className="text-body-sm font-medium text-muted">
           {bench.govLabel} · {bench.govCount}
         </span>
-        <span className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-muted">
-          {model.hemiNote}
-        </span>
+        <span className="text-body-sm font-medium text-muted">{model.hemiNote}</span>
       </div>
 
       <div className="relative w-full" style={{ height }}>
@@ -153,7 +151,7 @@ function BenchChamber({
       </div>
 
       <div className="mt-2.5 flex flex-wrap items-baseline justify-between gap-3">
-        <span className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-muted">
+        <span className="text-body-sm font-medium text-muted">
           {bench.oppLabel} · {bench.oppCount}
         </span>
         <span className="text-[11px] text-muted">

@@ -30,7 +30,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getGameStateCollection } from "@/lib/db/collections";
 import {
   buildMoneyGraph,
@@ -60,28 +60,25 @@ export async function GET(request: Request) {
     const minAmountParam = searchParams.get("minAmount");
 
     if (!userIdParam && !clusterIdParam) {
-      return NextResponse.json({ error: "userId or clusterId is required" }, { status: 400 });
+      return errorResponse(400, "userId or clusterId is required");
     }
     if (userIdParam && clusterIdParam) {
-      return NextResponse.json(
-        { error: "Provide only one of userId or clusterId" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Provide only one of userId or clusterId");
     }
     if (userIdParam && !OBJECT_ID_RE.test(userIdParam)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+      return errorResponse(400, "Invalid userId");
     }
     if (clusterIdParam && !OBJECT_ID_RE.test(clusterIdParam)) {
-      return NextResponse.json({ error: "Invalid clusterId" }, { status: 400 });
+      return errorResponse(400, "Invalid clusterId");
     }
 
     let depth = MONEY_GRAPH_MIN_DEPTH;
     if (depthParam !== null) {
       const v = parseInt(depthParam, 10);
       if (!Number.isFinite(v) || v < MONEY_GRAPH_MIN_DEPTH || v > MONEY_GRAPH_MAX_DEPTH) {
-        return NextResponse.json(
-          { error: `depth must be between ${MONEY_GRAPH_MIN_DEPTH} and ${MONEY_GRAPH_MAX_DEPTH}` },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `depth must be between ${MONEY_GRAPH_MIN_DEPTH} and ${MONEY_GRAPH_MAX_DEPTH}`
         );
       }
       depth = v;
@@ -91,10 +88,7 @@ export async function GET(request: Request) {
     if (turnsBackParam !== null) {
       const v = parseInt(turnsBackParam, 10);
       if (!Number.isFinite(v) || v < 1 || v > MONEY_GRAPH_MAX_TURNS_BACK) {
-        return NextResponse.json(
-          { error: `turnsBack must be between 1 and ${MONEY_GRAPH_MAX_TURNS_BACK}` },
-          { status: 400 }
-        );
+        return errorResponse(400, `turnsBack must be between 1 and ${MONEY_GRAPH_MAX_TURNS_BACK}`);
       }
       turnsBack = v;
     }
@@ -103,7 +97,7 @@ export async function GET(request: Request) {
     if (minAmountParam !== null) {
       const v = parseFloat(minAmountParam);
       if (!Number.isFinite(v) || v < 0) {
-        return NextResponse.json({ error: "Invalid minAmount" }, { status: 400 });
+        return errorResponse(400, "Invalid minAmount");
       }
       minAmount = v;
     }
@@ -114,7 +108,7 @@ export async function GET(request: Request) {
     if (userIdParam) {
       centerIds = await resolveCentersForUser(db, new ObjectId(userIdParam));
       if (centerIds.length === 0) {
-        return NextResponse.json({ error: "User has no character" }, { status: 404 });
+        return errorResponse(404, "User has no character");
       }
     } else {
       const { cluster, centers } = await resolveCentersForCluster(
@@ -122,7 +116,7 @@ export async function GET(request: Request) {
         new ObjectId(clusterIdParam!)
       );
       if (!cluster) {
-        return NextResponse.json({ error: "Cluster not found" }, { status: 404 });
+        return errorResponse(404, "Cluster not found");
       }
       centerIds = centers;
       if (centerIds.length === 0) {

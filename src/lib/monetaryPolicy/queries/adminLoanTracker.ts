@@ -1,9 +1,14 @@
+/**
+ * National loan tracking reports borrowers and central-bank credit in local money.
+ * loadAdminLoanTracker uses the active preset's monetary coverage.
+ */
+import { getPresetMonetaryScope } from "../presetMonetaryScope";
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import type { Db } from "mongodb";
 import type { Character, CentralBank, Corporation } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import {
   COUNTRY_CURRENCY_MAP,
-  FOREX_ACTIVE_COUNTRIES,
   getSeedCurrencyCode,
   getCountryIdForCurrency,
   type CurrencyCode,
@@ -118,7 +123,12 @@ export async function loadAdminLoanTracker(params: { db: Db; countryId: CountryI
   if (!COUNTRY_CONFIGS[countryId]) {
     return { ok: false as const, status: 404, error: "Country not found" };
   }
-  if (!FOREX_ACTIVE_COUNTRIES.includes(countryId)) {
+  const gameState = await getGameState(db);
+  if (
+    !getPresetMonetaryScope(gameState?.preset ?? DEFAULT_SEED_PRESET).forexCountries.includes(
+      countryId
+    )
+  ) {
     return {
       ok: false as const,
       status: 404,
@@ -131,7 +141,6 @@ export async function loadAdminLoanTracker(params: { db: Db; countryId: CountryI
     return { ok: false as const, status: 404, error: "Line of credit system is not active." };
   }
 
-  const gameState = await getGameState(db);
   const homeCurrency = gameState?.preset
     ? getSeedCurrencyCode(countryId, gameState.preset)
     : (COUNTRY_CURRENCY_MAP[countryId] as CurrencyCode);

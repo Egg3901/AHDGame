@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
 import { adminNppsSchema } from "@/lib/api/schemas/admin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { removeWithdrawnCandidateFromTally } from "@/lib/electionEngine/tallyCleaner";
 import type {
   NPP,
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, adminNppsSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
     const { action, states, parties, partyData } = body;

@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getWatchlistCollection } from "@/lib/db/collections";
 
 interface RouteParams {
@@ -23,14 +23,14 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
 
     const { userId } = await params;
     if (!OBJECT_ID_RE.test(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+      return errorResponse(400, "Invalid userId");
     }
 
     const db = await getDb();
     const watchlistCol = await getWatchlistCollection(db);
     const result = await watchlistCol.deleteOne({ userId: new ObjectId(userId) });
     if (result.deletedCount === 0) {
-      return NextResponse.json({ error: "User is not on the watchlist" }, { status: 404 });
+      return errorResponse(404, "User is not on the watchlist");
     }
 
     return NextResponse.json({ ok: true });

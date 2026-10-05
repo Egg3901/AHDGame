@@ -32,9 +32,9 @@ const headingFont = MIL_FONT.heading;
 
 const TABS = [
   { id: "overview", label: "Overview" },
-  { id: "traits", label: "Command Doctrine" },
+  { id: "traits", label: "Command doctrine" },
   { id: "assignment", label: "Assignment" },
-  { id: "docfit", label: "Doctrine Fit" },
+  { id: "docfit", label: "Doctrine fit" },
   { id: "politics", label: "Politics" },
   { id: "history", label: "History" },
 ];
@@ -382,7 +382,7 @@ export function GeneralProfileClient({
                 <>
                   Generals earn experience by <strong>fighting battles</strong>. A general is
                   credited for the units they personally led at a front, plus {WIN_BONUS_XP} XP for
-                  a victory or {LOSS_BONUS_XP} for a defeat. A <strong>Theater Commander</strong>{" "}
+                  a victory or {LOSS_BONUS_XP} for a defeat. A <strong>Theater commander</strong>{" "}
                   also earns {Math.round(THEATER_COMMAND.xpShare * 100)}% of a formation&rsquo;s
                   award for every battle fought in their theater, whether or not they led any units
                   in it. Each promotion grants {POINTS_PER_PROMOTION} skill points to spend in
@@ -625,7 +625,7 @@ export function GeneralProfileClient({
                     </div>
                     {posting.theaterName && posting.inCharge && (
                       <div style={{ font: `600 10px ${mono}`, color: MIL_COLOR.gold }}>
-                        ★ Theater Commander
+                        ★ Theater commander
                       </div>
                     )}
                   </div>

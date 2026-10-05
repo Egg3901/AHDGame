@@ -3,6 +3,7 @@
 // Body: { vote: "for" | "against" }
 // Errors: 400 invalid body, 401, 403 not-in-active-chamber, 409 no-decision/window-closed/already-voted.
 
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
@@ -27,12 +28,12 @@ export async function POST(req: Request, { params }: RouteParams) {
   const { code } = await params;
   const upper = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[upper]) {
-    return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+    return errorResponse(400, "Invalid country code");
   }
 
   const parsed = await parseJsonBody(req, bodySchema);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    return errorResponse(parsed.status, parsed.error);
   }
   const vote = parsed.data.vote;
 
@@ -44,24 +45,18 @@ export async function POST(req: Request, { params }: RouteParams) {
     .limit(1)
     .toArray();
   if (decisions.length === 0) {
-    return NextResponse.json(
-      { error: "No active legislative ratification for this country" },
-      { status: 409 }
-    );
+    return errorResponse(409, "No active legislative ratification for this country");
   }
   const decision = decisions[0];
   const idx = decision.currentChamberIndex ?? -1;
   const phases = decision.legislativePhases ?? [];
   const phase = phases[idx];
   if (!phase) {
-    return NextResponse.json(
-      { error: "No active chamber phase on this decision" },
-      { status: 409 }
-    );
+    return errorResponse(409, "No active chamber phase on this decision");
   }
 
   if (phase.outcome !== "pending") {
-    return NextResponse.json({ error: "Chamber has already tallied" }, { status: 409 });
+    return errorResponse(409, "Chamber has already tallied");
   }
   // Turn-first window check (matches the per-turn processor) with a wall-clock
   // fallback for phases opened before `endsOnTurn` existed.
@@ -72,7 +67,7 @@ export async function POST(req: Request, { params }: RouteParams) {
       ? currentTurn >= phase.endsOnTurn
       : phase.endsAtRealtimeMs <= nowMs;
   if (windowClosed) {
-    return NextResponse.json({ error: "Voting window has closed" }, { status: 409 });
+    return errorResponse(409, "Voting window has closed");
   }
 
   const character = auth.user.character;
@@ -81,15 +76,12 @@ export async function POST(req: Request, { params }: RouteParams) {
   const inActiveChamber =
     character.countryId === upper && officeCfg?.chamberKey === phase.chamberKey;
   if (!inActiveChamber) {
-    return NextResponse.json(
-      { error: "Only legislators in the active chamber may vote" },
-      { status: 403 }
-    );
+    return errorResponse(403, "Only legislators in the active chamber may vote");
   }
 
   const charKey = character._id.toString();
   if (phase.votes[charKey]) {
-    return NextResponse.json({ error: "You have already voted on this chamber" }, { status: 409 });
+    return errorResponse(409, "You have already voted on this chamber");
   }
 
   const counterField = vote === "for" ? "votesFor" : "votesAgainst";
@@ -107,7 +99,7 @@ export async function POST(req: Request, { params }: RouteParams) {
     }
   );
   if (result.modifiedCount === 0) {
-    return NextResponse.json({ error: "You have already voted on this chamber" }, { status: 409 });
+    return errorResponse(409, "You have already voted on this chamber");
   }
 
   return NextResponse.json({ ok: true, vote, chamberKey: phase.chamberKey });

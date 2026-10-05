@@ -29,7 +29,8 @@ const MODE_OPTIONS: {
   {
     key: "internal",
     label: "Base",
-    description: "Show raw game values in the internal base unit (₳), with no conversion.",
+    description:
+      "Show raw game values in ₳, the game's shared accounting unit, with no conversion. ₳ is not pegged to the dollar: it started near one dollar of the era and floats, so ₳1 can buy more or less than $1. The forex page shows today's rate.",
   },
 ];
 
@@ -123,7 +124,7 @@ export function DisplayPreferenceToggle() {
           </p>
 
           <div className="space-y-2">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-muted">Modes</div>
+            <div className="text-body-sm font-medium text-muted">Modes</div>
             <div className="flex w-fit flex-wrap items-center gap-1 rounded-lg border border-card-border bg-card-elevated p-1">
               {MODE_OPTIONS.map(({ key, label }) => (
                 <button
@@ -147,9 +148,7 @@ export function DisplayPreferenceToggle() {
           </div>
 
           <div className="space-y-2">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-muted">
-              Pin to a specific currency
-            </div>
+            <div className="text-body-sm font-medium text-muted">Pin to a specific currency</div>
             <div className="flex w-fit flex-wrap items-center gap-1 rounded-lg border border-card-border bg-card-elevated p-1">
               {FOREX_ACTIVE_CURRENCIES.map((code) => (
                 <button

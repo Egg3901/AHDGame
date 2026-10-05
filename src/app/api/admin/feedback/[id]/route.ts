@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { createNotification } from "@/lib/notifications";
 import { syncFeedbackToGitHub } from "@/lib/github";
 import { parseObjectId } from "@/lib/utils/objectId";
@@ -29,7 +29,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { id } = await params;
     const parsed = await parseJsonBody(request, adminFeedbackPatchSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { status, adminNotes } = parsed.data;
 
@@ -49,7 +49,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     if (!feedback) {
-      return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+      return errorResponse(404, "Issue not found");
     }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { NppMarketEntryFunnel } from "@/lib/db/types";
 import { getDb } from "@/lib/mongodb";
 import {
@@ -29,10 +29,7 @@ export async function GET(request: Request) {
       Object.fromEntries(new URL(request.url).searchParams.entries())
     );
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Invalid query", details: parsed.error.flatten() },
-        { status: 400 }
-      );
+      return errorResponse(400, "Invalid query", { extra: { details: parsed.error.flatten() } });
     }
 
     const db = await getDb();
@@ -47,7 +44,7 @@ export async function GET(request: Request) {
 
     const funnel = normalizeNppMarketEntryFunnel(doc);
     if (!funnel) {
-      return NextResponse.json({ error: "NPP entry funnel snapshot not found" }, { status: 404 });
+      return errorResponse(404, "NPP entry funnel snapshot not found");
     }
     return NextResponse.json({ funnel });
   } catch (error) {

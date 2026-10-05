@@ -5,7 +5,7 @@ import { searchableProse } from "@/lib/changelog/postUtils";
 import { ChangelogClient } from "./ChangelogClient";
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "What's New | A House Divided",
+  title: "What's new | A House Divided",
   description:
     "Release notes and feature updates for A House Divided: balance changes, new systems for politics and the economy, and quality-of-life improvements.",
   pathname: "/changelog",

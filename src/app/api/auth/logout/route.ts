@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { verifyAuth, clearAuthCookie } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 import { getClientIp } from "@/lib/utils/network";
@@ -65,10 +65,9 @@ export async function POST(request: Request) {
             throw new Error("Session revocation was not acknowledged");
         }
       } catch {
-        return NextResponse.json(
-          { error: "Logout is temporarily unavailable. Please try again." },
-          { status: 503, headers: { "Cache-Control": "private, no-store" } }
-        );
+        return errorResponse(503, "Logout is temporarily unavailable. Please try again.", {
+          headers: { "Cache-Control": "private, no-store" },
+        });
       }
       // A concurrent read may have repopulated this process's cache while
       // the database write was pending. Evict again after acknowledgment.

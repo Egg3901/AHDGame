@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Character, NPP, State, PoliticalParty } from "@/lib/db/types";
 import { getOfficeLabel } from "@/lib/utils/politics";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 
 export type PoliticianType = "character" | "npp";
 
@@ -33,7 +33,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     if (!id || !ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+      return errorResponse(400, "Invalid ID");
     }
 
     const db = await getDb();
@@ -106,7 +106,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       } satisfies PoliticianProfileData);
     }
 
-    return NextResponse.json({ error: "Politician not found" }, { status: 404 });
+    return errorResponse(404, "Politician not found");
   } catch (error) {
     return handleRouteError(error);
   }

@@ -6,12 +6,22 @@ import * as Sentry from "@sentry/nextjs";
 import { scrubPushRequest } from "@/lib/nativePush/telemetry";
 import { scrubSentryEvent } from "@/lib/observability/scrubSentryEvent";
 import { isNextRenderStreamDisconnect } from "@/lib/observability/sentryFilters";
+import { describeSentryIngest, formatSentryIngestLog } from "@/lib/observability/sentryIngest";
 
 // RAILWAY_ENVIRONMENT_NAME is injected on all Railway deployments.
 // Disabling locally prevents MongoParseError / MONGODB_URI-missing noise flooding the dashboard.
 const railwayEnv = process.env.RAILWAY_ENVIRONMENT_NAME || process.env.RAILWAY_SERVICE_NAME;
 const isProduction = railwayEnv === "production";
 const sentryEnabled = !!railwayEnv;
+
+// One boot line (host and project id only, never the key) so a missing or
+// malformed DSN is visible in deploy logs instead of silently dropping events.
+const ingest = describeSentryIngest(process.env);
+if (ingest.problem !== "disabled-environment") {
+  const log = formatSentryIngestLog(ingest);
+  if (ingest.enabled) console.log(log);
+  else console.error(log);
+}
 
 Sentry.init({
   dsn: process.env.SENTRY_DSN,

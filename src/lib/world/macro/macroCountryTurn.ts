@@ -61,6 +61,7 @@ export async function processMacroCountryTurn(
                 tracks: 1,
                 representedActors: 1,
                 arabRegional: 1,
+                realizedInfrastructureDamage: 1,
               },
             }
           )

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthUserWithCharacter } from "@/lib/auth";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { loadCountryCentralBankDetail } from "@/lib/monetaryPolicy/queries/countryCentralBankDetail";
 
@@ -28,7 +28,7 @@ export async function GET(request: Request, context: RouteContext) {
     });
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json(result.body);

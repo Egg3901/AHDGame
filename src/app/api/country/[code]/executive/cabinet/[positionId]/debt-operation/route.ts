@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -35,10 +35,10 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (resolveFinancePosition(countryId) !== positionId) {
-      return NextResponse.json({ error: "Not a finance cabinet position" }, { status: 404 });
+      return errorResponse(404, "Not a finance cabinet position");
     }
 
     const db = await getDb();
@@ -50,10 +50,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the finance holder or admin can launch operations" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the finance holder or admin can launch operations");
     }
 
     // A debt operation reshapes the country's borrowing well past this tenure.
@@ -66,24 +63,21 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const opsCol = getTreasuryOperationsCollection(db);
     const existing = await opsCol.findOne({ _id: countryId });
     if (existing?.activeOp) {
-      return NextResponse.json({ error: "An operation is already active" }, { status: 409 });
+      return errorResponse(409, "An operation is already active");
     }
     if (existing && currentTurn < existing.cooldownUntilTurn) {
-      return NextResponse.json(
-        { error: `On cooldown until turn ${existing.cooldownUntilTurn}` },
-        { status: 409 }
-      );
+      return errorResponse(409, `On cooldown until turn ${existing.cooldownUntilTurn}`);
     }
 
     // Shared UK pool: both offices of a dual holder spend one balance (issue #2049).
     const actions = await resolveMinisterialRemaining(db, countryId, member!);
     if (actions < 1) {
-      return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 400 });
+      return errorResponse(400, "No ministerial actions remaining");
     }
 
     const spend = await spendMinisterialAction(db, countryId, member!);
     if (!spend.ok) {
-      return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 409 });
+      return errorResponse(409, "No ministerial actions remaining");
     }
 
     const expiresTurn = currentTurn + DEBT_OP_DURATION_TURNS;

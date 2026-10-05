@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import type { CorporationType } from "@/lib/constants/corporations";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 
 type TariffEntry = {
   id: string;
@@ -80,7 +80,7 @@ export function TariffsTab({ countryId }: { countryId: string }) {
               {t.rate === 0 ? "Nullified" : `${t.rate}%`}
             </p>
             <p className="text-xs text-muted-foreground">
-              <LocalTime value={t.updatedAt} options={{ dateStyle: "medium" }} />
+              <GameMonthTime value={t.updatedAt} />
             </p>
           </div>
         </div>

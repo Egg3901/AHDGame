@@ -10,7 +10,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, badRequest, forbidden } from "@/lib/api/errors";
+import { handleRouteError, badRequest, forbidden, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getPersonalBalance, buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, limitOrderSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { fromCurrency, toCurrency, amount, limitRate, direction, expiresInTurns } = parsed.data;

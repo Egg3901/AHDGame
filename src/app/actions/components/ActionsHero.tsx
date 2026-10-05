@@ -108,7 +108,7 @@ export default function ActionsHero({
                 aria-expanded={fundsExpanded}
                 aria-label={fundsExpanded ? "Hide funds breakdown" : "Show funds breakdown"}
               >
-                Funds
+                Campaign funds
                 <svg
                   className={`h-3 w-3 transition-transform ${fundsExpanded ? "rotate-180" : ""}`}
                   fill="none"
@@ -130,7 +130,12 @@ export default function ActionsHero({
             {fundsExpanded && portfolioData && (
               <dd className="mt-2 space-y-1 text-body-sm">
                 <div className="flex justify-between gap-4">
-                  <span className="text-muted">Cash on hand</span>
+                  <span
+                    className="text-muted"
+                    title="Your own money across every currency you hold. Campaign funds are separate; Convert cash moves money from your home-currency cash into them."
+                  >
+                    Personal cash, all currencies
+                  </span>
                   <span className="tabular-nums text-foreground">
                     {formatAmount(portfolioData.cashOnHand)}
                   </span>

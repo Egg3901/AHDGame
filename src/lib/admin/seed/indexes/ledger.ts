@@ -72,5 +72,15 @@ export async function seedLedgerIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  // Per-member history is append-only and paged newest-first. The index keeps
+  // the sort/limit off the full 39k-row-and-growing ledger scan.
+  await ensureIndex(
+    db,
+    "sphereFlowLedger",
+    { memberId: 1, turn: -1, createdAt: -1 },
+    { name: "sphereFlowLedger_member_turn_createdAt" },
+    log
+  );
+
   log("Shadow ledger indexes ensured");
 }

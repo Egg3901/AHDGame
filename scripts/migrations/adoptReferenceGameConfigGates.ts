@@ -55,6 +55,7 @@
 import type { Db } from "mongodb";
 import { connectDb, closeDb } from "../utils/db";
 import { gameConfig as referenceGameConfig } from "../../src/lib/seeds/reference/gameConfig";
+import { FRESH_WORLD_GAME_CONFIG_FLAGS } from "../../src/lib/seeds/reference/featureFlagDefaults";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "../../src/lib/market/modes";
 import { TURNS_PER_DAY } from "../../src/lib/constants/corporations";
 import type { MigrationResult } from "../../src/lib/migrations/types";
@@ -106,6 +107,10 @@ export async function runAdoptReferenceGameConfigGates(
     // `marketSystemMode` is pass 2's business — it has provenance stamps and a
     // ladder, and must never be moved by a blunt value comparison.
     if (key === "marketSystemMode") continue;
+    // Fresh-world gameplay flags reach a world through its reset, never through
+    // this fill: an absent flag on a running world means "off", and filling it
+    // here would flip that world.
+    if (!isFreshWorld && key in FRESH_WORLD_GAME_CONFIG_FLAGS) continue;
     if (liveValues[key] === undefined) {
       set[key] = value;
       filled.push(key);

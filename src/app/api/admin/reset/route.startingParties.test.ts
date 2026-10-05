@@ -9,7 +9,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/auth", () => ({ clearAuthCookie: mocks.clearCookie }));
 vi.mock("@/lib/mongodb", () => ({ getDb: mocks.db }));
 vi.mock("@/lib/api/requireAdmin", () => ({ requireAdmin: mocks.admin }));
-vi.mock("@/lib/api/errors", () => ({
+vi.mock("@/lib/api/errors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/errors")>()),
   handleRouteError: (error: Error) => new Response(error.message, { status: 500 }),
 }));
 vi.mock("@/lib/admin/resetAndBootstrapGameWorld", () => ({

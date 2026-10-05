@@ -77,21 +77,21 @@ export function CrisesHeaderBar({
           disabled={reseeding}
           title="Backfill hero images from templates (matched by crisis name)"
         >
-          {reseeding ? "Reseeding…" : "Reseed Images"}
+          {reseeding ? "Reseeding…" : "Reseed images"}
         </button>
         {interactionEnabled === true && (
           <button
             className="rounded border border-border bg-card px-3 py-1 text-sm hover:bg-accent transition-colors"
             onClick={onOpenTemplateModal}
           >
-            Create from Template
+            Create from template
           </button>
         )}
         <button
           className="rounded border border-primary bg-primary px-3 py-1 text-sm text-primary-foreground hover:opacity-90 transition-opacity"
           onClick={onOpenCreateModal}
         >
-          Create Crisis
+          Create crisis
         </button>
       </div>
     </div>

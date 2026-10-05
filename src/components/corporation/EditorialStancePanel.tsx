@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export interface EditorialStanceView {
   economic: number;
@@ -36,7 +37,7 @@ export function EditorialStancePanel({
       });
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string };
-        setError(body.error ?? t("saveFailed"));
+        setError(apiErrorText(body, t("saveFailed")));
         return;
       }
       onSaved?.();

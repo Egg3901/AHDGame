@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -130,7 +131,7 @@ export default function BondsTab({
         setBondIssueFaceValue(0);
         onRefresh();
       } else {
-        setBondActionError(data.error || "Failed to issue bond");
+        setBondActionError(apiErrorText(data, "Failed to issue bond"));
       }
     } catch {
       setBondActionError("Network error");

@@ -59,6 +59,9 @@ describe("BG 2027 political substrate", () => {
       majorityThreshold: 121,
       status: "pending",
     });
+    expect(calls.stateDemographics!).toHaveBeenCalledTimes(6);
+    expect(calls.demographicCategories!.mock.calls[0]?.[1]?.$set.groups).toHaveLength(5);
+    expect(calls.stateBaselines!).toHaveBeenCalledTimes(6);
     const cold = mockDb();
     await seedBG2027(cold.db, true, () => {}, "1979-default");
     expect(cold.calls.states).toBeUndefined();

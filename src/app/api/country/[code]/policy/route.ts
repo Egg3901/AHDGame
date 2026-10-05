@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { StatePolicyRecord, GovernorExecutiveOrder, Subsidy } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -25,7 +25,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const { searchParams } = new URL(request.url);
     const scope = searchParams.get("scope");
@@ -83,7 +83,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
       });
     }
 
-    return NextResponse.json({ error: "Missing or invalid scope or stateId" }, { status: 400 });
+    return errorResponse(400, "Missing or invalid scope or stateId");
   } catch (error) {
     return handleRouteError(error);
   }

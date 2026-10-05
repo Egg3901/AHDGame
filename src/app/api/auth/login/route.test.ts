@@ -162,7 +162,7 @@ describe("POST /api/auth/login — authRevokedAt", () => {
     const { POST } = await import("./route");
     const res = await POST(loginRequest());
     expect(res.status).toBe(401);
-    await expect(res.json()).resolves.toEqual({ error: "Invalid credentials" });
+    await expect(res.json()).resolves.toMatchObject({ error: "Invalid credentials" });
     expect(updateOne).toHaveBeenCalled();
     expect(cookieSet.mock.calls.some((call) => call[0] === AUTH_COOKIE_NAME)).toBe(false);
   });
@@ -236,7 +236,7 @@ describe("POST /api/auth/login — authRevokedAt", () => {
     releaseWait();
     const res = await pending;
     expect(res.status).toBe(401);
-    await expect(res.json()).resolves.toEqual({ error: "Invalid credentials" });
+    await expect(res.json()).resolves.toMatchObject({ error: "Invalid credentials" });
     expect(updateOne).toHaveBeenCalled();
     expect(updateOne.mock.calls[0][0].authRevokedAt).toEqual(cutoff);
     expect(cookieSet.mock.calls.some((call) => call[0] === AUTH_COOKIE_NAME)).toBe(false);
@@ -265,7 +265,7 @@ describe("POST /api/auth/login — authRevokedAt", () => {
       const { POST } = await import("./route");
       const res = await POST(loginRequest());
       expect(res.status).toBe(401);
-      await expect(res.json()).resolves.toEqual({ error: "Invalid credentials" });
+      await expect(res.json()).resolves.toMatchObject({ error: "Invalid credentials" });
       expect(updateOne).not.toHaveBeenCalled();
       expect(cookieSet.mock.calls.some((call) => call[0] === AUTH_COOKIE_NAME)).toBe(false);
     }
@@ -341,7 +341,7 @@ describe("POST /api/auth/login — source migration fence", () => {
       const { POST } = await import("./route");
       const res = await POST(loginRequest());
       expect(res.status).toBe(401);
-      expect(await res.json()).toEqual({ error: "Invalid credentials" });
+      expect(await res.json()).toMatchObject({ error: "Invalid credentials" });
       expect(updateOne).not.toHaveBeenCalled();
     }
   );
@@ -380,7 +380,7 @@ describe("POST /api/auth/login unknown accounts", () => {
     const { POST } = await import("./route");
     const response = await POST(loginRequest());
     expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toEqual({ error: "Invalid credentials" });
+    await expect(response.json()).resolves.toMatchObject({ error: "Invalid credentials" });
     expect(compare).toHaveBeenCalledOnce();
     const hash = compare.mock.calls[0][1];
     expect(hash).toHaveLength(60);

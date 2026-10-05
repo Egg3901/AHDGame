@@ -21,10 +21,12 @@
 // server module's doc comment for the exact logic). This component only
 // renders that computed state; it does not itself decide what counts as new.
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { ConfidenceBar } from "../alts/ConfidenceMeter";
 import { confidenceHex, formatRelativeTime, memberDisplayName } from "../alts/altTypes";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 // A player the moderator picked from the name/username/Discord search. The
 // watchlist keys on `userId`, so an account with no linked user is unpickable.
@@ -161,7 +163,7 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
       const res = await fetch("/api/admin/watchlist", { cache: "no-store" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? `Failed to load watchlist (${res.status})`);
+        throw new Error(apiErrorText(body, `Failed to load watchlist (${res.status})`));
       }
       const data: WatchlistListResponse = await res.json();
       setEntries(data.entries);
@@ -206,7 +208,7 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(body.error ?? `Failed to add (${res.status})`);
+        throw new Error(apiErrorText(body, `Failed to add (${res.status})`));
       }
       setEntries((prev) => [body.entry as WatchlistEntryView, ...prev]);
       setQuery("");
@@ -229,7 +231,7 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
       const res = await fetch(`/api/admin/watchlist/${userId}`, { method: "DELETE" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? `Failed to remove (${res.status})`);
+        throw new Error(apiErrorText(body, `Failed to remove (${res.status})`));
       }
       setEntries((prev) => prev.filter((e) => e.userId !== userId));
     } catch (err) {
@@ -379,7 +381,7 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
         >
           {adding ? "Adding…" : "Add to watchlist"}
         </button>
-        {addError && <p className="w-full text-xs text-red-400">{addError}</p>}
+        <InlineError error={addError} className="w-full text-xs text-red-400" />
       </form>
 
       {flash && (

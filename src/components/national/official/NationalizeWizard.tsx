@@ -6,6 +6,7 @@ import { TIER_MULTIPLIER } from "@/lib/nationalization/constants";
 import { OWNER_LABEL, eligibilityReasons } from "@/lib/nationalization/labels";
 import type { NatOfficialActions } from "../NationalCorporationView";
 import { natMoney as money } from "../natMoney";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Target {
   corporationId: string;
@@ -86,7 +87,7 @@ export function NationalizeWizard({ official }: { official: NatOfficialActions }
       });
       const json = await res.json();
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Nationalization failed." });
+        setFeedback({ type: "error", message: apiErrorText(json, "Nationalization failed.") });
       } else {
         setFeedback({ type: "success", message: `${selected.name} nationalized.` });
         setSelectedId(null);

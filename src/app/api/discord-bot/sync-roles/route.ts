@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_FINANCIAL_LIMITS } from "@/lib/api/rateLimit";
 import type { Character, User, PoliticalParty, Corporation, ElectedOfficial } from "@/lib/db/types";
@@ -22,7 +22,7 @@ import { buildSyncRoleTokens } from "./buildSyncRoles";
 export async function GET(request: Request) {
   try {
     if (!requireBotToken(request)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const rateLimit = checkRateLimit(
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
     const discordId = url.searchParams.get("discordId");
 
     if (!discordId) {
-      return NextResponse.json({ error: "Must provide discordId" }, { status: 400 });
+      return errorResponse(400, "Must provide discordId");
     }
 
     const db = await getDb();
@@ -201,7 +201,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     if (!requireBotToken(request)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const rateLimit = checkRateLimit("discord-bot-sync", 10, 60000);

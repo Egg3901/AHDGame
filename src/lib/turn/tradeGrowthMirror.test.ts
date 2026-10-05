@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import { FOREX_ACTIVE_COUNTRIES } from "@/lib/constants/currencies";
+import { getPresetMonetaryScope } from "@/lib/monetaryPolicy/presetMonetaryScope";
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import type { Db } from "mongodb";
 import { mirrorTradeGrowth } from "./tradeGrowthMirror";
 
-const N_FOREX = FOREX_ACTIVE_COUNTRIES.length;
+const N_FOREX = getPresetMonetaryScope(DEFAULT_SEED_PRESET).centralBankCountries.length;
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 

@@ -94,19 +94,19 @@ export function CostAndChanceSummary({
     <div className="rounded-lg bg-background p-3">
       <div className="grid grid-cols-2 gap-2 text-sm">
         <div>
-          <span className="text-muted">Action Cost:</span>{" "}
+          <span className="text-muted">Action cost:</span>{" "}
           <span className="font-medium">{actionCost}</span>
         </div>
         {fundCost > 0 && (
           <div>
-            <span className="text-muted">Fund Cost:</span>{" "}
+            <span className="text-muted">Fund cost:</span>{" "}
             <span className="font-medium text-green-400">
               {formatLocalFunds(fundCost, currency)}
             </span>
           </div>
         )}
         <div className="col-span-2">
-          <span className="text-muted">Estimated Response:</span>{" "}
+          <span className="text-muted">Estimated response:</span>{" "}
           <span
             className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${
               isLikely

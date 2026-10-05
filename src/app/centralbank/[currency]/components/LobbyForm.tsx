@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { CENTRAL_BANK_LOBBY_MIN_AMOUNT } from "@/lib/constants/centralBankLobby";
 import { Button } from "@/components/ui";
@@ -134,7 +135,7 @@ export function LobbyForm({
           Cancel
         </Button>
       </div>
-      {error && <p className="text-body-sm text-error">{error}</p>}
+      <InlineError error={error} className="text-body-sm text-error" />
     </div>
   );
 }

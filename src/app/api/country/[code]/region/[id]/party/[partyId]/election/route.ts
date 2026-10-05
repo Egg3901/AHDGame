@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { isInNewCharacterCooldown } from "@/lib/auth/newCharacterCooldown";
 import {
   getLeadershipEligibility,
@@ -84,7 +84,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { code, id, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
 
@@ -102,8 +102,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // Party lookup by sequential ID
     const party = await findPartyBySequentialId(db, partyId, countryId);
 
-    if (!state) return NextResponse.json({ error: "State not found" }, { status: 404 });
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!state) return errorResponse(404, "State not found");
+    if (!party) return errorResponse(404, "Party not found");
 
     const partyKey = getPartyIdString(party);
 

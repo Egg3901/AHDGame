@@ -17,6 +17,7 @@ import {
   getSovereignIssuerName,
   issueScheduledSovereignBondSeries,
   issueAdminSovereignBondSeries,
+  issueDepositInsuranceBackstopBond,
   reconcileSovereignDebt,
   SOVEREIGN_BOND_TERM_PREMIUMS,
   shouldIssueQuarterlySovereignBondSeries,
@@ -327,6 +328,11 @@ describe("getSovereignCouponRate", () => {
     expect(getSovereignCouponRate(5.5, 96, 1.5)).toBe(7.25);
   });
 
+  it("adds the issuer-risk spread once after term and credibility spreads", () => {
+    expect(getSovereignCouponRate(5, 48, 0, 12)).toBe(17);
+    expect(getSovereignCouponRate(5, 96, 1.5, 3)).toBe(9.75);
+  });
+
   it("ignores a negative or non-finite spread rather than discounting the coupon", () => {
     expect(getSovereignCouponRate(5.5, 48, -2)).toBe(5.5);
     expect(getSovereignCouponRate(5.5, 48, NaN)).toBe(5.5);
@@ -496,9 +502,9 @@ describe("reconcileSovereignDebt", () => {
     const t48 = result!.tranches.find((t) => t.maturityTurns === 48)!;
     const t96 = result!.tranches.find((t) => t.maturityTurns === 96)!;
     const t240 = result!.tranches.find((t) => t.maturityTurns === 240)!;
-    expect(t48.couponRate).toBe(5.0); // prime 5.0 + 0pp
-    expect(t96.couponRate).toBe(5.25); // prime 5.0 + 0.25pp
-    expect(t240.couponRate).toBe(5.75); // prime 5.0 + 0.75pp
+    expect(t48.couponRate).toBe(5.5); // prime 5.0 + AA 0.5pp
+    expect(t96.couponRate).toBe(5.75); // plus term 0.25pp
+    expect(t240.couponRate).toBe(6.25); // plus term 0.75pp
   });
 
   it("budgetInterestDelta equals sum of all tranche annual coupon costs", async () => {
@@ -984,7 +990,35 @@ describe("issueScheduledSovereignBondSeries", () => {
     expect(inserted.currencyCode).toBe("EUR");
   });
 
-  it("uses term premiums per maturity", async () => {
+  it("prices admin and deposit-insurance new issues from the persisted issuer rating", async () => {
+    const budget = makeBudget({ creditRating: "CCC" });
+    const { db } = setupScheduledMocks({ budget, primeRate: 5 });
+
+    await issueAdminSovereignBondSeries(db as unknown as Db, {
+      countryId: COUNTRY_CONFIGS.US.id,
+      turn: TURN,
+      now: new Date(),
+      faceValue: 10_000_000,
+      useQuarterDeficit: false,
+    });
+    const adminBond = db.collectionMocks["bonds"]!.insertOne.mock.calls[0][0] as Omit<Bond, "_id">;
+    expect(adminBond.couponRate).toBe(17);
+
+    const backstopDb = setupScheduledMocks({
+      budget: makeBudget({ creditRating: "CCC" }),
+      primeRate: 5,
+    }).db;
+    const backstop = await issueDepositInsuranceBackstopBond(backstopDb as unknown as Db, {
+      countryId: COUNTRY_CONFIGS.US.id,
+      turn: TURN + 1,
+      now: new Date(),
+      amount: 10_000_000,
+      issuanceKey: "test:deposit-insurance",
+    });
+    expect(backstop?.couponRate).toBe(17);
+  });
+
+  it("uses term premiums plus the current issuer tier per maturity", async () => {
     const { db } = setupScheduledMocks({ primeRate: 5.0 });
     await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
 
@@ -993,9 +1027,44 @@ describe("issueScheduledSovereignBondSeries", () => {
     );
     const byMaturity = Object.fromEntries(bondDocs.map((b) => [b.maturityTurns, b]));
 
-    expect(byMaturity[48].couponRate).toBe(5.0); // +0pp
-    expect(byMaturity[96].couponRate).toBe(5.25); // +0.25pp
-    expect(byMaturity[240].couponRate).toBe(5.75); // +0.75pp
+    expect(byMaturity[48].couponRate).toBe(5.5); // AA +0.5pp
+    expect(byMaturity[96].couponRate).toBe(5.75); // AA + term 0.25pp
+    expect(byMaturity[240].couponRate).toBe(6.25); // AA + term 0.75pp
+  });
+
+  it("prices scheduled rollover/new paper at the current CCC tier without rewriting old bonds", async () => {
+    const budget = makeBudget({ creditRating: "CCC" });
+    const oldRollover: Bond = {
+      _id: "old-rollover" as unknown as Bond["_id"],
+      issuerType: "sovereign",
+      corporationId: "old-issuer" as unknown as Bond["corporationId"],
+      countryId: COUNTRY_CONFIGS.US.id,
+      issuerName: "United States",
+      faceValue: 1000,
+      couponRate: 5,
+      maturityTurns: 48,
+      issuedAtTurn: TURN - 48,
+      maturityTurn: TURN,
+      marketPrice: 1,
+      totalIssued: 20_000_000,
+      publicFloat: 20_000,
+      holders: [],
+      defaulted: false,
+      defaultedAtTurn: null,
+      matured: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const { db } = setupScheduledMocks({ budget, rolloverBonds: [oldRollover], primeRate: 5 });
+
+    await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
+
+    const newDocs = db.collectionMocks["bonds"]!.insertOne.mock.calls.map(
+      ([doc]) => doc as Omit<Bond, "_id">
+    );
+    expect(newDocs.length).toBeGreaterThan(0);
+    expect(newDocs.every((bond) => bond.couponRate >= 17)).toBe(true);
+    expect(oldRollover.couponRate).toBe(5);
   });
 
   it("denominates later Irish sovereign issues in the budget's EUR", async () => {

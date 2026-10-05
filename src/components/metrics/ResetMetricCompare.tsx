@@ -377,7 +377,7 @@ export function ResetMetricCompare({
                                   <div className="text-body-sm tabular-nums text-foreground">
                                     {valueLabel(comparisonMetric, column.countryId)}
                                   </div>
-                                  <div className="text-[10px] uppercase tracking-wide text-muted">
+                                  <div className="text-body-sm font-medium text-muted">
                                     <Score value={comparisonMetric.conditionScore} /> condition
                                   </div>
                                 </div>

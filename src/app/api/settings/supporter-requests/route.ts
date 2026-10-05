@@ -4,7 +4,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getSupporterRequestsCollection } from "@/lib/db/collections/supporterRequests";
 import type { SupporterRequest } from "@/lib/db/types/supporterRequests";
@@ -48,7 +48,7 @@ async function handleGET() {
       }
     );
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     const requests = await (
@@ -106,21 +106,18 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     const user = await db.collection<User>("users").findOne({ _id: userId });
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     const tier = user.patreonTier ?? null;
     if (!isPatreonActive(tier, user.patreonExpiresAt ?? null)) {
-      return NextResponse.json(
-        { error: "An active supporter subscription is required." },
-        { status: 403 }
-      );
+      return errorResponse(403, "An active supporter subscription is required.");
     }
 
     const requestsCol = await getSupporterRequestsCollection(db);
@@ -130,10 +127,7 @@ export async function POST(request: Request) {
       status: "pending",
     });
     if (pending) {
-      return NextResponse.json(
-        { error: "You already have a pending request of this type." },
-        { status: 409 }
-      );
+      return errorResponse(409, "You already have a pending request of this type.");
     }
 
     const submitterName = user.displayName || user.username;
@@ -141,12 +135,12 @@ export async function POST(request: Request) {
     if (parsed.data.kind === "wall-name") {
       const validated = validateProposedName(parsed.data.proposedName, { minLen: 2, maxLen: 40 });
       if (!validated.ok) {
-        return NextResponse.json({ error: validated.error }, { status: 400 });
+        return errorResponse(400, validated.error);
       }
       if (await nameCollidesWithUser(db, validated.name, userId)) {
-        return NextResponse.json(
-          { error: "That name matches another player's name. Pick something distinct." },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "That name matches another player's name. Pick something distinct."
         );
       }
 
@@ -169,16 +163,10 @@ export async function POST(request: Request) {
 
     // npp-rename
     if (tier !== "supporter-plus-plus") {
-      return NextResponse.json(
-        { error: "Politician renames require the Supporter++ tier." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Politician renames require the Supporter++ tier.");
     }
     if (user.nppRenameUsedAt) {
-      return NextResponse.json(
-        { error: "Your one-time politician rename has already been used." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Your one-time politician rename has already been used.");
     }
     const priorApproved = await requestsCol.findOne({
       userId,
@@ -186,26 +174,20 @@ export async function POST(request: Request) {
       status: "approved",
     });
     if (priorApproved) {
-      return NextResponse.json(
-        { error: "Your one-time politician rename has already been used." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Your one-time politician rename has already been used.");
     }
 
     const validated = validateProposedName(parsed.data.proposedNppName, { minLen: 2, maxLen: 60 });
     if (!validated.ok) {
-      return NextResponse.json({ error: validated.error }, { status: 400 });
+      return errorResponse(400, validated.error);
     }
 
     const npp = await db.collection<NPP>("npps").findOne({ _id: new ObjectId(parsed.data.nppId) });
     if (!npp) {
-      return NextResponse.json({ error: "Politician not found." }, { status: 404 });
+      return errorResponse(404, "Politician not found.");
     }
     if (npp.retiredAt) {
-      return NextResponse.json(
-        { error: "That politician is retired and cannot be renamed." },
-        { status: 400 }
-      );
+      return errorResponse(400, "That politician is retired and cannot be renamed.");
     }
 
     const exact = new RegExp(`^${escapeRegex(validated.name)}$`, "i");
@@ -218,16 +200,10 @@ export async function POST(request: Request) {
       { projection: { _id: 1 } }
     );
     if (nameTaken) {
-      return NextResponse.json(
-        { error: "A politician in that country already has this name." },
-        { status: 409 }
-      );
+      return errorResponse(409, "A politician in that country already has this name.");
     }
     if (await nameCollidesWithUser(db, validated.name, userId)) {
-      return NextResponse.json(
-        { error: "That name matches a player's name. Pick something distinct." },
-        { status: 409 }
-      );
+      return errorResponse(409, "That name matches a player's name. Pick something distinct.");
     }
 
     const doc: SupporterRequest = {

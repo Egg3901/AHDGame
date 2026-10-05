@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/ui";
 import type { PartyData } from "./types";
 import { getOfficeLabel } from "@/lib/utils/politics";
 import { PARTY_SECTION_HEADING_CLASS } from "@/components/party/partyPageStyles";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 type RosterFilter = "all" | "player" | "npp";
 
@@ -125,7 +126,11 @@ export function MembersPanel({ party }: { party: PartyData }) {
                         >
                           {m.name}
                         </Link>
-                        {m.isNPP && <span className="text-body-sm text-muted">NPP</span>}
+                        {m.isNPP && (
+                          <span className="text-body-sm text-muted">
+                            <NppAbbr />
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-3 text-muted">{m.homeState}</td>

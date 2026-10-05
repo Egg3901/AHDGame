@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 
 // GET /api/uploads/[...path] — Serves locally stored upload files in development (production uses Vercel Blob URLs directly).
@@ -9,7 +10,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pat
 
   // Basic path traversal protection
   if (relativePath.includes("..") || relativePath.startsWith("/")) {
-    return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+    return errorResponse(400, "Invalid path");
   }
 
   const fs = await import("fs/promises");
@@ -20,7 +21,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pat
   try {
     const stat = await fs.stat(filePath);
     if (!stat.isFile()) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return errorResponse(404, "Not found");
     }
 
     const buffer = await fs.readFile(filePath);
@@ -56,6 +57,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pat
 
     return new NextResponse(buffer, { status: 200, headers });
   } catch {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return errorResponse(404, "Not found");
   }
 }

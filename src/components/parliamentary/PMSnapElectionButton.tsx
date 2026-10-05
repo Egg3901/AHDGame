@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import type { CountryId } from "@/lib/constants/countries";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   countryId: CountryId;
@@ -38,7 +39,7 @@ export function PMSnapElectionButton({
         showToast(data.message ?? "Snap election triggered.", "success");
         onTriggered();
       } else {
-        showToast(data.error ?? "Failed to trigger snap election.", "error");
+        showToast(apiErrorText(data, "Failed to trigger snap election."), "error");
       }
     } catch {
       showToast("Network error.", "error");
@@ -77,7 +78,7 @@ export function PMSnapElectionButton({
         disabled={disabled}
         className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning hover:bg-warning/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
       >
-        Call Snap Election
+        Call snap election
       </button>
       <span className="text-xs text-muted">
         {snapElectionsUsed} / {total} used

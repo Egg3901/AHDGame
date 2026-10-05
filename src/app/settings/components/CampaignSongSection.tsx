@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { MessageBanner, SpinnerIcon, CheckIcon } from "./shared";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 function extractYouTubeId(input: string): string | null {
   if (!input) return null;
@@ -59,7 +60,7 @@ export function CampaignSongSection({ character, onCharacterUpdate }: Props) {
         onCharacterUpdate({ campaignSongUrl: data.videoId || "" });
         if (data.videoId) setCampaignSongUrl(data.videoId);
       } else {
-        setCampaignSongMsg({ text: data.error ?? t("common.saveFailed"), ok: false });
+        setCampaignSongMsg({ text: apiErrorText(data, t("common.saveFailed")), ok: false });
       }
     } catch {
       setCampaignSongMsg({ text: t("common.networkError"), ok: false });

@@ -23,7 +23,7 @@ import {
 const pct = (rate: number) => `${(rate * 100).toFixed(2).replace(/\.?0+$/, "")}%`;
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "Investing Guide | A House Divided",
+  title: "Investing guide | A House Divided",
   description:
     "How to invest in A House Divided: stocks, currency exchange, sovereign bonds, and how interest rates connect portfolios to the wider economy.",
   pathname: "/guides/investing",

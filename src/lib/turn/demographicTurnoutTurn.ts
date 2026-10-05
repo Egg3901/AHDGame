@@ -42,7 +42,7 @@ import { resolveCanvassGroup } from "@/lib/demographics/countryDemographics";
 import {
   calculateRegistrationDriveBoost,
   planRegistrationDriveSourcing,
-} from "./partyOrg/registrationDrive";
+} from "@/lib/parties/registrationDrive";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { DEFAULT_LEGACY_COUNTRY_ID, type CountryId } from "@/lib/constants/countries";
 import { REG_LAG_BELOW_ORG_PCT_BY_COUNTRY } from "./partyOrg/pacingConstants";

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { ExecutiveActKind } from "@/lib/constants/executiveSurface";
-import { formatStableUtc } from "@/lib/time/localTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 
 /** Serialized ExecutiveAct from GET /api/country/[code]/executive/acts. */
 export interface LedgerAct {
@@ -35,11 +35,10 @@ const FILTER_KINDS: Record<Exclude<LedgerFilter, "all">, ExecutiveActKind[]> = {
   orders: ["order"],
 };
 
-function stamp(act: LedgerAct): string {
-  if (act.turn !== undefined) return `T ${act.turn}`;
-  const date = new Date(act.at);
-  if (Number.isNaN(date.getTime())) return "—";
-  return formatStableUtc(date, { month: "short", day: "numeric" });
+function Stamp({ act }: { act: LedgerAct }) {
+  if (act.turn !== undefined) return <>T {act.turn}</>;
+  // Acts without a turn stamp read on the game calendar, never the real date.
+  return <GameMonthTime value={act.at} fallback="—" />;
 }
 
 /**
@@ -74,9 +73,7 @@ export function ActsLedger({
   return (
     <div className="overflow-hidden rounded-xl border border-card-border bg-card">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-card-border bg-card-muted px-4 py-2.5">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-muted">
-          Acts of Government
-        </span>
+        <span className="text-body-sm font-medium text-muted">Acts of government</span>
         <span className="flex gap-1.5">
           {pills.map((pill) => (
             <button
@@ -110,7 +107,9 @@ export function ActsLedger({
               key={`${act.kind}-${act.refId}`}
               className="relative grid grid-cols-[64px_92px_1fr] items-baseline gap-2.5 px-4 py-2"
             >
-              <span className="text-right font-mono text-[10px] text-muted">{stamp(act)}</span>
+              <span className="text-right font-mono text-[10px] text-muted">
+                <Stamp act={act} />
+              </span>
               <span
                 className={`rounded px-1 py-0.5 text-center text-[9px] font-bold tracking-wider ${KIND_TONE[act.kind]}`}
               >

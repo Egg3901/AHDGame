@@ -1,6 +1,7 @@
 /** Chancellor-authored annual omnibus Budget for the UK. */
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { useGameClock } from "@/contexts/useGameClock";
@@ -126,7 +127,7 @@ export function BudgetAuthoringPanel({ countryCode }: { countryCode: string }) {
         });
         const json = await response.json().catch(() => ({}));
         if (!response.ok || json?.ok === false) {
-          setError(json?.error ?? "Could not process the Budget");
+          setError(apiErrorText(json, "Could not process the Budget"));
           return;
         }
         if (action === "preview") {
@@ -377,7 +378,7 @@ export function BudgetAuthoringPanel({ countryCode }: { countryCode: string }) {
             onClick={() => submit("preview")}
             className="rounded border border-card-border px-3 py-1.5 text-body-sm text-muted disabled:opacity-50"
           >
-            Preview Budget
+            Preview budget
           </button>
           <button
             type="button"
@@ -393,7 +394,7 @@ export function BudgetAuthoringPanel({ countryCode }: { countryCode: string }) {
             onClick={() => submit("table")}
             className="rounded border border-foreground bg-foreground px-3 py-1.5 text-body-sm text-background disabled:opacity-50"
           >
-            Table Budget
+            Table budget
           </button>
         </div>
       )}

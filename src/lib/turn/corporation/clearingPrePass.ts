@@ -245,7 +245,8 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
           sector.transitionStartTurn,
           turn ?? 0,
           sector.industryModel,
-          sector.mediaDiscriminator
+          sector.mediaDiscriminator,
+          lookups.preset
         );
         // Same remap the world ledger applies (computeRawSupplyDemand): bloc
         // media offers state broadcasting, not advertising. If the offer and
@@ -733,6 +734,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     }
     if (supplyAgreementsEnabled && settleableAgreements) {
       buyerDemandByCorpCommodity = computeSupplyAgreementBuyerDemand({
+        preset: lookups.preset,
         sectors: supplyAgreementDemandSectors,
         currentTurn: turn ?? 0,
         unitScale: market.plantsEnabled ? lookups.eraUnitScale : 1,

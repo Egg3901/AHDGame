@@ -6,6 +6,7 @@
  * check modules, not the other way round).
  */
 import type { SeedDiagnosticCheck, SeedDiagnosticSeverity } from "./types";
+import { CONFORMANCE_REL_TOL, withinRelTol } from "./tolerance";
 
 export function check(
   id: string,
@@ -50,4 +51,30 @@ export function critical(
   note?: string
 ): SeedDiagnosticCheck {
   return check(id, scope, metric, expected, actual, "critical", note);
+}
+
+export function relCheck(
+  id: string,
+  scope: string,
+  metric: string,
+  expected: number,
+  actual: number | null | undefined,
+  tol: number = CONFORMANCE_REL_TOL,
+  note?: string
+): SeedDiagnosticCheck {
+  if (actual == null || !Number.isFinite(actual)) {
+    return critical(id, scope, metric, expected, actual ?? null, note ?? "missing actual");
+  }
+  if (withinRelTol(actual, expected, tol)) {
+    return ok(id, scope, metric, expected, actual, note);
+  }
+  const drift = Math.abs(actual - expected) / Math.max(Math.abs(expected), 1e-9);
+  return critical(
+    id,
+    scope,
+    metric,
+    expected,
+    actual,
+    note ?? `drift ${(drift * 100).toFixed(2)}% > ${(tol * 100).toFixed(1)}% tol`
+  );
 }

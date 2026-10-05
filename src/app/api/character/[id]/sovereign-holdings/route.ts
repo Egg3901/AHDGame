@@ -3,6 +3,7 @@
 // Auth: requireAuth
 // Errors: 400 (invalid id), 401
 
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
@@ -24,7 +25,7 @@ async function handleGET(_req: Request, { params }: RouteParams) {
 
   const { id } = await params;
   if (!ObjectId.isValid(id)) {
-    return NextResponse.json({ error: "Invalid character id" }, { status: 400 });
+    return errorResponse(400, "Invalid character id");
   }
   const characterId = new ObjectId(id);
   const characterIdStr = characterId.toString();

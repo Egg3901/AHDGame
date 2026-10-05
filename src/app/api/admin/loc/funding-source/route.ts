@@ -11,7 +11,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError, badRequest } from "@/lib/api/errors";
+import { handleRouteError, badRequest, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import type { Character } from "@/lib/db/types";
 import { ZOD_ACTIVE_CURRENCY_ENUM } from "@/lib/constants/currencies";
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { characterId, currency, source } = parsed.data;
     const c = currency as CurrencyCode;

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import type { DossierPlayView } from "@/lib/settlement/queries/dossier";
 
@@ -53,7 +54,7 @@ export function PlayButton({ play, onCommitted }: PlayButtonProps) {
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(body?.error ?? "That play could not be committed.");
+        setError(apiErrorText(body, "That play could not be committed."));
         return;
       }
       onCommitted();

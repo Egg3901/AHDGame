@@ -1,10 +1,12 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Badge, Button, Tooltip } from "@/components/ui";
 import { formatCompactNumber } from "@/lib/utils/formatters";
 import { CE_TERMS } from "./glossary";
 import type { CommandEconomyDashboard } from "@/lib/economy/commandEconomyDashboard";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   dashboard: CommandEconomyDashboard;
@@ -44,7 +46,7 @@ export function GosplanPlannerPanel({ dashboard, onSaved }: Props) {
       );
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.error ?? `Save failed (${res.status})`);
+        throw new Error(apiErrorText(j, `Save failed (${res.status})`));
       }
       onSaved();
     } catch (e) {
@@ -60,7 +62,7 @@ export function GosplanPlannerPanel({ dashboard, onSaved }: Props) {
     <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="flex items-center text-sm font-bold text-foreground">
-          Gosplan Planner
+          Gosplan planner
           <Tooltip content={CE_TERMS.gosplan} label="About Gosplan" />
         </h3>
         <Badge color="warning" variant="subtle">
@@ -110,9 +112,7 @@ export function GosplanPlannerPanel({ dashboard, onSaved }: Props) {
                 </span>
               </div>
               <label className="mt-2 flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wide text-muted">
-                  Quota
-                </span>
+                <span className="text-body-sm font-medium text-muted">Quota</span>
                 <input
                   type="number"
                   min={0}
@@ -131,7 +131,7 @@ export function GosplanPlannerPanel({ dashboard, onSaved }: Props) {
       <div className="mt-4 hidden overflow-x-auto sm:block">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-card-border text-[10px] font-bold uppercase tracking-wide text-muted">
+            <tr className="border-b border-card-border text-sm font-semibold text-foreground">
               <th className="px-2 py-2">Sector</th>
               <th className="px-2 py-2 text-right">Output</th>
               <th className="px-2 py-2 text-right">Fulfillment</th>
@@ -171,7 +171,7 @@ export function GosplanPlannerPanel({ dashboard, onSaved }: Props) {
         </table>
       </div>
 
-      {error && <p className="mt-3 text-xs text-error">{error}</p>}
+      <InlineError error={error} className="mt-3 text-xs text-error" />
       <div className="mt-4">
         <Button size="sm" onClick={save} disabled={saving}>
           {saving ? "Saving..." : "Set plan quotas"}

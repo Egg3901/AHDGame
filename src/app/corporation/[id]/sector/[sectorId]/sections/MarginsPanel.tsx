@@ -105,7 +105,7 @@ export function topMarginDrivers(margins: Margins): { label: string; value: numb
 
 function GroupHeader({ label }: { label: string }) {
   return (
-    <div className="mb-2 border-b border-card-border pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
+    <div className="mb-2 border-b border-card-border pb-1 text-sm font-semibold text-foreground">
       {label}
     </div>
   );
@@ -148,7 +148,7 @@ export default function MarginsPanel({
         className="flex w-full items-center justify-between px-6 py-4 text-left"
       >
         <div>
-          <h2 className="text-lg font-bold text-foreground">Profit Margin Breakdown</h2>
+          <h2 className="text-lg font-bold text-foreground">Profit margin breakdown</h2>
           <p className="text-xs text-muted">
             Base {margins.base}% · state, corporate & national modifiers
           </p>
@@ -179,9 +179,7 @@ export default function MarginsPanel({
 
           {/* Base margin */}
           <div className="mb-4 flex items-center justify-between border-b border-card-border pb-3 text-sm">
-            <span className="text-[11px] font-medium uppercase tracking-wider text-muted">
-              Base margin
-            </span>
+            <span className="text-body-sm font-medium text-muted">Base margin</span>
             <span className="text-base font-bold tabular-nums text-foreground">
               {margins.base}%
             </span>
@@ -190,7 +188,7 @@ export default function MarginsPanel({
           {/* Ranked drivers — what is actually moving this margin, biggest first */}
           {drivers.length > 0 && (
             <div className="mb-4 rounded-lg border border-card-border bg-card-elevated/40 p-3">
-              <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-primary">
+              <div className="mb-2 text-body-sm font-medium text-primary">
                 Biggest effects right now
               </div>
               <div className="space-y-1.5">
@@ -231,7 +229,7 @@ export default function MarginsPanel({
 
           {/* Group 1: State Conditions */}
           <div className="mb-4 space-y-2">
-            <GroupHeader label="State Conditions" />
+            <GroupHeader label="State conditions" />
             <ModifierRow
               label="Unemployment"
               modifier={margins.unemploymentModifier}
@@ -386,7 +384,7 @@ export default function MarginsPanel({
 
           {/* Group 2: Corporate Factors */}
           <div className="mb-4 space-y-2">
-            <GroupHeader label="Corporate Factors" />
+            <GroupHeader label="Corporate factors" />
             <ModifierRow
               label="Commodity markets"
               modifier={margins.commodityModifier}
@@ -503,7 +501,7 @@ export default function MarginsPanel({
 
           {/* Group 3: National Economy */}
           <div className="mb-4 space-y-2">
-            <GroupHeader label="National Economy" />
+            <GroupHeader label="National economy" />
             {margins.subsidyModifier !== 0 && (
               <ModifierRow
                 label="Active subsidies"
@@ -549,7 +547,7 @@ export default function MarginsPanel({
           {/* Group 4: Active Crises */}
           {margins.crisisMarginPenalty != null && margins.crisisMarginPenalty !== 0 && (
             <div className="mb-4 space-y-2">
-              <GroupHeader label="Active Crises" />
+              <GroupHeader label="Active crises" />
               <ModifierRow
                 label="Crisis margin shock"
                 modifier={margins.crisisMarginPenalty}

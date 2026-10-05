@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
@@ -136,19 +136,19 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
     if (authResult.user.isBanned) {
-      return NextResponse.json({ error: "Account is banned" }, { status: 403 });
+      return errorResponse(403, "Account is banned");
     }
     const myCharacterId = authResult.user.character._id;
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
 
     const eligibleVoterSet = getEligibleVoterSet(party);
     const eligibleSize = eligibleVoterSet.size;
@@ -257,13 +257,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
     if (authResult.user.isBanned) {
-      return NextResponse.json({ error: "Account is banned" }, { status: 403 });
+      return errorResponse(403, "Account is banned");
     }
     const { user } = authResult;
 
@@ -272,12 +272,12 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
     if (party.isDefunct) {
-      return NextResponse.json({ error: "This party has been dissolved" }, { status: 400 });
+      return errorResponse(400, "This party has been dissolved");
     }
     if (!isSameCountry(user.character, party)) {
-      return NextResponse.json({ error: "Country mismatch" }, { status: 403 });
+      return errorResponse(403, "Country mismatch");
     }
 
     const characterId = user.character._id;
@@ -291,18 +291,15 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isCommittee = party.committeeIds.some((id) => id.toString() === characterIdStr);
     const canPropose = isChair || isViceChair || isCommittee;
     if (!canPropose) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the chair, vice-chair, or a national committee member may propose committee actions",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the chair, vice-chair, or a national committee member may propose committee actions"
       );
     }
 
     const parsed = await parseJsonBody(request, createProposalSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
 
@@ -310,12 +307,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // editor, which owns the cap and residency checks. Refuse hand-rolled
     // ones here so those checks can't be side-stepped.
     if (body.type === "campaignerAppointment") {
-      return NextResponse.json(
-        {
-          error:
-            "Nominate campaigners from the Chair Office Party Campaigners card, not the proposal form.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Nominate campaigners from the Chair Office Party Campaigners card, not the proposal form."
       );
     }
 
@@ -326,12 +320,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (body.type === "positionShift") {
       if (isPositionShiftLocked(party, body.axis, nowTurn)) {
         const lock = party.positionShiftCooldowns?.[body.axis];
-        return NextResponse.json(
-          {
-            error: `Position shift on '${body.axis}' is locked until turn ${lock?.lockedUntilTurn}`,
-            lockedUntilTurn: lock?.lockedUntilTurn,
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          `Position shift on '${body.axis}' is locked until turn ${lock?.lockedUntilTurn}`,
+          { extra: { lockedUntilTurn: lock?.lockedUntilTurn } }
         );
       }
     } else if (
@@ -344,12 +336,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     ) {
       if (isProposalTypeLocked(party, body.type, nowTurn)) {
         const lock = party.proposalCooldowns?.[body.type];
-        return NextResponse.json(
-          {
-            error: `Proposal type '${body.type}' is locked until turn ${lock?.lockedUntilTurn}`,
-            lockedUntilTurn: lock?.lockedUntilTurn,
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          `Proposal type '${body.type}' is locked until turn ${lock?.lockedUntilTurn}`,
+          { extra: { lockedUntilTurn: lock?.lockedUntilTurn } }
         );
       }
     }
@@ -364,37 +354,31 @@ export async function POST(request: Request, { params }: RouteParams) {
       ...(body.type === "positionShift" ? { "positionShift.axis": body.axis } : {}),
     });
     if (duplicateOpen) {
-      return NextResponse.json(
-        {
-          error:
-            body.type === "positionShift"
-              ? `An open positionShift proposal on '${body.axis}' already exists`
-              : `An open '${body.type}' proposal already exists`,
-          existingProposalId: duplicateOpen._id.toString(),
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        body.type === "positionShift"
+          ? `An open positionShift proposal on '${body.axis}' already exists`
+          : `An open '${body.type}' proposal already exists`,
+        { extra: { existingProposalId: duplicateOpen._id.toString() } }
       );
     }
 
     if (body.type === "merge") {
       const targetPartyObjId = new ObjectId(body.targetPartyId);
       if (targetPartyObjId.toString() === party._id.toString()) {
-        return NextResponse.json({ error: "Cannot merge a party with itself" }, { status: 400 });
+        return errorResponse(400, "Cannot merge a party with itself");
       }
       const targetParty = await db
         .collection<PoliticalParty>("politicalParties")
         .findOne({ _id: targetPartyObjId }, { projection: { countryId: 1, isDefunct: 1 } });
       if (!targetParty) {
-        return NextResponse.json({ error: "Target party not found" }, { status: 404 });
+        return errorResponse(404, "Target party not found");
       }
       if (targetParty.isDefunct) {
-        return NextResponse.json({ error: "Target party has been dissolved" }, { status: 400 });
+        return errorResponse(400, "Target party has been dissolved");
       }
       if (targetParty.countryId !== party.countryId) {
-        return NextResponse.json(
-          { error: "Cannot merge parties across countries" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Cannot merge parties across countries");
       }
     }
 
@@ -405,9 +389,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       // switch to "double" on a legacy row is also a no-op.
       const currentMode = party.transactionApprovalMode ?? "double";
       if (body.mode === currentMode) {
-        return NextResponse.json(
-          { error: `Party is already in '${currentMode}' transaction approval mode.` },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Party is already in '${currentMode}' transaction approval mode.`
         );
       }
     }
@@ -416,7 +400,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       const targetOid = new ObjectId(body.targetCharacterId);
       // Self-target forbidden: proposing your own removal is invalid.
       if (targetOid.equals(characterId)) {
-        return NextResponse.json({ error: "You cannot propose your own removal" }, { status: 400 });
+        return errorResponse(400, "You cannot propose your own removal");
       }
       // Target must currently hold the named role; reject if the role is
       // vacant or the named character isn't in that role.
@@ -434,10 +418,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         inRole = party.committeeIds.some((id) => id.equals(targetOid));
       }
       if (!inRole) {
-        return NextResponse.json(
-          { error: `Target character is not currently the ${body.role}` },
-          { status: 400 }
-        );
+        return errorResponse(400, `Target character is not currently the ${body.role}`);
       }
     }
 

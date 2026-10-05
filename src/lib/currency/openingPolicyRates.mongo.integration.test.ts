@@ -25,7 +25,7 @@ describe.skipIf(!uri)("Opening central-bank rates on isolated Mongo", () => {
   afterAll(async () => {
     await client?.close();
   });
-  it("seeds five date-specific benchmarks in one bounded batch and preserves subsequent policy", async () => {
+  it("seeds affordable opening rates in one bounded batch and preserves subsequent policy", async () => {
     const db = client.db(`ahd_test_opening_bank_${new ObjectId()}`);
     try {
       commands = 0;
@@ -34,11 +34,11 @@ describe.skipIf(!uri)("Opening central-bank rates on isolated Mongo", () => {
       const metrics = { commands, replyBytes };
       expect(metrics.commands).toBeLessThanOrEqual(2);
       for (const [country, expected] of [
-        ["US", 7],
-        ["UK", 13.88],
-        ["JP", 6],
-        ["DE", 6],
-        ["IE", 11.25],
+        ["US", 4],
+        ["UK", 4.5],
+        ["JP", 3],
+        ["DE", 4],
+        ["IE", 4.5],
       ] as const) {
         expect(
           (

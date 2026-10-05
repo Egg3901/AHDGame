@@ -50,6 +50,8 @@ export interface EnrichedCandidate {
   primaryScore: number;
   sharePct: number;
   enteredAt: Date;
+  constituencyId?: string;
+  japanShugiinListOrder?: number;
   endorsements: Array<{
     type: "npp" | "player";
     nppId?: string;
@@ -365,6 +367,10 @@ export function enrichElectionCandidates(deps: EnrichmentDependencies): Enriched
       primaryScore,
       sharePct: 0, // Will be computed in grouping step
       enteredAt: c.enteredAt,
+      ...(c.constituencyId ? { constituencyId: c.constituencyId } : {}),
+      ...(c.japanShugiinListOrder != null
+        ? { japanShugiinListOrder: c.japanShugiinListOrder }
+        : {}),
       endorsements: endorsementsByCandidate.get(cid) ?? [],
       isYou: !c.isNPP && c.characterId != null && c.characterId.toString() === myCharId,
       runningMateId,

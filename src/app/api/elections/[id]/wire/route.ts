@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import {
   getRaceWireFeed,
@@ -40,7 +40,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       limit: url.searchParams.get("limit") ?? undefined,
     });
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid query parameters" }, { status: 400 });
+      return errorResponse(400, "Invalid query parameters");
     }
 
     const db = await getDb();
@@ -52,9 +52,9 @@ export async function GET(request: Request, { params }: RouteParams) {
     const resolved = await resolveElectionRouteParam(db, id);
     if (!resolved.ok) {
       const invalid = resolved.reason === "invalid_id";
-      return NextResponse.json(
-        { error: invalid ? "Invalid election id" : "Election not found" },
-        { status: invalid ? 400 : 404 }
+      return errorResponse(
+        invalid ? 400 : 404,
+        invalid ? "Invalid election id" : "Election not found"
       );
     }
 

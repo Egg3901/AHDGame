@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
@@ -37,9 +38,9 @@ export function WhipPanel({ countryId }: { countryId: string }) {
       if (res.ok) {
         setWithdrawn(Array.isArray(data.withdrawn) ? data.withdrawn : []);
       } else if (res.status === 403) {
-        setError(data.error ?? "Only the Prime Minister can view whip suspensions.");
+        setError(apiErrorText(data, "Only the Prime Minister can view whip suspensions."));
       } else {
-        setError(data.error ?? "Failed to load whip suspensions.");
+        setError(apiErrorText(data, "Failed to load whip suspensions."));
       }
     } catch {
       setError("Network error - could not reach the server.");
@@ -81,19 +82,19 @@ export function WhipPanel({ countryId }: { countryId: string }) {
         setCharacterId("");
         await fetchWithdrawn();
       } else if (res.status === 400) {
-        const message = data.error ?? "That character ID is invalid.";
+        const message = apiErrorText(data, "That character ID is invalid.");
         setError(message);
         showToast(message, "error");
       } else if (res.status === 403) {
-        const message = data.error ?? "The whip cannot be withdrawn from this MP.";
+        const message = apiErrorText(data, "The whip cannot be withdrawn from this MP.");
         setError(message);
         showToast(message, "error");
       } else if (res.status === 409) {
-        const message = data.error ?? "The whip has already been withdrawn from this MP.";
+        const message = apiErrorText(data, "The whip has already been withdrawn from this MP.");
         setError(message);
         showToast(message, "error");
       } else {
-        const message = data.error ?? "Failed to withdraw the whip";
+        const message = apiErrorText(data, "Failed to withdraw the whip");
         setError(message);
         showToast(message, "error");
       }
@@ -128,15 +129,15 @@ export function WhipPanel({ countryId }: { countryId: string }) {
         showToast(data.message ?? "Whip restored", "success");
         await fetchWithdrawn();
       } else if (res.status === 409) {
-        const message = data.error ?? "This MP currently holds the whip.";
+        const message = apiErrorText(data, "This MP currently holds the whip.");
         setError(message);
         showToast(message, "error");
       } else if (res.status === 403) {
-        const message = data.error ?? "Only the Prime Minister can restore the whip.";
+        const message = apiErrorText(data, "Only the Prime Minister can restore the whip.");
         setError(message);
         showToast(message, "error");
       } else {
-        const message = data.error ?? "Failed to restore the whip";
+        const message = apiErrorText(data, "Failed to restore the whip");
         setError(message);
         showToast(message, "error");
       }
@@ -157,7 +158,7 @@ export function WhipPanel({ countryId }: { countryId: string }) {
         id="cabinet-whip-heading"
         className="text-sm font-semibold uppercase tracking-widest text-muted"
       >
-        Party Whip
+        Party whip
       </h2>
 
       {error && (
@@ -188,7 +189,7 @@ export function WhipPanel({ countryId }: { countryId: string }) {
           disabled={acting["withdraw"] === true}
           aria-label="Withdraw the whip from this MP"
         >
-          {acting["withdraw"] ? "Withdrawing..." : "Withdraw Whip"}
+          {acting["withdraw"] ? "Withdrawing..." : "Withdraw whip"}
         </Button>
       </div>
 
@@ -226,7 +227,7 @@ export function WhipPanel({ countryId }: { countryId: string }) {
                 >
                   {mp.characterId && acting[`restore-${mp.characterId}`]
                     ? "Restoring..."
-                    : "Restore Whip"}
+                    : "Restore whip"}
                 </Button>
               </li>
             ))}

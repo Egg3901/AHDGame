@@ -77,7 +77,7 @@ export function WikiReviewTab() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-foreground">
-          Pending Wiki Submissions ({pending.length})
+          Pending wiki submissions ({pending.length})
         </h2>
       </div>
 
@@ -123,7 +123,7 @@ export function WikiReviewTab() {
               )}
               <div>
                 <h4 className="text-sm font-medium text-muted mb-2">
-                  {selected.originalContent ? "Proposed Changes" : "New Content"}
+                  {selected.originalContent ? "Proposed changes" : "New content"}
                 </h4>
                 <div className="bg-background border border-card-border rounded p-4 max-h-96 overflow-y-auto">
                   <div className="prose prose-sm prose-invert max-w-none">{selected.content}</div>

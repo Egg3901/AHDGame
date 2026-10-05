@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface PartyOption {
   sequentialId: number;
@@ -185,7 +186,7 @@ export function PrimaryProjectionDebugger() {
 
       {data && !data.ok && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-          {data.message ?? data.error ?? "Unknown error"}
+          {data.message ?? apiErrorText(data, "Unknown error")}
         </div>
       )}
 
@@ -214,13 +215,13 @@ export function PrimaryProjectionDebugger() {
 
       {candidates.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-card-border bg-card">
-          <div className="border-b border-card-border bg-background px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted">
+          <div className="border-b border-card-border bg-background px-4 py-2 text-sm font-semibold text-foreground">
             Candidate aggregates · vote share vs delegate share
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-card-border bg-background text-left text-[10px] uppercase tracking-wider text-muted">
+                <tr className="border-b border-card-border bg-background text-left text-sm font-semibold text-foreground">
                   <th className="px-3 py-2">Candidate</th>
                   <th className="px-3 py-2 text-right" title="Sum across states">
                     National votes
@@ -318,7 +319,7 @@ export function PrimaryProjectionDebugger() {
 
       {perState.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-card-border bg-card">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-card-border bg-background px-4 py-2 text-xs font-medium uppercase tracking-wider text-muted">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-card-border bg-background px-4 py-2 text-sm font-semibold text-foreground">
             <span>Per-state breakdown</span>
             <div className="flex items-center gap-2 text-[10px] normal-case">
               <span>Filter:</span>
@@ -344,7 +345,7 @@ export function PrimaryProjectionDebugger() {
           <div className="max-h-[640px] overflow-auto">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-background">
-                <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-wider text-muted">
+                <tr className="border-b border-card-border text-left text-sm font-semibold text-foreground">
                   <th className="px-3 py-2">State</th>
                   <th className="px-3 py-2">Source</th>
                   <th className="px-3 py-2">Alloc</th>
@@ -470,7 +471,7 @@ export function PrimaryProjectionDebugger() {
 function Tile({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-card-border bg-card p-3">
-      <div className="text-[10px] uppercase tracking-wider text-muted">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div className="mt-0.5 text-sm font-semibold">{children}</div>
     </div>
   );

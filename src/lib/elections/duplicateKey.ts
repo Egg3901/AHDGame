@@ -55,6 +55,16 @@ export function isActiveElectionCandidateDuplicateKey(error: unknown): boolean {
   );
 }
 
+export function isActiveJapanShugiinNominationDuplicateKey(error: unknown): boolean {
+  return (
+    isDuplicateKeyError(error) &&
+    (messageMentions(error, "unique_active_jp_shugiin_district_nominee") ||
+      messageMentions(error, "unique_active_jp_shugiin_list_rank") ||
+      keyPatternIncludes(error, "constituencyId") ||
+      keyPatternIncludes(error, "japanShugiinListOrder"))
+  );
+}
+
 export function isActiveStatePartyCandidateDuplicateKey(error: unknown): boolean {
   return (
     isDuplicateKeyError(error) &&

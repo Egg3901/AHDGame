@@ -1222,7 +1222,7 @@ describe("computeSupplyAgreementSettlements — state-scoped agreements", () => 
   const TX = "TX";
   const stateKey = "freight@TX";
 
-  it("books a located plant's freight demand under the state key as well as the bare one", () => {
+  it("books a located plant's local service demand under state keys as well as bare totals", () => {
     const demand = computeSupplyAgreementBuyerDemand({
       sectors: [
         {
@@ -1258,10 +1258,17 @@ describe("computeSupplyAgreementSettlements — state-scoped agreements", () => 
     expect(byKey.get("freight")).toBeGreaterThan(0);
     expect(byKey.get(stateKey)).toBeCloseTo(byKey.get("freight")! / 2, 6);
     expect(byKey.get("freight@NY")).toBeCloseTo(byKey.get("freight")! / 2, 6);
-    // Reachable inputs are never state-keyed.
-    for (const key of byKey.keys()) {
-      if (key.includes("@")) expect(key.startsWith("freight@")).toBe(true);
+    expect(byKey.get("construction_services")).toBeGreaterThan(0);
+    for (const stateId of [TX, "NY"]) {
+      expect(byKey.get(`construction_services@${stateId}`)).toBeCloseTo(
+        byKey.get("construction_services")! / 2,
+        6
+      );
     }
+    // Physical inputs remain reachable; only this recipe's local services get state keys.
+    expect([...byKey.keys()].filter((key) => key.includes("@")).sort()).toEqual(
+      ["construction_services@NY", "construction_services@TX", "freight@NY", "freight@TX"].sort()
+    );
   });
 
   it("reserves a state contract under its state key, capped by the buyer's demand in that state", () => {

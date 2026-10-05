@@ -55,12 +55,12 @@ type SectorsResponse = {
 const VIEW_TABS: { key: SectorView; label: string }[] = [
   { key: "unowned", label: "Unowned" },
   { key: "owned", label: "Owned" },
-  { key: "forSale", label: "For Sale" },
+  { key: "forSale", label: "For sale" },
 ];
 
 const SORT_OPTIONS: { value: SectorSort; label: string }[] = [
   { value: "revenue", label: "Revenue" },
-  { value: "type", label: "Sector Type" },
+  { value: "type", label: "Sector type" },
   { value: "state", label: "State" },
   { value: "country", label: "Country" },
   { value: "margin", label: "Margin" },
@@ -337,7 +337,7 @@ function SectorCard({ sector, view }: { sector: SectorRow; view: SectorView }) {
             <div className="text-lg font-bold tabular-nums leading-none text-foreground">
               ₳{formatNumber(sector.revenueAnchor)}
             </div>
-            <div className="text-[10px] text-muted uppercase tracking-wide mt-0.5">/day</div>
+            <div className="text-body-sm font-medium text-muted mt-0.5">/day</div>
           </div>
         </div>
       </Link>
@@ -346,7 +346,7 @@ function SectorCard({ sector, view }: { sector: SectorRow; view: SectorView }) {
       <div className="flex border-t border-card-border/40 divide-x divide-card-border/40">
         {view !== "unowned" && sector.corporationId && (
           <div className="flex flex-col px-4 py-2.5 min-w-0">
-            <span className="text-[10px] uppercase tracking-wide text-muted mb-1">Corporation</span>
+            <span className="text-body-sm font-medium text-muted mb-1">Corporation</span>
             <div className="flex items-center gap-2.5">
               <CorporationLogo
                 logoUrl={sector.corporationLogoUrl}
@@ -365,13 +365,13 @@ function SectorCard({ sector, view }: { sector: SectorRow; view: SectorView }) {
         )}
         {view === "unowned" && (
           <div className="flex flex-col px-4 py-2.5">
-            <span className="text-[10px] uppercase tracking-wide text-muted mb-1">Status</span>
+            <span className="text-body-sm font-medium text-muted mb-1">Status</span>
             <span className="text-xs text-muted leading-tight">Available</span>
           </div>
         )}
         {sector.margin != null && (
           <div className="flex flex-col px-4 py-2.5">
-            <span className="text-[10px] uppercase tracking-wide text-muted mb-1">Margin</span>
+            <span className="text-body-sm font-medium text-muted mb-1">Margin</span>
             <span className="text-xs font-semibold text-success tabular-nums leading-tight">
               {sector.margin.toFixed(1)}%
             </span>
@@ -379,7 +379,7 @@ function SectorCard({ sector, view }: { sector: SectorRow; view: SectorView }) {
         )}
         {sector.growthRate != null && (
           <div className="flex flex-col px-4 py-2.5">
-            <span className="text-[10px] uppercase tracking-wide text-muted mb-1">Growth</span>
+            <span className="text-body-sm font-medium text-muted mb-1">Growth</span>
             <span className="text-xs font-medium leading-tight">
               <span className={sector.growthRate >= 0 ? "text-success" : "text-error"}>
                 {sector.growthRate >= 0 ? "+" : ""}
@@ -391,7 +391,7 @@ function SectorCard({ sector, view }: { sector: SectorRow; view: SectorView }) {
         )}
         {view === "forSale" && sector.forSalePrice != null && (
           <div className="flex flex-col px-4 py-2.5">
-            <span className="text-[10px] uppercase tracking-wide text-muted mb-1">Price</span>
+            <span className="text-body-sm font-medium text-muted mb-1">Price</span>
             <span className="text-xs font-semibold text-success tabular-nums leading-tight">
               ₳{formatNumber(sector.forSalePrice)}
             </span>

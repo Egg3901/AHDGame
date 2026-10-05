@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { IDENTITY_OBSERVATIONS_COLLECTION } from "@/lib/db/types/identityObservation";
@@ -24,14 +24,14 @@ export const POST = withNoStore(async (request: Request) => {
 
     const parsed = await parseJsonBody(request, adminDeleteUserSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { userId } = parsed.data;
     const objectId = new ObjectId(userId);
 
     // Prevent deleting yourself
     if (admin.userId === userId) {
-      return NextResponse.json({ error: "You cannot delete yourself" }, { status: 400 });
+      return errorResponse(400, "You cannot delete yourself");
     }
 
     const db = await getDb();
@@ -43,17 +43,17 @@ export const POST = withNoStore(async (request: Request) => {
     // Check if user exists
     const user = await usersCollection.findOne({ _id: objectId });
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     // Prevent deleting other admins
     if (user.isAdmin === true || user.role === "admin") {
-      return NextResponse.json({ error: "Cannot delete admin users" }, { status: 400 });
+      return errorResponse(400, "Cannot delete admin users");
     }
     if (isAuthMigrationFenced(user)) {
-      return NextResponse.json(
-        { error: "This account changed during this request. Please reload and try again." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "This account changed during this request. Please reload and try again."
       );
     }
 

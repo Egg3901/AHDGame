@@ -11,7 +11,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import type { DefenceContract } from "@/lib/db/types/defenceContract";
 import { respondToContract } from "@/lib/db/collections/defenceContracts";
@@ -35,14 +35,14 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     // Contract ids are Mongo ObjectIds. The corporation param is not — corp pages
     // address /api/corporations/[id] by sequentialId (e.g. Lockheed is 453), and
     // `new ObjectId("453")` is the "Invalid id" the Accept button was hitting.
     if (!ObjectId.isValid(contractId) || contractId.length !== 24) {
-      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+      return errorResponse(400, "Invalid id");
     }
     const contractObjectId = new ObjectId(contractId);
 
@@ -53,10 +53,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const isCeo = corp.userId && corp.userId.toString() === auth.user.userId.toString();
     if (!isCeo && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only this corporation's CEO may answer a procurement offer." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only this corporation's CEO may answer a procurement offer.");
     }
 
     // Scoped to THIS corporation, not just the contract id: without it, any CEO could accept
@@ -65,13 +62,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       .collection<DefenceContract>("defenceContracts")
       .findOne({ _id: contractObjectId, corporationId: corp._id });
     if (!contract) {
-      return NextResponse.json({ error: "No such contract" }, { status: 404 });
+      return errorResponse(404, "No such contract");
     }
     if (contract.status !== "pending") {
-      return NextResponse.json(
-        { error: "That offer has already been answered or withdrawn." },
-        { status: 409 }
-      );
+      return errorResponse(409, "That offer has already been answered or withdrawn.");
     }
 
     const accept = parsed.data.action === "accept";
@@ -84,10 +78,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         .collection<CorporateSector>("corporateSectors")
         .findOne({ _id: contract.sectorId });
       if (!sector) {
-        return NextResponse.json(
-          { error: "This contract's plant no longer exists." },
-          { status: 409 }
-        );
+        return errorResponse(409, "This contract's plant no longer exists.");
       }
       const gameState = await getGameState();
       const currentTurn = gameState?.currentTurn ?? 1;
@@ -100,10 +91,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         assignedFactories: contract.assignedFactories,
       });
       if (!fill.eligible) {
-        return NextResponse.json(
-          { error: FILL_REASON_TEXT[fill.reason ?? "no_materiel_line"] },
-          { status: 409 }
-        );
+        return errorResponse(409, FILL_REASON_TEXT[fill.reason ?? "no_materiel_line"]);
       }
     }
     // Accepting turns a pending offer into a live, billing order - a NEW obligation, so it is
@@ -117,17 +105,14 @@ export async function POST(request: Request, { params }: RouteParams) {
       const gateState = await getGameState();
       const gate = await isProcurementBlocked(db, contract.countryId, gateState?.currentTurn ?? 0);
       if (gate.blocked) {
-        return NextResponse.json({ error: gate.reason }, { status: 409 });
+        return errorResponse(409, gate.reason);
       }
     }
     // The write is guarded on `pending` too, so a double-click or an accept racing the
     // minister's cancel resolves to one winner rather than reviving a withdrawn order.
     const changed = await respondToContract(db, contractObjectId, accept);
     if (!changed) {
-      return NextResponse.json(
-        { error: "That offer has already been answered or withdrawn." },
-        { status: 409 }
-      );
+      return errorResponse(409, "That offer has already been answered or withdrawn.");
     }
 
     return NextResponse.json({ success: true, status: accept ? "active" : "declined" });

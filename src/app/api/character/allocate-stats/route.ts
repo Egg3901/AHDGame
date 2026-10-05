@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireHumanSession } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import type { Character, User } from "@/lib/db/types";
 import { validateStatAllocation } from "@/lib/stats/validateStatAllocation";
@@ -60,18 +60,15 @@ async function handleGET(request: Request) {
     if (!auth.ok) return auth.response;
 
     if (!(await isRpgStatsEnabled())) {
-      return NextResponse.json(
-        { error: "The stat system is not currently enabled." },
-        { status: 403 }
-      );
+      return errorResponse(403, "The stat system is not currently enabled.");
     }
 
     const { db, character } = await loadActiveCharacter(auth.user.userId);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
     if (character.statsAllocated) {
-      return NextResponse.json({ error: "Stats already allocated." }, { status: 409 });
+      return errorResponse(409, "Stats already allocated.");
     }
 
     const suggestion = await buildSuggestion(db, character);
@@ -95,28 +92,25 @@ export async function POST(request: Request) {
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     if (!(await isRpgStatsEnabled())) {
-      return NextResponse.json(
-        { error: "The stat system is not currently enabled." },
-        { status: 403 }
-      );
+      return errorResponse(403, "The stat system is not currently enabled.");
     }
 
     const parsed = await parseJsonBody(request, allocateStatsSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const validation = validateStatAllocation(parsed.data.stats);
     if (!validation.ok) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+      return errorResponse(400, validation.error);
     }
 
     const { db, character } = await loadActiveCharacter(auth.user.userId);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
     if (character.statsAllocated) {
-      return NextResponse.json({ error: "Stats already allocated." }, { status: 409 });
+      return errorResponse(409, "Stats already allocated.");
     }
 
     // Atomic guard: only allocate if still unallocated (prevents double-submit).
@@ -133,7 +127,7 @@ export async function POST(request: Request) {
       }
     );
     if (result.matchedCount === 0) {
-      return NextResponse.json({ error: "Stats already allocated." }, { status: 409 });
+      return errorResponse(409, "Stats already allocated.");
     }
 
     return NextResponse.json({ success: true, stats: validation.stats });

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { Button, Skeleton } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -100,7 +101,7 @@ export default function DefaultedBondCrisisModal({
       const res = await fetch(`/api/corporations/${corpId}/bond-default`);
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error || "Failed to load bond default status");
+        setError(apiErrorText(json, "Failed to load bond default status"));
         setData(null);
         return;
       }
@@ -130,7 +131,7 @@ export default function DefaultedBondCrisisModal({
       const res = await fetch(`/api/corporations/${corpId}/bond-default/cash`, { method: "POST" });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error || "Could not pay");
+        setError(apiErrorText(json, "Could not pay"));
         return;
       }
       onResolved();
@@ -153,7 +154,7 @@ export default function DefaultedBondCrisisModal({
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error || "Could not refinance");
+        setError(apiErrorText(json, "Could not refinance"));
         return;
       }
       onResolved();
@@ -174,7 +175,7 @@ export default function DefaultedBondCrisisModal({
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error || "Could not restructure");
+        setError(apiErrorText(json, "Could not restructure"));
         return;
       }
       onResolved();
@@ -197,7 +198,7 @@ export default function DefaultedBondCrisisModal({
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error || "Could not dissolve");
+        setError(apiErrorText(json, "Could not dissolve"));
         return;
       }
       window.location.href = "/corporations";

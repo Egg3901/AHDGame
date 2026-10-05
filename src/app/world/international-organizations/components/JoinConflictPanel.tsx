@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 import { mutualDefenceBasis } from "@/lib/constants/mutualDefence";
@@ -14,6 +15,7 @@ import {
   requiresUnanimity,
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -103,7 +105,7 @@ export function JoinConflictPanel({
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to propose entry");
+        throw new Error(apiErrorText(body, "Failed to propose entry"));
       }
       setShowForm(false);
       onChange();
@@ -126,7 +128,7 @@ export function JoinConflictPanel({
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error ?? "Vote failed");
+      throw new Error(apiErrorText(body, "Vote failed"));
     }
     onChange();
   }
@@ -213,7 +215,7 @@ export function JoinConflictPanel({
               {selected.name}: {selected.sideALabel} against {selected.sideBLabel}.
             </p>
           )}
-          {error && <p className="mt-2 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-2 text-xs text-error" />
           <div className="mt-4 flex gap-2">
             <Button
               variant="primary"
@@ -232,9 +234,7 @@ export function JoinConflictPanel({
       )}
 
       <div className="space-y-3">
-        <h4 className="text-xs font-semibold uppercase tracking-widest text-muted">
-          Pending entry votes
-        </h4>
+        <h4 className="text-body-sm font-medium text-muted">Pending entry votes</h4>
         {pending.length === 0 ? (
           <div className="rounded-xl border border-card-border bg-card p-5">
             <p className="text-sm text-muted">No pending entry resolutions.</p>

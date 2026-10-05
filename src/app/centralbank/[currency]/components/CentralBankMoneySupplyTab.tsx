@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useTranslations } from "next-intl";
 import { currentMoneyGrowth } from "@/lib/moneySupply/rules/growthSignal";
 import { MONEY_ACCOUNTING_VERSION } from "@/lib/moneySupply/calculate";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui";
 import { formatNativeCurrency } from "./centralBankUtils";
 import type { MoneySupplyView } from "./centralBankTypes";
 import { CentralBankFigure, CentralBankRow, CentralBankSection } from "./CentralBankSection";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /** Monetary operation and committee decision names, in sentence case. */
 const OPERATION_LABEL: Record<string, string> = {
@@ -80,7 +82,7 @@ export function CentralBankMoneySupplyTab({
       const json = await response.json();
       if (!response.ok) {
         if ([400, 403, 409, 422].includes(response.status)) pendingOperation.current = null;
-        throw new Error(json.error ?? "Monetary operation failed");
+        throw new Error(apiErrorText(json, "Monetary operation failed"));
       }
       setMessage(`${operationLabel(type)} completed: ${fmt(json.operation.amount)}`);
       pendingOperation.current = null;
@@ -273,7 +275,7 @@ export function CentralBankMoneySupplyTab({
                 {busy ? "Executing…" : "Execute operation"}
               </Button>
               {message && <p className="text-body-sm text-success">{message}</p>}
-              {error && <p className="text-body-sm text-error">{error}</p>}
+              <InlineError error={error} className="text-body-sm text-error" />
             </div>
           </CentralBankSection>
         </form>

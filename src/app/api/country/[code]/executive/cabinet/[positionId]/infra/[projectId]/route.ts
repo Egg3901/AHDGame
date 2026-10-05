@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
@@ -24,13 +24,13 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     const { code, positionId, projectId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (!resolveInfraPosition(countryId, positionId)) {
-      return NextResponse.json({ error: "Not a transportation cabinet position" }, { status: 404 });
+      return errorResponse(404, "Not a transportation cabinet position");
     }
     if (!ObjectId.isValid(projectId)) {
-      return NextResponse.json({ error: "Invalid project id" }, { status: 400 });
+      return errorResponse(400, "Invalid project id");
     }
 
     const db = await getDb();
@@ -41,10 +41,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the transportation holder or admin can cancel projects" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the transportation holder or admin can cancel projects");
     }
 
     // Cancelling a project writes off work the successor may have wanted.
@@ -57,7 +54,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       positionId,
     });
     if (result.deletedCount === 0) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      return errorResponse(404, "Project not found");
     }
     return NextResponse.json({ success: true });
   } catch (error) {

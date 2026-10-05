@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 import { STATE_BILL_CATEGORIES, BILL_CATEGORIES } from "@shared/constants/legislation";
 import { turnoutTargetLabel } from "@/lib/demographics/turnoutTarget";
@@ -144,7 +146,7 @@ export function DeliverAddressModal({
     if (res.ok) onSuccess();
     else {
       const data = await res.json().catch(() => ({}));
-      setError(data?.error ?? "Failed to deliver.");
+      setError(apiErrorText(data, "Failed to deliver."));
       setSubmitting(false);
     }
   }
@@ -261,9 +263,7 @@ export function DeliverAddressModal({
 
         {/* Effects preview */}
         <div className="mb-3 rounded-lg border border-card-border bg-background/40 px-3 py-2 text-xs">
-          <div className="font-semibold text-muted uppercase tracking-wider text-[10px] mb-1">
-            Effects
-          </div>
+          <div className="text-muted text-body-sm font-medium mb-1">Effects</div>
           <ul className="space-y-0.5">
             <li>
               <span className="text-foreground">Approval</span>{" "}
@@ -318,7 +318,7 @@ export function DeliverAddressModal({
           )}
         </div>
 
-        {error && <p className="mb-3 text-sm text-error">{error}</p>}
+        <InlineError error={error} className="mb-3 text-sm text-error" />
         <div className="flex justify-end gap-2">
           <button
             onClick={onClose}

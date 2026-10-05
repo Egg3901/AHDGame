@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { requestCharacterStatsRefetch } from "@/lib/characterStatsSync";
@@ -34,7 +36,7 @@ export function SharePurchaseOrdersView({
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setError(data.error ?? "Failed to cancel order");
+        setError(apiErrorText(data, "Failed to cancel order"));
         return;
       }
       onSuccess();
@@ -54,9 +56,7 @@ export function SharePurchaseOrdersView({
         <>
           {openBuyOrders.length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-success">
-                Buy Orders
-              </p>
+              <p className="mb-2 text-body-sm font-medium text-success">Buy orders</p>
               <div className="divide-y divide-card-border/50 overflow-hidden rounded-lg border border-card-border">
                 {openBuyOrders.map((o) => (
                   <div
@@ -103,7 +103,7 @@ export function SharePurchaseOrdersView({
           {openSellOrders.length > 0 && (
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-error">
-                Sell Orders
+                Sell orders
               </p>
               <div className="divide-y divide-card-border/50 overflow-hidden rounded-lg border border-card-border">
                 {openSellOrders.map((o) => (
@@ -152,7 +152,7 @@ export function SharePurchaseOrdersView({
           )}
         </>
       )}
-      {error && <p className="text-xs text-error">{error}</p>}
+      <InlineError error={error} className="text-xs text-error" />
     </div>
   );
 }

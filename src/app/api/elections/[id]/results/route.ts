@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { conditionalJson } from "@/lib/api/conditionalJson";
 import { withApiMetrics } from "@/lib/observability/apiMetrics";
 import { isLiveElectionResultsEnabled } from "@/lib/elections/liveResults/featureFlag";
@@ -28,7 +28,7 @@ async function handleGet(
   try {
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid election id" }, { status: 400 });
+      return errorResponse(400, "Invalid election id");
     }
 
     const db = await getDb();
@@ -53,10 +53,10 @@ async function handleGet(
 
     const isAdmin = user?.isAdmin === true;
     if (!isLiveElectionResultsEnabled(gameState) && !isAdmin) {
-      return NextResponse.json({ error: "Live election results are not enabled" }, { status: 403 });
+      return errorResponse(403, "Live election results are not enabled");
     }
     if (!election) {
-      return NextResponse.json({ error: "Election not found" }, { status: 404 });
+      return errorResponse(404, "Election not found");
     }
 
     // A finished race is served from its frozen snapshot, not recomputed.

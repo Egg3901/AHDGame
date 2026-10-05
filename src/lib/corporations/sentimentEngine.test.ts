@@ -109,6 +109,48 @@ describe("pulseAppliesToCorp", () => {
     ).toBe(false);
   });
 
+  it("matches model-qualified operating keys without crossing countries", () => {
+    const pulse = makePulse({ scope: "sector", countryId: "US", sectorType: "energy" });
+    expect(pulseAppliesToCorp(pulse, "corp", "UK", ["energy"], keys("US:energy:"))).toBe(true);
+    expect(pulseAppliesToCorp(pulse, "corp", "US", ["energy"], keys("UK:energy:"))).toBe(false);
+  });
+
+  it("matches a vehicle's operating profile and its broader manufacturing sector", () => {
+    const operatingKeys = keys("US:manufacturing:vehicles");
+    for (const sectorType of ["automobiles", "manufacturing"]) {
+      const pulse = makePulse({ scope: "sector", countryId: "US", sectorType });
+      expect(pulseAppliesToCorp(pulse, "corp", "US", ["automobiles"], operatingKeys)).toBe(true);
+    }
+    const unrelated = makePulse({ scope: "sector", countryId: "US", sectorType: "energy" });
+    expect(pulseAppliesToCorp(unrelated, "corp", "US", ["automobiles"], operatingKeys)).toBe(false);
+  });
+
+  it("keeps FTA exemptions with model-qualified foreign operating keys", () => {
+    const pulse = makePulse({
+      scope: "sector",
+      countryId: "UK",
+      sectorType: "energy",
+      hqRelation: "foreign",
+    });
+    const operatingKeys = keys("UK:energy:");
+    const partners: FtaPairSet = new Set([ftaPairKey("UK", "US")]);
+    expect(pulseAppliesToCorp(pulse, "corp", "US", ["energy"], operatingKeys, partners)).toBe(
+      false
+    );
+    expect(pulseAppliesToCorp(pulse, "corp", "CN", ["energy"], operatingKeys, partners)).toBe(true);
+  });
+
+  it("recognizes entertainment events only for the canonical entertainment lane", () => {
+    const pulse = makePulse({ scope: "sector", countryId: "US", sectorType: "entertainment" });
+    expect(
+      pulseAppliesToCorp(pulse, "corp", "US", ["media"], keys("US:media::entertainment"))
+    ).toBe(true);
+    expect(pulseAppliesToCorp(pulse, "corp", "US", ["media"], keys("US:media::"))).toBe(false);
+    expect(
+      pulseAppliesToCorp(pulse, "corp", "US", ["media"], keys("UK:media::entertainment"))
+    ).toBe(false);
+  });
+
   it("scope=corp matches on corpId", () => {
     const pulse = makePulse({ scope: "corp", corpId: "abc" });
     expect(pulseAppliesToCorp(pulse, "abc", "US", [])).toBe(true);

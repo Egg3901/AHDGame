@@ -77,7 +77,7 @@ export function UsersToolbar({
       {!loading && !error && (
         <div className="flex flex-wrap items-center gap-4 rounded-lg border border-card-border bg-card px-4 py-3 text-sm">
           <div className="flex items-center gap-2">
-            <span className="text-muted">Total Users:</span>
+            <span className="text-muted">Total users:</span>
             <span className="font-semibold tabular-nums">{totalUsers}</span>
           </div>
           {(searchTerm || showDuplicatesOnly) && (

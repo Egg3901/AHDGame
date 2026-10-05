@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Layer1Config } from "@/lib/seeds/stateDemographics";
 import {
   editorConfigFromSeed,
@@ -85,7 +85,7 @@ export async function GET(request: Request) {
     // pass an arbitrary string to getCountryLayer1Model and return an empty
     // states list, indistinguishable from "no model") rejects with a 400.
     if (!(era in ERA_CENSUS)) {
-      return NextResponse.json({ error: "Unknown era" }, { status: 400 });
+      return errorResponse(400, "Unknown era");
     }
 
     if (country === "US") {

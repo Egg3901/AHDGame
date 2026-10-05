@@ -9,7 +9,7 @@ import {
 } from "@/lib/macroMetrics/displayMerge";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getCabinetMechanics, getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { resolveDepartment, resolveSeatName } from "@/lib/cabinet/rosterEra";
 import { barredScopesFor, isActingMember } from "@/lib/cabinet/actingScope";
@@ -153,12 +153,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const mechanics = getCabinetMechanics(countryId, positionId);
     if (!mechanics) {
-      return NextResponse.json({ error: "Unknown cabinet position" }, { status: 404 });
+      return errorResponse(404, "Unknown cabinet position");
     }
 
     const db = await getDb();

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { MessageBanner, SpinnerIcon, CheckIcon } from "./shared";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Demographics {
   race: string;
@@ -62,7 +63,7 @@ export function DemographicsSection({ character, onCharacterUpdate }: Props) {
           },
         });
       } else {
-        setDemoMsg({ text: data.error ?? t("common.saveFailed"), ok: false });
+        setDemoMsg({ text: apiErrorText(data, t("common.saveFailed")), ok: false });
       }
     } catch {
       setDemoMsg({ text: t("common.networkError"), ok: false });

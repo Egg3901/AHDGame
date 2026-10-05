@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -119,7 +120,7 @@ export function UnionsClient() {
         if (res.status === 403) {
           setNotEnabled(true);
         } else {
-          setLoadError(data.error ?? "Failed to load unions.");
+          setLoadError(apiErrorText(data, "Failed to load unions."));
         }
         return;
       }
@@ -203,17 +204,17 @@ export function UnionsClient() {
             <StatCell label="Led" value={String(stats.ledCount)} />
             <StatCell label="Vacant" value={String(stats.vacant)} />
             <StatCell
-              label="Total Membership"
+              label="Total membership"
               value={Math.round(stats.totalMembers).toLocaleString("en-US")}
               hint="Real headcount across every union in this country: workers in the sectors each one represents, weighted by unionization."
             />
             <StatCell
-              label="Avg Approval"
+              label="Avg approval"
               value={`${Math.round(stats.avgApproval)}%`}
               hint="How the membership rates the bargain, averaged across every union here. Dues push it down, running services pushes it up."
             />
             <StatCell
-              label="Total Funds"
+              label="Total funds"
               value={Math.round(stats.totalTreasury).toLocaleString("en-US")}
             />
           </div>
@@ -244,7 +245,7 @@ export function UnionsClient() {
                 href={`/country/${code}/legislature`}
                 className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
               >
-                Propose Legislation
+                Propose legislation
               </Link>{" "}
               → an <span className="font-medium">Industry</span> bill → check{" "}
               <span className="font-medium">Include union-law provision</span> → choose{" "}
@@ -326,7 +327,7 @@ export function UnionsClient() {
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-card-border bg-card-elevated text-left text-[11px] uppercase tracking-wider text-muted">
+                <tr className="border-b border-card-border bg-card-elevated text-left text-sm font-semibold text-foreground">
                   <th className="hidden px-4 py-3 font-medium sm:table-cell">#</th>
                   <th className="px-4 py-3 font-medium">Union</th>
                   <th className="hidden px-4 py-3 font-medium md:table-cell">
@@ -416,7 +417,7 @@ export function UnionsClient() {
                           </Link>
                         ) : (
                           (r.leaderName ?? (
-                            <span className="text-xs font-medium uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                            <span className="text-body-sm font-medium text-amber-600 dark:text-amber-400">
                               Vacant
                             </span>
                           ))
@@ -466,7 +467,7 @@ export function UnionsClient() {
 function StatCell({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="flex min-w-max flex-col px-5 py-3">
-      <span className="flex items-center text-[10px] font-medium uppercase tracking-widest text-muted">
+      <span className="flex items-center text-body-sm font-medium text-muted">
         {label}
         {hint && <Tooltip content={hint} />}
       </span>

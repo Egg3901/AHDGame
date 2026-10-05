@@ -2,7 +2,7 @@
 
 import type { CaucusDetail } from "./caucusTypes";
 import { caucusHealthTone, formatCaucusChurnKind } from "./caucusUtils";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 
 export function OverviewSubtab({ detail }: { detail: CaucusDetail }) {
   const health = detail.health;
@@ -159,10 +159,7 @@ export function OverviewSubtab({ detail }: { detail: CaucusDetail }) {
                         </div>
                       </div>
                       <div className="text-right text-body-sm text-muted">
-                        <LocalTime
-                          value={entry.occurredAt}
-                          options={{ dateStyle: "medium", timeStyle: "short" }}
-                        />
+                        <GameMonthTime value={entry.occurredAt} />
                       </div>
                     </li>
                   ))}

@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { ActivityLogTab } from "./ActivityLogTab";
 import {
@@ -10,6 +11,7 @@ import {
   type MatchGroup,
 } from "@/lib/admin/suspiciousGroups";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Counts {
   high: number;
@@ -73,7 +75,7 @@ function BanModal({ entry, onClose, onBanned, apiBase }: BanModalProps) {
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error ?? "Failed to ban user");
+        throw new Error(apiErrorText(data, "Failed to ban user"));
       }
       onBanned(entry._id);
       onClose();
@@ -93,7 +95,7 @@ function BanModal({ entry, onClose, onBanned, apiBase }: BanModalProps) {
         className="w-full max-w-md rounded-xl border border-card-border bg-card p-6 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="mb-1 font-semibold text-red-400">Ban User</h3>
+        <h3 className="mb-1 font-semibold text-red-400">Ban user</h3>
         <p className="mb-4 text-sm text-muted">
           Permanently ban <strong>{entry.characterName}</strong> ({entry.username})?
         </p>
@@ -104,7 +106,7 @@ function BanModal({ entry, onClose, onBanned, apiBase }: BanModalProps) {
           rows={3}
           className="w-full rounded border border-card-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
         />
-        {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+        <InlineError error={error} className="mt-2 text-sm text-red-500" />
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onClose}
@@ -117,7 +119,7 @@ function BanModal({ entry, onClose, onBanned, apiBase }: BanModalProps) {
             disabled={loading}
             className="min-h-[40px] rounded bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
-            {loading ? "Banning…" : "Confirm Ban"}
+            {loading ? "Banning…" : "Confirm ban"}
           </button>
         </div>
       </div>
@@ -142,7 +144,7 @@ function DismissModal({ entry, onClose, onDismissed, apiBase, isMod = false }: D
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error ?? "Failed to dismiss");
+        throw new Error(apiErrorText(data, "Failed to dismiss"));
       }
       onDismissed(entry._id);
       onClose();
@@ -184,7 +186,7 @@ function DismissModal({ entry, onClose, onDismissed, apiBase, isMod = false }: D
           />
           Permanent — resolved, never re-flagged
         </label>
-        {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+        <InlineError error={error} className="mt-2 text-sm text-red-500" />
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onClose}
@@ -197,7 +199,7 @@ function DismissModal({ entry, onClose, onDismissed, apiBase, isMod = false }: D
             disabled={loading}
             className="min-h-[40px] rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
-            {loading ? "Working…" : permanent ? "Resolve Permanently" : "Dismiss (30 days)"}
+            {loading ? "Working…" : permanent ? "Resolve permanently" : "Dismiss (30 days)"}
           </button>
         </div>
       </div>
@@ -313,7 +315,7 @@ export function SuspiciousActivityTab({ context = "admin" }: SuspiciousActivityT
               d="M15 19l-7-7 7-7"
             />
           </svg>
-          Back to Suspicious Activity
+          Back to suspicious activity
         </button>
         <ActivityLogTab initialCharacterId={drillCharacterId} context={context} />
       </div>
@@ -342,7 +344,7 @@ export function SuspiciousActivityTab({ context = "admin" }: SuspiciousActivityT
       )}
 
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold sm:text-lg">Suspicious Activity</h2>
+        <h2 className="text-base font-semibold sm:text-lg">Suspicious activity</h2>
         <button
           onClick={() => fetchEntries(null, false)}
           disabled={loading}
@@ -386,7 +388,7 @@ export function SuspiciousActivityTab({ context = "admin" }: SuspiciousActivityT
               : "border-card-border text-muted hover:text-foreground"
           }`}
         >
-          Deleted Accounts <span className="font-bold">({counts.deleted})</span>
+          Deleted accounts <span className="font-bold">({counts.deleted})</span>
         </button>
         <button
           onClick={() => setFilters((f) => ({ ...f, showResolved: !f.showResolved }))}
@@ -409,7 +411,7 @@ export function SuspiciousActivityTab({ context = "admin" }: SuspiciousActivityT
         </label>
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      <InlineError error={error} className="text-sm text-red-500" />
 
       {/* Entry list */}
       <div className="space-y-3">
@@ -622,7 +624,7 @@ function SuspiciousEntryCard({
           onClick={onDrill}
           className="min-h-[36px] rounded border border-card-border px-3 py-1.5 text-xs font-medium hover:bg-card/80 transition-colors"
         >
-          View Activity Log
+          View activity log
         </button>
         <button
           onClick={onDismiss}
@@ -634,7 +636,7 @@ function SuspiciousEntryCard({
           onClick={onBan}
           className="min-h-[36px] rounded border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors"
         >
-          Ban User
+          Ban user
         </button>
       </div>
     </div>

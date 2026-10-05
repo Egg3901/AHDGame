@@ -84,16 +84,14 @@ export function CarveUpPanel({
               className="absolute inset-[28px] flex flex-col items-center justify-center rounded-full bg-card"
               style={{ boxShadow: "inset 0 0 0 1px var(--card-border)" }}
             >
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-                {t("carveUp.regBase")}
-              </span>
+              <span className="text-body-sm font-medium text-muted">{t("carveUp.regBase")}</span>
               <span className="text-lg font-bold tabular-nums">{registrationBase ?? "—"}</span>
             </div>
           </div>
           <div className="flex-1 min-w-0">
             {topDemographics && topDemographics.length > 0 ? (
               <div className="mb-2">
-                <span className="text-[10px] uppercase tracking-wider text-muted">
+                <span className="text-body-sm font-medium text-muted">
                   {t("carveUp.topDemographics")}
                 </span>
                 <span className="text-[11px]">{topDemographics.slice(0, 4).join(" · ")}</span>

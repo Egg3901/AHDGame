@@ -6,7 +6,7 @@ import type { PatreonTier, User } from "@/lib/db/types";
 import { isPatreonActive } from "@/lib/db/types";
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "Supporter Wall | A House Divided",
+  title: "Supporter wall | A House Divided",
   description:
     "The players whose support keeps A House Divided running. Thank you to every Supporter, Supporter+, and Supporter++ member.",
   pathname: "/supporters",
@@ -73,7 +73,7 @@ export default async function SupporterWallPage() {
     <div className="min-h-screen bg-background pb-16">
       <div className="mx-auto max-w-4xl px-4 sm:px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Supporter Wall</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Supporter wall</h1>
           <p className="mt-2 text-sm text-muted">
             The players who keep A House Divided online. Thank you.
           </p>

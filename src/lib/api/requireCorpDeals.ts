@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Db } from "mongodb";
 import { getGameStateCollection } from "@/lib/db/collections";
+import { errorResponse } from "@/lib/api/errors";
 
 /**
  * Gate for the corporate M&A / acquisitions subsystem. Returns a 403 NextResponse
@@ -11,10 +12,7 @@ export async function requireCorpDealsEnabled(db: Db): Promise<NextResponse | nu
   const col = await getGameStateCollection(db);
   const gameState = await col.findOne({ _id: "current" }, { projection: { corpDealsEnabled: 1 } });
   if (!gameState?.corpDealsEnabled) {
-    return NextResponse.json(
-      { error: "Corporate acquisitions are not currently enabled." },
-      { status: 403 }
-    );
+    return errorResponse(403, "Corporate acquisitions are not currently enabled.");
   }
   return null;
 }

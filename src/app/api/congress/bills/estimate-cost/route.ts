@@ -14,7 +14,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getEnabledCountryIdsFromDb } from "@/lib/countryAccess";
 import { validateBudgetImpact } from "@/lib/budget/validation";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -47,14 +47,14 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, estimateSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { countryId: rawCountryId, provisions } = parsed.data;
 
     const db = await getDb();
     const enabled = await getEnabledCountryIdsFromDb(db);
     if (!enabled.includes(rawCountryId as CountryId)) {
-      return NextResponse.json({ error: "Country not enabled" }, { status: 400 });
+      return errorResponse(400, "Country not enabled");
     }
     const countryId = rawCountryId as CountryId;
     const budgetId = federalBudgetId(countryId);

@@ -49,7 +49,7 @@ function ProjTile({
   const deltaGood = delta != null && (invert ? -delta : delta) >= 0;
   return (
     <div className="rounded-lg border border-card-border bg-card-muted p-3">
-      <div className="text-[10px] font-bold uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div className={`mt-1 text-lg font-bold tabular-nums ${valueTone}`}>{value}</div>
       {delta != null && (
         <div className={`text-[11px] tabular-nums ${deltaGood ? "text-success" : "text-error"}`}>

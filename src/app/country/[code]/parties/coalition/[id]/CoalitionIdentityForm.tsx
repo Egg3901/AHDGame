@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { CoalitionDetail } from "@/lib/coalitions/types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function CoalitionIdentityForm({
   coalition,
@@ -32,7 +33,7 @@ export function CoalitionIdentityForm({
             body: JSON.stringify({ name, abbreviation, color }),
           });
           const data = await response.json();
-          if (!response.ok) throw new Error(data.error ?? "Could not update coalition.");
+          if (!response.ok) throw new Error(apiErrorText(data, "Could not update coalition."));
           await onSaved();
           setMessage("Coalition identity updated.");
         } catch (error) {

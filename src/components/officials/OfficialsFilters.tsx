@@ -32,7 +32,7 @@ export function OfficialsFilters({
         onChange={(e) => onStateChange(e.target.value)}
         className="rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
       >
-        <option value="">All States</option>
+        <option value="">All states</option>
         {US_STATES.map((s) => (
           <option key={s} value={s}>
             {s}
@@ -45,11 +45,11 @@ export function OfficialsFilters({
         onChange={(e) => onOfficeTypeChange(e.target.value)}
         className="rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
       >
-        <option value="">All Office Types</option>
+        <option value="">All office types</option>
         <option value="senate">Senate</option>
         <option value="house">House</option>
         <option value="president">President</option>
-        <option value="vicePresident">Vice President</option>
+        <option value="vicePresident">Vice president</option>
       </select>
 
       <label className="flex items-center gap-2 text-sm">
@@ -74,7 +74,7 @@ export function OfficialsFilters({
         onClick={onAddHouseRep}
         className="rounded-lg border border-card-border px-3 py-1.5 text-sm font-medium hover:bg-background"
       >
-        + Add House Rep
+        + Add House rep
       </button>
     </div>
   );

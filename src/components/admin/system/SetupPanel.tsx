@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { ImfInstitutionSeedForm } from "@/components/admin/economy/ImfInstitutionSeedForm";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface SetupStatus {
   ready: boolean;
@@ -92,7 +93,7 @@ export function SetupPanel() {
         body: JSON.stringify({ scope }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `Setup failed (${res.status})`);
+      if (!res.ok) throw new Error(apiErrorText(data, `Setup failed (${res.status})`));
       setResult(data);
       // Refresh status after setup
       await fetchStatus();
@@ -161,7 +162,7 @@ export function SetupPanel() {
             )}
           </div>
           <div>
-            <h2 className="font-semibold">{allReady ? "Server Ready" : "Setup Required"}</h2>
+            <h2 className="font-semibold">{allReady ? "Server ready" : "Setup required"}</h2>
             <p className="text-xs text-muted">
               {passCount}/{totalCount} checks passing
             </p>
@@ -221,7 +222,7 @@ export function SetupPanel() {
       {/* Run setup */}
       {!allReady && (
         <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
-          <h3 className="mb-1 font-semibold">Run Setup</h3>
+          <h3 className="mb-1 font-semibold">Run setup</h3>
           <p className="mb-4 text-sm text-muted">
             Seeds all reference data, initializes game state (paused), creates elected officials and
             cycle-1 elections, and ensures database indexes. Safe to run multiple times.
@@ -240,7 +241,7 @@ export function SetupPanel() {
                       : "border-card-border bg-card text-muted hover:text-foreground"
                   }`}
                 >
-                  {COUNTRY_CONFIGS[s as CountryId]?.name ?? "All Countries"}
+                  {COUNTRY_CONFIGS[s as CountryId]?.name ?? "All countries"}
                 </button>
               ))}
             </div>
@@ -254,10 +255,10 @@ export function SetupPanel() {
             {running ? (
               <span className="flex items-center gap-2">
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                Running Setup...
+                Running setup...
               </span>
             ) : (
-              "Run Setup"
+              "Run setup"
             )}
           </button>
         </div>
@@ -266,7 +267,7 @@ export function SetupPanel() {
       {/* Result output */}
       {result && (
         <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-5 shadow-sm">
-          <h3 className="mb-2 font-semibold text-green-400">Setup Complete</h3>
+          <h3 className="mb-2 font-semibold text-green-400">Setup complete</h3>
           <p className="mb-3 text-sm text-muted">{result.message}</p>
           {result.logs.length > 0 && (
             <details className="text-xs">

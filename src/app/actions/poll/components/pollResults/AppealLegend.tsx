@@ -1,92 +1,64 @@
 "use client";
 
-import { Tooltip } from "@/components/Tooltip";
-import { formatNum } from "../../pollHelpers";
-import type { StoredPoll } from "../../types";
+const BANDS = [
+  { fill: "bg-green-500", label: "35 and up: strong" },
+  { fill: "bg-yellow-500", label: "20 to 35: moderate" },
+  { fill: "bg-orange-500", label: "10 to 20: weak" },
+  { fill: "bg-red-500", label: "under 10: very weak" },
+];
 
-export function AppealLegend({ poll }: { poll: StoredPoll }) {
-  const { totalPotentialVoters, totalEstimatedVoters } = poll;
-  const pctOfVoters =
-    totalEstimatedVoters > 0
-      ? `${((totalPotentialVoters / totalEstimatedVoters) * 100).toFixed(1)}% of estimated voters`
-      : "—";
+const FACTORS = [
+  {
+    color: "text-primary",
+    name: "Position alignment",
+    body: "How closely your economic and social positions match each voter group. The closer you are, the higher your appeal (up to 25 points).",
+  },
+  {
+    color: "text-secondary",
+    name: "Political influence",
+    body: "Your name recognition sets what fraction of voters you can reach. Low influence means most voters don't know you exist.",
+  },
+  {
+    color: "text-warning",
+    name: "Favorability",
+    body: "Voters who don't approve of you won't vote for you, even if your positions align. It scales your reachable voters from 0% to 100%.",
+  },
+  {
+    color: "text-success",
+    name: "Party organization",
+    body: "Your party's ground game in this state. Stronger organization means better mobilization. Independents are unaffected.",
+  },
+];
 
+/** Reference for reading the appeal scale and what moves it. */
+export function AppealLegend() {
   return (
-    <div className="mt-6 rounded-xl border border-card-border bg-card p-5">
-      {/* Reachable voters headline */}
-      <div className="flex items-center justify-between gap-4 mb-4">
-        <div>
-          <div className="text-xs text-muted uppercase tracking-wide mb-1">
-            <Tooltip content="Upper bound if you captured 100% of each group. In contested races, your actual share depends on opponents.">
-              Reachable Voters (upper bound)
-            </Tooltip>
-          </div>
-          <div className="text-3xl font-bold text-secondary">{formatNum(totalPotentialVoters)}</div>
-          <div className="text-xs text-muted mt-0.5">{pctOfVoters}</div>
-        </div>
-        <div className="flex flex-wrap gap-4 text-xs">
-          <div className="flex items-center gap-1.5">
-            <div className="h-2 w-6 rounded-full bg-green-500" />
-            <span className="text-muted">35+ Strong</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="h-2 w-6 rounded-full bg-yellow-500" />
-            <span className="text-muted">20–35 Moderate</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="h-2 w-6 rounded-full bg-orange-500" />
-            <span className="text-muted">10–20 Weak</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="h-2 w-6 rounded-full bg-red-500" />
-            <span className="text-muted">&lt;10 Very Weak</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-card-border/50 pt-4">
-        <div className="text-xs text-muted uppercase tracking-wide mb-3">
-          What affects your poll numbers
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 text-sm text-muted/80">
-          <div className="flex gap-2">
-            <span className="text-blue-400 shrink-0">1.</span>
-            <div>
-              <span className="font-medium text-foreground/80">Position alignment</span> — How
-              closely your economic and social positions match each voter group. The closer you are,
-              the higher your appeal (up to 25 pts).
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <span className="text-purple-400 shrink-0">2.</span>
-            <div>
-              <span className="font-medium text-foreground/80">Political influence</span> — Your
-              name recognition determines what fraction of voters you can reach. Low influence means
-              most voters don&apos;t know you exist.
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <span className="text-yellow-400 shrink-0">3.</span>
-            <div>
-              <span className="font-medium text-foreground/80">Favorability</span> — Voters who
-              don&apos;t approve of you won&apos;t vote for you, even if your positions align.
-              Scales your reachable voters from 0% to 100%.
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <span className="text-emerald-400 shrink-0">4.</span>
-            <div>
-              <span className="font-medium text-foreground/80">Party organization</span> — Your
-              party&apos;s ground game in this state. Stronger organization means better
-              mobilization. Independents are unaffected.
-            </div>
-          </div>
-        </div>
-        <div className="mt-3 text-xs text-muted/50 italic">
-          In contested races, your share of each voter group is split proportionally among all
-          candidates based on these same factors.
-        </div>
-      </div>
-    </div>
+    <section aria-labelledby="poll-legend-heading">
+      <h2 id="poll-legend-heading" className="text-heading font-semibold">
+        What moves your numbers
+      </h2>
+      <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-body-sm text-muted">
+        {BANDS.map((b) => (
+          <li key={b.label} className="inline-flex items-center gap-1.5">
+            <span className={`h-2 w-5 rounded-full ${b.fill}`} aria-hidden />
+            {b.label}
+          </li>
+        ))}
+      </ul>
+      <ol className="mt-4 grid gap-x-8 gap-y-4 text-body sm:grid-cols-2">
+        {FACTORS.map((f, i) => (
+          <li key={f.name} className="flex gap-3">
+            <span className={`font-semibold tabular-nums ${f.color}`}>{i + 1}</span>
+            <p className="text-muted">
+              <span className="font-semibold text-foreground">{f.name}.</span> {f.body}
+            </p>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-4 text-body-sm text-muted">
+        In contested races, your share of each voter group is split among all candidates by these
+        same factors.
+      </p>
+    </section>
   );
 }

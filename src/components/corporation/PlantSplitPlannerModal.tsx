@@ -55,17 +55,13 @@ export function PlantSplitPlannerModal({
         <div className="rounded-xl border border-primary/25 bg-primary/5 p-4">
           <div className="grid grid-cols-3 gap-3 text-center">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-                Automatic share
-              </p>
+              <p className="text-body-sm font-medium text-muted">Automatic share</p>
               <p className="mt-1 text-2xl font-bold tabular-nums text-primary">
                 {sharePercent.toFixed(sharePercent % 1 === 0 ? 0 : 1)}%
               </p>
             </div>
             <div className="border-x border-card-border/60 px-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-                Plants at risk
-              </p>
+              <p className="text-body-sm font-medium text-muted">Plants at risk</p>
               <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">
                 {quote.plantsAtRisk.toLocaleString("en-US")}
               </p>
@@ -74,9 +70,7 @@ export function PlantSplitPlannerModal({
               </p>
             </div>
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-                Success chance
-              </p>
+              <p className="text-body-sm font-medium text-muted">Success chance</p>
               <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">
                 {chancePercent.toFixed(1)}%
               </p>
@@ -106,9 +100,7 @@ export function PlantSplitPlannerModal({
         <div className="rounded-lg border border-card-border bg-background/50 p-4">
           <div className="flex items-center gap-2">
             <ShieldAlert className="h-4 w-4 text-warning" aria-hidden />
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Committed cost
-            </p>
+            <p className="text-body-sm font-medium text-muted">Committed cost</p>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-4">
             <div>
@@ -123,7 +115,7 @@ export function PlantSplitPlannerModal({
               </p>
             </div>
             <div>
-              <p className="text-xs text-muted">Marketing Strength</p>
+              <p className="text-xs text-muted">Marketing strength</p>
               <p
                 className={`font-semibold tabular-nums ${msAffordable ? "text-foreground" : "text-error"}`}
               >

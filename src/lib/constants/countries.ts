@@ -1268,6 +1268,15 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
     RO: RO_ERAS["1991-default"]?.config,
     RU: RU_ERAS["1991-default"]?.config,
     NG: NG_ERAS["1991-default"]?.config,
+    // FR/IT/ES/SE/TR/GR/AT/FI: legacy-currency 1991 GDP at the WDI 1991 average rate.
+    FR: FR_ERAS["1991-default"]?.config,
+    IT: IT_ERAS["1991-default"]?.config,
+    ES: ES_ERAS["1991-default"]?.config,
+    SE: SE_ERAS["1991-default"]?.config,
+    TR: TR_ERAS["1991-default"]?.config,
+    GR: GR_ERAS["1991-default"]?.config,
+    AT: AT_ERAS["1991-default"]?.config,
+    FI: FI_ERAS["1991-default"]?.config,
   },
   "1953-default": {
     US: US_ERAS["1953-default"]?.config,

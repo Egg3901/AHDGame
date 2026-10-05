@@ -247,7 +247,7 @@ function ForexPageInner({ params }: { params: Promise<{ code: string }> }) {
           <BackButton iconOnly fallbackLabel="Back" fallbackHref="/dashboard" />
           <div className="mt-8 rounded-xl border border-card-border bg-card p-12 text-center shadow-sm">
             <div className="text-4xl mb-4 font-bold text-muted">¤</div>
-            <h1 className="text-2xl font-bold mb-2">Currency Exchange</h1>
+            <h1 className="text-2xl font-bold mb-2">Currency exchange</h1>
             <p className="text-muted text-sm max-w-md mx-auto">
               The foreign exchange market is not yet open. Multi-currency trading will be available
               in a future update.
@@ -263,12 +263,12 @@ function ForexPageInner({ params }: { params: Promise<{ code: string }> }) {
     { key: "policy", label: "Monetary policy" },
     {
       key: "orders",
-      label: "My Orders",
+      label: "My orders",
       count:
         myOrders.filter((o) => o.status === "open" || o.status === "partial").length || undefined,
     },
     { key: "history", label: "History" },
-    { key: "feed", label: "Trade Feed" },
+    { key: "feed", label: "Trade feed" },
   ];
 
   return (
@@ -309,7 +309,7 @@ function ForexPageInner({ params }: { params: Promise<{ code: string }> }) {
                     Foreign exchange market
                   </p>
                   <h1 className="text-xl font-bold tracking-tight text-white drop-shadow-md sm:text-3xl">
-                    Currency Exchange
+                    Currency exchange
                   </h1>
                 </div>
               </div>

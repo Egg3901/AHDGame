@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -224,7 +226,7 @@ function ReservePortfolioPanel({
       });
       const json = await response.json();
       if (!response.ok) {
-        setError(json.error ?? "Reserve exchange failed.");
+        setError(apiErrorText(json, "Reserve exchange failed."));
         return;
       }
       setMessage(
@@ -397,7 +399,7 @@ function ReservePortfolioPanel({
             </Button>
           </div>
           {message && <p className="mt-2 text-body-sm text-success">{message}</p>}
-          {error && <p className="mt-2 text-body-sm text-error">{error}</p>}
+          <InlineError error={error} className="mt-2 text-body-sm text-error" />
         </form>
       )}
     </CentralBankSection>
@@ -479,7 +481,7 @@ export function CentralBankFinancialsTab({
       const json = await response.json();
       if (!response.ok) {
         if ([400, 403, 409, 422].includes(response.status)) transferCommand.current = null;
-        setTransferError(json.error ?? "Reserve pool transfer failed.");
+        setTransferError(apiErrorText(json, "Reserve pool transfer failed."));
         return;
       }
       transferCommand.current = null;
@@ -690,7 +692,7 @@ export function CentralBankFinancialsTab({
               </p>
             )}
             {transferMessage && <p className="mt-2 text-body-sm text-success">{transferMessage}</p>}
-            {transferError && <p className="mt-2 text-body-sm text-error">{transferError}</p>}
+            <InlineError error={transferError} className="mt-2 text-body-sm text-error" />
           </form>
         )}
       </CentralBankSection>

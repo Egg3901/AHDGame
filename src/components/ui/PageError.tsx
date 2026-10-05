@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ErrorCode } from "@/lib/errors/catalog";
 
 export type PageErrorCode = 401 | 403 | 404 | 429 | 500 | "network";
 
@@ -14,38 +15,39 @@ interface PageErrorProps {
   backLabel?: string;
 }
 
-const ERROR_COPY: Record<PageErrorCode, { headline: string; flavor: string; subtext: string }> = {
+const ERROR_COPY: Record<
+  PageErrorCode,
+  { headline: string; subtext: string; catalogCode: ErrorCode }
+> = {
   401: {
-    headline: "Session Expired",
-    flavor: "Your credentials have been \u201Cvoted out\u201D.",
-    subtext: "Log in again to resume your political career.",
+    headline: "Session expired",
+    subtext: "Log in again to pick up where you left off.",
+    catalogCode: "UNAUTHORIZED",
   },
   403: {
-    headline: "Access Denied",
-    flavor: "This page has been \u201Cfilibustered\u201D \u2014 you lack the votes to enter.",
-    subtext: "You don\u2019t have the clearance required to view this content.",
+    headline: "Access denied",
+    subtext: "You do not have the clearance required to view this content.",
+    catalogCode: "FORBIDDEN",
   },
   404: {
-    headline: "Page Not Found",
-    flavor:
-      "This page has been \u201Cimpeached\u201D, \u201Cfilibustered\u201D, or simply never existed.",
-    subtext: "The congressional record shows no evidence of this URL.",
+    headline: "Page not found",
+    subtext: "There is nothing at this address.",
+    catalogCode: "NOT_FOUND",
   },
   429: {
-    headline: "Too Many Requests",
-    flavor: "The clerk\u2019s office is overwhelmed \u2014 you hit a rate limit.",
-    subtext:
-      "Wait a bit and try again. This is usually temporary and does not mean you were signed out.",
+    headline: "Too many requests",
+    subtext: "Wait a moment and try again. This does not mean you were signed out.",
+    catalogCode: "RATE_LIMITED",
   },
   500: {
-    headline: "Server Error",
-    flavor: "A \u201Clegislative gridlock\u201D has brought the server to a standstill.",
+    headline: "Server error",
     subtext: "Something went wrong on our end. Try again in a moment.",
+    catalogCode: "INTERNAL_ERROR",
   },
   network: {
-    headline: "Connection Lost",
-    flavor: "Your dispatch got lost \u201Cin committee\u201D.",
+    headline: "Connection lost",
     subtext: "Check your connection and try again.",
+    catalogCode: "NETWORK_ERROR",
   },
 };
 
@@ -73,8 +75,10 @@ export function PageError({
           {/* Headlines */}
           <div className="space-y-1">
             <h1 className="text-xl font-bold text-foreground">{copy.headline}</h1>
-            <p className="text-sm text-foreground/80 font-medium">{copy.flavor}</p>
-            <p className="text-xs text-muted">{copy.subtext}</p>
+            <p className="text-sm text-muted">{copy.subtext}</p>
+            <p className="font-mono text-xs text-muted" data-testid="error-code">
+              {copy.catalogCode}
+            </p>
           </div>
 
           {/* Admin detail */}

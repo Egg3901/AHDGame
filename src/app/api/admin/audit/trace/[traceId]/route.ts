@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { queryAuditTrace } from "@/lib/audit/queryAuditLog";
 
 interface RouteParams {
@@ -22,7 +22,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     const { traceId } = await params;
     if (!traceId?.trim()) {
-      return NextResponse.json({ error: "Invalid traceId" }, { status: 400 });
+      return errorResponse(400, "Invalid traceId");
     }
 
     const isAdmin = auth.user.isAdmin === true;

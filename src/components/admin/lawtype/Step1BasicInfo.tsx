@@ -17,7 +17,7 @@ export function Step1BasicInfo({
 }: Step1BasicInfoProps) {
   return (
     <div className="space-y-4">
-      <h3 className="font-medium">Basic Information</h3>
+      <h3 className="font-medium">Basic information</h3>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
@@ -67,7 +67,7 @@ export function Step1BasicInfo({
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-sm font-medium mb-1">
-            Policy Domain <span className="text-red-400">*</span>
+            Policy domain <span className="text-red-400">*</span>
           </label>
           <select
             value={state.policyDomain}
@@ -95,22 +95,22 @@ export function Step1BasicInfo({
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-2">Allowed Scope</label>
+        <label className="block text-sm font-medium mb-2">Allowed scope</label>
         <div className="space-y-2">
           {[
             {
               value: "national" as const,
-              label: "National Only",
+              label: "National only",
               desc: "Congress only. Effect: 1/50th per state.",
             },
             {
               value: "state" as const,
-              label: "State Only",
+              label: "State only",
               desc: "State legislatures only. Effect: 100% to passing state.",
             },
             {
               value: "both" as const,
-              label: "National & State",
+              label: "National & state",
               desc: "Can be proposed at either level.",
             },
           ].map((opt) => (
@@ -133,7 +133,7 @@ export function Step1BasicInfo({
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">Budget Cost (%)</label>
+        <label className="block text-sm font-medium mb-1">Budget cost (%)</label>
         <div className="flex items-center gap-3">
           <input
             type="number"
@@ -153,7 +153,7 @@ export function Step1BasicInfo({
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">Budget Category</label>
+        <label className="block text-sm font-medium mb-1">Budget category</label>
         <select
           value={state.budgetCategory}
           onChange={(e) => updateField("budgetCategory", e.target.value)}
@@ -164,9 +164,9 @@ export function Step1BasicInfo({
           <option value="education">Education</option>
           <option value="defense">Defense</option>
           <option value="infrastructure">Infrastructure</option>
-          <option value="socialSecurity">Social Security</option>
+          <option value="socialSecurity">Social security</option>
           <option value="transportation">Transportation</option>
-          <option value="publicSafety">Public Safety</option>
+          <option value="publicSafety">Public safety</option>
           <option value="environment">Environment</option>
           <option value="other">Other</option>
         </select>
@@ -181,7 +181,7 @@ export function Step1BasicInfo({
           {[
             {
               value: false,
-              label: "This Iteration",
+              label: "This iteration",
               desc: "Will be deleted on game reset. Good for testing.",
               color: "yellow",
             },

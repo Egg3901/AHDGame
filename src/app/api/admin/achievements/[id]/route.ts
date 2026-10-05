@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import type { Achievement } from "@/lib/db/types";
@@ -29,12 +29,12 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid achievement ID" }, { status: 400 });
+      return errorResponse(400, "Invalid achievement ID");
     }
 
     const parsed = await parseJsonBody(request, patchSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -45,7 +45,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       .updateOne({ _id: new ObjectId(id) }, { $set: update });
 
     if (result.matchedCount === 0) {
-      return NextResponse.json({ error: "Achievement not found" }, { status: 404 });
+      return errorResponse(404, "Achievement not found");
     }
 
     invalidateDefinitionsCache();

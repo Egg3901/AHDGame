@@ -32,6 +32,7 @@ import {
 import type { NationalTreasuryInsights } from "@/lib/treasury/partyTreasuryInsights";
 import { TreasuryFundingInsightsCard } from "@/components/party/TreasuryFundingInsightsCard";
 import { TreasuryOverrideHistoryCard } from "@/components/party/TreasuryOverrideHistoryCard";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -155,7 +156,7 @@ export function TreasuryPanel({
       });
       const d = await r.json();
       if (!r.ok) {
-        showToast(d.error ?? "Failed to set PS investment", "error");
+        showToast(apiErrorText(d, "Failed to set PS investment"), "error");
       } else {
         showToast(`PS investment set: +${d.expectedPsPerTurn.toFixed(2)} PS / turn`, "success");
         onPartyRefresh();
@@ -267,7 +268,10 @@ export function TreasuryPanel({
           body: JSON.stringify(body),
         });
         const d = await r.json();
-        dispatch({ type: "SET_MSG", payload: r.ok ? `✓ ${d.message}` : `✗ ${d.error}` });
+        dispatch({
+          type: "SET_MSG",
+          payload: r.ok ? `✓ ${d.message}` : `✗ ${apiErrorText(d, "Request failed")}`,
+        });
         if (r.ok) {
           if (options?.successMessage) {
             dispatch({ type: "SET_MSG", payload: `Success: ${options.successMessage}` });
@@ -638,7 +642,7 @@ export function TreasuryPanel({
       {/* Management Controls — chair/treasurer/admin only */}
       {canManageTreasury && (
         <TreasuryPlanningCard
-          title="National Treasurer Dashboard"
+          title="National treasurer dashboard"
           description="The Treasurer sets soft reserve targets for transfers, member support, and NPP recruiting. Chair and Vice Chair still keep emergency spending access, but sends and transfers that pierce the reserve are flagged as override actions."
           canEdit={canManageTreasuryPlan}
           treasury={party.treasury}
@@ -679,7 +683,7 @@ export function TreasuryPanel({
             growthLeaders={insights.growthLeaders}
           />
           <TreasuryOverrideHistoryCard
-            title="Leadership Override Log"
+            title="Leadership override log"
             description="Recent sends and transfers that pierced the Treasurer reserve target. Leadership can still spend through the plan, but those actions are surfaced here for accountability."
             currencyCode={partyCurrencyCode}
             items={insights.overrideHistory}

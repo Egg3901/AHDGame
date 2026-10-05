@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui";
 import type { TierSettingConfig } from "@/lib/constants/cabinetMechanicsTypes";
 import { ActingLockNote, useActingLock } from "./ActingLock";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface TierSettingPanelProps {
   config: TierSettingConfig;
@@ -66,7 +67,7 @@ export function TierSettingPanel({
       );
       if (!res.ok) {
         const json = (await res.json()) as { error?: string };
-        setFeedback({ type: "error", message: json.error ?? "Failed to save" });
+        setFeedback({ type: "error", message: apiErrorText(json, "Failed to save") });
         return;
       }
       setFeedback({ type: "success", message: "Setting saved." });
@@ -107,11 +108,7 @@ export function TierSettingPanel({
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="font-semibold text-foreground text-sm">{option.label}</span>
-                {isActive && (
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-primary">
-                    Active
-                  </span>
-                )}
+                {isActive && <span className="text-body-sm font-medium text-primary">Active</span>}
               </div>
               <p className="text-xs text-muted leading-snug">{option.description}</p>
             </button>
@@ -126,7 +123,7 @@ export function TierSettingPanel({
           isLoading={saving}
           onClick={handleSave}
         >
-          Apply Setting
+          Apply setting
         </Button>
         {feedback && (
           <span

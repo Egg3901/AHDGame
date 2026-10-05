@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { INDEPENDENCE_COSTS, DISMISSAL_SCRUTINY } from "@/lib/centralBank/independence";
 import { CentralBankSection } from "./CentralBankSection";
@@ -38,7 +39,7 @@ export function DismissChairPanel({
     try {
       const res = await fetch(`${bankApiBasePath}/dismiss-chair`, { method: "POST" });
       const d = await res.json();
-      if (!res.ok) setErr(d.error || "Dismissal failed");
+      if (!res.ok) setErr(apiErrorText(d, "Dismissal failed"));
       else {
         setConfirming(false);
         onChanged();

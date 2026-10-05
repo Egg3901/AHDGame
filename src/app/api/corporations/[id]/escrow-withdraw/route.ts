@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getGameState } from "@/lib/gameState";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -48,7 +48,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { amount } = parsed.data;
 
@@ -74,7 +74,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       lastWithdrawalTurn: corporation.lastEscrowWithdrawalTurn,
     });
     if (!verdict.ok) {
-      return NextResponse.json({ error: verdict.error }, { status: verdict.status });
+      return errorResponse(verdict.status, verdict.error);
     }
 
     // Atomic, race-safe move: the filter re-asserts the positive-balance and
@@ -97,10 +97,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
     );
     if (result.matchedCount === 0) {
-      return NextResponse.json(
-        { error: "Escrow changed before the withdrawal could be applied" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Escrow changed before the withdrawal could be applied");
     }
 
     const withdrawalEntry = buildEscrowWithdrawalTxEntry({

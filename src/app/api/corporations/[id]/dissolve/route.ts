@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { formatFundsCompact } from "@/lib/utils/formatters";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { Bond, Character, Corporation, CorporateSector, CentralBank } from "@/lib/db/types";
@@ -103,10 +103,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const currentTurn = await getCurrentTurn(db);
     const ageBlock = corporationDissolutionAgeBlock(corporation.foundedAtTurn, currentTurn);
     if (ageBlock.blocked) {
-      return NextResponse.json(
-        { error: dissolutionAgeBlockedMessage(ageBlock.turnsRemaining) },
-        { status: 400 }
-      );
+      return errorResponse(400, dissolutionAgeBlockedMessage(ageBlock.turnsRemaining));
     }
 
     // Bug #0597: Allow quick dissolve for public corps where the CEO is the
@@ -126,12 +123,9 @@ export async function POST(_request: Request, { params }: RouteParams) {
         status: "passed",
       });
       if (!passedVote) {
-        return NextResponse.json(
-          {
-            error:
-              "Public corporations require a passed shareholder dissolution vote. Propose one from the admin tab.",
-          },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "Public corporations require a passed shareholder dissolution vote. Propose one from the admin tab."
         );
       }
     }
@@ -141,12 +135,9 @@ export async function POST(_request: Request, { params }: RouteParams) {
       matured: false,
     });
     if (outstandingBonds > 0) {
-      return NextResponse.json(
-        {
-          error:
-            "This corporation has outstanding bonds. Resolve them via Bond default resolution (pay, refinance, or dissolve & settle) before using quick dissolve.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "This corporation has outstanding bonds. Resolve them via Bond default resolution (pay, refinance, or dissolve & settle) before using quick dissolve."
       );
     }
 
@@ -163,9 +154,9 @@ export async function POST(_request: Request, { params }: RouteParams) {
           .find({ corporationId: corporation._id })
           .toArray();
         if (!(await reserveSectorsForRestore(db, sectors))) {
-          return NextResponse.json(
-            { error: "Resolve secured construction before dissolving this corporation" },
-            { status: 409 }
+          return errorResponse(
+            409,
+            "Resolve secured construction before dissolving this corporation"
           );
         }
 
@@ -266,7 +257,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
           .collection<Corporation>("corporations")
           .findOne({ _id: corporation._id });
         if (!refreshedCorporation) {
-          return NextResponse.json({ error: "Corporation not found" }, { status: 404 });
+          return errorResponse(404, "Corporation not found");
         }
 
         // Share-buyback escrow settles into the payout pool ahead of equity: a
@@ -612,10 +603,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     );
 
     if (!result) {
-      return NextResponse.json(
-        { error: "Dissolution is already in progress for this corporation" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Dissolution is already in progress for this corporation");
     }
 
     return result;

@@ -150,7 +150,7 @@ export function ExperimentalUserMenu({
         {showProfile && ((adminCharacters && adminCharacters.length > 1) || imperialCharacter) && (
           <>
             <div className="my-1 h-px bg-card-border" />
-            <div className="px-2.5 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+            <div className="px-2.5 pb-1 pt-1 text-body-sm font-medium text-muted">
               {t("userMenu.characters")}
             </div>
             {adminCharacters?.map((char) =>

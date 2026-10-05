@@ -13,7 +13,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { emitTx } from "@/lib/financialTxLog/emit";
@@ -36,7 +36,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!auth.ok) return auth.response;
 
     if (!(await isPrivateBankingEnabled())) {
-      return NextResponse.json({ error: "Private banking is not enabled." }, { status: 403 });
+      return errorResponse(403, "Private banking is not enabled.");
     }
 
     const rateLimit = checkRateLimit(`bank-upstream:${auth.user.userId}`, 10, 60000);
@@ -53,20 +53,17 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const charter = corp.bankCharter;
     if (!charter || charter.status !== "active") {
-      return NextResponse.json(
-        { error: "This corporation has no active bank charter." },
-        { status: 400 }
-      );
+      return errorResponse(400, "This corporation has no active bank charter.");
     }
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const reserveRatio = await getReserveRequirement(db, charter.currency as CurrencyCode);
     const result = await upstreamBankCash(db, corp._id, parsed.data.amount, reserveRatio);
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+    if (!result.ok) return errorResponse(400, result.error);
 
     const now = new Date();
     await emitTx(db, {

@@ -17,6 +17,7 @@ import { ELECTION_STATE_NAMES, isCompetitiveElection } from "@/app/elections/ele
 import type { EntryAction } from "@/lib/elections/entryEligibility";
 import { isByElectionType } from "@/lib/utils/electionLabels";
 import { relevantDeadlineTurn } from "../electionsSelectors";
+import { CLOSE_RACE_RULE_TEXT } from "@/lib/elections/rules/closeRace";
 
 const CLASS_ROMAN: Record<number, string> = { 1: "I", 2: "II", 3: "III" };
 
@@ -143,7 +144,7 @@ export function FieldCell({ election }: { election: ElectionDisplay }) {
           <span className="shrink-0 text-xs tabular-nums text-muted">{share.toFixed(0)}%</span>
         )}
         {isCompetitiveElection(election) && (
-          <span className="shrink-0 text-xs text-warning" title="Top two within 15 points">
+          <span className="shrink-0 text-xs text-warning" title={CLOSE_RACE_RULE_TEXT}>
             Close
           </span>
         )}

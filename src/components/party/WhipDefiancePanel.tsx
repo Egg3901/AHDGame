@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui";
 import type { WhipDefianceItem, WhipDefianceSnapshot } from "@/lib/partyWhips/whipDefiance";
 import { whipIssuerRoleLabel } from "@/lib/partyWhips/issuerRole";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 function formatIssuedAt(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -65,7 +66,7 @@ export function WhipDefiancePanel({ defianceUrl }: { defianceUrl: string }) {
         const response = await fetch(defianceUrl, { cache: "no-store" });
         if (!response.ok) {
           const body = (await response.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(body?.error ?? "Failed to load whip defiance");
+          throw new Error(apiErrorText(body, "Failed to load whip defiance"));
         }
         const body = (await response.json()) as WhipDefianceSnapshot;
         if (!cancelled) {
@@ -116,19 +117,19 @@ export function WhipDefiancePanel({ defianceUrl }: { defianceUrl: string }) {
         <>
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-xl border border-card-border bg-card p-4">
-              <p className="text-body-sm text-muted">Active Defiance</p>
+              <p className="text-body-sm text-muted">Active defiance</p>
               <p className="mt-2 text-heading-sm font-bold tabular-nums text-foreground">
                 {data.activeCount}
               </p>
             </div>
             <div className="rounded-xl border border-card-border bg-card p-4">
-              <p className="text-body-sm text-muted">Players Defying</p>
+              <p className="text-body-sm text-muted">Players defying</p>
               <p className="mt-2 text-heading-sm font-bold tabular-nums text-warning">
                 {data.playerCount}
               </p>
             </div>
             <div className="rounded-xl border border-card-border bg-card p-4">
-              <p className="text-body-sm text-muted">NPPs Defying</p>
+              <p className="text-body-sm text-muted">NPPs defying</p>
               <p className="mt-2 text-heading-sm font-bold tabular-nums text-error">
                 {data.nppCount}
               </p>

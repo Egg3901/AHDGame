@@ -1,4 +1,5 @@
 import type { CountryEraOverride } from "../../contract";
+import { INITIAL_RATES_1991 } from "@/lib/constants/currencies";
 
 /**
  * SE, 1991.
@@ -9,13 +10,15 @@ import type { CountryEraOverride } from "../../contract";
  *
  * ⚠ DIFFERENCES ONLY. Everything not named here comes from the base modules.
  *
- * No config override: this era uses SE's base configuration. The field
- * is ABSENT rather than an empty object, because `getCountryConfig` merges
- * shallowly and `config: {}` reads as an override that supplies nothing.
+ * Config override: `usdExchangeRate` only. Its base value is the 1979 reciprocal
+ * of the SE rate, and the 1991 GDP seeds are authored in legacy currency at the
+ * 1991 average (WDI, see fiscalAnchors1991.ts), so the anchor is the reciprocal
+ * of `INITIAL_RATES_1991`, the same table `seedExchangeRates` writes (#3034).
  *
  * No per-era orders of battle: this era falls back to the base set rather
  * than inventing an empty one.
  */
 export const SE_1991: CountryEraOverride = {
   preset: "1991-default",
+  config: { usdExchangeRate: 1 / INITIAL_RATES_1991.SE! },
 };

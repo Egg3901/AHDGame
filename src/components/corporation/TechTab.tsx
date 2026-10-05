@@ -14,6 +14,7 @@ import {
   Td,
   Th,
 } from "./dense/DenseKit";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type Lane = "generic" | "sector";
 type EffectCategory =
@@ -156,7 +157,7 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
         body: JSON.stringify({ nodeId: confirmNode.node.id }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) setMsg({ kind: "err", text: json.error ?? "Unlock failed" });
+      if (!res.ok) setMsg({ kind: "err", text: apiErrorText(json, "Unlock failed") });
       else {
         setMsg({ kind: "ok", text: `Unlocked ${confirmNode.node.name}.` });
         await load();
@@ -179,7 +180,7 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
         body: JSON.stringify({ decadeId: confirmAbandon.id }),
       });
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) setMsg({ kind: "err", text: json.error ?? "Abandon failed" });
+      if (!res.ok) setMsg({ kind: "err", text: apiErrorText(json, "Abandon failed") });
       else {
         setMsg({ kind: "ok", text: `Abandoned ${decadeLabel(confirmAbandon.label)}.` });
         await load();

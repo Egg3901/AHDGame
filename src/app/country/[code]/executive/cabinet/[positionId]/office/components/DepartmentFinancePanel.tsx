@@ -238,7 +238,7 @@ export function DepartmentFinancePanel({
       <section className="rounded-lg border border-card-border bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-wide text-muted">Department account</p>
+            <p className="text-body-sm font-medium text-muted">Department account</p>
             <h2 className="text-lg font-semibold">{department.departmentName}</h2>
           </div>
           <span className="rounded-full border border-card-border px-3 py-1 text-xs font-semibold uppercase">

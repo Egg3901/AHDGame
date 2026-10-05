@@ -113,9 +113,7 @@ export function AchievementsShowcaseClient({
         <div className="flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:p-8">
           <Avatar url={avatarUrl} name={characterName} size="h-24 w-24" />
           <div className="min-w-0 flex-1">
-            <p className="text-body-sm font-semibold uppercase tracking-widest text-primary">
-              Achievement showcase
-            </p>
+            <p className="text-body-sm font-medium text-primary">Achievement showcase</p>
             <h1 className="mt-1 text-display text-foreground">
               {characterName}&apos;s achievements
             </h1>

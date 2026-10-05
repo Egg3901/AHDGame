@@ -15,7 +15,7 @@ import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimizatio
 import { formatEffectiveCouponPct, formatMarketingStrength } from "@/lib/utils/formatters";
 import { loyaltyLabel } from "@/lib/market/brandLoyalty";
 import { CorpEconomicModelBadge } from "@/components/economy/CorpEconomicModelBadge";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { corpIncomeBasis, netMarginPct } from "./financials/financialsModel";
 import { CAPACITY_UNIT_LABEL, formatUnits } from "./plantsPresentation";
@@ -821,10 +821,7 @@ export default function OverviewTab({
                 hint={`${sub.ownershipPct.toFixed(1)}%`}
               />
             ))}
-            <KVRow
-              label="Founded"
-              value={<LocalTime value={corporation.createdAt} options={{ dateStyle: "medium" }} />}
-            />
+            <KVRow label="Founded" value={<GameMonthTime value={corporation.createdAt} />} />
           </KVList>
         </DenseSection>
       </aside>

@@ -10,7 +10,7 @@
  */
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { SPAWN_ELECTIONS_REGISTRY } from "@/lib/turn/perpetualElections";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 
@@ -26,13 +26,13 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     const handler = SPAWN_ELECTIONS_REGISTRY[countryId];
     if (!handler) {
-      return NextResponse.json(
-        { error: `No spawn-elections handler registered for country '${countryId}'.` },
-        { status: 404 }
+      return errorResponse(
+        404,
+        `No spawn-elections handler registered for country '${countryId}'.`
       );
     }
 

@@ -8,7 +8,12 @@ vi.mock("./serverPosthog", () => ({
   getServerPosthogClient: () => ({}),
 }));
 
-function fixture(rows: Record<string, unknown[]>) {
+function fixture(
+  rows: Record<string, unknown[]>,
+  state: { worldEpochStartedAt?: Date; preset?: string } = {
+    worldEpochStartedAt: new Date("2026-10-01T00:00:00Z"),
+  }
+) {
   const reads = vi.fn((name: string, filter: unknown, options: unknown) => {
     void filter;
     void options;
@@ -17,6 +22,16 @@ function fixture(rows: Record<string, unknown[]>) {
   const db = {
     collection: (name: string) => ({
       find: (filter: unknown, options: unknown) => reads(name, filter, options),
+      findOne: vi
+        .fn()
+        .mockImplementation((filter: { _id?: string; action?: unknown }, options?: unknown) => {
+          void options;
+          if (name === "gameState") return Promise.resolve(state);
+          if (name === "adminLogs" && filter?._id === undefined) {
+            return Promise.resolve({ resetRun: { startedAt: new Date("2026-10-01T00:00:00Z") } });
+          }
+          return Promise.resolve(null);
+        }),
     }),
   } as unknown as Db;
   return { db, reads };
@@ -171,6 +186,26 @@ describe("committed world depth telemetry", () => {
     }
     expect(reads).toHaveBeenCalledTimes(13);
     for (const [, , options] of reads.mock.calls) expect(options).toHaveProperty("projection");
+  });
+
+  it("filters retained membership history to the current world epoch", async () => {
+    const { db, reads } = fixture({});
+    await captureWorldDepthPosthog({ db, turn: 42 });
+    expect(reads).toHaveBeenCalledWith(
+      "partyMembershipEvents",
+      { turn: { $gte: 41, $lte: 42 }, createdAt: { $gte: new Date("2026-10-01T00:00:00Z") } },
+      expect.objectContaining({ projection: expect.any(Object) })
+    );
+  });
+
+  it("uses the latest reset-run start for a legacy gameState document", async () => {
+    const { db, reads } = fixture({}, { preset: "1991-default" });
+    await captureWorldDepthPosthog({ db, turn: 42 });
+    expect(reads).toHaveBeenCalledWith(
+      "partyMembershipEvents",
+      { turn: { $gte: 41, $lte: 42 }, createdAt: { $gte: new Date("2026-10-01T00:00:00Z") } },
+      expect.objectContaining({ projection: expect.any(Object) })
+    );
   });
 
   it("reports crisis start and same-turn resolution separately and excludes maintenance membership changes", async () => {

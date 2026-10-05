@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Db } from "mongodb";
 import { getGameStateCollection } from "@/lib/db/collections";
+import { errorResponse } from "@/lib/api/errors";
 
 /**
  * Full-game pause gate (`gameState.isActive === false`): admin stop, auto-drift
@@ -17,7 +18,7 @@ export async function requireGameActive(db: Db): Promise<NextResponse | null> {
   const gameState = await col.findOne({ _id: "current" }, { projection: { isActive: 1 } });
 
   if (gameState && gameState.isActive === false) {
-    return NextResponse.json({ error: "The game is currently paused." }, { status: 409 });
+    return errorResponse(409, "The game is currently paused.");
   }
 
   return null;
@@ -41,10 +42,7 @@ export async function requireCorporationActionsEnabled(db: Db): Promise<NextResp
   );
 
   if (gameState?.corporationActionsPaused) {
-    return NextResponse.json(
-      { error: "Corporation actions are currently paused by an admin" },
-      { status: 403 }
-    );
+    return errorResponse(403, "Corporation actions are currently paused by an admin");
   }
 
   return null;

@@ -101,6 +101,25 @@ export function withdrawEuropeanRatification(
   return { ...state, ratifications };
 }
 
+/**
+ * The state is established from the world's own stored turn, so an
+ * establishment turn the world has not reached can only come from a previous
+ * world carried through a reset. That record is not this world's history and
+ * must not decide its institutional stage or founding roster. Decision turns
+ * are deliberately not compared: turn processing may stamp the turn in
+ * progress before the stored counter advances.
+ */
+export function isCarriedOverEuropeanIntegration(
+  state: EuropeanIntegrationState,
+  currentTurn: number
+): boolean {
+  return (
+    Number.isFinite(currentTurn) &&
+    Number.isFinite(state.establishedTurn) &&
+    state.establishedTurn > currentTurn
+  );
+}
+
 export function initialEuropeanIntegration(input: {
   startingYear: number;
   currentTurn: number;

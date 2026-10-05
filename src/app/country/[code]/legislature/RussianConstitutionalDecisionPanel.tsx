@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { apiErrorText } from "@/lib/errors/catalog";
 interface Decision {
   kind: "presidency" | "federalAssembly" | "regionalHeads" | "regionalDelegates" | "law1995";
   threshold?: "majority";
@@ -50,7 +51,7 @@ export default function RussianConstitutionalDecisionPanel() {
       });
       const body = (await response.json()) as { billId?: string; error?: string };
       if (!response.ok || !body.billId) {
-        setError(body.error ?? t("openError"));
+        setError(apiErrorText(body, t("openError")));
         return;
       }
       router.push(`/congress/bills/${body.billId}`);

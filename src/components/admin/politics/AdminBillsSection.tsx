@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/ui";
 import { Pagination } from "../Pagination";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface AdminBillRow {
   id: string;
@@ -105,7 +106,7 @@ export function AdminBillsSection({ countryId }: AdminBillsSectionProps) {
       body: JSON.stringify({ billId, action }),
     });
     const d = await res.json();
-    setMessage(res.ok ? d.message : `Error: ${d.error}`);
+    setMessage(res.ok ? d.message : `Error: ${apiErrorText(d, "Request failed")}`);
     if (res.ok) fetchBills();
   };
 
@@ -124,7 +125,7 @@ export function AdminBillsSection({ countryId }: AdminBillsSectionProps) {
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-lg font-semibold">Legislation Management</h2>
+        <h2 className="text-lg font-semibold">Legislation management</h2>
         <div className="flex gap-1 rounded-lg border border-card-border overflow-hidden text-sm">
           {["all", "active", "active_other", "enrolled", "signed", "failed", "vetoed"].map((s) => (
             <button
@@ -225,7 +226,7 @@ export function AdminBillsSection({ countryId }: AdminBillsSectionProps) {
                       onClick={() => runAction(bill.id, "force_advance_chamber")}
                       className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-400 hover:bg-cyan-500/20 transition-colors"
                     >
-                      Advance Chamber
+                      Advance chamber
                     </button>
                   )}
                   {["active", "active_other"].includes(bill.status) && (
@@ -233,7 +234,7 @@ export function AdminBillsSection({ countryId }: AdminBillsSectionProps) {
                       onClick={() => runAction(bill.id, "force_enroll")}
                       className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-1.5 text-xs font-medium text-purple-400 hover:bg-purple-500/20 transition-colors"
                     >
-                      Send to President
+                      Send to president
                     </button>
                   )}
                   {bill.status === "enrolled" && (
@@ -242,13 +243,13 @@ export function AdminBillsSection({ countryId }: AdminBillsSectionProps) {
                         onClick={() => runAction(bill.id, "force_sign")}
                         className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-500/20 transition-colors"
                       >
-                        Force Sign
+                        Force sign
                       </button>
                       <button
                         onClick={() => runAction(bill.id, "force_veto")}
                         className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors"
                       >
-                        Force Veto
+                        Force veto
                       </button>
                     </>
                   )}

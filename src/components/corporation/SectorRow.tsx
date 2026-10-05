@@ -1,5 +1,6 @@
 "use client";
 
+import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useState } from "react";
 import Link from "next/link";
 import { InfoTooltip } from "@/components/InfoTooltip";
@@ -99,18 +100,25 @@ export function SectorRow({
   const [mobileAbandonConfirm, setMobileAbandonConfirm] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
+  const { preset } = useWorldFlags();
   const operatingSectorType = getOperatingSectorType(
     sector.sectorType,
     sector.industryModel,
     sector.mediaDiscriminator
   ) as CorporationType;
-  const strategies = getSectorStrategies(operatingSectorType, mediaOperatingModelsEnabled);
+  const strategies = getSectorStrategies(
+    operatingSectorType,
+    mediaOperatingModelsEnabled,
+    null,
+    preset
+  );
   const currentId = sector.strategyId ?? "standard";
   const currentStrategy = getStrategyForOperatingModel(
     sector.sectorType,
     currentId,
     sector.industryModel,
-    sector.mediaDiscriminator
+    sector.mediaDiscriminator,
+    preset
   );
   const currentStrategyListed = strategies.some((strategy) => strategy.id === currentId);
   const isTransitioning = !!sector.transitionFromStrategyId;

@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui";
@@ -105,7 +106,7 @@ export function NominationsPanel({
                 excludeIds={nominations.map((n) => n.characterId)}
               />
               {loading && <p className="text-body-sm text-muted">Submitting nomination...</p>}
-              {error && <p className="text-body-sm text-error">{error}</p>}
+              <InlineError error={error} className="text-body-sm text-error" />
               <Button variant="ghost" onClick={() => setShowSelector(false)}>
                 Cancel
               </Button>

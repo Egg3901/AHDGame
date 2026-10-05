@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { findCaucusBySlug } from "@/lib/db/caucusLookup";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -20,10 +20,10 @@ export async function DELETE(
     const { code, id, slug, memberId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     if (!ObjectId.isValid(memberId)) {
-      return NextResponse.json({ error: "Invalid member id" }, { status: 400 });
+      return errorResponse(400, "Invalid member id");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -32,13 +32,13 @@ export async function DELETE(
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const partyId = String(party.sequentialId);
 
     const resolved = await findCaucusBySlug(db, countryId, partyId, slug);
     if (!resolved) {
-      return NextResponse.json({ error: "Caucus not found" }, { status: 404 });
+      return errorResponse(404, "Caucus not found");
     }
     const { caucus } = resolved;
 
@@ -47,7 +47,7 @@ export async function DELETE(
       .collection<CaucusMembership>("caucusMemberships")
       .findOne({ caucusId: caucus._id, memberId: memberOid, status: "active" });
     if (!membership) {
-      return NextResponse.json({ error: "Membership not found" }, { status: 404 });
+      return errorResponse(404, "Membership not found");
     }
 
     const callerId = auth.user.character._id;
@@ -55,9 +55,9 @@ export async function DELETE(
     const isSelf = membership.memberType === "character" && membership.memberId.equals(callerId);
 
     if (!isChair && !isSelf) {
-      return NextResponse.json(
-        { error: "Only the chair or the member themselves can remove this membership." },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the chair or the member themselves can remove this membership."
       );
     }
 
@@ -65,12 +65,9 @@ export async function DELETE(
     // now happens through the caucus chair election flow or via PATCH /caucus +
     // an explicit "step down" flow. Disbanding clears the chair too.
     if (isChair && isSelf) {
-      return NextResponse.json(
-        {
-          error:
-            "Chairs can't leave the caucus directly — disband the caucus or hand the chair off via the next election.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Chairs can't leave the caucus directly — disband the caucus or hand the chair off via the next election."
       );
     }
 

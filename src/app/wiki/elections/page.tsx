@@ -66,7 +66,7 @@ export default function WikiElectionsPage() {
       </nav>
 
       <header className="mb-10">
-        <h1 className="mb-2 text-3xl font-bold tracking-tight text-foreground">Election History</h1>
+        <h1 className="mb-2 text-3xl font-bold tracking-tight text-foreground">Election history</h1>
         <p className="text-lg text-muted">
           Browse by year and type (e.g. 2020 Governors) or by state and type (e.g. Florida
           Governor). Click any election for full details.

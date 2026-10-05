@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { MacroMetricsDoc } from "@/lib/db/types/macroMetrics";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getReferendumCollection } from "@/lib/db/collections/referendum";
@@ -18,7 +18,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (countryId !== "UK") {
       return NextResponse.json({ referendums: [], isPM: false, isAdmin: false, currentTurn: 0 });

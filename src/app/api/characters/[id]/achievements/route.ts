@@ -7,7 +7,7 @@ import {
   getAllAchievements,
 } from "@/lib/achievements";
 import type { Character } from "@/lib/db/types";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getAchievementProgress } from "@/lib/achievements/progress";
 
 interface RouteParams {
@@ -25,7 +25,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid character ID" }, { status: 400 });
+      return errorResponse(400, "Invalid character ID");
     }
 
     const characterId = new ObjectId(id);
@@ -33,7 +33,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     const character = await db.collection<Character>("characters").findOne({ _id: characterId });
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const [earned, rarityMap, allAchievements] = await Promise.all([

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import {
@@ -27,7 +27,7 @@ export async function POST(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
@@ -42,12 +42,12 @@ export async function POST(
     const party = await findPartyBySequentialId(db, id, countryId);
 
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     // Check if actually in this party - must match both party AND country
     if (auth.character.party !== id || !isSameCountry(auth.character, party)) {
-      return NextResponse.json({ error: "You are not a member of this party" }, { status: 400 });
+      return errorResponse(400, "You are not a member of this party");
     }
 
     const now = new Date();

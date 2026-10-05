@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState, useEffect, useCallback } from "react";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 import { LocalTime } from "@/components/time/LocalTime";
@@ -353,7 +354,7 @@ export function ActivityLogTab({
 
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold sm:text-lg">Activity Log</h2>
+      <h2 className="text-base font-semibold sm:text-lg">Activity log</h2>
 
       {/* Filter bar */}
       <div className="flex flex-wrap gap-2">
@@ -440,7 +441,7 @@ export function ActivityLogTab({
         </button>
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      <InlineError error={error} className="text-sm text-red-500" />
 
       {/* Table */}
       <div className="rounded-xl border border-card-border bg-card overflow-x-auto">

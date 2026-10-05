@@ -15,7 +15,7 @@ import {
 describe("buildCentralBankBootstrapUpdate", () => {
   it("uses the supplied opening year only for a newly bootstrapped bank", () => {
     const update = buildCentralBankBootstrapUpdate("JP", "JP", undefined, undefined, 1991);
-    expect(update.$setOnInsert.primeRate).toBe(6);
+    expect(update.$setOnInsert.primeRate).toBe(3);
     expect(update).not.toHaveProperty("$set.primeRate");
   });
   it("keeps shared-bank intorgId out of $setOnInsert to avoid Mongo update conflicts", () => {

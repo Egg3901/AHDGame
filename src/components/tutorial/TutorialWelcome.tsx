@@ -166,7 +166,7 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
                   <span className="rounded-full border border-card-border px-2 py-0.5 text-[10px] font-medium text-muted">
                     {t("welcome.mostPlayers")}
                   </span>
-                  <span className="ml-auto text-[10px] uppercase tracking-wide text-muted">
+                  <span className="ml-auto text-body-sm font-medium text-muted">
                     {t("welcome.aboutMinutesShort", { minutes: fullEstimate })}
                   </span>
                 </span>
@@ -191,7 +191,7 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
                     >
                       <span className="flex items-baseline justify-between gap-2">
                         <span className="text-sm font-semibold">{t(chapter.title)}</span>
-                        <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted">
+                        <span className="shrink-0 text-body-sm font-medium text-muted">
                           {t("welcome.minutesShort", { minutes: chapter.estimatedMinutes })}
                         </span>
                       </span>

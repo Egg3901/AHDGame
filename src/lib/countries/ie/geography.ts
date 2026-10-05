@@ -1,6 +1,7 @@
 import type { CountryModifierPatch } from "@/lib/states/conditions/countryPatches";
 import { condition as c } from "@/lib/states/conditions/condition";
 import type { CountryGeography } from "../contract";
+import { modernRegionalPopulation2027 } from "@/lib/seeds/reference/modernRegionalPopulation2027";
 import { ieMetricPresets1953 } from "./data/ieMetricPresets1953";
 import { ieMetricPresets1991, ieMetricPresets2019 } from "./data/ieMetricPresets";
 import { iePopulationAnchors1991, iePopulationAnchors2019 } from "./data/iePopulationAnchors";
@@ -79,6 +80,7 @@ const regionBundles = {
   "2007-default": ieRegions2007,
   "2019-default": ieRegions,
   "2023-default": ieRegions2023,
+  "2027-default": modernRegionalPopulation2027("IE", ieRegions2023),
 };
 
 /** Base-era per-modifier threshold overrides and suppressions. */

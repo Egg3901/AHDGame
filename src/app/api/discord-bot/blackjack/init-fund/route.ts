@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import type { DiscordBotFund } from "@/lib/db/types/discordBotFund";
@@ -13,7 +13,7 @@ import type { DiscordBotFund } from "@/lib/db/types/discordBotFund";
 export async function POST(request: Request) {
   try {
     if (!requireBotToken(request, false)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const rateLimit = checkRateLimit("discord-bot:blackjack-init-fund", 5, 60_000);
@@ -27,15 +27,13 @@ export async function POST(request: Request) {
       .findOne({ name: "blackjack_prize_pool" });
 
     if (existingFund) {
-      return NextResponse.json(
-        {
-          error: "Already initialized",
+      return errorResponse(409, "Already initialized", {
+        extra: {
           message: "The blackjack prize pool is already set up.",
           currentBalance: existingFund.balance,
           createdAt: existingFund.createdAt,
         },
-        { status: 409 }
-      );
+      });
     }
 
     const now = new Date();
@@ -61,10 +59,9 @@ export async function POST(request: Request) {
     });
 
     if (!result.acknowledged) {
-      return NextResponse.json(
-        { error: "Failed to initialize prize pool", insertedId: result.insertedId },
-        { status: 500 }
-      );
+      return errorResponse(500, "Failed to initialize prize pool", {
+        extra: { insertedId: result.insertedId },
+      });
     }
 
     return NextResponse.json({

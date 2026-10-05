@@ -5,7 +5,7 @@ import { AUTH_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
 import { durableRateLimit } from "@/lib/api/rateLimit.mongo";
 import { parseJsonBody } from "@/lib/api/validate";
 import { forgotPasswordBodySchema } from "@/lib/api/schemas/auth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { createPasswordReset, PASSWORD_RESETS_COLLECTION } from "@/lib/passwordReset";
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, forgotPasswordBodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const identifier = parsed.data.identifier.toLowerCase().trim();
 
@@ -66,10 +66,7 @@ export async function POST(request: Request) {
         outcome: "rejected",
         reason: "turnstile_failed",
       });
-      return NextResponse.json(
-        { error: "Verification failed. Please try again." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Verification failed. Please try again.");
     }
 
     const db = await getDb();

@@ -3,6 +3,7 @@
 import { useMemo, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import { useTickerDecel } from "@/hooks/useTickerDecel";
 import type { StockListing, CommodityData } from "../types";
 import { finitePriceChange } from "@/lib/stockExchange/listingEligibility";
@@ -28,10 +29,12 @@ interface TickerItem {
   priceChange24h: number;
   link: string;
   isSubsidiary?: boolean;
+  /** Listing currency of a corporation quote; `price` is then exchange-local. */
+  listingCurrencyCode?: CurrencyCode;
 }
 
 function TickerEntry({ item }: { item: TickerItem }) {
-  const { formatPrice } = useCurrency();
+  const { formatPrice, formatListingPrice } = useCurrency();
   const changeColor =
     item.priceChange24h > 0
       ? "text-success"
@@ -52,7 +55,11 @@ function TickerEntry({ item }: { item: TickerItem }) {
           Sub
         </span>
       ) : null}
-      <span className="font-bold text-foreground tabular-nums">{formatPrice(item.price)}</span>
+      <span className="font-bold text-foreground tabular-nums">
+        {item.listingCurrencyCode
+          ? formatListingPrice(item.price, item.listingCurrencyCode)
+          : formatPrice(item.price)}
+      </span>
       <span className={`${changeColor} tabular-nums`}>
         {arrow}
         {item.priceChange24h > 0 ? "+" : ""}
@@ -92,9 +99,13 @@ export function StockTicker({
       // Ticker symbol is the canonical scroll-bar label for a corp; legacy
       // corps without one fall back to the full company name.
       name: s.tickerSymbol ?? s.name,
-      // formatPrice accepts anchor units, while sharePrice is exchange-local.
-      // Match the stock table's normalized source for the same listing.
-      price: s.sharePriceAnchor ?? s.sharePrice,
+      // The listing-currency quote, matching the stocks table, corporation
+      // header and status bar. Legacy rows without a currency fall back to the
+      // anchor mirror, which formatPrice expects.
+      price: s.liquidCurrencyCode ? s.sharePrice : (s.sharePriceAnchor ?? s.sharePrice),
+      ...(s.liquidCurrencyCode
+        ? { listingCurrencyCode: s.liquidCurrencyCode as CurrencyCode }
+        : {}),
       priceChange24h: finitePriceChange(s.priceChange24h),
       link: `/corporation/${s.sequentialId ?? s._id}`,
       isSubsidiary: s.isSubsidiary === true,

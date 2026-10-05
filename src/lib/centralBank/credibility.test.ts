@@ -73,6 +73,25 @@ describe("resolve is the escape hatch", () => {
 });
 
 describe("stance correctness follows the corridor the UI shows", () => {
+  it("uses the neutral Taylor rate at target CPI instead of a real-rate proxy", () => {
+    const atNeutral = stanceIsCorrect(3, 2, 2, 3, 2);
+    const belowNeutral = stanceIsCorrect(2.5, 2, 2, 3, 2);
+
+    expect(atNeutral).toBe(true);
+    expect(belowNeutral).toBe(false);
+  });
+
+  it("follows both inflation and output gaps in the neutral Taylor target", () => {
+    expect(stanceIsCorrect(4.75, 4, 2, 3, 2)).toBe(true);
+    expect(stanceIsCorrect(3, 4, 2, 3, 2)).toBe(false);
+    expect(stanceIsCorrect(3.75, 2, 2, 3, 4)).toBe(true);
+    expect(stanceIsCorrect(3, 2, 2, 3, 4)).toBe(false);
+    expect(stanceIsCorrect(1.25, 0, 2, 3, 2)).toBe(true);
+    expect(stanceIsCorrect(3, 0, 2, 3, 2)).toBe(false);
+    expect(stanceIsCorrect(2.25, 2, 2, 3, 0)).toBe(true);
+    expect(stanceIsCorrect(3, 2, 2, 3, 0)).toBe(false);
+  });
+
   it("wants restrictive when inflation runs hot", () => {
     expect(stanceIsCorrect(6, 4, 2)).toBe(true);
     expect(stanceIsCorrect(1, 4, 2)).toBe(false);

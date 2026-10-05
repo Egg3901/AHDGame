@@ -3,7 +3,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { draftCharterSchema } from "@/lib/api/schemas/charters";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { PoliticalParty, Character, StatePartyOrg } from "@/lib/db/types";
 import { resolvePartyTier } from "@/lib/parties/partyTier";
 import { ObjectId } from "mongodb";
@@ -24,7 +24,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     // Exclude defunct (merged-away) parties — their tombstone row is retained
@@ -206,7 +206,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
@@ -217,16 +217,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     const parsed = await parseJsonBody(request, draftCharterSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { name, abbreviation, platform, foundersCharacterIds, foundingCohort } = parsed.data;
 
     // Cross-check character country matches the URL country.
     if (authResult.user.character.countryId !== countryId) {
-      return NextResponse.json(
-        { error: "You can only charter a party in your own country" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You can only charter a party in your own country");
     }
 
     const db = await getDb();
@@ -267,7 +264,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
                         : result.reason === "cohort-state-not-adjacent"
                           ? "Founding-cohort states must be your home state or adjacent to it"
                           : "A party or active charter already uses this abbreviation";
-      return NextResponse.json({ error: message, reason: result.reason }, { status: 400 });
+      return errorResponse(400, message, { extra: { reason: result.reason } });
     }
 
     return NextResponse.json(

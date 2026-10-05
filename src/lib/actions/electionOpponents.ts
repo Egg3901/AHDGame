@@ -19,12 +19,24 @@ import {
 import { computeLiveGroupTurnouts } from "@/lib/seeds/stateDemographics";
 import { getGameTime } from "@/lib/time/gameTime";
 import { isPrimaryEnded } from "@/lib/elections/phases";
+import {
+  resolveHouseIncumbentTenures,
+  resolveSingleSeatLegislativeIncumbent,
+} from "@/lib/electionEngine/singleSeatIncumbency";
 
 export interface ElectionOpponents {
   campaignRulesVersion?: number;
   electionId: string;
   electionType: string;
   state: string;
+  /** Current player's electionCandidates._id, needed for House tenure parity. */
+  candidateId: string;
+  /** Resolved once per race; no per-opponent tenure reads. */
+  incumbency?: {
+    legislativePartyId?: string;
+    legislativeTenureTermsSought?: number;
+    houseTenureTermsByCandidateId?: Map<string, number>;
+  };
   /** True if the election is currently in its primary phase (primaryEndTime > now). */
   inPrimary: boolean;
   opponents: OpponentForShare[];
@@ -96,6 +108,40 @@ export async function getElectionOpponents(
           ...(inPrimary ? { party: myEntry.party } : {}),
         })
         .toArray();
+
+      let incumbency: ElectionOpponents["incumbency"];
+      if (!inPrimary && election.electionType === "senate") {
+        const runningIdentities = new Set(
+          [myEntry, ...otherCandidates]
+            .map((candidate) => (candidate.characterId ?? candidate.nppId)?.toString())
+            .filter((identity): identity is string => Boolean(identity))
+        );
+        const legislativeIncumbent = await resolveSingleSeatLegislativeIncumbent(
+          election,
+          runningIdentities,
+          db
+        );
+        if (legislativeIncumbent) {
+          incumbency = {
+            legislativePartyId: legislativeIncumbent.incumbentPartyId,
+            legislativeTenureTermsSought: legislativeIncumbent.tenureTerms,
+          };
+        }
+      } else if (!inPrimary && election.electionType === "house") {
+        const runningIdentityToCandidateId = new Map<string, string>();
+        for (const candidate of [myEntry, ...otherCandidates]) {
+          const identity = (candidate.characterId ?? candidate.nppId)?.toString();
+          if (identity) runningIdentityToCandidateId.set(identity, candidate._id.toString());
+        }
+        const houseTenureTermsByCandidateId = await resolveHouseIncumbentTenures(
+          election,
+          runningIdentityToCandidateId,
+          db
+        );
+        if (houseTenureTermsByCandidateId.size > 0) {
+          incumbency = { houseTenureTermsByCandidateId };
+        }
+      }
 
       const [state, demographics, categories, statePartyOrgs] = await Promise.all([
         db
@@ -186,6 +232,9 @@ export async function getElectionOpponents(
 
           const archetypeApprovals =
             opponentChar?.archetypeApprovals ?? opponentNPP?.archetypeApprovals;
+          const nationalInfluence = opponentNPP
+            ? Math.min(100, Math.max(0, Number.isFinite(polInf) ? polInf : 10))
+            : Math.max(0, opponentChar?.nationalInfluence ?? 0);
           // NPPs don't carry infamy; characters do. Leaving infamy undefined for
           // NPPs yields no penalty (infamyPenaltyMultiplier(undefined) === 1.0).
           const opponentInfamy = opponentChar?.infamy;
@@ -199,6 +248,7 @@ export async function getElectionOpponents(
             socialPosition: social,
             favorability: fav,
             politicalInfluence: polInf,
+            nationalInfluence,
             ...(archetypeApprovals && { archetypeApprovals }),
             ...(opponentInfamy != null && { infamy: opponentInfamy }),
             overallAppeal: pd.overallAppeal,
@@ -217,6 +267,8 @@ export async function getElectionOpponents(
         electionId: election._id.toString(),
         electionType: election.electionType,
         state: election.state,
+        candidateId: myEntry._id.toString(),
+        ...(incumbency ? { incumbency } : {}),
         inPrimary,
         opponents,
         lastElection,

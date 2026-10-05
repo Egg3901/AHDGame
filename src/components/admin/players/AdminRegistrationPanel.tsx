@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback } from "react";
 import { LocalTime } from "@/components/time/LocalTime";
 
@@ -49,7 +50,7 @@ export function AdminRegistrationPanel() {
 
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Failed to update admin registration");
+        setError(apiErrorText(data, "Failed to update admin registration"));
         return;
       }
 
@@ -107,7 +108,7 @@ export function AdminRegistrationPanel() {
             </svg>
           </div>
           <div>
-            <h3 className="text-sm font-semibold">Admin Registration</h3>
+            <h3 className="text-sm font-semibold">Admin registration</h3>
             <p className="text-xs text-muted">
               {isEnabled
                 ? "Anyone with the admin key can register as an admin"
@@ -206,8 +207,8 @@ export function AdminRegistrationPanel() {
         {toggling
           ? "Updating..."
           : isEnabled
-            ? "Close Admin Registration"
-            : "Open Admin Registration"}
+            ? "Close admin registration"
+            : "Open admin registration"}
       </button>
     </div>
   );

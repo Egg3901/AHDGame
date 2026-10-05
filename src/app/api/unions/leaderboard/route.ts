@@ -10,7 +10,7 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { CorporateSector, FederalBudget, Union } from "@/lib/db/types";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -27,7 +27,7 @@ import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 export async function GET(req: NextRequest) {
   try {
     if (!(await isLabourFullMode())) {
-      return NextResponse.json({ error: "Player-run unions are not enabled." }, { status: 403 });
+      return errorResponse(403, "Player-run unions are not enabled.");
     }
 
     const db = await getDb();

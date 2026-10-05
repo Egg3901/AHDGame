@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { findPartyBySequentialId, getStatePartyOrgDocumentId } from "@/lib/db/partyLookup";
 import type { State, StatePartyOrg } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -18,7 +18,7 @@ export async function GET(
     const { code, id, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -27,19 +27,19 @@ export async function GET(
     const db = await getDb();
     const state = await db.collection<State>("states").findOne({ _id: id, countryId });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const stateParty = await db
       .collection<StatePartyOrg>("statePartyOrg")
       .findOne({ _id: getStatePartyOrgDocumentId(id, party) });
     if (!stateParty) {
-      return NextResponse.json({ error: "State party not found" }, { status: 404 });
+      return errorResponse(404, "State party not found");
     }
 
     const actorId = auth.user.character._id;
@@ -49,10 +49,7 @@ export async function GET(
     const isStateViceChair = stateParty.viceChairId?.equals(actorId);
     const isStateTreasurer = stateParty.treasurerId?.equals(actorId);
     if (!isAdmin && !isNationalChair && !isStateChair && !isStateViceChair && !isStateTreasurer) {
-      return NextResponse.json(
-        { error: "Only party leadership can view treasury insights" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only party leadership can view treasury insights");
     }
 
     const insights = await buildStateTreasuryInsights(db, party.name, state.name);

@@ -15,6 +15,7 @@ import { PartyCampaignersCard } from "./PartyCampaignersCard";
 import { MembershipModeCard } from "./MembershipModeCard";
 import { BulkStateOrgControl } from "./BulkStateOrgControl";
 import { HuListVacanciesCard } from "./HuListVacanciesCard";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ChairOfficeTabProps {
   party: PartyData;
@@ -104,7 +105,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
         setMsg("✓ Color updated successfully");
         onUpdate();
       } else {
-        setMsg(`✗ ${data.error}`);
+        setMsg(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMsg("✗ Network error");
@@ -139,7 +140,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
         );
         onUpdate();
       } else {
-        setMsg(`✗ ${data.error}`);
+        setMsg(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMsg("✗ Network error");
@@ -182,7 +183,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
         setMsg("✓ Logo uploaded successfully");
         onUpdate();
       } else {
-        setMsg(`✗ ${data.error}`);
+        setMsg(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMsg("✗ Network error");
@@ -212,7 +213,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
         setMsg("✓ Member expelled successfully");
         onUpdate();
       } else {
-        setPurgeMsg(`✗ ${data.error}`);
+        setPurgeMsg(`✗ ${apiErrorText(data, "Request failed")}`);
         // Cooldown became active between page load and submit — refresh so button reflects it
         if (res.status === 429) onUpdate();
       }
@@ -272,7 +273,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
                   disabled={uploadingLogo}
                   className="rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
                 >
-                  {uploadingLogo ? "Uploading..." : party.logoUrl ? "Change Logo" : "Upload Logo"}
+                  {uploadingLogo ? "Uploading..." : party.logoUrl ? "Change logo" : "Upload logo"}
                 </button>
               </div>
             </div>
@@ -307,7 +308,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
                 disabled={savingColor || color === party.color || !/^#[0-9A-Fa-f]{6}$/.test(color)}
                 className="rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
               >
-                {savingColor ? "Saving..." : "Save Color"}
+                {savingColor ? "Saving..." : "Save color"}
               </button>
             </div>
             <p className="text-xs text-muted">
@@ -340,10 +341,10 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
                 {savingDiscordLink
                   ? "Saving..."
                   : trimmedDiscordInviteUrl
-                    ? "Save Link"
+                    ? "Save link"
                     : party.discordInviteUrl
-                      ? "Clear Link"
-                      : "Save Link"}
+                      ? "Clear link"
+                      : "Save link"}
               </button>
             </div>
             <p className={`text-xs ${hasDiscordValidationError ? "text-error" : "text-muted"}`}>
@@ -397,7 +398,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
               >
                 {purgeCooldownActive
                   ? `Purge Member (${purgeTurnsRemaining} turn${purgeTurnsRemaining === 1 ? "" : "s"})`
-                  : "Purge Member"}
+                  : "Purge member"}
               </button>
               {purgeableMembers.length === 0 && !purgeCooldownActive && (
                 <p className="mt-2 text-xs text-muted">No purgeable members.</p>
@@ -480,7 +481,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
                   ? "Expelling..."
                   : selectedMember
                     ? `Purge ${selectedMember.name}`
-                    : "Purge Member"}
+                    : "Purge member"}
               </button>
             </div>
           </div>

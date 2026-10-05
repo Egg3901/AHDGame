@@ -18,6 +18,8 @@ export interface PoliticalMetricsDoc {
    */
   countryId: CountryId;
   values: Record<PoliticalMetricId, number>;
+  /** Version of the authored opening, also guards one-time baseline repairs. */
+  politicalOpeningVersion?: string;
   /** Durable event-effect witnesses for exactly-once funded country choices. */
   appliedEventEffects?: string[];
   /**

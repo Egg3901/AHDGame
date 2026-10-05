@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
@@ -52,7 +53,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   const { code, id: partyId } = await params;
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) {
-    return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+    return errorResponse(400, "Invalid country code");
   }
 
   const authResult = await requireAuthWithCharacter();
@@ -61,24 +62,21 @@ export async function POST(request: Request, { params }: RouteParams) {
 
   const parsed = await parseJsonBody(request, buildPsInvestmentSchema(countryId));
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    return errorResponse(parsed.status, parsed.error);
   }
 
   const db = await getDb();
   const party = await findPartyBySequentialId(db, partyId, countryId);
-  if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+  if (!party) return errorResponse(404, "Party not found");
 
   const isAdmin = authUser.isAdmin;
   const isChair = party.chairId?.equals(authUser.character._id);
   const isViceChair = party.viceChairId?.equals(authUser.character._id);
   const isTreasurer = party.treasurerId?.equals(authUser.character._id);
   if (!isAdmin && !isChair && !isViceChair && !isTreasurer) {
-    return NextResponse.json(
-      {
-        error:
-          "Only the party chair, vice chair, treasurer, or an admin can set the PS investment budget",
-      },
-      { status: 403 }
+    return errorResponse(
+      403,
+      "Only the party chair, vice chair, treasurer, or an admin can set the PS investment budget"
     );
   }
 

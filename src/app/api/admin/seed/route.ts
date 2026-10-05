@@ -21,7 +21,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { countryIdSchema } from "@/lib/api/schemas/country";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { parseJsonBody } from "@/lib/api/validate";
 
@@ -417,10 +417,9 @@ export async function POST(request: Request) {
 
     const invalid = rawTargets.filter((t) => !isValidTarget(t));
     if (invalid.length > 0) {
-      return NextResponse.json(
-        { error: `Invalid targets: ${invalid.join(", ")}`, availableTargets: ALL_TARGETS },
-        { status: 400 }
-      );
+      return errorResponse(400, `Invalid targets: ${invalid.join(", ")}`, {
+        extra: { availableTargets: ALL_TARGETS },
+      });
     }
 
     const TARGETS_BY_SCOPE: Record<string, readonly string[]> = {

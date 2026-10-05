@@ -5,7 +5,7 @@ import { getCountryConfig } from "@/lib/constants/countries";
 import type { CountryId } from "@/lib/constants/countries";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import type { CorporationType } from "@/lib/constants/corporations";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 
 type SubsidyEntry = {
   id: string;
@@ -69,7 +69,7 @@ export function SubsidiesTab({ countryId }: { countryId: CountryId }) {
             </p>
             <p className="text-xs text-muted-foreground">
               {s.domesticOnly ? "Domestic corps only" : "All corps"}
-              {" · "}updated <LocalTime value={s.updatedAt} options={{ dateStyle: "medium" }} />
+              {" · "}updated <GameMonthTime value={s.updatedAt} />
             </p>
           </div>
           <div className="text-right">

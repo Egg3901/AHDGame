@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { refreshGameTurnStatus } from "@/hooks/useGameEvents";
 import { useAuthMe } from "@/contexts/AuthDataContext";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * The one control a singleplayer world needs that multiplayer never shows:
@@ -57,7 +58,10 @@ export function SingleplayerEndTurnButton() {
       } | null;
       if (!res.ok) {
         setTimerRunning(false);
-        const message = body?.error ?? body?.message ?? t("failedStatus", { status: res.status });
+        const message = apiErrorText(
+          body,
+          body?.message ?? t("failedStatus", { status: res.status })
+        );
         setError(message);
         window.dispatchEvent(new CustomEvent("ahd:turn-error", { detail: { message } }));
         return;

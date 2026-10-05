@@ -54,6 +54,10 @@ describe("resolveBundestagspraesidentElection", () => {
 
   it("announces exactly once when it wins the atomic election close", async () => {
     seedVotingElectionWithWinner();
+    db.collection("characters");
+    db.collectionMocks.characters!.findOne.mockResolvedValue({
+      avatarUrl: "https://cdn.example/bundestag-president.png",
+    });
     db.collectionMocks.bundestagspraesidentElections!.updateOne.mockResolvedValue({
       matchedCount: 1,
       modifiedCount: 1,
@@ -69,6 +73,14 @@ describe("resolveBundestagspraesidentElection", () => {
 
     expect(resolved).toBe(true);
     expect(sendCountryGameEvent).toHaveBeenCalledTimes(1);
+    expect(sendCountryGameEvent).toHaveBeenCalledWith("DE", {
+      title: "Leadership Election Result \u2014 Bundestagspräsident",
+      description: "**Winner** has been elected as **Bundestagspräsident**.",
+      color: 0,
+      footer: { text: "A House Divided" },
+      timestamp: expect.any(String),
+      thumbnail: { url: "https://cdn.example/bundestag-president.png" },
+    });
   });
 
   it("does not announce when another worker already closed the election", async () => {

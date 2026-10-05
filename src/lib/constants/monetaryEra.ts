@@ -189,6 +189,8 @@ export const MONETARY_BASELINES_1979: Partial<Record<CountryId, EraMonetaryBasel
  * ~66%/yr — all three far beyond the model's 15 cap, so they are authored
  * below it (12) to keep inflation dynamic instead of pinned at min=max=15.
  */
+// Match the player reset rates so NPC policy does not undo affordable entry.
+// Inflation targets and historical country provenance remain intact.
 export const MONETARY_BASELINES_1991: Partial<Record<CountryId, EraMonetaryBaseline>> = {
   US: US_ECONOMY.monetary.byEra["1991"],
   UK: UK_ECONOMY.monetary.byEra["1991"],

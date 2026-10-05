@@ -580,7 +580,7 @@ export default function CountryOverviewClient({
         {/* Footer nav */}
         <div className="flex flex-wrap items-center gap-3">
           <Link href="/world" className={NAV_BUTTON}>
-            Back to World
+            Back to world
           </Link>
           {countryId === COUNTRY_CONFIGS.US.id && (
             <Link href="/dashboard" className={NAV_BUTTON}>

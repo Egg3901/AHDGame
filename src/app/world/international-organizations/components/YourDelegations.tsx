@@ -46,9 +46,7 @@ export function YourDelegations({
       <div className="flex items-center gap-3">
         <CountryFlag country={focusCountry} size="lg" />
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-            Your delegations
-          </p>
+          <p className="text-body-sm font-medium text-muted">Your delegations</p>
           <p className="text-base font-semibold text-foreground">{countryName}</p>
         </div>
       </div>

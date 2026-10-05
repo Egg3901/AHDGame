@@ -5,7 +5,7 @@ import { getDb } from "@/lib/mongodb";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
-import { handleRouteError, badRequest, internalError } from "@/lib/api/errors";
+import { handleRouteError, badRequest, internalError, errorResponse } from "@/lib/api/errors";
 import type { Bond, Character, Corporation } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
@@ -64,10 +64,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     if (corporation.countryOwnerId) {
-      return NextResponse.json(
-        { error: "Not available for national corporations" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Not available for national corporations");
     }
 
     // Game state is required: the cure stamp's `curedAtTurn`, the
@@ -76,10 +73,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const gameStateForCure = await getGameState();
     const cureTurn = gameStateForCure?.currentTurn ?? 0;
     if (cureTurn <= 0) {
-      return NextResponse.json(
-        { error: "Game state unavailable; cash payoff cannot be processed." },
-        { status: 503 }
-      );
+      return errorResponse(503, "Game state unavailable; cash payoff cannot be processed.");
     }
 
     const now = new Date();
@@ -95,7 +89,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
           .toArray();
 
         if (defaultedBonds.length === 0) {
-          return NextResponse.json({ error: "No defaulted bonds to resolve" }, { status: 400 });
+          return errorResponse(400, "No defaulted bonds to resolve");
         }
 
         // Load FX rates once so the cost sum + per-bond face + holder payouts all
@@ -110,7 +104,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
           .collection<Corporation>("corporations")
           .findOne({ _id: corporation._id });
         if (!refreshedCorporation) {
-          return NextResponse.json({ error: "Corporation not found" }, { status: 404 });
+          return errorResponse(404, "Corporation not found");
         }
 
         const corpFxRate = fxRateForCorpFromMap(refreshedCorporation, fxByCurrency);
@@ -573,10 +567,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
           );
         } catch (err) {
           if (err instanceof Error && err.message === "RATE_UNAVAILABLE") {
-            return NextResponse.json(
-              { error: "Exchange rate unavailable, try again shortly" },
-              { status: 503 }
-            );
+            return errorResponse(503, "Exchange rate unavailable, try again shortly");
           }
           throw err;
         }
@@ -672,10 +663,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     );
 
     if (!result) {
-      return NextResponse.json(
-        { error: "Bond settlement is already in progress for this corporation" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Bond settlement is already in progress for this corporation");
     }
 
     return result;

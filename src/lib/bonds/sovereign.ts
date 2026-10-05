@@ -33,6 +33,10 @@ import type {
 } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import {
+  calculateSovereignCouponRate,
+  sovereignCreditSpreadPp,
+} from "@/lib/bonds/rules/sovereignCreditSpread";
+import {
   consolidateSovereignTranches,
   planSovereignTranches,
   SOVEREIGN_MIN_TRANCHE_UNITS,
@@ -112,21 +116,26 @@ async function loadDemocraticSovereignSpread(db: Db, countryId: CountryId): Prom
 }
 
 /**
- * Effective sovereign coupon rate = primeRate + term premium for the given maturity,
- * plus any central-bank credibility spread (B4 market effects).
+ * Effective sovereign coupon rate = primeRate + term premium, issuer credit risk,
+ * and any central-bank credibility or democratic spread.
  * Rounds to 2 dp so stored rates stay human-readable.
  *
- * `credibilitySpreadPp` defaults to 0, so every caller that does not know the
- * issuing bank's scrutiny (seeds, admin tools) prices exactly as before.
+ * Both optional spread inputs default to 0 for legacy callers that lack current
+ * issuer-risk or scrutiny inputs.
  */
 export function getSovereignCouponRate(
   primeRate: number,
   maturityTurns: BondMaturityTurns,
-  credibilitySpreadPp = 0
+  credibilitySpreadPp = 0,
+  issuerRiskSpreadPp = 0
 ): number {
   const termPremium = SOVEREIGN_BOND_TERM_PREMIUMS[maturityTurns] ?? 0;
-  const spread = Number.isFinite(credibilitySpreadPp) ? Math.max(0, credibilitySpreadPp) : 0;
-  return Math.round((primeRate + termPremium + spread) * 100) / 100;
+  return calculateSovereignCouponRate({
+    primeRate,
+    termPremiumPp: termPremium,
+    credibilitySpreadPp,
+    issuerRiskSpreadPp,
+  });
 }
 
 export function isSovereignBond(bond: Pick<Bond, "issuerType">): boolean {
@@ -277,6 +286,8 @@ function buildSovereignBondDoc(params: {
   credibilitySpreadPp?: number;
   /** Democratic backsliding premium in percentage points. */
   democraticSpreadPp?: number;
+  /** Existing sovereign credit-tier premium in percentage points. */
+  issuerRiskSpreadPp?: number;
   /**
    * Explicit home currency (usually the budget's `currencyCode`). Preferred
    * over the era-blind map fallback, so 2027 euro members issue in EUR.
@@ -291,7 +302,8 @@ function buildSovereignBondDoc(params: {
   const couponRate = getSovereignCouponRate(
     primeRate,
     maturityTurns,
-    (params.credibilitySpreadPp ?? 0) + (params.democraticSpreadPp ?? 0)
+    (params.credibilitySpreadPp ?? 0) + (params.democraticSpreadPp ?? 0),
+    params.issuerRiskSpreadPp ?? 0
   );
 
   const bondDoc: Omit<Bond, "_id"> = {
@@ -381,6 +393,7 @@ async function issueSovereignBondSeries(
     primeRate,
     countryCorporation,
     currencyCode: budget.currencyCode,
+    issuerRiskSpreadPp: sovereignCreditSpreadPp(budget.creditRating),
     // B4: a discredited central bank makes its government borrow dearer. No
     // bank document means no scrutiny to read, so the spread is 0, not a guess.
     credibilitySpreadPp: centralBank ? sovereignCredibilitySpread(centralBank.chairInfamy ?? 0) : 0,
@@ -669,6 +682,7 @@ export async function issueScheduledSovereignBondSeries(
         maturityTurns,
         primeRate,
         countryCorporation,
+        issuerRiskSpreadPp: sovereignCreditSpreadPp(budgetDoc.creditRating),
         democraticSpreadPp,
       });
       bondDocs.push(bondDoc);
@@ -813,7 +827,8 @@ export async function reconcileSovereignDebt(
       const couponRate = getSovereignCouponRate(
         primeRate,
         maturityTurns,
-        credibilitySpreadPp + democraticSpreadPp
+        credibilitySpreadPp + democraticSpreadPp,
+        sovereignCreditSpreadPp(budget.creditRating)
       );
       const annualCouponCost = (couponRate / 100) * trancheAmount;
 

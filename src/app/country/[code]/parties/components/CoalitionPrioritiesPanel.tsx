@@ -10,6 +10,7 @@ import type {
   CoalitionPriorityStatus,
   CoalitionPriorityVote,
 } from "../coalitionTypes";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CoalitionPrioritiesPanelProps {
   effectiveCountry: string;
@@ -60,7 +61,7 @@ export function CoalitionPrioritiesPanel({
       const response = await fetch(route, { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload.error ?? "Failed to load coalition priorities.");
+        throw new Error(apiErrorText(payload, "Failed to load coalition priorities."));
       }
       setData(payload);
       setDraftPolicyTheme(payload.options.policyThemes[0]?.key ?? "");
@@ -138,7 +139,7 @@ export function CoalitionPrioritiesPanel({
       });
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload.error ?? "Failed to propose coalition priority.");
+        throw new Error(apiErrorText(payload, "Failed to propose coalition priority."));
       }
       resetDraft();
       await load();
@@ -179,7 +180,7 @@ export function CoalitionPrioritiesPanel({
         );
         const payload = await response.json();
         if (!response.ok) {
-          throw new Error(payload.error ?? "Failed to update coalition priority.");
+          throw new Error(apiErrorText(payload, "Failed to update coalition priority."));
         }
         await load();
       } catch (caught) {
@@ -404,9 +405,9 @@ export function CoalitionPrioritiesPanel({
                 onChange={(event) => setDraftType(event.target.value as DraftType)}
                 className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
               >
-                <option value="policy_theme">Policy Theme</option>
+                <option value="policy_theme">Policy theme</option>
                 <option value="bill">Bill</option>
-                <option value="leadership_goal">Leadership Goal</option>
+                <option value="leadership_goal">Leadership goal</option>
               </select>
             </label>
             <label className="block">
@@ -542,7 +543,7 @@ export function CoalitionPrioritiesPanel({
               onClick={() => void handleCreate()}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
-              {submitting ? "Saving…" : "Propose Priority"}
+              {submitting ? "Saving…" : "Propose priority"}
             </button>
           </div>
         </div>

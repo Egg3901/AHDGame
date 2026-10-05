@@ -55,7 +55,7 @@ export function PresidentialWinnerBanner({
             {winner.partyName}
           </span>
           {winner.runningMateName && (
-            <span className="text-sm text-muted">· Running Mate: {winner.runningMateName}</span>
+            <span className="text-sm text-muted">· Running mate: {winner.runningMateName}</span>
           )}
         </div>
       </div>

@@ -21,7 +21,10 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { sectorDailyProfitAnchor } from "@/lib/corporations/sectorProfitBasis";
 import { sumBondPrincipalAnchor, sumBondAnnualInterestAnchor } from "@/lib/bonds/bondPrincipalSum";
-import { corporateCashArrearsAnchor } from "@/lib/bonds/corporateCredit";
+import {
+  corporateCashArrearsAnchor,
+  corporateBondMaturityLiquidity,
+} from "@/lib/bonds/corporateCredit";
 import {
   DISSOLUTION_SECTOR_SALVAGE_FRACTION,
   NPV_ANNUAL_DISCOUNT_RATE,
@@ -190,7 +193,7 @@ export function previewRefinanceIssuance(params: {
   couponRate: number;
 } {
   const {
-    corporation,
+    corporation: _corporation,
     liquidCapitalAnchor,
     allNonMaturedBonds,
     actualFaceAnchor,
@@ -243,7 +246,18 @@ export function previewRefinanceIssuance(params: {
     annualIncome,
     annualInterest,
     totalEquity,
-    { bondDefaultCreditPenaltyActive: false }
+    {
+      bondDefaultCreditPenaltyActive: false,
+      nearTermLiquidityScore:
+        corporateBondMaturityLiquidity({
+          bonds: nonDefaultedPool,
+          liquidCapitalAnchor,
+          incomePerTurn: annualIncome / TURNS_PER_YEAR,
+          annualCouponObligations: annualInterest,
+          currentTurn,
+          fxByCurrency,
+        }).liquidityScore ?? undefined,
+    }
   );
   const couponRate = getBondCouponRate(primeRate, creditRating.rating, maturityTurns);
 

@@ -1,1 +1,8 @@
-{ "centralBank": {} }
+{
+  "centralBank": {
+    "rateCorridor": {
+      "credibilityNote": "Die Glaubwürdigkeit wird am neutralen Zinssatz ({neutral}%) sowie an Inflations- und BIP-Lücken gemessen. Der Abstand zwischen Leitzins und Inflation oben dient nur zur Orientierung.",
+      "sharedCredibilityNote": "Die Glaubwürdigkeit wird am neutralen Zinssatz des gemeinsamen Währungsraums sowie an Inflations- und BIP-Lücken gemessen. Der Abstand zwischen Leitzins und Inflation oben dient nur zur Orientierung."
+    }
+  }
+}

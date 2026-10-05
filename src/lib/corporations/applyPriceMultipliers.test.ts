@@ -15,6 +15,73 @@ describe("applyPriceMultipliers — FTA threading", () => {
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
   });
 
+  it("loads production models and separates entertainment from generic media events", async () => {
+    const entertainmentId = new ObjectId();
+    const genericId = new ObjectId();
+    for (const name of ["corporations", "corporateSectors", "sentimentPulses"]) db.collection(name);
+    const corporations = [entertainmentId, genericId].map((_id) => ({
+      _id,
+      countryId: "US",
+      type: "media",
+      fundamentalSharePrice: 100,
+      sharePrice: 100,
+      publicFloat: 1_000,
+      totalShares: 10_000,
+    }));
+    db.collectionMocks.corporations.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue(corporations),
+    });
+    db.collectionMocks.corporateSectors.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          corporationId: entertainmentId,
+          countryId: "US",
+          sectorType: "media",
+          mediaDiscriminator: "entertainment",
+        },
+        {
+          corporationId: genericId,
+          countryId: "US",
+          sectorType: "media",
+          mediaDiscriminator: null,
+        },
+      ]),
+    });
+    db.collectionMocks.sentimentPulses.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          scope: "sector",
+          countryId: "US",
+          sectorType: "entertainment",
+          initialImpact: 0.1,
+          decayRate: 1,
+          createdAt: new Date(),
+          eventType: "sector_event",
+        },
+      ]),
+    });
+    const { applyPriceMultipliers } = await import("./applyPriceMultipliers");
+    await applyPriceMultipliers();
+
+    const operations = db.collectionMocks.corporations.bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: { filter: { _id: ObjectId }; update: { $set: { sharePrice: number } } };
+    }>;
+    const prices = new Map(
+      operations.map((op) => [
+        op.updateOne.filter._id.toString(),
+        op.updateOne.update.$set.sharePrice,
+      ])
+    );
+    expect(prices.get(entertainmentId.toString())).toBe(110);
+    expect(prices.get(genericId.toString())).toBe(100);
+    for (const name of ["corporations", "corporateSectors"]) {
+      expect(db.collectionMocks[name].find.mock.calls[0][1].projection).toMatchObject({
+        industryModel: 1,
+        mediaDiscriminator: 1,
+      });
+    }
+  });
+
   it("suppresses foreign-side tariff pulses for FTA-partnered corp HQs", async () => {
     // Setup: UK has fired four foreign-penalty energy pulses (would otherwise peg
     // the sentiment cap at -25%). A US-HQ corp with US:energy and UK:energy operations

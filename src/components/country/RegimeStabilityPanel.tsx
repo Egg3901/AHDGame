@@ -120,7 +120,7 @@ export function RegimeStabilityPanel({ countryCode }: Props) {
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">Regime Stability</h3>
+          <h3 className="text-sm font-semibold text-foreground">Regime stability</h3>
           <p className="mt-0.5 text-xs text-muted" data-testid="regime-band-label">
             {bandStyle.label}
           </p>

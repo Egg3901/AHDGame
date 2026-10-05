@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Db } from "mongodb";
 import { getGameStateCollection } from "@/lib/db/collections";
+import { errorResponse } from "@/lib/api/errors";
 
 export async function requirePlayerTransfersEnabled(db: Db): Promise<NextResponse | null> {
   const col = await getGameStateCollection(db);
@@ -10,12 +11,7 @@ export async function requirePlayerTransfersEnabled(db: Db): Promise<NextRespons
   );
 
   if (gameState?.playerTransfersPaused) {
-    return NextResponse.json(
-      {
-        error: "Player-to-player transfers are currently paused by an admin",
-      },
-      { status: 403 }
-    );
+    return errorResponse(403, "Player-to-player transfers are currently paused by an admin");
   }
 
   return null;

@@ -298,7 +298,7 @@ export default function CommoditiesPanel({
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
-      <h2 className="text-lg font-bold text-foreground mb-1">Commodity Flows</h2>
+      <h2 className="text-lg font-bold text-foreground mb-1">Commodity flows</h2>
       <p className="text-xs text-muted mb-2">
         What this sector produces and consumes daily, with per-commodity impact on margins.
       </p>
@@ -310,7 +310,7 @@ export default function CommoditiesPanel({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {commodities.supplies.length > 0 && (
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">
+            <div className="text-body-sm font-medium text-muted mb-2">
               Supplies (output revenue)
             </div>
             <div className="space-y-2.5">
@@ -330,9 +330,7 @@ export default function CommoditiesPanel({
         )}
         {commodities.demands.length > 0 && (
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">
-              Demands (input costs)
-            </div>
+            <div className="text-body-sm font-medium text-muted mb-2">Demands (input costs)</div>
             <div className="space-y-2.5">
               {commodities.demands.map((d) => (
                 <CommodityItem

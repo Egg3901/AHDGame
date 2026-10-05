@@ -38,7 +38,7 @@ function MarketizationGauge({ level }: { level: number }) {
         style={{ left: `${pct}%` }}
         aria-hidden
       />
-      <div className="mt-1.5 flex justify-between text-[10px] font-semibold uppercase tracking-wide text-muted">
+      <div className="mt-1.5 flex justify-between text-body-sm font-medium text-muted">
         <span>Command</span>
         <span>Dual-track</span>
         <span>Market</span>
@@ -68,7 +68,7 @@ function Driver({
     tone === "up" ? "text-success" : tone === "down" ? "text-warning" : "text-foreground";
   return (
     <div className="rounded-lg border border-card-border bg-card-muted/30 p-3">
-      <div className="flex items-center text-[10px] font-bold uppercase tracking-wide text-muted">
+      <div className="flex items-center text-body-sm font-medium text-muted">
         {label}
         {tip && <Tooltip content={tip} label={`About ${label}`} />}
       </div>
@@ -150,13 +150,13 @@ export function CommandEconomyDashboardView({ countryId }: Props) {
       <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold text-foreground">Command Economy</h2>
+            <h2 className="text-base font-bold text-foreground">Command economy</h2>
             <Badge color={data.regime === "command" ? "warning" : "info"} variant="subtle">
               {data.regimeLabel}
             </Badge>
           </div>
           <div className="text-right">
-            <div className="flex items-center justify-end text-[10px] font-bold uppercase tracking-wide text-muted">
+            <div className="flex items-center justify-end text-body-sm font-medium text-muted">
               Marketization
               <Tooltip content={CE_TERMS.marketization} label="About marketization" />
             </div>

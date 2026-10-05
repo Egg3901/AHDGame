@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -43,11 +43,9 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
     const auth = await requireAuth();
     if (!auth.ok) return auth.response;
     const countryId = (await context.params).code.toUpperCase() as CountryId;
-    if (!COUNTRY_CONFIGS[countryId])
-      return NextResponse.json({ error: "Country not found" }, { status: 404 });
+    if (!COUNTRY_CONFIGS[countryId]) return errorResponse(404, "Country not found");
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const db = await getDb();
     const [bank, gameState, budget, config] = await Promise.all([
       db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId(countryId) }),
@@ -60,9 +58,8 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
         .findOne({ _id: "default" }, { projection: { moneySupplyEnabled: 1 } }),
     ]);
     if (!isMoneySupplyEnabledFromConfig(config))
-      return NextResponse.json({ error: "Money-supply policy is not enabled" }, { status: 409 });
-    if (!bank || !budget)
-      return NextResponse.json({ error: "Monetary authority unavailable" }, { status: 404 });
+      return errorResponse(409, "Money-supply policy is not enabled");
+    if (!bank || !budget) return errorResponse(404, "Monetary authority unavailable");
     const scope = await getMonetaryPolicyScope(db, countryId);
     const authority =
       scope.bankId === bank._id
@@ -77,7 +74,7 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
       auth.user.character?._id != null &&
       authority?.chairCharacterId?.toString() === auth.user.character._id.toString();
     if (!auth.user.isAdmin && (!isChair || authority?.chairControlsLocked))
-      return NextResponse.json({ error: "Only the central-bank chair may act" }, { status: 403 });
+      return errorResponse(403, "Only the central-bank chair may act");
     const turn = gameState?.currentTurn ?? 0;
     const replay =
       parsed.data.type === "liquidity_injection" && parsed.data.operationId
@@ -99,7 +96,7 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
       bank.lastMonetaryOperationTurn != null &&
       turn - bank.lastMonetaryOperationTurn < MONETARY_OPERATION_COOLDOWN_TURNS
     )
-      return NextResponse.json({ error: "Monetary operations are on cooldown" }, { status: 409 });
+      return errorResponse(409, "Monetary operations are on cooldown");
     const amount = parsed.data.amount ?? 0;
     const cap =
       parsed.data.type === "treasury_advance"
@@ -111,10 +108,7 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
       (parsed.data.type === "treasury_advance" || parsed.data.type === "liquidity_injection") &&
       amount > cap
     )
-      return NextResponse.json(
-        { error: `Operation exceeds the ${Math.round(cap)} cap` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Operation exceeds the ${Math.round(cap)} cap`);
     const operation = await executeMonetaryOperation(db, {
       countryId,
       operationId: parsed.data.operationId,
@@ -132,7 +126,7 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
     return NextResponse.json({ success: true, operation });
   } catch (error) {
     if (error instanceof LiquidityAdvanceRejected || error instanceof MonetaryOperationRejected)
-      return NextResponse.json({ error: error.message }, { status: 409 });
+      return errorResponse(409, error.message);
     return handleRouteError(error);
   }
 }

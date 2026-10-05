@@ -2,7 +2,7 @@ import { buildApportionment } from "@/lib/elections/apportionment";
 import { computeMapOfficeholders } from "@/lib/map/officeholderService";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { computePartyOrgMap } from "@/lib/map/partyOrgService";
 import { computeSenateMap } from "@/lib/map/senateService";
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const rawCountryId = (searchParams.get("countryId") || "US").toUpperCase();
     if (!(rawCountryId in COUNTRY_CONFIGS)) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const countryId = rawCountryId as CountryId;
 

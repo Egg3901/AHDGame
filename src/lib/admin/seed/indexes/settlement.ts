@@ -139,5 +139,68 @@ export async function seedSettlementIndexes(db: Db, log: (msg: string) => void) 
     log
   );
 
+  // Merger reviews have separate corporation, authority queue, and deadline
+  // reads. Their history belongs to the reset world and the review table may
+  // grow over a long iteration.
+  await ensureIndex(
+    db,
+    "mergerReviews",
+    { acquirerCorporationId: 1, targetCorporationId: 1, status: 1 },
+    { name: "mergerReviews_pair_status" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "mergerReviews",
+    { status: 1, decideByTurn: 1 },
+    { name: "mergerReviews_status_decideByTurn" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "mergerReviews",
+    { countryId: 1, status: 1, decideByTurn: 1 },
+    { name: "mergerReviews_country_status_decideByTurn" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "mergerReviews",
+    { countryId: 1, status: 1, resolvedAtTurn: -1, createdAt: -1 },
+    { name: "mergerReviews_country_status_resolved_created" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "mergerReviews",
+    { acquirerCorporationId: 1, createdAt: -1 },
+    { name: "mergerReviews_acquirer_createdAt" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "mergerReviews",
+    { targetCorporationId: 1, createdAt: -1 },
+    { name: "mergerReviews_target_createdAt" },
+    log
+  );
+
+  // Pending sale intents are the crash-recovery queue. The first index serves
+  // both the status-sorted repair view and the per-holder/bond resume query.
+  await ensureIndex(
+    db,
+    "bondSaleIntents",
+    { status: 1, createdAt: 1 },
+    { name: "bondSaleIntents_status_createdAt" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "bondSaleIntents",
+    { bondId: 1, holderKey: 1, holderId: 1, status: 1 },
+    { name: "bondSaleIntents_bond_holder_status" },
+    log
+  );
+
   log("Settlement crisis indexes ensured");
 }

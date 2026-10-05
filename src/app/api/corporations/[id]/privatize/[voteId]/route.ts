@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { resolvePrivatizationVote } from "@/lib/corporations/commands/privatization/resolvePrivatizationVote";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getGameState } from "@/lib/gameState";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import type { CorporationPrivatizationVote } from "@/lib/db/types";
@@ -22,7 +22,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
   try {
     const { id, voteId } = await params;
     if (!ObjectId.isValid(voteId)) {
-      return NextResponse.json({ error: "Invalid vote id" }, { status: 400 });
+      return errorResponse(400, "Invalid vote id");
     }
     const db = await getDb();
     const resolved = await resolveCorporation(db, id);
@@ -32,7 +32,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     let vote = await db
       .collection<CorporationPrivatizationVote>("corporationPrivatizationVotes")
       .findOne({ _id: new ObjectId(voteId), corporationId: corporation._id });
-    if (!vote) return NextResponse.json({ error: "Vote not found" }, { status: 404 });
+    if (!vote) return errorResponse(404, "Vote not found");
 
     const gameState = await getGameState();
     const currentTurn = gameState?.currentTurn ?? 0;
@@ -43,7 +43,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       vote = await db
         .collection<CorporationPrivatizationVote>("corporationPrivatizationVotes")
         .findOne({ _id: vote._id });
-      if (!vote) return NextResponse.json({ error: "Vote not found" }, { status: 404 });
+      if (!vote) return errorResponse(404, "Vote not found");
     }
 
     const tally = (vote.votes ?? []).reduce(

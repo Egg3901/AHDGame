@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import type {
   MilitaryUnitView,
@@ -124,7 +125,7 @@ export function MilitaryFlagship({
         // The route refuses for reasons the tab cannot pre-empt - a drained
         // appropriation, a lost seat - so surface its own wording.
         const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-        setNuclearError(payload?.error ?? "That order could not be given.");
+        setNuclearError(apiErrorText(payload, "That order could not be given."));
         return false;
       }
       await refreshNuclear();
@@ -168,7 +169,7 @@ export function MilitaryFlagship({
         // seat, a country whose GDP went unusable between render and submit. Surface its own
         // wording rather than a generic failure.
         const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-        setContractError(payload?.error ?? "That contract could not be awarded.");
+        setContractError(apiErrorText(payload, "That contract could not be awarded."));
         return false;
       }
       onUpdate();
@@ -193,7 +194,7 @@ export function MilitaryFlagship({
         // Silence would read as a dead button — the route refuses for reasons the panel
         // cannot infer (a lost seat, an already-closed contract).
         const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-        setContractError(payload?.error ?? "That contract could not be cancelled.");
+        setContractError(apiErrorText(payload, "That contract could not be cancelled."));
         return;
       }
       onUpdate();

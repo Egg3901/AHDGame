@@ -133,7 +133,7 @@ export function TasksPageClient() {
                 : "border-transparent text-muted hover:text-foreground"
             }`}
           >
-            {tab === "tasks" ? "Tasks" : "Lessons Learned"}
+            {tab === "tasks" ? "Tasks" : "Lessons learned"}
           </button>
         ))}
       </div>
@@ -154,9 +154,9 @@ export function TasksPageClient() {
                 onChange={(e) => setStatusFilter(e.target.value as TaskStatus | "all")}
                 className="h-9 rounded-md border border-card-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none"
               >
-                <option value="all">All Status</option>
+                <option value="all">All status</option>
                 <option value="pending">Pending</option>
-                <option value="in_progress">In Progress</option>
+                <option value="in_progress">In progress</option>
                 <option value="completed">Completed</option>
               </select>
 
@@ -165,7 +165,7 @@ export function TasksPageClient() {
                 onChange={(e) => setPriorityFilter(e.target.value as TaskPriority | "all")}
                 className="h-9 rounded-md border border-card-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none"
               >
-                <option value="all">All Priority</option>
+                <option value="all">All priority</option>
                 <option value="critical">Critical</option>
                 <option value="high">High</option>
                 <option value="medium">Medium</option>
@@ -177,7 +177,7 @@ export function TasksPageClient() {
                 onChange={(e) => setTypeFilter(e.target.value as TaskType | "all")}
                 className="h-9 rounded-md border border-card-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none"
               >
-                <option value="all">All Types</option>
+                <option value="all">All types</option>
                 <option value="bug">Bugs</option>
                 <option value="feature">Features</option>
                 <option value="improvement">Improvements</option>
@@ -188,7 +188,7 @@ export function TasksPageClient() {
               onClick={() => setShowForm(true)}
               className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
-              + New Task
+              + New task
             </button>
 
             {/* Healing Tools */}
@@ -201,7 +201,7 @@ export function TasksPageClient() {
               <>
                 <section className="space-y-3">
                   <h3 className="text-sm font-semibold text-muted uppercase tracking-wider flex items-center gap-2">
-                    Active Tasks{" "}
+                    Active tasks{" "}
                     <span className="bg-card-border px-1.5 py-0.5 rounded text-xs text-foreground">
                       {activeTasks.length}
                     </span>
@@ -463,7 +463,7 @@ function LessonsTab() {
           onChange={(e) => setCategoryFilter(e.target.value as LessonCategory | "all")}
           className="h-9 rounded-md border border-card-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none"
         >
-          <option value="all">All Categories</option>
+          <option value="all">All categories</option>
           {LESSON_CATEGORIES.map((cat) => (
             <option key={cat} value={cat} className="capitalize">
               {cat.charAt(0).toUpperCase() + cat.slice(1)}
@@ -555,7 +555,7 @@ function TaskList({
                 </button>
                 {task.status === "in_progress" && (
                   <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-500">
-                    In Progress
+                    In progress
                   </span>
                 )}
               </div>
@@ -566,7 +566,7 @@ function TaskList({
                   className="h-6 rounded border border-card-border bg-background px-1 text-xs text-muted focus:border-primary focus:outline-none"
                 >
                   <option value="pending">Pending</option>
-                  <option value="in_progress">In Progress</option>
+                  <option value="in_progress">In progress</option>
                   <option value="completed">Completed</option>
                 </select>
                 <button

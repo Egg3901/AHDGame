@@ -11,7 +11,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { parseJsonBody } from "@/lib/api/validate";
-import { badRequest, forbidden, handleRouteError, notFound } from "@/lib/api/errors";
+import { badRequest, forbidden, handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { Character } from "@/lib/db/types/character";
@@ -52,7 +52,7 @@ export async function POST(request: Request, context: RouteContext) {
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const canAppoint = canAppointSoeDirector(roles);

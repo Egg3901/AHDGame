@@ -84,7 +84,7 @@ describe("StateEconomy", () => {
     const tiles = document.querySelectorAll("[data-sector]");
     expect(tiles.length).toBe(2);
     // top sector chip reflects the largest market
-    expect(screen.getByText(/Top sector/)).toBeTruthy();
+    expect(screen.getAllByText(/Top sector/).length).toBeGreaterThan(0);
     // sector-board tiles show average CURRENT growth (energy's lone corp is at +5)
     expect(screen.getAllByText("Avg. Growth").length).toBe(2);
     expect(screen.getByText("+5.00%")).toBeTruthy();
@@ -96,7 +96,7 @@ describe("StateEconomy", () => {
     const select = screen.getByRole("combobox", { name: /select sector/i });
     expect(select).toBeTruthy();
     fireEvent.change(select, { target: { value: "financial" } });
-    await waitFor(() => expect(screen.getByText(/No market activity|Unowned Market/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/No market activity|Unowned market/)).toBeTruthy());
   });
 
   it("switches the sector detail when a board tile is clicked", async () => {
@@ -106,7 +106,7 @@ describe("StateEconomy", () => {
     const financialTile = document.querySelector('[data-sector="financial"]');
     expect(financialTile).toBeTruthy();
     fireEvent.click(financialTile!);
-    await waitFor(() => expect(screen.getByText(/No market activity|Unowned Market/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/No market activity|Unowned market/)).toBeTruthy());
   });
 
   it("shows the national-context cross-link for the selected sector", async () => {
@@ -149,7 +149,7 @@ describe("StateEconomy", () => {
       })
     );
     render(<StateEconomy stateId="TX" countryId="US" />);
-    await waitFor(() => expect(screen.getByText("Untapped Market")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Untapped market")).toBeTruthy());
     expect(screen.queryByText("Split strength")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Split/ })).toBeNull();
     const buildHere = screen.getByRole("link", { name: /Build here/i });
@@ -226,12 +226,12 @@ describe("StateEconomy market control under plants (ticket #1162)", () => {
         .mockResolvedValue({ ok: true, json: async () => ({ ...plantsPayload, ...overrides }) })
     );
 
-  it("labels the per-sector stat Largest Share rather than Market Control", async () => {
+  it("labels the per-sector stat Largest share rather than Market Control", async () => {
     stubPlants();
     render(<StateEconomy stateId="TX" countryId="US" />);
     await waitFor(() => expect(screen.getByText("$1.82T")).toBeTruthy());
 
-    expect(screen.getByText("Largest Share")).toBeTruthy();
+    expect(screen.getByText("Largest share")).toBeTruthy();
     expect(screen.queryByText("Market Control")).toBeNull();
   });
 
@@ -259,10 +259,10 @@ describe("StateEconomy market control under plants (ticket #1162)", () => {
   it("summarises the state as a count of sectors anyone operates in", async () => {
     stubPlants();
     render(<StateEconomy stateId="TX" countryId="US" />);
-    await waitFor(() => expect(screen.getByText("Active Sectors")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Active sectors")).toBeTruthy());
     // One of the two fixture sectors has an owner. Read the tile itself rather
     // than a bare "1", which matches growth figures elsewhere on the board.
-    const tile = screen.getByText("Active Sectors").parentElement!;
+    const tile = screen.getByText("Active sectors").parentElement!;
     expect(tile.textContent).toContain("1");
     expect(tile.textContent).toContain("of 2");
   });

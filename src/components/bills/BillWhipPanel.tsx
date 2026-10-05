@@ -6,6 +6,7 @@ import { useToast } from "@/contexts/ToastContext";
 import type { CountryId } from "@/lib/constants/countries";
 import type { BillWhipPanelData } from "@/lib/congress/billWhipPanelData";
 import { partyApiUrl, partyUrl } from "@/lib/urls";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BillWhipPanelProps {
   billId: string;
@@ -75,7 +76,7 @@ export function BillWhipPanel({
 
       const data = await res.json();
       if (!res.ok) {
-        showToast(data.error || "Failed to issue whip", "error");
+        showToast(apiErrorText(data, "Failed to issue whip"), "error");
         return;
       }
 
@@ -98,7 +99,7 @@ export function BillWhipPanel({
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <h3 className="text-sm font-semibold">Whip Panel</h3>
+          <h3 className="text-sm font-semibold">Whip panel</h3>
           <p className="text-xs text-muted">
             Issue party whips for this bill here or from the party page. Both stay in sync.
           </p>
@@ -126,7 +127,7 @@ export function BillWhipPanel({
               : "text-muted hover:text-foreground"
           }`}
         >
-          Player Whip
+          Player whip
         </button>
         <button
           type="button"
@@ -139,7 +140,7 @@ export function BillWhipPanel({
               : "text-muted hover:text-foreground"
           }`}
         >
-          NPP Whip
+          NPP whip
         </button>
       </div>
 

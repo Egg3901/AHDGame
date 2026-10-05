@@ -1,8 +1,9 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useCallback, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 // Imported from the specific types file, not the `db/types` barrel: that module's
 // own imports are all `import type`, so pulling its runtime tuple into a client
@@ -11,6 +12,7 @@ import {
   TREASURY_TRANSACTION_CATEGORIES,
   type TreasuryTransactionCategory,
 } from "@/lib/db/types/treasuryTransaction";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Append-only audit log of treasury inflows and outflows for a party. Reads
@@ -106,7 +108,7 @@ export function TreasuryTransactionLog({ countryCode, partyId }: Props) {
       const res = await fetch(buildUrl(), { cache: "no-store" });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `Failed to load transactions (${res.status})`);
+        throw new Error(apiErrorText(body, `Failed to load transactions (${res.status})`));
       }
       const json = (await res.json()) as TransactionsResponse;
       setItems(json.items);
@@ -191,7 +193,7 @@ export function TreasuryTransactionLog({ countryCode, partyId }: Props) {
           ))}
         </div>
       )}
-      {error && <p className="text-xs text-error">{error}</p>}
+      <InlineError error={error} className="text-xs text-error" />
 
       {!loading && !error && items.length === 0 && (
         <p className="text-xs text-muted">
@@ -226,7 +228,7 @@ export function TreasuryTransactionLog({ countryCode, partyId }: Props) {
                   <span>turn {row.turn}</span>
                   <span>|</span>
                   <span>
-                    <LocalTime value={row.createdAt} />
+                    <GameMonthTime value={row.createdAt} />
                   </span>
                   {row.counterparty?.label && (
                     <>

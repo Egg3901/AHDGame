@@ -143,7 +143,7 @@ describe("expanded tree", () => {
   it("disables the unlock the campaign cannot afford, and says so", () => {
     const poor = tree({ unlocked: false, starterAffordable: false });
     renderSection({ rows: [row({ expanded: true, tree: poor })] });
-    const btn = screen.getByRole("button", { name: "Insufficient Resources" });
+    const btn = screen.getByRole("button", { name: "Insufficient resources" });
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 

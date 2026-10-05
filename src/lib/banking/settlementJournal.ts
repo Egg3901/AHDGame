@@ -139,6 +139,51 @@ function toMoneyLeg(leg: TransitionLeg): MoneyMoveLeg {
   };
 }
 
+function isDuplicateKey(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const code = "code" in error ? (error as { code?: unknown }).code : undefined;
+  if (code === 11000) return true;
+  const writeErrors =
+    "writeErrors" in error ? (error as { writeErrors?: unknown }).writeErrors : [];
+  return (
+    Array.isArray(writeErrors) &&
+    writeErrors.length > 0 &&
+    writeErrors.every((entry) => (entry as { code?: unknown })?.code === 11000)
+  );
+}
+
+/**
+ * Insert a batch of fixed-id documents. A duplicate key means an earlier
+ * attempt already wrote that document, so the batch is retried one document at
+ * a time to land whatever is still missing, regardless of whether the driver
+ * stopped at the first duplicate.
+ */
+async function applyInsertBatch(
+  collection: ReturnType<Db["collection"]>,
+  inserts: Record<string, unknown>[]
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const documents = inserts.map((insert) => reviveObjectIds(insert) as Document);
+  if (documents.some((document) => document._id === undefined))
+    return { ok: false, error: "Batch insert projections need a fixed _id on every document" };
+  try {
+    if (documents.length > 0) await collection.insertMany(documents, { ordered: false });
+    return { ok: true };
+  } catch (error) {
+    if (!isDuplicateKey(error)) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+  for (const document of documents) {
+    try {
+      await collection.insertOne(document);
+    } catch (error) {
+      if (isDuplicateKey(error)) continue;
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+  return { ok: true };
+}
+
 /**
  * Apply an immutable insert projection. Update projections must use the
  * journal-aware target publication protocol below.
@@ -149,6 +194,7 @@ export async function applyProjection(
   _stamp?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const collection = db.collection(projection.collection);
+  if (projection.inserts) return applyInsertBatch(collection, projection.inserts);
   if (projection.insert) {
     try {
       await collection.insertOne(reviveObjectIds(projection.insert) as Document);

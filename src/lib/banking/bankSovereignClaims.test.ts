@@ -69,6 +69,14 @@ function vault(db: InMemoryDb): number {
     .cashReserves;
 }
 
+function paidCouponLifetime(db: InMemoryDb): number | undefined {
+  return (
+    db.collection("corporations").docs[0].bankCharter as {
+      sovereignCouponIncomePaidLifetime?: number;
+    }
+  ).sovereignCouponIncomePaidLifetime;
+}
+
 function failEscrowCredit(memory: InMemoryDb): Db {
   return {
     collection(name: string) {
@@ -196,10 +204,7 @@ describe("bank sovereign claims", () => {
       settleBankSovereignClaims(crash.db as unknown as Db, budget(memory), 13)
     ).rejects.toThrow("crash");
     expect(vault(memory)).toBe(15);
-    expect(
-      (memory.collection("corporations").docs[0].bankCharter as BankCharter | undefined)
-        ?.sovereignCouponIncomePaidLifetime
-    ).toBe(10);
+    expect(paidCouponLifetime(memory)).toBe(10);
 
     await memory
       .collection("corporations")
@@ -356,24 +361,15 @@ describe("bank sovereign claims", () => {
     ).rejects.toThrow("crash");
     expect(budget(memory).treasuryBalance).toBe(90);
     expect(vault(memory)).toBe(5);
-    expect(
-      (memory.collection("corporations").docs[0].bankCharter as BankCharter | undefined)
-        ?.sovereignCouponIncomePaidLifetime
-    ).toBeUndefined();
+    expect(paidCouponLifetime(memory)).toBeUndefined();
 
     await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
     expect(budget(memory).treasuryBalance).toBe(90);
     expect(vault(memory)).toBe(15);
-    expect(
-      (memory.collection("corporations").docs[0].bankCharter as BankCharter | undefined)
-        ?.sovereignCouponIncomePaidLifetime
-    ).toBe(10);
+    expect(paidCouponLifetime(memory)).toBe(10);
     expect(budget(memory).bankSovereignClaims).toEqual([]);
     await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 14);
-    expect(
-      (memory.collection("corporations").docs[0].bankCharter as BankCharter | undefined)
-        ?.sovereignCouponIncomePaidLifetime
-    ).toBe(10);
+    expect(paidCouponLifetime(memory)).toBe(10);
   });
 
   it("does not start a second funding attempt while a prior credit leg stays partial", async () => {

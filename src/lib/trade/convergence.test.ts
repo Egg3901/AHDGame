@@ -52,6 +52,17 @@ describe("applyTradeConvergence", () => {
     expect(byCountry.get("CN")!.get("steel")!.supply).toBe(0);
   });
 
+  it("converges only tariff-budgeted physical units that actually clear", () => {
+    const byCountry = byCountryOf([
+      ["US", { steel: [100, 0] }],
+      ["CN", { steel: [0, 100] }],
+    ]);
+    const clearing = clearAllCommodities(countries, byCountry, affinityFor, undefined, () => 1.25);
+    expect(clearing.get("steel")!.perCountry.CN.imports).toBeCloseTo(80);
+    applyTradeConvergence(countries, byCountry, clearing, 0.5);
+    expect(byCountry.get("CN")!.get("steel")!.demand).toBeCloseTo(60);
+  });
+
   it("never drives effective supply or demand negative", () => {
     const byCountry = byCountryOf([
       ["US", { steel: [100, 0] }],

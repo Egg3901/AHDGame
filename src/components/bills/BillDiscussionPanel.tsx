@@ -10,6 +10,7 @@ import type {
   BillDiscussionListResult,
   BillDiscussionView,
 } from "@/lib/legislature/discussions/types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BillDiscussionPanelProps {
   /** Bill base URL, e.g. `/api/congress/bills/123` or the regional bill base. */
@@ -63,7 +64,7 @@ export function BillDiscussionPanel({ apiBase, chamberLabel }: BillDiscussionPan
       });
       const d = await res.json();
       if (!res.ok) {
-        showToast(d.error ?? "Could not post.");
+        showToast(apiErrorText(d, "Could not post."));
         return;
       }
       setDraft("");
@@ -92,7 +93,7 @@ export function BillDiscussionPanel({ apiBase, chamberLabel }: BillDiscussionPan
       }));
     } else {
       const d = await res.json().catch(() => ({}));
-      showToast(d.error ?? "Could not react.");
+      showToast(apiErrorText(d, "Could not react."));
     }
   }
 

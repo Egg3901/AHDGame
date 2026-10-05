@@ -90,7 +90,7 @@ export function IESeanadCompositionPanel() {
 
       <section className="rounded-xl border border-card-border bg-card p-5">
         <header className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="text-base font-semibold text-foreground">Vocational Panels</h3>
+          <h3 className="text-base font-semibold text-foreground">Vocational panels</h3>
           <span className="text-xs text-muted">{data.totals.vocational} / 43</span>
         </header>
         <p className="mb-3 text-xs text-muted">
@@ -107,7 +107,7 @@ export function IESeanadCompositionPanel() {
 
       <section className="rounded-xl border border-card-border bg-card p-5">
         <header className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="text-base font-semibold text-foreground">Taoiseach Nominees</h3>
+          <h3 className="text-base font-semibold text-foreground">Taoiseach nominees</h3>
           <span className="text-xs text-muted">{data.totals.taoiseachPicks} / 11</span>
         </header>
         <p className="mb-3 text-xs text-muted">
@@ -137,7 +137,7 @@ export function IESeanadCompositionPanel() {
 
       <section className="rounded-xl border border-card-border bg-card p-5">
         <header className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="text-base font-semibold text-foreground">University Constituencies</h3>
+          <h3 className="text-base font-semibold text-foreground">University constituencies</h3>
           <span className="text-xs text-muted">{data.totals.university} / 6</span>
         </header>
         <p className="text-xs text-muted">

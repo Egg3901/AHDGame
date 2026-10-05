@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Modal } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface WikiReviewActionsProps {
   slug: string;
@@ -30,7 +31,7 @@ export function WikiReviewActions({ slug, onApprove, onReject }: WikiReviewActio
         onApprove();
       } else {
         const data = await response.json();
-        alert(data.error || "Failed to approve");
+        alert(apiErrorText(data, "Failed to approve"));
       }
     } catch {
       alert("Failed to approve");
@@ -59,7 +60,7 @@ export function WikiReviewActions({ slug, onApprove, onReject }: WikiReviewActio
         onReject();
       } else {
         const data = await response.json();
-        alert(data.error || "Failed to reject");
+        alert(apiErrorText(data, "Failed to reject"));
       }
     } catch {
       alert("Failed to reject");
@@ -89,7 +90,7 @@ export function WikiReviewActions({ slug, onApprove, onReject }: WikiReviewActio
 
       <Modal
         open={showRejectModal}
-        title="Reject Submission"
+        title="Reject submission"
         onClose={() => {
           setShowRejectModal(false);
           setRejectReason("");
@@ -117,7 +118,7 @@ export function WikiReviewActions({ slug, onApprove, onReject }: WikiReviewActio
             disabled={rejecting || !rejectReason.trim()}
             className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
           >
-            {rejecting ? "Rejecting..." : "Confirm Reject"}
+            {rejecting ? "Rejecting..." : "Confirm reject"}
           </button>
         </div>
       </Modal>

@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import Image from "next/image";
 import { useId } from "react";
 import { useImageUpload } from "@/hooks/useImageUpload";
@@ -115,7 +116,7 @@ export function ProfileHeaderImageUpload({
         className="hidden"
       />
 
-      {error && <p className="text-xs text-error">{error}</p>}
+      <InlineError error={error} className="text-xs text-error" />
       <p className="text-[11px] text-muted">
         JPEG, PNG, WebP, or GIF · max 4 MB
         {!isCompact && (

@@ -12,6 +12,7 @@ import {
   TRADE_EMBARGO_MAX_ACTIVE_PER_MEMBER,
 } from "@/lib/trade/constants";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface EmbargoItem {
   id: string;
@@ -113,7 +114,7 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Failed to impose embargo." });
+        setFeedback({ type: "error", message: apiErrorText(json, "Failed to impose embargo.") });
         return;
       }
       setFeedback({ type: "success", message: "Embargo imposed — it takes effect next turn." });
@@ -138,7 +139,7 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
       const res = await fetch(`/api/world/trade/embargoes?id=${id}`, { method: "DELETE" });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Failed to lift embargo." });
+        setFeedback({ type: "error", message: apiErrorText(json, "Failed to lift embargo.") });
         return;
       }
       setFeedback({ type: "success", message: "Embargo lifted." });
@@ -164,7 +165,7 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-foreground">Trade Embargoes</h2>
+        <h2 className="text-lg font-semibold text-foreground">Trade embargoes</h2>
         <p className="mt-1 text-sm text-muted">
           Impose a temporary embargo on another nation&apos;s trade — block a flow outright or cap
           it — to deny them a commodity or refuse their goods. Takes effect next turn and expires
@@ -228,7 +229,7 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
                       Lift
                     </Button>
                   ) : (
-                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted/70">
+                    <span className="shrink-0 text-body-sm font-medium text-muted">
                       {e.origin === "organization"
                         ? "Repeal through organization"
                         : "Repeal via bill"}
@@ -277,7 +278,7 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="emb-target" className="mb-1 block text-xs font-medium text-muted">
-              Target Country
+              Target country
             </label>
             <select
               id="emb-target"
@@ -405,7 +406,7 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
             isLoading={submitting}
             onClick={handleImpose}
           >
-            Impose Embargo
+            Impose embargo
           </Button>
           {canAct ? (
             <span className="text-xs text-muted">

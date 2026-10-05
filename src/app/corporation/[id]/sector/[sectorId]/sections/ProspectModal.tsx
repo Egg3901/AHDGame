@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { Modal, Button } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -79,7 +81,7 @@ export default function ProspectModal({
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(json.error ?? "Failed to launch the survey.");
+        setError(apiErrorText(json, "Failed to launch the survey."));
         setSubmitting(false);
         return;
       }
@@ -105,18 +107,14 @@ export default function ProspectModal({
 
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="rounded-lg border border-card-border bg-card-elevated/40 p-3">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-              Success odds
-            </div>
+            <div className="text-body-sm font-medium text-muted">Success odds</div>
             <div className="mt-1 text-lg font-semibold tabular-nums text-foreground">
               {Math.round(successChance * 100)}%
             </div>
             <p className="mt-0.5 text-xs text-muted">Higher with more R&amp;D score.</p>
           </div>
           <div className="rounded-lg border border-card-border bg-card-elevated/40 p-3">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-              Expected yield
-            </div>
+            <div className="text-body-sm font-medium text-muted">Expected yield</div>
             <div className="mt-1 text-lg font-semibold tabular-nums text-foreground">
               {yieldMinUnits.toLocaleString("en-US")}-{yieldMaxUnits.toLocaleString("en-US")}
             </div>
@@ -135,11 +133,11 @@ export default function ProspectModal({
           </p>
         </div>
 
-        {error && <p className="text-sm text-error">{error}</p>}
+        <InlineError error={error} className="text-sm text-error" />
 
         <div className="flex gap-3 pt-1">
           <Button type="submit" disabled={submitting} className="flex-1">
-            {submitting ? "Launching..." : "Launch Survey"}
+            {submitting ? "Launching..." : "Launch survey"}
           </Button>
           <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel

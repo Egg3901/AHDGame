@@ -1,8 +1,9 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
-import { HOSTILE_TAKEOVER_PREMIUM_RATE } from "@/lib/corporations/corporateOwnership";
+import { HOSTILE_TAKEOVER_PREMIUM_RATE } from "@/lib/corporations/corporateOwnershipConstants";
 import type { CorporationDetail } from "./CorporationPageTypes";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
@@ -63,7 +64,7 @@ export function HostileTakeoverCard({
       });
       const data = await res.json();
       if (!res.ok) {
-        setPayoffErr(data.error || "Payoff failed");
+        setPayoffErr(apiErrorText(data, "Payoff failed"));
         return;
       }
       if (onBondPayoff) {
@@ -96,7 +97,7 @@ export function HostileTakeoverCard({
       });
       const data = await res.json();
       if (!res.ok) {
-        setErr(data.error || "Merge failed");
+        setErr(apiErrorText(data, "Merge failed"));
         return;
       }
       onMerged();

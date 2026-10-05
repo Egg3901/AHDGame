@@ -131,6 +131,21 @@ describe("calculateFederalSpending", () => {
     });
   });
 
+  it("includes realized refugee services once in ordinary recurring spending", async () => {
+    const db = createMockDb();
+    const spending = await calculateFederalSpending(
+      db as unknown as Db,
+      mockBudget(),
+      10,
+      undefined,
+      { CN: 1200 }
+    );
+    expect(spending.byCategory.refugeeReceptionServices).toBe(1200);
+    expect(spending.total).toBe(1385);
+    expect(db.collection("refugeeReceptionHistory").find).not.toHaveBeenCalled();
+    expect(db.collection("federalBudget").updateOne).not.toHaveBeenCalled();
+  });
+
   it("uses enacted spending laws when a nonzero cost exists", async () => {
     const db = createMockDb();
     db.collection("enactedLaws").find.mockReturnValue({
@@ -291,6 +306,36 @@ describe("calculateFederalSpending", () => {
     );
 
     expect(spending.stateGrants).toBe(250);
+  });
+
+  it("books the legacy UK enacted grant once even when regions also record its receipt", async () => {
+    const db = createMockDb();
+    db.collection("enactedLaws").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          legislationTypeId: "uk_local_government_funding",
+          countryId: "UK",
+          scope: "national",
+          budgetCategory: "other",
+          isGrant: true,
+          budgetCost: 0,
+          gdpPerCapitaMultiplier: 0.00025,
+        },
+      ]),
+    });
+    db.collection("states").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "LON" }]),
+    });
+    db.collection("regionalBudgets").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "LON", westminsterGrant: 250 }]),
+    });
+    const spending = await calculateFederalSpending(
+      db as unknown as Db,
+      mockBudget({ _id: "UK", countryId: "UK" }),
+      10
+    );
+    expect(spending.stateGrants).toBe(250);
+    expect(spending.total).toBe(260);
   });
 
   it("books only the drawn-down grant for a planned economy, and the full grant for a market one", async () => {

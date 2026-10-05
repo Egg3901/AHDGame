@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { findSlateForElection } from "@/lib/db/recruitmentSlateLookup";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -29,10 +29,10 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     const { code, id, electionId, candidateRowId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     if (!ObjectId.isValid(electionId) || !ObjectId.isValid(candidateRowId)) {
-      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+      return errorResponse(400, "Invalid id");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -40,11 +40,11 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
     const partyId = String(party.sequentialId);
     const electionObjectId = new ObjectId(electionId);
     const slate = await findSlateForElection(db, countryId, partyId, electionObjectId);
-    if (!slate) return NextResponse.json({ error: "Slate not found" }, { status: 404 });
+    if (!slate) return errorResponse(404, "Slate not found");
     const authority = await resolveSlateAuthority({
       db,
       party,
@@ -53,12 +53,9 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       isAdmin: !!auth.user.isAdmin,
     });
     if (!authority.canManage) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the national or state party chair / vice chair for this race can withdraw slate assignments.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the national or state party chair / vice chair for this race can withdraw slate assignments."
       );
     }
 
@@ -66,7 +63,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       .collection<SlateCandidate>("slateCandidates")
       .findOne({ _id: new ObjectId(candidateRowId), slateId: slate._id });
     if (!row) {
-      return NextResponse.json({ error: "Invitation not found on this slate" }, { status: 404 });
+      return errorResponse(404, "Invitation not found on this slate");
     }
     const now = new Date();
     if (row.status === "filed") {
@@ -83,10 +80,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
         election.status === "resolved" ||
         election.status === "cancelled"
       ) {
-        return NextResponse.json(
-          { error: "Cannot withdraw a filed candidate from a closed race." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Cannot withdraw a filed candidate from a closed race.");
       }
 
       const filedCandidate = await db.collection<ElectionCandidate>("electionCandidates").findOne({

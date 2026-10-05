@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { missionNeedsTarget } from "@/lib/navair/missions";
 
@@ -123,7 +124,7 @@ export function NavairCommandClient({
       if (!res.ok) {
         // Show the server's reason verbatim. It knows why, and paraphrasing it into
         // "something went wrong" is how a player ends up filing a ticket.
-        setError(body?.error ?? "The order was refused.");
+        setError(apiErrorText(body, "The order was refused."));
         return false;
       }
       setRows((prev) =>

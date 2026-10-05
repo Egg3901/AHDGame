@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId, type ClientSession, type MongoServerError, type UpdateFilter } from "mongodb";
 import { getDb, getMongoClient } from "@/lib/mongodb";
 import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
-import { badRequest, handleRouteError, notFound } from "@/lib/api/errors";
+import { badRequest, handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { sendFundsSchema } from "@/lib/api/schemas/send";
@@ -40,7 +40,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId, slug } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
@@ -52,7 +52,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, sendFundsSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { characterId, amount: sendAmount } = parsed.data;
     const targetCharacterOid = new ObjectId(characterId);
@@ -63,31 +63,25 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const partyIdStr = String(party.sequentialId);
 
     const resolved = await findCaucusBySlug(db, countryId, partyIdStr, slug);
     if (!resolved) {
-      return NextResponse.json({ error: "Caucus not found" }, { status: 404 });
+      return errorResponse(404, "Caucus not found");
     }
     const { caucus } = resolved;
 
     const isAdmin = authUser.isAdmin;
     const isChair = caucus.chairId?.equals(authUser.character._id) ?? false;
     if (!isAdmin && !isChair) {
-      return NextResponse.json(
-        { error: "Only the Caucus Chair or an admin can send caucus funds" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the Caucus Chair or an admin can send caucus funds");
     }
     // Defense-in-depth: chair role retains across relocation, so refuse if the
     // actor's character is no longer in this country.
     if (!isAdmin && !isSameCountry(authUser.character, { countryId })) {
-      return NextResponse.json(
-        { error: "You must be a citizen of this country to send caucus funds" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You must be a citizen of this country to send caucus funds");
     }
 
     const memberships = await listCaucusMemberships(db, caucus._id, "character");
@@ -95,10 +89,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       memberships.map((membership) => membership.memberId.toString())
     );
     if (!activeCharacterIds.has(targetCharacterOid.toString())) {
-      return NextResponse.json(
-        { error: "Character is not an active player member of this caucus" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Character is not an active player member of this caucus");
     }
 
     const targetCharacter = await db.collection<Character>("characters").findOne({
@@ -107,7 +98,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       party: partyIdStr,
     });
     if (!targetCharacter) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     // Caucus money is party money for the purposes of both controls,
@@ -116,7 +107,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { currentTurn } = await getGameTime();
     if (!isAdmin) {
       if (await isLeadershipElectionFreezeActive(db, party, currentTurn)) {
-        return NextResponse.json({ error: LEADERSHIP_FREEZE_MESSAGE }, { status: 400 });
+        return errorResponse(400, LEADERSHIP_FREEZE_MESSAGE);
       }
       const cap = await checkPlayerPayoutCap(db, {
         characterId: targetCharacterOid,
@@ -132,13 +123,13 @@ export async function POST(request: Request, { params }: RouteParams) {
         ]),
       });
       if (!cap.ok) {
-        return NextResponse.json({ error: cap.reason }, { status: 400 });
+        return errorResponse(400, cap.reason);
       }
     }
 
     const treasury = caucus.treasury ?? 0;
     if (treasury < sendAmount) {
-      return NextResponse.json({ error: "Insufficient caucus funds" }, { status: 400 });
+      return errorResponse(400, "Insufficient caucus funds");
     }
 
     const now = new Date();
@@ -178,7 +169,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         .updateOne({ _id: caucus._id, treasury: { $gte: sendAmount } }, caucusDebit);
 
       if (debitResult.matchedCount === 0) {
-        return NextResponse.json({ error: "Insufficient caucus funds" }, { status: 400 });
+        return errorResponse(400, "Insufficient caucus funds");
       }
 
       // The debit has landed and there is no transaction to roll back, so
@@ -231,7 +222,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
       if (creditResult.matchedCount === 0) {
         await refundDebit("recipient not found");
-        return NextResponse.json({ error: "Character not found" }, { status: 404 });
+        return errorResponse(404, "Character not found");
       }
 
       return null;

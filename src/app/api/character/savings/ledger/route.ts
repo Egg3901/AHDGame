@@ -3,7 +3,7 @@ import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { fetchSavingsLedgerForCharacter } from "@/lib/savings/ledger";
 import { ZOD_ACTIVE_CURRENCY_ENUM } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -28,7 +28,7 @@ async function handleGET(request: Request) {
       limit: url.searchParams.get("limit") ?? undefined,
     });
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid query" }, { status: 400 });
+      return errorResponse(400, "Invalid query");
     }
     const limit = parsed.data.limit ?? 50;
     const currency = parsed.data.currency as CurrencyCode | undefined;
@@ -37,7 +37,7 @@ async function handleGET(request: Request) {
     const character = await getCharacterByUserId(db, auth.user.userId);
 
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const entries = await fetchSavingsLedgerForCharacter(db, character._id, currency, limit);

@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getProspectingSurveysCollection } from "@/lib/db/collections/prospectingSurveys";
 import type { ProspectingSurvey } from "@/lib/db/types/prospectingSurvey";
 
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     const countryId = searchParams.get("countryId");
 
     if (corporationId && !ObjectId.isValid(corporationId)) {
-      return NextResponse.json({ error: "Invalid corporationId" }, { status: 400 });
+      return errorResponse(400, "Invalid corporationId");
     }
 
     const base: Record<string, unknown> = {};

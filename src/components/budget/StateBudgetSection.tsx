@@ -83,7 +83,7 @@ export function StateBudgetSection({ stateId, countryId, regionCode }: StateBudg
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">State Budget - FY{budget.fiscalYear}</h2>
+      <h2 className="text-xl font-semibold">State budget - FY{budget.fiscalYear}</h2>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -100,7 +100,7 @@ export function StateBudgetSection({ stateId, countryId, regionCode }: StateBudg
       {/* Revenue & Spending */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="rounded-xl border border-card-border bg-card p-4">
-          <h3 className="font-medium mb-3">Revenue Sources</h3>
+          <h3 className="font-medium mb-3">Revenue sources</h3>
           <div className="space-y-2 text-sm">
             {Object.entries(budget.revenue)
               .filter(([key]) => key !== "total")
@@ -133,13 +133,13 @@ export function StateBudgetSection({ stateId, countryId, regionCode }: StateBudg
                           {taxRate.toFixed(1)}%
                           <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-background border border-card-border rounded-lg shadow-lg text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                             <span className="block font-medium text-foreground mb-1">
-                              Revenue Calculation
+                              Revenue calculation
                             </span>
                             <span className="block text-muted">
                               {baseLabel}: {formatMoney(taxBase)}
                             </span>
                             <span className="block text-muted">
-                              Tax Rate: {taxRate.toFixed(1)}%
+                              Tax rate: {taxRate.toFixed(1)}%
                             </span>
                             <span className="block text-foreground font-medium mt-1">
                               = {formatMoney(value)}
@@ -155,7 +155,7 @@ export function StateBudgetSection({ stateId, countryId, regionCode }: StateBudg
           </div>
         </div>
         <div className="rounded-xl border border-card-border bg-card p-4">
-          <h3 className="font-medium mb-3">Spending by Category</h3>
+          <h3 className="font-medium mb-3">Spending by category</h3>
           <div className="space-y-2 text-sm">
             {Object.entries(budget.spending.byCategory).map(([key, value]) => (
               <div key={key} className="flex justify-between">

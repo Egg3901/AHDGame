@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { listHolderTreasuryTransactions } from "@/lib/db/treasuryTransactionLookup";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -28,7 +28,7 @@ export async function GET(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuth();
@@ -36,7 +36,7 @@ export async function GET(
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
     const partyId = String(party.sequentialId);
 
     const url = new URL(request.url);
@@ -47,7 +47,7 @@ export async function GET(
 
     const before = beforeRaw ? new Date(beforeRaw) : undefined;
     if (before && Number.isNaN(before.getTime())) {
-      return NextResponse.json({ error: "Invalid 'before' timestamp" }, { status: 400 });
+      return errorResponse(400, "Invalid 'before' timestamp");
     }
     const limit = limitRaw ? Math.max(1, Math.min(200, Number(limitRaw))) : 50;
     const category =

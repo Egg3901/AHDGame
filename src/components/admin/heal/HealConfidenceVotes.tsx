@@ -51,7 +51,7 @@ export function HealConfidenceVotes() {
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-      <h3 className="text-sm font-semibold text-white">Heal Confidence Votes</h3>
+      <h3 className="text-sm font-semibold text-white">Heal confidence votes</h3>
       <p className="text-xs text-muted">
         Fix active confidence votes where NPP MPs failed to auto-vote YES. Diagnoses missing NPP
         votes and records them.
@@ -69,7 +69,7 @@ export function HealConfidenceVotes() {
           disabled={fixing}
           className="text-sm px-3 py-1.5 rounded border border-amber-500/50 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 disabled:opacity-40 transition-colors"
         >
-          {fixing ? "Fixing…" : "Fix Missing NPP Votes"}
+          {fixing ? "Fixing…" : "Fix missing NPP votes"}
         </button>
       </div>
       {diagnostic !== null && (

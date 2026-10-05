@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { PlayerSelector } from "@/components/PlayerSelector";
 
@@ -34,7 +35,7 @@ export function PatreonManagementTab({ context = "admin" }: PatreonManagementTab
       const res = await fetch(`${apiBase}/patreon/search?q=${encodeURIComponent(query)}`);
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Search failed");
+        setError(apiErrorText(data, "Search failed"));
         setSelected(null);
         return;
       }
@@ -78,7 +79,7 @@ export function PatreonManagementTab({ context = "admin" }: PatreonManagementTab
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to update Patreon status");
+        setError(apiErrorText(data, "Failed to update Patreon status"));
         return;
       }
       setMessage(nextTier ? `Set Patreon tier to ${nextTier}.` : "Cleared Patreon status.");
@@ -102,7 +103,7 @@ export function PatreonManagementTab({ context = "admin" }: PatreonManagementTab
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-card-border bg-card p-5 shadow-card">
-        <h3 className="text-sm font-semibold text-foreground">Patreon Management</h3>
+        <h3 className="text-sm font-semibold text-foreground">Patreon management</h3>
         <p className="mt-1 text-sm text-muted">
           Search for a player account, link a Patreon user ID, and set or clear supporter status.
         </p>
@@ -145,7 +146,7 @@ export function PatreonManagementTab({ context = "admin" }: PatreonManagementTab
 
       {selected && (
         <div className="rounded-2xl border border-card-border bg-card p-5 shadow-card">
-          <h4 className="text-sm font-semibold text-foreground">Set Status</h4>
+          <h4 className="text-sm font-semibold text-foreground">Set status</h4>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <label className="space-y-1">
               <span className="block text-xs font-medium text-muted">Tier</span>
@@ -161,7 +162,7 @@ export function PatreonManagementTab({ context = "admin" }: PatreonManagementTab
               </select>
             </label>
             <label className="space-y-1">
-              <span className="block text-xs font-medium text-muted">Patreon User ID</span>
+              <span className="block text-xs font-medium text-muted">Patreon user ID</span>
               <input
                 value={patreonUserId}
                 onChange={(e) => setPatreonUserId(e.target.value)}

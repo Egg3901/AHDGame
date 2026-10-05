@@ -18,6 +18,7 @@ import {
   type AltMemberIdentity,
   type AltMemberRole,
 } from "./altTypes";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type Suspect = AltMemberIdentity & { role?: AltMemberRole };
 
@@ -105,7 +106,7 @@ function SuspectPeekCard({ member, onClose }: { member: Suspect; onClose: () => 
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? `Request failed (${res.status})`);
+        throw new Error(apiErrorText(data, `Request failed (${res.status})`));
       }
       peek.onMemberBanned(member.userId);
       peek.notify(`Banned ${name}.`, "success");
@@ -141,7 +142,7 @@ function SuspectPeekCard({ member, onClose }: { member: Suspect; onClose: () => 
           <SuspectMugshot member={member} size="h-14 w-14" />
           <div className="min-w-0 flex-1">
             <div className="text-base font-semibold text-foreground">{name}</div>
-            <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+            <div className="flex flex-wrap items-center gap-1.5 text-body-sm font-medium text-muted">
               {member.role && <span>{ROLE_LABEL[member.role]}</span>}
               {member.banned && (
                 <span className="rounded-md border border-red-400/25 bg-red-500/10 px-1.5 py-0.5 text-red-400">

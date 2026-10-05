@@ -17,7 +17,7 @@ export default async function ModeratorMailReportPage({ params }: MailReportPage
     <div className="min-h-screen bg-background">
       <div className="border-b border-card-border bg-card shadow-sm">
         <div className="mx-auto max-w-4xl px-4 py-4 sm:px-6">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Staff review</p>
+          <p className="text-body-sm font-medium text-muted">Staff review</p>
           <h1 className="text-lg font-bold text-foreground">Reported conversation</h1>
         </div>
       </div>

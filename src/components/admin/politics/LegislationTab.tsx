@@ -17,7 +17,7 @@ type SubTab = "legislation" | "cabinet" | "leadership";
 
 const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: "legislation", label: "Legislation" },
-  { id: "cabinet", label: "Cabinet Nominations" },
+  { id: "cabinet", label: "Cabinet nominations" },
   { id: "leadership", label: "Leadership" },
 ];
 

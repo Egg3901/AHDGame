@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
@@ -24,12 +24,12 @@ export async function POST(request: Request) {
     if (!rate.ok) return rateLimitResponse(rate.retryAfter);
 
     if (!(await isProspectingEnabled())) {
-      return NextResponse.json({ error: "Resource prospecting is not enabled." }, { status: 403 });
+      return errorResponse(403, "Resource prospecting is not enabled.");
     }
 
     const parsed = await parseJsonBody(request, corpProspectSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { corporationId, stateId, resource } = parsed.data;
 
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     const now = new Date();
     const result = await launchCorpProspect(db, corporation, { stateId, resource }, turn, now);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json({

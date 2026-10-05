@@ -112,3 +112,18 @@ describe("runRetention — archive-only never deletes", () => {
     expect(col.deleteMany).not.toHaveBeenCalled();
   });
 });
+
+describe("research telemetry retention", () => {
+  it("prunes both panels one day past the export span cap", async () => {
+    const { RETENTION_POLICIES } = await import("./policy");
+    for (const name of ["countryTurnTelemetry", "securityTelemetry"]) {
+      const policy = RETENTION_POLICIES.find((p) => p.collection === name);
+      expect(policy?.mode).toBe(RetentionMode.ARCHIVE_DELETE);
+      expect(policy?.windowTurns).toBe(504);
+    }
+    const col = db.collection("securityTelemetry");
+    col.countDocuments = vi.fn().mockResolvedValue(3);
+    const summary = await runRetention({ dryRun: true, collections: ["securityTelemetry"] });
+    expect(summary.results[0]).toMatchObject({ cutoff: 1009 - 504, wouldDelete: 3 });
+  });
+});

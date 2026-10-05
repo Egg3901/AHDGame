@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 const DOCS_URL = process.env.NEXT_PUBLIC_DOCS_URL ?? "https://docs.lakesidegames.net";
 import { useLocale, useTranslations } from "next-intl";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type UserApiKey = {
   _id: string;
@@ -46,7 +47,7 @@ export function ApiKeysSection() {
       setUserKeyName("");
       void loadUserKeys();
     } else {
-      setError(data.error || t("apiKeys.createFailed"));
+      setError(apiErrorText(data, t("apiKeys.createFailed")));
     }
   };
 

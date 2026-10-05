@@ -8,6 +8,7 @@ import {
   MAX_GOTV_PERCENT,
   MAX_ORG_BUILDING_PERCENT,
 } from "@/lib/api/schemas/settings";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Chair-Office card: bulk-apply one state-party org setting to the same value
@@ -82,7 +83,7 @@ export function BulkStateOrgControl({ countryCode, partyId, onApplied }: BulkSta
       });
       const body = await res.json();
       if (!res.ok) {
-        setMsg(`✗ ${body.error ?? "Failed to apply setting"}`);
+        setMsg(`✗ ${apiErrorText(body, "Failed to apply setting")}`);
         return;
       }
       setMsg(`✓ ${body.message ?? "Applied to all state chapters"}`);

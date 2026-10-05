@@ -8,7 +8,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseBoundedIntParam, parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { CabinetNomination, CabinetMember, Character, CareerEvent } from "@/lib/db/types";
 import type { OfficeType } from "@/lib/db/types/character";
 import { CABINET_POSITIONS, getCabinetPositionById } from "@/lib/constants";
@@ -43,7 +43,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const { searchParams } = new URL(request.url);
@@ -101,13 +101,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   const { code } = await params;
   const routeCountryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[routeCountryId]) {
-    return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+    return errorResponse(400, "Invalid country code");
   }
 
   try {
     const parsed = await parseJsonBody(request, actionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { nominationId, action } = parsed.data;
 
@@ -117,7 +117,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       .findOne({ _id: new ObjectId(nominationId), countryId: routeCountryId });
 
     if (!nomination) {
-      return NextResponse.json({ error: "Nomination not found" }, { status: 404 });
+      return errorResponse(404, "Nomination not found");
     }
 
     const now = new Date();
@@ -256,7 +256,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       });
     }
 
-    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+    return errorResponse(400, "Invalid action");
   } catch (error) {
     return handleRouteError(error);
   }

@@ -1,5 +1,5 @@
 import { ObjectId, type ClientSession, type Db } from "mongodb";
-import { NextResponse } from "next/server";
+
 import type { Corporation, Bond, CentralBank, CorporateSector } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import type { BondMaturityTurns } from "@/lib/db/types/bond";
@@ -13,6 +13,7 @@ import {
 import { loadCorpExitEquityAnchor } from "@/lib/bonds/corpExitEquity";
 import {
   sumCorporateSectorNpv,
+  corporateBondMaturityLiquidity,
   sumCorporateSectorConstructionInProgress,
 } from "@/lib/bonds/corporateCredit";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
@@ -28,6 +29,7 @@ import {
   loadFxRatesByCurrency,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
+import { errorResponse } from "@/lib/api/errors";
 
 /** Relocation bond uses the longest corporate tenor (7yr = 336 turns). */
 export const RELOCATION_BOND_MATURITY_TURNS: BondMaturityTurns = 336;
@@ -161,7 +163,18 @@ export async function previewRelocationBond(
     annualIncome,
     annualInterest,
     totalEquity,
-    { bondDefaultCreditPenaltyActive: penaltyActive }
+    {
+      bondDefaultCreditPenaltyActive: penaltyActive,
+      nearTermLiquidityScore:
+        corporateBondMaturityLiquidity({
+          bonds: existingBonds,
+          liquidCapitalAnchor,
+          incomePerTurn: annualIncome / TURNS_PER_YEAR,
+          annualCouponObligations: annualInterest,
+          currentTurn,
+          fxByCurrency,
+        }).liquidityScore ?? undefined,
+    }
   );
   const centralBank = centralBanks.find((bank) => bank.countryId === corporation.countryId);
   const primeRate =
@@ -221,29 +234,22 @@ export async function issueRelocationBond(
   if (preflight.cooldownTurnsRemaining != null) {
     return {
       ok: false,
-      response: NextResponse.json(
-        {
-          error: `Bond issuance on cooldown. ${preflight.cooldownTurnsRemaining} turns remaining.`,
-        },
-        { status: 400 }
+      response: errorResponse(
+        400,
+        `Bond issuance on cooldown. ${preflight.cooldownTurnsRemaining} turns remaining.`
       ),
     };
   }
   if (!preflight.ok) {
     return {
       ok: false,
-      response: NextResponse.json(
-        {
-          // #1198: capacity is now the lower of the two ceilings, so the
-          // message reports the remaining capacity rather than naming a limit
-          // that may not be the one that bound.
-          error: `Bond issuance would exceed this corporation's debt capacity (the lower of ${MAX_BOND_ISSUANCE_FRACTION}x equity and what it could realize by selling up). Current debt: $${Math.round(
-            preflight.existingDebt
-          ).toLocaleString()}, remaining capacity: $${Math.round(
-            preflight.availableBondCapacity
-          ).toLocaleString()}.`,
-        },
-        { status: 400 }
+      response: errorResponse(
+        400,
+        `Bond issuance would exceed this corporation's debt capacity (the lower of ${MAX_BOND_ISSUANCE_FRACTION}x equity and what it could realize by selling up). Current debt: $${Math.round(
+          preflight.existingDebt
+        ).toLocaleString()}, remaining capacity: $${Math.round(
+          preflight.availableBondCapacity
+        ).toLocaleString()}.`
       ),
     };
   }
@@ -262,10 +268,7 @@ export async function issueRelocationBond(
   if (totalUnits <= 0) {
     return {
       ok: false,
-      response: NextResponse.json(
-        { error: "Relocation cost too low for bond issuance" },
-        { status: 400 }
-      ),
+      response: errorResponse(400, "Relocation cost too low for bond issuance"),
     };
   }
   const actualFaceValueLocal = totalUnits * BOND_UNIT_FACE_VALUE;
@@ -312,9 +315,9 @@ export async function issueRelocationBond(
       ) {
         return {
           ok: false,
-          response: NextResponse.json(
-            { error: "The frozen relocation bond identity is already used by another issue" },
-            { status: 409 }
+          response: errorResponse(
+            409,
+            "The frozen relocation bond identity is already used by another issue"
           ),
         };
       }
@@ -336,9 +339,9 @@ export async function issueRelocationBond(
         ) {
           return {
             ok: false,
-            response: NextResponse.json(
-              { error: "The frozen relocation bond identity is already used by another issue" },
-              { status: 409 }
+            response: errorResponse(
+              409,
+              "The frozen relocation bond identity is already used by another issue"
             ),
           };
         }

@@ -27,7 +27,7 @@ describe("BillVoteIndicator shift preview", () => {
   it("hides the preview once a vote is cast locally until the server sends fresh numbers", async () => {
     render(<BillVoteIndicator billId="b1" myVote={null} canVote shiftPreview={preview} />);
     fireEvent.click(screen.getByRole("button", { name: "Aye" }));
-    await waitFor(() => expect(screen.getByText(/Voted For/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Voted for/)).toBeTruthy());
     // The numbers on screen were computed before the vote; showing them now would
     // promise a second step. They come back when the parent refetches and passes
     // a matching myVote.

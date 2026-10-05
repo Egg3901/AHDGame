@@ -130,7 +130,7 @@ export function BlocOverviewBoard({ side = "west" }: { side?: BlocSide }) {
                       color: "#f3f1ea",
                     }}
                   >
-                    The World Divided
+                    The world divided
                   </h1>
                   <p
                     style={{

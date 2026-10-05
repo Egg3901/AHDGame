@@ -11,7 +11,7 @@ import {
   joinGateForPoleCount,
   type AlignmentPoleId,
 } from "@/lib/constants/alignmentEras";
-import { ROSTER_BY_KEY } from "@/lib/constants/alignmentRoster";
+import { rosterNameAt } from "@/lib/constants/alignmentRoster";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getAlignmentCrisesCollection, getCountryAlignmentsCollection } from "@/lib/db/collections";
 import type { GameState } from "@/lib/db/types";
@@ -149,6 +149,7 @@ export async function loadWorldAlignment(db: Db): Promise<WorldAlignmentView> {
       poleIds,
       memberPoleIds: polesOf(orgIds),
       preset,
+      year,
     });
     if (!standing) continue;
     rows.push({ ...standing, orgIds });
@@ -170,7 +171,7 @@ export async function loadWorldAlignment(db: Db): Promise<WorldAlignmentView> {
     targetEntityId: crisis.targetEntityId,
     targetName:
       COUNTRY_CONFIGS[crisis.targetEntityId as CountryId]?.name ??
-      ROSTER_BY_KEY[crisis.targetEntityId]?.name ??
+      rosterNameAt(crisis.targetEntityId, year) ??
       crisis.targetEntityId,
     title: crisis.title,
     headline: crisis.headline,

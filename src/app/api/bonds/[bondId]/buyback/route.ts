@@ -7,7 +7,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { parseJsonBody } from "@/lib/api/validate";
 import { buyBondSchema } from "@/lib/api/schemas/bonds";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Bond, Corporation } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -46,7 +46,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { bondId } = await params;
     const parsed = await parseJsonBody(request, buyBondSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { units } = parsed.data;
@@ -59,11 +59,11 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const bond = await db.collection<Bond>("bonds").findOne({ _id: new ObjectId(bondId) });
     if (!bond) {
-      return NextResponse.json({ error: "Bond not found" }, { status: 404 });
+      return errorResponse(404, "Bond not found");
     }
 
     if (bond.matured) {
-      return NextResponse.json({ error: "Bond has already matured" }, { status: 400 });
+      return errorResponse(400, "Bond has already matured");
     }
 
     // Verify CEO - use requireCeo for proper vacant seat handling
@@ -75,10 +75,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     if (bond.publicFloat < units) {
-      return NextResponse.json(
-        { error: `Only ${bond.publicFloat} units available in public float` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Only ${bond.publicFloat} units available in public float`);
     }
 
     // Bond denomination — canonical key is `bond.currencyCode` (Task-18B). Do
@@ -116,10 +113,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       rates: fxRates,
     });
     if (!corpPurchaseEstimate) {
-      return NextResponse.json(
-        { error: "Exchange rate unavailable, try again shortly" },
-        { status: 503 }
-      );
+      return errorResponse(503, "Exchange rate unavailable, try again shortly");
     }
     if (!corpPurchaseEstimate.canAfford) {
       const corpSym = CURRENCY_SYMBOLS[corpCurrency ?? "USD"] ?? "$";
@@ -135,11 +129,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         corpCurrency && corpCurrency !== bondCurrency
           ? ` (~${corpSym}${adjustedStr} ${corpCurrency} incl. FX, corp has ${corpSym}${haveStr} ${corpCurrency})`
           : `, have ${corpSym}${haveStr} ${corpCurrency ?? "USD"}`;
-      return NextResponse.json(
-        {
-          error: `Insufficient corporate funds. Need ${bondSym}${needStr} ${bondCurrency}${currencyNote}`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient corporate funds. Need ${bondSym}${needStr} ${bondCurrency}${currencyNote}`
       );
     }
 
@@ -159,10 +151,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         { $inc: { liquidCapital: -costInCorpCapital }, $set: { updatedAt: now } }
       );
     if (debitResult.modifiedCount === 0) {
-      return NextResponse.json(
-        { error: "Insufficient corporate funds (race with another transaction)." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Insufficient corporate funds (race with another transaction).");
     }
 
     let bondUpdateFilter: Record<string, unknown> = {
@@ -194,11 +183,9 @@ export async function POST(request: Request, { params }: RouteParams) {
           { $inc: { liquidCapital: costInCorpCapital }, $set: { updatedAt: new Date() } }
         );
       const refreshedBond = await db.collection<Bond>("bonds").findOne({ _id: bond._id });
-      return NextResponse.json(
-        {
-          error: `Only ${refreshedBond?.publicFloat ?? 0} units available in public float`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Only ${refreshedBond?.publicFloat ?? 0} units available in public float`
       );
     }
 

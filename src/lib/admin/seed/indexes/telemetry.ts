@@ -2,7 +2,7 @@ import type { CreateIndexesOptions, Db, IndexSpecification } from "mongodb";
 import { ensureIndex } from "./helpers";
 
 export type TelemetryIndexPlan = {
-  collection: "approvalTelemetry" | "macroTelemetry";
+  collection: "approvalTelemetry" | "macroTelemetry" | "countryTurnTelemetry" | "securityTelemetry";
   keys: IndexSpecification;
   options: CreateIndexesOptions & { name: string; unique: true };
 };
@@ -32,6 +32,18 @@ export const TELEMETRY_INDEXES: readonly TelemetryIndexPlan[] = [
     collection: "macroTelemetry",
     keys: { worldId: 1, country: 1, region: 1, metric: 1, turn: 1 },
     options: { name: "macroTelemetry_world_country_region_metric_turn_unique", unique: true },
+  },
+  // One research country-turn row per (world, country, turn) (#2331, #2336).
+  {
+    collection: "countryTurnTelemetry",
+    keys: { worldId: 1, country: 1, turn: 1 },
+    options: { name: "countryTurnTelemetry_world_country_turn_unique", unique: true },
+  },
+  // One research securities row per (world, turn) (#2332).
+  {
+    collection: "securityTelemetry",
+    keys: { worldId: 1, turn: 1 },
+    options: { name: "securityTelemetry_world_turn_unique", unique: true },
   },
 ];
 

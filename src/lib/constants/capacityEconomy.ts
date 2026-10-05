@@ -1,141 +1,22 @@
 /**
- * Plants and capacity: what a unit of production capacity costs, how long a build
- * takes and how long it takes to pay back. capacityPricePerUnit prices capacity
- * from commodity base prices and strategy output; CAPACITY_BUILD_TURNS runs from
- * 12 turns (retail) to 60 (telecommunications, real estate), where 48 turns is a game year.
- * Cancelled builds refund 75%, idle capacity still pays 30% upkeep
- * (IDLE_UPKEEP_FRACTION), mothballed 5%, and attacks transfer only 60% of captured capacity.
+ * In 1991 presets, plant investment prices capacity at one day of its nominal
+ * output. Other presets retain the growth multiplier and era price column.
+ * capacityPricePerUnit selects this basis. computeBuildCost applies host costs, borrowing rates,
+ * CEO skill, technology and dominance; expanding existing plants gets a 20%
+ * discount. Only the 1991 calibration omits the additional nominal price index. Idle capacity pays 30% upkeep and
+ * mothballed capacity pays 5%.
+ *
+ * Capacity is output units per day. capacityUnitYield maps the commodity mix
+ * to units per anchor currency; its inverse is revenuePerCapacityUnit. Both
+ * conversions carry the same eraUnitScale. Prices follow the actual strategy,
+ * preserving the value of cheap and expensive output baskets across retools.
  */
-/**
- * Capacity economy anchors — what a unit of productive capacity COSTS and how
- * many workers it TAKES (P1 of the "buildable sectors" plan).
- *
- * ─── Why this module exists ────────────────────────────────────────────────
- * Today there is no ₳-per-unit-of-capacity price anywhere in the game. Under
- * `marketSystemMode >= "capital"` a sector owns `capitalStock` measured in
- * OUTPUT UNITS PER DAY (see `lib/market/capital.ts`), but that stock grows
- * *multiplicatively* off the growth slider (`advanceCapitalStock`: stock ×
- * (1 + g − δ)) while cash is charged by a completely separate formula
- * (`calculateDailyGrowthCost`: revenue × g × GROWTH_COST_MULTIPLIER × …).
- * The two are never reconciled: nothing in the codebase says "one unit/day of
- * capacity costs X ₳" or "one unit/day of capacity needs Y workers".
- *
- * Later phases make capacity something a corp BUYS with cash and STAFFS with
- * workers. This module is the pricing table those phases will read. It is
- * **purely additive and unreferenced by production code in this phase** — no
- * behavior changes until a later phase calls it.
- *
- * ─── Calibration principle: no-op by construction ──────────────────────────
- * Both anchors are DERIVED IN CODE from the tables the live economy already
- * uses (`COMMODITY_BASE_PRICES`, `SECTOR_STRATEGIES`, `REVENUE_PER_WORKER`
- * via `calculateWorkers`, `GROWTH_COST_MULTIPLIER`). Nothing here is a
- * hand-typed number that could silently desync when those base tables drift:
- * change a base price or a strategy's supply rates and these anchors move with
- * them, automatically. At the 1953 anchor era the tables reproduce today's
- * observed economics exactly, so the eventual cutover is a no-op at flip.
- *
- * ─── The unit-mix pivot: `revenuePerCapacityUnit` ──────────────────────────
- * Everything below hangs off one quantity. `impliedOutputUnits`
- * (capital.ts:99-113) is
- *
- *     units(revenue) = Σ_c  revenue × rate_c / basePrice_c
- *                    = revenue × Σ_c (rate_c / basePrice_c)
- *
- * — it SUMS raw units across the whole output mix (tons of steel plus MWh of
- * energy plus …; the game deliberately treats them as commensurable "units").
- * Define the unit yield
- *
- *     k(type) = Σ_c (rate_c / basePrice_c)      [units per ₳ of daily revenue]
- *
- * and its reciprocal, the revenue one unit/day of capacity earns at full
- * utilization:
- *
- *     revenuePerCapacityUnit(type) = 1 / k(type)               (RPU)
- *
- * JUDGMENT CALL (documented deliberately): the obvious "average price of the
- * output mix" is the rate-weighted arithmetic mean Σ(rate_c × basePrice_c) /
- * Σ rate_c. That is NOT what the engine computes. Because `impliedOutputUnits`
- * divides each leg by its own base price and then sums the resulting unit
- * counts, the correct inverse is the reciprocal-of-a-sum above — a
- * *harmonic-style* mix, which is dominated by the CHEAP legs of the mix (a
- * $25/MMBtu gas leg contributes far more units per ₳ than a $25,000/vehicle
- * leg). Using the arithmetic mean would over-price capacity by a large factor
- * for any sector with a mixed-price output basket (energy, extraction,
- * automobiles). RPU as defined is exactly the ₳ of revenue that one unit of
- * `capitalStock` supports, which is the only definition that makes the two
- * identities below self-consistent with `capitalUtilizationFactor`.
- *
- * ─── Anchor identity A (labour) ────────────────────────────────────────────
- * `calculateWorkers` (corporations.ts:270-280) is
- *
- *     workers = (revenue / REVENUE_PER_WORKER) × skillMult,   skillMult = 1 at
- *                                                             workforceSkill 50
- *
- * and capacity implied by that same revenue is units = revenue × k. So at the
- * neutral-skill reference point:
- *
- *     laborIntensity = workers / units
- *                    = (revenue / REVENUE_PER_WORKER) / (revenue × k)
- *                    = 1 / (REVENUE_PER_WORKER × k)
- *                    = RPU(type) / REVENUE_PER_WORKER            ◀ IDENTITY A
- *
- * The representative revenue CANCELS — the anchor is scale-free, which is why
- * no "representative revenue" constant appears in this file. Skill enters as a
- * multiplier at the call site later (a skill-100 state staffs the same capacity
- * with 0.70× the workers); the anchor is the skill-50 baseline.
- *
- * ─── Anchor identity B (price) ─────────────────────────────────────────────
- * The legacy growth system charges (post-#3934 clock fix, corporations.ts:520-590)
- * an effective GROWTH_COST_MULTIPLIER × the revenue the growth actually adds,
- * for capacity delivered over one game year:
- *
- *     cashOverOneGameYear = GROWTH_COST_MULTIPLIER × Δrevenue
- *
- * and that Δrevenue corresponds to Δunits = Δrevenue × k of extra capacity
- * (same `impliedOutputUnits` map). Therefore
- *
- *     capacityPricePerUnit = cash / Δunits
- *                          = GROWTH_COST_MULTIPLIER × Δrevenue / (Δrevenue × k)
- *                          = GROWTH_COST_MULTIPLIER × RPU(type, strategy)   ◀ IDENTITY B
- *
- * Again scale-free. Note both identities are ratios of the SAME cancelling
- * Δrevenue, so A and B are consistent with each other by construction:
- * capacityPricePerUnit / laborIntensity = GROWTH_COST_MULTIPLIER ×
- * REVENUE_PER_WORKER, in every era with matching era columns — a relationship
- * the tests pin.
- *
- * ⚠️ SCOPE OF THE A↔B RELATIONSHIP. Identity B is now evaluated at the
- * sector's ACTUAL strategy, while `laborIntensity` (identity A) is still
- * evaluated at the TYPE's default mix. The two therefore coincide only at the
- * default strategy, which is exactly where `capacityEconomy.test.ts` pins them.
- * That is correct rather than an oversight: real staffing does not come from
- * identity A at all — `calculateWorkers(revenue, workforceSkill)` derives
- * headcount from REVENUE, which is already strategy-aware, so a strategy-aware
- * price and a type-level labour anchor stay consistent in practice. Making A
- * strategy-aware too would change no live staffing number and is deliberately
- * not done here.
- *
- * The rate/dominance/acumen multipliers in `calculateDailyGrowthCost` are
- * deliberately EXCLUDED: they are situational modifiers on a transaction, not
- * properties of the capacity good. The future build system applies its own
- * modifiers on top of this base price, exactly as the growth path does today.
- *
- * ─── Era scaling ───────────────────────────────────────────────────────────
- * Both lookups follow the era-span step pattern of `constants/monetaryEra.ts`
- * (spans listed most-historical-first; the first span whose `untilYear` exceeds
- * the year wins; ≥ MODERN_ERA_START_YEAR resolves the modern row). Step, not
- * interpolation — same as monetaryEra, and the same reason: these are authored
- * regime anchors, not a measured series, and a step keeps a world's numbers
- * stable within an era instead of drifting every turn.
- *
- * The 1953 row of BOTH columns is exactly 1.0. That is the calibration anchor:
- * at 1953 the functions return the raw identities above, so a 1953 world's
- * numbers reproduce today's economics exactly. Everything else is PROVISIONAL
- * and will be re-tuned by worldsim.
- */
+
+import { eraForPreset } from "@/lib/seeds/presetSelector";
 
 import {
   COLD_CAPACITY_UPKEEP_FRACTION,
+  constructionPriceForDailyRevenue,
   expansionCostMultiplier,
   investmentBuildTurns,
 } from "@/lib/corporations/investment/rules";
@@ -547,44 +428,10 @@ export function capacityEraLaborIndex(year: number | null | undefined): number {
 // ─── Public anchors ─────────────────────────────────────────────────────────
 
 /**
- * IDENTITY B — ₳ to build one unit/day of capacity in `sectorType` running
- * `strategyId`, at the world's current `year`.
- *
- *     capacityPricePerUnit = GROWTH_COST_MULTIPLIER × RPU(type, strategy) × eraPriceIndex(year)
- *
- * At `year = 1953` the era index is 1.0, so this is exactly the ₳ the legacy
- * growth path charges for the same increment of capacity.
- *
- * ─── WHY THE PRICE IS STRATEGY-AWARE ───────────────────────────────────────
- * This used to read `revenuePerCapacityUnit(sectorType, unitScale)` — the
- * TYPE's default ("standard") mix — while revenue has always been computed from
- * the sector's ACTUAL strategy (`sectorProfitBasis`'s nameplate leg). The two
- * legs therefore priced and paid for different products.
- *
- * For extraction the gap is 326.9x: `rare_earth` carries a 21,000 base price
- * but only a 0.14 rate in the diversified mix, so it contributes 0.06% of that
- * mix's unit yield (RPU 89.23) and 100% of `rare_earth_mining`'s (RPU
- * 29,166.67). Capacity bought at the diversified price and pointed at rare
- * earth repaid its capex in 0.22 turns against the 72 turns
- * (GROWTH_COST_MULTIPLIER = 3.0 days) every other build pays — measured live at
- * turn 694, where every US sector type sat at revenue/capacityBook 0.16-0.46
- * and rare-earth mining sat at 44.77.
- *
- * The invariant this restores, asserted over every (type, strategy) pair in
- * `capacityEconomy.strategyPricing.test.ts`:
- *
- *     capacityPricePerUnit / revenuePerCapacityUnitForStrategy === GROWTH_COST_MULTIPLIER
- *
- * `strategyId` is REQUIRED but nullable so the compiler enumerates every
- * pricing site rather than leaving silent 3-arg callers behind;
- * `revenuePerCapacityUnitForStrategy` falls back to the default strategy for
- * null, so `null` is byte-identical to the old behaviour.
- *
- * NOTE this does NOT retire the D9 retool rescale
- * ({@link rescaleCapacityForStrategyChange}). That closes a different route:
- * capacity already BOUGHT at the coal price and then re-pointed at rare earth.
- * Pricing fixes new builds; D9 fixes re-aiming existing stock. Both are needed,
- * and the payback test above fails if either is removed.
+ * Undiscounted construction price per unit of daily capacity. The 1991 preset
+ * uses one day of nominal output; all other presets retain the legacy growth
+ * multiplier and price column. Without a preset, the year selects the basis.
+ * Passing the originating preset keeps a 1991 world's price stable as it ages.
  */
 export function capacityPricePerUnit(
   sectorType: CorporationType,
@@ -592,19 +439,19 @@ export function capacityPricePerUnit(
   unitScale: number,
   strategyId: string | null | undefined,
   industryModel?: string | null,
-  mediaDiscriminator?: MediaDiscriminator | null
+  mediaDiscriminator?: MediaDiscriminator | null,
+  preset?: string
 ): number {
-  return (
-    GROWTH_COST_MULTIPLIER *
-    revenuePerCapacityUnitForStrategy(
-      sectorType,
-      strategyId,
-      unitScale,
-      industryModel,
-      mediaDiscriminator
-    ) *
-    capacityEraPriceIndex(year)
+  const dailyRevenue = revenuePerCapacityUnitForStrategy(
+    sectorType,
+    strategyId,
+    unitScale,
+    industryModel,
+    mediaDiscriminator
   );
+  return uses1991Construction(year, preset)
+    ? constructionPriceForDailyRevenue(dailyRevenue)
+    : dailyRevenue * GROWTH_COST_MULTIPLIER * capacityEraPriceIndex(year);
 }
 
 /**
@@ -721,32 +568,12 @@ export const MOTHBALL_UPKEEP_FRACTION = COLD_CAPACITY_UPKEEP_FRACTION;
  */
 export const IDLE_UPKEEP_FRACTION = 0.3;
 
-/**
- * Price multiplier on the FOUNDING build of a newly created sector.
- *
- * Founding a sector today (`expandSector`) costs SECTOR_EXPANSION_BASE_COST
- * (100k ₳) and GRANTS DEFAULT_SECTOR_STARTING_REVENUE (1M ₳/day) of capacity
- * for free — an effective founding price of ~0.033 × the standing capacity
- * price, since that much capacity costs
- * `DEFAULT_SECTOR_STARTING_REVENUE × GROWTH_COST_MULTIPLIER` = 3M ₳ at the
- * 1953 anchor (the RPU terms cancel; see `capacityEconomy.test.ts`).
- *
- * Charging the standing price for a founding build would therefore be a ~30×
- * increase in the cost of entering a market, which would close the game to new
- * corps. This constant is the honest lever: the founding build is priced at
- * 0.1 × the standing price (300k ₳ for the starter capacity), a ~3× increase on
- * today's effective cost rather than a 30× one, and comfortably inside the
- * founding affordability gate (≤ 350k ₳, payback ≤ 30 financial days) that
- * `capacityEconomy.test.ts` pins.
- *
- * The alternative lever — bending the era price index — was rejected: the 1953
- * row is the calibration anchor and is 1.0 BY DEFINITION (identity B), so
- * moving it to make founding cheap would silently re-price every existing
- * growth-equivalent build as well. FLAGGED PROVISIONAL: worldsim re-tunes.
- *
- * Not wired into the founding flow in this phase — P3b owns that.
- */
+/** Legacy first-plant discount. The qualified 1991 preset pays the full basis. */
 export const CAPACITY_FOUNDING_DISCOUNT = 0.1;
+
+function uses1991Construction(year: number, preset?: string): boolean {
+  return preset == null ? year === 1991 : eraForPreset(preset) === "1991";
+}
 
 /**
  * Share of the capacity taken off a defender that actually arrives at the
@@ -776,10 +603,8 @@ export const ATTACK_CAPTURE_EFFICIENCY = 0.6;
  * capacity costs. Priced against the build table it is far too cheap: the
  * legacy cost per unit received works out at roughly
  * `RPU / (efficiency × captureMultipliers × msShare)` ≈ 1.7-3.3 × RPU, while
- * building one unit costs `GROWTH_COST_MULTIPLIER × RPU × eraPriceIndex(year)`
- * = 3 × RPU at the 1953 anchor and 15 × RPU in the modern era. Left alone,
- * plants would make war on rivals the cheapest source of capacity in the game
- * by an order of magnitude, in every era after 1953.
+ * building one unit uses the preset's capacity-price basis and construction modifiers.
+ * Any gap between the two prices can make cheap takeovers bypass construction.
  *
  * So under plants the attack price is floored at the build price of the
  * capacity the attacker actually receives, times this premium. Attacking is
@@ -884,8 +709,10 @@ export interface BuildCostInputs {
    * type's default mix. See {@link capacityPricePerUnit} for why.
    */
   strategyId: string | null;
-  /** World year — drives the era price column. */
+  /** World year for the legacy era price column. */
   year: number;
+  /** Originating reset preset, so the calibration survives clock advancement. */
+  preset?: string;
   /**
    * The world's era unit-basis scale (`getEraUnitScale(preset)`). REQUIRED so
    * the compiler enumerates every pricing site: 1 for modern worlds, ~70 for
@@ -929,7 +756,7 @@ export interface BuildCostInputs {
 
 /** Itemized build cost, so UI/tests/NPPs can show WHY a build costs what it does. */
 export interface BuildCostBreakdown {
-  /** Base ₳ per capacity unit at this year (era-indexed). */
+  /** Base anchor currency per capacity unit in the world's nominal unit basis. */
   unitPriceAnchor: number;
   /** Dominance penalty multiplier (1 below the dominance threshold). */
   dominanceMultiplier: number;
@@ -1000,9 +827,8 @@ export interface BuildCostBreakdown {
  * line is itself vestigial under plants and gating it would move the flip-turn
  * numbers for a dominant sector, which the flip identity forbids.)
  *
- * Note `capacityPricePerUnit` already carries GROWTH_COST_MULTIPLIER (identity
- * B), so the base term here is exactly the cash the growth path charges for the
- * same increment of capacity — no double-counting.
+ * `capacityPricePerUnit` selects the preset-qualified basis. The legacy growth
+ * slider retains its separate pricing outside plants mode.
  */
 export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
   const {
@@ -1012,6 +838,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
     units,
     strategyId,
     year,
+    preset,
     eraUnitScale,
     marketSharePercent = 0,
     nationalMarketSharePercent = 0,
@@ -1029,7 +856,8 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
     eraUnitScale,
     strategyId,
     industryModel,
-    mediaDiscriminator
+    mediaDiscriminator,
+    preset
   );
   // Dominance is scaled by how contested the cell is. The factor multiplies the
   // toll's EXCESS over 1.0, so a market with no rivals still pays a monopoly
@@ -1070,7 +898,11 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
       ? techGrowthCostMultiplier
       : 1;
   const hostPriceMultiplier = hostBuildPriceIndex(hostCostOfLivingIndex);
-  const foundingMultiplier = founding ? CAPACITY_FOUNDING_DISCOUNT : 1;
+  const foundingMultiplier = founding
+    ? uses1991Construction(year, preset)
+      ? 1
+      : CAPACITY_FOUNDING_DISCOUNT
+    : 1;
   const expansionMultiplier = expansionCostMultiplier(founding);
   return {
     unitPriceAnchor,

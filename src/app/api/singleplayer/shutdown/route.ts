@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSingleplayer } from "@/lib/api/requireSingleplayer";
 import { getMongoClient } from "@/lib/mongodb";
+import { errorResponse } from "@/lib/api/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
     // successful shutdown as a closed connection. Anything else is a failure.
     if (!isConnectionDrop(error)) {
       const message = error instanceof Error ? error.message : String(error);
-      return NextResponse.json({ ok: false, error: message }, { status: 500 });
+      return errorResponse(500, message, { extra: { ok: false } });
     }
   }
   return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });

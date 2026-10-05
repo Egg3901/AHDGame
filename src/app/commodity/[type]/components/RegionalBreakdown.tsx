@@ -53,7 +53,7 @@ export default function RegionalBreakdown({
         className="w-full flex items-center justify-between px-6 py-4 hover:bg-card-elevated/50 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-bold text-foreground">Regional Breakdown</h2>
+          <h2 className="text-lg font-bold text-foreground">Regional breakdown</h2>
           <span className="text-xs text-muted px-2 py-0.5 rounded-full bg-card-elevated">
             {stateIds.length} regions
           </span>
@@ -71,7 +71,7 @@ export default function RegionalBreakdown({
       {isOpen && (
         <div className="px-6 pb-6 border-t border-card-border/50">
           <div className="space-y-2 pt-3">
-            <div className="grid grid-cols-5 text-xs font-semibold text-muted uppercase tracking-wider pb-2 border-b border-card-border">
+            <div className="grid grid-cols-5 text-sm font-semibold text-foreground pb-2 border-b border-card-border">
               <div>Region</div>
               <div className="text-right">Price</div>
               <div className="text-right">Supply</div>

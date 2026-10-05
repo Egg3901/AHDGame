@@ -6,6 +6,7 @@
  * status pane sourced from /regime/leader. Designed for diagnostic
  * use, not end-user gameplay.
  */
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 
 type Stage = "stable" | "discontent" | "crisis" | "internalChallenge" | "collapse";
@@ -82,7 +83,7 @@ export function AdminRegimePanel({ countryCode }: Props) {
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string; atTurn?: number };
       if (!res.ok) {
-        setErr(json.error ?? `Request failed (${res.status})`);
+        setErr(apiErrorText(json, `Request failed (${res.status})`));
       } else {
         setMsg(`${path} ok at turn ${json.atTurn ?? "?"}`);
         await refresh();

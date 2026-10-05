@@ -10,6 +10,7 @@ import { mergeState } from "../lib/helpers";
 import { SmallButton, TableScroll, Td, Th } from "@/components/corporation/dense/DenseKit";
 import { allowedPropOpeningAssets } from "@/lib/banking/rules/propAssets";
 import { BankPanel } from "../components/BankSection";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type PropAsset = "equity" | "bond" | "indexUnit" | "forex";
 
@@ -121,7 +122,7 @@ export function PropBookPanel({
       proceeds: number;
     };
     if (!response.ok) {
-      showToast(result.error ?? t("unavailable"), "error");
+      showToast(apiErrorText(result, t("unavailable")), "error");
       return null;
     }
     return result;
@@ -168,7 +169,7 @@ export function PropBookPanel({
       };
       if (!res.ok) {
         updatePropState({ quote: null });
-        showToast(json.error ?? "Could not open position", "error");
+        showToast(apiErrorText(json, "Could not open position"), "error");
         return;
       }
       showToast(
@@ -223,7 +224,7 @@ export function PropBookPanel({
         realizedPnl?: number;
       };
       if (!res.ok) {
-        showToast(json.error ?? "Could not close position", "error");
+        showToast(apiErrorText(json, "Could not close position"), "error");
         return;
       }
       showToast(

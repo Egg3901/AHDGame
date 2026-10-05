@@ -46,23 +46,30 @@ const LABELS: Record<SingleplayerFeatureFlagKey, string> = {
   livingConflictsEnabled: "Living conflicts",
   nppOffensiveInitiationEnabled: "Autonomous offensive initiation",
   nppOffensiveJoinEnabled: "Autonomous offensive participation",
+  intelligenceMilitarySabotageEnabled: "Military sabotage effects",
+  nppIntelligenceOperationsEnabled: "Autonomous intelligence operations",
+  granularElectorateEnabled: "Granular electorate",
+  macroGrowthV1: "Macro growth convergence",
+  settlementCrisisEnabled: "Settlement crises",
+  departmentProgramSliceEnabled: "Department programs",
+  departmentFinanceEnabled: "Department finance",
+  lawAdministrationEnabled: "Law administration",
+  regionalLegislationFinanceEnabled: "Regional legislation finance",
+  canonicalPoliticalMetricsEnabled: "Canonical political metrics",
 };
 
 const descriptions: Partial<Record<SingleplayerFeatureFlagKey, string>> = {
-  autoSectorSeedEnabled:
-    "Periodically seed unowned sectors. Off by default to preserve a world you deliberately shape.",
-  nppOffensiveInitiationEnabled:
-    "Let autonomous countries start wars. Off by default while generals and military technology remain incomplete.",
-  nppOffensiveJoinEnabled:
-    "Let autonomous countries join offensives. Off by default while generals and military technology remain incomplete.",
+  autoSectorSeedEnabled: "Periodically seed unowned sectors.",
+  nppOffensiveInitiationEnabled: "Let autonomous countries start wars.",
+  nppOffensiveJoinEnabled: "Let autonomous countries join offensives.",
 };
 
 /**
  * Boolean local-world controls, derived from the same defaults persisted by
  * setSingleplayerConfig. New defaults therefore cannot silently miss setup UI.
  */
-export const SINGLEPLAYER_FEATURE_FLAGS: readonly SingleplayerFeatureFlagOption[] = Object.entries(
-  DEFAULT_GAME_STATE_FLAGS
+export const SINGLEPLAYER_FEATURE_FLAGS: readonly SingleplayerFeatureFlagOption[] = (
+  Object.entries(DEFAULT_GAME_STATE_FLAGS) as [string, unknown][]
 )
   .filter((entry): entry is [BooleanDefaultKey, boolean] => typeof entry[1] === "boolean")
   .filter(

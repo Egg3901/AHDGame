@@ -397,10 +397,10 @@ export function GeneralPhaseView({
           <div>
             <h2 className="text-lg font-semibold">
               {localIsEnded
-                ? "Final Election Results"
+                ? "Final election results"
                 : isProjectedGeneral
-                  ? "General Election — Live Projection"
-                  : "General Election — Live Tally"}
+                  ? "General election — Live projection"
+                  : "General election — Live tally"}
             </h2>
             <p className="text-xs text-muted mt-0.5">
               {isProjectedGeneral

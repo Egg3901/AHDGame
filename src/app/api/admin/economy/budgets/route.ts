@@ -11,7 +11,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { countryIdSchema } from "@/lib/api/schemas/country";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { FISCAL_YEAR_START_TURN_IN_YEAR } from "@/lib/budget/fiscalYear";
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
       countryId: searchParams.get("countryId"),
       fiscalYear: searchParams.get("fiscalYear") || undefined,
     });
-    if (!parsed.success) return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
+    if (!parsed.success) return errorResponse(400, "Invalid parameters");
 
     const { countryId, fiscalYear } = parsed.data;
     const budgetId = countryId === COUNTRY_CONFIGS.US.id ? "federal" : countryId;
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
       const snapshot = await db
         .collection<FederalBudgetSnapshot>("federalBudgetSnapshots")
         .findOne({ _id: `${countryId}:FY${fiscalYear}` });
-      if (!snapshot) return NextResponse.json({ error: "Snapshot not found" }, { status: 404 });
+      if (!snapshot) return errorResponse(404, "Snapshot not found");
 
       return NextResponse.json({
         budget: {
@@ -88,7 +88,7 @@ export async function GET(request: Request) {
         .findOne({ countryId }, { projection: { primeRate: 1 } }),
     ]);
 
-    if (!budget) return NextResponse.json({ error: "Budget not found" }, { status: 404 });
+    if (!budget) return errorResponse(404, "Budget not found");
 
     const currentTurn = gameState?.currentTurn ?? 0;
     const turnInYear = ((currentTurn - 1) % TURNS_PER_YEAR) + 1;

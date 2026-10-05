@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import React, { useState, useEffect } from "react";
 import { formatDate } from "@/lib/utils/formatters";
 import { SubTabBar } from "@/components/admin/tabs/SubTabBar";
@@ -30,23 +31,23 @@ interface LogData {
 type LogSubTab = "account" | "election" | "system" | "hourly";
 
 const ACTION_CONFIG: Record<string, { label: string; icon: string; color: string }> = {
-  account_created: { label: "Account Created", icon: "user-plus", color: "text-green-400" },
+  account_created: { label: "Account created", icon: "user-plus", color: "text-green-400" },
   account_deleted_self: {
-    label: "Account Self-Deleted",
+    label: "Account self-deleted",
     icon: "user-minus",
     color: "text-red-400",
   },
-  account_deleted_admin: { label: "Deleted by Admin", icon: "trash", color: "text-red-400" },
+  account_deleted_admin: { label: "Deleted by admin", icon: "trash", color: "text-red-400" },
   account_banned: { label: "Banned", icon: "ban", color: "text-yellow-400" },
   account_unbanned: { label: "Unbanned", icon: "check", color: "text-green-400" },
-  password_reset: { label: "Password Reset", icon: "key", color: "text-orange-400" },
-  official_appointed: { label: "Appointed to Office", icon: "briefcase", color: "text-blue-400" },
-  official_removed: { label: "Removed from Office", icon: "x", color: "text-red-400" },
-  game_reset: { label: "Game Reset", icon: "refresh", color: "text-orange-400" },
-  game_full_reset: { label: "Full Reset", icon: "alert", color: "text-red-400" },
-  demographics_updated: { label: "Demographics Updated", icon: "edit", color: "text-blue-400" },
+  password_reset: { label: "Password reset", icon: "key", color: "text-orange-400" },
+  official_appointed: { label: "Appointed to office", icon: "briefcase", color: "text-blue-400" },
+  official_removed: { label: "Removed from office", icon: "x", color: "text-red-400" },
+  game_reset: { label: "Game reset", icon: "refresh", color: "text-orange-400" },
+  game_full_reset: { label: "Full reset", icon: "alert", color: "text-red-400" },
+  demographics_updated: { label: "Demographics updated", icon: "edit", color: "text-blue-400" },
   demographics_defaults_overwritten: {
-    label: "Demographics Overwritten",
+    label: "Demographics overwritten",
     icon: "alert",
     color: "text-orange-400",
   },
@@ -223,7 +224,7 @@ export function LogsTab() {
       const res = await fetch("/api/admin/logs");
       const data = await res.json();
       if (res.ok) setLogs(data.logs);
-      else setError(data.error || "Failed to fetch logs");
+      else setError(apiErrorText(data, "Failed to fetch logs"));
     } catch {
       setError("Network error");
     } finally {
@@ -238,7 +239,7 @@ export function LogsTab() {
       const res = await fetch("/api/admin/logs/hourly");
       const data = await res.json();
       if (res.ok) setHourlyLogs(data.logs);
-      else setError(data.error || "Failed to fetch hourly logs");
+      else setError(apiErrorText(data, "Failed to fetch hourly logs"));
     } catch {
       setError("Network error");
     } finally {
@@ -265,10 +266,10 @@ export function LogsTab() {
 
       <SubTabBar
         options={[
-          { id: "account" as const, label: "Account Actions" },
+          { id: "account" as const, label: "Account actions" },
           { id: "election" as const, label: "Elections" },
           { id: "system" as const, label: "System" },
-          { id: "hourly" as const, label: "Hourly Logs" },
+          { id: "hourly" as const, label: "Hourly logs" },
         ]}
         active={activeSubTab}
         onChange={setActiveSubTab}
@@ -470,7 +471,7 @@ export function LogsTab() {
 
                         <div className="mb-4">
                           <div className="mb-2 flex flex-wrap items-center gap-2">
-                            <h4 className="text-sm font-semibold">Phase Status</h4>
+                            <h4 className="text-sm font-semibold">Phase status</h4>
                             {phaseStatusEntries.length > 0 && (
                               <>
                                 <span className="rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
@@ -550,7 +551,7 @@ export function LogsTab() {
                           )}
                         </div>
 
-                        <h4 className="mb-2 text-sm font-semibold">Phase Results</h4>
+                        <h4 className="mb-2 text-sm font-semibold">Phase results</h4>
                         <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
                           {Object.entries(log.phases).map(([phase, data]) => {
                             if (!data) return null;

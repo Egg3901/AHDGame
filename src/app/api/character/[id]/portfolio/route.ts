@@ -3,7 +3,7 @@ import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Corporation, Character, Bond } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE, BOND_MATURITY_LABELS } from "@/lib/db/types/bond";
 import type { BondMaturityTurns } from "@/lib/db/types/bond";
@@ -79,7 +79,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
 
     const parsed = parseCharacterId(id);
     if (!parsed) {
-      return NextResponse.json({ error: "Invalid character ID" }, { status: 400 });
+      return errorResponse(400, "Invalid character ID");
     }
 
     const [db, forexEnabled] = await Promise.all([getDb(), isForexEnabled()]);
@@ -99,7 +99,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
     }
 
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const charId = character._id;

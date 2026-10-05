@@ -16,6 +16,7 @@
  * can view this" empty state — the public Regime Stability panel on
  * the country overview is the non-leader fallback.
  */
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { RegimeChangeHistory } from "./RegimeChangeHistory";
 import { governmentSystemLabel } from "@/lib/military/peaceTerm";
@@ -301,7 +302,7 @@ export function RegimeHealthTab({ countryCode }: Props) {
       );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        setErr(body.error ?? `Submission failed (${res.status})`);
+        setErr(apiErrorText(body, `Submission failed (${res.status})`));
       } else {
         await refresh();
       }
@@ -322,7 +323,7 @@ export function RegimeHealthTab({ countryCode }: Props) {
       });
       if (!res.ok) {
         const errBody = (await res.json().catch(() => ({}))) as { error?: string };
-        setErr(errBody.error ?? `Reform action failed (${res.status})`);
+        setErr(apiErrorText(errBody, `Reform action failed (${res.status})`));
         return false;
       }
       await refresh();
@@ -341,7 +342,7 @@ export function RegimeHealthTab({ countryCode }: Props) {
       });
       if (!res.ok) {
         const errBody = (await res.json().catch(() => ({}))) as { error?: string };
-        setErr(errBody.error ?? `Announce failed (${res.status})`);
+        setErr(apiErrorText(errBody, `Announce failed (${res.status})`));
       } else {
         await refresh();
       }
@@ -361,7 +362,7 @@ export function RegimeHealthTab({ countryCode }: Props) {
       });
       if (!res.ok) {
         const errBody = (await res.json().catch(() => ({}))) as { error?: string };
-        setErr(errBody.error ?? `Draft submission failed (${res.status})`);
+        setErr(apiErrorText(errBody, `Draft submission failed (${res.status})`));
       } else {
         await refresh();
       }

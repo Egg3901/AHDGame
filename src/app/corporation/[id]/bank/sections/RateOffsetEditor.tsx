@@ -7,6 +7,7 @@ import type { Corridor, ShowToast } from "../types";
 import { mergeState } from "../lib/helpers";
 import { SmallButton } from "@/components/corporation/dense/DenseKit";
 import { BankPanel } from "../components/BankSection";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 function corridorSentence(
   corridors: { deposit: Corridor; lending: Corridor },
@@ -73,7 +74,7 @@ export function RateOffsetEditor({
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
         // The server rejects out-of-corridor values instead of clamping them.
-        showToast(json.error ?? "Could not update rates", "error");
+        showToast(apiErrorText(json, "Could not update rates"), "error");
         return;
       }
       showToast(

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTradeFlowSnapshot, type TradeSnapshotInput } from "./snapshot";
+import { buildTradeFlowSnapshot, clearAllCommodities, type TradeSnapshotInput } from "./snapshot";
 import { getBaseAffinity } from "./affinity";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { CountryId } from "@/lib/constants/countries";
@@ -39,6 +39,78 @@ const baseInput = (
 });
 
 describe("buildTradeFlowSnapshot", () => {
+  it("forwards route import costs through both snapshot clearing APIs", () => {
+    const balances = byCountryOf([
+      ["US", { steel: [100, 0] }],
+      ["CN", { steel: [0, 100] }],
+    ]);
+    const snapshot = buildTradeFlowSnapshot({
+      ...baseInput(balances, new Map([["steel", { US: 2 }]]), new Map(), ["US", "CN"]),
+      importCostMultiplierFor: () => 1.25,
+    });
+    expect(snapshot.commodities.steel!.flow.US.CN).toBeCloseTo(160);
+    const clearing = clearAllCommodities(
+      ["US", "CN"],
+      balances,
+      () => 1,
+      undefined,
+      () => 1.25
+    );
+    expect(clearing.get("steel")!.flow.US.CN).toBeCloseTo(80);
+    expect(clearing.get("steel")!.perCountry.CN.uncleared).toBeCloseTo(-20);
+  });
+
+  it.each([
+    "freight",
+    "construction_services",
+    "healthcare_services",
+    "real_estate_services",
+    "entertainment_services",
+  ] as const)(
+    "leaves %s surplus and deficits local even with an open foreign lane",
+    (commodity) => {
+      const balances = byCountryOf([
+        ["US", { [commodity]: [100, 0] }],
+        ["CN", { [commodity]: [0, 100] }],
+      ]);
+      let costPolicyCalls = 0;
+      const clearing = clearAllCommodities(
+        ["US", "CN"],
+        balances,
+        () => 1,
+        undefined,
+        () => {
+          costPolicyCalls++;
+          return 1.5;
+        }
+      );
+      expect(costPolicyCalls).toBe(0);
+      const result = clearing.get(commodity)!;
+      expect(result.clearedVolume).toBe(0);
+      expect(result.perCountry.US).toEqual({ exports: 0, imports: 0, net: 0, uncleared: 100 });
+      expect(result.perCountry.CN).toEqual({ exports: 0, imports: 0, net: 0, uncleared: -100 });
+      const snapshot = buildTradeFlowSnapshot({
+        ...baseInput(balances, new Map(), new Map([[commodity, 10]]), ["US", "CN"]),
+        importCostMultiplierFor: () => 1.5,
+      });
+      expect(snapshot.commodities[commodity]).toBeUndefined();
+      expect(snapshot.world.clearedVolume).toBe(0);
+    }
+  );
+
+  it.each(["software", "consulting_services"] as const)(
+    "allows remotely delivered %s to trade",
+    (commodity) => {
+      const balances = byCountryOf([
+        ["US", { [commodity]: [100, 0] }],
+        ["CN", { [commodity]: [0, 100] }],
+      ]);
+      expect(
+        clearAllCommodities(["US", "CN"], balances, () => 1).get(commodity)!.clearedVolume
+      ).toBeCloseTo(100);
+    }
+  );
+
   it("values a single steel flow in ₳ (units × exporter price)", () => {
     // US surplus 100 steel, CN deficit 100 steel; price $800.
     const byCountry = byCountryOf([

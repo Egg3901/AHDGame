@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import type {
@@ -48,12 +48,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     try {
       electionObjectId = new ObjectId(electionId);
     } catch {
-      return NextResponse.json({ error: "Invalid election ID" }, { status: 400 });
+      return errorResponse(400, "Invalid election ID");
     }
 
     const parsed = await parseJsonBody(request, placeCandidateSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { characterId, nppId, party } = parsed.data;
 
@@ -65,18 +65,15 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     if (!election) {
-      return NextResponse.json({ error: "Election not found" }, { status: 404 });
+      return errorResponse(404, "Election not found");
     }
 
     if (election.electionType !== "president") {
-      return NextResponse.json(
-        { error: "Place candidate is only for presidential elections" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Place candidate is only for presidential elections");
     }
 
     if (election.status !== "upcoming" && election.status !== "active") {
-      return NextResponse.json({ error: "Election is not open for entry" }, { status: 400 });
+      return errorResponse(400, "Election is not open for entry");
     }
 
     let characterName: string;
@@ -88,7 +85,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       const charIdObj = new ObjectId(characterId);
       const char = await db.collection<Character>("characters").findOne({ _id: charIdObj });
       if (!char) {
-        return NextResponse.json({ error: "Character not found" }, { status: 404 });
+        return errorResponse(404, "Character not found");
       }
       characterName = char.name;
       charId = charIdObj;
@@ -96,13 +93,13 @@ export async function POST(request: Request, { params }: RouteParams) {
       const nppIdObjParsed = new ObjectId(nppId);
       const npp = await db.collection<NPP>("npps").findOne({ _id: nppIdObjParsed });
       if (!npp) {
-        return NextResponse.json({ error: "NPP not found" }, { status: 404 });
+        return errorResponse(404, "NPP not found");
       }
       characterName = npp.name;
       nppIdObj = nppIdObjParsed;
       isNPP = true;
     } else {
-      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+      return errorResponse(400, "Invalid request");
     }
 
     const existing = await db.collection<ElectionCandidate>("electionCandidates").findOne({
@@ -112,10 +109,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     if (existing) {
-      return NextResponse.json(
-        { error: `${characterName} is already in this race` },
-        { status: 400 }
-      );
+      return errorResponse(400, `${characterName} is already in this race`);
     }
 
     const partyAlreadyHasCandidate = await db
@@ -127,11 +121,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       });
 
     if (partyAlreadyHasCandidate) {
-      return NextResponse.json(
-        {
-          error: `The ${party} party already has a candidate in this race. Remove the existing candidate first to replace them.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `The ${party} party already has a candidate in this race. Remove the existing candidate first to replace them.`
       );
     }
 

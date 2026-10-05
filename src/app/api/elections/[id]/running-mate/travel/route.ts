@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ELECTION_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
 import { getElectoralVoteUnits, getTravelActionCost } from "@/lib/constants/states";
@@ -49,8 +49,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const { stateId } = parsed.data;
     const { id: electionId } = await params;
@@ -61,36 +60,33 @@ export async function POST(request: Request, { params }: RouteParams) {
       .findOne({ _id: "current" }, { projection: { preset: 1 } });
     const validStates = new Set(getElectoralVoteUnits(gameState?.preset).map((u) => u.stateId));
     if (!validStates.has(stateId)) {
-      return NextResponse.json({ error: "Invalid US state code" }, { status: 400 });
+      return errorResponse(400, "Invalid US state code");
     }
 
     const resolved = await resolveElectionRouteParam(db, electionId);
     if (!resolved.ok) {
       return resolved.reason === "invalid_id"
-        ? NextResponse.json({ error: "Invalid election ID" }, { status: 400 })
-        : NextResponse.json({ error: "Election not found" }, { status: 404 });
+        ? errorResponse(400, "Invalid election ID")
+        : errorResponse(404, "Election not found");
     }
 
     const election = resolved.election;
 
     if (election.electionType !== "president") {
-      return NextResponse.json(
-        { error: "Running-mate travel is only available in presidential races" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Running-mate travel is only available in presidential races");
     }
 
     if (election.status !== "active") {
-      return NextResponse.json({ error: "Election is not active" }, { status: 400 });
+      return errorResponse(400, "Election is not active");
     }
 
     // Surrogate travel opens in the general phase only (a running mate is a
     // general-phase concept). Turn-first (drift-immune) with a Date fallback.
     const gameTime = await getGameTime();
     if (!isCampaignUpgradeGeneralPhase(election, gameTime.currentTurn, gameTime)) {
-      return NextResponse.json(
-        { error: "Running-mate surrogate travel opens once the general election begins" },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Running-mate surrogate travel opens once the general election begins"
       );
     }
 
@@ -99,10 +95,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Cross-country defense-in-depth: the running mate's character must be in
     // the same country as the race, even though the ticket link resolves.
     if (!auth.user.isAdmin && !isSameCountry(character, election)) {
-      return NextResponse.json(
-        { error: "You cannot campaign for a ticket in another country" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You cannot campaign for a ticket in another country");
     }
 
     // Resolve the ticket by the running-mate link: the mate has no candidate row
@@ -114,17 +107,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     if (!candidate) {
-      return NextResponse.json(
-        { error: "You are not the running mate on any ticket in this election" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You are not the running mate on any ticket in this election");
     }
 
     if (candidate.campaignSuspended) {
-      return NextResponse.json(
-        { error: "Suspended campaigns cannot change travel focus" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Suspended campaigns cannot change travel focus");
     }
 
     // The ticket's Campaign holds the shared per-day surrogate pool.
@@ -137,7 +124,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       { projection: { _id: 1 } }
     );
     if (!campaign) {
-      return NextResponse.json({ error: "Ticket campaign not found" }, { status: 404 });
+      return errorResponse(404, "Ticket campaign not found");
     }
 
     // Cost scales with the target state's electoral-vote count, mirroring the
@@ -146,7 +133,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const headerKey = request.headers.get("Idempotency-Key");
     if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
-      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+      return errorResponse(400, "Invalid Idempotency-Key header");
     }
     const flowKey = headerKey ?? randomUUID();
     const fingerprint = `${character._id.toHexString()}:${candidate._id.toHexString()}:rm-travel:${stateId}:${actionCost}`;
@@ -170,10 +157,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const recovering = previousReceipt?.status === "in_progress";
 
     if (!recovering && candidate.runningMateTravelState === stateId) {
-      return NextResponse.json(
-        { error: "The running mate is already campaigning in this state" },
-        { status: 400 }
-      );
+      return errorResponse(400, "The running mate is already campaigning in this state");
     }
 
     const freshChar = recovering
@@ -183,9 +167,9 @@ export async function POST(request: Request, { params }: RouteParams) {
           .findOne({ _id: character._id }, { projection: { actions: 1 } });
 
     if (!recovering && (!freshChar || freshChar.actions < actionCost)) {
-      return NextResponse.json(
-        { error: `Not enough actions. Travel to ${stateId} costs ${actionCost} actions.` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Not enough actions. Travel to ${stateId} costs ${actionCost} actions.`
       );
     }
 
@@ -210,10 +194,7 @@ export async function POST(request: Request, { params }: RouteParams) {
             { projection: { _id: 1 } }
           );
     if (!recovering && !poolAvailable) {
-      return NextResponse.json(
-        { error: "No running-mate surrogate actions remaining today." },
-        { status: 409 }
-      );
+      return errorResponse(409, "No running-mate surrogate actions remaining today.");
     }
 
     const characters = db.collection<Character>("characters");
@@ -281,21 +262,18 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     } catch (error) {
       if ((error as Error).message === "SURROGATE_POOL_EMPTY") {
-        return NextResponse.json(
-          { error: "No running-mate surrogate actions remaining today." },
-          { status: 409 }
-        );
+        return errorResponse(409, "No running-mate surrogate actions remaining today.");
       }
       if ((error as Error).message === "INSUFFICIENT_ACTIONS") {
-        return NextResponse.json(
-          { error: `Not enough actions. Travel to ${stateId} costs ${actionCost} actions.` },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Not enough actions. Travel to ${stateId} costs ${actionCost} actions.`
         );
       }
       if ((error as Error).message === "TRAVEL_CONFLICT") {
-        return NextResponse.json(
-          { error: "The ticket's surrogate travel state changed. Please refresh and try again." },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "The ticket's surrogate travel state changed. Please refresh and try again."
         );
       }
       throw error;

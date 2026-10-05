@@ -7,7 +7,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { schemas } from "@/lib/api/validate";
 import { loadIdentityHistory } from "@/lib/identityHistory/loadHistory";
 
@@ -42,7 +42,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { userId: userIdParam } = await params;
     const parsedId = schemas.objectId.safeParse(userIdParam);
     if (!parsedId.success) {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+      return errorResponse(400, "Invalid user ID");
     }
 
     const { searchParams } = new URL(request.url);
@@ -52,7 +52,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       context: searchParams.get("context"),
     });
     if (!parsedQuery.success) {
-      return NextResponse.json({ error: "Invalid track" }, { status: 400 });
+      return errorResponse(400, "Invalid track");
     }
 
     const db = await getDb();
