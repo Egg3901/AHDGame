@@ -197,7 +197,8 @@ describe("bank sovereign claims", () => {
     ).rejects.toThrow("crash");
     expect(vault(memory)).toBe(15);
     expect(
-      memory.collection("corporations").docs[0].bankCharter?.sovereignCouponIncomePaidLifetime
+      (memory.collection("corporations").docs[0].bankCharter as BankCharter | undefined)
+        ?.sovereignCouponIncomePaidLifetime
     ).toBe(10);
 
     await memory
@@ -356,19 +357,22 @@ describe("bank sovereign claims", () => {
     expect(budget(memory).treasuryBalance).toBe(90);
     expect(vault(memory)).toBe(5);
     expect(
-      memory.collection("corporations").docs[0].bankCharter?.sovereignCouponIncomePaidLifetime
+      (memory.collection("corporations").docs[0].bankCharter as BankCharter | undefined)
+        ?.sovereignCouponIncomePaidLifetime
     ).toBeUndefined();
 
     await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
     expect(budget(memory).treasuryBalance).toBe(90);
     expect(vault(memory)).toBe(15);
     expect(
-      memory.collection("corporations").docs[0].bankCharter?.sovereignCouponIncomePaidLifetime
+      (memory.collection("corporations").docs[0].bankCharter as BankCharter | undefined)
+        ?.sovereignCouponIncomePaidLifetime
     ).toBe(10);
     expect(budget(memory).bankSovereignClaims).toEqual([]);
     await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 14);
     expect(
-      memory.collection("corporations").docs[0].bankCharter?.sovereignCouponIncomePaidLifetime
+      (memory.collection("corporations").docs[0].bankCharter as BankCharter | undefined)
+        ?.sovereignCouponIncomePaidLifetime
     ).toBe(10);
   });
 

@@ -520,43 +520,44 @@ describe("processBankingTurn", () => {
       const patch = update as { $set?: Record<string, unknown> };
       if (patch.$set?.["bankCharter.lastBankingTurn"] === TURN) {
         publicationFilters.push(selector);
-        liveCorp.bankCharter!.sovereignCouponIncomePaidLifetime = 20;
-        liveCorp.bankCharter!.treasuryRealizedGainPaidLifetime = 6;
+        const charter = liveCorp.bankCharter!;
+        charter.sovereignCouponIncomePaidLifetime = 20;
+        charter.treasuryRealizedGainPaidLifetime = 6;
         const observedIncomeTurn = selector["bankCharter.lastBankingIncomeTurn"];
         const observedCoupon = selector["bankCharter.lastBankingSovereignCouponIncome"];
         const observedGain = selector["bankCharter.lastBankingTreasuryRealizedGain"];
         const observedCouponPaid = selector["bankCharter.sovereignCouponIncomePaidLifetime"];
         const observedGainPaid = selector["bankCharter.treasuryRealizedGainPaidLifetime"];
         const incomeTurnMatches =
-          typeof observedIncomeTurn === "object"
+          observedIncomeTurn !== null && typeof observedIncomeTurn === "object"
             ? "$exists" in observedIncomeTurn &&
               observedIncomeTurn.$exists === false &&
-              liveCorp.bankCharter.lastBankingIncomeTurn === undefined
-            : observedIncomeTurn === liveCorp.bankCharter.lastBankingIncomeTurn;
+              charter.lastBankingIncomeTurn === undefined
+            : observedIncomeTurn === charter.lastBankingIncomeTurn;
         const couponMatches =
-          typeof observedCoupon === "object"
+          observedCoupon !== null && typeof observedCoupon === "object"
             ? "$exists" in observedCoupon &&
               observedCoupon.$exists === false &&
-              liveCorp.bankCharter.lastBankingSovereignCouponIncome === undefined
-            : observedCoupon === liveCorp.bankCharter.lastBankingSovereignCouponIncome;
+              charter.lastBankingSovereignCouponIncome === undefined
+            : observedCoupon === charter.lastBankingSovereignCouponIncome;
         const gainMatches =
-          typeof observedGain === "object"
+          observedGain !== null && typeof observedGain === "object"
             ? "$exists" in observedGain &&
               observedGain.$exists === false &&
-              liveCorp.bankCharter.lastBankingTreasuryRealizedGain === undefined
-            : observedGain === liveCorp.bankCharter.lastBankingTreasuryRealizedGain;
+              charter.lastBankingTreasuryRealizedGain === undefined
+            : observedGain === charter.lastBankingTreasuryRealizedGain;
         const couponPaidMatches =
-          typeof observedCouponPaid === "object"
+          observedCouponPaid !== null && typeof observedCouponPaid === "object"
             ? "$exists" in observedCouponPaid &&
               observedCouponPaid.$exists === false &&
-              liveCorp.bankCharter.sovereignCouponIncomePaidLifetime === undefined
-            : observedCouponPaid === liveCorp.bankCharter.sovereignCouponIncomePaidLifetime;
+              charter.sovereignCouponIncomePaidLifetime === undefined
+            : observedCouponPaid === charter.sovereignCouponIncomePaidLifetime;
         const gainPaidMatches =
-          typeof observedGainPaid === "object"
+          observedGainPaid !== null && typeof observedGainPaid === "object"
             ? "$exists" in observedGainPaid &&
               observedGainPaid.$exists === false &&
-              liveCorp.bankCharter.treasuryRealizedGainPaidLifetime === undefined
-            : observedGainPaid === liveCorp.bankCharter.treasuryRealizedGainPaidLifetime;
+              charter.treasuryRealizedGainPaidLifetime === undefined
+            : observedGainPaid === charter.treasuryRealizedGainPaidLifetime;
         if (
           !incomeTurnMatches ||
           !couponMatches ||

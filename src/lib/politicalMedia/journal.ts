@@ -244,9 +244,9 @@ function validateSettlementPlan(
         (plan.fallbackSpend.balancePath !== "treasuryCashLocal" &&
           plan.fallbackSpend.balancePath !== "treasuryBalance") ||
         Math.abs(
-          plan.fallbackSpend.amountLocal -
-            fallbackAnchor * plan.fallbackSpend.localPerAnchor
-        ) > epsilon * Math.max(1, plan.fallbackSpend.amountLocal)))
+          plan.fallbackSpend.amountLocal - fallbackAnchor * plan.fallbackSpend.localPerAnchor
+        ) >
+          epsilon * Math.max(1, plan.fallbackSpend.amountLocal)))
   )
     throw new Error(`Political media order ${identity.orderId} has an invalid fallback receipt.`);
   for (const seller of plan.sellers) {
@@ -645,7 +645,8 @@ export async function settlePoliticalMediaOrder(
     });
     const fallbackReceipt = await finishOrResumeMove(db, fallbackKey, fallbackAttempt);
     results.push(fallbackReceipt);
-    if (fallbackReceipt.status !== "applied" && fallbackReceipt.status !== "replayed") return results;
+    if (fallbackReceipt.status !== "applied" && fallbackReceipt.status !== "replayed")
+      return results;
   }
 
   const payer = saved.identity.payer;

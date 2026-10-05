@@ -1,4 +1,5 @@
 ---
+date: 2026-10-04
 title: Restore economy startup guards after a fresh reset
 badges: [patch]
 areas: [backend]
