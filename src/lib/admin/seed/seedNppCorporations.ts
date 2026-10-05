@@ -1,41 +1,23 @@
 /**
- * Seed-time NPP market corporations.
- *
- * A fresh world previously opened with ZERO NPP-run per-sector corporations:
- * `bootstrapGameWorld` seeds state-owned national corps (budget seeders) and
- * the unowned-sector market pool, but never spawned the NPP-run competitors.
- * They only appeared if an operator manually POSTed
- * `/api/admin/corporations/spawn-npp-all`, or organically once NPCs founded
- * their own during turns. That left the exchange and every sector market bare
- * at switch-on.
- *
- * This runs as a bootstrap step and derives WHO gets corps and HOW MANY from
- * the same source of truth the rest of the seed uses — the per-preset access
- * tier (`getPresetEnablementTier`):
- *
- *   • player-enabled country  → 1 NPP corp per sector (the two-major
- *     democracies: US, UK, …). One competitor per sector.
- *   • econ-preview country    → 2 NPP corps per sector (the NPP-run market
- *     democracies: DE, JP, IE, BR, NG, FR, IT, …). Two competitors per sector
- *     so the market opens contested rather than monopolised.
- *   • hidden / coming-soon    → 0.
- *
- * On top of the tier, two hard gates:
- *   • Planned economies (RU, CN-1953, DD, the Eastern bloc) are excluded — the
- *     state owns the commanding heights and its SOEs come from the budget
- *     seeders, not a market-corp spawn. Detected via the marketization dial
- *     (`scheduledMarketizationLevel < DUAL_TRACK_CEILING`), so China correctly
- *     spawns corps in market-era presets but not in 1953.
- *   • Countries with no configured capital region (`NPP_CAPITAL_STATES[c]`
- *     blank — latent/secession regions) are skipped; there is nowhere to HQ.
- *
- * Idempotent: skips any country that already has NPP corps, so a re-run or the
- * manual admin route is safe.
+ * Seeded competitors fill player and economy-preview markets without duplicates.
+ * seedNppCorporations follows preset access, excludes planned economies, and
+ * consumes available market capacity. Player miners use supported deposits.
  */
 
 import type { Db } from "mongodb";
+import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
+import { chooseSeedExtractionSite } from "@/lib/extraction/rules/seedPlacement";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import type { Corporation } from "@/lib/db/types";
+import {
+  CORPORATION_TYPES,
+  type CorporationType,
+  type ManufacturingIndustryModel,
+  type MediaDiscriminator,
+} from "@/lib/constants/corporations";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
+import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import {
   getPresetEnablementCountries,
   getPresetEnablementTier,
@@ -135,7 +117,7 @@ export interface SeedNppCorporationsResult {
 }
 
 /**
- * Spawn the seed NPP corporations for a preset. Idempotent per country.
+ * Fill missing NPP competitors per market without duplicating completed markets.
  */
 export async function seedNppCorporations(
   db: Db,
@@ -147,42 +129,93 @@ export async function seedNppCorporations(
   const plan = nppCorpSpawnPlan(preset, startingYear);
   const byCountry: Record<string, number> = {};
   let totalSpawned = 0;
+  const config =
+    preset === "1991-default"
+      ? await db
+          .collection<GameConfig>("gameConfig")
+          .findOne(
+            { _id: "default" },
+            { projection: { fresh1991VehicleModelSeed: 1, fresh1991MediaTaxonomySeed: 1 } }
+          )
+      : null;
+  vehicleModelSeed ||= config?.fresh1991VehicleModelSeed?.schema === "manufacturing-vehicles-v1";
+
+  const sectorMarkets: Array<{
+    type: CorporationType;
+    industryModel: ManufacturingIndustryModel | null;
+    mediaDiscriminator?: MediaDiscriminator | null;
+  }> = vehicleModelSeed
+    ? [
+        ...CORPORATION_TYPES.filter((type) => type !== "automobiles").map((type) => ({
+          type,
+          industryModel: null,
+        })),
+        { type: "manufacturing" as const, industryModel: "vehicles" as const },
+      ]
+    : CORPORATION_TYPES.map((type) => ({ type, industryModel: null }));
+  if (config?.fresh1991MediaTaxonomySeed?.status === "complete") {
+    for (const market of sectorMarkets) {
+      if (market.type === "entertainment") {
+        market.type = "media";
+        market.mediaDiscriminator = "entertainment";
+      }
+    }
+  }
 
   for (const { countryId, perSectorCount } of plan) {
+    const extractionSite =
+      preset === "1991-default" && ["US", "UK", "JP"].includes(countryId)
+        ? chooseSeedExtractionSite(
+            await db
+              .collection<StateResourceCapacity>("stateResourceCapacity")
+              .find({ countryId })
+              .toArray()
+          )
+        : null;
     const existing = await db
-      .collection("corporations")
-      .countDocuments({ ceoType: "npp", countryId });
-    if (existing > 0) {
-      log(`[seedNppCorporations] ${countryId} already has ${existing} NPP corps — skipping`);
-      continue;
-    }
-
-    try {
-      const sectorMarkets = vehicleModelSeed
-        ? [
-            ...CORPORATION_TYPES.filter((type) => type !== "automobiles").map((type) => ({
-              type,
-            })),
-            { type: "manufacturing" as const, industryModel: "vehicles" as const },
-          ]
-        : undefined;
+      .collection<Corporation>("corporations")
+      .find({ ceoType: "npp", countryId })
+      .project<Pick<Corporation, "type" | "industryModel" | "mediaDiscriminator">>({
+        type: 1,
+        industryModel: 1,
+        mediaDiscriminator: 1,
+      })
+      .toArray();
+    let countrySpawned = 0;
+    for (const market of sectorMarkets) {
+      const present = existing.filter(
+        (corp) =>
+          getOperatingSectorType(corp.type, null, corp.mediaDiscriminator) ===
+            getOperatingSectorType(market.type, null, market.mediaDiscriminator) &&
+          (corp.industryModel ?? null) === market.industryModel
+      ).length;
+      const missing = Math.max(0, perSectorCount - present);
+      if (missing === 0) continue;
       const spawned = await batchSpawnNppCorporations(db, countryId, {
-        perSectorCount,
-        ...(sectorMarkets ? { sectorMarkets } : {}),
+        perSectorCount: missing,
+        sectorMarkets: [market],
+        limitToUnownedPool: true,
+        ...(market.type === "extraction" && extractionSite
+          ? {
+              headquartersState: extractionSite.stateId,
+              initialStrategyId: extractionSite.strategyId,
+              maximumStartingRevenue:
+                (extractionSite.supportedDailyRevenue / getEraUnitScale(preset)) * 0.25,
+            }
+          : {}),
       });
-      byCountry[countryId] = spawned.length;
-      totalSpawned += spawned.length;
-      log(
-        `[seedNppCorporations] ${countryId}: spawned ${spawned.length} NPP corps ` +
-          `(${perSectorCount}/sector × ${sectorMarkets?.length ?? CORPORATION_TYPES.length} markets)`
-      );
-    } catch (err) {
-      log(
-        `[seedNppCorporations] ${countryId} failed: ${
-          err instanceof Error ? err.message : String(err)
-        }`
-      );
+      if (spawned.length !== missing) {
+        throw new Error(
+          `NPP seed incomplete: ${countryId}/${market.type}/${market.industryModel ?? "standard"} expected ${missing} competitors, created ${spawned.length}`
+        );
+      }
+      countrySpawned += spawned.length;
     }
+    byCountry[countryId] = countrySpawned;
+    totalSpawned += countrySpawned;
+    log(
+      `[seedNppCorporations] ${countryId}: completed ${sectorMarkets.length} markets, spawned ${countrySpawned} competitors`
+    );
   }
 
   log(

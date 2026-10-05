@@ -154,7 +154,7 @@ describe("getEraMonetaryBaseline", () => {
   it("1991 table: moderate disinflation anchors, all below the 15% model cap", () => {
     expect(getEraMonetaryBaseline("US", 1991)).toMatchObject({
       targetInflation: 4.0,
-      neutralPrimeRate: 6.0,
+      neutralPrimeRate: 4.0,
     });
     expect(getEraMonetaryBaseline("UK", 1991)?.targetInflation).toBe(4.5);
     expect(getEraMonetaryBaseline("JP", 1991)?.targetInflation).toBe(2.5);

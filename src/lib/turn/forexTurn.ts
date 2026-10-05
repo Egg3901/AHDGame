@@ -1,4 +1,5 @@
 import { linkedEuroRates } from "@/lib/currency/euro/rules";
+import { getPresetMonetaryScope } from "@/lib/monetaryPolicy/presetMonetaryScope";
 /**
  * Forex Turn Phase — updates exchange rates for all active currencies.
  *
@@ -20,12 +21,10 @@ import { FOREX_AND_MACRO_CHART_HISTORY_TURNS } from "@/lib/constants/turnTime";
 import type { Character } from "@/lib/db/types/character";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
-  FOREX_ACTIVE_COUNTRIES,
   INITIAL_RATES,
   getCountryIdForCurrency,
   getInitialRates,
   getSeedCurrencyCode,
-  COUNTRY_CURRENCY_MAP,
   INTERVENTION_FAILURE_INFAMY,
   INTERVENTION_HISTORY_MAX,
   FOREX_ACTIVE_CURRENCIES,
@@ -142,6 +141,7 @@ export async function processForexTurn(
   // Resolve the era-selected initial-rate table ONCE per turn (not per country)
   // — the same lookup `seedExchangeRates` used at world creation.
   const eraInitialRates = getInitialRates(preset ?? DEFAULT_SEED_PRESET);
+  const activeCountries = getPresetMonetaryScope(preset ?? DEFAULT_SEED_PRESET).forexCountries;
 
   const euroUnion = await reconcileEuroMonetaryUnion(db, currentTurn);
 
@@ -162,7 +162,7 @@ export async function processForexTurn(
   // Pre-fetch all existing exchange rates in one query
   const existingRateDocs = await db
     .collection<ExchangeRate>("exchangeRates")
-    .find({ _id: { $in: FOREX_ACTIVE_COUNTRIES } })
+    .find({ _id: { $in: activeCountries } })
     .toArray();
   const rateMap = new Map(existingRateDocs.map((r) => [r._id, r]));
   const ratesByCurrency: Partial<Record<CurrencyCode, number>> = Object.fromEntries(
@@ -197,7 +197,7 @@ export async function processForexTurn(
   const deDocRate = deDoc && Number.isFinite(deDoc.rate) && deDoc.rate > 0 ? deDoc.rate : null;
 
   // Update rates for each active country
-  for (const countryId of FOREX_ACTIVE_COUNTRIES) {
+  for (const countryId of activeCountries) {
     // Member units follow the common quote in a second pass. They cannot drift
     // independently or spend national reserves defending an obsolete FX band.
     if (euroUnion?.members[countryId] && countryId !== euroUnion.anchorCountryId) continue;
@@ -211,7 +211,7 @@ export async function processForexTurn(
       (getSeedCurrencyCode(countryId, presetForSeed) === "EUR" ||
         existingRateDoc?.currencyCode === "EUR");
 
-    const currencyCode = isEuroFollower ? "EUR" : COUNTRY_CURRENCY_MAP[countryId];
+    const currencyCode = isEuroFollower ? "EUR" : getSeedCurrencyCode(countryId, presetForSeed);
     // Era-aware anchor: pre-modern presets use their own rate table; modern
     // presets resolve to INITIAL_RATES (kept as a defensive fallback for any
     // country missing from an era table so its currency never loses its anchor).

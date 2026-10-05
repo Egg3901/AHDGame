@@ -321,6 +321,8 @@ export async function calculateFederalSpending(
     }
   }
 
+  // An enacted grant law already books the transfer, including in legacy eras.
+  // Only use the distributed pool when no such law exists.
   // Config-derived central transfer pools (CN/DE/UK) are credited to regions in
   // the regional-budget processors but — unlike JP's isGrant funding law — have
   // no enacted national law to book them as spending. Sum the actual distributed
@@ -330,7 +332,7 @@ export async function calculateFederalSpending(
   // from prior region-id schemes — e.g. CN's pre-rename NORTHEAST/EAST/… docs —
   // are excluded and the pool is not double-counted. Mirrors federalBudgetDetail.
   const transferGrantField = CONFIG_DERIVED_TRANSFER_FIELD[budgetCountryId];
-  if (transferGrantField) {
+  if (transferGrantField && !items.some(({ law }) => law.isGrant)) {
     const stateIds = (
       await db
         .collection<State>("states")

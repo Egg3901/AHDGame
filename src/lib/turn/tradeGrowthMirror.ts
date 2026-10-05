@@ -19,7 +19,8 @@ import type { Db } from "mongodb";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
-import { FOREX_ACTIVE_COUNTRIES } from "@/lib/constants/currencies";
+import { getPresetMonetaryScope } from "@/lib/monetaryPolicy/presetMonetaryScope";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 
 export interface TradeGrowthMirrorResult {
@@ -33,9 +34,12 @@ export interface TradeGrowthMirrorResult {
  * If no budget is found for a country, tradeGrowth defaults to 0 (neutral).
  */
 export async function mirrorTradeGrowth(db: Db): Promise<TradeGrowthMirrorResult> {
+  const countries = getPresetMonetaryScope(
+    await getGameStatePresetOrDefault(db)
+  ).centralBankCountries;
   // Build budget IDs for all forex-active countries
   const budgetIdSet = new Set<string>();
-  for (const countryId of FOREX_ACTIVE_COUNTRIES) {
+  for (const countryId of countries) {
     const config = COUNTRY_CONFIGS[countryId];
     if (!config) continue;
     const budgetId = getNationalBudgetId(countryId);
@@ -62,7 +66,7 @@ export async function mirrorTradeGrowth(db: Db): Promise<TradeGrowthMirrorResult
     };
   }> = [];
 
-  for (const countryId of FOREX_ACTIVE_COUNTRIES) {
+  for (const countryId of countries) {
     const config = COUNTRY_CONFIGS[countryId];
     if (!config) continue;
 

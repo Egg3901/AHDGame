@@ -2,6 +2,7 @@ import type { CountryEconomy } from "../contract";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
+import { NATIVE_NOMINAL_GDP_1991 } from "@/lib/seeds/reference/nominalGdp1991";
 
 /**
  * IE's money.
@@ -60,9 +61,10 @@ const repEcon = {
   population: 5100000,
 };
 const costScaleAnchors = {
-  gdpLow: 24000000000,
+  gdpLow: NATIVE_NOMINAL_GDP_1991.IE,
   popLow: 3525000,
-  scaleLow: 0.2,
+  // Preserve the legacy per-capita programs' modeled GDP share after rebasing.
+  scaleLow: (0.2 * NATIVE_NOMINAL_GDP_1991.IE) / 24_000_000_000,
   gdpHigh: 500000000000,
   popHigh: 5100000,
   scaleHigh: 1,

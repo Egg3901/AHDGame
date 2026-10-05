@@ -1,13 +1,16 @@
+/**
+ * Savings earn interest from their currency's central bank and settle quarterly.
+ * processSavingsInterestTurn also refreshes national savings totals for the
+ * active scenario's banks.
+ */
+import { getPresetMonetaryScope } from "@/lib/monetaryPolicy/presetMonetaryScope";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import type { Db } from "mongodb";
 import type { Character, CentralBank, SavingsLedgerEntry } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { CountryId } from "@/lib/constants/countries";
-import {
-  getCountryIdForCurrency,
-  FOREX_ACTIVE_COUNTRIES,
-  FOREX_ACTIVE_CURRENCIES,
-} from "@/lib/constants/currencies";
+import { getCountryIdForCurrency, FOREX_ACTIVE_CURRENCIES } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import {
@@ -217,17 +220,19 @@ export async function processSavingsInterestTurn(
     // after the last account in that currency is closed.
     // Use getBankId so shared-bank countries (e.g. IE → ECB) write to the correct doc.
     await db.collection<CentralBank>("centralBanks").bulkWrite(
-      FOREX_ACTIVE_COUNTRIES.map((cid) => ({
-        updateOne: {
-          filter: { _id: getBankId(cid) },
-          update: {
-            $set: {
-              nationalSavingsBalance:
-                Math.round((nationalSavingsBalance.get(cid) ?? 0) * 100) / 100,
+      getPresetMonetaryScope(await getGameStatePresetOrDefault(db)).centralBankCountries.map(
+        (cid) => ({
+          updateOne: {
+            filter: { _id: getBankId(cid) },
+            update: {
+              $set: {
+                nationalSavingsBalance:
+                  Math.round((nationalSavingsBalance.get(cid) ?? 0) * 100) / 100,
+              },
             },
           },
-        },
-      }))
+        })
+      )
     );
 
     // Phase 2 (quarterly): flush pending → savings balance, log ledger transaction

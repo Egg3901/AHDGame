@@ -245,6 +245,15 @@ describe("inMemoryDb — driver surface used by bootstrapGameWorld", () => {
     await expect(db.collection("crises").indexes()).resolves.toEqual([]);
   });
 
+  it("drops both reference documents and their secondary indexes", async () => {
+    const db = createInMemoryDb();
+    const collection = db.seed("resources", [{ _id: "CA", oil: 100 }]);
+    await collection.createIndex({ oil: 1 }, { name: "resource_ceiling" });
+    await collection.drop();
+    expect(await collection.countDocuments()).toBe(0);
+    expect(await collection.indexes()).toEqual([]);
+  });
+
   it("reports Mongo IndexNotFound metadata when a migration drops an absent index", async () => {
     const db = createInMemoryDb();
     await expect(db.collection("sectors").dropIndex("legacy_identity")).rejects.toMatchObject({

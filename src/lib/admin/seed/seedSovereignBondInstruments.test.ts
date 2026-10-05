@@ -16,6 +16,49 @@ function makeCursor<T>(rows: T[]) {
 }
 
 describe("seedSovereignBondInstruments", () => {
+  it("instruments historic debt at its average coupon independently of the opening policy rate", async () => {
+    const db = createMockDb();
+    const inserted: Array<{ couponRate: number; totalIssued: number; marketPrice: number }> = [];
+    db.collectionMocks.federalBudget = db.collection("federalBudget");
+    db.collectionMocks.federalBudget.find.mockReturnValue(
+      makeCursor([
+        {
+          _id: "UK",
+          countryId: "UK",
+          creditRating: "AAA",
+          fiscalYear: 1991,
+          debt: { principal: 194_118_000_000, interestRate: 0.105 },
+        },
+      ])
+    );
+    db.collectionMocks.centralBanks = db.collection("centralBanks");
+    db.collectionMocks.centralBanks.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks.corporations = db.collection("corporations");
+    db.collectionMocks.corporations.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks.corporations.findOne.mockResolvedValue(null);
+    db.collectionMocks.bonds = db.collection("bonds");
+    db.collectionMocks.bonds.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks.bonds.insertMany.mockImplementation(async (docs: typeof inserted) => {
+      inserted.push(...docs);
+      return { insertedCount: docs.length };
+    });
+    await seedSovereignBondInstruments(db as unknown as Db, () => {});
+    expect(inserted.length).toBeGreaterThan(3);
+    expect(inserted.every((bond) => bond.couponRate === 10.5)).toBe(true);
+    expect(
+      inserted.every((bond) => Number.isFinite(bond.marketPrice) && bond.marketPrice > 1)
+    ).toBe(true);
+    const covered = inserted.reduce((sum, bond) => sum + bond.totalIssued, 0);
+    expect(covered).toBe(194_118_000_000);
+    const annualCoupon = inserted.reduce(
+      (sum, bond) => sum + (bond.totalIssued * bond.couponRate) / 100,
+      0
+    );
+    expect(annualCoupon + (194_118_000_000 - covered) * 0.105).toBeCloseTo(
+      194_118_000_000 * 0.105,
+      0
+    );
+  });
   it("materializes US/UK scalar debt into staggered sovereign bond tranches without mutating the budget", async () => {
     const db = createMockDb();
     const inserted: unknown[] = [];
@@ -190,10 +233,14 @@ describe("seedSovereignBondInstruments", () => {
 
     await seedSovereignBondInstruments(db as unknown as Db, () => {}, 0, new Date());
 
-    expect(inserted.map((bond) => [bond.maturityTurns, bond.couponRate])).toEqual([
+    for (const [tenor, coupon] of [
       [48, 8],
       [96, 8.25],
       [240, 8.75],
-    ]);
+    ]) {
+      const cohorts = inserted.filter((bond) => bond.maturityTurns === tenor);
+      expect(cohorts.length).toBeGreaterThan(0);
+      expect(cohorts.every((bond) => bond.couponRate === coupon)).toBe(true);
+    }
   });
 });
