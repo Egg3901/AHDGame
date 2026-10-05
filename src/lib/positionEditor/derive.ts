@@ -301,8 +301,14 @@ export function computeDerivedCompositionGeneric(
   // UK 1991's audited preview retains the two-decimal calculateStateLean mean.
   // Other models keep their calibrated one-decimal preview until audited.
   const scale = 10 ** (cfg.regionLeanDecimals ?? 1);
-  const stateEconomicLean = weightSum > 0 ? Math.round((econSum / weightSum) * scale) / scale : 0;
-  const stateSocialLean = weightSum > 0 ? Math.round((socialSum / weightSum) * scale) / scale : 0;
+  const stateEconomicLean =
+    weightSum > 0
+      ? Math.max(-5, Math.min(5, Math.round((econSum / weightSum) * scale) / scale))
+      : 0;
+  const stateSocialLean =
+    weightSum > 0
+      ? Math.max(-5, Math.min(5, Math.round((socialSum / weightSum) * scale) / scale))
+      : 0;
 
   return {
     archetypes,

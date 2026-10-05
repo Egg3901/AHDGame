@@ -29,7 +29,7 @@ export type SimActorMode = "pure-npp" | "synthetic";
 export type ActorGateStatus = "covered" | "partial" | "unreachable";
 
 /** Registry version stamped into every manifest; bump on entry changes. */
-export const ACTOR_COVERAGE_REGISTRY_VERSION = 4;
+export const ACTOR_COVERAGE_REGISTRY_VERSION = 3;
 
 /** Exact explicit result for the presidential-nomination gate in pure NPP mode. */
 export const UNCOVERED_PRESIDENTIAL_NOMINATION = "uncovered: presidential nomination";

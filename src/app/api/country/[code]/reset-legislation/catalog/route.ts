@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { errorResponse, handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { GameState } from "@/lib/db/types/gameState";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
