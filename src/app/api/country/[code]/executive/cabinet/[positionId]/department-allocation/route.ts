@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
@@ -35,11 +35,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId] || !["US", "UK", "JP"].includes(countryId)) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -53,9 +53,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         auth.user.character &&
         member.characterId.toString() === auth.user.character._id.toString();
       if (!isHolder && !auth.user.isAdmin) {
-        return NextResponse.json(
-          { error: "Only the cabinet holder or admin can set department allocations" },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "Only the cabinet holder or admin can set department allocations"
         );
       }
       const result = await setResetDepartmentAllocations({
@@ -73,7 +73,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       });
     }
     if (gameState?.departmentFinanceEnabled !== true) {
-      return NextResponse.json({ error: "Department finance is not enabled" }, { status: 404 });
+      return errorResponse(404, "Department finance is not enabled");
     }
     const definition = getDepartmentDefinitions(
       countryId as DepartmentCountryId,
@@ -85,10 +85,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         candidate.controllingPositionIds.includes(positionId)
     );
     if (!definition?.accountPolicyId) {
-      return NextResponse.json(
-        { error: "This office does not control that department account" },
-        { status: 403 }
-      );
+      return errorResponse(403, "This office does not control that department account");
     }
 
     const member = await getCabinetMembersCollection(db).findOne({ countryId, positionId });
@@ -97,10 +94,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the cabinet holder or admin can set department allocations" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the cabinet holder or admin can set department allocations");
     }
 
     const accountPath = `departmentAccounts.${definition.id}`;
@@ -109,34 +103,25 @@ export async function POST(request: Request, { params }: RouteParams) {
       .findOne({ countryId }, { projection: { [accountPath]: 1 } });
     const account = budget?.departmentAccounts?.[definition.id];
     if (!account) {
-      return NextResponse.json(
-        { error: "This department has no settled account yet" },
-        { status: 404 }
-      );
+      return errorResponse(404, "This department has no settled account yet");
     }
     const activeProgramIds = Object.values(account.programs)
       .filter((program) => program.status === "authorized" || program.status === "operating")
       .map((program) => program.programId);
     if (activeProgramIds.length === 0) {
-      return NextResponse.json(
-        { error: "This department has no active programs" },
-        { status: 400 }
-      );
+      return errorResponse(400, "This department has no active programs");
     }
     const validation = validateDepartmentProgramAllocations(
       activeProgramIds,
       parsed.data.programAllocationPercents
     );
     if (!validation.ok) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+      return errorResponse(400, validation.error);
     }
 
     const currentTurn = gameState.currentTurn ?? 1;
     if ((account.lastAllocationChangedTurn ?? 0) >= currentTurn) {
-      return NextResponse.json(
-        { error: "Department allocations can only be updated once per turn" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Department allocations can only be updated once per turn");
     }
     const lastChangedPath = `${accountPath}.lastAllocationChangedTurn`;
     const result = await db.collection<FederalBudget>("federalBudget").updateOne(
@@ -159,10 +144,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
     );
     if (result.modifiedCount === 0) {
-      return NextResponse.json(
-        { error: "Department allocations changed. Refresh and try again." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Department allocations changed. Refresh and try again.");
     }
     return NextResponse.json({ success: true });
   } catch (error) {
