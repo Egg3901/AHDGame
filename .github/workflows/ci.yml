@@ -55,7 +55,7 @@ jobs:
         env:
           # The clean program can exceed 6.5 GiB during final type serialization.
           # Keep enough heap headroom for the hosted runner to finish reliably.
-          NODE_OPTIONS: --max-old-space-size=8192
+          NODE_OPTIONS: --max-old-space-size=12288
 
   # Split out of `verify` and sharded: the suite is ~3,500 files and its cost is
   # dominated by per-file module loading, so wall time tracks file count almost

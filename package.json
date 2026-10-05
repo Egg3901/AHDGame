@@ -60,7 +60,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "node --max-old-space-size=8192 ./node_modules/typescript/bin/tsc --noEmit",
+    "typecheck": "node --max-old-space-size=12288 ./node_modules/typescript/bin/tsc --noEmit",
     "knip": "knip",
     "knip:production": "knip --production",
     "verify": "concurrently --kill-others-on-fail -n lint,fmt,tsc,arch -c auto \"npm run lint\" \"npm run format:check\" \"npm run typecheck\" \"npm run architecture:audit\" && npm run test:run",

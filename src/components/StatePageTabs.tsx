@@ -8,6 +8,7 @@ import { POLITICAL_METRIC_COUNTRY_IDS } from "@/lib/politicalMetrics/types";
 import { partiesUrl } from "@/lib/urls";
 import { makeUSPartyFlavor, compareUSParties } from "@/components/region/regionPartiesUSFlavor";
 import { CardSkeleton, Skeleton, StatGridSkeleton } from "@/components/ui";
+import { useWorldFlags } from "@/hooks/useWorldFlags";
 
 // Generic tab-chunk fallback: stat grid + content card silhouette, sized to
 // roughly the shortest loaded tab so the page doesn't collapse then jump.
@@ -33,8 +34,8 @@ const StateMetricsTab = dynamic(
   () => import("@/components/StateMetricsTab").then((m) => ({ default: m.StateMetricsTab })),
   { loading: TabFallback }
 );
-const RegionRegistryTab = dynamic(
-  () => import("./state/RegionRegistryTab").then((m) => ({ default: m.RegionRegistryTab })),
+const RegionMetricsTab = dynamic(
+  () => import("./state/RegionMetricsTab").then((m) => ({ default: m.RegionMetricsTab })),
   { loading: TabFallback }
 );
 const PoliticsTab = dynamic(
@@ -100,9 +101,16 @@ export function StatePageTabs({
   regionParties = [],
   bucketProfile = null,
 }: StatePageTabsProps) {
-  // Only the four board countries have a registry to render. Everywhere else
-  // the Metrics tab is hidden rather than shown erroring.
-  const hasRegistry = (POLITICAL_METRIC_COUNTRY_IDS as readonly string[]).includes(state.countryId);
+  const { loaded, failed, resetSystemVersions, resetV2Countries } = useWorldFlags();
+  const hasV2Registry =
+    loaded &&
+    !failed &&
+    resetSystemVersions.metrics === "v2" &&
+    resetV2Countries.includes(state.countryId);
+  // V1 countries keep the political registry. The three supported v2 countries
+  // expose their reset metric board in the same Metrics tab.
+  const hasRegistry =
+    hasV2Registry || (POLITICAL_METRIC_COUNTRY_IDS as readonly string[]).includes(state.countryId);
 
   const renderContent = (superTab: SuperTabId, subTab: string) => {
     // ── Overview ──
@@ -222,7 +230,7 @@ export function StatePageTabs({
     if (superTab === "metrics") {
       if (!hasRegistry) return null;
       return (
-        <RegionRegistryTab
+        <RegionMetricsTab
           countryId={state.countryId}
           regionId={state._id}
           regionName={state.name}

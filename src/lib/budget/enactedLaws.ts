@@ -3,6 +3,8 @@ import { ObjectId } from "mongodb";
 import type { EnactedLaw } from "@/lib/db/types/budget";
 import type { Bill, LegislationPolicyOption, LegislationType } from "@/lib/db/types/legislation";
 import type { CountryId } from "@/lib/constants/countries";
+import { resolvePolicyOptionJurisdiction } from "@/lib/legislature/jurisdiction";
+import { withAuthoredOptionJurisdiction } from "@/lib/governmentFinance/lawAdministrationCatalog";
 
 const COUNTRY_SCOPE_TO_ID: Record<string, CountryId> = {
   us: "US",
@@ -80,6 +82,11 @@ export async function recordEnactedLaw(
           ),
         }
       : {}),
+    jurisdictionMode: resolvePolicyOptionJurisdiction(
+      legislationType,
+      policyOption ? withAuthoredOptionJurisdiction(legislationType._id, policyOption) : undefined,
+      bill.jurisdictionMode
+    ),
     budgetCategory: legislationType.budgetCategory || legislationType.policyDomain,
     ...(legislationType.isGrant ? { isGrant: true } : {}),
     enactedAt: new Date(),

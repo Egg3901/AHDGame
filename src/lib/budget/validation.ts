@@ -82,8 +82,13 @@ async function calculateBillAnnualCost(
   bill: Pick<Bill, "legislationTypeId" | "effectDirection" | "provisions">,
   context: BudgetCostContext
 ): Promise<number> {
+  const resetLawDelta = (bill.provisions ?? []).reduce(
+    (sum, provision) =>
+      provision.type === "reset_law" ? sum + provision.annualAllocationDeltaSnapshot : sum,
+    0
+  );
   const selections = getBillSelections(bill);
-  if (selections.length === 0) return 0;
+  if (selections.length === 0) return resetLawDelta;
 
   const legislationTypeIds = [
     ...new Set(selections.map((selection) => selection.legislationTypeId)),
@@ -96,20 +101,23 @@ async function calculateBillAnnualCost(
     legislationTypes.map((legislationType) => [legislationType._id, legislationType])
   );
 
-  return selections.reduce((total, selection) => {
-    const legislationType = legislationTypeMap.get(selection.legislationTypeId);
-    if (!legislationType) return total;
+  return (
+    resetLawDelta +
+    selections.reduce((total, selection) => {
+      const legislationType = legislationTypeMap.get(selection.legislationTypeId);
+      if (!legislationType) return total;
 
-    const selectedPolicyOption = getSelectedPolicyOption(legislationType, selection);
-    const formulaCost = calculatePolicyOptionAnnualCost(
-      selectedPolicyOption,
-      context,
-      legislationType._id
-    );
-    const legacyCost = (legislationType.budgetCost || 0) * (context.budgetCapacity / 100);
+      const selectedPolicyOption = getSelectedPolicyOption(legislationType, selection);
+      const formulaCost = calculatePolicyOptionAnnualCost(
+        selectedPolicyOption,
+        context,
+        legislationType._id
+      );
+      const legacyCost = (legislationType.budgetCost || 0) * (context.budgetCapacity / 100);
 
-    return total + (formulaCost ?? legacyCost);
-  }, 0);
+      return total + (formulaCost ?? legacyCost);
+    }, 0)
+  );
 }
 
 export async function validateFederalBudgetImpact(

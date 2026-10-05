@@ -682,7 +682,7 @@ describe("marketing settlement", () => {
     };
     const memory = createInMemoryDb();
     memory.seed("corporations", [{ ...buyer }, { ...seller }]);
-    memory.seed(MEDIA_PRODUCT_PROJECTS, [{ ...title }]);
+    memory.seed(MEDIA_PRODUCT_PROJECTS, [title as unknown as Record<string, unknown>]);
 
     const firstResult = processSectors(
       makeMediaLookups(buyer, 1),
@@ -834,7 +834,10 @@ describe("marketing settlement", () => {
       advertisingSellerDeliveredValueAnchorByCorpId: new Map([[seller._id.toString(), 100]]),
     });
     const memory = createInMemoryDb();
-    memory.seed("corporations", [{ ...buyer }, { ...seller }]);
+    memory.seed("corporations", [
+      buyer as unknown as Record<string, unknown>,
+      seller as unknown as Record<string, unknown>,
+    ]);
     await applyOperatingCashThenDevelopmentCash({
       db: memory as never,
       operations: [],

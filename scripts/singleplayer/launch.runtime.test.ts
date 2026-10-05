@@ -241,6 +241,11 @@ describe("launcher process on a silent server", () => {
         env: {
           ...process.env,
           AHD_LAUNCH_LIBRARY: "",
+          // The occupied test port means the launcher never executes this
+          // binary. Supplying a known local file keeps the process test
+          // hermetic instead of making its setup depend on a cached mongod or
+          // network access to MongoDB's download host.
+          MONGOD_PATH: process.execPath,
           SINGLEPLAYER_SERVER_JS: stub,
           SINGLEPLAYER_READY_TIMEOUT_MS: "1500",
         },
@@ -312,7 +317,12 @@ describe("launcher process shutdown over the control channel", () => {
         "--no-browser",
       ],
       {
-        env: { ...process.env, AHD_LAUNCH_LIBRARY: "", SINGLEPLAYER_SERVER_JS: stub },
+        env: {
+          ...process.env,
+          AHD_LAUNCH_LIBRARY: "",
+          MONGOD_PATH: process.execPath,
+          SINGLEPLAYER_SERVER_JS: stub,
+        },
         stdio: ["pipe", "pipe", "pipe"],
       }
     );

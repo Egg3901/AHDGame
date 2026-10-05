@@ -1,9 +1,14 @@
 import { resolveStartingPartiesMode, type StartingPartiesMode } from "./startingParties";
 import { MongoServerError, ObjectId, type Db } from "mongodb";
+import { randomUUID } from "node:crypto";
 import type { Character, GameState, User } from "@/lib/db/types";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
-import { resolveResetStartDate, type ResetStartDate } from "@/lib/admin/resetStartDate";
+import {
+  isPresetAnchorDate,
+  resolveResetStartDate,
+  type ResetStartDate,
+} from "@/lib/admin/resetStartDate";
 import { seedHistoricalOfficials } from "@/lib/npp/seedHistorical";
 import { retireCharacter } from "@/lib/retireCharacter";
 import { freezeOfficeHistoryIterations } from "@/lib/turn/history/freezeOfficeHistoryIterations";
@@ -19,6 +24,12 @@ import type { CharacterRecap } from "@/lib/recap/types";
 import type { GameIteration } from "@/lib/db/types/gameState";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { isSeasonRecapEnabled } from "@/lib/recap/featureFlag";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import {
+  resetSelectionPreflight,
+  resetSystemSelectionsFrom,
+  type ResetVersionState,
+} from "@/lib/resetVersions/rules";
 
 /**
  * Runtime collections that `resetGameWorld` handles with bespoke logic instead
@@ -162,6 +173,8 @@ interface ResetGameWorldOptions {
   iteration?: import("@/lib/db/types/gameState").GameIteration;
   /** Optional arbitrary game-calendar date within the selected authored era. */
   startDate?: ResetStartDate;
+  /** Frozen before an orchestrated reset seals the outgoing world. */
+  versionSelectionSnapshot?: ResetVersionState | null;
   /**
    * When true, start the world in a live pre-iteration "founding" phase: seed
    * chambers VACANT ("priors" seed mode) and stamp `preIteration.active` so the
@@ -215,6 +228,28 @@ export async function resetGameWorld(
   const seedHistorical = startingParties !== "none" && options.seedHistorical !== false;
   const preIteration = options.preIteration === true;
   const now = new Date();
+  const selectedState =
+    options.versionSelectionSnapshot !== undefined
+      ? options.versionSelectionSnapshot
+      : await db.collection<GameState>("gameState").findOne(
+          { _id: "current" },
+          {
+            projection: {
+              metricsSystemVersion: 1,
+              legislationSystemVersion: 1,
+              cabinetSystemVersion: 1,
+              resetSystemSelections: 1,
+            },
+          }
+        );
+  const selectedVersions = resetSystemSelectionsFrom(selectedState);
+  const preflight = resetSelectionPreflight(
+    selectedState,
+    preset,
+    isPresetAnchorDate(preset, options.startDate),
+    RESET_V2_READY
+  );
+  if (!preflight.allowed) throw new Error(preflight.reason);
 
   // Tagged progress sink — see ResetGameWorldOptions.log for why the prefix is
   // load-bearing rather than cosmetic. Handed to every sub-seeder below; the
@@ -455,6 +490,7 @@ export async function resetGameWorld(
   const { startingYear } = resetDate;
   const gameStateUpdate: Record<string, unknown> = {
     worldEpochId: new ObjectId().toHexString(),
+    resetWorldId: randomUUID(),
     currentTurn: resetDate.currentTurn,
     currentYear: resetDate.currentYear,
     resetStartDate: { year: resetDate.year, week: resetDate.week },
@@ -473,7 +509,15 @@ export async function resetGameWorld(
     // (all on, NPP autonomy at v4), whatever the outgoing world ran with.
     ...DEFAULT_GAME_STATE_FLAGS,
     startingPartiesMode: startingParties,
+    metricsSystemVersion: selectedVersions.metrics,
+    legislationSystemVersion: selectedVersions.legislation,
+    cabinetSystemVersion: selectedVersions.cabinet,
+    resetSystemSelections: selectedVersions,
   };
+  // Law-created seats belong to the outgoing world. A fresh v1 world begins
+  // without them; the historical 1991 Cabinet-v2 opening includes Education.
+  gameStateUpdate.manuallyEnabledSeats =
+    selectedVersions.cabinet === "v2" ? ["secretary_of_education"] : [];
   if (options.iteration) {
     gameStateUpdate.iteration = options.iteration;
     // Maintain the global iteration registry so generated wiki office pages can
@@ -486,7 +530,10 @@ export async function resetGameWorld(
   // Pre-iteration founding phase: pin the calendar (offset 0 → clamp to era
   // start while active) and flag the founding phase. A normal reset clears any
   // stale flag from a prior world so the calendar/schedule behave normally.
-  const gameStateUnset: Record<string, ""> = { ...STALE_PROGRESS_GAME_STATE_UNSET };
+  const gameStateUnset: Record<string, ""> = {
+    ...STALE_PROGRESS_GAME_STATE_UNSET,
+    resetVersionSeeds: "",
+  };
   gameStateUnset.demographicFlowAttempt = "";
   gameStateUpdate.preIterationTurns = 0;
   if (preIteration) {

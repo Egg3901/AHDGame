@@ -452,7 +452,7 @@ describe("PUT /api/character/savings-holder", () => {
       })
     );
     expect(res.status).toBe(400);
-    expect(sortedKeys(await res.json())).toEqual(["error"]);
+    expect(sortedKeys(await res.json())).toEqual(["code", "error", "ref"]);
   });
 });
 

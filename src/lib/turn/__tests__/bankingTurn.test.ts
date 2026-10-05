@@ -475,6 +475,42 @@ describe("processBankingTurn", () => {
     expect(characterState.savings).toBe(savBefore);
   });
 
+  it("does not publish turn aggregates onto a replacement charter", async () => {
+    const originalUpdate = db.collectionMocks.corporations!.updateOne.getMockImplementation();
+    expect(originalUpdate).toBeDefined();
+    let publicationFilter: Record<string, unknown> | undefined;
+    db.collectionMocks.corporations!.updateOne.mockImplementation(async (filter, update) => {
+      const selector = filter as Record<string, unknown>;
+      const patch = update as { $set?: Record<string, unknown> };
+      if (patch.$set?.["bankCharter.lastBankingTurn"] === TURN) {
+        publicationFilter = selector;
+        liveCorp.bankCharter = makeCharter({
+          ...liveCorp.bankCharter,
+          charteredTurn: TURN + 1,
+          currency: "EUR",
+        });
+        const current = liveCorp.bankCharter;
+        const epochMatches =
+          selector["bankCharter.charteredTurn"] === undefined ||
+          selector["bankCharter.charteredTurn"] === current.charteredTurn;
+        const currencyMatches =
+          selector["bankCharter.currency"] === undefined ||
+          selector["bankCharter.currency"] === current.currency;
+        if (!epochMatches || !currencyMatches) return { matchedCount: 0, modifiedCount: 0 };
+      }
+      return originalUpdate!(filter, update);
+    });
+
+    await processBankingTurn(db as unknown as Db, TURN);
+
+    expect(publicationFilter?.["bankCharter.charteredTurn"]).toBe(1);
+    expect(publicationFilter?.["bankCharter.currency"]).toBe("USD");
+    expect(publicationFilter?.countryId).toBe("US");
+    expect(liveCorp.bankCharter?.charteredTurn).toBe(TURN + 1);
+    expect(liveCorp.bankCharter?.currency).toBe("EUR");
+    expect(liveCorp.bankCharter?.lastBankingTurn).toBeUndefined();
+  });
+
   it.each(["current", "legacy"])(
     "recovers %s household fee funding after cash moves but tranche insertion fails",
     async (format) => {

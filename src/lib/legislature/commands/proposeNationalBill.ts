@@ -11,6 +11,7 @@ import { type CountryId } from "@/lib/constants/countries";
 import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
 import {
   checkDuplicateProvisions,
+  checkDuplicateResetLawFamilies,
   checkDuplicateTariffProvisions,
   checkCurrentPolicyLevel,
   NATIONAL_TERMINAL_STATUSES,
@@ -353,7 +354,11 @@ export async function proposeNationalBill(
   }
 
   const enabledCountryIds = new Set(await getEnabledCountryIds());
-  const validation = await validateBillProvisions(db, rawProvisions, category, countryId);
+  const administrationEnabled =
+    gameState?.lawAdministrationEnabled === true && ["US", "UK", "JP"].includes(countryId);
+  const validation = await validateBillProvisions(db, rawProvisions, category, countryId, {
+    enabled: administrationEnabled,
+  });
   if (!validation.ok) {
     return { status: validation.status, body: { error: validation.error } };
   }
@@ -369,6 +374,7 @@ export async function proposeNationalBill(
     economicSystemReformProvisions: validatedEconomicSystemReformProvisions,
     euroAdoptionProvisions: validatedEuroAdoptionProvisions,
     europeanTreatyProvisions: validatedEuropeanTreatyProvisions,
+    resetLawProvisions: validatedResetLawProvisions,
   } = validation;
 
   for (const provision of validatedTariffProvisions) {
@@ -468,6 +474,16 @@ export async function proposeNationalBill(
     return { status: 409, body: { error: duplicateCheck.error } };
   }
 
+  const resetLawDuplicateCheck = await checkDuplicateResetLawFamilies(
+    db,
+    "bills",
+    activeBillFilter,
+    validatedResetLawProvisions
+  );
+  if (resetLawDuplicateCheck) {
+    return { status: 409, body: { error: resetLawDuplicateCheck.error } };
+  }
+
   const tariffDuplicateCheck = await checkDuplicateTariffProvisions(
     db,
     "bills",
@@ -522,7 +538,8 @@ export async function proposeNationalBill(
         validatedEconomicSystemReformProvisions.length +
         validatedElectoralLawProvisions.length +
         validatedEuroAdoptionProvisions.length +
-        validatedEuropeanTreatyProvisions.length,
+        validatedEuropeanTreatyProvisions.length +
+        validatedResetLawProvisions.length,
     })
   );
   const actionCost = BILL_PROPOSE_ACTION_COST;
@@ -586,6 +603,7 @@ export async function proposeNationalBill(
     ...validatedEconomicSystemReformProvisions,
     ...validatedEuroAdoptionProvisions,
     ...validatedEuropeanTreatyProvisions,
+    ...validatedResetLawProvisions,
   ];
   const stateId = getNationalDocId(countryId) ?? `${countryId.toLowerCase()}_national`;
 

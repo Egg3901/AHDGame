@@ -56,6 +56,12 @@ import type { SeedDiagnosticCheck } from "@/lib/admin/seedDiagnostic/types";
 import { presetDefaultsToFoundingPhase } from "@/lib/seeds/presetSelector";
 import type { GameIteration, GameState } from "@/lib/db/types/gameState";
 import { isPresetAnchorDate, type ResetStartDate } from "@/lib/admin/resetStartDate";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import {
+  resetSeedComplete,
+  resetSelectionPreflight,
+  resetSystemSelectionsFrom,
+} from "@/lib/resetVersions/rules";
 import { getValidatedEnv } from "@/lib/env";
 import { assertResetDatabaseMatchesApplication } from "@/lib/admin/resetPreflight";
 
@@ -199,6 +205,28 @@ export async function resetAndBootstrapGameWorld(
     );
   }
 
+  // Reject a staged but unsupported v2 reset before the seal changes the
+  // running world. A failed preflight must leave v1 playable.
+  const selectedState = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      projection: {
+        metricsSystemVersion: 1,
+        legislationSystemVersion: 1,
+        cabinetSystemVersion: 1,
+        resetSystemSelections: 1,
+      },
+    }
+  );
+  const versionPreflight = resetSelectionPreflight(
+    selectedState,
+    preset,
+    atPresetAnchor,
+    RESET_V2_READY
+  );
+  if (!versionPreflight.allowed) throw new Error(versionPreflight.reason);
+  const selectedVersions = resetSystemSelectionsFrom(selectedState);
+
   // 0) Seal the world BEFORE anything is destroyed.
   //
   //    Both halves of this used to happen far too late. `enableMaintenanceMode`
@@ -271,6 +299,7 @@ export async function resetAndBootstrapGameWorld(
       adminUsername,
       iteration,
       startDate: options.startDate,
+      versionSelectionSnapshot: selectedState,
       preIteration,
       startingParties,
       log: collect,
@@ -334,13 +363,22 @@ export async function resetAndBootstrapGameWorld(
       reset.details.budgetSeedLog = finalized.finalizeLog;
     }
 
-    // 3) Reset-only path: seed historical officials *after* reference is re-seeded.
-    //    On the bootstrap path, bootstrapGameWorld already seeded them internally.
+    // New v2 opening verification can fail after core bootstrap has written
+    // the world. Seal it before those fail-closed checks, not only after them.
+    if (selectedVersions.metrics === "v2") {
+      await enableMaintenanceMode(db, {
+        reason:
+          "Game reset: fresh world being prepared. Site will reopen when admin verifies the new state.",
+        enabledBy: adminUsername ?? "system",
+      });
+    }
+
+    // Complete the reset-only officials pass before certifying any v2 opening.
+    // Its contained failures otherwise leave valid-looking v2 receipts on an
+    // incomplete world.
     let postSeedOfficials: ResetAndBootstrapResult["postSeedOfficials"];
     if (seedOnly && preset !== "2019-no-parties") {
       phaseReached = "officials";
-      // CONTAINED: the reference data is already re-seeded by this point, so a
-      // failure here degrades the run rather than discarding it.
       const result = await run.step("officials", "seedHistoricalOfficials", () =>
         seedHistoricalOfficials(db, preset, preIteration ? "priors" : "winners")
       );
@@ -353,6 +391,144 @@ export async function resetAndBootstrapGameWorld(
     }
 
     if (startingParties === "none") await clearStartingPolitics(db, preset);
+
+    // The v2 board is separate from all v1 working metric collections. A
+    // receipt is written only after the whole board has been persisted and
+    // read back. A contained finalize failure cannot certify a v2 opening.
+    if (selectedVersions.metrics === "v2") {
+      phaseReached = "v2 metrics opening";
+      if (run.status(false) !== "succeeded") {
+        throw new Error("Cannot certify metrics v2 after a partial reset");
+      }
+      const freshState = await db
+        .collection<GameState>("gameState")
+        .findOne(
+          { _id: "current" },
+          { projection: { resetWorldId: 1, currentTurn: 1, metricsSystemVersion: 1 } }
+        );
+      if (
+        freshState?.metricsSystemVersion !== "v2" ||
+        typeof freshState.resetWorldId !== "string" ||
+        !Number.isSafeInteger(freshState.currentTurn) ||
+        freshState.currentTurn < 1
+      ) {
+        throw new Error("Fresh reset state is missing the metrics v2 world identity");
+      }
+      const { seedOpeningMetrics1991 } = await import("@/lib/resetMetrics/seedOpening1991");
+      const receipt = await seedOpeningMetrics1991(
+        db,
+        freshState.resetWorldId,
+        freshState.currentTurn
+      );
+      const stamped = await db.collection<GameState>("gameState").updateOne(
+        {
+          _id: "current",
+          resetWorldId: freshState.resetWorldId,
+          currentTurn: freshState.currentTurn,
+          metricsSystemVersion: "v2",
+        },
+        { $set: { "resetVersionSeeds.metrics": receipt } }
+      );
+      if (stamped.matchedCount !== 1) {
+        throw new Error("Metrics v2 world changed before its seed receipt could be stamped");
+      }
+      collect("Verified 1991 v2 metric opening for US, UK, and JP");
+    }
+    if (selectedVersions.legislation === "v2") {
+      phaseReached = "v2 current-law opening";
+      if (run.status(false) !== "succeeded") {
+        throw new Error("Cannot certify legislation v2 after a partial reset");
+      }
+      const freshState = await db.collection<GameState>("gameState").findOne(
+        { _id: "current" },
+        {
+          projection: {
+            resetWorldId: 1,
+            resetVersionSeeds: 1,
+            currentTurn: 1,
+            metricsSystemVersion: 1,
+            legislationSystemVersion: 1,
+          },
+        }
+      );
+      if (
+        freshState?.legislationSystemVersion !== "v2" ||
+        freshState.metricsSystemVersion !== "v2" ||
+        !resetSeedComplete(freshState, "metrics") ||
+        typeof freshState.resetWorldId !== "string" ||
+        !Number.isSafeInteger(freshState.currentTurn) ||
+        freshState.currentTurn < 1
+      ) {
+        throw new Error("Fresh reset state lacks the prerequisite metrics v2 opening");
+      }
+      const { seedOpeningLawBoards1991 } = await import("@/lib/resetLegislation/seedOpening1991");
+      const receipt = await seedOpeningLawBoards1991(
+        db,
+        freshState.resetWorldId,
+        freshState.currentTurn
+      );
+      const stamped = await db.collection<GameState>("gameState").updateOne(
+        {
+          _id: "current",
+          resetWorldId: freshState.resetWorldId,
+          currentTurn: freshState.currentTurn,
+          legislationSystemVersion: "v2",
+        },
+        { $set: { "resetVersionSeeds.legislation": receipt } }
+      );
+      if (stamped.matchedCount !== 1) {
+        throw new Error("Legislation v2 world changed before its seed receipt could be stamped");
+      }
+      collect("Verified 1991 v2 current-law opening for US, UK, and JP");
+    }
+    if (selectedVersions.cabinet === "v2") {
+      phaseReached = "v2 department opening";
+      if (run.status(false) !== "succeeded") {
+        throw new Error("Cannot certify Cabinet v2 after a partial reset");
+      }
+      const freshState = await db.collection<GameState>("gameState").findOne(
+        { _id: "current" },
+        {
+          projection: {
+            resetWorldId: 1,
+            resetVersionSeeds: 1,
+            currentTurn: 1,
+            metricsSystemVersion: 1,
+            cabinetSystemVersion: 1,
+          },
+        }
+      );
+      if (
+        freshState?.cabinetSystemVersion !== "v2" ||
+        freshState.metricsSystemVersion !== "v2" ||
+        !resetSeedComplete(freshState, "metrics") ||
+        typeof freshState.resetWorldId !== "string" ||
+        !Number.isSafeInteger(freshState.currentTurn) ||
+        freshState.currentTurn < 1
+      ) {
+        throw new Error("Fresh reset state lacks the prerequisite metrics v2 opening");
+      }
+      const { seedOpeningDepartmentBoards1991 } =
+        await import("@/lib/resetFinance/seedOpeningDepartments1991");
+      const receipt = await seedOpeningDepartmentBoards1991(
+        db,
+        freshState.resetWorldId,
+        freshState.currentTurn
+      );
+      const stamped = await db.collection<GameState>("gameState").updateOne(
+        {
+          _id: "current",
+          resetWorldId: freshState.resetWorldId,
+          currentTurn: freshState.currentTurn,
+          cabinetSystemVersion: "v2",
+        },
+        { $set: { "resetVersionSeeds.cabinet": receipt } }
+      );
+      if (stamped.matchedCount !== 1) {
+        throw new Error("Cabinet v2 world changed before its seed receipt could be stamped");
+      }
+      collect("Verified 1991 v2 Cabinet opening claims for US, UK, and JP");
+    }
 
     if (preIteration && startingParties === "none") {
       const { seedPartylessFoundingCandidates } =

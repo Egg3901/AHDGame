@@ -2,6 +2,7 @@ import type { EuroMonetaryUnion } from "@/lib/currency/euro/rules";
 import type { ObjectId } from "mongodb";
 import type { CountryId, CountryStatus } from "../../constants/countries";
 import type { TurnPhaseTelemetryMap } from "./turnPhaseTelemetry";
+import type { ResetSystem, ResetSystemSeedReceipt } from "../../resetVersions/rules";
 
 export type NppEntryViabilityMode = "off" | "observe" | "enforce";
 
@@ -492,6 +493,25 @@ export interface GameState {
   legislationDemographicEffectsV2Enabled?: boolean;
   legislationDemographicEffectsV2EnabledBy?: string;
   legislationDemographicEffectsV2EnabledAt?: string;
+  /** Reset-era metrics engine. Absent and invalid values run the live v1 path. */
+  /** Changes on every world reset; an opening-seed receipt is valid only for this world. */
+  resetWorldId?: string;
+  /** Per-system, per-world proof that v2 data was populated and verified. */
+  resetVersionSeeds?: Partial<Record<ResetSystem, ResetSystemSeedReceipt>>;
+  /** Admin selection for the next reset; changing it does not convert the live world. */
+  resetSystemSelections?: Partial<Record<ResetSystem, "v1" | "v2">>;
+  resetSystemSelectionsAudit?: Partial<Record<ResetSystem, { by: string; at: string }>>;
+  metricsSystemVersion?: "v1" | "v2";
+  metricsSystemVersionBy?: string;
+  metricsSystemVersionAt?: string;
+  /** Reset-era legislation catalog and proposal flow, including its modal. */
+  legislationSystemVersion?: "v1" | "v2";
+  legislationSystemVersionBy?: string;
+  legislationSystemVersionAt?: string;
+  /** Reset-era Cabinet portfolios, treasury, and ministerial actions. */
+  cabinetSystemVersion?: "v1" | "v2";
+  cabinetSystemVersionBy?: string;
+  cabinetSystemVersionAt?: string;
   /**
    * Master gate for the new-player onboarding checklist (profile checklist
    * card, page-visit step tracking, welcome mail, completion reward). When
@@ -525,6 +545,30 @@ export interface GameState {
   intOrgAlignmentEnabled?: boolean;
   intOrgAlignmentEnabledBy?: string;
   intOrgAlignmentEnabledAt?: string;
+  /**
+   * Stage-1 proof gate for department-funded legislation. Only the US
+   * `public_health_opt_1` vertical slice reads it. Fail-closed and deliberately
+   * absent from default flags until Gate 1 is accepted.
+   */
+  departmentProgramSliceEnabled?: boolean;
+  departmentProgramSliceEnabledBy?: string;
+  departmentProgramSliceEnabledAt?: string;
+  /** Generalized national department accounts and program settlement. */
+  departmentFinanceEnabled?: boolean;
+  departmentFinanceEnabledBy?: string;
+  departmentFinanceEnabledAt?: string;
+  /** Jurisdiction selection, conflict rules, and delivered law outcomes. */
+  lawAdministrationEnabled?: boolean;
+  lawAdministrationEnabledBy?: string;
+  lawAdministrationEnabledAt?: string;
+  /** Regional discretion, underfunding settlement, and national grants. */
+  regionalLegislationFinanceEnabled?: boolean;
+  regionalLegislationFinanceEnabledBy?: string;
+  regionalLegislationFinanceEnabledAt?: string;
+  /** Canonical metric aliases and derived political readouts. */
+  canonicalPoliticalMetricsEnabled?: boolean;
+  canonicalPoliticalMetricsEnabledBy?: string;
+  canonicalPoliticalMetricsEnabledAt?: string;
   /**
    * Master gate for settlement crises (the German Question). Fail-closed: only
    * an explicit `true` enables. Fresh worlds seed it on
