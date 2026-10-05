@@ -55,3 +55,27 @@ describe("era-aware modifier evaluation", () => {
     );
   });
 });
+
+describe("1991 condition threshold regressions", () => {
+  it("does not shift an already-authored UK recession-era threshold twice", () => {
+    const active = evaluateModifiers(
+      { economic: { gdpGrowth: -0.3 } },
+      { countryId: "UK", preset: "1991-default", year: 1991 }
+    );
+    expect(active.map((m) => m.id)).not.toContain("slow_growth");
+  });
+  it("does not call positive growth a recession", () => {
+    const active = evaluateModifiers(
+      { economic: { gdpGrowth: 0.4, unemploymentRate: 14 } },
+      { countryId: "US", preset: "1991-default", year: 1991 }
+    );
+    expect(active.map((m) => m.id)).not.toContain("recession");
+  });
+  it("uses the current COL index rather than the obsolete halved index", () => {
+    const active = evaluateModifiers(
+      { economic: { costOfLiving: 100, povertyRate: 24 } },
+      { countryId: "US", preset: "1991-default", year: 1991 }
+    );
+    expect(active.map((m) => m.id)).not.toContain("cost_of_living_crisis");
+  });
+});

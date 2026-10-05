@@ -1,7 +1,7 @@
 /**
  * Year-anchored political-metric baselines.
  *
- * Values resolve by in-game YEAR, never by seed preset — there is no
+ * Values resolve by in-game YEAR, never by seed preset; there is no
  * "2019-default" fallback anywhere in this path, and no year is privileged.
  * Interpolation mirrors interpolateBand (src/lib/era/metricCatalog.ts) so the
  * codebase has one interpolation behavior: linear between anchors, clamped at
@@ -16,6 +16,7 @@ import {
   type PoliticalMetricsCountryId,
 } from "../types";
 import { NATIONAL_BASELINES_1953 } from "./nationalBaselines1953";
+import { NATIONAL_BASELINES_1991 } from "./nationalBaselines1991";
 import { NATIONAL_BASELINES_1979 } from "./nationalBaselines1979";
 
 export interface BaselineAnchor {
@@ -38,6 +39,7 @@ function buildInitialTable(): AnchorTable {
       perFamily[id] = [
         { year: 1953, value: baseline.value },
         { year: 1979, value: NATIONAL_BASELINES_1979[countryId][id] },
+        { year: 1991, value: NATIONAL_BASELINES_1991[countryId][id] },
       ];
     }
     out[countryId] = perFamily;
@@ -55,7 +57,8 @@ export function interpolateAnchors(anchors: BaselineAnchor[], year: number): num
   for (let i = 1; i < anchors.length; i++) {
     const a = anchors[i - 1];
     const b = anchors[i];
-    if (year <= b.year) {
+    if (year === b.year) return b.value;
+    if (year < b.year) {
       const t = (year - a.year) / (b.year - a.year);
       return a.value + (b.value - a.value) * t;
     }
@@ -65,7 +68,7 @@ export function interpolateAnchors(anchors: BaselineAnchor[], year: number): num
 
 /**
  * Resolve one family's baseline for a country at a year. Throws when the family
- * has no anchors — a missing curve is an authoring bug that must surface, never
+ * has no anchors; a missing curve is an authoring bug that must surface, never
  * a silent default (that silent-default behavior is what made the old preset
  * fallback so hard to reason about).
  */

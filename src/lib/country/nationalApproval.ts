@@ -8,11 +8,20 @@ import {
   PUBLIC_EXPECTATIONS_MODIFIER,
 } from "@/lib/utils/governmentApproval";
 import { evaluateModifiers } from "@/lib/utils/approvalModifiers";
-import { recomputeNationalApproval } from "@/lib/country/recomputeNationalApproval";
+import {
+  recomputeNationalApproval,
+  recomputePoliticalNationalApproval,
+  type RecomputeInputs,
+} from "@/lib/country/recomputeNationalApproval";
+import {
+  isPoliticalApprovalCountry,
+  type PoliticalApprovalBases,
+} from "@/lib/politicalLegislation/politicalApprovalProvider";
 import type { CountryId } from "@/lib/constants/countries";
 
 export interface NationalApprovalData {
   governmentApproval: number;
+  governmentApprovalBase: number;
   history: GovernmentApproval["history"];
   modifiers: ReturnType<typeof evaluateModifiers>;
 }
@@ -22,15 +31,20 @@ export interface NationalApprovalData {
  * GET route and server components so a page can seed its initial data with a
  * direct DB call instead of a client self-fetch through the CDN.
  */
-export async function loadNationalApproval(countryId: CountryId): Promise<NationalApprovalData> {
+export async function loadNationalApproval(
+  countryId: CountryId,
+  prefetched?: RecomputeInputs,
+  bases?: PoliticalApprovalBases | null
+): Promise<NationalApprovalData> {
   const db = await getDb();
 
   // governmentApprovals lookup is independent of stateMetrics — fetch in parallel
   const [allStates, approvalDoc] = await Promise.all([
-    db
-      .collection<State>("states")
-      .find({ countryId }, { projection: { _id: 1, population: 1 } })
-      .toArray(),
+    prefetched?.allStates ??
+      db
+        .collection<State>("states")
+        .find({ countryId }, { projection: { _id: 1, population: 1 } })
+        .toArray(),
     db.collection<GovernmentApproval>("governmentApprovals").findOne({ _id: countryId }),
   ]);
   const stateIds = allStates.map((s) => s._id);
@@ -39,10 +53,12 @@ export async function loadNationalApproval(countryId: CountryId): Promise<Nation
   // Bremen, CN HB is Huabei), and an unscoped `$in` pulled the other country's
   // metrics into these national averages, which feed both the modifiers below and
   // the recompute the gate now shares.
-  const allMetrics = await findMergedRegionMetricsMany(db, {
-    _id: { $in: stateIds },
-    countryId,
-  });
+  const allMetrics =
+    prefetched?.allMetrics ??
+    (await findMergedRegionMetricsMany(db, {
+      _id: { $in: stateIds },
+      countryId,
+    }));
   const history = approvalDoc?.history ?? [];
 
   // National metric averages (cheap — just averaging the already-fetched docs).
@@ -54,39 +70,28 @@ export async function loadNationalApproval(countryId: CountryId): Promise<Nation
   // preset was previously omitted here, so national modifiers silently skipped
   // the era-1991 patches under the 1991 preset — threading era context fixes
   // both that and era-aware year drift in one go.
-  const { preset, year } = await getEraContext(db);
+  const { preset, year } = prefetched ?? (await getEraContext(db));
   // Metric conditions are cheap to recompute from the averages already fetched.
   // The national providers — the address bump, org statements and the war block
   // — are not: they read conflicts, personnel and org state, which belongs in
   // the turn phase rather than a page render. They are stored by the snapshot
   // that produced this rating, so read them rather than recompute, and the
   // chips a reader shows are exactly the ones folded into the number above.
-  const modifiers = approvalDoc
-    ? [
-        ...evaluateModifiers(nationalAverages, { countryId, preset, year }),
-        ...(approvalDoc.activeNationalModifiers ?? []),
-      ]
-    : [
-        ...evaluateModifiers(nationalAverages, { countryId, preset, year }),
-        PUBLIC_EXPECTATIONS_MODIFIER,
-      ];
-
-  // Canonical approval is the value the per-turn snapshot stored in
-  // governmentApprovals (includes national address/cabinet adjustments and
-  // matches the history chart, the Executive page, and the metrics masthead).
-  // A live recompute is only a fallback for DBs that have no snapshot yet.
-  // The inputs are handed over rather than re-fetched: everything the recompute
-  // needs was already read above for the modifiers, so this path costs the same
-  // queries it always did.
+  const inputs = { allStates, allMetrics, nationalAverages, preset, year };
+  const live = isPoliticalApprovalCountry(countryId)
+    ? await recomputePoliticalNationalApproval(db, countryId, inputs, bases)
+    : null;
+  const modifiers = [
+    ...(approvalDoc?.activeRegionalModifiers ??
+      live?.regionalModifiers ??
+      evaluateModifiers(nationalAverages, { countryId, preset, year })),
+    ...(approvalDoc?.activeNationalModifiers ?? [PUBLIC_EXPECTATIONS_MODIFIER]),
+  ];
   const governmentApproval =
     approvalDoc?.approvalRating ??
-    (await recomputeNationalApproval(db, countryId, {
-      allStates,
-      allMetrics,
-      nationalAverages,
-      preset,
-      year,
-    }));
+    live?.approval ??
+    (await recomputeNationalApproval(db, countryId, inputs));
+  const governmentApprovalBase = approvalDoc?.approvalBase ?? live?.base ?? 50;
 
-  return { governmentApproval, history, modifiers };
+  return { governmentApproval, governmentApprovalBase, history, modifiers };
 }

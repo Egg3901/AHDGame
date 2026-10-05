@@ -3,6 +3,7 @@
  * cost UI, deleters) uses. Content lives in laws/*Laws.ts (transcribed).
  */
 
+import { BASELINE_LEVEL_OVERRIDES_1991 } from "./seeds/baselineLevels1991";
 import { DD_LAWS } from "./laws/ddLaws";
 import { DD_LAND_LAWS } from "./laws/ddLandLaws";
 import { RU_LAWS } from "./laws/ruLaws";
@@ -31,6 +32,20 @@ const CATALOGS: Record<LawCountryId, PoliticalLaw[]> = {
   RU: CORE_CATALOGS.RU,
   DD: [...CORE_CATALOGS.DD, ...DD_LAND_LAWS],
 };
+
+// Explicit anchors for all program laws make era coverage inspectable.
+// Catalog objects are shared with core/sidecar views; attach the same metadata once.
+for (const laws of Object.values(CATALOGS)) {
+  for (const law of laws) {
+    if (law.kind === "tax" || law.baselineLevelAnchors?.length) continue;
+    const inherited = law.baselineLevel ?? 0;
+    law.baselineLevelAnchors = [
+      { year: 1953, level: inherited },
+      { year: 1979, level: inherited },
+      { year: 1991, level: BASELINE_LEVEL_OVERRIDES_1991[law.id] ?? inherited },
+    ];
+  }
+}
 
 const LAWS_BY_ID = new Map<string, PoliticalLaw>(
   Object.values(CATALOGS)

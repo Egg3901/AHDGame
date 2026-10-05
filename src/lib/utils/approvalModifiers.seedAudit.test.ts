@@ -63,13 +63,13 @@ describe("approvalModifiers — US preset calibration", () => {
       )
     ).toBe(true);
     expect(
-      evaluateModifiers({ economic: { costOfLiving: 55 } }, { preset: "1991-default" }).some(
+      evaluateModifiers({ economic: { costOfLiving: 95 } }, { preset: "1991-default" }).some(
         (m) => m.id === "affordable_living"
       )
     ).toBe(false);
     expect(
       evaluateModifiers(
-        { economic: { costOfLiving: 72, povertyRate: 18 } },
+        { economic: { costOfLiving: 142, povertyRate: 18 } },
         { preset: "1991-default" }
       ).some((m) => m.id === "cost_of_living_crisis")
     ).toBe(true);
