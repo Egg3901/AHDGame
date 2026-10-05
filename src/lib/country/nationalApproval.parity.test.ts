@@ -54,6 +54,19 @@ describe("national approval reader parity", () => {
     expect(metrics?.governmentApprovalModifiers).toEqual(card.modifiers);
     expect(metrics?.governmentApprovalBase).toBe(card.governmentApprovalBase);
   });
+  it("keeps old snapshots without invented national modifier chips", async () => {
+    db.collection("governmentApprovals").findOne.mockResolvedValue({
+      _id: "UK",
+      approvalRating: 42.1,
+      history: [{ turn: 5, approval: 42.1, net: -15.8 }],
+    });
+    const card = await loadNationalApproval("UK");
+    const metrics = await loadNationalMetrics("UK");
+    expect(card.governmentApproval).toBe(42.1);
+    expect(metrics?.governmentApproval).toBe(42.1);
+    expect(metrics?.governmentApprovalModifiers).toEqual(card.modifiers);
+    expect(card.modifiers.some((modifier) => modifier.id === "public_expectations")).toBe(false);
+  });
   it("both readers prefer the canonical snapshot, including the applied modifiers", async () => {
     db.collection("governmentApprovals").findOne.mockResolvedValue({
       _id: "UK",
