@@ -3,6 +3,7 @@ import type { Db } from "mongodb";
 import { migration as bankPropForexFeeIndex } from "./entries/2026-10-04-bank-prop-forex-fee-index";
 import { migration as repairOrphanIndexFundState } from "./entries/2026-09-03-repair-orphan-index-fund-state";
 import { migration as equityMarketPools } from "./entries/2026-09-03-equity-market-pools";
+import { migration as bondMarketPools } from "./entries/2026-09-03-bond-market-pools";
 import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
 import { migration as centralBankPricingPhaseIn } from "./entries/2026-09-11-central-bank-pricing-phase-in";
 import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-long-horizon-telemetry-indexes";
@@ -10,7 +11,6 @@ import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-ap
 import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import { migration as politicalMediaOrderIndexes } from "./entries/2026-10-04-political-media-order-indexes";
 import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank-treasury-trade-indexes";
-import { migration as industryModelMarketIndexes } from "./entries/2026-10-04-industry-model-market-indexes";
 import { migration as mediaDiscriminatorMarketIndexes } from "./entries/2026-10-04-media-discriminator-market-indexes";
 import { migration as constructionServiceLeaseIndex } from "./entries/2026-10-04-construction-service-lease-index";
 import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-media-product-projects-v1-index";
@@ -51,7 +51,8 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   bankFailurePoliticsIndex,
   // Model-aware unique keys must be in place before a fresh canonical seed can
   // create a vehicles market beside generic manufacturing.
-  industryModelMarketIndexes,
+  // This supersedes the narrower industry-model indexes. Recreating those
+  // after media lanes are seeded can reject valid news/entertainment pairs.
   mediaDiscriminatorMarketIndexes,
   constructionServiceLeaseIndex,
   mediaProductProjectsV1Index,
@@ -61,14 +62,61 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   underwritingRecoveryIndexes,
 ];
 
+/** Index metadata can disappear on reset even when migration markers survive. */
+export const REQUIRED_STARTUP_INDEX_MIGRATIONS: readonly Migration[] = [
+  politicalMediaOrderIndexes,
+  bankTreasuryTradeIndexes,
+  bankPropForexFeeIndex,
+  bankFailurePoliticsIndex,
+  mediaDiscriminatorMarketIndexes,
+  constructionServiceLeaseIndex,
+  mediaProductProjectsV1Index,
+  manufacturingProductProjectsV2Index,
+  underwritingRecoveryIndexes,
+];
+
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {
   const unsafe = REQUIRED_STARTUP_MIGRATIONS.find((migration) => !migration.idempotent);
   if (unsafe) {
     throw new Error(`Startup migration must be idempotent: ${unsafe.id}`);
   }
 
-  return runMigrations(db, {
+  const initial = await runMigrations(db, {
     migrations: [...REQUIRED_STARTUP_MIGRATIONS],
     dryRun: false,
   });
+
+  // Only metadata migrations run past their markers. Historical data repairs
+  // remain marker-gated; no old-world data heal is implied by this pass.
+  const indexes = await runMigrations(db, {
+    migrations: [...REQUIRED_STARTUP_INDEX_MIGRATIONS],
+    only: REQUIRED_STARTUP_INDEX_MIGRATIONS.map((migration) => migration.id),
+    force: true,
+    dryRun: false,
+  });
+  const summaries = [initial, indexes];
+  const state = await db
+    .collection<{ _id: string; preset?: string; currentTurn?: number }>("gameState")
+    .findOne({ _id: "current" }, { projection: { preset: 1, currentTurn: 1 } });
+  // A reset preserves historical markers but removes opening pool rows.
+  // Bootstrap only the new 1991 world; never refill an existing cash pool.
+  if (state?.preset === "1991-default" && state.currentTurn === 1) {
+    summaries.push(
+      await runMigrations(db, {
+        migrations: [bondMarketPools],
+        only: [bondMarketPools.id],
+        force: true,
+        dryRun: false,
+      })
+    );
+  }
+  const ranIds = [...new Set(summaries.flatMap((summary) => summary.ranIds))];
+  return {
+    ranIds,
+    skippedIds: [...new Set(summaries.flatMap((summary) => summary.skippedIds))].filter(
+      (id) => !ranIds.includes(id)
+    ),
+    results: Object.assign({}, ...summaries.map((summary) => summary.results)),
+    dryRun: false,
+  };
 }
