@@ -23,6 +23,7 @@ import {
   finiteOrNull,
   summarizeBook,
   summarizeExecutions,
+  RESEARCH_MAX_SECURITIES_PER_ROW,
   type MarketPoolRow,
   type SecurityTelemetryRow,
   type SecurityTurnRow,
@@ -227,6 +228,12 @@ export async function buildSecurityTelemetryRowForTurn(
         hasHolders: Object.values(byClass).some((units) => units > 0),
       },
     });
+  }
+
+  if (securities.length > RESEARCH_MAX_SECURITIES_PER_ROW) {
+    throw new Error(
+      `securityTelemetry row for turn ${turn} has ${securities.length} securities, over the ${RESEARCH_MAX_SECURITIES_PER_ROW} per-document ceiling`
+    );
   }
 
   const poolRows: MarketPoolRow[] = pools.map((p) => ({

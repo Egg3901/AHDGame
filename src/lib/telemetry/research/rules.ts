@@ -1130,6 +1130,20 @@ export type ResearchPanel = (typeof RESEARCH_PANELS)[number];
 
 /** Longest inclusive turn window a single request may span (10 game years). */
 export const RESEARCH_MAX_TURN_SPAN = 480;
+
+/**
+ * Turns of research telemetry kept live: the export's span cap plus one day of
+ * slack so a full-span query issued late in a turn never reads a pruned edge.
+ * Older rows are archived to R2 and deleted by the retention job.
+ */
+export const RESEARCH_TELEMETRY_RETENTION_TURNS = RESEARCH_MAX_TURN_SPAN + 24;
+
+/**
+ * Hard ceiling on securities in one whole-market row. A security row is about
+ * 600 bytes in BSON, so this keeps the document near 12 MiB, under the 16 MiB
+ * limit. Crossing it fails loudly instead of as an opaque BSON write error.
+ */
+export const RESEARCH_MAX_SECURITIES_PER_ROW = 20_000;
 export const RESEARCH_DEFAULT_LIMIT = 500;
 export const RESEARCH_MAX_LIMIT = 2000;
 /** Securities rows are whole-market documents, so a page holds few turns. */

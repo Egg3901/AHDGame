@@ -6,7 +6,8 @@ import type { LongHorizonContext } from "@/lib/telemetry/longHorizon/telemetry";
 import { appendCountryTurnTelemetry, buildCountryTurnRows } from "./countryTurn";
 import { appendSecurityTelemetry, buildSecurityTelemetryRowForTurn } from "./securities";
 import { runResearchExport } from "./export";
-import { parseResearchQuery } from "./rules";
+import { calculateObjectSize } from "bson";
+import { parseResearchQuery, RESEARCH_MAX_SECURITIES_PER_ROW } from "./rules";
 
 const ctx = {
   worldId: "1991:iteration-1",
@@ -391,5 +392,118 @@ describe("runResearchExport", () => {
     expect(out.rows).toEqual([]);
     expect(out.observedTurns.count).toBe(0);
     expect(out.nextCursor).toBeNull();
+  });
+});
+
+describe("securities capture cost", () => {
+  const BSON_LIMIT = 16 * 1024 * 1024;
+
+  function seedScaled(db: MockDb, n: number) {
+    const ids = Array.from({ length: n }, () => new ObjectId());
+    const set = (name: string, docs: unknown[]) =>
+      db.collection(name).find().toArray.mockResolvedValue(docs);
+    set(
+      "corporations",
+      ids.map((_id) => ({
+        _id,
+        countryId: "US",
+        sharePrice: 50.123456789,
+        fundamentalSharePrice: 49.1,
+        totalShares: 1_000_000,
+        publicFloat: 1234,
+        liquidCurrencyCode: "USD",
+        liquidCapital: 5_000_000.123,
+      }))
+    );
+    set(
+      "corporationHistory",
+      ids.map((corporationId) => ({
+        corporationId,
+        revenue: 9_000_000.1,
+        income: 80_000.2,
+        dividendPaidPerTurn: 100.5,
+      }))
+    );
+    set(
+      "shareTradeHistory",
+      ids.flatMap((corporationId) => [
+        { corporationId, shares: 10, totalAnchor: 520 },
+        { corporationId, shares: 10, totalAnchor: 500 },
+      ])
+    );
+    set(
+      "shareOrders",
+      ids.flatMap((corporationId) => [
+        { corporationId, type: "buy", pricePerShare: 49, sharesRemaining: 5 },
+        { corporationId, type: "sell", pricePerShare: 51, sharesRemaining: 5 },
+      ])
+    );
+    set(
+      "bonds",
+      ids.map((_id) => ({
+        _id,
+        issuerType: "sovereign",
+        countryId: "US",
+        currencyCode: "USD",
+        couponRate: 4.8,
+        maturityTurn: 500,
+        marketPrice: 0.97,
+        totalIssued: 10_000,
+        publicFloat: 4,
+        holders: [{ units: 3, fundId: new ObjectId() }],
+      }))
+    );
+    set("bondMarketPools", []);
+    set("exchangeRates", [{ currencyCode: "USD", rate: 1 }]);
+  }
+
+  it("uses the same bounded number of reads and one write at any world size", async () => {
+    const counts: number[] = [];
+    for (const n of [5, 400]) {
+      const db = createMockDb();
+      seedScaled(db, n);
+      for (const c of Object.values(db.collectionMocks)) c.find.mockClear();
+      await appendSecurityTelemetry(db as unknown as Db, ctx, 100, observedAt);
+      const reads = Object.values(db.collectionMocks).reduce(
+        (a, c) => a + c.find.mock.calls.length,
+        0
+      );
+      const writes = Object.values(db.collectionMocks).reduce(
+        (a, c) => a + c.replaceOne.mock.calls.length + c.insertOne.mock.calls.length,
+        0
+      );
+      const other = Object.values(db.collectionMocks).reduce(
+        (a, c) =>
+          a +
+          c.findOne.mock.calls.length +
+          c.countDocuments.mock.calls.length +
+          c.aggregate.mock.calls.length +
+          c.updateOne.mock.calls.length,
+        0
+      );
+      expect(other).toBe(0);
+      expect(writes).toBe(1);
+      counts.push(reads);
+    }
+    expect(counts[0]).toBe(counts[1]);
+    expect(counts[0]).toBe(7);
+  });
+
+  it("keeps a 5000-equity plus 5000-bond row far under the BSON document limit", async () => {
+    const db = createMockDb();
+    seedScaled(db, 5000);
+    const row = await buildSecurityTelemetryRowForTurn(db as unknown as Db, ctx, 100, observedAt);
+    expect(row.securities).toHaveLength(10_000);
+    const bytes = calculateObjectSize(row as never);
+    expect(bytes).toBeLessThan(BSON_LIMIT / 2);
+    expect(RESEARCH_MAX_SECURITIES_PER_ROW * (bytes / 10_000)).toBeLessThan(BSON_LIMIT);
+  });
+
+  it("fails loudly above the per-document ceiling", async () => {
+    const db = createMockDb();
+    seedScaled(db, RESEARCH_MAX_SECURITIES_PER_ROW / 2 + 1);
+    await expect(
+      buildSecurityTelemetryRowForTurn(db as unknown as Db, ctx, 100, observedAt)
+    ).rejects.toThrow(/per-document ceiling/);
   });
 });
