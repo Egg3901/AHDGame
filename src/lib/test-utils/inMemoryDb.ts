@@ -602,6 +602,13 @@ class InMemoryCollection {
     private readonly owner?: InMemoryDb
   ) {}
 
+  /** Reference resets remove both documents and secondary indexes. */
+  async drop(): Promise<boolean> {
+    this.docs = [];
+    this.indexDescriptions = [];
+    return true;
+  }
+
   async findOne(filter: Doc = {}): Promise<Doc | null> {
     const found = this.docs.find((d) => matchesFilter(d, filter));
     return found ? clone(found) : null;

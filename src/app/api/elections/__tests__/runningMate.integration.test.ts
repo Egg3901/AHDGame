@@ -113,8 +113,8 @@ describe("Presidential running mate integration tests", () => {
     );
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({
-      code: "BAD_REQUEST",
       error: "That character is not eligible to be selected as running mate",
+      code: "BAD_REQUEST",
     });
     expect(updateOne).not.toHaveBeenCalled();
   });

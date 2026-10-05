@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import type { BondMaturityTurns } from "@/lib/db/types/bond";
 import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { getSovereignCouponRate } from "@/lib/bonds/sovereign";
 import { seedSovereignBondInstruments } from "./seedSovereignBondInstruments";
 
 function makeCursor<T>(rows: T[]) {
@@ -16,6 +18,87 @@ function makeCursor<T>(rows: T[]) {
 }
 
 describe("seedSovereignBondInstruments", () => {
+  it.each([1953, 2019])(
+    "preserves %i policy-priced coupons and par instruments",
+    async (fiscalYear) => {
+      const db = createMockDb();
+      const inserted: Array<{
+        maturityTurns: BondMaturityTurns;
+        couponRate: number;
+        marketPrice: number;
+      }> = [];
+      db.collection("federalBudget").find.mockReturnValue(
+        makeCursor([
+          {
+            _id: "UK",
+            countryId: "UK",
+            fiscalYear,
+            creditRating: "AAA",
+            debt: { principal: 20_000_000, interestRate: 0.105 },
+          },
+        ])
+      );
+      db.collection("centralBanks").find.mockReturnValue(
+        makeCursor([{ _id: getBankId("UK"), primeRate: 2.5 }])
+      );
+      db.collection("corporations").find.mockReturnValue(makeCursor([]));
+      db.collectionMocks.corporations.findOne.mockResolvedValue(null);
+      db.collection("bonds").find.mockReturnValue(makeCursor([]));
+      db.collectionMocks.bonds.insertMany.mockImplementation(async (docs: typeof inserted) => {
+        inserted.push(...docs);
+        return { insertedCount: docs.length };
+      });
+      await seedSovereignBondInstruments(db as unknown as Db, () => {});
+      expect(inserted).toHaveLength(32);
+      for (const bond of inserted) {
+        expect(bond.couponRate).toBe(getSovereignCouponRate(2.5, bond.maturityTurns, 0, 0));
+        expect(bond.marketPrice).toBe(1);
+      }
+    }
+  );
+  it("instruments historic debt at its average coupon independently of the opening policy rate", async () => {
+    const db = createMockDb();
+    const inserted: Array<{ couponRate: number; totalIssued: number; marketPrice: number }> = [];
+    db.collectionMocks.federalBudget = db.collection("federalBudget");
+    db.collectionMocks.federalBudget.find.mockReturnValue(
+      makeCursor([
+        {
+          _id: "UK",
+          countryId: "UK",
+          creditRating: "AAA",
+          fiscalYear: 1991,
+          debt: { principal: 194_118_000_000, interestRate: 0.105 },
+        },
+      ])
+    );
+    db.collectionMocks.centralBanks = db.collection("centralBanks");
+    db.collectionMocks.centralBanks.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks.corporations = db.collection("corporations");
+    db.collectionMocks.corporations.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks.corporations.findOne.mockResolvedValue(null);
+    db.collectionMocks.bonds = db.collection("bonds");
+    db.collectionMocks.bonds.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks.bonds.insertMany.mockImplementation(async (docs: typeof inserted) => {
+      inserted.push(...docs);
+      return { insertedCount: docs.length };
+    });
+    await seedSovereignBondInstruments(db as unknown as Db, () => {});
+    expect(inserted.length).toBeGreaterThan(3);
+    expect(inserted.every((bond) => bond.couponRate === 10.5)).toBe(true);
+    expect(
+      inserted.every((bond) => Number.isFinite(bond.marketPrice) && bond.marketPrice > 1)
+    ).toBe(true);
+    const covered = inserted.reduce((sum, bond) => sum + bond.totalIssued, 0);
+    expect(covered).toBe(194_118_000_000);
+    const annualCoupon = inserted.reduce(
+      (sum, bond) => sum + (bond.totalIssued * bond.couponRate) / 100,
+      0
+    );
+    expect(annualCoupon + (194_118_000_000 - covered) * 0.105).toBeCloseTo(
+      194_118_000_000 * 0.105,
+      0
+    );
+  });
   it("materializes US/UK scalar debt into staggered sovereign bond tranches without mutating the budget", async () => {
     const db = createMockDb();
     const inserted: unknown[] = [];
@@ -99,7 +182,7 @@ describe("seedSovereignBondInstruments", () => {
         reconcile: boolean;
         matured: boolean;
         holders: unknown[];
-        maturityTurns: number;
+        maturityTurns: BondMaturityTurns;
       };
       expect(b.issuerType).toBe("sovereign");
       expect(b.reconcile).toBe(true);

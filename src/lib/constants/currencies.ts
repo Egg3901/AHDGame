@@ -254,6 +254,15 @@ export const FOREX_ACTIVE_CURRENCIES: CurrencyCode[] = [
   "GRD",
   "ATS",
   "FIM",
+  "PLZ",
+  "HUF",
+  "ROL",
+  "BGL",
+  "CSK",
+  "YUD",
+  "PLN",
+  "RON",
+  "BGN",
 ];
 
 /** Zod-compatible tuple for ACTIVE currencies only (used in forex route schemas) */
@@ -277,6 +286,15 @@ export const ZOD_ACTIVE_CURRENCY_ENUM: [CurrencyCode, CurrencyCode, ...CurrencyC
   "GRD",
   "ATS",
   "FIM",
+  "PLZ",
+  "HUF",
+  "ROL",
+  "BGL",
+  "CSK",
+  "YUD",
+  "PLN",
+  "RON",
+  "BGN",
 ];
 
 // ── Spread schedule ──────────────────────────────────────────────────────────
@@ -467,8 +485,8 @@ export const INITIAL_RATES: Partial<Record<CountryId, number>> = {
  * Sources: IMF IFS annual averages 1991.
  *
  * DE uses an EUR-equivalent derived from the 1991 DEM rate converted through the
- * fixed DM→EUR parity (1 EUR = 1.95583 DEM). IE uses real IEP (Irish pound) —
- * ~0.85 IEP/USD in 1991 (ERM era; sterling link had ended in 1979).
+ * fixed DM to EUR parity (1 EUR = 1.95583 DEM). IE uses real IEP (Irish pound),
+ * 0.6212975 IEP/USD in 1991 (ERM era; sterling link ended in 1979).
  *
  * BR is excluded: Brazil's cruzeiro was in hyperinflation in 1991 (Plano Collor
  * failed; monthly inflation ~20%). A stable parity with USD cannot be
@@ -485,7 +503,7 @@ export const INITIAL_RATES_1991: Partial<Record<CountryId, number>> = {
   UK: 0.57, // GBP/USD annual average 1991
   JP: 134.5, // JPY/USD annual average 1991
   DE: 0.85, // DEM→EUR-equivalent (1.66 DEM/USD ÷ 1.95583 DEM/EUR)
-  IE: 0.85, // IEP/USD ~1991 (post-sterling-link; ERM)
+  IE: 0.6212975, // WDI PA.NUS.FCRF 1991 annual average, IEP/USD
   BR: 5.0, // placeholder — cruzeiro hyperinflation makes 1991 rate meaningless
   CN: 5.32, // CNY/USD official 1991 rate
   NG: 9.9, // NGN/USD official 1991 rate (pre-SAP devaluations)
@@ -514,8 +532,7 @@ export const INITIAL_RATES_1991: Partial<Record<CountryId, number>> = {
   // https://www.elibrary.imf.org/view/book/9781451940589/ch002.xml
   // https://www.federalreserve.gov/releases/h10/Hist/dat96_ge.htm
   YU: 9 * 1.5075,
-  // RU and DD are 1979-only placeholders to satisfy forex invariants (not
-  // enabled in 1991); they mirror the 1979 rate.
+  // RU is an administered game quote; DD is absent after reunification.
   RU: 2.22,
   DD: 2.22, // DDM placeholder (DD not enabled in 1991)
   // FR/IT/ES/SE/TR/GR/AT/FI: WDI PA.NUS.FCRF 1991 period averages in the legacy

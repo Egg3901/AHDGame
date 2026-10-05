@@ -111,6 +111,7 @@ export type {
  * delivers against.
  */
 export function computeSupplyAgreementBuyerDemand(args: {
+  preset?: string;
   sectors: readonly SupplyAgreementDemandSector[];
   currentTurn: number;
   unitScale: number;
@@ -128,7 +129,8 @@ export function computeSupplyAgreementBuyerDemand(args: {
       sector.transitionStartTurn,
       args.currentTurn,
       sector.industryModel,
-      sector.mediaDiscriminator
+      sector.mediaDiscriminator,
+      args.preset
     );
     const utilization =
       args.plantsEnabled &&

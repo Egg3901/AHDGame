@@ -35,8 +35,8 @@ import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
 /**
  * The daily nameplate revenue one facility should represent, in modern ₳.
- * Chosen so a single build is a real investment (cost ≈ 15x this at 2019
- * prices) without pricing small corps out of their first facility.
+ * Chosen so a first facility is a meaningful investment with a comparable
+ * daily nameplate, while starter treasuries can afford entry.
  */
 export const FACILITY_TARGET_DAILY_REVENUE_ANCHOR = 25_000;
 

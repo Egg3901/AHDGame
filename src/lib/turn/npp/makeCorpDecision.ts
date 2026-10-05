@@ -742,6 +742,7 @@ export function makeNppCorpDecision(
               // Greenfield entry uses the sector-type default strategy.
               strategyId: null,
               year: plants.year,
+              preset: plants.preset,
               eraUnitScale: plants.eraUnitScale,
               marketSharePercent: 0,
               nationalMarketSharePercent: nationalShare(
@@ -1232,6 +1233,7 @@ export function makeNppCorpDecision(
               units: 1,
               strategyId: sector.strategyId ?? null,
               year: plants.year,
+              preset: plants.preset,
               eraUnitScale: plants.eraUnitScale,
               marketSharePercent: growthShare,
               nationalMarketSharePercent: nationalShare(
@@ -1328,6 +1330,7 @@ export function makeNppCorpDecision(
         units,
         strategyId: sector.strategyId ?? null,
         year: plants.year,
+        preset: plants.preset,
         eraUnitScale: plants.eraUnitScale,
         marketSharePercent,
         nationalMarketSharePercent: nationalShare(

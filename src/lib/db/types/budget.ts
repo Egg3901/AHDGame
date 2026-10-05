@@ -700,6 +700,8 @@ export interface FederalBudget {
    * law changes. Other countries leave this field absent.
    */
   nonLawSpendingGdpShareBaseline?: number;
+  /** Founding-world program expense scale shared by catalog quotes and seeded v2 options. */
+  programCostScaleBaseline?: number;
   /**
    * Fiscal-divergence guardrail (refs #fiscal-divergence-audit): each tax
    * base's share of national GDP at the turn this field was first populated

@@ -1,12 +1,12 @@
 /**
- * Opening central-bank rates use observed policy benchmarks for January 1991.
- * getOpeningPolicyRate leaves other years and unauthored countries at their
- * supplied default; subsequent rate decisions remain ordinary game policy.
+ * Opening central-bank rates give the 1991 reset affordable new borrowing.
+ * Historical benchmarks remain explicit provenance, separate from gameplay
+ * rates. Other years and subsequent player policy decisions are unchanged.
  */
 import type { CountryId } from "@/lib/constants/countries";
 
 /** Percent per year, January 1, 1991; distinct from neutral policy targets. */
-export const OPENING_POLICY_RATES_1991: Partial<Record<CountryId, number>> = {
+export const HISTORICAL_POLICY_RATES_1991: Partial<Record<CountryId, number>> = {
   // Intended federal funds target after December 18, 1990, not the annual mean.
   // https://www.federalreserve.gov/foia/files/20190829-changes-intended-federal-funds-rate.pdf
   US: 7,
@@ -24,10 +24,23 @@ export const OPENING_POLICY_RATES_1991: Partial<Record<CountryId, number>> = {
   IE: 11.25,
 };
 
+/** Gameplay opening rates, percent per year. Historic debt keeps its own coupons. */
+export const OPENING_POLICY_RATES_1991: Partial<Record<CountryId, number>> = {
+  US: 4,
+  UK: 4.5,
+  JP: 3,
+  DE: 4,
+  IE: 4.5,
+};
+
+export const OPENING_POLICY_RATE_CEILING_1991 = 5;
+
 export function getOpeningPolicyRate(
   countryId: CountryId,
   startingYear: number | undefined,
   fallback: number
 ): number {
-  return startingYear === 1991 ? (OPENING_POLICY_RATES_1991[countryId] ?? fallback) : fallback;
+  return startingYear === 1991
+    ? (OPENING_POLICY_RATES_1991[countryId] ?? Math.min(fallback, OPENING_POLICY_RATE_CEILING_1991))
+    : fallback;
 }

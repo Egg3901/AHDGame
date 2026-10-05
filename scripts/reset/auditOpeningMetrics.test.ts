@@ -123,12 +123,12 @@ describe("1991 opening metric source audit", () => {
 
   it("keeps fiscal balance and debt as national ledger-owned observations", () => {
     const national = openingNationalFiscalObservations1991();
-    expect(national.US.balance.value).toBeCloseTo(-1.427, 2);
+    expect(national.US.balance.value).toBeCloseTo(-0.5, 2);
     expect(national.US.debt.value).toBeCloseTo(59.113, 2);
-    expect(national.UK.balance.value).toBeCloseTo(-1.887, 2);
-    expect(national.UK.debt.value).toBe(32.5);
-    expect(national.JP.balance.value).toBeCloseTo(0.733, 2);
-    expect(national.JP.debt.value).toBeCloseTo(35.532, 2);
+    expect(national.UK.balance.value).toBeCloseTo(-0.5, 2);
+    expect(national.UK.debt.value).toBeCloseTo(32.353, 3);
+    expect(national.JP.balance.value).toBeCloseTo(0.6115, 3);
+    expect(national.JP.debt.value).toBeCloseTo(36.596, 2);
     for (const country of ["US", "UK", "JP"] as const) {
       expect(national[country].balance.owner).toBe("ledger");
       expect(national[country].debt.owner).toBe("ledger");

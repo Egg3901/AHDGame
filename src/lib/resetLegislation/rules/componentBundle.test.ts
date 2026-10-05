@@ -133,8 +133,8 @@ describe("reviewed source component comparison", () => {
       annualAgencyAllocation: 3_400_000_000,
       transitionLiability: 0,
     });
-    expect(result.currentAnnualAllocation).toBe(2_799_164_700);
-    expect(result.annualAllocationDelta).toBe(600_835_300);
+    expect(result.currentAnnualAllocation).toBe(2_585_421_384);
+    expect(result.annualAllocationDelta).toBe(814_578_616);
   });
 
   it("does not let an ordinary option replace a protected grant transfer", () => {

@@ -1,3 +1,4 @@
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 /**
  * First-plant founding: one facility quantum + era-scaled entry fee.
  *
@@ -14,6 +15,7 @@
  * the quote and the charge cannot drift.
  */
 
+import { eraForPreset } from "@/lib/seeds/presetSelector";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { SECTOR_EXPANSION_BASE_COST } from "@/lib/constants/corporations";
 import { plantSizeUnits } from "@/lib/constants/facilityQuantum";
@@ -40,5 +42,11 @@ export function sectorEntryFeeAnchor(preset: string | undefined, expansionDiscou
     Number.isFinite(expansionDiscount) && expansionDiscount > 0
       ? Math.min(1, expansionDiscount)
       : 0;
-  return Math.round(getEraNominalAmount(SECTOR_EXPANSION_BASE_COST, preset) * (1 - disc));
+  return Math.round(
+    getEraNominalAmount(
+      eraForPreset(preset ?? DEFAULT_SEED_PRESET) === "1991" ? 2_500 : SECTOR_EXPANSION_BASE_COST,
+      preset
+    ) *
+      (1 - disc)
+  );
 }

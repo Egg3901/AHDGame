@@ -196,9 +196,9 @@ describe("era-derived expectations", () => {
   });
 
   it("uses authored opening benchmarks for 1991 and keeps other defaults", () => {
-    expect(expectedPrimeRate("US", 1991)).toBe(7);
-    expect(expectedPrimeRate("JP", 1991)).toBe(6);
-    expect(expectedPrimeRate("IE", 1991)).toBe(11.25);
+    expect(expectedPrimeRate("US", 1991)).toBe(4);
+    expect(expectedPrimeRate("JP", 1991)).toBe(3);
+    expect(expectedPrimeRate("IE", 1991)).toBe(4.5);
     expect(expectedPrimeRate("JP", 1953)).toBe(1);
 
     expect(expectedPrimeRate("JP")).toBe(COUNTRY_CONFIGS.JP.centralBank.defaultPrimeRate);

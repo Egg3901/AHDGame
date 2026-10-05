@@ -1,3 +1,4 @@
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 /**
  * Sector strategies a corporation can pick, and what switching costs. Each sector
  * type has 4 to 8 strategies in SECTOR_STRATEGIES that change which commodities it
@@ -28,6 +29,8 @@ import {
   type MediaOperatingModelSector,
 } from "@/lib/mediaOperatingModels/catalog";
 
+import { eraForPreset } from "@/lib/seeds/presetSelector";
+import { DEFAULT_DEMAND_1991 } from "./sectorStrategyDefinitions1991";
 import { SECTOR_STRATEGIES } from "./sectorStrategyDefinitions";
 import {
   CANCEL_COST_FRACTION,
@@ -121,7 +124,23 @@ export function getMediaOperatingModelStrategies(sectorType: string): SectorStra
  * Falls back to the sector's first strategy if the strategy ID is unknown.
  * Unknown persisted sector types use an inert strategy until repaired.
  */
-export function getStrategy(sectorType: string, strategyId: string): SectorStrategy {
+function strategyForPreset(
+  sectorType: string,
+  strategy: SectorStrategy,
+  preset?: string
+): SectorStrategy {
+  const demand =
+    strategy.id === "standard" && eraForPreset(preset ?? DEFAULT_SEED_PRESET) === "1991"
+      ? DEFAULT_DEMAND_1991[sectorType as CorporationType]
+      : undefined;
+  return demand ? { ...strategy, demand: { ...demand } } : strategy;
+}
+
+export function getStrategy(
+  sectorType: string,
+  strategyId: string,
+  preset?: string
+): SectorStrategy {
   if (!Object.hasOwn(SECTOR_STRATEGIES, sectorType)) {
     if (!reportedUnknownSectorTypes.has(sectorType)) {
       reportedUnknownSectorTypes.add(sectorType);
@@ -133,22 +152,25 @@ export function getStrategy(sectorType: string, strategyId: string): SectorStrat
     return UNKNOWN_SECTOR_STRATEGY;
   }
   const strategies = SECTOR_STRATEGIES[sectorType as CorporationType];
-  return (
+  const strategy =
     strategies.find((s) => s.id === strategyId) ??
     getMediaOperatingModelStrategies(sectorType).find((s) => s.id === strategyId) ??
-    strategies[0]
-  );
+    strategies[0];
+  return strategyForPreset(sectorType, strategy, preset);
 }
 
 /** Strategy options for queries and menus. Model options are omitted unless enabled. */
 export function getSectorStrategies(
   sectorType: string,
   mediaOperatingModelsEnabled = false,
-  mediaDiscriminator?: string | null
+  mediaDiscriminator?: string | null,
+  preset?: string
 ): SectorStrategy[] {
   const operatingType = getOperatingSectorType(sectorType, undefined, mediaDiscriminator);
   if (!Object.hasOwn(SECTOR_STRATEGIES, operatingType)) return [];
-  const strategies = SECTOR_STRATEGIES[operatingType as CorporationType];
+  const strategies = SECTOR_STRATEGIES[operatingType as CorporationType].map((strategy) =>
+    strategyForPreset(operatingType, strategy, preset)
+  );
   return mediaOperatingModelsEnabled
     ? [...strategies, ...getMediaOperatingModelStrategies(operatingType)]
     : strategies;
@@ -173,11 +195,13 @@ export function getStrategyForOperatingModel(
   sectorType: string,
   strategyId: string,
   industryModel?: string | null,
-  mediaDiscriminator?: string | null
+  mediaDiscriminator?: string | null,
+  preset?: string
 ): SectorStrategy {
   return getStrategy(
     getOperatingSectorType(sectorType, industryModel, mediaDiscriminator),
-    strategyId
+    strategyId,
+    preset
   );
 }
 
@@ -193,10 +217,11 @@ export function getEffectiveStrategyRates(
   transitionFromStrategyId: string | undefined | null,
   transitionStartTurn: number | undefined | null,
   currentTurn: number,
-  mediaDiscriminator?: string | null
+  mediaDiscriminator?: string | null,
+  preset?: string
 ): EffectiveStrategyRates {
   const operatingType = getOperatingSectorType(sectorType, undefined, mediaDiscriminator);
-  const target = getStrategy(operatingType, strategyId);
+  const target = getStrategy(operatingType, strategyId, preset);
 
   // No transition in progress → return target directly
   if (!transitionFromStrategyId || transitionStartTurn == null) {
@@ -219,7 +244,7 @@ export function getEffectiveStrategyRates(
     };
   }
 
-  const source = getStrategy(operatingType, transitionFromStrategyId);
+  const source = getStrategy(operatingType, transitionFromStrategyId, preset);
 
   // Interpolate each commodity rate
   const supply = blendRates(source.supply, target.supply, progress);
@@ -236,7 +261,8 @@ export function getEffectiveStrategyRatesForOperatingModel(
   transitionStartTurn: number | undefined | null,
   currentTurn: number,
   industryModel?: string | null,
-  mediaDiscriminator?: string | null
+  mediaDiscriminator?: string | null,
+  preset?: string
 ): EffectiveStrategyRates {
   return getEffectiveStrategyRates(
     getOperatingSectorType(sectorType, industryModel, mediaDiscriminator),
@@ -244,7 +270,8 @@ export function getEffectiveStrategyRatesForOperatingModel(
     transitionFromStrategyId,
     transitionStartTurn,
     currentTurn,
-    mediaDiscriminator
+    mediaDiscriminator,
+    preset
   );
 }
 

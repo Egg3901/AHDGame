@@ -34,6 +34,7 @@ export interface BuildQueueTurnArgs {
   sectorCurrencyCode: CurrencyCode | undefined;
   sectorFxRate: number;
   eraUnitScale: number;
+  preset?: string;
 }
 
 export interface BuildQueueTurn {
@@ -114,7 +115,8 @@ export function resolveBuildQueueTurn(args: BuildQueueTurnArgs): BuildQueueTurn 
     eraUnitScale,
     sector.strategyId ?? null,
     sector.industryModel,
-    sector.mediaDiscriminator
+    sector.mediaDiscriminator,
+    args.preset
   );
   // C10: the credit keys on the ACCRUED COST, not on the target slider.
   // `currentGrowthCost` is what the sector is being billed THIS turn;

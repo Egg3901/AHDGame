@@ -10,6 +10,20 @@ const US_BASE = { gdp: 397_100_000_000, population: 151_300_000 };
 const RU_BASE = { gdp: 1_400_000_000_000, population: 189_500_000 };
 
 describe("computeLawCost", () => {
+  it("applies a persisted founding program scale to expenses while preserving receipts", () => {
+    const model = {
+      name: "Program",
+      description: "",
+      gdpCostFraction: 0.1,
+      incomeCostFraction: 0.2,
+      gdpRevenueFraction: 0.03,
+    };
+    const raw = computeLawCost(model, UK_BASE, "UK", 1.2);
+    const scaled = computeLawCost(model, UK_BASE, "UK", 1.2, 0.72);
+    expect(scaled.cost).toBeCloseTo(raw.cost * 0.72, 0);
+    expect(scaled.revenue).toBe(raw.revenue);
+    expect(scaled.net).toBe(scaled.revenue - scaled.cost);
+  });
   it("prices the UK NHS L4 at ≈£429M on the 1953 base (income term)", () => {
     const nhs = UK_LAWS.find((l) => l.id === "uk.health.universalCare.primary")!;
     const r = computeLawCost(nhs.levels![4], UK_BASE, "UK", null);

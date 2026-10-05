@@ -37,6 +37,12 @@ import { refreshNationalBudgetRevenue } from "@/lib/budget/revenue";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { NATIONAL_POLICY_STATE_IDS } from "@/lib/policy/nationalStateId";
 import type { CountryId } from "@/lib/constants/countries";
+import { calculateFederalLawAnnualCosts } from "@/lib/budget/spending";
+import { PLAYER_RESET_DEFICIT_GDP_SHARE_1991 } from "@/lib/seeds/reference/rules/openingFiscalEnvelope";
+import {
+  openingProgramCostScale,
+  scaleProgramCostModel,
+} from "@/lib/seeds/reference/rules/openingProgramCostScale";
 
 // The gate lives in ONE place (politicalMetrics/pipelinePreset) so the four
 // seed call sites cannot drift apart again. Re-exported under the historical
@@ -251,6 +257,7 @@ export async function seedPoliticalLegislationBaseline(
   );
 
   if (year === 1991) {
+    await calibratePlayerOpeningPrograms1991(db, log);
     const { SUCCESSOR_1991_GENERAL_GOVERNMENT_GDP_PERCENT } =
       await import("@/lib/seeds/reference/successorFiscal1991");
     const budget = await db
@@ -280,6 +287,76 @@ export async function seedPoliticalLegislationBaseline(
     `Seeded political-legislation ${year} baseline: ${policyCount} policy records, ` +
       `${lawCount} enacted laws, ${residualCount} metric residual sets, budgets synced`
   );
+}
+
+/**
+ * US/UK use the v2 book at every preset. Calibrate that authoritative book,
+ * including every proposable level, after its real receipts and fixed regional
+ * transfers are known. Expense fractions persist through fiscal refreshes;
+ * revenue fractions, tax rates and political metric effects are preserved.
+ */
+async function calibratePlayerOpeningPrograms1991(
+  db: Db,
+  log: (msg: string) => void
+): Promise<void> {
+  for (const countryId of ["US", "UK"] as const) {
+    const budgetId = getNationalBudgetId(countryId);
+    const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
+    if (!budget) throw new Error(`Missing 1991 ${countryId} national budget after law sync`);
+    const { items } = await calculateFederalLawAnnualCosts(db, budget);
+    const programCost = items.reduce((sum, item) => sum + item.amount, 0);
+    const fixedOperatingCost = Math.max(
+      0,
+      budget.spending.total - budget.spending.debtInterest - programCost
+    );
+    const scale = openingProgramCostScale({
+      gdp: budget.gdp,
+      annualRevenue: budget.revenue.total,
+      annualDebtService: budget.spending.debtInterest,
+      fixedOperatingCost,
+      programCost,
+      maximumDeficitGdpShare: PLAYER_RESET_DEFICIT_GDP_SHARE_1991,
+    });
+    await db
+      .collection<FederalBudget>("federalBudget")
+      .updateOne({ _id: budgetId }, { $set: { programCostScaleBaseline: scale } });
+    const costOps: AnyBulkWriteOperation<EnactedLaw>[] = items.flatMap(({ law }) =>
+      law.costModelV2
+        ? [
+            {
+              updateOne: {
+                filter: { _id: law._id },
+                update: { $set: { costModelV2: scaleProgramCostModel(law.costModelV2, scale) } },
+              },
+            },
+          ]
+        : []
+    );
+    if (costOps.length > 0) await db.collection<EnactedLaw>("enactedLaws").bulkWrite(costOps);
+
+    const typeOps: AnyBulkWriteOperation<LegislationType>[] = getCatalog(countryId, 1991)
+      .filter((law) => law.kind !== "tax")
+      .map((law) => {
+        const doc = projectLawToLegislationType(law);
+        return {
+          updateOne: {
+            filter: { _id: doc._id },
+            update: {
+              $set: {
+                policyOptions: doc.policyOptions!.map((option) => ({
+                  ...option,
+                  costModelV2: scaleProgramCostModel(option.costModelV2!, scale),
+                })),
+              },
+            },
+          },
+        };
+      });
+    if (typeOps.length > 0)
+      await db.collection<LegislationType>("legislationTypes").bulkWrite(typeOps);
+    await refreshNationalBudgetRevenue(db, [budgetId]);
+    log(`Calibrated 1991 ${countryId} program expense fractions by ${scale.toFixed(6)}`);
+  }
 }
 
 /**

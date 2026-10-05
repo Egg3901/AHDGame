@@ -17,7 +17,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { centralBankApiUrl } from "@/lib/urls";
 import { CREDIT_RATINGS } from "@/lib/db/types/centralBank";
 import {
-  FOREX_ACTIVE_COUNTRIES,
+  FOREX_ACTIVE_CURRENCIES,
   COUNTRY_CURRENCY_MAP,
   type CurrencyCode,
 } from "@/lib/constants/currencies";
@@ -321,9 +321,10 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
                     · Term ends on turn {data.chairTermExpiresAtTurn}
                   </span>
                 )}
-                {data.intervention && FOREX_ACTIVE_COUNTRIES.includes(countryId) && (
-                  <span className="text-muted">· FX intervention active</span>
-                )}
+                {data.intervention &&
+                  FOREX_ACTIVE_CURRENCIES.includes(data.nationalCurrency ?? "USD") && (
+                    <span className="text-muted">· FX intervention active</span>
+                  )}
               </>
             }
             primeRate={`${(data.primeRate ?? 0).toFixed(2)}%`}
@@ -440,20 +441,21 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
             onClick={() => setActiveTab("members")}
             label="Members"
           />
-          {FOREX_ACTIVE_COUNTRIES.includes(countryId) && (
+          {FOREX_ACTIVE_CURRENCIES.includes(data.nationalCurrency ?? "USD") && (
             <TabButton
               active={activeTab === "savings"}
               onClick={() => setActiveTab("savings")}
               label="Savings"
             />
           )}
-          {FOREX_ACTIVE_COUNTRIES.includes(countryId) && data.lineOfCreditEnabled && (
-            <TabButton
-              active={activeTab === "loc"}
-              onClick={() => setActiveTab("loc")}
-              label="Line of credit"
-            />
-          )}
+          {FOREX_ACTIVE_CURRENCIES.includes(data.nationalCurrency ?? "USD") &&
+            data.lineOfCreditEnabled && (
+              <TabButton
+                active={activeTab === "loc"}
+                onClick={() => setActiveTab("loc")}
+                label="Line of credit"
+              />
+            )}
           {data.balanceSheet && (
             <TabButton
               active={activeTab === "balance-sheet"}
@@ -468,13 +470,14 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
               label="Money supply"
             />
           )}
-          {FOREX_ACTIVE_COUNTRIES.includes(countryId) && data.intervention && (
-            <TabButton
-              active={activeTab === "intervention"}
-              onClick={() => setActiveTab("intervention")}
-              label="FX intervention"
-            />
-          )}
+          {FOREX_ACTIVE_CURRENCIES.includes(data.nationalCurrency ?? "USD") &&
+            data.intervention && (
+              <TabButton
+                active={activeTab === "intervention"}
+                onClick={() => setActiveTab("intervention")}
+                label="FX intervention"
+              />
+            )}
           <TabButton
             active={activeTab === "reserves"}
             onClick={() => setActiveTab("reserves")}

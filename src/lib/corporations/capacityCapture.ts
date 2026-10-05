@@ -208,9 +208,10 @@ export function capacityCaptureBookUpdates(args: {
   unitsTaken: number;
   unitsReceived: number;
   year: number;
+  preset?: string;
   eraUnitScale: number;
 }): { defenderSet: { capacityBookAnchor?: number }; attackerBookAnchor: number } {
-  const { defender, attacker, unitsTaken, unitsReceived, year, eraUnitScale } = args;
+  const { defender, attacker, unitsTaken, unitsReceived, year, eraUnitScale, preset } = args;
   const defenderStock =
     typeof defender.capitalStock === "number" && Number.isFinite(defender.capitalStock)
       ? Math.max(0, defender.capitalStock)
@@ -231,7 +232,8 @@ export function capacityCaptureBookUpdates(args: {
             eraUnitScale,
             defender.strategyId ?? null,
             defender.industryModel,
-            defender.mediaDiscriminator
+            defender.mediaDiscriminator,
+            preset
           ),
     sourceStock: defenderStock,
     unitsTaken,
@@ -261,7 +263,8 @@ export function capacityCaptureBookUpdates(args: {
           // attacker type with a defender strategy.
           (attacker ? attacker.strategyId : defender.strategyId) ?? null,
           attacker?.industryModel ?? defender.industryModel,
-          attacker?.mediaDiscriminator ?? defender.mediaDiscriminator
+          attacker?.mediaDiscriminator ?? defender.mediaDiscriminator,
+          preset
         );
   return {
     defenderSet:
@@ -346,6 +349,7 @@ export function attackCostAnchorUnderPlants(args: {
    */
   strategyId: string | null;
   year: number;
+  preset?: string;
   eraUnitScale: number;
 }): number {
   const {
@@ -356,6 +360,7 @@ export function attackCostAnchorUnderPlants(args: {
     mediaDiscriminator,
     strategyId,
     year,
+    preset,
     eraUnitScale,
   } = args;
   const legacy = Number.isFinite(legacyCostAnchor) ? Math.max(0, legacyCostAnchor) : 0;
@@ -368,7 +373,8 @@ export function attackCostAnchorUnderPlants(args: {
       eraUnitScale,
       strategyId ?? null,
       industryModel,
-      mediaDiscriminator
+      mediaDiscriminator,
+      preset
     ) *
     ATTACK_BUILD_PRICE_PREMIUM;
   return Math.round(Math.max(legacy, capacityFloor));

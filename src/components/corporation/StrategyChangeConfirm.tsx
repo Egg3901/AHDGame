@@ -1,5 +1,6 @@
 "use client";
 
+import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useEffect, useState } from "react";
 import type { CorporationType } from "@/lib/constants/corporations";
 import {
@@ -136,10 +137,16 @@ export default function StrategyChangeConfirm({
     };
   }, []);
 
-  const strategies = getSectorStrategies(sectorType, mediaOperatingModelsEnabled === true);
+  const { preset } = useWorldFlags();
+  const strategies = getSectorStrategies(
+    sectorType,
+    mediaOperatingModelsEnabled === true,
+    null,
+    preset
+  );
   if (!strategies) return null;
 
-  const current = getStrategy(sectorType, currentStrategyId);
+  const current = getStrategy(sectorType, currentStrategyId, preset);
   const target = strategies.find((s) => s.id === targetStrategyId) as SectorStrategy | undefined;
   if (!current || !target) return null;
 

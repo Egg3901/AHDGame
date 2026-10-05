@@ -308,6 +308,36 @@ describe("calculateFederalSpending", () => {
     expect(spending.stateGrants).toBe(250);
   });
 
+  it("books the legacy UK enacted grant once even when regions also record its receipt", async () => {
+    const db = createMockDb();
+    db.collection("enactedLaws").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          legislationTypeId: "uk_local_government_funding",
+          countryId: "UK",
+          scope: "national",
+          budgetCategory: "other",
+          isGrant: true,
+          budgetCost: 0,
+          gdpPerCapitaMultiplier: 0.00025,
+        },
+      ]),
+    });
+    db.collection("states").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "LON" }]),
+    });
+    db.collection("regionalBudgets").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "LON", westminsterGrant: 250 }]),
+    });
+    const spending = await calculateFederalSpending(
+      db as unknown as Db,
+      mockBudget({ _id: "UK", countryId: "UK" }),
+      10
+    );
+    expect(spending.stateGrants).toBe(250);
+    expect(spending.total).toBe(260);
+  });
+
   it("books only the drawn-down grant for a planned economy, and the full grant for a market one", async () => {
     // Plan-economy allocations LAPSE: the centre books what a republic actually
     // draws down, not the whole allocation. Live RU distributes ₽44.00B and its

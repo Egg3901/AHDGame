@@ -7,11 +7,17 @@ import {
   gdp1991LegacyLcu,
   type FiscalAnchorCountry1991,
 } from "@/lib/constants/fiscalAnchors1991";
+import { IRISH_GROSS_GOVERNMENT_DEBT_1991_IEP, NATIVE_NOMINAL_GDP_1991 } from "./nominalGdp1991";
+import {
+  fitOpeningFiscalEnvelope,
+  PLAYER_RESET_DEFICIT_GDP_SHARE_1991,
+} from "./rules/openingFiscalEnvelope";
 import { POPULATION_TOTALS_1991 } from "./populationTotals1991";
 import { ObjectId } from "mongodb";
 import { calculatePolicyOptionAnnualCost } from "@/lib/budget/costs";
 import { computeTaxBaseGdpShareBaseline } from "@/lib/budget/revenue";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
+import { getCostClass } from "@/lib/era/legislationCostCatalog";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { EnactedLaw, FederalBudget, StateBudget } from "@/lib/db/types/budget";
 import type { LegislationPolicyOption, LegislationType } from "@/lib/db/types/legislation";
@@ -295,6 +301,8 @@ export interface NationalBudgetSeedConfig {
   creditRating: SupportedNationalBudget["creditRating"];
   baselineSpendingByCategory: Record<string, number>;
   baselineStateGrants: number;
+  /** Use the reset's calibrated program envelope in both the budget and enacted laws. */
+  calibratedSpendingBaseline?: boolean;
   policyRevenueConfigs?: Array<{
     legislationTypeId: string;
     revenueKey: keyof SupportedNationalBudget["revenue"];
@@ -679,6 +687,7 @@ function isPoliticalLegislationCountry(countryId: string): boolean {
 function preferFullAuthoredBaseline(config: NationalBudgetSeedConfig): boolean {
   return (
     config.skipLegacyLegislation === true ||
+    config.calibratedSpendingBaseline === true ||
     shouldUseFullAuthoredBudgetBaseline({
       countryId: config.countryId,
       fiscalYear: config.fiscalYear,
@@ -693,7 +702,8 @@ function preferCategoryBaselineOverrides(config: NationalBudgetSeedConfig): bool
 
 function deriveSpending(
   config: NationalBudgetSeedConfig,
-  typesById: Map<string, LegislationType>
+  typesById: Map<string, LegislationType>,
+  activeOnly = false
 ): SupportedNationalBudget["spending"] {
   // US/UK/RU/DD on 1953: full authored baselines (political-legislation sync
   // replaces these with the v2 law book shortly after seed).
@@ -721,6 +731,8 @@ function deriveSpending(
     if (legislationType.countryScope !== config.countryId.toLowerCase()) continue;
     if (!legislationType.budgetCategory) continue;
     if (legislationType.allowedScope === "state") continue;
+    if (activeOnly && !isLegislationTypeActive(legislationType._id, config.fiscalYear)) continue;
+    if (activeOnly && getCostClass(legislationType._id) === "none") continue;
 
     const defaultOption = getDefaultPolicyOption(config, legislationType);
     const annualCost = calculatePolicyOptionAnnualCost(defaultOption, {
@@ -1056,6 +1068,14 @@ function deriveEnactedLaws(
     if (!defaultOption) continue;
 
     const isTaxRate = defaultOption.rate !== undefined;
+    // Budget-neutral reforms remain policies, but their legacy absolute costs
+    // must not consume a calibrated fiscal envelope that runtime prices at zero.
+    if (
+      config.calibratedSpendingBaseline &&
+      !isTaxRate &&
+      getCostClass(legislationType._id) === "none"
+    )
+      continue;
 
     // Tax rate types don't have budgetCategory — they contribute revenue, not spending.
     // Non-tax types must have a budgetCategory to be included.
@@ -1112,8 +1132,13 @@ function deriveEnactedLaws(
   // gdpPerCapitaMultiplier × gdp is the legacy GDP-share form and is not
   // re-scaled by getGdpIndexedCostScale. Political countries seed no old laws
   // (above). Other countries only rescale defense/healthcare by default.
-  if (preferCategoryBaselineOverrides(config) && config.gdp > 0) {
-    const overrideCats = overrideCategoriesFor(config.countryId);
+  if (
+    (preferCategoryBaselineOverrides(config) || config.calibratedSpendingBaseline) &&
+    config.gdp > 0
+  ) {
+    const overrideCats = config.calibratedSpendingBaseline
+      ? new Set(Object.keys(config.baselineSpendingByCategory))
+      : overrideCategoriesFor(config.countryId);
     const spendingIdx: number[] = [];
     for (let i = 0; i < laws.length; i++) {
       if (laws[i].rate === undefined) spendingIdx.push(i);
@@ -1125,7 +1150,10 @@ function deriveEnactedLaws(
       const law = laws[lawPos]!;
       const raw = rawCosts[j] ?? 0;
       if (law.isGrant) {
-        if (GRANT_OVERRIDE_COUNTRIES.has(config.countryId.toUpperCase())) {
+        if (
+          config.calibratedSpendingBaseline ||
+          GRANT_OVERRIDE_COUNTRIES.has(config.countryId.toUpperCase())
+        ) {
           grantEntries.push({ lawPos, raw });
         }
         continue;
@@ -1147,6 +1175,7 @@ function deriveEnactedLaws(
         const scaled = grantTarget * share;
         const law = laws[lawPos]!;
         delete law.annualCostPerCapita;
+        delete law.annualCostUsd;
         delete law.gdpCostFraction;
         delete law.incomeCostFraction;
         law.gdpPerCapitaMultiplier = scaled / config.gdp;
@@ -1161,6 +1190,7 @@ function deriveEnactedLaws(
         const scaled = target * share;
         const law = laws[lawPos]!;
         delete law.annualCostPerCapita;
+        delete law.annualCostUsd;
         delete law.gdpCostFraction;
         delete law.incomeCostFraction;
         law.gdpPerCapitaMultiplier = scaled / config.gdp;
@@ -2109,6 +2139,9 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     },
     otherRevenue: 45_000_000_000,
     debt: {
+      // FY1991 Treasury public debt securities, rounded to billions. Includes
+      // intragovernmental holdings; excludes separate agency securities.
+      // https://www.fiscal.treasury.gov/files/reports-statements/treasury-bulletin/b16.pdf (FD-1)
       principal: 3_665_000_000_000,
       interestRate: 0.075,
       ceiling: 4_145_000_000_000,
@@ -2158,7 +2191,10 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     },
     otherRevenue: 35_000_000_000,
     debt: {
-      principal: 195_000_000_000,
+      // Consolidated gross public-sector debt, end-March 1991, Table A.
+      // Distinct from net debt (£154.467B) and market national debt (£163.448B).
+      // https://www.bankofengland.co.uk/-/media/boe/files/quarterly-bulletin/1991/the-net-debt-of-the-public-sector-end-march-1991.pdf
+      principal: 194_118_000_000,
       interestRate: 0.105,
       ceiling: 240_000_000_000,
       ceilingLastRaisedYear: 1991,
@@ -2216,7 +2252,10 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     },
     otherRevenue: 8_000_000_000_000,
     debt: {
-      principal: 167_000_000_000_000,
+      // Government general bonds outstanding, end-FY1991, rounded trillions.
+      // The previous ¥167T was FY1990. This excludes local-government debt.
+      // https://www.mof.go.jp/english/policy/budget/budget/fy2025/01.pdf
+      principal: 172_000_000_000_000,
       interestRate: 0.058,
       ceiling: 195_000_000_000_000,
       ceilingLastRaisedYear: 1991,
@@ -2297,7 +2336,7 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     countryId: "IE",
     fiscalYear: 1991,
     population: 3_525_000,
-    gdp: 24_000_000_000, // £IR 24B (1991 IEP; ~€34B at fixed IR£→EUR parity)
+    gdp: 24_000_000_000, // Legacy authored base; the 1991 opening restores sourced native GDP below.
     currencyCode: "IEP",
     economicFactors: {
       gdpGrowth: 2.0, // pre-Celtic-Tiger
@@ -2315,7 +2354,7 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     },
     otherRevenue: 2_500_000_000,
     debt: {
-      principal: 32_000_000_000, // debt-to-GDP ~95%
+      principal: 32_000_000_000, // Legacy scenario debt share, not an observed 1991 debt series.
       interestRate: 0.1,
       ceiling: 38_000_000_000,
       ceilingLastRaisedYear: 1991,
@@ -5667,7 +5706,9 @@ function anchorFiscal1991(config: NationalBudgetSeedConfig, carriedFrom1979: boo
  * Returns the preset-appropriate national-budget seed configs. Falls back
  * to the 2019-era bundle for unknown presets.
  */
-export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalBudgetSeedConfig[] {
+function getUncalibratedNationalBudgetSeedConfigsForPreset(
+  preset: string
+): NationalBudgetSeedConfig[] {
   if (preset === "1953-default") return NATIONAL_BUDGET_SEED_CONFIGS_1953;
   if (preset === "1979-default") return NATIONAL_BUDGET_SEED_CONFIGS_1979;
   if (preset === "1991-default") {
@@ -5700,7 +5741,7 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
     return overlayNationalBudgetConfigs(
       // The seven transition republic budgets are scoped to the 1991 world.
       // Later presets may reintroduce a country only with a later authored row.
-      getNationalBudgetSeedConfigsForPreset("1991-default").filter(
+      getUncalibratedNationalBudgetSeedConfigsForPreset("1991-default").filter(
         (config) => !TRANSITION_1991_BUDGET_COUNTRIES.includes(config.countryId)
       ),
       NATIONAL_BUDGET_SEED_CONFIGS_1999,
@@ -5709,14 +5750,14 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
   }
   if (preset === "2007-default") {
     return overlayNationalBudgetConfigs(
-      getNationalBudgetSeedConfigsForPreset("1999-default"),
+      getUncalibratedNationalBudgetSeedConfigsForPreset("1999-default"),
       NATIONAL_BUDGET_SEED_CONFIGS_2007,
       2007
     );
   }
   if (preset === "2019-default") {
     return overlayNationalBudgetConfigs(
-      getNationalBudgetSeedConfigsForPreset("2007-default"),
+      getUncalibratedNationalBudgetSeedConfigsForPreset("2007-default"),
       [...NATIONAL_BUDGET_SEED_CONFIGS, ...MODERN_NATIONAL_BUDGETS_2019],
       2019
     );
@@ -5725,7 +5766,7 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
     return overlayNationalBudgetConfigs(
       // These five rows are authored for the 2019 reset only. A 2023 or
       // 2027 world needs its own fiscal calibration before it can include them.
-      getNationalBudgetSeedConfigsForPreset("2019-default").filter(
+      getUncalibratedNationalBudgetSeedConfigsForPreset("2019-default").filter(
         (config) => !MODERN_NATIONAL_BUDGETS_2019.some((row) => row.countryId === config.countryId)
       ),
       NATIONAL_BUDGET_SEED_CONFIGS_2023,
@@ -5735,13 +5776,77 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
   if (preset === "2027-default") {
     return convertEuroMemberBudgetsFor2027(
       overlayNationalBudgetConfigs(
-        getNationalBudgetSeedConfigsForPreset("2023-default"),
+        getUncalibratedNationalBudgetSeedConfigsForPreset("2023-default"),
         NATIONAL_BUDGET_SEED_CONFIGS_2027,
         2027
       )
     );
   }
   return NATIONAL_BUDGET_SEED_CONFIGS;
+}
+
+/** 1991 player budgets resize active programs while preserving receipts and historic debt. */
+export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalBudgetSeedConfig[] {
+  const configs = getUncalibratedNationalBudgetSeedConfigsForPreset(preset);
+  if (preset !== "1991-default") return configs;
+  return configs.map((config) => {
+    if (!["US", "UK", "JP"].includes(config.countryId)) {
+      // The shared primary-source anchors own both nominal GDP and any
+      // available historical debt/expenditure totals. Pin their authored
+      // envelopes to actual laws instead of recalculating the old ladder.
+      if ((FISCAL_ANCHOR_COUNTRIES_1991 as readonly string[]).includes(config.countryId)) {
+        return { ...config, calibratedSpendingBaseline: true };
+      }
+      const nominalGdp =
+        NATIVE_NOMINAL_GDP_1991[config.countryId as keyof typeof NATIVE_NOMINAL_GDP_1991];
+      if (nominalGdp === undefined) return config;
+      // Preserve the effective opening program book, rather than dormant
+      // authored baselines overridden by legacy policy ladders. Pin actual
+      // laws to the same shares to survive subsequent fiscal refreshes.
+      const spending = deriveSpending(
+        config,
+        new Map(budgetLegislationTypes.map((type) => [type._id, type] as const))
+      );
+      const rebased = rebaseBudgetNominals(
+        {
+          ...config,
+          baselineSpendingByCategory: spending.byCategory,
+          baselineStateGrants: spending.stateGrants,
+          calibratedSpendingBaseline: true,
+        },
+        nominalGdp
+      );
+      if (config.countryId !== "IE") return rebased;
+      // CSO's gross debt stock is an absolute EUR observation restored to IEP.
+      // Preserve the authored ceiling headroom, not the stale 133.3% debt share.
+      return {
+        ...rebased,
+        debt: {
+          ...rebased.debt,
+          principal: IRISH_GROSS_GOVERNMENT_DEBT_1991_IEP,
+          ceiling:
+            IRISH_GROSS_GOVERNMENT_DEBT_1991_IEP * (rebased.debt.ceiling / rebased.debt.principal),
+        },
+      };
+    }
+    const budget = buildNationalBudgetSeed(config);
+    const typesById = new Map(budgetLegislationTypes.map((type) => [type._id, type] as const));
+    const activeSpending = deriveSpending(config, typesById, true);
+    const envelope = fitOpeningFiscalEnvelope({
+      gdp: config.gdp,
+      annualRevenue: budget.revenue.total,
+      annualDebtService: budget.spending.debtInterest,
+      byCategory: activeSpending.byCategory,
+      stateGrants: activeSpending.stateGrants,
+      maximumDeficitGdpShare: PLAYER_RESET_DEFICIT_GDP_SHARE_1991,
+    });
+    return {
+      ...config,
+      baselineSpendingByCategory: envelope.byCategory,
+      baselineStateGrants: envelope.stateGrants,
+      calibratedSpendingBaseline: true,
+    };
+  });
 }
 
 /**

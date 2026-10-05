@@ -2,19 +2,6 @@ import { openingLawReferences } from "@/lib/resetLegislation/openingLaw";
 import { openingFiscalBooks1991, type ResetOpeningCountry } from "./opening1991";
 import { reconcileOpeningOwnership } from "./rules/openingOwnership";
 
-/** The only positive national source not represented by a proposed law family. */
-const STANDALONE_CONTINUITY = {
-  US: [],
-  UK: [],
-  JP: [
-    {
-      id: "jp_foreign_affairs_continuity",
-      sourceId: "jp_foreign_aid",
-      amount: 1_736_000_000_000,
-    },
-  ],
-} as const;
-
 export function openingFiscalOwnership1991() {
   const books = openingFiscalBooks1991();
   return Object.fromEntries(
@@ -34,7 +21,11 @@ export function openingFiscalOwnership1991() {
         );
       return [
         country,
-        reconcileOpeningOwnership(books[country].operating, claims, STANDALONE_CONTINUITY[country]),
+        reconcileOpeningOwnership(
+          books[country].operating,
+          claims,
+          books[country].standaloneContinuity
+        ),
       ];
     })
   ) as Record<ResetOpeningCountry, ReturnType<typeof reconcileOpeningOwnership>>;

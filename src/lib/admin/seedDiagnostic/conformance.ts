@@ -47,6 +47,7 @@ import {
   checkMonetary,
   checkForex,
 } from "./conformanceMacro";
+import { checkEconomicOpening } from "./economicOpening";
 import { checkRegionDerivedCoverage } from "./regionDerivedCoverage";
 import { regionalMetricCoverage, seedTurnoutScopeFilter } from "./regionalCoverage";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
@@ -1062,6 +1063,7 @@ export async function runConformanceChecks(
     checkConfig(db, worldsimBootstrap),
     checkRegionDerivedCoverage(db, expect),
     checkScotusSeed(db, preset),
+    checkEconomicOpening(db, preset),
   ]);
   const checks: SeedDiagnosticCheck[] = groups.flat();
 
