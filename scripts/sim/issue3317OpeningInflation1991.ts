@@ -4,8 +4,10 @@
  * Seeds every 1991-default country with its calibrated gameplay CPI and wage
  * growth, then runs one game year of the real CPI rule, the runtime wage rule,
  * the household price index and per-turn tax-base growth in a neutral FIXED
- * environment: unemployment at NAIRU (5%), prime at neutral (3%), seeded deficit and tariff, no
- * commodity, FX, savings, policy or money-supply signal, no player action.
+ * environment: each country's 1991 era inflation target, prime held at its
+ * 1991 era neutral rate, unemployment at NAIRU (5%), seeded deficit and
+ * tariff, no commodity, FX, savings, policy or money-supply signal, no player
+ * action.
  * It is a rule-level projection, not a world simulation, and makes no
  * long-run claim.
  *
@@ -16,7 +18,12 @@
  * Run: npx tsx scripts/sim/issue3317OpeningInflation1991.ts > scripts/sim/issue3317OpeningInflation1991.report.md
  */
 import { execSync } from "node:child_process";
-import { calculateInflation } from "@/lib/budget/inflation";
+import type { CountryId } from "@/lib/constants/countries";
+import {
+  calculateInflation,
+  getInflationTarget,
+  getNeutralPrimeRate,
+} from "@/lib/budget/inflation";
 import { applyPerTurnGrowthToFederalBases } from "@/lib/budget/revenue";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
@@ -26,9 +33,9 @@ import {
 import { getInitialNationalBudgetsForPreset } from "@/lib/seeds/reference/budgets";
 import { OPENING_INFLATION_BOUNDS } from "@/lib/seeds/reference/openingInflation1991";
 
-// Neutral stance: unemployment at NAIRU, prime at the engine's default neutral rate.
+// Neutral stance: unemployment at NAIRU, prime at each country's era neutral rate.
 const UNEMPLOYMENT = 5;
-const PRIME_RATE = 3;
+const YEAR = 1991;
 
 /** Authored historical CPI and wage growth (provenance) for calibrated openings. */
 const AUTHORED: Record<string, { inflationRate: number; wageGrowth: number }> = {
@@ -52,10 +59,14 @@ function step(
   previousInflation: number,
   wageGrowth: number
 ): number {
+  const country = budget.countryId as CountryId;
+  const neutralPrimeRate = getNeutralPrimeRate(country, YEAR);
   return calculateInflation({
+    targetInflation: getInflationTarget(country, YEAR),
+    neutralPrimeRate,
     unemployment: UNEMPLOYMENT,
     gdpGrowth: budget.economicFactors.gdpGrowth,
-    primeRate: PRIME_RATE,
+    primeRate: neutralPrimeRate,
     surplusToGdp: budget.gdp > 0 ? budget.surplus / budget.gdp : 0,
     tariffRate: budget.taxRates.tariffs ?? 0,
     wageGrowth,
@@ -76,10 +87,10 @@ const lines: string[] = [
   "# #3317 1991 opening inflation: deterministic rule-level report",
   "",
   `Source: \`${sha}\`. Preset \`1991-default\`, ${budgets.length} countries.`,
-  `Neutral fixed environment: unemployment ${UNEMPLOYMENT}% (NAIRU), prime ${PRIME_RATE}% (neutral), seeded deficit and tariff, no commodity/FX/savings/policy/M2 signal, no player action. Not a world simulation; no long-run claim.`,
+  `Neutral fixed environment: 1991 era inflation targets, prime at each country's era neutral rate, unemployment ${UNEMPLOYMENT}% (NAIRU), seeded deficit and tariff, no commodity/FX/savings/policy/M2 signal, no player action. Not a world simulation; no long-run claim.`,
   "",
-  "| Country | Authored CPI | Authored wage | Old T1 CPI | Opening CPI | Opening wage | T1 CPI | T12 CPI | T48 CPI | T48 wage | Price index T48 | Taxable income T48 |",
-  "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+  "| Country | Era target | Authored CPI | Authored wage | Old T1 CPI | Opening CPI | Opening wage | T1 CPI | T12 CPI | T48 CPI | T48 wage | Price index T48 | Taxable income T48 |",
+  "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
 ];
 
 for (const budget of budgets) {
@@ -107,7 +118,7 @@ for (const budget of budgets) {
   const income =
     budget.taxBases.taxableIncome > 0 ? bases.taxableIncome / budget.taxBases.taxableIncome : 1;
   lines.push(
-    `| ${budget.countryId} | ${authored ? f2(authored.inflationRate) : "="} | ${
+    `| ${budget.countryId} | ${f2(getInflationTarget(budget.countryId as CountryId, YEAR))} | ${authored ? f2(authored.inflationRate) : "="} | ${
       authored ? f2(authored.wageGrowth) : "="
     } | ${oldFirst === null ? "-" : f2(oldFirst)} | ${f2(opening.inflationRate)} | ${f2(
       opening.wageGrowth

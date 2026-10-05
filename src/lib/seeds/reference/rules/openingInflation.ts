@@ -1,47 +1,67 @@
 /**
- * Gameplay opening CPI and wage growth for authored high-inflation openings.
+ * Gameplay opening CPI and wage growth for the 1991 high-inflation countries.
  *
- * Seed authors record HISTORICAL annual CPI (1991 BR 480%, BG 338.45%, ...) as
- * provenance. The runtime inflation engine only supports MIN_INFLATION..
- * MAX_INFLATION (-2..100); an opening above that range was snapped to 100 on
- * the first recalculation, an unmodelled stabilization (#3317). Openings are
- * therefore calibrated here into gameplay values, before any budget is built.
+ * Seed rows record HISTORICAL 1991 CPI as provenance (BR 480%, BG 338.45%,
+ * RO 230.62%, ...). Those are not live opening values. The runtime CPI range
+ * is -2..100 and the first recalculation used to snap anything above it to
+ * 100, an unmodelled stabilization (#3317). The owner chose moderate gameplay
+ * openings instead of carrying hyperinflation into play.
  *
- * CPI: identity up to OPENING_INFLATION_KNEE, logarithmic above it:
+ * Contract:
+ *   - An opening at or below GAMEPLAY_OPENING_INFLATION_MAX (20%) is used as
+ *     authored. Ordinary countries are untouched.
+ *   - Every authored opening above it must have a row in
+ *     GAMEPLAY_OPENING_INFLATION_1991, which names its historical figure and
+ *     its gameplay value. A missing row, or a historical figure that no longer
+ *     matches the seed, is a seed error, not a silent fallback.
+ *   - Gameplay values sit in a moderate 12..20% band. Countries with an
+ *     authored 1991 monetary-era inflation target of 12% or more open at that
+ *     target (BR, RU, TR 12; YU 15), so the opening agrees with the target
+ *     the engine already reverts toward. Countries without such an anchor
+ *     (their era targets are 2..4%) are placed in the band by the severity of
+ *     their 1991 price shock: BG 20, RO 18, PL 16, CS 14, HU 14. Ordering is
+ *     kept within that unanchored group only; it is not useful across the
+ *     anchors (BR's target is the lowest yet its history is the worst).
+ *   - A calibrated opening rebuilds wage growth with the runtime wage rule
+ *     (`wageGrowthNode`): the real component, clamped to the real wage clamp,
+ *     plus the wage inflation passthrough times CPI. The authored real GDP
+ *     growth is the real component, as in the transition authoring rule
+ *     `wageGrowth = inflation + real growth`. Keeping BR's 50% or BG's 330%
+ *     authored nominal wage growth next to a 12..20% CPI would be incoherent.
  *
- *   gameplay = h                      for h <= K
- *   gameplay = K * (1 + ln(h / K))    for h >  K
- *
- * The map is monotone (a worse historical inflation stays worse in play) and
- * has slope 1 at the knee, so nothing jumps at the boundary. Inflation above
- * the knee behaves multiplicatively, so a log scale keeps the relative distance
- * between openings. K = 20 is the largest whole-number knee that keeps the whole
- * supported historical domain (up to MAX_SUPPORTED_HISTORICAL_INFLATION, 1000%)
- * strictly inside the runtime ceiling: 1000% maps to 98.2%, 480% to 83.6%.
- * Ordinary openings (at or below 20%) are unchanged.
- *
- * Wages: a calibrated opening cannot keep its authored nominal wage growth (BG
- * authored 330% against what is now ~77% CPI). Its wage growth is rebuilt with
- * the runtime wage rule (`wageGrowthNode`): the real component, clamped to
- * REAL_WAGE_CLAMP, plus WAGE_INFLATION_PASSTHROUGH times CPI. The authored real
- * GDP growth is the real component, as in the transition authoring rule
- * `wageGrowth = inflation + real growth`. The engine recomputes wage growth from
- * the same rule every turn, so the opening now starts where the runtime goes.
- *
- * Pure: plain data in, plain data out. Constants are passed in by the shell.
+ * Pure: plain data in, plain data out. Runtime constants come from the shell.
  */
 
-/** Below or at this annual CPI (%) an opening is used as authored. */
-export const OPENING_INFLATION_KNEE = 20;
+/** Highest opening CPI (%) used as authored; also the top of the gameplay band. */
+export const GAMEPLAY_OPENING_INFLATION_MAX = 20;
 
-/** Highest authored historical CPI (%) the calibration accepts. */
-export const MAX_SUPPORTED_HISTORICAL_INFLATION = 1000;
+/** Bottom of the gameplay band for calibrated openings (%). */
+export const GAMEPLAY_OPENING_INFLATION_MIN = 12;
+
+export interface GameplayOpeningInflation {
+  /** Authored historical 1991 annual CPI (%), kept as provenance. */
+  historical: number;
+  /** Gameplay opening CPI (%). */
+  gameplay: number;
+  /** Why this value. */
+  basis: "era-target" | "unanchored-severity";
+}
+
+export const GAMEPLAY_OPENING_INFLATION_1991: Readonly<Record<string, GameplayOpeningInflation>> = {
+  BR: { historical: 480, gameplay: 12, basis: "era-target" },
+  RU: { historical: 144, gameplay: 12, basis: "era-target" },
+  TR: { historical: 66, gameplay: 12, basis: "era-target" },
+  YU: { historical: 164, gameplay: 15, basis: "era-target" },
+  BG: { historical: 338.45, gameplay: 20, basis: "unanchored-severity" },
+  RO: { historical: 230.62, gameplay: 18, basis: "unanchored-severity" },
+  PL: { historical: 76.77, gameplay: 16, basis: "unanchored-severity" },
+  CS: { historical: 55, gameplay: 14, basis: "unanchored-severity" },
+  HU: { historical: 34.82, gameplay: 14, basis: "unanchored-severity" },
+};
 
 export interface OpeningInflationBounds {
   /** Runtime CPI floor (%). */
   minInflation: number;
-  /** Runtime CPI ceiling (%). */
-  maxInflation: number;
   /** Runtime real wage growth clamp [low, high] (%). */
   realWageClamp: readonly [number, number];
   /** Runtime share of CPI passed into nominal wage growth. */
@@ -58,48 +78,77 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-/** Map a historical annual CPI (%) to its gameplay opening CPI (%). */
-export function gameplayOpeningInflation(historical: number): number {
-  if (historical <= OPENING_INFLATION_KNEE) return historical;
-  return round2(OPENING_INFLATION_KNEE * (1 + Math.log(historical / OPENING_INFLATION_KNEE)));
+/** Wage growth the runtime wage rule gives at this real growth and CPI. */
+export function runtimeOpeningWageGrowth(
+  gdpGrowth: number,
+  inflationRate: number,
+  bounds: OpeningInflationBounds
+): number {
+  const [low, high] = bounds.realWageClamp;
+  const real = Math.max(low, Math.min(high, gdpGrowth));
+  return round2(real + bounds.wageInflationPassthrough * inflationRate);
 }
 
-/** Why an authored opening is outside the supported calibration domain, or null. */
-export function unsupportedOpeningInflation(
+/**
+ * Calibrate one authored opening. Ordinary openings are returned unchanged;
+ * a tabled high-inflation opening gets its gameplay CPI and runtime-rule wage.
+ * Throws on an opening outside the contract.
+ */
+export function calibrateOpeningEconomicFactors<T extends OpeningEconomicFactors>(
+  countryId: string,
+  factors: T,
+  bounds: OpeningInflationBounds
+): T {
+  const { inflationRate, wageGrowth, gdpGrowth } = factors;
+  if (![inflationRate, wageGrowth, gdpGrowth].every(Number.isFinite)) {
+    throw new Error(`${countryId}: non-finite opening economic factor`);
+  }
+  if (inflationRate <= GAMEPLAY_OPENING_INFLATION_MAX) return factors;
+  const row = GAMEPLAY_OPENING_INFLATION_1991[countryId];
+  if (!row) {
+    throw new Error(
+      `${countryId}: opening CPI ${inflationRate}% exceeds ${GAMEPLAY_OPENING_INFLATION_MAX}% ` +
+        `and has no gameplay opening row`
+    );
+  }
+  if (row.historical !== inflationRate) {
+    throw new Error(
+      `${countryId}: authored CPI ${inflationRate}% does not match its recorded historical ` +
+        `figure ${row.historical}%`
+    );
+  }
+  return {
+    ...factors,
+    inflationRate: row.gameplay,
+    wageGrowth: runtimeOpeningWageGrowth(gdpGrowth, row.gameplay, bounds),
+  };
+}
+
+/**
+ * Why a seeded opening is outside the gameplay contract, or null. Used by the
+ * seed contract test and the opening diagnostic on persisted budgets.
+ */
+export function openingInflationProblem(
+  countryId: string,
   factors: OpeningEconomicFactors,
   bounds: OpeningInflationBounds
 ): string | null {
   const { inflationRate, wageGrowth, gdpGrowth } = factors;
   if (![inflationRate, wageGrowth, gdpGrowth].every(Number.isFinite)) {
-    return "non-finite opening economic factor";
+    return "non-finite opening CPI, wage or growth";
   }
-  if (inflationRate < bounds.minInflation) {
-    return `CPI ${inflationRate}% is below the runtime floor ${bounds.minInflation}%`;
+  if (inflationRate < bounds.minInflation || inflationRate > GAMEPLAY_OPENING_INFLATION_MAX) {
+    return `opening CPI ${inflationRate}% outside ${bounds.minInflation}..${GAMEPLAY_OPENING_INFLATION_MAX}%`;
   }
-  if (inflationRate > MAX_SUPPORTED_HISTORICAL_INFLATION) {
-    return `CPI ${inflationRate}% exceeds the supported historical maximum ${MAX_SUPPORTED_HISTORICAL_INFLATION}%`;
+  const row = GAMEPLAY_OPENING_INFLATION_1991[countryId];
+  if (row) {
+    if (inflationRate !== row.gameplay) {
+      return `opening CPI ${inflationRate}% is not the gameplay value ${row.gameplay}%`;
+    }
+    const wage = runtimeOpeningWageGrowth(gdpGrowth, row.gameplay, bounds);
+    if (Math.abs(wageGrowth - wage) > 0.005) {
+      return `opening wage growth ${wageGrowth}% is not the runtime-rule value ${wage}%`;
+    }
   }
   return null;
-}
-
-/**
- * Calibrate one opening. Returns the factors unchanged at or below the knee;
- * otherwise the gameplay CPI and the runtime-rule wage growth.
- */
-export function calibrateOpeningEconomicFactors<T extends OpeningEconomicFactors>(
-  factors: T,
-  bounds: OpeningInflationBounds
-): T {
-  const problem = unsupportedOpeningInflation(factors, bounds);
-  if (problem) throw new Error(`Unsupported opening inflation: ${problem}`);
-  if (factors.inflationRate <= OPENING_INFLATION_KNEE) return factors;
-
-  const inflationRate = gameplayOpeningInflation(factors.inflationRate);
-  if (inflationRate > bounds.maxInflation) {
-    throw new Error(`Calibrated opening CPI ${inflationRate}% exceeds ${bounds.maxInflation}%`);
-  }
-  const [realLow, realHigh] = bounds.realWageClamp;
-  const real = Math.max(realLow, Math.min(realHigh, factors.gdpGrowth));
-  const wageGrowth = round2(real + bounds.wageInflationPassthrough * inflationRate);
-  return { ...factors, inflationRate, wageGrowth };
 }

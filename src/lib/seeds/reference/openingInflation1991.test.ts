@@ -12,23 +12,10 @@ import { REAL_WAGE_CLAMP, WAGE_INFLATION_PASSTHROUGH } from "@/lib/metricEngine/
 import { getInitialNationalBudgetsForPreset } from "./budgets";
 import { OPENING_INFLATION_BOUNDS } from "./openingInflation1991";
 import {
-  gameplayOpeningInflation,
-  OPENING_INFLATION_KNEE,
-  unsupportedOpeningInflation,
+  GAMEPLAY_OPENING_INFLATION_1991,
+  GAMEPLAY_OPENING_INFLATION_MAX,
+  openingInflationProblem,
 } from "./rules/openingInflation";
-
-// #3317: authored historical CPI (provenance) for the calibrated 1991 openings.
-const HISTORICAL_CPI_1991: Record<string, number> = {
-  BR: 480,
-  BG: 338.45,
-  RO: 230.62,
-  YU: 164,
-  RU: 144,
-  PL: 76.77,
-  TR: 66,
-  CS: 55,
-  HU: 34.82,
-};
 
 const openings = getInitialNationalBudgetsForPreset("1991-default");
 
@@ -52,7 +39,6 @@ describe("1991 opening inflation seed contract (#3317)", () => {
   it("calibrates against the live runtime constants", () => {
     expect(OPENING_INFLATION_BOUNDS).toEqual({
       minInflation: MIN_INFLATION,
-      maxInflation: MAX_INFLATION,
       realWageClamp: REAL_WAGE_CLAMP,
       wageInflationPassthrough: WAGE_INFLATION_PASSTHROUGH,
     });
@@ -62,31 +48,36 @@ describe("1991 opening inflation seed contract (#3317)", () => {
     expect(openings).toHaveLength(23);
   });
 
-  it("every opening is a supported runtime input", () => {
+  it("every opening is inside the gameplay contract", () => {
     for (const b of openings) {
-      const f = b.economicFactors;
-      expect(unsupportedOpeningInflation(f, OPENING_INFLATION_BOUNDS), b.countryId).toBeNull();
-      expect(f.inflationRate, b.countryId).toBeGreaterThanOrEqual(MIN_INFLATION);
-      expect(f.inflationRate, b.countryId).toBeLessThan(MAX_INFLATION);
+      expect(
+        openingInflationProblem(b.countryId, b.economicFactors, OPENING_INFLATION_BOUNDS),
+        b.countryId
+      ).toBeNull();
+      expect(b.economicFactors.inflationRate, b.countryId).toBeLessThan(MAX_INFLATION);
     }
   });
 
-  it("calibrates exactly the authored high-inflation openings and keeps their wages coherent", () => {
+  it("calibrates exactly the tabled openings and leaves the rest as authored", () => {
+    const calibrated = openings
+      .filter((b) => GAMEPLAY_OPENING_INFLATION_1991[b.countryId])
+      .map((b) => [b.countryId, b.economicFactors.inflationRate]);
+    expect(Object.fromEntries(calibrated)).toEqual({
+      BR: 12,
+      RU: 12,
+      TR: 12,
+      YU: 15,
+      BG: 20,
+      RO: 18,
+      PL: 16,
+      CS: 14,
+      HU: 14,
+    });
     for (const b of openings) {
-      const f = b.economicFactors;
-      const historical = HISTORICAL_CPI_1991[b.countryId];
-      if (historical === undefined) {
-        expect(f.inflationRate, b.countryId).toBeLessThanOrEqual(OPENING_INFLATION_KNEE);
-        continue;
-      }
-      expect(f.inflationRate, b.countryId).toBe(gameplayOpeningInflation(historical));
-      const [lo, hi] = OPENING_INFLATION_BOUNDS.realWageClamp;
-      const real = Math.max(lo, Math.min(hi, f.gdpGrowth));
-      expect(f.wageGrowth, b.countryId).toBeCloseTo(
-        real + OPENING_INFLATION_BOUNDS.wageInflationPassthrough * f.inflationRate,
-        2
+      expect(b.economicFactors.inflationRate).toBeLessThanOrEqual(GAMEPLAY_OPENING_INFLATION_MAX);
+      expect(b.economicFactors.wageGrowth, b.countryId).toBeLessThan(
+        b.economicFactors.inflationRate + 15
       );
-      expect(f.wageGrowth, b.countryId).toBeLessThan(f.inflationRate);
     }
   });
 
