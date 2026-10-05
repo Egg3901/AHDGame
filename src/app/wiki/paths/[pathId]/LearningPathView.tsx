@@ -51,7 +51,7 @@ export default function LearningPathView({ path, pathId }: LearningPathViewProps
         </Link>
         <span aria-hidden>/</span>
         <Link href="/wiki#learning-paths" className="hover:text-foreground transition-colors">
-          Learning Paths
+          Learning paths
         </Link>
         <span aria-hidden>/</span>
         <span className="text-foreground">{path.title}</span>

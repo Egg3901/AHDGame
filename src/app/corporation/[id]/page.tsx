@@ -685,7 +685,7 @@ export default function CorporationDetailPage() {
                   onClick={handleAcceptCeo}
                   className="rounded-lg bg-success px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-success/90"
                 >
-                  Accept Position
+                  Accept position
                 </button>
                 <button
                   onClick={handleDeclineCeo}

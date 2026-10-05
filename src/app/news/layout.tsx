@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "National News | A House Divided",
+  title: "National news | A House Divided",
   description: "Political updates and news from across the nation",
 };
 

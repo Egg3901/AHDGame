@@ -85,7 +85,7 @@ export default function ForgotPasswordPageClient() {
 
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
-                  <Label htmlFor="identifier">Email or Username</Label>
+                  <Label htmlFor="identifier">Email or username</Label>
                   <Input
                     id="identifier"
                     type="text"

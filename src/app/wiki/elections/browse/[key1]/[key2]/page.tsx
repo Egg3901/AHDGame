@@ -156,7 +156,7 @@ export default function WikiElectionsGroupPage({
 
       <footer className="mt-10 border-t border-card-border pt-6">
         <Link href="/wiki/elections" className="text-sm text-muted hover:text-foreground">
-          ← Back to Election History
+          ← Back to election history
         </Link>
       </footer>
     </div>

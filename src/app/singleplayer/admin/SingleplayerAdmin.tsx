@@ -124,9 +124,7 @@ export function SingleplayerAdmin({
     <main className="min-h-screen bg-background px-4 py-12">
       <div className="mx-auto max-w-3xl">
         <header className="mb-8">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-            Singleplayer controls
-          </p>
+          <p className="mb-2 text-body-sm font-medium text-primary">Singleplayer controls</p>
           <h1 className="text-3xl font-bold tracking-tight">Your local world</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted">
             This panel controls only the world stored on this device. Hosted administration,
@@ -137,9 +135,7 @@ export function SingleplayerAdmin({
         <section className="rounded border border-card-border bg-card-muted p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                World state
-              </p>
+              <p className="text-body-sm font-medium text-muted">World state</p>
               <h2 className="mt-1 text-xl font-semibold">
                 {availability === "sealed" ? "Paused and sealed" : "Open for play"}
               </h2>
@@ -295,7 +291,7 @@ export function SingleplayerAdmin({
                     href={item.href}
                     className="block rounded border border-card-border p-3 hover:bg-card-muted"
                   >
-                    <span className="block text-xs uppercase tracking-wide text-muted">
+                    <span className="block text-body-sm font-medium text-muted">
                       {item.category}
                     </span>
                     <span className="font-medium">{item.label}</span>{" "}

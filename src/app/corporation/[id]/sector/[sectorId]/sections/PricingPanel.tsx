@@ -99,7 +99,7 @@ export default function PricingPanel({
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
       <div className="flex items-center justify-between gap-2 mb-1">
-        <h2 className="text-lg font-bold text-foreground">Pricing Posture</h2>
+        <h2 className="text-lg font-bold text-foreground">Pricing posture</h2>
         {sold != null && (
           <InfoTooltip
             trigger={

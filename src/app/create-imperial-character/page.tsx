@@ -138,7 +138,7 @@ export default function CreateImperialCharacterPage() {
   if (eligibleCountries.length === 0) {
     return (
       <div className="mx-auto max-w-lg px-4 py-16 text-center">
-        <h1 className="text-2xl font-bold mb-4">No Eligible Countries</h1>
+        <h1 className="text-2xl font-bold mb-4">No eligible countries</h1>
         <p className="text-muted">
           All eligible countries already have an imperial character, or no countries support
           imperial characters.
@@ -150,7 +150,7 @@ export default function CreateImperialCharacterPage() {
   return (
     <div className="mx-auto max-w-lg px-4 py-8 sm:py-16">
       <div className="mb-8 text-center">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Create Imperial Character</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Create imperial character</h1>
         <p className="mt-2 text-sm text-muted">Create a ceremonial head of state for a country.</p>
       </div>
 
@@ -166,9 +166,7 @@ export default function CreateImperialCharacterPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Country */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-widest text-muted mb-2">
-            Country
-          </label>
+          <label className="block text-body-sm font-medium text-muted mb-2">Country</label>
           <select
             value={country}
             onChange={(e) => {
@@ -188,9 +186,7 @@ export default function CreateImperialCharacterPage() {
 
         {/* Name */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-widest text-muted mb-2">
-            Name
-          </label>
+          <label className="block text-body-sm font-medium text-muted mb-2">Name</label>
           <input
             type="text"
             value={name}
@@ -206,9 +202,7 @@ export default function CreateImperialCharacterPage() {
 
         {/* Gender */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-widest text-muted mb-2">
-            Gender
-          </label>
+          <label className="block text-body-sm font-medium text-muted mb-2">Gender</label>
           <div className="flex gap-2">
             {(["male", "female", "nonbinary"] as const).map((g) => (
               <button
@@ -240,9 +234,7 @@ export default function CreateImperialCharacterPage() {
 
         {/* Royal House */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-widest text-muted mb-2">
-            Royal House
-          </label>
+          <label className="block text-body-sm font-medium text-muted mb-2">Royal House</label>
           <input
             type="text"
             value={royalHouse}
@@ -255,9 +247,7 @@ export default function CreateImperialCharacterPage() {
 
         {/* Home Province */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-widest text-muted mb-2">
-            Home Province
-          </label>
+          <label className="block text-body-sm font-medium text-muted mb-2">Home province</label>
           <select
             value={homeState}
             onChange={(e) => setHomeState(e.target.value)}
@@ -278,7 +268,7 @@ export default function CreateImperialCharacterPage() {
 
         {/* Bio */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-widest text-muted mb-2">
+          <label className="block text-body-sm font-medium text-muted mb-2">
             Bio{" "}
             <span className="font-normal normal-case tracking-normal text-muted/60">
               (optional)
@@ -298,11 +288,9 @@ export default function CreateImperialCharacterPage() {
         {/* Starter Corporation Preview */}
         {selectedCountry && (
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-amber-400 mb-1">
-              Starter Corporation
-            </p>
+            <p className="text-body-sm font-medium text-amber-400 mb-1">Starter corporation</p>
             <p className="text-sm text-foreground">
-              A <span className="font-semibold">Real Estate</span> corporation will be automatically
+              A <span className="font-semibold">Real estate</span> corporation will be automatically
               created with $50,000,000 starting capital.
             </p>
           </div>
@@ -314,7 +302,7 @@ export default function CreateImperialCharacterPage() {
           disabled={isLoading || !country || !name || !gender || !royalHouse || !homeState}
           className="w-full"
         >
-          {isLoading ? "Creating..." : "Create Imperial Character"}
+          {isLoading ? "Creating..." : "Create imperial character"}
         </Button>
       </form>
     </div>

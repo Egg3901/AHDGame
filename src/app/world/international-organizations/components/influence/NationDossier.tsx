@@ -69,7 +69,7 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
     >
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-body-lg font-semibold text-foreground">{target.name}</h3>
-        <span className="text-body-xs uppercase tracking-wide text-muted">{target.status}</span>
+        <span className="text-body-sm font-medium text-muted">{target.status}</span>
       </header>
 
       <div className="space-y-2">
@@ -128,7 +128,7 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
 
       {modifiers.length > 0 && (
         <div className="space-y-1">
-          <h4 className="text-body-xs uppercase tracking-wide text-muted">
+          <h4 className="text-body-sm font-medium text-muted">
             What&rsquo;s affecting this nation
           </h4>
           {modifiers.map((m) => (
@@ -140,7 +140,7 @@ export function NationDossier({ view, target, orgId, viewerCountryId, onCommitte
       )}
 
       <div data-testid="rival-intel" className="space-y-1">
-        <h4 className="text-body-xs uppercase tracking-wide text-muted">Rival activity</h4>
+        <h4 className="text-body-sm font-medium text-muted">Rival activity</h4>
         {intel.length === 0 ? (
           <p className="text-body-sm text-muted">{t("noRivals")}</p>
         ) : (
@@ -296,7 +296,7 @@ function CommitPlayForm({
   return (
     <form onSubmit={submit} className="space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <span className="text-body-xs uppercase tracking-wide text-muted">
+        <span className="text-body-sm font-medium text-muted">
           Paid from the {view.fundCurrencyCountryId} organisation fund
         </span>
         <span className="font-mono text-body-xs tabular-nums text-foreground">
@@ -306,7 +306,7 @@ function CommitPlayForm({
 
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex-1">
-          <span className="mb-1 block text-body-xs uppercase tracking-wide text-muted">
+          <span className="mb-1 block text-body-sm font-medium text-muted">
             Amount ({fundCode})
           </span>
           <input

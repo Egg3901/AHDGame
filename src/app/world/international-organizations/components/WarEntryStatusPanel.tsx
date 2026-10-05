@@ -24,7 +24,7 @@ export function WarEntryStatusPanel({ org }: { org: OrgSummary }) {
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4">
-      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">War entry</div>
+      <div className="text-body-sm font-medium text-muted">War entry</div>
       {operations.map((operation) => (
         <div key={operation.resolutionId} className="mt-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -64,7 +64,7 @@ export function WarEntryStatusPanel({ org }: { org: OrgSummary }) {
                     <div className="min-w-0 truncate text-[13px] font-semibold text-foreground">
                       {member?.flagEmoji} {member?.countryName ?? entry.countryId}
                     </div>
-                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                    <span className="shrink-0 text-body-sm font-medium text-muted">
                       {entry.stake === "offensive_coalition" && entry.status === "pending"
                         ? "National vote open"
                         : STATUS_LABEL[entry.status]}

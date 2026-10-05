@@ -60,7 +60,7 @@ export function VoteRoster({ votes: rawVotes, expectedVoters }: Props) {
 
   return (
     <div className="mt-3 space-y-1.5 border-t border-card-border pt-3">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">Votes cast</p>
+      <p className="text-body-sm font-medium text-muted">Votes cast</p>
       {votes.length === 0 ? (
         <p className="text-xs italic text-muted">No votes cast yet.</p>
       ) : (

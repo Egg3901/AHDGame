@@ -196,10 +196,7 @@ export default function BuildCapacityDialog({
 
         {/* 1. HOW MUCH ─────────────────────────────────────────────────────── */}
         <div>
-          <label
-            htmlFor="build-count"
-            className="text-body-xs font-semibold uppercase tracking-wider text-muted"
-          >
+          <label htmlFor="build-count" className="text-body-sm font-medium text-muted">
             {capitalizeFacility(sites)} to {vocab.buildVerb}
           </label>
           <div className="mt-2 flex items-center gap-2">
@@ -293,9 +290,7 @@ export default function BuildCapacityDialog({
 
         {/* 2. WHAT IT COSTS ────────────────────────────────────────────────── */}
         <div className="rounded-lg border border-card-border bg-card-muted/60 p-4">
-          <p className="mb-3 text-body-xs font-semibold uppercase tracking-wider text-muted">
-            What it costs
-          </p>
+          <p className="mb-3 text-body-sm font-medium text-muted">What it costs</p>
           <dl className="space-y-1.5 text-body-sm">
             <CostLeg
               label={`Base price per ${site}`}
@@ -603,7 +598,7 @@ function Tile({
       className="flex h-full flex-col rounded-lg border border-card-border bg-background/40 p-3"
       title={help}
     >
-      <p className="text-body-xs uppercase leading-tight tracking-wider text-muted">{label}</p>
+      <p className="text-body-sm font-medium leading-tight text-muted">{label}</p>
       <p className={`mt-auto pt-0.5 text-body-lg font-bold tabular-nums ${toneClass}`}>{value}</p>
       <p className="text-body-xs text-muted">{unit}</p>
     </div>

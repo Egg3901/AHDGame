@@ -221,7 +221,7 @@ export default function CrisisActionCard() {
                   type="button"
                   onClick={() => handleDismiss(crisis._id.toString())}
                   className="shrink-0 text-xs text-muted hover:text-foreground transition-colors px-2 py-1 rounded-md border border-transparent hover:border-card-border hover:bg-card"
-                  title="Dismiss from Actions"
+                  title="Dismiss from actions"
                   aria-label="Dismiss crisis from Actions"
                 >
                   Dismiss
@@ -294,7 +294,7 @@ export default function CrisisActionCard() {
                 {currentNode.type === "collective" && interaction && (
                   <div className="mb-3">
                     <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-muted">Response Fund</span>
+                      <span className="text-muted">Response fund</span>
                       <span className="tabular-nums">
                         ${interaction.collectiveCurrent.toLocaleString("en-US")} / $
                         {interaction.collectiveTarget?.toLocaleString("en-US")}

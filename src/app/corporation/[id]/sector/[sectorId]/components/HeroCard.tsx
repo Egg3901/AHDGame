@@ -108,7 +108,7 @@ export default function HeroCard({
                 className="inline-flex items-center rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-success"
                 title={`Asking price: ${fmtAnchor(sector.forSale.priceAnchor)}`}
               >
-                {sector.forSale.foreclosed ? "Foreclosure Sale" : "For Sale"} ·{" "}
+                {sector.forSale.foreclosed ? "Foreclosure sale" : "For sale"} ·{" "}
                 {fmtAnchor(sector.forSale.priceAnchor)}
               </span>
             )}
@@ -150,9 +150,7 @@ export default function HeroCard({
       {/* Stats strip, scrollable on mobile */}
       <div className="flex divide-x divide-card-border overflow-x-auto border-t border-card-border">
         <div className="min-w-[90px] shrink-0 px-4 py-3">
-          <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
-            Actual Revenue
-          </span>
+          <span className="block text-body-sm font-medium text-muted">Actual revenue</span>
           <span className="text-sm font-bold tabular-nums text-success">
             {financials ? (
               <>
@@ -165,9 +163,7 @@ export default function HeroCard({
           </span>
         </div>
         <div className="min-w-[90px] shrink-0 px-4 py-3">
-          <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
-            Net Profit
-          </span>
+          <span className="block text-body-sm font-medium text-muted">Net profit</span>
           <span
             className={`text-sm font-bold tabular-nums ${financials ? (financials.profit >= 0 ? "text-success" : "text-error") : ""}`}
           >
@@ -182,9 +178,7 @@ export default function HeroCard({
           </span>
         </div>
         <div className="min-w-[90px] shrink-0 px-4 py-3">
-          <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
-            Eff. Margin
-          </span>
+          <span className="block text-body-sm font-medium text-muted">Eff. Margin</span>
           <span className="text-sm font-bold tabular-nums text-foreground">
             {/* Rounded for display: the margin is a computed float, and the raw
                 value renders as "37.40833333333334%" in this narrow stat cell. */}
@@ -192,15 +186,11 @@ export default function HeroCard({
           </span>
         </div>
         <div className="min-w-[90px] shrink-0 px-4 py-3">
-          <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
-            Market Share
-          </span>
+          <span className="block text-body-sm font-medium text-muted">Market share</span>
           <span className="text-sm font-bold tabular-nums text-primary">{market.marketShare}%</span>
         </div>
         <div className="min-w-[90px] shrink-0 px-4 py-3">
-          <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
-            Workers
-          </span>
+          <span className="block text-body-sm font-medium text-muted">Workers</span>
           <span className="text-sm font-bold tabular-nums text-foreground">
             {sector.workers != null ? sector.workers.toLocaleString("en-US") : hiddenMarker}
           </span>

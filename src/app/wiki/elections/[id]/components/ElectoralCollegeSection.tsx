@@ -34,7 +34,7 @@ export function ElectoralCollegeAnalysis({
   return (
     <section className="mb-8">
       <h2 className="mb-4 scroll-mt-24 border-b border-card-border pb-2 text-2xl font-semibold text-foreground">
-        Electoral College Analysis
+        Electoral College analysis
       </h2>
 
       {generalResults.electoralMapData && (
@@ -127,7 +127,7 @@ export function ElectoralCollegeTable({ generalResults }: ElectoralCollegeTableP
             <tr className="border-b border-card-border text-left">
               <th className="pb-2 pr-4 font-medium text-foreground">Candidate</th>
               <th className="pb-2 pr-4 font-medium text-foreground">Party</th>
-              <th className="pb-2 font-medium text-foreground">Electoral Votes</th>
+              <th className="pb-2 font-medium text-foreground">Electoral votes</th>
             </tr>
           </thead>
           <tbody>

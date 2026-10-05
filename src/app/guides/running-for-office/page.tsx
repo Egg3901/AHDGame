@@ -3,7 +3,7 @@ import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "Running for Office | A House Divided",
+  title: "Running for office | A House Divided",
   description:
     "Strategy guides for running for office in A House Divided: US elections, UK parliamentary races, and Japanese Diet elections.",
   pathname: "/guides/running-for-office",
@@ -56,11 +56,11 @@ export default function RunningForOfficeIndexPage() {
             Guides
           </Link>
           <span>/</span>
-          <span className="text-foreground">Running for Office</span>
+          <span className="text-foreground">Running for office</span>
         </nav>
 
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Running for Office</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Running for office</h1>
           <p className="mt-2 text-sm text-muted">Choose your country to get started</p>
         </div>
 
@@ -72,7 +72,7 @@ export default function RunningForOfficeIndexPage() {
             Campaigns are fought with the same levers everywhere: build{" "}
             <strong className="text-foreground">favorability</strong> with the demographics that
             actually live in your district, raise and spend campaign funds on ads and ground game,
-            bank <strong className="text-foreground">Political Influence</strong> to unlock bigger
+            bank <strong className="text-foreground">Political influence</strong> to unlock bigger
             moves, and time your push so you peak in the final weeks, not the first ones.
           </p>
           <p className="text-sm text-muted leading-relaxed">
@@ -87,7 +87,7 @@ export default function RunningForOfficeIndexPage() {
           <p className="text-sm text-muted leading-relaxed">
             New to the game entirely? Start with the{" "}
             <Link href="/wiki/first-campaign-walkthrough" className="text-primary hover:underline">
-              First Campaign Walkthrough
+              First campaign walkthrough
             </Link>{" "}
             on the wiki, then come back here when you know which country you&apos;re playing.
           </p>

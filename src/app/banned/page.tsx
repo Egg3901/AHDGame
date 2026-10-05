@@ -34,13 +34,13 @@ function BannedContent() {
 
           {/* Title */}
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold text-error">Account Banned</h1>
+            <h1 className="text-3xl font-bold text-error">Account banned</h1>
             <p className="text-sm text-muted">Your account has been banned from A House Divided.</p>
           </div>
 
           {/* Reason box */}
           <div className="rounded-lg border border-card-border bg-card p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">Reason</p>
+            <p className="text-body-sm font-medium text-muted mb-2">Reason</p>
             <p className="text-sm font-medium text-foreground">{reason}</p>
           </div>
 

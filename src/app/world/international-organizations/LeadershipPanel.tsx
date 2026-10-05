@@ -145,9 +145,7 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
               {leader.holderCountryId && <CountryFlag country={leader.holderCountryId} size="lg" />}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted">
-                Currently held by
-              </p>
+              <p className="text-body-sm font-medium text-muted">Currently held by</p>
               <p className="text-base font-semibold text-foreground">
                 {leader.holderCharacterName}
               </p>

@@ -242,11 +242,11 @@ export default async function AboutPage() {
 
         <p className="mt-6 text-center text-xs text-muted">
           <Link href="/privacy" className="text-primary hover:underline">
-            Privacy Policy
+            Privacy policy
           </Link>{" "}
           &middot;{" "}
           <Link href="/terms" className="text-primary hover:underline">
-            Terms of Service
+            Terms of service
           </Link>{" "}
           &middot;{" "}
           <Link href="/contact" className="text-primary hover:underline">

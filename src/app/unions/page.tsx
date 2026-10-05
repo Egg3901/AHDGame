@@ -189,20 +189,20 @@ export default function UnionsPage() {
 
         {!notEnabled && (
           <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
-            <StatCell label="Led Unions" value={String(stats.ledCount)} />
+            <StatCell label="Led unions" value={String(stats.ledCount)} />
             <StatCell label="Vacant" value={String(stats.vacant)} />
             <StatCell
-              label="Total Membership"
+              label="Total membership"
               value={Math.round(stats.totalMembers).toLocaleString("en-US")}
               hint="Real headcount across every union shown: workers in the sectors each one represents, weighted by unionization."
             />
             <StatCell
-              label="Avg Approval"
+              label="Avg approval"
               value={`${Math.round(stats.avgApproval)}%`}
               hint="How the membership rates the bargain, averaged across every union shown. Dues push it down, running services pushes it up."
             />
             <StatCell
-              label="Total Funds"
+              label="Total funds"
               value={Math.round(stats.totalTreasury).toLocaleString("en-US")}
             />
           </div>
@@ -344,7 +344,7 @@ export default function UnionsPage() {
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-card-border bg-card-elevated text-left text-[11px] uppercase tracking-wider text-muted">
+                <tr className="border-b border-card-border bg-card-elevated text-left text-sm font-semibold text-foreground">
                   <th className="hidden px-4 py-3 font-medium sm:table-cell">#</th>
                   <th className="px-4 py-3 font-medium">Union</th>
                   <th className="hidden px-4 py-3 font-medium md:table-cell">
@@ -425,7 +425,7 @@ export default function UnionsPage() {
                         </Link>
                       ) : (
                         (r.leaderName ?? (
-                          <span className="text-xs font-medium uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                          <span className="text-body-sm font-medium text-amber-600 dark:text-amber-400">
                             Vacant
                           </span>
                         ))
@@ -476,7 +476,7 @@ export default function UnionsPage() {
 function StatCell({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="flex min-w-max flex-col px-5 py-3">
-      <span className="flex items-center text-[10px] font-medium uppercase tracking-widest text-muted">
+      <span className="flex items-center text-body-sm font-medium text-muted">
         {label}
         {hint && <Tooltip content={hint} />}
       </span>

@@ -19,7 +19,7 @@ export async function generateMetadata({ params, searchParams }: PageProps) {
   const { id } = await params;
   const { country } = await searchParams;
   const data = await getPartyData(id, parseCountryParam(country));
-  if (!data) return { title: "Not Found" };
+  if (!data) return { title: "Not found" };
   return {
     title: `${data.name} | Wiki | A House Divided`,
     description: `Political party: ${data.name}`,
@@ -66,7 +66,7 @@ export default async function WikiPartyPage({ params, searchParams }: PageProps)
       <section className="mb-8 rounded-xl border border-card-border bg-card/60 p-6 shadow-card">
         <h2 className="mb-3 text-lg font-semibold text-foreground">About</h2>
         <p className="text-muted leading-relaxed">{flavor.blurb}</p>
-        <h3 className="mt-4 mb-2 text-sm font-medium text-foreground">In the Game</h3>
+        <h3 className="mt-4 mb-2 text-sm font-medium text-foreground">In the game</h3>
         <ul className="list-inside list-disc space-y-1 text-sm text-muted">
           {flavor.tips.map((t, i) => (
             <li key={i}>{t}</li>
@@ -75,7 +75,7 @@ export default async function WikiPartyPage({ params, searchParams }: PageProps)
       </section>
 
       <section className="mb-8">
-        <h2 className="mb-4 text-xl font-semibold text-foreground">Political Positions</h2>
+        <h2 className="mb-4 text-xl font-semibold text-foreground">Political positions</h2>
         <PolicyAlignmentCard
           economic={data.economicPosition}
           social={data.socialPosition}
@@ -84,7 +84,7 @@ export default async function WikiPartyPage({ params, searchParams }: PageProps)
       </section>
 
       <section className="mb-8 rounded-xl border border-card-border bg-card/60 p-6 shadow-card">
-        <h2 className="mb-4 text-xl font-semibold text-foreground">Seats Held</h2>
+        <h2 className="mb-4 text-xl font-semibold text-foreground">Seats held</h2>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <div className="rounded-lg border border-card-border bg-card/40 p-4 text-center">
             <div className="text-2xl font-bold text-foreground">{data.seatCounts.senate}</div>
@@ -117,7 +117,7 @@ export default async function WikiPartyPage({ params, searchParams }: PageProps)
               {data.seatCounts.vicePresident}
             </div>
             <div className="text-sm text-muted">
-              {data.countryId === "US" ? "Vice President" : "Deputy Executive"}
+              {data.countryId === "US" ? "Vice president" : "Deputy executive"}
             </div>
           </div>
         </div>
