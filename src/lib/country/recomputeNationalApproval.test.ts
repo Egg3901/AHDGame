@@ -71,7 +71,13 @@ describe("recomputeNationalApproval", () => {
     // unboarded cases use, which scores well ABOVE the base, so a result of 49.5
     // can only have come from the political bases, with the public-expectations
     // modifier applied once at the recompute boundary.
-    basesMock.mockResolvedValue({ national: 49.5 });
+    basesMock.mockResolvedValue({
+      national: 49.5,
+      byRegion: new Map([
+        ["rich", 49.5],
+        ["poor", 49.5],
+      ]),
+    });
     const metrics = [makeStateMetrics("rich", 90000), makeStateMetrics("poor", 30000)];
 
     const result = await recomputeNationalApproval(
@@ -126,18 +132,19 @@ describe("recomputeNationalApproval", () => {
     expect(result).toBe(BASE_APPROVAL);
   });
 
-  it("does not gather metrics it will not use for a board country", async () => {
-    // Every country in COUNTRY_ORDER is a board country, so the political branch is
-    // the only one that runs in practice -- and it reads none of the states, metrics
-    // or era context that gathering them costs. The war-entry gate calls this with
-    // no prefetched inputs on every entry bill.
-    basesMock.mockResolvedValue({ national: 49.5 });
-
+  it("gathers regional metrics so fresh-world approval includes named conditions", async () => {
+    basesMock.mockResolvedValue({ national: 50, byRegion: new Map([["idf", 50]]) });
+    db.collection("states")
+      .find()
+      .toArray.mockResolvedValue([{ _id: "idf", population: 1000 }]);
+    db.collection("macroMetrics")
+      .find()
+      .toArray.mockResolvedValue([
+        { _id: "idf", countryId: "FR", economic: { gdpGrowth: { value: -2 } } },
+      ]);
     const result = await recomputeNationalApproval(db as unknown as Db, "FR");
-
-    expect(result).toBe(49.5 + PUBLIC_EXPECTATIONS_MODIFIER.effect);
-    expect(db.collection("macroMetrics").find).not.toHaveBeenCalled();
-    expect(db.collection("states").find).not.toHaveBeenCalled();
+    expect(result).toBeLessThan(45);
+    expect(db.collection("macroMetrics").find).toHaveBeenCalled();
   });
 
   it("scopes its own metrics query to the country", async () => {
@@ -158,11 +165,13 @@ describe("recomputeNationalApproval", () => {
 
   it("queries for its own inputs when a caller hands none over", async () => {
     // The war-entry gate calls it this way -- it holds no metrics of its own.
-    basesMock.mockResolvedValue({ national: 52.5 });
+    basesMock.mockResolvedValue({ national: 52.5, byRegion: new Map([["idf", 52.5]]) });
     db.collection("states")
       .find()
       .toArray.mockResolvedValue([{ _id: "idf", population: 1000 }]);
-    db.collection("stateMetrics").find().toArray.mockResolvedValue([]);
+    db.collection("macroMetrics")
+      .find()
+      .toArray.mockResolvedValue([{ _id: "idf", countryId: "FR" }]);
 
     const result = await recomputeNationalApproval(db as unknown as Db, "FR");
 

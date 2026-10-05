@@ -445,7 +445,7 @@ export async function processPoliticalMetricsDynamics(
             // Bridge B: macro reality bends the equilibrium, bounded so the law
             // ladder still dominates. NOT persisted — `residuals` stays structural.
             const lawTarget = composeTarget(points, supplement?.[id] ?? 0, structural);
-            const macroTerm = macroResidualFor(id, lawTarget, regionMacro, countryId);
+            const macroTerm = macroResidualFor(id, lawTarget, regionMacro, countryId, eraYear);
             // The engine term: the same treatment for the CAUSAL half. Bridge B
             // asks "is the economy better or worse than the law book implies";
             // this asks "are the services this government actually funds better

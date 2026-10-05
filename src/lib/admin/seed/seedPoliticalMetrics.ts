@@ -1,3 +1,7 @@
+import {
+  POLITICAL_OPENING_1991_VERSION,
+  RESET_RUNTIME_FIELDS,
+} from "@/lib/politicalMetrics/rules/repair1991";
 import type { AnyBulkWriteOperation, Db } from "mongodb";
 import { logWarning } from "@/lib/utils/errorLog";
 import type { State } from "@/lib/db/types/state";
@@ -12,11 +16,12 @@ import {
   baselineFor,
 } from "@/lib/politicalMetrics/seeds/baselineAnchors";
 import { REGIONAL_MODIFIERS_1953 } from "@/lib/politicalMetrics/seeds/regionalModifiers1953";
+import { REGIONAL_TEXTURE_1991 } from "@/lib/politicalMetrics/seeds/regionalTexture1991";
 import { REGIONAL_TEXTURE_1953 } from "@/lib/politicalMetrics/seeds/regionalTexture1953";
 import { NON_PLAYABLE_BOARDS } from "@/lib/politicalMetrics/seeds/nonPlayableBoards";
 
 /**
- * The only preset carrying playable-region texture and modifiers (issue #704).
+ * The 1953 preset carrying both authored modifiers and generated texture (issue #704).
  * Applying either 1953 regional input to another era's baselines would dress
  * it in the wrong year's regional character.
  */
@@ -26,7 +31,7 @@ const PLAYABLE = new Set<string>(POLITICAL_METRIC_COUNTRY_IDS);
 /**
  * Non-playable countries seed from the committed, derived board file instead of
  * the anchor table. A country in NEITHER set is skipped entirely rather than
- * given a neutral board — a 63-family doc of 50s would look authored while
+ * given a neutral board; a 63-family doc of 50s would look authored while
  * meaning nothing, which is the failure mode this whole project exists to end.
  */
 const BOARD_COUNTRIES = new Set<string>(
@@ -44,14 +49,13 @@ const clampScore = (v: number) => Math.max(0, Math.min(100, v));
  * Seeds one politicalMetrics doc per US/UK/RU/DD region present in `states`:
  * value = clamp(baseline at `year` + regional character, 0, 100), where the
  * character is the sparse hand-authored modifier where one exists and the
- * generated 1953 texture deviation otherwise (issue #704).
+ * generated texture deviation otherwise (issues #704 and #3266).
  *
  * Baselines resolve by in-game YEAR through the anchor table, never by seed
  * preset. Authored era anchors give later presets their own national values.
  *
- * Texture resolves by seed PRESET, never by year: it exists only for
- * 1953-default, and a null modifier entry means "no authored statement",
- * which is exactly when the derived texture applies.
+ * Texture resolves by seed PRESET, never by year. The 1953 preset prefers
+ * explicit modifiers; the 1991 preset uses its population-centered texture.
  */
 export async function seedPoliticalMetrics(
   db: Db,
@@ -63,11 +67,11 @@ export async function seedPoliticalMetrics(
   // Non-playable boards are keyed by preset: each era overlays its own authored
   // metric values and is scored against that era's band. A world whose preset
   // has no emitted board seeds NO non-playable boards rather than falling back
-  // to another era's — a 2019 world wearing 1953 numbers is exactly the silent
+  // to another era's; a 2019 world wearing 1953 numbers is exactly the silent
   // wrongness this project exists to end.
   const boardsForPreset = NON_PLAYABLE_BOARDS[preset];
   if (!boardsForPreset) {
-    log(`No non-playable political boards emitted for preset ${preset} — playables only`);
+    log(`No non-playable political boards emitted for preset ${preset}; playables only`);
   }
   if (reset) {
     await db
@@ -99,12 +103,16 @@ export async function seedPoliticalMetrics(
       // applies only on the preset it was derived for; elsewhere the board
       // keeps its previous baseline+modifier shape. A present modifier wins
       // outright over texture (deliberate history is not diluted), which the
-      // generator also guarantees by emitting zero there — belt and braces.
+      // generator also guarantees by emitting zero there; belt and braces.
       const countryId = state.countryId as PoliticalMetricsCountryId;
       const modifiers =
         preset === TEXTURE_PRESET ? (REGIONAL_MODIFIERS_1953[countryId][state._id] ?? {}) : {};
       const texture =
-        preset === TEXTURE_PRESET ? (REGIONAL_TEXTURE_1953[countryId]?.[state._id] ?? {}) : {};
+        preset === "1991-default"
+          ? (REGIONAL_TEXTURE_1991[countryId]?.[state._id] ?? {})
+          : preset === TEXTURE_PRESET
+            ? (REGIONAL_TEXTURE_1953[countryId]?.[state._id] ?? {})
+            : {};
       for (const metricId of Object.keys(
         POLITICAL_BASELINE_ANCHORS[countryId]
       ) as PoliticalMetricId[]) {
@@ -117,7 +125,7 @@ export async function seedPoliticalMetrics(
       // real per-region variation in the political half, so a national board
       // replicated across regions would flatten regional approval, corp margins,
       // crises and demographics. A region missing from the board is skipped, not
-      // given its country's board as a fallback — same rule as an unknown
+      // given its country's board as a fallback; same rule as an unknown
       // country, for the same reason: a plausible-looking wrong board is exactly
       // the failure mode this project exists to end.
       const regionBoard = boardsForPreset?.[state.countryId]?.[state._id];
@@ -127,9 +135,29 @@ export async function seedPoliticalMetrics(
       }
     }
     const countryId = state.countryId as PoliticalMetricsCountryId;
-    const doc: PoliticalMetricsDoc = { _id: state._id, countryId, values, lastUpdated: now };
+    const doc: PoliticalMetricsDoc = {
+      _id: state._id,
+      countryId,
+      values,
+      lastUpdated: now,
+      ...(preset === "1991-default"
+        ? { politicalOpeningVersion: POLITICAL_OPENING_1991_VERSION }
+        : {}),
+    };
     ops.push({
-      updateOne: { filter: { _id: state._id }, update: { $set: doc }, upsert: true },
+      updateOne: {
+        filter: { _id: state._id },
+        update: {
+          $set: doc,
+          $unset: {
+            ...Object.fromEntries(RESET_RUNTIME_FIELDS.map((field) => [field, ""])),
+            residuals: "",
+            playableTexture1953MigrationId: "",
+            ...(preset !== "1991-default" ? { politicalOpeningVersion: "" } : {}),
+          },
+        },
+        upsert: true,
+      },
     });
     regionsSeeded++;
   }

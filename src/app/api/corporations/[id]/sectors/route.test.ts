@@ -168,6 +168,7 @@ describe("POST /api/corporations/[id]/sectors", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: "You already have operations in this state",
       code: "BAD_REQUEST",
+      ref: expect.any(String),
     });
     expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
   });
