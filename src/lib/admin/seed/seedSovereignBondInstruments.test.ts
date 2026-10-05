@@ -190,10 +190,20 @@ describe("seedSovereignBondInstruments", () => {
 
     await seedSovereignBondInstruments(db as unknown as Db, () => {}, 0, new Date());
 
-    expect(inserted.map((bond) => [bond.maturityTurns, bond.couponRate])).toEqual([
-      [48, 8],
-      [96, 8.25],
-      [240, 8.75],
+    // Opening debt is spread over quarterly cohorts per tenor, so assert the
+    // credit-tier coupon per tenor rather than one tranche per tenor.
+    const couponByTenor = new Map<number, Set<number>>();
+    for (const bond of inserted) {
+      const set = couponByTenor.get(bond.maturityTurns) ?? new Set<number>();
+      set.add(bond.couponRate);
+      couponByTenor.set(bond.maturityTurns, set);
+    }
+    expect(
+      [...couponByTenor.entries()].sort((a, b) => a[0] - b[0]).map(([t, c]) => [t, [...c]])
+    ).toEqual([
+      [48, [8]],
+      [96, [8.25]],
+      [240, [8.75]],
     ]);
   });
 });
