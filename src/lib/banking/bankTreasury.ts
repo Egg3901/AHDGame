@@ -18,6 +18,7 @@ import {
   planBankTreasurySweep,
   bankTreasuryHolderUnits,
   allocateBankTreasuryHolderLots,
+  bankTreasuryAllocatedCostBasis,
   quoteBankTreasuryBond,
   BANK_TREASURY_MAX_REMAINING_TURNS,
   type BankTreasurySweepCandidate,
@@ -124,6 +125,7 @@ function holderLotInputs(holders: readonly BondHolder[]) {
     lotId: holder.bankTreasuryLotId,
     tradeId: holder.bankTreasuryTradeId,
     units: holder.units,
+    avgCostPerUnit: holder.avgCostPerUnit,
   }));
 }
 
@@ -884,6 +886,9 @@ async function paySaleEscrow(db: Db, receipt: BankTreasuryTradeReceipt): Promise
     charter?.currency === receipt.currency && charter.charteredTurn === receipt.charteredTurn;
   const estateOpen = charter?.status === "failed" && charter.depositorsResolvedTurn == null;
   if (matchingEpoch && (charter?.status === "active" || estateOpen)) {
+    const realizedGain = Number.isFinite(receipt.costBasisLocal)
+      ? receipt.amountLocal - receipt.costBasisLocal!
+      : 0;
     const transition: BankingTransition = {
       key: `bank-treasury:${receipt._id}:vault`,
       kind: "bank_treasury_sale_to_vault",
@@ -915,6 +920,9 @@ async function paySaleEscrow(db: Db, receipt: BankTreasuryTradeReceipt): Promise
             $inc: {
               [escrowPath]: -receipt.amountLocal,
               "bankCharter.cashReserves": receipt.amountLocal,
+              ...(realizedGain !== 0
+                ? { "bankCharter.treasuryRealizedGainPaidLifetime": realizedGain }
+                : {}),
             },
           },
           note: "Atomically release sale cash from escrow to the matching bank estate",
@@ -1517,6 +1525,14 @@ export async function tradeBankTreasuryBill(
       error: "Held lots changed before sale reservation",
     };
   }
+  const costBasisLocal =
+    input.side === "sell" && allocations
+      ? bankTreasuryAllocatedCostBasis(
+          holderLotInputs(bond.holders ?? []),
+          allocations,
+          charter.currency
+        )
+      : null;
   let primary: BankTreasuryTradeReceipt["primary"];
   if (input.primary) {
     if (input.side !== "buy") throw new Error("Primary offers can only be subscribed");
@@ -1609,6 +1625,7 @@ export async function tradeBankTreasuryBill(
     units: fillUnits,
     ...(primary ? { primary } : {}),
     ...(allocations ? { allocations } : {}),
+    ...(costBasisLocal !== null ? { costBasisLocal } : {}),
     ...(allocations ? { holderSnapshot: freezeHolderSnapshot(bond.holders ?? []) } : {}),
     pricePerUnitLocal,
     amountLocal,

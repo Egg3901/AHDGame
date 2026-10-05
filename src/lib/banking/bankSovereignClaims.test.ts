@@ -3,10 +3,16 @@ import { describe, expect, it } from "vitest";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
 import type { Bond } from "@/lib/db/types/bond";
+import type { BankCharter } from "@/lib/db/types/bank";
 import type { BankSovereignClaim, FederalBudget } from "@/lib/db/types/budget";
 import { treasuryAccrualWithBankCouponReserve } from "@/lib/budget/rules/treasuryAccrual";
 import { addBankMaturityClaims, settleBankSovereignClaims } from "./bankSovereignClaims";
-import { bankCouponClaim, bankCouponPlanForCountry } from "./rules/sovereignClaims";
+import {
+  bankCouponClaim,
+  bankCouponPlanForCountry,
+  bankIncomeIncludingUnbookedSovereignAssets,
+  unbookedSovereignAssetIncome,
+} from "./rules/sovereignClaims";
 import {
   freezeFundedSovereignBondMaturityQuote,
   settleFundedSovereignBondMaturity,
@@ -190,6 +196,9 @@ describe("bank sovereign claims", () => {
       settleBankSovereignClaims(crash.db as unknown as Db, budget(memory), 13)
     ).rejects.toThrow("crash");
     expect(vault(memory)).toBe(15);
+    expect(
+      memory.collection("corporations").docs[0].bankCharter?.sovereignCouponIncomePaidLifetime
+    ).toBe(10);
 
     await memory
       .collection("corporations")
@@ -208,6 +217,130 @@ describe("bank sovereign claims", () => {
     );
   });
 
+  it("records a funded coupon beside the vault credit for later income publication", async () => {
+    const claim = { ...couponClaim(), treasuryCashLedgerEnabled: true };
+    const memory = world(claim);
+    memory.collection("federalBudget").docs[0].treasuryCashLocal = 100;
+    memory.collection("corporations").docs[0].bankCharter = {
+      status: "active",
+      currency: "USD",
+      charteredTurn: claim.charteredTurn,
+      cashReserves: 5,
+      lastBankingTurn: 13,
+      lastBankingIncome: 40,
+      lastBankingIncomeTurn: 13,
+      lastBankingSovereignCouponIncome: 0,
+    };
+    const frozenBudget = budget(memory);
+
+    await settleBankSovereignClaims(memory as unknown as Db, frozenBudget, 13);
+    await settleBankSovereignClaims(memory as unknown as Db, frozenBudget, 13);
+
+    expect(memory.collection("corporations").docs[0].bankCharter).toMatchObject({
+      cashReserves: 15,
+      lastBankingIncome: 40,
+      lastBankingIncomeTurn: 13,
+      sovereignCouponIncomePaidLifetime: 10,
+    });
+    expect(
+      bankIncomeIncludingUnbookedSovereignAssets(
+        memory.collection("corporations").docs[0].bankCharter as BankCharter
+      )
+    ).toBe(50);
+  });
+
+  it("keeps a delayed coupon unbooked until the next banking income publication", async () => {
+    const claim = { ...couponClaim(), treasuryCashLedgerEnabled: true };
+    const memory = world(claim);
+    memory.collection("federalBudget").docs[0].treasuryCashLocal = 100;
+    memory.collection("corporations").docs[0].bankCharter = {
+      status: "active",
+      currency: "USD",
+      charteredTurn: claim.charteredTurn,
+      cashReserves: 5,
+      lastBankingIncome: 37,
+      lastBankingIncomeTurn: 12,
+      lastBankingSovereignCouponIncome: 27,
+    };
+    await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
+    expect(memory.collection("corporations").docs[0].bankCharter).toMatchObject({
+      lastBankingIncome: 37,
+      lastBankingIncomeTurn: 12,
+      sovereignCouponIncomePaidLifetime: 10,
+    });
+    expect(
+      unbookedSovereignAssetIncome(
+        memory.collection("corporations").docs[0].bankCharter as BankCharter
+      )
+    ).toEqual({ couponIncome: 10, realizedGain: 0 });
+  });
+
+  it("pays a stale frozen coupon without moving a newer income stamp backwards", async () => {
+    const claim = { ...couponClaim(), treasuryCashLedgerEnabled: true };
+    const memory = world(claim);
+    memory.collection("federalBudget").docs[0].treasuryCashLocal = 100;
+    memory.collection("corporations").docs[0].bankCharter = {
+      status: "active",
+      currency: "USD",
+      charteredTurn: claim.charteredTurn,
+      cashReserves: 5,
+      lastBankingIncome: 77,
+      lastBankingIncomeTurn: 14,
+      lastBankingSovereignCouponIncome: 11,
+    };
+    await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
+    expect(vault(memory)).toBe(15);
+    expect(memory.collection("corporations").docs[0].bankCharter).toMatchObject({
+      lastBankingIncome: 77,
+      lastBankingIncomeTurn: 14,
+      lastBankingSovereignCouponIncome: 11,
+      sovereignCouponIncomePaidLifetime: 10,
+    });
+  });
+
+  it("recognizes only the funded maturity gain above a frozen known basis", async () => {
+    const claim = {
+      ...couponClaim(100),
+      id: "bank-sovereign-maturity:650000000000000000000002:650000000000000000000001:4",
+      kind: "maturity" as const,
+      costBasisLocal: 80,
+      treasuryCashLedgerEnabled: true,
+    };
+    const memory = world(claim);
+    memory.collection("federalBudget").docs[0].treasuryCashLocal = 100;
+    await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
+    expect(memory.collection("corporations").docs[0].bankCharter).toMatchObject({
+      cashReserves: 105,
+      treasuryRealizedGainPaidLifetime: 20,
+    });
+    expect(
+      unbookedSovereignAssetIncome(
+        memory.collection("corporations").docs[0].bankCharter as BankCharter
+      )
+    ).toEqual({ couponIncome: 0, realizedGain: 20 });
+  });
+
+  it("does not classify maturity principal as earnings when the holding basis is unknown", async () => {
+    const claim = {
+      ...couponClaim(100),
+      id: "bank-sovereign-maturity:650000000000000000000002:650000000000000000000001:4",
+      kind: "maturity" as const,
+      treasuryCashLedgerEnabled: true,
+    };
+    const memory = world(claim);
+    memory.collection("federalBudget").docs[0].treasuryCashLocal = 100;
+    await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
+    expect(memory.collection("corporations").docs[0].bankCharter).toMatchObject({
+      cashReserves: 105,
+    });
+    expect(memory.collection("corporations").docs[0].bankCharter).not.toHaveProperty(
+      "treasuryRealizedGainPaidLifetime"
+    );
+    expect(memory.collection("corporations").docs[0].bankCharter).not.toHaveProperty(
+      "lastBankingIncome"
+    );
+  });
+
   it("resumes a crash after the treasury debit without charging it twice", async () => {
     const claim = couponClaim();
     const memory = world(claim);
@@ -222,11 +355,21 @@ describe("bank sovereign claims", () => {
     ).rejects.toThrow("crash");
     expect(budget(memory).treasuryBalance).toBe(90);
     expect(vault(memory)).toBe(5);
+    expect(
+      memory.collection("corporations").docs[0].bankCharter?.sovereignCouponIncomePaidLifetime
+    ).toBeUndefined();
 
     await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 13);
     expect(budget(memory).treasuryBalance).toBe(90);
     expect(vault(memory)).toBe(15);
+    expect(
+      memory.collection("corporations").docs[0].bankCharter?.sovereignCouponIncomePaidLifetime
+    ).toBe(10);
     expect(budget(memory).bankSovereignClaims).toEqual([]);
+    await settleBankSovereignClaims(memory as unknown as Db, budget(memory), 14);
+    expect(
+      memory.collection("corporations").docs[0].bankCharter?.sovereignCouponIncomePaidLifetime
+    ).toBe(10);
   });
 
   it("does not start a second funding attempt while a prior credit leg stays partial", async () => {
@@ -423,6 +566,23 @@ describe("bank sovereign claims", () => {
         ledgerShadow: true,
       },
     ]);
+  });
+
+  it("freezes complete bank lot basis with a maturity claim", async () => {
+    const memory = world(couponClaim());
+    const bond = {
+      _id: new ObjectId("650000000000000000000004"),
+      maturityTurn: 48,
+      holders: [{ bankId, charteredTurn: 4, units: 7, avgCostPerUnit: 920 }],
+    } as unknown as Bond;
+    const claims = await addBankMaturityClaims(memory as unknown as Db, {
+      budgetId: "federal",
+      countryId: "US",
+      currencyCode: "USD",
+      turn: 48,
+      bond,
+    });
+    expect(claims[0]).toMatchObject({ amountLocal: 7_000, costBasisLocal: 6_440 });
   });
 
   it("replays a legacy pending maturity claim without adding an optional due turn", async () => {

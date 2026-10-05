@@ -19,6 +19,29 @@ export interface BankTreasuryHolderLot {
   lotId?: string;
   tradeId?: string;
   units: number;
+  avgCostPerUnit?: number;
+}
+
+/** Return a complete allocated-lot basis, or null when any source lot is unknown. */
+export function bankTreasuryAllocatedCostBasis(
+  holders: readonly BankTreasuryHolderLot[],
+  allocations: readonly { lotId: string; units: number }[],
+  currency: CurrencyCode
+): number | null {
+  if (allocations.length === 0) return null;
+  let basis = 0;
+  for (const allocation of allocations) {
+    const holder = holders.find((row) => row.lotId === allocation.lotId);
+    if (
+      !holder ||
+      !Number.isFinite(holder.avgCostPerUnit) ||
+      !Number.isFinite(allocation.units) ||
+      allocation.units <= 0
+    )
+      return null;
+    basis += holder.avgCostPerUnit! * allocation.units;
+  }
+  return roundSavingsAmount(basis, currency);
 }
 
 /** Count only settled units owned by this charter epoch. */
