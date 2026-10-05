@@ -137,7 +137,7 @@ describe("runDemographicFlows", () => {
       ]),
     });
     const { runDemographicFlows } = await import("./phase");
-    await runDemographicFlows(db as unknown as Db, 2, {
+    await runDemographicFlows(db as unknown as Db, 2, undefined, {
       metrics: true,
       legislation: false,
       cabinet: false,
@@ -177,7 +177,7 @@ describe("runDemographicFlows", () => {
     });
     const { runDemographicFlows } = await import("./phase");
     await expect(
-      runDemographicFlows(db as unknown as Db, 2, {
+      runDemographicFlows(db as unknown as Db, 2, undefined, {
         metrics: true,
         legislation: false,
         cabinet: false,

@@ -68,8 +68,8 @@ const descriptions: Partial<Record<SingleplayerFeatureFlagKey, string>> = {
  * Boolean local-world controls, derived from the same defaults persisted by
  * setSingleplayerConfig. New defaults therefore cannot silently miss setup UI.
  */
-export const SINGLEPLAYER_FEATURE_FLAGS: readonly SingleplayerFeatureFlagOption[] = Object.entries(
-  DEFAULT_GAME_STATE_FLAGS
+export const SINGLEPLAYER_FEATURE_FLAGS: readonly SingleplayerFeatureFlagOption[] = (
+  Object.entries(DEFAULT_GAME_STATE_FLAGS) as [string, unknown][]
 )
   .filter((entry): entry is [BooleanDefaultKey, boolean] => typeof entry[1] === "boolean")
   .filter(

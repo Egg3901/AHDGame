@@ -374,7 +374,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // national aggregation (they write state.population + population metrics
     // that the national rollup consumes).
     const demographicFlowsResult = await runtime.runPhase("demographicFlows", () =>
-      runDemographicFlows(db, newTurn, RESET_V2_READY, gameState.worldEpochId)
+      runDemographicFlows(db, newTurn, gameState.worldEpochId)
     );
     phaseResults.demographicFlows = {
       regionsProcessed: demographicFlowsResult?.regionsProcessed ?? 0,

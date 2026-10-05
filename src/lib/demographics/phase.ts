@@ -189,8 +189,8 @@ const METRIC_BOUNDS = {
 export async function runDemographicFlows(
   db: Db,
   turn: number,
-  v2Ready: Record<ResetSystem, boolean> = RESET_V2_READY,
-  suppliedWorldEpochId?: string
+  suppliedWorldEpochId?: string,
+  v2Ready: Record<ResetSystem, boolean> = RESET_V2_READY
 ): Promise<{ regionsProcessed: number; circuitBreakerTrips: number }> {
   const worldEpochId = suppliedWorldEpochId ?? (await ensureDemographicWorldEpoch(db));
   const prior = await resumeDemographicFlowReceipt(db, worldEpochId, turn);
