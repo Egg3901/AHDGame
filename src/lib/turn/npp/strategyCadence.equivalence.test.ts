@@ -1,9 +1,9 @@
 /**
  * Seeded equivalence replay for the NPP strategy cadence split (#2693).
  *
- * The golden trace in `__fixtures__/strategyCadence.golden.json` was recorded
- * from the pre-split brain, where the strategy loop was evaluated eagerly every
- * turn and its memory was persisted every turn. The split must reproduce every
+ * The golden trace in `__fixtures__/strategyCadence.golden.json` began with the
+ * pre-split brain and was recalibrated for issue #3262's intended construction
+ * pricing and standard recipe changes. The split must reproduce every
  * budget, dividend, divestment, founding and strategy decision exactly, for
  * healthy, losing, debt-dominant, low-fill and caretaker corporations across a
  * long synthetic window, including turns on and off the stagger slot.

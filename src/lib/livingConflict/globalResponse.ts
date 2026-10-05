@@ -671,17 +671,15 @@ export async function resolveGlobalResponse(
       if (prior.capacityDestruction && !interaction.globalResponseOutcome.capacityDestruction) {
         const summary = await applyConflictCapacityDestruction(db, crisis, prior, resolutionId);
         if (summary)
-          await db
-            .collection<CrisisInteraction>("crisisInteractions")
-            .updateOne(
-              { _id: interaction._id },
-              {
-                $set: {
-                  "globalResponseOutcome.capacityDestruction": summary,
-                  updatedAt: new Date(),
-                },
-              }
-            );
+          await db.collection<CrisisInteraction>("crisisInteractions").updateOne(
+            { _id: interaction._id },
+            {
+              $set: {
+                "globalResponseOutcome.capacityDestruction": summary,
+                updatedAt: new Date(),
+              },
+            }
+          );
       }
       if (
         crisis.globalResponse.conflictKey === ARAB_UPRISINGS_KEY ||

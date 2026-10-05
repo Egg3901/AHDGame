@@ -243,9 +243,7 @@ export function settlePoliticalAdMarket(args: {
       ...(allocation.fallbackAnchor > 0
         ? (() => {
             const order = args.orders.find((candidate) => candidate.orderId === allocation.orderId);
-            const terms = order
-              ? args.fallbackTreasuryByCountry?.get(order.countryId)
-              : undefined;
+            const terms = order ? args.fallbackTreasuryByCountry?.get(order.countryId) : undefined;
             if (!order || !terms) throw new Error("Missing frozen fallback treasury terms.");
             return {
               fallbackSpend: {

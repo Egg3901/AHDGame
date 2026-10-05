@@ -194,7 +194,9 @@ export async function seedNppCorporations(
       const spawned = await batchSpawnNppCorporations(db, countryId, {
         perSectorCount: missing,
         sectorMarkets: [market],
-        limitToUnownedPool: true,
+        // The strict opening headroom acceptance applies to the audited reset.
+        // Older presets retain their authored competitor grants.
+        limitToUnownedPool: preset === "1991-default",
         ...(market.type === "extraction" && extractionSite
           ? {
               headquartersState: extractionSite.stateId,

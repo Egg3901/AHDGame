@@ -192,9 +192,9 @@ export const MONETARY_BASELINES_1979: Partial<Record<CountryId, EraMonetaryBasel
 // Match the player reset rates so NPC policy does not undo affordable entry.
 // Inflation targets and historical country provenance remain intact.
 export const MONETARY_BASELINES_1991: Partial<Record<CountryId, EraMonetaryBaseline>> = {
-  US: { ...US_ECONOMY.monetary.byEra["1991"], neutralPrimeRate: 4 },
-  UK: { ...UK_ECONOMY.monetary.byEra["1991"], neutralPrimeRate: 4.5 },
-  JP: { ...JP_ECONOMY.monetary.byEra["1991"], neutralPrimeRate: 3 },
+  US: US_ECONOMY.monetary.byEra["1991"],
+  UK: UK_ECONOMY.monetary.byEra["1991"],
+  JP: JP_ECONOMY.monetary.byEra["1991"],
   DE: DE_ECONOMY.monetary.byEra["1991"],
   IE: IE_ECONOMY.monetary.byEra["1991"],
   CN: CN_ECONOMY.monetary.byEra["1991"],

@@ -16,7 +16,10 @@ UK/JP debt anchors, disagreement between budget coupons and seeded bonds,
 fiscal targets overwritten by authoritative US/UK political laws, double-counted
 UK grants, stale nominal units in nine economy-only fiscal books, transition
 currencies omitted from seed and runtime coverage, and miners assigned to barren
-capital regions. Fresh bootstrap markers also failed to insert into an empty
+capital regions. The newer treasury bridge also retained stale source signatures,
+opening law prices and a Japanese receipt override that no longer matched the
+authored fiscal books. Ireland's runtime GDP conversion and a campaign baseline
+still referenced the old denomination. Fresh bootstrap markers also failed to insert into an empty
 configuration collection, preventing opt-in vehicle/media conversion.
 
 The plan was to preserve fiscal receipts and debt scopes, calibrate real expense
@@ -55,15 +58,30 @@ and media/entertainment reset identities reuse the tested operating recipes.
 
 ## Fiscal and currency evidence
 
-Initial portable fiscal builders target the following annual native amounts;
-the actual bootstrap separately calibrates the authoritative political-law book
-and checks its persisted result after another real budget refresh.
+The portable legacy fiscal builders produce the following annual native amounts.
+The actual bootstrap separately calibrates the authoritative political-law book
+and checks its persisted result after another real budget refresh. Negative
+deficit percentages denote a surplus. The legacy UK builder omits its period
+pension obligation, so its surplus must not be presented as the newer funded
+treasury book.
 
 | Country | Debt principal |     Receipts | Spending including coupons | Deficit / GDP |
 | ------- | -------------: | -----------: | -------------------------: | ------------: |
 | US      |     USD 3,665B | USD 939.214B |               USD 970.214B |          0.5% |
-| UK      |   GBP 194.118B | GBP 229.306B |               GBP 232.306B |          0.5% |
+| UK      |   GBP 194.118B | GBP 229.306B |               GBP 209.256B |       -3.342% |
 | JP      |       JPY 172T | JPY 123.714T |               JPY 126.064T |          0.5% |
+
+The newer treasury books preserve period pension continuity and protected
+regional grants. Their shared source-claim calibration also feeds current-law
+boards, proposal pricing, enactment and department ownership, so later reforms
+do not restore the discarded expense baseline. Receipts stay unchanged; the old
+Japanese receipt override is removed. Source drift guards remain active.
+
+| Treasury book |     Receipts | Spending including coupons | Deficit / GDP |
+| ------------- | -----------: | -------------------------: | ------------: |
+| US            | USD 939.214B |               USD 970.214B |          0.5% |
+| UK            | GBP 229.306B |               GBP 232.306B |          0.5% |
+| JP            | JPY 123.714T |               JPY 120.840T |       -0.611% |
 
 US debt rounds FY1991 Treasury public debt securities including intragovernmental
 holdings. UK uses end-March 1991 gross consolidated public-sector debt. Japan
@@ -103,7 +121,8 @@ restored WDI GDP rather than copied from a different national-accounts vintage.
 Source: [CSO Statistical Yearbook, table 9.6](https://www.cso.ie/en/media/csoie/releasespublications/documents/statisticalyearbook/2013/c9publicfinance.pdf).
 
 PL/HU/RO/BG/CS/YU currencies now seed and participate in monetary queries and
-runtime updates. RU retains the authored whole-Union GDP and an administered
+runtime updates. Germany retains the release scenario's explicit EUR-equivalent
+accounting convention with consistent GDP and FX. RU retains the authored whole-Union GDP and an administered
 opening quote. BR retains its explicitly stabilized game-BRL accounting unit;
 it is not a literal 1991 cruzeiro observation. RO/BG/PL/CS opening fixings are
 preserved rather than confused with annual-average quotes. Reunified Germany
@@ -143,7 +162,10 @@ final Irish debt adjustment passed its 28-test rerun. Affected bond, FX, regiona
 budget, UK forecast, operating-balance and grant regressions passed 87 tests.
 Earlier focused suites also qualified construction, founding, extraction,
 competitor spawning, law enactment, fiscal read models and monetary scope.
-Scoped strict TypeScript passed. ESLint and formatting passed across all changed
+The follow-up treasury/current-law/metric qualification passed 114 tests across
+29 files. The recalibrated NPC cadence replay passed all 15 tests, preserving
+strategy choices and equivalent persistence while recording the intended
+construction budget changes. Scoped strict TypeScript passed. ESLint and formatting passed across all changed
 files; the architecture audit has zero blocking findings. Full release gates
 are tracked by the PR's CI checks.
 
@@ -155,11 +177,9 @@ later market clearing, input shortages, NPC borrowing and policy drift. Its
 status must be recorded separately from these deterministic results before reset
 promotion. Player policy choices can change interest rates and fiscal balance.
 
-A 96-turn sandbox job was queued on 2026-10-05 with plant markets, full labour
-and v5 autonomy, using the ordinary overnight start policy. Run ID:
-`48db372f-59c8-4c38-afbc-e8c15d45af46`. Its source is pinned to
-`7a80ee2c3dc6b43521a3c67260564b0b37152854`, the qualified implementation before
-this evidence-only update. No autonomous-run results were available when this
-deterministic evidence was recorded. The run uses the simulation bootstrap's
-default identities; the separate acceptance fixture qualifies both opt-in
-vehicle/media conversions.
+A 96-turn sandbox qualification uses plant markets, full labour and v5
+autonomy under the ordinary overnight start policy. The final source commit,
+job ID and latest status are tracked in [PR #3279](https://github.com/Egg3901/AHDGame/pull/3279).
+No autonomous-run results were available when this deterministic evidence was
+recorded. The run uses the simulation bootstrap's default identities; the
+separate acceptance fixture qualifies both opt-in vehicle/media conversions.

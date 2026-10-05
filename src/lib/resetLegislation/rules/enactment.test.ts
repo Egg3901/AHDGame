@@ -40,9 +40,9 @@ describe("v2 law family enactment", () => {
       year: 1991,
       turn: 2,
     });
-    expect(result.previousAnnualAllocation).toBe(2_799_164_700);
+    expect(result.previousAnnualAllocation).toBe(2_585_421_384);
     expect(result.nextAnnualAllocation).toBe(3_400_000_000);
-    expect(result.annualAllocationDelta).toBe(600_835_300);
+    expect(result.annualAllocationDelta).toBe(814_578_616);
     expect(result.transitionClaim).toBe(30_000_000);
   });
 
@@ -80,8 +80,8 @@ describe("v2 law family enactment", () => {
       year: 1991,
       turn: 2,
     });
-    expect(additive.previousAnnualAllocation).toBe(2_799_164_700);
-    expect(additive.nextAnnualAllocation).toBe(3_199_164_700);
+    expect(additive.previousAnnualAllocation).toBe(2_585_421_384);
+    expect(additive.nextAnnualAllocation).toBe(2_985_421_384);
     expect(additive.annualAllocationDelta).toBe(400_000_000);
     const replacement = enactReviewedLawOption({
       family,
@@ -92,7 +92,7 @@ describe("v2 law family enactment", () => {
       year: 1991,
       turn: 3,
     });
-    expect(replacement.annualAllocationDelta).toBe(-1_099_164_700);
+    expect(replacement.annualAllocationDelta).toBe(-885_421_384);
     expect(() =>
       enactReviewedLawOption({
         family,

@@ -1,4 +1,5 @@
 import { gdp1991LegacyLcu } from "@/lib/constants/fiscalAnchors1991";
+import { IE_NOMINAL_GDP_1991_IEP } from "@/lib/countries/ie/economy";
 
 /**
  * 1991 national nominal GDP in the currency circulating at the scenario start.
@@ -19,7 +20,7 @@ import { gdp1991LegacyLcu } from "@/lib/constants/fiscalAnchors1991";
  * composition retains its original sourceFiscalYear independently.
  */
 export const NATIVE_NOMINAL_GDP_1991 = {
-  IE: 39_277_360_000 * 0.787564,
+  IE: IE_NOMINAL_GDP_1991_IEP,
   FR: gdp1991LegacyLcu("FR"),
   IT: gdp1991LegacyLcu("IT"),
   ES: gdp1991LegacyLcu("ES"),
