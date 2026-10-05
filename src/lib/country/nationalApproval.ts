@@ -85,7 +85,7 @@ export async function loadNationalApproval(
     ...(approvalDoc?.activeRegionalModifiers ??
       live?.regionalModifiers ??
       evaluateModifiers(nationalAverages, { countryId, preset, year })),
-    ...(approvalDoc?.activeNationalModifiers ?? [PUBLIC_EXPECTATIONS_MODIFIER]),
+    ...(approvalDoc ? (approvalDoc.activeNationalModifiers ?? []) : [PUBLIC_EXPECTATIONS_MODIFIER]),
   ];
   const governmentApproval =
     approvalDoc?.approvalRating ??
