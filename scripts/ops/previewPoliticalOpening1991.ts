@@ -32,7 +32,7 @@ async function main() {
       gameState.isProcessing ||
       gameState.currentTurn !== 1
     ) {
-      throw new Error("Repair requires an idle1991opening at turn1; clocks are never modified");
+      throw new Error("Repair requires an idle 1991 opening at turn 1; clocks are never modified");
     }
     const states = await db
       .collection("states")
@@ -49,7 +49,7 @@ async function main() {
         rebases.push({
           env: environment,
           description:
-            "Issue3266 1991political opening rebase preserving player score changes and law target distance",
+            "Issue #3266 1991 political opening rebase preserving player score changes and law target distance",
           collection: "politicalMetrics",
           expectedMax: 1,
           filter: {
@@ -61,15 +61,10 @@ async function main() {
           },
           action: { kind: "set", set: after },
         });
-      const old =
-        ["US", "UK", "RU"].includes(doc.countryId) && after
-          ? RESET_RUNTIME_FIELDS.filter((field) => field in doc)
-          : [];
-      if (
-        old.some(
-          (field) => Object.keys((doc as unknown as Record<string, object>)[field] ?? {}).length > 0
-        )
-      )
+      // Every current region may retain old-world runtime channels, including
+      // countries whose authored board needs no baseline rebase.
+      const old = RESET_RUNTIME_FIELDS.filter((field) => field in doc);
+      if (old.length > 0)
         runtimeCleanup.push({
           env: environment,
           description:
