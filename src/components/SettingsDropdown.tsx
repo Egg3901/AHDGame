@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useEnabledCountries } from "@/contexts/RegisteredCountriesContext";
 import { CountryFlag } from "@/components/CountryFlag";
+import { hasSandboxAccess } from "@/lib/sandbox/access";
 import { countryUrl } from "@/lib/urls";
 import {
   DROPDOWN_PANEL_CLASS,
@@ -25,6 +26,7 @@ interface SettingsDropdownProps {
     singleplayer?: boolean;
     patreonTier?: string | null;
     isPatronActive?: boolean;
+    sandboxTesterAccess?: boolean;
   };
   onSignOut: () => void;
   pageCountry: CountryId;
@@ -111,11 +113,14 @@ export function SettingsDropdown({
     };
   }, [isOpen, showNationPicker]);
 
-  const canAccessSandbox =
-    user.isAdmin ||
-    user.isModerator ||
-    ((user.patreonTier === "supporter-plus" || user.patreonTier === "supporter-plus-plus") &&
-      user.isPatronActive);
+  const canAccessSandbox = hasSandboxAccess({
+    isAdmin: user.isAdmin,
+    isModerator: user.isModerator,
+    patreonTier: user.patreonTier,
+    isPatronActive: user.isPatronActive,
+    testerAccessEnabled: user.sandboxTesterAccess,
+    testerGranted: user.sandboxTesterAccess,
+  });
   const showSandboxToggle = !user.singleplayer && canAccessSandbox;
   const { url: sandboxUrl, isSandbox } = getSandboxToggleInfo();
 

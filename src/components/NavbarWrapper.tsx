@@ -63,6 +63,7 @@ interface NavbarWrapperState {
     canSeeCampaignManager?: boolean;
     patreonTier?: string | null;
     isPatronActive?: boolean;
+    sandboxTesterAccess?: boolean;
   } | null;
   hasCharacter: boolean;
   homeState: { id: string; name: string; countryId: string } | null;
@@ -408,6 +409,7 @@ export function NavbarWrapper({
           canSeeCampaignManager: navData.user.canSeeCampaignManager,
           patreonTier: navData.user.patreonTier ?? null,
           isPatronActive: navData.user.isPatronActive ?? false,
+          sandboxTesterAccess: navData.user.sandboxTesterAccess ?? false,
         },
         hasCharacter: navData.hasCharacter,
         unreadCount: navData.unreadCount ?? 0,

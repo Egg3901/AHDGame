@@ -174,6 +174,7 @@ export const NON_GAMEPLAY_GAME_STATE_FIELDS: Readonly<Record<string, string>> = 
 export const NON_GAMEPLAY_GAME_CONFIG_FIELDS: Readonly<Record<string, string>> = {
   maintenanceMode: "ops maintenance switch",
   pollBannerEnabled: "ops announcement banner",
+  sandboxTesterAccessEnabled: "ops access gate for sandbox tester grants (no supporter perks)",
   publicReviewMode: "ops access gate for anonymous page reads",
   publicViewingMode: "ops access gate for anonymous API reads",
   testMode: "ops registration gate",
