@@ -5,7 +5,7 @@ import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CORPORATION_TYPES, CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { CORPORATION_TYPE_LABELS, FOUNDABLE_CORPORATION_TYPES } from "@/lib/constants/corporations";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { regionUrl } from "@/lib/urls";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -304,12 +304,13 @@ export default function ExpandMarketModal({
     }
   }
 
-  // Any sector type is buildable. Primary and secondary are listed first and
-  // badged; the rest carry the off-type margin penalty but are not gated out.
+  // Any foundable sector type is buildable; retired automobiles/entertainment
+  // only appear as a legacy primary or secondary. Primary and secondary are
+  // listed first and badged; the rest carry the off-type margin penalty but are not gated out.
   const orderedTypes: CorporationType[] = [
     primaryType,
     ...(secondaryType ? [secondaryType] : []),
-    ...CORPORATION_TYPES.filter((t) => t !== primaryType && t !== secondaryType),
+    ...FOUNDABLE_CORPORATION_TYPES.filter((t) => t !== primaryType && t !== secondaryType),
   ];
 
   return (
