@@ -78,83 +78,109 @@ export interface LeadershipElectionState {
   myWhippedFromOriginal: string | null;
 }
 
-/**
- * Builds the complete state for a leadership position election.
- * Handles current leader enrichment, candidacy display, and user permissions.
- */
-export async function buildLeadershipElectionState(
-  db: Db,
-  role: SenateLeadershipElectionRole | HouseLeadershipElectionRole,
-  leaderRole: LeadershipRole,
-  chamber: "senate" | "house",
-  eligiblePartySlugs: Iterable<string> | null,
-  partySeats: number,
-  partyLabel: string,
-  partyMap: Map<string, PoliticalParty>,
-  myCharacterId: string | null,
-  myParty: string | null,
-  isMember: boolean
-): Promise<LeadershipElectionState> {
-  type ChamberNomination = SenateLeadershipNomination | HouseLeadershipNomination;
-  const eligiblePartySet = new Set(eligiblePartySlugs ?? []);
+export interface LeadershipRoleSpec {
+  role: SenateLeadershipElectionRole | HouseLeadershipElectionRole;
+  leaderRole: LeadershipRole;
+  eligiblePartySlugs: Iterable<string> | null;
+  partySeats: number;
+  partyLabel: string;
+}
 
+export interface LeadershipViewer {
+  partyMap: Map<string, PoliticalParty>;
+  myCharacterId: string | null;
+  myParty: string | null;
+  isMember: boolean;
+}
+
+type ChamberElection = SenateLeadershipElection | HouseLeadershipElection;
+type GameTime = Awaited<ReturnType<typeof getGameTime>>;
+
+/**
+ * Reads one role's election, resolving it first when its window has closed so
+ * the caller never shows a finished race as still open.
+ */
+async function loadFreshElection(
+  db: Db,
+  role: LeadershipRoleSpec["role"],
+  leaderRole: LeadershipRole,
+  chamber: "senate" | "house"
+): Promise<{ election: ChamberElection | null; gameTime: GameTime }> {
   const electionCollection =
     chamber === "senate" ? "senateLeadershipElections" : "houseLeadershipElections";
-  const nominationCollection =
-    chamber === "senate" ? "senateLeadershipNominations" : "houseLeadershipNominations";
 
-  // Fetch and possibly resolve election. Use the game clock so the endsAt
-  // window matches turn-based resolution even when real time has drifted.
-  let election = await db
-    .collection<SenateLeadershipElection | HouseLeadershipElection>(electionCollection)
-    .findOne({ _id: role });
+  // Use the game clock so the endsAt window matches turn-based resolution
+  // even when real time has drifted.
+  let election = await db.collection<ChamberElection>(electionCollection).findOne({ _id: role });
 
   const gameTime = await getGameTime();
-  const gameNow = gameTime.effectiveNow;
   if (
     election?.status === "voting" &&
-    isLeadershipElectionClosed(election, gameTime.currentTurn, gameNow)
+    isLeadershipElectionClosed(election, gameTime.currentTurn, gameTime.effectiveNow)
   ) {
     await resolveLeadershipElection(db, role, leaderRole, chamber, false);
-    election = await db
-      .collection<SenateLeadershipElection | HouseLeadershipElection>(electionCollection)
-      .findOne({ _id: role });
+    election = await db.collection<ChamberElection>(electionCollection).findOne({ _id: role });
   }
+  return { election, gameTime };
+}
 
-  const electionStatus = election?.status ?? "none";
-  const isVoting =
-    electionStatus === "voting" &&
-    !!election &&
-    !isLeadershipElectionClosed(election, gameTime.currentTurn, gameNow);
-
-  // Fetch and enrich current leader
-  const leaderDoc = await db
+/**
+ * One read of every requested leader seat plus the character, NPP and border
+ * data needed to display them. Taken only after all elections are resolved,
+ * because resolving a race writes the seat it fills.
+ */
+async function loadLeaderDisplays(
+  db: Db,
+  leaderRoles: LeadershipRole[],
+  partyMap: Map<string, PoliticalParty>
+): Promise<Map<LeadershipRole, LeaderDisplay>> {
+  const leaderDocs = await db
     .collection<CongressLeader>("congressLeaders")
-    .findOne({ role: leaderRole });
-  let current: LeaderDisplay | null = null;
+    .find({ role: { $in: leaderRoles } })
+    .toArray();
+  // First doc per role, matching the per-role findOne this replaces.
+  const docByRole = new Map<LeadershipRole, CongressLeader>();
+  for (const doc of leaderDocs) if (!docByRole.has(doc.role)) docByRole.set(doc.role, doc);
+  const seated = [...docByRole.values()].filter(
+    (doc): doc is CongressLeader & { characterId: ObjectId } => !!doc.characterId
+  );
+  const out = new Map<LeadershipRole, LeaderDisplay>();
+  if (seated.length === 0) return out;
 
-  if (leaderDoc?.characterId) {
-    const p = partyMap.get(leaderDoc.party ?? "");
-    const char = await db
-      .collection<Character>("characters")
-      .findOne(
-        { _id: leaderDoc.characterId },
-        { projection: { avatarUrl: 1, homeState: 1, sequentialId: 1, userId: 1 } }
-      );
-    const npp = char
-      ? null
-      : await db
+  const holderIds = seated.map((doc) => doc.characterId);
+  const chars = await db
+    .collection<Character>("characters")
+    .find(
+      { _id: { $in: holderIds } },
+      { projection: { avatarUrl: 1, homeState: 1, sequentialId: 1, userId: 1 } }
+    )
+    .toArray();
+  const charById = new Map(chars.map((c) => [c._id.toString(), c]));
+  const nppIds = holderIds.filter((id) => !charById.has(id.toString()));
+  const npps =
+    nppIds.length > 0
+      ? await db
           .collection<NPP>("npps")
-          .findOne(
-            { _id: leaderDoc.characterId },
+          .find(
+            { _id: { $in: nppIds } },
             { projection: { homeState: 1, avatarUrl: 1, sequentialId: 1 } }
-          );
-    const leaderBorder = char?.userId
-      ? (await fetchBordersByUserIds(db, [char.userId])).get(char.userId.toString())
-      : undefined;
+          )
+          .toArray()
+      : [];
+  const nppById = new Map(npps.map((n) => [n._id.toString(), n]));
+  const borders = await fetchBordersByUserIds(
+    db,
+    chars.flatMap((c) => (c.userId ? [c.userId] : []))
+  );
 
-    current = {
-      characterId: leaderDoc.characterId.toString(),
+  for (const leaderDoc of seated) {
+    const holderId = leaderDoc.characterId.toString();
+    const char = charById.get(holderId);
+    const npp = char ? undefined : nppById.get(holderId);
+    const leaderBorder = char?.userId ? borders.get(char.userId.toString()) : undefined;
+    const p = partyMap.get(leaderDoc.party ?? "");
+    out.set(leaderDoc.role, {
+      characterId: holderId,
       sequentialId: char?.sequentialId ?? npp?.sequentialId ?? null,
       characterName: leaderDoc.characterName,
       avatarUrl: char?.avatarUrl ?? npp?.avatarUrl,
@@ -166,8 +192,59 @@ export async function buildLeadershipElectionState(
       state: char?.homeState ?? npp?.homeState,
       electedAt: leaderDoc.electedAt?.toISOString() ?? null,
       isNPP: !char,
-    };
+    });
   }
+  return out;
+}
+
+/**
+ * Builds the complete state for every leadership election shown on a chamber
+ * page, in the order of `specs`.
+ *
+ * Two phases: every closed election is resolved first, then the seated leaders
+ * are read once for all roles. Reading leaders per role used to cost one
+ * congressLeaders round trip per role, and a snapshot taken before resolution
+ * would show the pre-election holder.
+ */
+export async function buildLeadershipElectionStates(
+  db: Db,
+  chamber: "senate" | "house",
+  specs: LeadershipRoleSpec[],
+  viewer: LeadershipViewer
+): Promise<LeadershipElectionState[]> {
+  const fresh = await Promise.all(
+    specs.map((spec) => loadFreshElection(db, spec.role, spec.leaderRole, chamber))
+  );
+  const leaders = await loadLeaderDisplays(
+    db,
+    specs.map((spec) => spec.leaderRole),
+    viewer.partyMap
+  );
+  return Promise.all(
+    specs.map((spec, i) =>
+      buildRoleState(db, chamber, spec, viewer, fresh[i]!, leaders.get(spec.leaderRole) ?? null)
+    )
+  );
+}
+
+async function buildRoleState(
+  db: Db,
+  chamber: "senate" | "house",
+  { role, eligiblePartySlugs, partySeats, partyLabel }: LeadershipRoleSpec,
+  { partyMap, myCharacterId, myParty, isMember }: LeadershipViewer,
+  { election, gameTime }: { election: ChamberElection | null; gameTime: GameTime },
+  current: LeaderDisplay | null
+): Promise<LeadershipElectionState> {
+  type ChamberNomination = SenateLeadershipNomination | HouseLeadershipNomination;
+  const eligiblePartySet = new Set(eligiblePartySlugs ?? []);
+  const nominationCollection =
+    chamber === "senate" ? "senateLeadershipNominations" : "houseLeadershipNominations";
+
+  const electionStatus = election?.status ?? "none";
+  const isVoting =
+    electionStatus === "voting" &&
+    !!election &&
+    !isLeadershipElectionClosed(election, gameTime.currentTurn, gameTime.effectiveNow);
 
   const nominationFilter: Filter<ChamberNomination> = isVoting
     ? { role, status: { $in: ["open", "voting"] } }
