@@ -4,7 +4,8 @@
  * gaps, the prime rate versus neutral, the deficit as a share of GDP, tariffs,
  * wage growth, commodity prices, currency depreciation, savings outflow, housing
  * costs and money supply, then smooths toward last turn and toward the 2% target.
- * The result is clamped to MIN_INFLATION..MAX_INFLATION.
+ * The result is bounded by rules/inflationBounds.ts: MIN_INFLATION..MAX_INFLATION,
+ * with an explicit recovery path for rates authored above the ceiling.
  */
 /**
  * Dynamic inflation calculation per country.
@@ -46,6 +47,12 @@ import { TARIFF_INFLATION_BASELINE } from "@/lib/tariffs/rules/tariffInflationEx
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { isMoneySupplyEnabledFromConfig } from "@/lib/moneySupply/featureFlag";
+import {
+  MAX_INFLATION,
+  MAX_PER_TURN_DELTA,
+  MIN_INFLATION,
+  settleInflationStep,
+} from "./rules/inflationBounds";
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
 
@@ -240,9 +247,10 @@ const HOUSING_PRESSURE_COEFF = 0;
  *  negative target) and, via DEFLATION_PENALTY_COEFF, applies an uncapped negative
  *  corp-margin modifier that bankrupts every company — the t1166 deflation-spiral
  *  incident. The floor also caps the deflation margin penalty at DEFLATION_PENALTY_COEFF
- *  * 2pp. inflationDiagnostics.ts already assumes this -2.0 floor. */
-export const MIN_INFLATION = -2.0;
-export const MAX_INFLATION = 100.0;
+ *  * 2pp. inflationDiagnostics.ts already assumes this -2.0 floor. A rate above
+ *  MAX_INFLATION (an authored hyperinflation opening) is not clamped; it unwinds
+ *  under the recovery contract in rules/inflationBounds.ts. */
+export { MIN_INFLATION, MAX_INFLATION };
 
 /** Inertia weight: new inflation = INERTIA * previous + (1 - INERTIA) * calculated.
  *  0.35 strikes a balance between policy responsiveness and dampening runaway
@@ -258,15 +266,6 @@ const INERTIA = 0.35;
  *  drifts back toward the central-bank target over time, preventing the
  *  "inertia trap" where prev≈raw locks the rate at whatever it is. */
 const MEAN_REVERSION_COEFF = 0.08;
-
-/** Maximum ordinary |Δ inflation| allowed per turn from this calculation.
- *  Prevents a single-turn spike when a previously-stuck wageGrowth value
- *  suddenly normalizes (or vice versa). At 48 turns per game year, 1.5pp per
- *  turn permits a 72pp same-direction arithmetic envelope in one year. This
- *  is not a predicted path: smoothing, mean reversion, and the absolute bounds
- *  can stop movement sooner. Deep-deflation recovery below deliberately allows
- *  a larger one-turn upward correction when current drivers return near target. */
-const MAX_PER_TURN_DELTA = 1.5;
 
 /** Deep deflation recovery threshold below target before allowing a faster upward correction. */
 const DEEP_DEFLATION_RECOVERY_GAP = 4.0;
@@ -561,11 +560,11 @@ export function calculateInflationWithBreakdown(inputs: InflationInputs): {
   const maxPositiveDelta = recoveringFromDeepDeflation
     ? Math.max(MAX_PER_TURN_DELTA, targetInflationInput - previousInflationInput)
     : MAX_PER_TURN_DELTA;
-  const clampedDelta = Math.max(-MAX_PER_TURN_DELTA, Math.min(maxPositiveDelta, delta));
-  const clampedSmoothed = previousInflationInput + clampedDelta;
-
-  const rate =
-    Math.round(Math.max(MIN_INFLATION, Math.min(MAX_INFLATION, clampedSmoothed)) * 100) / 100;
+  const rate = settleInflationStep({
+    previous: previousInflationInput,
+    proposed: smoothed,
+    maxPositiveDelta,
+  });
   // The explanation must reconcile to the settled rate even when a floor,
   // ceiling or per-turn limit binds. Keep economic contributions unchanged;
   // the stabilization row accounts for the complete final adjustment.
