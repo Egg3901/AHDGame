@@ -116,6 +116,14 @@ const nextConfig: NextConfig = {
           // SINGLEPLAYER_PRELOAD_ENTRIES=1 restores the default for the smoke
           // workflow's measurements.
           preloadEntriesOnStart: process.env.SINGLEPLAYER_PRELOAD_ENTRIES === "1",
+          // Packaging also runs on 4 vCPU / 16 GB hosted runners, where Next's
+          // default of cpus-1 static generation workers (3) each hold the whole
+          // server bundle on top of the Turbopack build and starved the runner
+          // until its agent was killed. package.mjs caps the worker count via
+          // SINGLEPLAYER_BUILD_CPUS; unset leaves Next's default untouched.
+          ...(Number(process.env.SINGLEPLAYER_BUILD_CPUS) > 0
+            ? { cpus: Number(process.env.SINGLEPLAYER_BUILD_CPUS) }
+            : {}),
         },
       }
     : {}),
