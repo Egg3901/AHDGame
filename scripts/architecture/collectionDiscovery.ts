@@ -342,8 +342,7 @@ export function discoverCollectionCalls(
 
   for (const sourceFile of program.getSourceFiles()) {
     const normalized = resolve(sourceFile.fileName);
-    const inProduction =
-      normalized.startsWith(`${srcRoot}/`) && productionFiles.includes(normalized);
+    const inProduction = productionFiles.includes(normalized);
     const inAdditional = additional.includes(normalized);
     if (!inProduction && !inAdditional) continue;
 
@@ -389,8 +388,7 @@ export function discoverCollectionCalls(
   // interface widens the literal. Keep those concrete declarations discoverable.
   for (const sourceFile of program.getSourceFiles()) {
     const normalized = resolve(sourceFile.fileName);
-    const inProduction =
-      normalized.startsWith(`${srcRoot}/`) && productionFiles.includes(normalized);
+    const inProduction = productionFiles.includes(normalized);
     if (!inProduction) continue;
     const visit = (node: ts.Node): void => {
       if (

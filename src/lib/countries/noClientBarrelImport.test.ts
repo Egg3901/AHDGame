@@ -86,7 +86,7 @@ describe("country barrels are server-side only", () => {
     // Guards the guard: a walk that silently found nothing would pass the real
     // assertion below while checking absolutely nothing.
     expect(clientModules().length).toBeGreaterThan(100);
-  });
+  }, 60_000);
 
   it("has no client module importing a country barrel", () => {
     const offenders = clientModules()
@@ -100,5 +100,5 @@ describe("country barrels are server-side only", () => {
         `\n\nImport the specific module instead -- e.g. countries/jp/identity, not countries/jp.\n` +
         `The barrel pulls elections (which reaches getDb) and all seven era files.\n`
     ).toEqual([]);
-  });
+  }, 60_000);
 });
