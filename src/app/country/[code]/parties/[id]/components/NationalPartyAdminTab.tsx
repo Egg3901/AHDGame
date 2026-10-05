@@ -225,7 +225,7 @@ export function NationalPartyAdminTab({ party, onUpdate }: NationalPartyAdminTab
         <div className="rounded-lg border border-red-500/30 bg-background p-4">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <div className="font-medium text-sm">Delete Party</div>
+              <div className="font-medium text-sm">Delete party</div>
               <div className="text-xs text-muted mt-1">
                 Permanently delete the {party.name} party and ALL associated state party
                 organizations. This action cannot be undone.

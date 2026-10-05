@@ -64,8 +64,8 @@ export const REVENUE_TO_TAX_BASE: Record<string, string> = {
 
 export const COUNTRY_LABELS = {
   US: {
-    title: "Federal Budget",
-    subtitle: "United States Federal Finances",
+    title: "Federal budget",
+    subtitle: "United States federal finances",
     debtTitle: "National Debt",
     ceilingLabel: "Debt Ceiling",
     revenueTitle: "Revenue Sources",
@@ -129,8 +129,8 @@ export const COUNTRY_LABELS = {
     activeLawsTitle: "Active Fiscal Laws",
   },
   UK: {
-    title: "HM Treasury Budget",
-    subtitle: "United Kingdom Public Finances",
+    title: "HM treasury budget",
+    subtitle: "United Kingdom public finances",
     debtTitle: "Public Debt",
     ceilingLabel: "Borrowing Limit",
     revenueTitle: "Receipts",
@@ -202,8 +202,8 @@ export const COUNTRY_LABELS = {
     activeLawsTitle: "Active Treasury Measures",
   },
   JP: {
-    title: "National Budget",
-    subtitle: "Japan Public Finances",
+    title: "National budget",
+    subtitle: "Japan public finances",
     debtTitle: "National Debt",
     ceilingLabel: "Debt Ceiling",
     revenueTitle: "Revenue Sources",
@@ -267,8 +267,8 @@ export const COUNTRY_LABELS = {
     activeLawsTitle: "Active Fiscal Legislation",
   },
   CA: {
-    title: "Federal Budget",
-    subtitle: "Canada Federal Finances",
+    title: "Federal budget",
+    subtitle: "Canada federal finances",
     debtTitle: "Federal Debt",
     ceilingLabel: "Debt Limit",
     revenueTitle: "Revenue Sources",
@@ -332,7 +332,7 @@ export const COUNTRY_LABELS = {
   },
   DE: {
     title: "Bundeshaushalt",
-    subtitle: "Germany Federal Finances",
+    subtitle: "Germany federal finances",
     debtTitle: "Federal Debt",
     ceilingLabel: "Debt Brake Limit",
     revenueTitle: "Revenue Sources",
@@ -398,7 +398,7 @@ export const COUNTRY_LABELS = {
   },
   DD: {
     title: "Staatshaushaltsplan",
-    subtitle: "East German State Finances",
+    subtitle: "East German state finances",
     debtTitle: "State Debt",
     ceilingLabel: "Borrowing Limit",
     revenueTitle: "Revenue Sources",
@@ -464,8 +464,8 @@ export const COUNTRY_LABELS = {
     activeLawsTitle: "Active State Legislation",
   },
   CN: {
-    title: "国家预算 / National Budget",
-    subtitle: "China Central Government Finances",
+    title: "国家预算 / National budget",
+    subtitle: "China central government finances",
     debtTitle: "Central Government Debt",
     ceilingLabel: "Debt Service Ceiling",
     revenueTitle: "Revenue Sources",
@@ -539,8 +539,8 @@ export const COUNTRY_LABELS = {
     activeLawsTitle: "Active Fiscal Laws",
   },
   IE: {
-    title: "National Budget",
-    subtitle: "Government of Ireland Finances",
+    title: "National budget",
+    subtitle: "Government of Ireland finances",
     debtTitle: "National Debt",
     ceilingLabel: "Debt-Service Ceiling",
     revenueTitle: "Revenue Sources",

@@ -159,9 +159,7 @@ export function OfficeSection({
             <span className="block text-sm font-medium tabular-nums text-foreground">
               {deadline}
             </span>
-            <span className="block text-[10px] uppercase tracking-wider text-muted">
-              Next to close
-            </span>
+            <span className="block text-body-sm font-medium text-muted">Next to close</span>
           </span>
         )}
       </button>

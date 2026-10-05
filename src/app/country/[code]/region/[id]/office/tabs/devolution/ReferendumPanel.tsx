@@ -148,7 +148,7 @@ export function ReferendumPanel({ countryId, stateId, currentTurn, viewerCanMana
           )}
           {cooldownTurnsLeft > 0 && (
             <p className="text-xs text-muted">
-              Cooldown Remaining: {cooldownTurnsLeft} {cooldownTurnsLeft === 1 ? "turn" : "turns"}
+              Cooldown remaining: {cooldownTurnsLeft} {cooldownTurnsLeft === 1 ? "turn" : "turns"}
             </p>
           )}
         </div>

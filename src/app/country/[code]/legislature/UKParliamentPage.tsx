@@ -215,7 +215,7 @@ function BillsTab({
             onClick={() => setShowModal(true)}
             className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
           >
-            Propose Bill
+            Propose bill
           </button>
         </div>
       )}
@@ -351,7 +351,7 @@ function LeadershipTab({
             onClick={() => setAppointModalOpen(true)}
             className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
           >
-            Appoint Prime Minister
+            Appoint prime minister
           </button>
         </div>
       )}
@@ -360,7 +360,7 @@ function LeadershipTab({
         <div className="rounded-xl border border-warning/20 bg-warning/5 px-4 py-3">
           <div className="mb-2 flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-medium text-foreground">Dissolve Parliament</p>
+              <p className="text-sm font-medium text-foreground">Dissolve parliament</p>
               <p className="text-xs text-muted">
                 As Prime Minister, you may call a snap election. All active legislation will fail.
               </p>
@@ -392,7 +392,7 @@ function LeadershipTab({
               title={`No-confidence cooldown: ${noConfidenceCooldownTurns} turn${noConfidenceCooldownTurns === 1 ? "" : "s"} remaining`}
               className="shrink-0 rounded-lg border border-warning/20 bg-warning/5 px-4 py-2 text-sm font-semibold text-warning/40 cursor-not-allowed opacity-50"
             >
-              Propose No-Confidence
+              Propose no-confidence
             </button>
           ) : noConfirmOpen ? (
             <div className="flex items-center gap-2 shrink-0">
@@ -417,7 +417,7 @@ function LeadershipTab({
               disabled={!viewerMayProposeNoConfidence}
               className="shrink-0 rounded-lg border border-warning/40 bg-warning/10 px-4 py-2 text-sm font-semibold text-warning hover:bg-warning/20 disabled:opacity-50 transition-colors"
             >
-              Propose No-Confidence
+              Propose no-confidence
             </button>
           )}
         </div>
@@ -448,12 +448,12 @@ function LeadershipTab({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <LeaderCard
-          title="Prime Minister"
+          title="Prime minister"
           subtitle={`Head of ${imperialPossessive} Government`}
           character={leaders.primeMinister}
         />
         <LeaderCard
-          title="Leader of the Opposition"
+          title="Leader of the opposition"
           subtitle="Leader of the largest non-governing party"
           character={leaders.oppositionLeader}
         />
@@ -540,7 +540,7 @@ export function UKParliamentPage({ countryId }: { countryId: CountryId }) {
     totalSeats: members?.totalSeats ?? 0,
     leader: leaders?.primeMinister
       ? {
-          label: "Prime Minister",
+          label: "Prime minister",
           name: leaders.primeMinister.characterName,
           id: leaders.primeMinister.characterId,
           sequentialId: leaders.primeMinister.sequentialId,
@@ -548,7 +548,7 @@ export function UKParliamentPage({ countryId }: { countryId: CountryId }) {
       : null,
     minorityLeader: leaders?.oppositionLeader
       ? {
-          label: "Opposition Leader",
+          label: "Opposition leader",
           name: leaders.oppositionLeader.characterName,
           id: leaders.oppositionLeader.characterId,
           sequentialId: leaders.oppositionLeader.sequentialId,
@@ -577,7 +577,7 @@ export function UKParliamentPage({ countryId }: { countryId: CountryId }) {
             subtitle={
               headerStats.totalSeats > 0
                 ? `${headerStats.totalSeats} elected MPs · First Past the Post · United Kingdom`
-                : "First Past the Post · United Kingdom"
+                : "First past the post · United Kingdom"
             }
             heroImage={COMMONS_HERO.image}
             heroAlt={COMMONS_HERO.alt}

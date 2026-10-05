@@ -197,9 +197,7 @@ function TabContextStrip({
       <div className="grid grid-cols-2 divide-x divide-card-border">
         {stats.map((s) => (
           <div key={s.label} className="px-4 py-3">
-            <span className="text-[10px] uppercase tracking-widest text-muted font-medium block mb-0.5">
-              {s.label}
-            </span>
+            <span className="text-body-sm font-medium text-muted block mb-0.5">{s.label}</span>
             <span className="text-lg font-bold tabular-nums">{s.value}</span>
           </div>
         ))}
@@ -698,7 +696,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
     },
     {
       key: "wealth",
-      label: "Wealth List",
+      label: "Wealth list",
       tooltip: "Richest characters by portfolio value",
       count: wealthEntries.length || undefined,
     },
@@ -762,14 +760,14 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
               href="/portfolio"
               className="rounded-lg border border-card-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-card-elevated transition-colors"
             >
-              My Wallet
+              My wallet
             </Link>
             {myCorporation ? (
               <Link
                 href={`/corporation/${myCorporation.sequentialId}`}
                 className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90 transition-colors"
               >
-                My Corp
+                My corp
               </Link>
             ) : canFoundCorp ? (
               <button
@@ -777,7 +775,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
                 onClick={() => setShowFoundModal(true)}
                 className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90 transition-colors"
               >
-                Found Corp
+                Found corp
               </button>
             ) : null}
           </div>
@@ -799,21 +797,15 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
               )}
             </div>
             <div className="px-4 py-3">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium block mb-0.5">
-                Market Cap
-              </span>
+              <span className="text-body-sm font-medium text-muted block mb-0.5">Market cap</span>
               <span className="text-lg font-bold tabular-nums">{formatAmount(totalMarketCap)}</span>
             </div>
             <div className="px-4 py-3">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium block mb-0.5">
-                Revenue
-              </span>
+              <span className="text-body-sm font-medium text-muted block mb-0.5">Revenue</span>
               <span className="text-lg font-bold tabular-nums">{formatAmount(totalRevenue)}</span>
             </div>
             <div className="px-4 py-3">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium block mb-0.5">
-                Income
-              </span>
+              <span className="text-body-sm font-medium text-muted block mb-0.5">Income</span>
               <span
                 className={`text-lg font-bold tabular-nums ${totalIncome >= 0 ? "text-success" : "text-error"}`}
               >
@@ -822,9 +814,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
               </span>
             </div>
             <div className="px-4 py-3">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium block mb-0.5">
-                Profitable
-              </span>
+              <span className="text-body-sm font-medium text-muted block mb-0.5">Profitable</span>
               <span
                 className={`text-lg font-bold tabular-nums ${
                   profitablePct >= 75
@@ -839,7 +829,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
             </div>
             <div className="px-4 py-3">
               <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
+                <span className="text-body-sm font-medium text-muted">
                   {MARKET_TIMEFRAMES[stockTimeframe].label}
                 </span>
                 <div className="flex items-center gap-0.5 bg-card-elevated rounded px-0.5 py-px border border-card-border">

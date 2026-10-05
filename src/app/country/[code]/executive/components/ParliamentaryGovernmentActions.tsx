@@ -169,7 +169,7 @@ export function ParliamentaryGovernmentActions({
               title={`No-confidence cooldown: ${noConfidenceCooldownTurns} turn${noConfidenceCooldownTurns === 1 ? "" : "s"} remaining`}
               className="shrink-0 rounded-lg border border-warning/20 bg-warning/5 px-4 py-2 text-sm font-semibold text-warning/40 cursor-not-allowed opacity-50"
             >
-              Propose No-Confidence
+              Propose no-confidence
             </button>
           ) : noConfirmOpen ? (
             <div className="flex items-center gap-2 shrink-0">
@@ -194,7 +194,7 @@ export function ParliamentaryGovernmentActions({
               disabled={!viewerMayProposeNoConfidence}
               className="shrink-0 rounded-lg border border-warning/40 bg-warning/10 px-4 py-2 text-sm font-semibold text-warning hover:bg-warning/20 disabled:opacity-50 transition-colors"
             >
-              Propose No-Confidence
+              Propose no-confidence
             </button>
           )}
         </div>

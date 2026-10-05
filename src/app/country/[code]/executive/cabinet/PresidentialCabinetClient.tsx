@@ -262,7 +262,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
     const spent = position.actingChargeSpent === true;
     return (
       <Button variant="secondary" disabled={spent} onClick={() => openActingModal(position.id)}>
-        Appoint Acting
+        Appoint acting
       </Button>
     );
   }
@@ -364,7 +364,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
               href={`/country/${code}/executive`}
               className="text-muted transition-colors hover:text-foreground"
             >
-              {countryId === COUNTRY_CONFIGS.US.id ? "Back to White House" : "Back to Executive"}
+              {countryId === COUNTRY_CONFIGS.US.id ? "Back to White House" : "Back to executive"}
             </Link>
             <span className="text-muted">-</span>
             <Link href={senateLink} className="text-muted transition-colors hover:text-foreground">
@@ -397,9 +397,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
             </div>
             <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
               <div className="flex min-w-[110px] flex-col px-5 py-3">
-                <span className="text-[10px] font-medium uppercase tracking-widest text-muted">
-                  Positions
-                </span>
+                <span className="text-body-sm font-medium text-muted">Positions</span>
                 <span className="text-base font-bold tabular-nums">
                   {filledCount}
                   <span className="text-xs font-normal text-muted">
@@ -409,9 +407,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
                 </span>
               </div>
               <div className="flex min-w-[140px] flex-col px-5 py-3">
-                <span className="text-[10px] font-medium uppercase tracking-widest text-muted">
-                  Pending Votes
-                </span>
+                <span className="text-body-sm font-medium text-muted">Pending votes</span>
                 <span className="text-base font-bold tabular-nums">{activeNominations.length}</span>
               </div>
             </div>
@@ -469,7 +465,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
                         setNominateError("");
                       }}
                     >
-                      Propose Nomination
+                      Propose nomination
                     </Button>
                   </div>
                 </div>
@@ -620,7 +616,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
                                   {position.nomination.votesAbstain} abstain
                                 </p>
                               </div>
-                              <Badge color="warning">Senate Vote</Badge>
+                              <Badge color="warning">Senate vote</Badge>
                             </div>
                             {data.isPresident && (
                               <div className="mt-3 flex flex-wrap gap-2">
@@ -633,7 +629,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
                                     setNominateError("");
                                   }}
                                 >
-                                  Replace Nomination
+                                  Replace nomination
                                 </Button>
                                 {renderActingControl(position)}
                               </div>
@@ -667,7 +663,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
                           href={`/country/${code}/executive/cabinet/${position.id}/office`}
                           className="mt-3 block text-xs text-primary hover:underline"
                         >
-                          Open Office
+                          Open office
                         </Link>
                       </div>
                     );
@@ -720,7 +716,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
         onPositionChange={setSelectedPositionId}
         onCharChange={setSelectedCharId}
         onSubmit={handleAppointActing}
-        title="Appoint an Acting Secretary"
+        title="Appoint an acting secretary"
         description={`An acting secretary takes the seat at once, with no Senate vote. They may run the department day to day but cannot set policy, move personnel, or commit the nation to anything lasting. The appointment ends after ${data.actingTenureTurns ?? 24} turns, and you get only one per office per term.`}
         submitLabel="Appoint"
         nomineeLabel="Appointee"

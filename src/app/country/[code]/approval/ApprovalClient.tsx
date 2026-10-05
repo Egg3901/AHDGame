@@ -137,10 +137,10 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
             {config.name}
           </Link>
           <span>/</span>
-          <span>Approval &amp; Active Effects</span>
+          <span>Approval &amp; active effects</span>
         </div>
 
-        <h1 className="text-2xl font-bold mb-1">{config.name} Approval &amp; Active Effects</h1>
+        <h1 className="text-2xl font-bold mb-1">{config.name} Approval &amp; active effects</h1>
         <p className="text-sm text-muted mb-8">
           National approval and the named conditions that adjust it — plus their knock-on effects on
           in-state sector profit margins.
@@ -169,9 +169,7 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
             {/* Government Approval */}
             {governmentApproval != null && (
               <div className="rounded-xl border border-card-border bg-card p-6 shadow-panel">
-                <p className="text-xs uppercase tracking-widest text-muted font-medium mb-1">
-                  Government Approval
-                </p>
+                <p className="text-body-sm font-medium text-muted mb-1">Government approval</p>
                 <p
                   className={`text-5xl font-bold tabular-nums ${approvalColor(governmentApproval)}`}
                 >
@@ -191,9 +189,7 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
                 {modifiers.length > 0 && (
                   <div className="flex gap-4 text-right text-xs">
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted">
-                        Net approval
-                      </div>
+                      <div className="text-body-sm font-medium text-muted">Net approval</div>
                       <div
                         className={
                           "mt-0.5 font-semibold tabular-nums " +
@@ -209,9 +205,7 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
                       </div>
                     </div>
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted">
-                        Net margin
-                      </div>
+                      <div className="text-body-sm font-medium text-muted">Net margin</div>
                       <div
                         className={
                           "mt-0.5 font-semibold tabular-nums " +
@@ -312,14 +306,14 @@ export default function ApprovalClient({ initialMetrics, initialApproval }: Appr
               href={politicalMetricsUrl(config.id)}
               className="rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-medium text-muted hover:text-foreground transition-colors"
             >
-              Political Metrics
+              Political metrics
             </Link>
           ) : (
             <Link
               href={`/country/${config.code.toLowerCase()}/metrics`}
               className="rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-medium text-muted hover:text-foreground transition-colors"
             >
-              National Metrics
+              National metrics
             </Link>
           )}
         </div>

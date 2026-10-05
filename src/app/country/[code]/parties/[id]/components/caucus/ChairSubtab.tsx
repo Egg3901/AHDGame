@@ -307,7 +307,7 @@ export function ChairSubtab({
         className: "border-error/40 bg-error/15 text-error",
       }
     : {
-        label: "Recruitment Available",
+        label: "Recruitment available",
         className: "border-success/40 bg-success/15 text-success",
       };
 

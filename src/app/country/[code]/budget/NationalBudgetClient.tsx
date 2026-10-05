@@ -330,7 +330,7 @@ export function NationalBudgetClient() {
       : ` State ownership: ${Math.round(data.stateOwnershipConcentration ?? 0)}% of national corporate revenue (${soeConcentration.label}).`;
   const soeLine = (amount: number): BreakdownLine => ({
     id: "stateEnterprises",
-    label: "State Enterprises",
+    label: "State enterprises",
     description:
       "Net per-turn operating result of this country's National Corporations — remitted profit when in surplus, treasury-backed losses when in deficit." +
       soeConcentrationNote,

@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { code } = await params;
   const id = code.toUpperCase() as CountryId;
   const config = COUNTRY_CONFIGS[id];
-  if (!config) return { title: "Command Economy | A House Divided" };
+  if (!config) return { title: "Command economy | A House Divided" };
   return {
     title: `Command Economy | ${config.name} | A House Divided`,
     description: `Run ${config.name}'s planned economy: the national plan, state enterprises, and Gosbank credit.`,
@@ -38,7 +38,7 @@ export default async function CommandEconomyPage({ params }: PageProps) {
         <div className="mb-6 flex items-center gap-3">
           <BackButton iconOnly />
           <div>
-            <h1 className="text-xl font-bold text-foreground">{config.name} Command Economy</h1>
+            <h1 className="text-xl font-bold text-foreground">{config.name} Command economy</h1>
             <p className="text-sm text-muted">
               The national plan, the state enterprises, and Gosbank credit.
             </p>

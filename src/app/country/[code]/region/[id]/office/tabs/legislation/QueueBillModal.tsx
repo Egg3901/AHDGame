@@ -326,7 +326,7 @@ export function QueueBillModal({
                   disabled={submitting}
                 >
                   <option value="subsidy">Grant Subsidy (+7.5% margin)</option>
-                  <option value="end_subsidy">End Subsidy</option>
+                  <option value="end_subsidy">End subsidy</option>
                 </select>
                 <select
                   value={sp.scopeType}
@@ -345,7 +345,7 @@ export function QueueBillModal({
                   disabled={submitting}
                 >
                   <option value="economy_wide">Economy-Wide</option>
-                  <option value="sector">Specific Sector</option>
+                  <option value="sector">Specific sector</option>
                 </select>
                 {sp.scopeType === "sector" && (
                   <SubsidySectorSelect

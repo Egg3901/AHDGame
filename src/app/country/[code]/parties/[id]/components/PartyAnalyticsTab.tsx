@@ -366,21 +366,21 @@ export function PartyAnalyticsTab({
           link={data.links.stateParties}
         />
         <div className="grid gap-4 md:grid-cols-3">
-          <SummaryMetric label="Tracked State Parties" value={data.org.totalStateOrgs} />
+          <SummaryMetric label="Tracked state parties" value={data.org.totalStateOrgs} />
           <SummaryMetric
-            label="Growing States"
+            label="Growing states"
             value={data.org.positiveGrowthCount}
             tone="success"
           />
           <SummaryMetric
-            label="Shrinking States"
+            label="Shrinking states"
             value={data.org.negativeGrowthCount}
             tone="warning"
           />
         </div>
         <div className="grid gap-4 xl:grid-cols-2">
           <MetricList
-            title="Growth Leaders"
+            title="Growth leaders"
             items={data.org.growthLeaders}
             render={(item) => <StateMetricRow item={item as PartyAnalyticsStateMetric} />}
             empty="No state organization data on file."
@@ -425,37 +425,37 @@ export function PartyAnalyticsTab({
         />
         <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
           <SummaryMetric
-            label="Low Loyalty"
+            label="Low loyalty"
             value={data.discipline.lowLoyaltyCount}
             tone="warning"
           />
           <SummaryMetric
-            label="Likely Whip Breakers"
+            label="Likely whip breakers"
             value={data.discipline.likelyWhipBreakers}
             tone="error"
           />
           <SummaryMetric
-            label="Caution Pool"
+            label="Caution pool"
             value={data.discipline.cautionCount}
             tone="secondary"
           />
           <SummaryMetric
-            label="Active Defiance"
+            label="Active defiance"
             value={data.discipline.activeDefianceCount}
             tone="error"
           />
           <SummaryMetric
-            label="Caucus Risk"
+            label="Caucus risk"
             value={data.discipline.caucusRiskCount}
             tone="warning"
           />
           <SummaryMetric
-            label="Critical Risk"
+            label="Critical risk"
             value={data.discipline.criticalRiskCount}
             tone="error"
           />
           <SummaryMetric
-            label="Elevated Risk"
+            label="Elevated risk"
             value={data.discipline.elevatedRiskCount}
             tone="secondary"
           />
@@ -473,36 +473,36 @@ export function PartyAnalyticsTab({
         </div>
         <div className="grid gap-4 md:grid-cols-3">
           <SummaryMetric
-            label="Players Defying"
+            label="Players defying"
             value={data.discipline.playerDefianceCount}
             tone="warning"
           />
           <SummaryMetric
-            label="NPPs Defying"
+            label="NPPs defying"
             value={data.discipline.nppDefianceCount}
             tone="error"
           />
           <SummaryMetric
-            label="Whip Room Watch"
+            label="Whip room watch"
             value={data.discipline.activeDefianceCount > 0 ? "Attention" : "Clear"}
             tone={data.discipline.activeDefianceCount > 0 ? "warning" : "success"}
           />
         </div>
         <div className="grid gap-4 xl:grid-cols-2">
           <MetricList
-            title="Discipline Watch"
+            title="Discipline watch"
             items={data.discipline.disciplineWatch}
             render={(item) => <RiskRow item={item as PartyAnalyticsRiskItem} />}
             empty="No low-loyalty NPPs on watch."
           />
           <MetricList
-            title="High Stubbornness"
+            title="High stubbornness"
             items={data.discipline.highStubbornness}
             render={(item) => <RiskRow item={item as PartyAnalyticsRiskItem} />}
             empty="No stubbornness spikes on file."
           />
           <MetricList
-            title="Caucus Exit Risk"
+            title="Caucus exit risk"
             items={data.discipline.caucusRisk}
             render={(item) => <CaucusRiskRow item={item as PartyAnalyticsCaucusRiskItem} />}
             empty="No caucus NPPs are close to the exit threshold."
@@ -521,24 +521,24 @@ export function PartyAnalyticsTab({
           <SummaryMetric label="Strained" value={data.caucuses.strainedCount} tone="warning" />
           <SummaryMetric label="Fragile" value={data.caucuses.fragileCount} tone="error" />
           <SummaryMetric
-            label="Chair Elections"
+            label="Chair elections"
             value={data.caucuses.activeElectionCount}
             tone="secondary"
           />
           <SummaryMetric
-            label="Recent Forced Exits"
+            label="Recent forced exits"
             value={data.caucuses.recentForcedExitCount}
             tone="error"
           />
           <SummaryMetric
-            label="Active Caucus Defiance"
+            label="Active caucus defiance"
             value={data.caucuses.activeDefianceCount}
             tone="warning"
           />
         </div>
         <div className="grid gap-4 xl:grid-cols-2">
           <MetricList
-            title="Fragile or Strained Caucuses"
+            title="Fragile or strained caucuses"
             items={data.caucuses.caucuses.filter((item) => item.statusLabel !== "Healthy")}
             render={(item) => (
               <CaucusHealthRow
@@ -549,7 +549,7 @@ export function PartyAnalyticsTab({
             empty="All caucuses are currently healthy."
           />
           <MetricList
-            title="All Caucuses"
+            title="All caucuses"
             items={data.caucuses.caucuses}
             render={(item) => (
               <CaucusHealthRow
@@ -569,26 +569,26 @@ export function PartyAnalyticsTab({
           link={data.links.slate}
         />
         <div className="grid gap-4 md:grid-cols-4 xl:grid-cols-7">
-          <SummaryMetric label="Active Races" value={data.slate.activeRaceCount} />
-          <SummaryMetric label="No Coverage" value={data.slate.uncoveredRaceCount} tone="warning" />
+          <SummaryMetric label="Active races" value={data.slate.activeRaceCount} />
+          <SummaryMetric label="No coverage" value={data.slate.uncoveredRaceCount} tone="warning" />
           <SummaryMetric
-            label="Awaiting Resolution"
+            label="Awaiting resolution"
             value={data.slate.awaitingResolutionCount}
             tone="secondary"
           />
           <SummaryMetric label="Filed" value={data.slate.filedCount} tone="success" />
           <SummaryMetric
-            label="Likely Declines"
+            label="Likely declines"
             value={data.slate.likelyDeclineCount}
             tone="error"
           />
           <SummaryMetric
-            label="States Needing Coverage"
+            label="States needing coverage"
             value={data.slate.statesNeedingCoverageCount}
             tone="warning"
           />
           <SummaryMetric
-            label="States With Declines"
+            label="States with declines"
             value={data.slate.statesWithLikelyDeclinesCount}
             tone="error"
           />
@@ -606,19 +606,19 @@ export function PartyAnalyticsTab({
         </div>
         <div className="grid gap-4 xl:grid-cols-3">
           <MetricList
-            title="Open Races Without Coverage"
+            title="Open races without coverage"
             items={data.slate.noCoverage}
             render={(item) => <SlateItemRow item={item as PartyAnalyticsSlateItem} />}
             empty="Every live race has Slate coverage."
           />
           <MetricList
-            title="At-Risk Assignments"
+            title="At-risk assignments"
             items={data.slate.atRiskAssignments}
             render={(item) => <SlateItemRow item={item as PartyAnalyticsSlateItem} />}
             empty="No current assignments are flashing decline risk."
           />
           <MetricList
-            title="State Coverage Heat List"
+            title="State coverage heat list"
             items={data.slate.stateCoverage}
             render={(item) => <SlateCoverageRow item={item as PartyAnalyticsSlateCoverageItem} />}
             empty="No live state coverage data."

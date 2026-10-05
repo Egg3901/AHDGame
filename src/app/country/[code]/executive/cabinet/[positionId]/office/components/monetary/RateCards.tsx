@@ -12,7 +12,7 @@ export function RateCards({ m }: { m: MonetaryView }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <MonetaryCard
-        title="Central Bank Prime Rate"
+        title="Central bank prime rate"
         hint={
           m.chairName
             ? `Set by the Central Bank (Chair: ${m.chairName})`
@@ -26,7 +26,7 @@ export function RateCards({ m }: { m: MonetaryView }) {
       </MonetaryCard>
 
       <MonetaryCard
-        title="Sovereign Borrowing Rate"
+        title="Sovereign borrowing rate"
         hint="Debt-to-GDP base + investor-confidence premium"
       >
         <div className="grid grid-cols-3 gap-3">

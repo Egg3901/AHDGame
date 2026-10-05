@@ -642,7 +642,7 @@ export function TreasuryPanel({
       {/* Management Controls — chair/treasurer/admin only */}
       {canManageTreasury && (
         <TreasuryPlanningCard
-          title="National Treasurer Dashboard"
+          title="National treasurer dashboard"
           description="The Treasurer sets soft reserve targets for transfers, member support, and NPP recruiting. Chair and Vice Chair still keep emergency spending access, but sends and transfers that pierce the reserve are flagged as override actions."
           canEdit={canManageTreasuryPlan}
           treasury={party.treasury}
@@ -683,7 +683,7 @@ export function TreasuryPanel({
             growthLeaders={insights.growthLeaders}
           />
           <TreasuryOverrideHistoryCard
-            title="Leadership Override Log"
+            title="Leadership override log"
             description="Recent sends and transfers that pierced the Treasurer reserve target. Leadership can still spend through the plan, but those actions are surfaced here for accountability."
             currencyCode={partyCurrencyCode}
             items={insights.overrideHistory}

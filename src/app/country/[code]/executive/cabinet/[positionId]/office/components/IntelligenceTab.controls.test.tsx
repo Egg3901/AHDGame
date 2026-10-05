@@ -76,7 +76,7 @@ describe("funding a network", () => {
     const fetchMock = okFetch();
     vi.stubGlobal("fetch", fetchMock);
     renderTab();
-    await screen.findByText("Direct the Service");
+    await screen.findByText("Direct the service");
 
     fireEvent.change(selects()[0], { target: { value: "RU" } });
     fireEvent.change(selects()[1], { target: { value: "steady" } });
@@ -90,13 +90,13 @@ describe("funding a network", () => {
 
   it("will not post without a target", async () => {
     renderTab();
-    await screen.findByText("Direct the Service");
+    await screen.findByText("Direct the service");
     expect(button(/fund network/i).disabled).toBe(true);
   });
 
   it("never offers the service its own country as a target", async () => {
     renderTab();
-    await screen.findByText("Direct the Service");
+    await screen.findByText("Direct the service");
     const values = [...selects()[0].options].map((o) => o.value);
     expect(values).not.toContain("US");
   });
@@ -107,7 +107,7 @@ describe("ordering an operation", () => {
     const fetchMock = okFetch();
     vi.stubGlobal("fetch", fetchMock);
     renderTab();
-    await screen.findByText("Direct the Service");
+    await screen.findByText("Direct the service");
 
     fireEvent.change(selects()[2], { target: { value: "RU" } });
     fireEvent.change(selects()[3], { target: { value: "military" } });
@@ -128,7 +128,7 @@ describe("ordering an operation", () => {
     // The whole reason funding exists: an unfunded service can order nothing.
     serviceView.funding = { ...BASE.funding, balance: 0 };
     renderTab();
-    await screen.findByText("Direct the Service");
+    await screen.findByText("Direct the service");
     expect(button(/run operation/i).disabled).toBe(true);
     expect(screen.getByText(/appropriation cannot cover/i)).toBeTruthy();
   });
@@ -136,7 +136,7 @@ describe("ordering an operation", () => {
   it("refuses when the turn's slots are spent", async () => {
     serviceView.slotsRemaining = 0;
     renderTab();
-    await screen.findByText("Direct the Service");
+    await screen.findByText("Direct the service");
     expect(button(/run operation/i).disabled).toBe(true);
     expect(screen.getByText(/slot for this turn is spent/i)).toBeTruthy();
   });
@@ -147,7 +147,7 @@ describe("counter-intelligence posture", () => {
     const fetchMock = okFetch();
     vi.stubGlobal("fetch", fetchMock);
     renderTab();
-    await screen.findByText("Direct the Service");
+    await screen.findByText("Direct the service");
 
     fireEvent.change(screen.getByLabelText(/Posture/), { target: { value: "45" } });
     fireEvent.click(button(/set posture/i));
@@ -171,7 +171,7 @@ describe("when an order is refused", () => {
       })
     );
     renderTab();
-    await screen.findByText("Direct the Service");
+    await screen.findByText("Direct the service");
 
     fireEvent.change(selects()[0], { target: { value: "RU" } });
     fireEvent.click(button(/fund network/i));
@@ -183,8 +183,8 @@ describe("when an order is refused", () => {
 describe("when the viewer may read but not act", () => {
   it("renders no controls at all", async () => {
     renderTab(false);
-    await screen.findByText("The Service");
-    expect(screen.queryByText("Direct the Service")).toBeNull();
+    await screen.findByText("The service");
+    expect(screen.queryByText("Direct the service")).toBeNull();
     expect(screen.queryByRole("button", { name: /run operation/i })).toBeNull();
   });
 });

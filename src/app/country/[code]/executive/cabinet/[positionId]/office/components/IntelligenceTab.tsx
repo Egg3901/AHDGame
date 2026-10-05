@@ -299,22 +299,22 @@ export default function IntelligenceTab({
   return (
     <div className="min-w-0 space-y-4">
       <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
-        <h2 className="text-lg text-foreground">The Service</h2>
+        <h2 className="text-lg text-foreground">The service</h2>
         <p className="mt-0.5 max-w-2xl text-sm text-muted">
           Networks are slow to build and are what a compromise costs you. Coverage is perishable: it
           decays every turn, so a service that stops collecting goes blind on what it already knows.
         </p>
         <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">Tradecraft</dt>
+            <dt className="text-body-sm font-medium text-muted">Tradecraft</dt>
             <dd className="text-lg font-semibold text-foreground">{view.agency.tradecraft}</dd>
           </div>
           <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">Counter-Intelligence</dt>
+            <dt className="text-body-sm font-medium text-muted">Counter-Intelligence</dt>
             <dd className="text-lg font-semibold text-foreground">{view.agency.counterIntel}</dd>
           </div>
           <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">Operations Left</dt>
+            <dt className="text-body-sm font-medium text-muted">Operations left</dt>
             <dd className="text-lg font-semibold text-foreground">{view.slotsRemaining}</dd>
           </div>
         </dl>
@@ -341,27 +341,27 @@ export default function IntelligenceTab({
             </p>
             <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div>
-                <dt className="text-xs uppercase tracking-wide text-muted">Enacted Line</dt>
+                <dt className="text-body-sm font-medium text-muted">Enacted line</dt>
                 <dd className="text-lg font-semibold text-foreground">
                   {fmtMoneyAbs(currencySymbol, view.funding.enactedLine)}
                 </dd>
                 <dd className="text-xs text-muted">a year</dd>
               </div>
               <div>
-                <dt className="text-xs uppercase tracking-wide text-muted">On Hand</dt>
+                <dt className="text-body-sm font-medium text-muted">On hand</dt>
                 <dd className="text-lg font-semibold text-foreground">
                   {fmtMoneyAbs(currencySymbol, view.funding.balance)}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs uppercase tracking-wide text-muted">Accrues</dt>
+                <dt className="text-body-sm font-medium text-muted">Accrues</dt>
                 <dd className="text-lg font-semibold text-foreground">
                   {fmtMoneyAbs(currencySymbol, view.funding.accrualPerTurn)}
                 </dd>
                 <dd className="text-xs text-muted">a turn</dd>
               </div>
               <div>
-                <dt className="text-xs uppercase tracking-wide text-muted">Committed</dt>
+                <dt className="text-body-sm font-medium text-muted">Committed</dt>
                 <dd className="text-lg font-semibold text-foreground">
                   {fmtMoneyAbs(currencySymbol, view.funding.committedUpkeep)}
                 </dd>
@@ -385,7 +385,7 @@ export default function IntelligenceTab({
 
       {canAct && (
         <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
-          <h2 className="text-lg text-foreground">Direct the Service</h2>
+          <h2 className="text-lg text-foreground">Direct the service</h2>
           <p className="mt-0.5 max-w-2xl text-sm text-muted">
             Funding a network is a standing claim on the appropriation every turn. An operation is
             paid for once, and spends one of the turn&apos;s slots.
@@ -438,7 +438,7 @@ export default function IntelligenceTab({
                     submit("network", { targetCountryId: netTarget, funding: netFunding })
                   }
                 >
-                  Fund Network
+                  Fund network
                 </button>
               </div>
               <p className="mt-2 text-xs text-muted">
@@ -506,7 +506,7 @@ export default function IntelligenceTab({
                     })
                   }
                 >
-                  Run Operation
+                  Run operation
                 </button>
               </div>
               <p className="mt-2 text-xs text-muted">
@@ -543,7 +543,7 @@ export default function IntelligenceTab({
                     submit("counter-intel", { counterIntel: Math.round(Number(posture)) })
                   }
                 >
-                  Set Posture
+                  Set posture
                 </button>
               </div>
               <p className="mt-2 text-xs text-muted">
@@ -565,7 +565,7 @@ export default function IntelligenceTab({
           <div className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[42rem] text-sm">
               <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-muted">
+                <tr className="text-left text-body-sm font-medium text-muted">
                   <th className="py-2">Country</th>
                   <th className="py-2">Level</th>
                   <th className="py-2">Funding</th>
@@ -605,7 +605,7 @@ export default function IntelligenceTab({
       </section>
 
       <section className="min-w-0 rounded-xl border border-card-border bg-card p-4 shadow-card">
-        <h2 className="text-lg text-foreground">Nuclear Assessments</h2>
+        <h2 className="text-lg text-foreground">Nuclear assessments</h2>
         <p className="mt-0.5 max-w-2xl text-sm text-muted">
           What strategic coverage currently buys you. Estimates carry real error and are stable
           while the coverage is, so re-reading the page will not sharpen them. Only sustained
@@ -653,7 +653,7 @@ export default function IntelligenceTab({
       </section>
 
       <section className="min-w-0 rounded-xl border border-card-border bg-card p-4 shadow-card">
-        <h2 className="text-lg text-foreground">Military Assessments</h2>
+        <h2 className="text-lg text-foreground">Military assessments</h2>
         <p className="mt-0.5 max-w-2xl text-sm text-muted">
           What military coverage buys you. This is what a service can read from the outside, not the
           view that a nation gives its own command staff.
@@ -702,7 +702,7 @@ export default function IntelligenceTab({
       </section>
 
       <section className="min-w-0 rounded-xl border border-card-border bg-card p-4 shadow-card">
-        <h2 className="text-lg text-foreground">Economic Assessments</h2>
+        <h2 className="text-lg text-foreground">Economic assessments</h2>
         <p className="mt-0.5 max-w-2xl text-sm text-muted">
           The national picture of a country&apos;s corporate sector. Reading one company&apos;s
           books is a separate act, and takes an operation rather than a threshold.
@@ -744,7 +744,7 @@ export default function IntelligenceTab({
       </section>
 
       <section className="min-w-0 rounded-xl border border-card-border bg-card p-4 shadow-card">
-        <h2 className="text-lg text-foreground">Recent Operations</h2>
+        <h2 className="text-lg text-foreground">Recent operations</h2>
         {view.incidents.length === 0 ? (
           <p className="mt-2 text-sm text-muted">The service has run nothing yet.</p>
         ) : (

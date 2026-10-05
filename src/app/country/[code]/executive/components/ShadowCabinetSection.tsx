@@ -87,7 +87,7 @@ export function ShadowCabinetSection({
 
   return (
     <section className="rounded-2xl border border-card-border bg-card p-6 shadow-card">
-      <SectionLabel as="h3">Shadow Cabinet</SectionLabel>
+      <SectionLabel as="h3">Shadow cabinet</SectionLabel>
       <p className="-mt-2 mb-4 text-body-sm text-muted">
         {oppositionLeaderName ? (
           <>

@@ -124,7 +124,7 @@ export function EmergencyMechanicPanel({
               htmlFor="emergency-region-select"
               className="mb-1 block text-xs font-medium text-muted"
             >
-              {config.regionMetricThreshold ? "Eligible Region" : "Target Region"}
+              {config.regionMetricThreshold ? "Eligible region" : "Target region"}
             </label>
             <select
               id="emergency-region-select"

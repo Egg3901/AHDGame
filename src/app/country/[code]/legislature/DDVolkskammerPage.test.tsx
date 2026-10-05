@@ -2,8 +2,8 @@
  * Tests for the DD Volkskammer legislature page.
  *
  * Focus: the unicameral data scope (every fetch keys on "volkskammer") and
- * the Leadership tab — deputies must be able to act on the General Secretary
- * from the legislature page, and the sitting Chairman of the Council of State
+ * the Leadership tab — deputies must be able to act on the General secretary
+ * from the legislature page, and the sitting Chairman of the council of state
  * (or its vacancy) must be surfaced.
  *
  * @vitest-environment happy-dom
@@ -90,7 +90,7 @@ describe("DDVolkskammerPage", () => {
     expect(useLegislatureDataMock).toHaveBeenLastCalledWith("DD", "volkskammer");
   });
 
-  it("wires General Secretary / Volkskammer Deputy labels into the actions panel", async () => {
+  it("wires General secretary / Volkskammer Deputy labels into the actions panel", async () => {
     render(<DDVolkskammerPage countryId="DD" />);
     fireEvent.click(screen.getByRole("button", { name: "Leadership" }));
 
@@ -106,7 +106,7 @@ describe("DDVolkskammerPage", () => {
     render(<DDVolkskammerPage countryId="DD" />);
     fireEvent.click(screen.getByRole("button", { name: "Leadership" }));
 
-    expect(await screen.findByText("Chairman of the Council of State")).toBeTruthy();
+    expect(await screen.findByText("Chairman of the council of state")).toBeTruthy();
     await waitFor(() => {
       expect(screen.getByText(/Vacant because the SED chair is not seated/)).toBeTruthy();
     });

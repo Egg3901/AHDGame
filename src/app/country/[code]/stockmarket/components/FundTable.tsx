@@ -233,9 +233,7 @@ export function FundTable({
           </svg>
         </div>
         <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 w-full sm:w-auto">
-          <span className="text-xs font-semibold text-muted uppercase tracking-wider shrink-0">
-            Sort by:
-          </span>
+          <span className="text-body-sm font-medium text-muted shrink-0">Sort by:</span>
           {sortOptions.map((opt) => (
             <button
               key={opt.field}
@@ -258,25 +256,25 @@ export function FundTable({
           <table className="w-full text-left text-sm">
             <thead className="bg-card-elevated border-b border-card-border">
               <tr>
-                <th className="px-2 py-2.5 sm:px-4 sm:py-3 font-semibold text-muted uppercase text-[10px] tracking-wider w-[70px] sm:w-[80px]">
+                <th className="px-2 py-2.5 sm:px-4 sm:py-3 text-muted text-body-sm font-medium w-[70px] sm:w-[80px]">
                   Ticker
                 </th>
-                <th className="px-2 py-2.5 sm:px-4 sm:py-3 font-semibold text-muted uppercase text-[10px] tracking-wider w-[36%]">
+                <th className="px-2 py-2.5 sm:px-4 sm:py-3 text-muted text-body-sm font-medium w-[36%]">
                   Fund
                 </th>
-                <th className="px-2 py-2.5 sm:px-4 sm:py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
+                <th className="px-2 py-2.5 sm:px-4 sm:py-3 text-muted text-body-sm font-medium text-right">
                   NAV
                 </th>
-                <th className="px-2 py-2.5 sm:px-4 sm:py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
+                <th className="px-2 py-2.5 sm:px-4 sm:py-3 text-muted text-body-sm font-medium text-right">
                   {MARKET_TIMEFRAMES[timeframe].label} Change
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden sm:table-cell">
                   Trend
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden md:table-cell">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden md:table-cell">
                   AUM
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden lg:table-cell">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden lg:table-cell">
                   Status
                 </th>
               </tr>
@@ -395,9 +393,7 @@ export function FundTable({
                       {isExpanded && fund.topHoldings.length > 0 && (
                         <tr>
                           <td colSpan={7} className="bg-card-elevated/30 px-4 py-3">
-                            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
-                              Top holdings
-                            </p>
+                            <p className="mb-2 text-body-sm font-medium text-muted">Top holdings</p>
                             <ul className="space-y-1.5">
                               {fund.topHoldings.map((h) => (
                                 <li
