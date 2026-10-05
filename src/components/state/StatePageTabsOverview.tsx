@@ -106,8 +106,9 @@ export function OverviewTab({
             Party strength
           </h2>
           <p className="mt-1 text-body text-muted">
-            Organization is each party&apos;s ground game here. Registration is who voters have
-            signed up with.
+            Organization is a shared state pool. Each Build Org action invests Political Strength to
+            grow your party&apos;s stake over time, while inactivity here can gradually reduce it.
+            Registration is who voters have signed up with.
           </p>
           <div className="mt-6 grid grid-cols-1 gap-x-10 gap-y-8 xl:grid-cols-2">
             <PoolBreakdown
