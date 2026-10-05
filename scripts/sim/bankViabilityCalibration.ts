@@ -19,6 +19,7 @@ import {
 } from "@/lib/sovereignDefault/constants";
 import { isFiscalYearEndForCountry } from "@/lib/countrySystems/fiscalCalendar";
 import { getEffectiveRate } from "@/lib/db/types/centralBank";
+import type { SovereignCrisisState } from "@/lib/db/types/budget";
 import {
   computeBankTreasuryCashFloor,
   computeBankTreasuryDueInterest,
@@ -78,6 +79,7 @@ import { SOVEREIGN_BOND_HOLDER_CAP } from "@/lib/bonds/holderCap";
 import { BOND_POOL_M2_SHARE } from "@/lib/bonds/marketPool";
 import { planPoolCashMoves } from "@/lib/bonds/marketPoolTurn";
 import { planSovereignUnderwriting } from "@/lib/bonds/primaryMarket";
+import { requiredIssuanceFrom } from "@/lib/sovereignDefault/requiredIssuance";
 
 type Scenario = {
   name: string;
@@ -216,8 +218,9 @@ function simulate(scenario: Scenario) {
     floatUnits: tranche.units,
     heldUnits: 0,
   }));
-  // The registered pool migration seeds cash at its current M2 target. Zero is
-  // an explicit sensitivity, not the normal seeded-world opening state.
+  // The migration's M2-target opening is the historical model baseline. A
+  // read-only production preflight on 2026-10-05 found no pool documents despite
+  // the migration marker, so zero opening cash also models the observed world.
   let poolCash = scenario.openingPoolCash ?? conservativePoolCashSeed;
   let poolTargetCash = poolCash > 0 ? conservativePoolCashSeed : 0;
   let poolAppetite = scenario.fixedPoolAppetite ?? 1;
@@ -229,7 +232,7 @@ function simulate(scenario: Scenario) {
     null;
   const annualAuctionTrace: Array<Record<string, number | string | boolean | null>> = [];
   let consecutiveFailedAuctions = 0;
-  let crisisState: "normal" | "warning" | "crisisPending" = "normal";
+  let crisisState: SovereignCrisisState = "normal";
   let firstCrisisPendingTurn: number | null = null;
   let treasuryCash = 0;
   let couponsReceived = 0;
@@ -705,14 +708,10 @@ function simulate(scenario: Scenario) {
         sovereignPrincipal,
         turn
       );
-      const annualDeficit = Math.max(
-        0,
-        us1991Budget.spending.total -
-          us1991Budget.spending.debtInterest +
-          annualBudgetInterest -
-          us1991Budget.revenue.total
-      );
-      const issueAmount = calculateQuarterlyIssuanceAmount(annualDeficit) + rolloverFace;
+      const modeledSurplus =
+        us1991Budget.revenue.total -
+        (us1991Budget.spending.total - us1991Budget.spending.debtInterest + annualBudgetInterest);
+      const issueAmount = requiredIssuanceFrom(modeledSurplus, rolloverFace);
       const planned = planSovereignTranches(SOVEREIGN_RECONCILE_DISTRIBUTION, issueAmount);
       let requestedUnitsTotal = 0;
       let placedUnitsTotal = 0;
@@ -747,101 +746,14 @@ function simulate(scenario: Scenario) {
         sovereignLots.push(lot);
       }
       lastPrimaryFillRatio =
-        requestedUnitsTotal > 0 ? placedUnitsTotal / requestedUnitsTotal : null;
+        requestedUnitsTotal > 0
+          ? Math.round((placedUnitsTotal / requestedUnitsTotal) * 10000) / 10000
+          : null;
       lastPrimaryAuction = {
         turn,
         requestedUnits: requestedUnitsTotal,
         placedUnits: placedUnitsTotal,
       };
-    }
-
-    // Runtime evaluates the sovereign auction signal once at the configured
-    // fiscal-year close. The model uses the same calendar, production demand
-    // and outcome/state-transition rules. It deliberately stops at
-    // crisisPending: no executive resolution choice or repudiation is guessed.
-    if (isFiscalYearEndForCountry("US", turn) && crisisState !== "crisisPending") {
-      const rolloverFace = sovereignRolloverFromBonds(
-        sovereignLots
-          .filter((bond) => !bond.maturityPaid)
-          .map((bond) => ({
-            maturityTurn: bond.maturityTurn,
-            totalIssued: bond.totalUnits * BOND_UNIT_FACE_VALUE,
-          })),
-        sovereignPrincipal,
-        turn
-      );
-      const annualDeficit = Math.max(
-        0,
-        us1991Budget.spending.total -
-          us1991Budget.spending.debtInterest +
-          annualBudgetInterest -
-          us1991Budget.revenue.total
-      );
-      const requiredIssuance = calculateQuarterlyIssuanceAmount(annualDeficit) + rolloverFace;
-      if (requiredIssuance > 0) {
-        const terms = sovereignDebtTerms(sovereignPrincipal, {
-          gdp: us1991Budget.gdp,
-          gdpSmoothed: us1991Budget.gdpSmoothed,
-          investorConfidence: us1991Budget.investorConfidence,
-          imfBailoutActive: us1991Budget.imfSovereignBailoutActive,
-          sovereignRiskAnchor: us1991Budget.sovereignRiskAnchor,
-        });
-        const demand = computeMarketDemand({
-          countryCode: "US",
-          currentTurn: turn,
-          debtToGdp: sovereignPrincipal / us1991Budget.gdp,
-          inflationRate: scenario.inflation / 100,
-          trust: baselineFor("US", "governance.integrity", 1991) / 100,
-          sovereignCouponRate: getEffectiveRate(prime, terms.creditRating),
-          fxDepreciationRate10t: 0,
-          turnsSinceLastDefault: null,
-          entityHoldings: sovereignLots
-            .filter((bond) => !bond.maturityPaid && bond.maturityTurn > turn)
-            .reduce((sum, bond) => sum + bond.heldUnits * BOND_UNIT_FACE_VALUE, 0),
-          requiredIssuance,
-        });
-        const effectiveRatio =
-          lastPrimaryFillRatio !== null && lastPrimaryFillRatio < 1
-            ? Math.min(demand.demandRatio, lastPrimaryFillRatio)
-            : demand.demandRatio;
-        const classified = classifyAuctionOutcome(effectiveRatio);
-        // The 1991 US seed is player-enabled by its authored country status.
-        // This simulation has no NPP state, so the autonomous eligibility
-        // exception is reported as unavailable rather than assumed.
-        const playerEligible = COUNTRY_CONFIGS.US.status === "active";
-        const autonomousEligible =
-          !playerEligible &&
-          sovereignPrincipal / us1991Budget.gdp >= AUTONOMOUS_CRISIS_MIN_DEBT_TO_GDP;
-        const eligible = playerEligible || autonomousEligible;
-        if (eligible) {
-          consecutiveFailedAuctions =
-            classified.counterDelta === 0 ? 0 : consecutiveFailedAuctions + 1;
-          const transition = computeNextCrisisState({
-            current: crisisState,
-            outcome: classified.outcome,
-            newConsecutiveFailedCount: consecutiveFailedAuctions,
-          });
-          crisisState = transition.nextState;
-          if (transition.firedThisEvaluation && firstCrisisPendingTurn === null) {
-            firstCrisisPendingTurn = turn;
-          }
-        }
-        annualAuctionTrace.push({
-          turn,
-          requiredIssuance: Math.round(requiredIssuance),
-          demandRatio: round3(demand.demandRatio),
-          lastPrimaryAuctionTurn: lastPrimaryAuction?.turn ?? null,
-          requestedUnits: lastPrimaryAuction?.requestedUnits ?? null,
-          placedUnits: lastPrimaryAuction?.placedUnits ?? null,
-          placedOverRequested: lastPrimaryFillRatio === null ? null : round3(lastPrimaryFillRatio),
-          effectiveRatio: round3(effectiveRatio),
-          outcome: classified.outcome,
-          eligible,
-          consecutiveFailedAuctions,
-          crisisState,
-          firstCrisisPending: firstCrisisPendingTurn === turn,
-        });
-      }
     }
 
     // The production pool target is max(calibrated 5% M2 liquidity,
@@ -1050,6 +962,119 @@ function simulate(scenario: Scenario) {
         `Unexplained bank equity in ${scenario.name} turn${turn}: ${equityBridgeError}`
       );
     equityHistory.push(netAssets);
+    // This annual diagnostic follows the model's complete BondTurn path,
+    // including funded bank claims, novation, nonbank payout, face retirement,
+    // and the current turn's income/equity bridge. The first window is
+    // annualized over the available turns; later rows use the trailing 48.
+    if (isFiscalYearEndForCountry("US", turn) && crisisState !== "crisisPending") {
+      const rolloverFace = sovereignRolloverFromBonds(
+        sovereignLots
+          .filter((bond) => !bond.maturityPaid)
+          .map((bond) => ({
+            maturityTurn: bond.maturityTurn,
+            totalIssued: bond.totalUnits * BOND_UNIT_FACE_VALUE,
+          })),
+        sovereignPrincipal,
+        turn
+      );
+      const modeledSurplus =
+        us1991Budget.revenue.total -
+        (us1991Budget.spending.total - us1991Budget.spending.debtInterest + annualBudgetInterest);
+      const requiredIssuance = requiredIssuanceFrom(modeledSurplus, rolloverFace);
+      if (requiredIssuance > 0) {
+        const terms = sovereignDebtTerms(sovereignPrincipal, {
+          gdp: us1991Budget.gdp,
+          gdpSmoothed: us1991Budget.gdpSmoothed,
+          investorConfidence: us1991Budget.investorConfidence,
+          imfBailoutActive: us1991Budget.imfSovereignBailoutActive,
+          sovereignRiskAnchor: us1991Budget.sovereignRiskAnchor,
+        });
+        const demand = computeMarketDemand({
+          countryCode: "US",
+          currentTurn: turn,
+          debtToGdp: sovereignPrincipal / us1991Budget.gdp,
+          inflationRate: scenario.inflation / 100,
+          trust: baselineFor("US", "governance.integrity", 1991) / 100,
+          sovereignCouponRate: getEffectiveRate(prime, terms.creditRating),
+          fxDepreciationRate10t: 0,
+          turnsSinceLastDefault: null,
+          entityHoldings: sovereignLots
+            .filter((bond) => !bond.maturityPaid && bond.maturityTurn > turn)
+            .reduce((sum, bond) => sum + bond.heldUnits * BOND_UNIT_FACE_VALUE, 0),
+          requiredIssuance,
+        });
+        const effectiveRatio =
+          lastPrimaryFillRatio !== null && lastPrimaryFillRatio < 1
+            ? Math.min(demand.demandRatio, lastPrimaryFillRatio)
+            : demand.demandRatio;
+        const classified = classifyAuctionOutcome(effectiveRatio);
+        const playerEligible = COUNTRY_CONFIGS.US.status === "active";
+        // This single-country bank model has no NPP/government-autonomy input.
+        // Null means ineligible for the autonomous exception, never inferred
+        // from a disabled player toggle or the debt ratio alone.
+        const nppGoverned: boolean | null = null;
+        const autonomousEligible =
+          nppGoverned === true &&
+          sovereignPrincipal / us1991Budget.gdp >= AUTONOMOUS_CRISIS_MIN_DEBT_TO_GDP;
+        const eligible = playerEligible || autonomousEligible;
+        if (eligible) {
+          consecutiveFailedAuctions =
+            classified.counterDelta === 0 ? 0 : consecutiveFailedAuctions + 1;
+          const transition = computeNextCrisisState({
+            current: crisisState,
+            outcome: classified.outcome,
+            newConsecutiveFailedCount: consecutiveFailedAuctions,
+          });
+          crisisState = transition.nextState;
+          if (transition.firedThisEvaluation && firstCrisisPendingTurn === null) {
+            firstCrisisPendingTurn = turn;
+          }
+        }
+        const turnsInWindow = Math.min(TURNS_PER_YEAR, incomeHistory.length);
+        const annualizedRealizedIncome =
+          (incomeHistory.slice(-TURNS_PER_YEAR).reduce((sum, income) => sum + income, 0) *
+            TURNS_PER_YEAR) /
+          Math.max(1, turnsInWindow);
+        const yearOpeningEquity =
+          equityHistory.length > TURNS_PER_YEAR
+            ? equityHistory[equityHistory.length - TURNS_PER_YEAR - 1]!
+            : openingEquity;
+        const averageEquity =
+          equityHistory.slice(-TURNS_PER_YEAR).reduce((sum, equity) => sum + equity, 0) /
+          Math.max(1, turnsInWindow);
+        const annualizedEconomicGain =
+          ((netAssets - yearOpeningEquity) * TURNS_PER_YEAR) / Math.max(1, turnsInWindow);
+        const annualizedCagr =
+          netAssets > 0 && openingEquity > 0
+            ? ((netAssets / openingEquity) ** (TURNS_PER_YEAR / equityHistory.length) - 1) * 100
+            : null;
+        annualAuctionTrace.push({
+          turn,
+          requiredIssuance: Math.round(requiredIssuance),
+          demandRatio: round3(demand.demandRatio),
+          lastPrimaryAuctionTurn: lastPrimaryAuction?.turn ?? null,
+          requestedUnits: lastPrimaryAuction?.requestedUnits ?? null,
+          placedUnits: lastPrimaryAuction?.placedUnits ?? null,
+          placedOverRequested: lastPrimaryFillRatio,
+          effectiveRatio: round3(effectiveRatio),
+          outcome: classified.outcome,
+          eligible,
+          nppGoverned,
+          consecutiveFailedAuctions,
+          crisisState,
+          firstCrisisPending: firstCrisisPendingTurn === turn,
+          annualizedRealizedIncome: Math.round(annualizedRealizedIncome),
+          averageEquity: Math.round(averageEquity),
+          annualizedRealizedRoePercent:
+            averageEquity > 0 ? round2((annualizedRealizedIncome / averageEquity) * 100) : null,
+          annualizedEconomicRoePercent:
+            averageEquity > 0 ? round2((annualizedEconomicGain / averageEquity) * 100) : null,
+          annualizedEquityCagrPercent: annualizedCagr === null ? null : round2(annualizedCagr),
+          neutralWindowQualification:
+            firstCrisisPendingTurn === null ? "pre-crisis-window" : "invalid-distress",
+        });
+      }
+    }
     assertCashConservation();
     const failed = depositTakerFails({
       priorBand,

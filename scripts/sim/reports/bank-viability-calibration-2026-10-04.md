@@ -12,7 +12,7 @@ Run `npx --no-install tsx --tsconfig tsconfig.json scripts/sim/bankViabilityCali
 
 This checkpoint uses the shared production positive-carry sweep, quote, funding-cost, cash-floor, public-float novation, market-demand, loan-demand, fee, premium, and solvency rules. The diagnostic tracks full-year income over average equity, equity movement over average equity, and compound annual equity growth separately. Cash transfers among the bank, households, market pool, Treasury and insurance fund are paired. Institutional pool inflow and sweep remain explicit system boundaries.
 
-The annual auction trace uses the production US fiscal-year close calendar, `computeMarketDemand`, `classifyAuctionOutcome`, and `computeNextCrisisState`. It caps demand with the modeled aggregate primary-pool placed/requested ratio, and reports requested and placed units at each scheduled primary auction. The 1991 country seed is player-enabled, so the production crisis eligibility gate is active. This bank-only model has no NPP state, player or NPC holdings beyond the modeled bank, exchange-rate path, default history, executive decision, or crisis resolution. It stops crisis-state progression at `crisisPending`; it does not infer repudiation or apply a default credit overlay. The decision-window deadline is reported from the production 12-turn constant, not as a default date.
+The annual auction trace runs after modeled BondTurn coupon and maturity settlement, using the production US fiscal-year close calendar, `computeMarketDemand`, `classifyAuctionOutcome`, and `computeNextCrisisState`. It caps demand with the modeled aggregate primary-pool placed/requested ratio rounded to the production four-decimal precision, and reports requested and placed units at each scheduled primary auction. Annual income, average equity, realized ROE, economic ROE, and equity CAGR are recorded at each close so pre-crisis windows remain inspectable. The 1991 country seed is player-enabled, so the production crisis eligibility gate is active. This bank-only model has no NPP state, player or NPC holdings beyond the modeled bank, exchange-rate path, default history, executive decision, or crisis resolution. It stops crisis-state progression at `crisisPending`; it does not infer repudiation or apply a default credit overlay. The decision-window deadline is reported from the production 12-turn constant, not as a default date.
 
 ## Results
 
@@ -27,11 +27,23 @@ The annual auction trace uses the production US fiscal-year close calendar, `com
 
 The seeded neutral auction trace is fully subscribed at turns 40, 88, and 136. Turn 184 is undersubscribed at a 0.708 pool fill. Turns 232, 280, and 328 fail at pool fills of 0.518, 0.443, and 0.401; the third consecutive annual failure enters `crisisPending` at turn 328. Those dates are the configured US fiscal closes, and the fills are sums of actual modeled primary placements over requested units. The source diagnostic's 12-turn executive decision window ends at turn 340. No resolution choice is modeled, and the bank-only ROE after that point is not a valid neutral acceptance result.
 
+| US fiscal close | Annual realized ROE | Annual economic ROE | Annual equity CAGR | Auction state | Neutral window |
+| --------------: | -----------------: | -----------------: | ----------------: | ------------- | -------------- |
+|              40 |            -12.46% |            -30.27% |           -27.81% | fully subscribed | pre-crisis |
+|              88 |             24.80% |             19.36% |            -3.09% | fully subscribed | pre-crisis |
+|             136 |             26.06% |             30.82% |             9.36% | fully subscribed | pre-crisis |
+|             184 |             37.63% |             34.13% |            17.08% | undersubscribed | pre-crisis |
+|             232 |             37.01% |             33.57% |            21.80% | failed, count 1 | pre-crisis |
+|             280 |             32.28% |             32.25% |            24.62% | failed, count 2 | pre-crisis |
+|             328 |             27.72% |             27.09% |            25.62% | crisis pending | invalid-distress |
+
+Annual values are derived after the model's current-turn bond claims and maturity face changes. The first row annualizes the available partial opening window to 48 turns; later rows use trailing 48-turn income and equity windows. Early windows can be reviewed independently, while turn 328 and any full-horizon summary are distress-ineligible.
+
 The baseline includes $30.424M of lifetime realized bill gains. Omitting those gains produces misleading operating-income ROE. The held-bill cost basis and unrealized gain bridge reconciles equity exactly in every scenario. Cash conservation error is at most $0.40 across the printed scenarios on trillion-dollar system stocks; this is floating-point arithmetic, with a $1 assertion tolerance.
 
 ## Inputs and boundaries
 
-- The reference seed has $6.2T US GDP, $3.665T sovereign face and $4.03T external broad money. The registered pool migration initializes $201.5B of pool cash. Zero opening pool cash is an explicit sensitivity. Spendable Treasury cash opens at zero. Signed fiscal projections are not spendable cash.
+- The reference seed has $6.2T US GDP, $3.665T sovereign face and $4.03T external broad money. The model's $201.5B opening pool cash is conditional on the registered migration having seeded its M2 target. A read-only production preflight on 2026-10-05 found the `bondMarketPools` namespace missing despite its migration marker; the model's zero-opening-pool case matches that observed fresh-reset state. Spendable Treasury cash opens at zero. Signed fiscal projections are not spendable cash.
 - The representative bank starts with $5M capital, 250 financial-sector capacity units, 50% branch share and a $150M deposit ceiling. Seeded rate offsets are -1.75 percentage points for deposits and 4.125 for lending. The fixture runs 480 turns.
 - Quarterly issuance, scheduled Treasury/BondTurn ordering, conserved par novation, residual public-float cash payment, unpaid maturity stock and contractual coupon cutoff are modeled. No coupon accrues after maturity.
 - GDP, inflation, integrity, FX, entity participation and fiscal primary inputs are held constant. Market appetite responds to modeled debt, rating and prime through the production demand core. The neutral scenario falls below the sovereign distress threshold during its run, but the complete sovereign default/crisis state machine is outside this bank-only fixture. It must not be presented as a whole-world ten-year forecast.
