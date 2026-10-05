@@ -66,6 +66,7 @@ import { getValidatedEnv } from "@/lib/env";
 import { assertResetDatabaseMatchesApplication } from "@/lib/admin/resetPreflight";
 import { resetPoliticalMetricsRuntimeState } from "@/lib/admin/seed/resetPoliticalMetricsRuntimeState";
 import { resetMacroMetricsRuntimeState } from "@/lib/admin/seed/resetMacroMetricsRuntimeState";
+import { resetStateRuntimeFields } from "@/lib/admin/seed/resetStateRuntimeFields";
 
 export interface ResetAndBootstrapOptions {
   /** 1991 only: leave political offices vacant for player-created parties. */
@@ -315,6 +316,8 @@ export async function resetAndBootstrapGameWorld(
     collect(
       `Cleared embedded political runtime fields from ${politicalRuntimeFieldsCleared} region(s)`
     );
+    const stateRuntimeFieldsCleared = await resetStateRuntimeFields(db);
+    collect(`Cleared embedded state runtime fields from ${stateRuntimeFieldsCleared} region(s)`);
     const macroRuntimeReset = await resetMacroMetricsRuntimeState(db);
     collect(
       `Cleared embedded macro runtime fields from ${macroRuntimeReset.documentsModified} row(s); ` +

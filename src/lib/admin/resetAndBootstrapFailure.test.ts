@@ -213,6 +213,10 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
       order.push("delete-national-rollups");
       return { deletedCount: 9 } as never;
     });
+    db.collection("states").updateMany.mockImplementation(async () => {
+      order.push("clear-state-runtime");
+      return { modifiedCount: 226 } as never;
+    });
     vi.mocked(bootstrapGameWorld).mockImplementation(async () => {
       order.push("bootstrap");
       return {} as never;
@@ -228,6 +232,7 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
 
     expect(order).toEqual([
       "teardown",
+      "clear-state-runtime",
       "clear-macro-runtime",
       "delete-national-rollups",
       "bootstrap",
@@ -237,6 +242,35 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
       _id: { $in: expect.arrayContaining(["federal", "uk_national", "su_national"]) },
     });
     expect(result.logs.join(" ")).toContain("removed 9 derived national rollup(s)");
+    expect(db.collectionMocks.states?.updateMany).toHaveBeenCalledOnce();
+  });
+
+  it("aborts before bootstrap when preserve-reference state cleanup fails", async () => {
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
+    const order: string[] = [];
+    vi.mocked(resetGameWorld).mockImplementation(async () => {
+      order.push("teardown");
+      return okTeardown as never;
+    });
+    db.collection("states").updateMany.mockImplementation(async () => {
+      order.push("clear-state-runtime");
+      throw new Error("state cleanup failed");
+    });
+
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    await expect(
+      resetAndBootstrapGameWorld({
+        db: db as unknown as Db,
+        preset: "1991-default",
+        resetReference: false,
+        startingParties: "none",
+      })
+    ).rejects.toThrow("state cleanup failed");
+
+    expect(order).toEqual(["teardown", "clear-state-runtime"]);
+    expect(vi.mocked(bootstrapGameWorld)).not.toHaveBeenCalled();
+    expect(closeUpdate().$set["resetRun.status"]).toBe("failed");
   });
 
   it("aborts before bootstrap when macro runtime cleanup fails", async () => {
