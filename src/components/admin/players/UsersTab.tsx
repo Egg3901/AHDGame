@@ -88,7 +88,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       });
       const data = await res.json();
       if (res.ok) alert(`Password reset for ${username}`);
-      else alert(`Error: ${data.error}`);
+      else alert(`Error: ${apiErrorText(data, "Request failed")}`);
     } catch {
       alert("Network error");
     }
@@ -107,7 +107,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       });
       const data = await res.json();
       if (res.ok) alert(data.message);
-      else alert(`Error: ${data.error}`);
+      else alert(`Error: ${apiErrorText(data, "Request failed")}`);
     } catch {
       alert("Network error");
     }
@@ -128,7 +128,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       });
       const data = await res.json();
       if (res.ok) alert(data.message);
-      else alert(`Error: ${data.error}`);
+      else alert(`Error: ${apiErrorText(data, "Request failed")}`);
     } catch {
       alert("Network error");
     }
@@ -155,7 +155,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
         recordBanAction(userId);
         alert(data.message);
         fetchUsers();
-      } else alert(`Error: ${data.error}`);
+      } else alert(`Error: ${apiErrorText(data, "Request failed")}`);
     } catch {
       alert("Network error");
     }
@@ -182,7 +182,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       if (res.ok) {
         alert(data.message);
         fetchUsers();
-      } else alert(`Error: ${data.error}`);
+      } else alert(`Error: ${apiErrorText(data, "Request failed")}`);
     } catch {
       alert("Network error");
     }
@@ -205,7 +205,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       if (res.ok) {
         alert("Character retired successfully");
         fetchUsers();
-      } else alert(`Error: ${data.error}`);
+      } else alert(`Error: ${apiErrorText(data, "Request failed")}`);
     } catch {
       alert("Network error");
     }
@@ -272,7 +272,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
         );
         setNoteModal(null);
       } else {
-        alert(`Error: ${data.error}`);
+        alert(`Error: ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       alert("Network error");
@@ -289,7 +289,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       if (res.ok) {
         setRetiredModal({ userId, username, characters: data.retiredCharacters });
       } else {
-        alert(`Error: ${data.error}`);
+        alert(`Error: ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       alert("Network error");
@@ -320,7 +320,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       if (res.ok) {
         alert(data.message);
         fetchUsers();
-      } else alert(`Error: ${data.error}`);
+      } else alert(`Error: ${apiErrorText(data, "Request failed")}`);
     } catch {
       alert("Network error");
     }
@@ -344,7 +344,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
         body: JSON.stringify({ userId, entitled }),
       });
       const data = await res.json();
-      if (!res.ok) return alert(`Error: ${data.error}`);
+      if (!res.ok) return alert(`Error: ${apiErrorText(data, "Request failed")}`);
       setUsers((previous) =>
         previous.map((user) =>
           user.id === userId ? { ...user, singleplayerEntitled: entitled } : user

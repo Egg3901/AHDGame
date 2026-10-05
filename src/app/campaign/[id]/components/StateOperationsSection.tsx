@@ -13,6 +13,7 @@ import type {
   LiveAttackRow,
   StateOperationsView,
 } from "@/lib/elections/dto/stateOperations";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export interface StateOperationsSectionProps {
   view: StateOperationsView;
@@ -130,7 +131,7 @@ export function StateOperationsSection({
         setPresenceOpen(false);
         onChanged();
       } else {
-        setPresenceMessage(`✗ ${data.error ?? "That did not work."}`);
+        setPresenceMessage(`✗ ${apiErrorText(data, "That did not work.")}`);
       }
     } catch {
       setPresenceMessage("✗ Network error");

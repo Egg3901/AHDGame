@@ -364,7 +364,7 @@ function useStandaloneIdentitySettings({
         onFeedback?.({ success: "Settings saved" });
         onRefresh();
       } else {
-        const error = data.error || "Failed to save";
+        const error = apiErrorText(data, "Failed to save");
         setUploadError(error);
         onFeedback?.({ error });
       }

@@ -6,6 +6,7 @@ import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useToast } from "@/contexts/ToastContext";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 function formatBalance(amount: number, currency: CurrencyCode): string {
   const symbol = CURRENCY_SYMBOLS[currency] ?? currency;
@@ -54,7 +55,7 @@ export function SavingsWalletBlock({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        showToast(data.error ?? "Request failed", "error");
+        showToast(apiErrorText(data, "Request failed"), "error");
         return;
       }
       showToast("Updated", "success");

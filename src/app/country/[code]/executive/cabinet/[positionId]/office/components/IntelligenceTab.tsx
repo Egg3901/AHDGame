@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { COUNTRY_CONFIGS, getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
 import { fmtMoneyAbs } from "./energy/energyUi";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface AgencyView {
   tradecraft: number;
@@ -280,7 +281,7 @@ export default function IntelligenceTab({
       );
       if (!res.ok) {
         const payload = (await res.json().catch(() => ({}))) as { error?: string };
-        setProblem(payload.error ?? "That order did not go through.");
+        setProblem(apiErrorText(payload, "That order did not go through."));
         return;
       }
       load();

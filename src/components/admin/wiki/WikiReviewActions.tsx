@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Modal } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface WikiReviewActionsProps {
   slug: string;
@@ -30,7 +31,7 @@ export function WikiReviewActions({ slug, onApprove, onReject }: WikiReviewActio
         onApprove();
       } else {
         const data = await response.json();
-        alert(data.error || "Failed to approve");
+        alert(apiErrorText(data, "Failed to approve"));
       }
     } catch {
       alert("Failed to approve");
@@ -59,7 +60,7 @@ export function WikiReviewActions({ slug, onApprove, onReject }: WikiReviewActio
         onReject();
       } else {
         const data = await response.json();
-        alert(data.error || "Failed to reject");
+        alert(apiErrorText(data, "Failed to reject"));
       }
     } catch {
       alert("Failed to reject");

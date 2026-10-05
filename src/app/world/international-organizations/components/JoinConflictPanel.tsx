@@ -15,6 +15,7 @@ import {
   requiresUnanimity,
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -104,7 +105,7 @@ export function JoinConflictPanel({
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to propose entry");
+        throw new Error(apiErrorText(body, "Failed to propose entry"));
       }
       setShowForm(false);
       onChange();
@@ -127,7 +128,7 @@ export function JoinConflictPanel({
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error ?? "Vote failed");
+      throw new Error(apiErrorText(body, "Vote failed"));
     }
     onChange();
   }

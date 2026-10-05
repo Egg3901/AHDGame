@@ -4,6 +4,7 @@ import { useState } from "react";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import { useRouter } from "next/navigation";
 import { StatePickerModal } from "./StatePickerModal";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface StateOption {
   id: string;
@@ -70,7 +71,7 @@ export function PrimaryCampaignControls({
         router.refresh();
         onChanged?.();
       } else {
-        setMessage(`✗ ${data.error}`);
+        setMessage(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMessage("✗ Network error");
@@ -97,7 +98,7 @@ export function PrimaryCampaignControls({
         router.refresh();
         onChanged?.();
       } else {
-        setMessage(`✗ ${data.error}`);
+        setMessage(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMessage("✗ Network error");

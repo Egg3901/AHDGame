@@ -14,6 +14,7 @@ import {
   requiresUnanimity,
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -69,7 +70,7 @@ export function DirectivePanel({ org, viewer, currentTurn, votingWindowTurns, on
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to table directive");
+        throw new Error(apiErrorText(body, "Failed to table directive"));
       }
       setShowForm(false);
       setDirectiveKey("");
@@ -93,7 +94,7 @@ export function DirectivePanel({ org, viewer, currentTurn, votingWindowTurns, on
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error ?? "Vote failed");
+      throw new Error(apiErrorText(body, "Vote failed"));
     }
     onChange();
   }

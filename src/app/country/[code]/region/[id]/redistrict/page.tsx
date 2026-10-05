@@ -9,6 +9,7 @@ import { DistrictCompositionSummary } from "@/components/redistricting/DistrictC
 import { RedistrictingGuide } from "@/components/redistricting/RedistrictingGuide";
 import type { DistrictSquares } from "@/lib/db/types/congressionalDistrict";
 import type { RedistrictCaps } from "@/lib/redistricting/caps";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface EditorData {
   canRedraw: boolean;
@@ -31,7 +32,9 @@ export default function RedistrictPage({
 
   useEffect(() => {
     fetch(`/api/country/${code.toLowerCase()}/region/${id.toLowerCase()}/redistrict`)
-      .then((r) => (r.ok ? r.json() : r.json().then((d) => Promise.reject(d.error ?? "Failed"))))
+      .then((r) =>
+        r.ok ? r.json() : r.json().then((d) => Promise.reject(apiErrorText(d, "Failed")))
+      )
       .then(setData)
       .catch((e) => setError(typeof e === "string" ? e : "Failed to load"));
   }, [code, id]);

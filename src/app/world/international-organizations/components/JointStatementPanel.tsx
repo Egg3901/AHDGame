@@ -15,6 +15,7 @@ import {
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
 import { useEntityName } from "../useEntityName";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -78,7 +79,7 @@ export function JointStatementPanel({
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to table statement");
+        throw new Error(apiErrorText(body, "Failed to table statement"));
       }
       setShowForm(false);
       setSubject("");
@@ -103,7 +104,7 @@ export function JointStatementPanel({
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error ?? "Vote failed");
+      throw new Error(apiErrorText(body, "Vote failed"));
     }
     onChange();
   }

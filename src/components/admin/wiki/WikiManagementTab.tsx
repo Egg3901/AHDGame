@@ -5,6 +5,7 @@ import { WikiPageForm } from "./WikiPageForm";
 import { WikiPageTable } from "./WikiPageTable";
 import type { WikiPageRow } from "./WikiPageTable";
 import { useWikiManagementState } from "./useWikiManagementState";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ReseedResult {
   inserted?: string[];
@@ -91,7 +92,7 @@ export function WikiManagementTab({ isAdmin = true }: WikiManagementTabProps = {
     try {
       const res = await fetch("/api/admin/wiki/toggle", { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to toggle");
+      if (!res.ok) throw new Error(apiErrorText(data, "Failed to toggle"));
       dispatch({ type: "SET_WIKI_DISABLED", value: data.wikiDisabled });
     } catch (e) {
       dispatch({
@@ -153,7 +154,7 @@ export function WikiManagementTab({ isAdmin = true }: WikiManagementTabProps = {
     try {
       const res = await fetch("/api/admin/wiki/sync-prior-submissions", { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Sync failed");
+      if (!res.ok) throw new Error(apiErrorText(data, "Sync failed"));
       dispatch({
         type: "SET_SYNC_MESSAGE",
         value: `Sync prior submissions: ${formatSyncResult(data)}`,
@@ -183,7 +184,7 @@ export function WikiManagementTab({ isAdmin = true }: WikiManagementTabProps = {
     try {
       const res = await fetch("/api/admin/wiki/backfill-game-stamp", { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Backfill failed");
+      if (!res.ok) throw new Error(apiErrorText(data, "Backfill failed"));
       if (data.skippedNoEnv) {
         dispatch({
           type: "SET_BACKFILL_MESSAGE",
@@ -221,7 +222,7 @@ export function WikiManagementTab({ isAdmin = true }: WikiManagementTabProps = {
         body: JSON.stringify({ force }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Reseed failed");
+      if (!res.ok) throw new Error(apiErrorText(data, "Reseed failed"));
       dispatch({
         type: "SET_RESEED_MESSAGE",
         value: `${force ? "Force reseed" : "Reseed"}: ${formatReseedResult(data)}`,
@@ -253,7 +254,7 @@ export function WikiManagementTab({ isAdmin = true }: WikiManagementTabProps = {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create");
+      if (!res.ok) throw new Error(apiErrorText(data, "Failed to create"));
       await fetchPages();
       resetForm();
     } catch (e) {
@@ -282,7 +283,7 @@ export function WikiManagementTab({ isAdmin = true }: WikiManagementTabProps = {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update");
+      if (!res.ok) throw new Error(apiErrorText(data, "Failed to update"));
       await fetchPages();
       resetForm();
     } catch (e) {
@@ -302,7 +303,7 @@ export function WikiManagementTab({ isAdmin = true }: WikiManagementTabProps = {
         method: "DELETE",
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to delete");
+      if (!res.ok) throw new Error(apiErrorText(data, "Failed to delete"));
       await fetchPages();
       if (editingSlug === slug) resetForm();
     } catch (e) {

@@ -26,6 +26,7 @@ import {
   type CalibrationReport,
   type MetricsReport,
 } from "./altTypes";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface DetectionHealthPanelProps {
   notify?: (msg: string, kind: "success" | "error" | "info") => void;
@@ -416,7 +417,7 @@ export function DetectionHealthPanel({ notify }: DetectionHealthPanelProps) {
         if (!calRes.ok || !metRes.ok) {
           const failed = !calRes.ok ? calRes : metRes;
           const data = await failed.json().catch(() => ({}));
-          throw new Error(data.error ?? `Request failed (${failed.status})`);
+          throw new Error(apiErrorText(data, `Request failed (${failed.status})`));
         }
         const [cal, met] = await Promise.all([calRes.json(), metRes.json()]);
         if (cancelled) return;

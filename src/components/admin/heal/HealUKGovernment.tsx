@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface HealDiagnostic {
   government: {
@@ -42,7 +43,7 @@ export function HealUKGovernment() {
       if (res.ok) {
         setDiagnostic(data as HealDiagnostic);
       } else {
-        setMessage({ ok: false, text: data.error ?? "Failed to load UK government state" });
+        setMessage({ ok: false, text: apiErrorText(data, "Failed to load UK government state") });
       }
     } catch {
       setMessage({ ok: false, text: "Network error" });
@@ -74,7 +75,7 @@ export function HealUKGovernment() {
         setMessage({ ok: true, text: "Formation logic completed. Refresh the diagnostic below." });
         await refresh();
       } else {
-        setMessage({ ok: false, text: data.error ?? "Request failed" });
+        setMessage({ ok: false, text: apiErrorText(data, "Request failed") });
       }
     } catch {
       setMessage({ ok: false, text: "Network error" });
@@ -111,7 +112,7 @@ export function HealUKGovernment() {
         });
         await refresh();
       } else {
-        setMessage({ ok: false, text: data.error ?? "Request failed" });
+        setMessage({ ok: false, text: apiErrorText(data, "Request failed") });
       }
     } catch {
       setMessage({ ok: false, text: "Network error" });

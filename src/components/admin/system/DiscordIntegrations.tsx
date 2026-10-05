@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const INPUT_CLASS =
   "w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-primary";
@@ -175,7 +176,7 @@ export function DiscordIntegrations() {
       const data = (await res.json().catch(() => null)) as { error?: string } | null;
       if (!res.ok) {
         if (res.status === 409) setOwnershipConflict(true);
-        throw new Error(data?.error ?? "Save failed");
+        throw new Error(apiErrorText(data, "Save failed"));
       }
       setMessage({ type: "success", text: "Webhook URLs saved." });
     } catch (err) {
@@ -201,7 +202,7 @@ export function DiscordIntegrations() {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Test failed");
+      if (!res.ok) throw new Error(apiErrorText(data, "Test failed"));
       setMessage({ type: "success", text: `Test embed sent to ${key} webhook.` });
     } catch (e) {
       setMessage({ type: "error", text: e instanceof Error ? e.message : "Test failed." });
@@ -221,7 +222,7 @@ export function DiscordIntegrations() {
         body: JSON.stringify({ electionType, countryId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Test failed");
+      if (!res.ok) throw new Error(apiErrorText(data, "Test failed"));
       setMessage({
         type: "success",
         text: `Test ${electionType} results sent (${data.resultsShown} results).`,
@@ -243,7 +244,7 @@ export function DiscordIntegrations() {
         body: JSON.stringify({ mode }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Test failed");
+      if (!res.ok) throw new Error(apiErrorText(data, "Test failed"));
       if (mode === "latest") {
         setMessage({
           type: "success",
@@ -277,7 +278,7 @@ export function DiscordIntegrations() {
         remaining?: number;
         message?: string;
       };
-      if (!res.ok) throw new Error(data.error ?? "Backfill failed");
+      if (!res.ok) throw new Error(apiErrorText(data, "Backfill failed"));
 
       const remaining = data.remaining ?? 0;
       if ((data.processed ?? 0) === 0 && remaining === 0) {

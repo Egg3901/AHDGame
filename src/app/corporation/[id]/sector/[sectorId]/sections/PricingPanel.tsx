@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import { GOUGE_JUMP, CONSISTENCY_BAND } from "@/lib/market/brandLoyalty";
 import type { PricingData } from "../types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const POSTURE_STEPS = [-0.2, -0.1, -0.05, 0, 0.05, 0.1, 0.2] as const;
 
@@ -60,7 +61,7 @@ export default function PricingPanel({
       };
       if (!res.ok) {
         setIsError(true);
-        setMessage(data.error || "Failed to update pricing");
+        setMessage(apiErrorText(data, "Failed to update pricing"));
         return;
       }
       setDraft(data.pricingPosture ?? null);

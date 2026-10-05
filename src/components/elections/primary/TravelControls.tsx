@@ -5,6 +5,7 @@ import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import { useRouter } from "next/navigation";
 import { StatePickerModal } from "./StatePickerModal";
 import type { StateTravelOption } from "@/lib/elections/dto/campaignStatePresence";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface TravelControlsProps {
   electionId: string;
@@ -56,7 +57,7 @@ export function TravelControls({
         router.refresh();
         onChanged?.();
       } else {
-        setMessage(`✗ ${data.error}`);
+        setMessage(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMessage("✗ Network error");

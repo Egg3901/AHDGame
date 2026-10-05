@@ -14,6 +14,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import type { LocSnapshot } from "@/lib/lineOfCredit/buildSnapshot";
 import { CB_TH, CentralBankFigure, CentralBankSection } from "./CentralBankSection";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BorrowerRow {
   characterId: string;
@@ -191,7 +192,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
         `/api/admin/country/${countryId.toLowerCase()}/central-bank/loan-tracker`
       );
       const j = (await res.json()) as TrackerResponse & { error?: string };
-      if (!res.ok) throw new Error(j.error ?? "Failed to load loan tracker");
+      if (!res.ok) throw new Error(apiErrorText(j, "Failed to load loan tracker"));
       setTracker(j);
     } catch (e) {
       setTracker(null);
@@ -209,7 +210,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
         `/api/admin/country/${countryId.toLowerCase()}/central-bank/savings-tracker`
       );
       const j = (await res.json()) as SavingsTrackerResponse & { error?: string };
-      if (!res.ok) throw new Error(j.error ?? "Failed to load deposit accounts");
+      if (!res.ok) throw new Error(apiErrorText(j, "Failed to load deposit accounts"));
       setSavingsTracker(j);
     } catch (e) {
       setSavingsTracker(null);
@@ -280,7 +281,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
       });
       if (!res.ok) {
         const json = await res.json();
-        throw new Error(json.error || "Failed to update rate");
+        throw new Error(apiErrorText(json, "Failed to update rate"));
       }
       await loadCbMeta();
       setReason("");
@@ -306,7 +307,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
         }
       );
       const j = (await res.json()) as { error?: string; chairControlsLocked?: boolean };
-      if (!res.ok) throw new Error(j.error ?? "Failed to update lock");
+      if (!res.ok) throw new Error(apiErrorText(j, "Failed to update lock"));
       setChairLocked(j.chairControlsLocked === true);
       await loadCbMeta();
     } catch (e) {
@@ -344,7 +345,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
         }),
       });
       const j = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(j.error ?? "Action failed");
+      if (!res.ok) throw new Error(apiErrorText(j, "Action failed"));
       await loadAccountDetail(selection);
       void loadTracker();
     },

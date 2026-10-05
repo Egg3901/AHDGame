@@ -18,6 +18,7 @@ import {
 } from "@/lib/db/types/supplyAgreement";
 import { useToast } from "@/contexts/ToastContext";
 import { supplyAgreementRequiresState } from "@/lib/market/commodityMarketScope";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface SupplyAgreement {
   _id: string;
@@ -219,7 +220,7 @@ export default function SupplyAgreementsSection({
         );
         await load();
       } else {
-        showToast(data.error || "Action failed", "error");
+        showToast(apiErrorText(data, "Action failed"), "error");
       }
     } catch {
       showToast("Network error", "error");
@@ -286,7 +287,7 @@ export default function SupplyAgreementsSection({
         setCounterOpenId(null);
         await load();
       } else {
-        showToast(data.error || t("negotiation.counterOfferFailed"), "error");
+        showToast(apiErrorText(data, t("negotiation.counterOfferFailed")), "error");
       }
     } catch {
       showToast("Network error", "error");
@@ -353,7 +354,7 @@ export default function SupplyAgreementsSection({
         setShowForm(false);
         await load();
       } else {
-        showToast(data.error || t("negotiation.failedToPropose"), "error");
+        showToast(apiErrorText(data, t("negotiation.failedToPropose")), "error");
       }
     } catch {
       showToast("Network error", "error");

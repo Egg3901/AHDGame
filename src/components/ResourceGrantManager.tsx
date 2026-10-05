@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { getMessageStyle } from "@/lib/utils/formatters";
 import { getPartyTextColor } from "@/lib/utils/politics";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CharacterInfo {
   id: string;
@@ -183,7 +184,7 @@ export function ResourceGrantManager({ context = "admin" }: ResourceGrantManager
         // Refresh character list to show updated values
         await fetchCharacters();
       } else {
-        setMessage(`Error: ${data.error}`);
+        setMessage(`Error: ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMessage("Error: Network error");

@@ -11,6 +11,7 @@ import type { PlayerWhipIssuerRole } from "@/lib/partyWhips/playerWhipSummary";
 import { whipIssuerRoleLabel } from "@/lib/partyWhips/issuerRole";
 import type { PlayerWhipMode } from "@/lib/db/types";
 import type { WhipEndpointConfig } from "./WhipTabs";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface PlayerWhipEntry {
   direction: string;
@@ -148,7 +149,7 @@ export function PlayerWhipPanel({
         showToast(successPrefix ? `${successPrefix} ${data.message}` : data.message, "success");
         setRefreshKey((k) => k + 1);
       } else {
-        showToast(data.error || "Failed to issue whip", "error");
+        showToast(apiErrorText(data, "Failed to issue whip"), "error");
       }
     } catch {
       showToast("Network error", "error");

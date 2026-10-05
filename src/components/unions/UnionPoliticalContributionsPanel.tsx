@@ -13,6 +13,7 @@ import {
   freeCashFlowPerTurn,
   politicalContributionPerTurn,
 } from "@/lib/unions/unionPoliticalContributions";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface UnionPoliticalContributionsPanelProps {
   unionId: string;
@@ -98,7 +99,7 @@ export function UnionPoliticalContributionsPanel({
         ok: res.ok,
         text: res.ok
           ? "Political contributions updated."
-          : (data.error ?? "Failed to update political contributions."),
+          : apiErrorText(data, "Failed to update political contributions."),
       });
       if (res.ok) onSaved();
     } catch {

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type Translator = ReturnType<typeof useTranslations<"settings">>;
 
@@ -89,7 +90,7 @@ export function SupporterPerksSection() {
       const res = await fetch("/api/settings/supporter-requests");
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || t("supporterPerks.loadFailed"));
+        setError(apiErrorText(data, t("supporterPerks.loadFailed")));
         return;
       }
       setState(data);
@@ -140,7 +141,7 @@ export function SupporterPerksSection() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || t("supporterPerks.submitFailed"));
+        setError(apiErrorText(data, t("supporterPerks.submitFailed")));
         return;
       }
       setMessage(t("supporterPerks.submitted"));

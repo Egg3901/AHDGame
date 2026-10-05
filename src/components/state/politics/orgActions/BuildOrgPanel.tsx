@@ -19,6 +19,7 @@ import { EstimateBox } from "./EstimateBox";
 import { PsSpendButtons } from "./PsSpendButtons";
 import { usePsSpendScope } from "./usePsSpendScope";
 import { useActionPreview } from "./useActionPreview";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BuildOrgPanelProps {
   countryCode: string;
@@ -130,7 +131,7 @@ export function BuildOrgPanel({
       });
       const d = await r.json();
       if (!r.ok) {
-        showToast(d.error ?? "Build Org failed", "error");
+        showToast(apiErrorText(d, "Build Org failed"), "error");
         return;
       }
       setLastResult(d as BuildOrgResult);

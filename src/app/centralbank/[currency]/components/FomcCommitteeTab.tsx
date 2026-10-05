@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CountryId } from "@/lib/constants/countries";
 import { PlayerSelector } from "@/components/PlayerSelector";
 import { CentralBankSection } from "./CentralBankSection";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BoardSeat {
   seatId: string;
@@ -150,7 +151,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
         });
         if (!res.ok) {
           const body = (await res.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(body?.error ?? "Vote failed");
+          throw new Error(apiErrorText(body, "Vote failed"));
         }
         await load();
       } catch (e) {
@@ -174,7 +175,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
         });
         if (!res.ok) {
           const body = (await res.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(body?.error ?? "Vote failed");
+          throw new Error(apiErrorText(body, "Vote failed"));
         }
         await load();
       } catch (e) {
@@ -205,7 +206,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
         });
         if (!res.ok) {
           const body = (await res.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(body?.error ?? "Nomination failed");
+          throw new Error(apiErrorText(body, "Nomination failed"));
         }
         setNomStatus("Nomination sent to the Senate for confirmation.");
         await load();

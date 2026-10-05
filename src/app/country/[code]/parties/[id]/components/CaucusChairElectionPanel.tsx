@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { getMessageStyle } from "@/lib/utils/formatters";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CandidateDisplay {
   id: string;
@@ -83,7 +84,9 @@ export function CaucusChairElectionPanel({
         body: JSON.stringify(body),
       });
       const payload = (await response.json()) as { message?: string; error?: string };
-      setMessage(response.ok ? `✓ ${payload.message}` : `✗ ${payload.error}`);
+      setMessage(
+        response.ok ? `✓ ${payload.message}` : `✗ ${apiErrorText(payload, "Request failed")}`
+      );
       if (response.ok) {
         await fetchData();
       }

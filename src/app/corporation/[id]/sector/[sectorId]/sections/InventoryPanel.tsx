@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { COMMODITY_LABELS } from "@/lib/constants/commodities";
 import type { CommodityType } from "@/lib/constants/commodities";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface InventoryPanelProps {
   corporationId: string;
@@ -61,7 +62,7 @@ export default function InventoryPanel({
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(data?.error ?? "Failed to update");
+        throw new Error(apiErrorText(data, "Failed to update"));
       }
       setEnabled(nextValue);
     } catch (e) {

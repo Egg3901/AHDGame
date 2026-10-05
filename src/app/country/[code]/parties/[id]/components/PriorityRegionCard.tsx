@@ -7,6 +7,7 @@ import { adjacentStates } from "@/lib/constants/stateAdjacency";
 import { isClusterConnected } from "@/lib/parties/priorityRegion";
 import type { CountryId } from "@/lib/constants/countries";
 import type { PartyData } from "./types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Chair-Office card for setting the party's Priority Region cluster.
@@ -139,7 +140,7 @@ export function PriorityRegionCard({ party, countryCode }: PriorityRegionCardPro
       });
       const body = await res.json();
       if (!res.ok) {
-        setMsg(`✗ ${body.error ?? "Failed to set Priority Region"}`);
+        setMsg(`✗ ${apiErrorText(body, "Failed to set Priority Region")}`);
         return;
       }
       setMsg("✓ Priority Region locked in.");

@@ -6,6 +6,7 @@ import { VoteTallyTable } from "@/app/congress/bills/[id]/components/VoteTallyTa
 import { WhippedBadge } from "@/components/bills/WhippedBadge";
 import { useGameClock } from "@/contexts/useGameClock";
 import type { VoteByParty } from "@/lib/congress/governmentVoteBreakdown";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface PMAppointmentVoteData {
   type: "pmAppointment";
@@ -98,7 +99,7 @@ export default function GovernmentVotePanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        errorMsg = data.error ?? "Failed to cast vote.";
+        errorMsg = apiErrorText(data, "Failed to cast vote.");
       } else {
         onVoteCast?.();
       }

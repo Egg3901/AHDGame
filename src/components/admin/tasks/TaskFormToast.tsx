@@ -3,6 +3,7 @@
 import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import type { Task, TaskType, TaskPriority } from "@/lib/db/types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 function parseTags(input: string): string[] {
   return input
@@ -37,7 +38,7 @@ export function TaskFormToast({ onCreated, onClose }: TaskFormToastProps) {
         body: JSON.stringify({ title, description, type, priority, tags: parseTags(tagsInput) }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to create task");
+      if (!res.ok) throw new Error(apiErrorText(data, "Failed to create task"));
       onCreated(data.task as Task);
       onClose();
     } catch (err) {

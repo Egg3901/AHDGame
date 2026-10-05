@@ -7,6 +7,7 @@ import { type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { centralBankApiUrl, centralBankUrl } from "@/lib/urls";
 import { PlayerSelector } from "@/components/PlayerSelector";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BankSummary {
   countryId: CountryId;
@@ -65,7 +66,7 @@ export function CentralBankAdminPanel() {
       );
       if (!res.ok) {
         const json = await res.json();
-        throw new Error(json.error || "Failed to appoint chair");
+        throw new Error(apiErrorText(json, "Failed to appoint chair"));
       }
       await fetchBanks();
     } catch (err) {
@@ -89,7 +90,7 @@ export function CentralBankAdminPanel() {
       );
       if (!res.ok) {
         const json = await res.json();
-        throw new Error(json.error || "Failed to vacate chair");
+        throw new Error(apiErrorText(json, "Failed to vacate chair"));
       }
       await fetchBanks();
     } catch (err) {
@@ -109,7 +110,7 @@ export function CentralBankAdminPanel() {
       );
       if (!res.ok) {
         const json = await res.json();
-        throw new Error(json.error || "Failed to trigger selection");
+        throw new Error(apiErrorText(json, "Failed to trigger selection"));
       }
       await fetchBanks();
     } catch (err) {

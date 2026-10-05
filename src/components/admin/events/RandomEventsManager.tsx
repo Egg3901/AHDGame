@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { PlayerSelector } from "@/components/PlayerSelector";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface OutcomeEffect {
   type: string;
@@ -164,7 +165,7 @@ export function RandomEventsManager() {
       if (res.ok) {
         return data;
       }
-      setMessage(`✗ ${data.error ?? "Request failed"}`);
+      setMessage(`✗ ${apiErrorText(data, "Request failed")}`);
       return null;
     } catch {
       setMessage("✗ Network error");

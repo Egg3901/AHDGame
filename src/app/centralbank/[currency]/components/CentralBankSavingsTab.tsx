@@ -113,7 +113,7 @@ export function CentralBankSavingsTab({ countryId }: Props) {
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(j.error ?? "Request failed", "error");
+        showToast(apiErrorText(j, "Request failed"), "error");
         return;
       }
       showToast("Updated", "success");

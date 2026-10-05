@@ -28,6 +28,7 @@ import {
   postBillProposalWithElectionConfirmation,
 } from "@/components/bills/BillAutoFailWarning";
 import type { BillProposalAutoFailWarning } from "@/lib/legislature/billAutoFailWarning";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface LegislationPolicyOption {
   id: string;
@@ -191,7 +192,7 @@ export function JPCabinetProposeBillModal({
       });
       if (cancelled) return;
       if (!response.ok) {
-        showToast(data.error ?? "Failed to propose cabinet bill.", "error");
+        showToast(apiErrorText(data, "Failed to propose cabinet bill."), "error");
         return;
       }
       showToast("Cabinet bill proposed for cabinet review.", "success");

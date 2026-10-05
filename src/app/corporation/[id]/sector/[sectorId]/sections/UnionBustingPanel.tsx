@@ -9,6 +9,7 @@ import {
   unionBustingCashCost,
 } from "@/lib/labour/unionBusting";
 import type { SectorData } from "../types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface UnionBustingPanelProps {
   sector: SectorData;
@@ -64,7 +65,7 @@ export default function UnionBustingPanel({
         onBusted();
       } else {
         setSucceeded(false);
-        setMessage(data.error ?? "Failed to attempt union-busting");
+        setMessage(apiErrorText(data, "Failed to attempt union-busting"));
       }
     } catch {
       setSucceeded(false);

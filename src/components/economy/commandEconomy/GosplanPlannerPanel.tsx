@@ -6,6 +6,7 @@ import { Badge, Button, Tooltip } from "@/components/ui";
 import { formatCompactNumber } from "@/lib/utils/formatters";
 import { CE_TERMS } from "./glossary";
 import type { CommandEconomyDashboard } from "@/lib/economy/commandEconomyDashboard";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   dashboard: CommandEconomyDashboard;
@@ -45,7 +46,7 @@ export function GosplanPlannerPanel({ dashboard, onSaved }: Props) {
       );
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.error ?? `Save failed (${res.status})`);
+        throw new Error(apiErrorText(j, `Save failed (${res.status})`));
       }
       onSaved();
     } catch (e) {

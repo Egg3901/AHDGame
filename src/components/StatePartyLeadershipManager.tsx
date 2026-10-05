@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { getMessageStyle } from "@/lib/utils/formatters";
 import { regionApiSubUrl } from "@/lib/urls";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface LeaderInfo {
   id: string;
@@ -61,7 +62,7 @@ export function StatePartyLeadershipManager({
         }
       );
       const data = await res.json();
-      setMessage(res.ok ? data.message : `Error: ${data.error}`);
+      setMessage(res.ok ? data.message : `Error: ${apiErrorText(data, "Request failed")}`);
       if (res.ok) {
         setSelectedChar("");
         onUpdate();

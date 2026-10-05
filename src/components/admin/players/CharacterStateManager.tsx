@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { PlayerSelector } from "@/components/PlayerSelector";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Region {
   id: string;
@@ -127,7 +128,7 @@ export function CharacterStateManager({ context = "admin" }: CharacterStateManag
         setUsername("");
         setHomeState("");
       } else {
-        setResult({ ok: false, message: data.error ?? "Unknown error" });
+        setResult({ ok: false, message: apiErrorText(data, "Unknown error") });
       }
     } catch {
       setResult({ ok: false, message: "Network error — request failed" });
@@ -161,7 +162,7 @@ export function CharacterStateManager({ context = "admin" }: CharacterStateManag
         setCountryId("US");
         setCountryHomeState("");
       } else {
-        setCountryResult({ ok: false, message: data.error ?? "Unknown error" });
+        setCountryResult({ ok: false, message: apiErrorText(data, "Unknown error") });
       }
     } catch {
       setCountryResult({ ok: false, message: "Network error — request failed" });
@@ -196,7 +197,7 @@ export function CharacterStateManager({ context = "admin" }: CharacterStateManag
         setEconomic(null);
         setSocial(null);
       } else {
-        setPosResult({ ok: false, message: data.error ?? "Unknown error" });
+        setPosResult({ ok: false, message: apiErrorText(data, "Unknown error") });
       }
     } catch {
       setPosResult({ ok: false, message: "Network error — request failed" });

@@ -13,6 +13,7 @@ import type { Crisis, CrisisInteraction, CrisisDecisionNode } from "@/lib/db/typ
 // Defense Fever read LOW here and MEDIUM there.
 import { crisisSeverity } from "@/lib/crises/severity";
 import { formatCrisisEffectValue } from "@/lib/crises/effectLabels";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ActiveCrisisData {
   crisis: Crisis;
@@ -138,7 +139,7 @@ export default function CrisisActionCard() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError({ crisisId, message: data.error ?? "Failed to submit decision" });
+        setError({ crisisId, message: apiErrorText(data, "Failed to submit decision") });
         return;
       }
 

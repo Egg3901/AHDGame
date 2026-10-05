@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface NationalDiagnostic {
   budgetId: string;
@@ -75,7 +76,7 @@ export function HealBudgets() {
       if (res.ok) {
         setDiagnostics(data);
       } else {
-        setResult({ ok: false, message: data.error ?? "Diagnostic failed" });
+        setResult({ ok: false, message: apiErrorText(data, "Diagnostic failed") });
       }
     } catch {
       setResult({ ok: false, message: "Network error" });

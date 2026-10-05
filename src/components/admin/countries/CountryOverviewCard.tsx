@@ -6,6 +6,7 @@ import type { CountryId, CountryStatus } from "@/lib/constants/countries";
 import { useToast } from "@/contexts/ToastContext";
 import { useRuntimeCountryConfig } from "@/hooks/useRuntimeCountryConfig";
 import { CountryFlag } from "@/components/CountryFlag";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CountrySettings {
   enabledForPlayers: boolean;
@@ -98,7 +99,7 @@ export default function CountryOverviewCard({ countryId }: Props) {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        throw new Error(json.error ?? "Failed to update status");
+        throw new Error(apiErrorText(json, "Failed to update status"));
       }
     } catch (err) {
       // Revert optimistic update
@@ -126,7 +127,7 @@ export default function CountryOverviewCard({ countryId }: Props) {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        throw new Error(json.error ?? "Failed to update");
+        throw new Error(apiErrorText(json, "Failed to update"));
       }
       setSettings((prev) => (prev ? { ...prev, enabledForPlayers: newEnabled } : prev));
       showToast(
@@ -152,7 +153,7 @@ export default function CountryOverviewCard({ countryId }: Props) {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        throw new Error(json.error ?? "Failed to update");
+        throw new Error(apiErrorText(json, "Failed to update"));
       }
       setSettings((prev) => (prev ? { ...prev, economyPreview: newPreview } : prev));
       showToast(

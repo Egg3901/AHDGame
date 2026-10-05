@@ -31,6 +31,7 @@ import { GovernanceRow } from "./GovernanceRow";
 import { SuperShareAdoptionCard } from "./SuperShareAdoptionCard";
 import { TickerChangeCard } from "./TickerChangeCard";
 import { useCeoAdminState, type DissolvePreviewData, type StateOption } from "./useCeoAdminState";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const ADDRESS_COOLDOWN_MS = 12 * 60 * 60 * 1000;
 
@@ -148,7 +149,7 @@ export default function CeoGovernancePanel({
           preview?: DissolvePreviewData;
           error?: string;
         };
-        if (!res.ok) throw new Error(data.error || "Could not load dissolve preview");
+        if (!res.ok) throw new Error(apiErrorText(data, "Could not load dissolve preview"));
         if (!data.preview) throw new Error("Invalid preview response");
         if (!cancelled) dispatch({ type: "SET_DISSOLVE_PREVIEW", value: data.preview });
       })

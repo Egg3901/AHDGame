@@ -206,7 +206,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         setSelectedCharId("");
         await fetchData();
       } else {
-        showToast(json.error ?? "Failed to update appointment", "error");
+        showToast(apiErrorText(json, "Failed to update appointment"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");
@@ -235,7 +235,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         showToast(json.message ?? "You have resigned as Vice President.", "success");
         await fetchData();
       } else {
-        showToast(json.error ?? "Failed to resign", "error");
+        showToast(apiErrorText(json, "Failed to resign"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");
@@ -253,7 +253,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         showToast(json.message ?? "Executive slots initialized", "success");
         await fetchData();
       } else {
-        showToast(json.error ?? "Failed to initialize", "error");
+        showToast(apiErrorText(json, "Failed to initialize"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");
@@ -303,7 +303,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         showToast(json.message ?? "Nomination withdrawn", "success");
         await fetchData();
       } else {
-        showToast(json.error ?? "Failed to withdraw nomination", "error");
+        showToast(apiErrorText(json, "Failed to withdraw nomination"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");
@@ -325,7 +325,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         showToast(json.message ?? "Vote recorded", "success");
         await fetchData();
       } else {
-        showToast(json.error ?? "Failed to record vote", "error");
+        showToast(apiErrorText(json, "Failed to record vote"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");
@@ -347,7 +347,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         showToast(json.message ?? `Bill ${decision === "sign" ? "signed" : "vetoed"}`, "success");
         await fetchData();
       } else {
-        showToast(json.error ?? `Failed to ${decision} bill`, "error");
+        showToast(apiErrorText(json, `Failed to ${decision} bill`), "error");
       }
     } finally {
       setBillActionId(null);

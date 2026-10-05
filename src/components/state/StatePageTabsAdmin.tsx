@@ -8,6 +8,7 @@ import {
   type CountryId,
 } from "@/lib/constants/countries";
 import type { SerializedPlayer, NPPDisplaySimple } from "./StatePageTabsTypes";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /** One region seat group from the vacant-seats route (config-driven). */
 interface SeatGroup {
@@ -128,7 +129,7 @@ export function AdminTab({
       } else {
         setMessage({
           type: "error",
-          text: data.error || "Failed to assign seat",
+          text: apiErrorText(data, "Failed to assign seat"),
         });
       }
     } catch {
@@ -170,7 +171,7 @@ export function AdminTab({
       } else {
         setMessage({
           type: "error",
-          text: data.error || "Failed to remove official",
+          text: apiErrorText(data, "Failed to remove official"),
         });
       }
     } catch {

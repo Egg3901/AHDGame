@@ -6,6 +6,7 @@ import { ReportForm } from "./ReportForm";
 import { BugReportForm } from "./BugReportForm";
 import { FeedbackSuccess } from "./FeedbackSuccess";
 import { useScreenshotUpload } from "./useScreenshotUpload";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export type FeedbackModalType = "bug" | "suggestion";
 
@@ -213,7 +214,7 @@ export function FeedbackModal({
         const data = await res.json();
 
         if (!res.ok) {
-          dispatch({ type: "SET_ERROR", payload: data.error ?? "Failed to submit" });
+          dispatch({ type: "SET_ERROR", payload: apiErrorText(data, "Failed to submit") });
           return;
         }
 
@@ -242,7 +243,7 @@ export function FeedbackModal({
         const data = await res.json();
 
         if (!res.ok) {
-          dispatch({ type: "SET_ERROR", payload: data.error ?? "Failed to submit" });
+          dispatch({ type: "SET_ERROR", payload: apiErrorText(data, "Failed to submit") });
           return;
         }
 

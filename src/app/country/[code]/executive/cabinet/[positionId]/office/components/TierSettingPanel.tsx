@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui";
 import type { TierSettingConfig } from "@/lib/constants/cabinetMechanicsTypes";
 import { ActingLockNote, useActingLock } from "./ActingLock";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface TierSettingPanelProps {
   config: TierSettingConfig;
@@ -66,7 +67,7 @@ export function TierSettingPanel({
       );
       if (!res.ok) {
         const json = (await res.json()) as { error?: string };
-        setFeedback({ type: "error", message: json.error ?? "Failed to save" });
+        setFeedback({ type: "error", message: apiErrorText(json, "Failed to save") });
         return;
       }
       setFeedback({ type: "success", message: "Setting saved." });

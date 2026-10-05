@@ -45,7 +45,7 @@ export function BannerAdComposer({ onClose }: BannerAdComposerProps) {
     fetch("/api/player-ads")
       .then((r) => r.json())
       .then((data) => {
-        if (data.error) setInfoError(data.error);
+        if (data.error) setInfoError(apiErrorText(data, "Request failed. Try again."));
         else setInfo(data as CostInfo);
       })
       .catch(() => setInfoError("Failed to load pricing info."));

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Input, Slider } from "@/components/ui";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface RegionRow {
   regionId: string;
@@ -183,7 +184,7 @@ export function ChancellorFundingPanel({
       );
       if (!res.ok) {
         const json = (await res.json()) as { error?: string };
-        setFeedback({ type: "error", message: json.error ?? "Failed to save" });
+        setFeedback({ type: "error", message: apiErrorText(json, "Failed to save") });
         return;
       }
       setFeedback({ type: "success", message: "Allocations saved." });

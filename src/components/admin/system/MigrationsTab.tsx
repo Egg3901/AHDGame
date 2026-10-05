@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Migration {
   id: string;
@@ -120,7 +121,10 @@ export function MigrationsTab() {
         setOrphanRecords((prev) => prev.filter((r) => r.id !== migrationId));
         setMessage({ type: "success", text: data.message || "Migration record deleted" });
       } else {
-        setMessage({ type: "error", text: data.error || "Failed to delete migration record" });
+        setMessage({
+          type: "error",
+          text: apiErrorText(data, "Failed to delete migration record"),
+        });
       }
     } catch {
       setMessage({ type: "error", text: "Network error - please try again" });

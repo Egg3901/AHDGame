@@ -26,6 +26,7 @@ import {
   type SignalTier,
 } from "./altTypes";
 import type { ToastKind } from "./ModeratorActions";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ScoringConfigPanelProps {
   config: AltConfig;
@@ -86,7 +87,7 @@ export function ScoringConfigPanel({ config, cluster, onSaved, notify }: Scoring
         body: JSON.stringify({ weights, thresholds }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+      if (!res.ok) throw new Error(apiErrorText(data, `Request failed (${res.status})`));
       const saved: AltConfig = {
         weights: (data.weights as AltSignalWeights) ?? weights,
         thresholds: (data.thresholds as AltScoringThresholds) ?? thresholds,

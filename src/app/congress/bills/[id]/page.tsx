@@ -36,6 +36,7 @@ import {
 } from "@/components/legislature/dispatch/primitives";
 import { getLegislativeProcess } from "@/lib/legislature/process";
 import { VetoMessageModal } from "@/app/country/[code]/region/[id]/office/tabs/legislation/VetoMessageModal";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -94,7 +95,7 @@ function BillDetailContent() {
       });
       const d = await res.json();
       if (!res.ok) {
-        setError(d.error);
+        setError(apiErrorText(d, "Request failed. Try again."));
         return;
       }
       setMessage(d.message);
@@ -117,7 +118,7 @@ function BillDetailContent() {
     });
     const d = await res.json();
     if (!res.ok) {
-      setError(d.error);
+      setError(apiErrorText(d, "Request failed. Try again."));
       return;
     }
     setMessage(d.message);

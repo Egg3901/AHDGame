@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getMessageStyle } from "@/lib/utils/formatters";
 import { regionApiSubUrl } from "@/lib/urls";
 import { COUNTRY_CONFIGS, isParliamentarySystem, type CountryId } from "@/lib/constants/countries";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -207,7 +208,7 @@ function ElectionPanel({
         }
       );
       const data = await res.json();
-      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${data.error}`);
+      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Request failed")}`);
       if (res.ok) onRefresh();
     } catch {
       setMessage("✗ Network error");

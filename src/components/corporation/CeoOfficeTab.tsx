@@ -17,6 +17,7 @@ import CeoOperationsTable, {
 import IndustrialRelationsSection from "./IndustrialRelationsSection";
 import { useCeoOfficeState } from "./ceo/useCeoOfficeState";
 import { InlineStatus } from "./dense/DenseKit";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CeoOfficeTabProps {
   corporation: CorporationDetail;
@@ -102,7 +103,7 @@ export default function CeoOfficeTab({
         set({ actionSuccess: "Budgets saved." });
         onRefresh();
       } else {
-        set({ actionError: (data.error as string) || "Failed to save" });
+        set({ actionError: apiErrorText(data, "Failed to save") });
       }
     } catch {
       set({ actionError: "Network error" });

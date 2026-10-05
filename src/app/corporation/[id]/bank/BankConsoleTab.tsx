@@ -8,6 +8,7 @@ import { mergeState } from "./lib/helpers";
 import { ActiveCharterPanel } from "./sections/ActiveCharterPanel";
 import { CapsPanel } from "./sections/CapsPanel";
 import { CharterIssueForm } from "./sections/CharterIssueForm";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   corporationId: string;
@@ -35,7 +36,7 @@ export function BankConsoleTab({ corporationId, isCeo }: Props) {
       const json = (await res.json().catch(() => ({}))) as ConsolePayload & { error?: string };
       if (!res.ok) {
         updateLoadState({
-          error: json.error ?? "Failed to load bank console",
+          error: apiErrorText(json, "Failed to load bank console"),
           data: null,
         });
         return;

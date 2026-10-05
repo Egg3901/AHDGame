@@ -43,6 +43,7 @@ import {
   type StateMapEntry,
   type StateMapRenderMode,
 } from "./slate/stateMapData";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * National Recruitment Slate tab. Top half is the country-aware state map
@@ -290,7 +291,7 @@ export function SlateTab({
       ]);
       if (!overviewRes.ok) {
         const body = (await overviewRes.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `Failed to load slate (${overviewRes.status})`);
+        throw new Error(apiErrorText(body, `Failed to load slate (${overviewRes.status})`));
       }
       setOverview((await overviewRes.json()) as OverviewResponse);
 
@@ -737,7 +738,7 @@ function RaceSlatePanel({
       );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `Failed to load slate (${res.status})`);
+        throw new Error(apiErrorText(body, `Failed to load slate (${res.status})`));
       }
       setDetail((await res.json()) as SlateDetailResponse);
     } catch (err) {

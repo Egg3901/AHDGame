@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { AchievementIcon } from "@/lib/utils/achievementIcons";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface AchievementRow {
   id: string;
@@ -90,7 +91,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
         setActionMsg({ text: data.message, ok: true });
         fetchData();
       } else {
-        setActionMsg({ text: data.error ?? "Failed", ok: false });
+        setActionMsg({ text: apiErrorText(data, "Failed"), ok: false });
       }
     } catch {
       setActionMsg({ text: "Network error", ok: false });
@@ -115,7 +116,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
         setActionMsg({ text: data.message, ok: true });
         fetchData();
       } else {
-        setActionMsg({ text: data.error ?? "Failed", ok: false });
+        setActionMsg({ text: apiErrorText(data, "Failed"), ok: false });
       }
     } catch {
       setActionMsg({ text: "Network error", ok: false });
@@ -140,7 +141,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
         setActionMsg({ text: data.message, ok: true });
         fetchData();
       } else {
-        setActionMsg({ text: data.error ?? "Failed", ok: false });
+        setActionMsg({ text: apiErrorText(data, "Failed"), ok: false });
       }
     } catch {
       setActionMsg({ text: "Network error", ok: false });

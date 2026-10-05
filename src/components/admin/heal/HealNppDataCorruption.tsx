@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface DiagnosticResult {
   status: string;
@@ -29,7 +30,7 @@ export function HealNppDataCorruption() {
       if (res.ok) {
         setDiagnostic(data);
       } else {
-        setResult({ ok: false, message: data.error ?? "Diagnostic failed" });
+        setResult({ ok: false, message: apiErrorText(data, "Diagnostic failed") });
       }
     } catch {
       setResult({ ok: false, message: "Network error" });

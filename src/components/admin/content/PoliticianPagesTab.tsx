@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface PoliticianOverrideItem {
   _id: string;
@@ -139,7 +140,7 @@ export function PoliticianPagesTab() {
     try {
       const res = await fetch("/api/admin/politician-pages/backfill", { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate");
+      if (!res.ok) throw new Error(apiErrorText(data, "Failed to generate"));
       await fetchData();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to generate");

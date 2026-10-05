@@ -113,7 +113,7 @@ export function ConferencePanel({
         const res = await fetch(url, { ...init, credentials: "same-origin" });
         const payload = await res.json().catch(() => null);
         if (!res.ok) {
-          setMessage(`Error: ${payload?.error ?? "Action failed"}`);
+          setMessage(`Error: ${apiErrorText(payload, "Action failed")}`);
           return;
         }
         if (okDetail) setMessage(okDetail);

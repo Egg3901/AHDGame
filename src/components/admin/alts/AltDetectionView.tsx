@@ -27,6 +27,7 @@ import type {
   ClusterListItem,
   ClustersResponse,
 } from "./altTypes";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface AltDetectionViewProps {
   /** Same prop the sibling Players sub-tabs receive. Admin unlocks the
@@ -94,7 +95,7 @@ export default function AltDetectionView({ context = "admin" }: AltDetectionView
         const res = await fetch(`/api/admin/alts/clusters?${params}`);
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          throw new Error(data.error ?? `Request failed (${res.status})`);
+          throw new Error(apiErrorText(data, `Request failed (${res.status})`));
         }
         const data: ClustersResponse = await res.json();
         setClusters((prev) => (append ? [...prev, ...data.clusters] : data.clusters));
@@ -146,7 +147,7 @@ export default function AltDetectionView({ context = "admin" }: AltDetectionView
         const res = await fetch(`/api/admin/alts/cluster/${selectedId}`);
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          throw new Error(data.error ?? `Request failed (${res.status})`);
+          throw new Error(apiErrorText(data, `Request failed (${res.status})`));
         }
         const data: ClusterDetail = await res.json();
         if (!cancelled) setDetail(data);

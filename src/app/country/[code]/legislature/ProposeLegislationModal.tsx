@@ -64,6 +64,7 @@ import { TaxRateSliderControl } from "@/components/legislation/TaxRateSliderCont
 import { useEnabledCountryIds } from "@/lib/hooks/useEnabledCountryIds";
 import type { BillProposalAutoFailWarning } from "@/lib/legislature/billAutoFailWarning";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface LegislationTypeOption {
   _id: string;
@@ -508,7 +509,7 @@ export function ProposeLegislationModal({
         return;
       }
       if (!res.ok) {
-        showToast(data.error ?? "Failed to propose bill.", "error");
+        showToast(apiErrorText(data, "Failed to propose bill."), "error");
       } else {
         showToast("Bill proposed and opened for voting.", "success");
         void captureProductEvent("bill_drafted");

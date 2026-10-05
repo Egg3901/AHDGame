@@ -6,6 +6,7 @@ import { useState } from "react";
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
 import { Input, Label, Button, SectionLabel } from "@/components/ui";
 import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export default function ForgotPasswordPageClient() {
   const [identifier, setIdentifier] = useState("");
@@ -30,7 +31,7 @@ export default function ForgotPasswordPageClient() {
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Request failed. Please try again.");
+        throw new Error(apiErrorText(data, "Request failed. Please try again."));
       }
       setSubmitted(true);
     } catch (err) {

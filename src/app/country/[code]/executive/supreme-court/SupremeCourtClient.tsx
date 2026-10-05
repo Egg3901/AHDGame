@@ -225,7 +225,7 @@ export default function SupremeCourtClient({ countryId }: { countryId: CountryId
       });
       const json = (await response.json()) as { message?: string; error?: string };
       if (!response.ok) {
-        showToast(json.error ?? "Failed to record vote", "error");
+        showToast(apiErrorText(json, "Failed to record vote"), "error");
         return;
       }
       showToast(json.message ?? "Vote recorded", "success");

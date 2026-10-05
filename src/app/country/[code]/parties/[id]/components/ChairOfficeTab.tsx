@@ -15,6 +15,7 @@ import { PartyCampaignersCard } from "./PartyCampaignersCard";
 import { MembershipModeCard } from "./MembershipModeCard";
 import { BulkStateOrgControl } from "./BulkStateOrgControl";
 import { HuListVacanciesCard } from "./HuListVacanciesCard";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ChairOfficeTabProps {
   party: PartyData;
@@ -104,7 +105,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
         setMsg("✓ Color updated successfully");
         onUpdate();
       } else {
-        setMsg(`✗ ${data.error}`);
+        setMsg(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMsg("✗ Network error");
@@ -139,7 +140,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
         );
         onUpdate();
       } else {
-        setMsg(`✗ ${data.error}`);
+        setMsg(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMsg("✗ Network error");
@@ -182,7 +183,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
         setMsg("✓ Logo uploaded successfully");
         onUpdate();
       } else {
-        setMsg(`✗ ${data.error}`);
+        setMsg(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMsg("✗ Network error");
@@ -212,7 +213,7 @@ export function ChairOfficeTab({ party, countryId, characterId, onUpdate }: Chai
         setMsg("✓ Member expelled successfully");
         onUpdate();
       } else {
-        setPurgeMsg(`✗ ${data.error}`);
+        setPurgeMsg(`✗ ${apiErrorText(data, "Request failed")}`);
         // Cooldown became active between page load and submit — refresh so button reflects it
         if (res.status === 429) onUpdate();
       }

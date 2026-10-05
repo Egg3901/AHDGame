@@ -5,6 +5,7 @@ import { getMessageStyle } from "@/lib/utils/formatters";
 import { Skeleton } from "@/components/ui";
 import { US_STATES } from "@/lib/constants";
 import { useDemographicsState } from "./demographics/useDemographicsState";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Reseed targets. Countries are those with a Layer-1 model plus US; eras match
@@ -188,7 +189,10 @@ export function DemographicsManager() {
         await fetchCategories();
         if (selectedState) await fetchDemographics(selectedState);
       } else {
-        dispatch({ type: "SET_RESEED_MESSAGE", payload: `✗ ${data.error ?? "Reseed failed"}` });
+        dispatch({
+          type: "SET_RESEED_MESSAGE",
+          payload: `✗ ${apiErrorText(data, "Reseed failed")}`,
+        });
       }
     } catch {
       dispatch({ type: "SET_RESEED_MESSAGE", payload: "✗ Network error" });
@@ -218,7 +222,10 @@ export function DemographicsManager() {
         dispatch({ type: "SET_OVERWRITE_MESSAGE", payload: `✓ ${data.message}` });
         dispatch({ type: "CLOSE_OVERWRITE" });
       } else {
-        dispatch({ type: "SET_OVERWRITE_MESSAGE", payload: `✗ ${data.error}` });
+        dispatch({
+          type: "SET_OVERWRITE_MESSAGE",
+          payload: `✗ ${apiErrorText(data, "Request failed")}`,
+        });
       }
     } catch {
       dispatch({ type: "SET_OVERWRITE_MESSAGE", payload: "✗ Network error" });

@@ -7,6 +7,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ShowToast } from "../types";
 import { SmallButton } from "@/components/corporation/dense/DenseKit";
 import { BankPanel } from "../components/BankSection";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function CapacityAllocationEditor({
   corporationId,
@@ -69,7 +70,7 @@ export function CapacityAllocationEditor({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(json.error ?? "Could not update capacity allocation", "error");
+        showToast(apiErrorText(json, "Could not update capacity allocation"), "error");
         return;
       }
       showToast(
