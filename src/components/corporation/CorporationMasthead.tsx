@@ -466,7 +466,8 @@ export function CorporationMasthead({
           {Number.isFinite(corporation.marketingStrength) && (
             <Figure label="Marketing" title="Marketing strength and its change per turn.">
               {formatMarketingStrength(corporation.marketingStrength)}
-              {Number.isFinite(corporation.marketingStrengthGrowth) &&
+              {corporation.marketingStrengthGrowth != null &&
+                Number.isFinite(corporation.marketingStrengthGrowth) &&
                 corporation.marketingStrengthGrowth !== 0 && (
                   <span
                     className={`ml-1.5 text-[11px] font-normal ${signTone(corporation.marketingStrengthGrowth)}`}
