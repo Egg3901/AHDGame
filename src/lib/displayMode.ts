@@ -29,6 +29,14 @@ export function isStoreAppUserAgent(userAgent: string): boolean {
   return userAgent.includes("AHDClient-Mobile/");
 }
 
+/**
+ * Client-side: the root layout marked this document as the store app. For
+ * data-driven UI (lists, routes) where hiding one element by CSS is not enough.
+ */
+export function isStoreAppDocument(): boolean {
+  return typeof document !== "undefined" && document.documentElement.dataset.storeApp === "true";
+}
+
 /** Any in-app webview: no ads, no consent prompts, no cookie banner. */
 export function isInAppWebViewUserAgent(userAgent: string): boolean {
   return isNativeAppUserAgent(userAgent) || isClientShellUserAgent(userAgent);
