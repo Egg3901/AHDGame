@@ -19,11 +19,17 @@ ruleTester.run("no-uncoded-error-response", rule, {
     { code: "const r = NextResponse.json(error.toJson(), { status: error.status });" },
     { code: "const r = NextResponse.json({ data }, { status: 201 });" },
     { code: "const r = NextResponse.json({ reason: 'x', code: 'X' }, { status: 409 });" },
+    { code: "const r = NextResponse.json(notFound('x').toJson(), { status: 404 });" },
+    { code: "const r = NextResponse.json(payload, { status: 200 });" },
     { code: "const r = somethingElse.json({ error: 'x' }, { status: 400 });" },
   ],
   invalid: [
     {
       code: "const r = NextResponse.json({ error: 'Nope' }, { status: 400 });",
+      errors: [{ messageId: "uncoded" }],
+    },
+    {
+      code: "const r = NextResponse.json(payload, { status: 409 });",
       errors: [{ messageId: "uncoded" }],
     },
     {

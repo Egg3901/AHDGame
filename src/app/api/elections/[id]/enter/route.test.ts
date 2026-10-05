@@ -156,7 +156,7 @@ describe("POST /api/elections/[id]/enter — OPS filing gates", () => {
       params: Promise.resolve({ id: electionOid.toHexString() }),
     });
     expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       error: "Choose a playable residence before entering an election.",
     });
     expect(getDb).not.toHaveBeenCalled();
