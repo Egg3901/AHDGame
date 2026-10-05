@@ -239,8 +239,11 @@ describe("balance replay validity", () => {
       { books: { $exists: true }, turn: { $lte: 705 } },
       { sort: { turn: -1 }, projection: { turn: 1, books: 1 } }
     );
-    expect((await stat(directory)).mode & 0o777).toBe(0o700);
-    expect((await stat(join(directory, "705.json"))).mode & 0o777).toBe(0o600);
+    // Windows does not expose POSIX mode bits through stat, even after chmod.
+    if (process.platform !== "win32") {
+      expect((await stat(directory)).mode & 0o777).toBe(0o700);
+      expect((await stat(join(directory, "705.json"))).mode & 0o777).toBe(0o600);
+    }
     expect(JSON.stringify(scorer)).not.toContain("private-user");
     expect(() => JSON.stringify(scorer)).not.toThrow();
 

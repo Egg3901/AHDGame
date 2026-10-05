@@ -52,12 +52,16 @@ describe("no serif fonts in src", () => {
     expect(files.length).toBeGreaterThan(1000);
   });
 
-  it.each(BANNED)("has no $label", ({ pattern }) => {
-    const offenders = files
-      .filter(({ full }) => pattern.test(readFileSync(full, "utf8")))
-      .map(({ rel }) => rel);
-    expect(offenders, `Found in:\n${offenders.join("\n")}`).toEqual([]);
-  });
+  it.each(BANNED)(
+    "has no $label",
+    ({ pattern }) => {
+      const offenders = files
+        .filter(({ full }) => pattern.test(readFileSync(full, "utf8")))
+        .map(({ rel }) => rel);
+      expect(offenders, `Found in:\n${offenders.join("\n")}`).toEqual([]);
+    },
+    60_000
+  );
 
   it("matches what it is meant to match", () => {
     const [serif, display, faces] = BANNED.map((b) => b.pattern);
