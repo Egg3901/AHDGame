@@ -135,16 +135,17 @@ units rather than treating finite numbers as proof of correct denominations.
 
 ## Recorded deterministic qualification
 
-The complete fresh-reset acceptance passed all four tests, including another
-runtime fiscal refresh and idempotent repair of converted market identities.
-The portable 51-scenario report passed. Related targeted regressions passed,
-including 342 tests in the broad focused run; its one stale founding-price
-expectation was corrected and the investment regression subsequently passed.
-The final investment/reset-helper batch passed 65 tests, and the final
-headroom/founding/FX/test-database batch passed 70 tests. Macro-specific tests
-also qualified native GDP and spending continuity, option enactment, fiscal
-read models and monetary scope. Scoped ESLint has no errors; the architecture
-audit has zero blocking findings.
+After integration with the release branch, the complete fresh-reset acceptance
+passed all four tests, including another runtime fiscal refresh and idempotent
+repair of converted market identities. The portable 51-scenario report passed.
+The post-integration fiscal-anchor/GDP/continuity batch passed 131 tests; the
+final Irish debt adjustment passed its 28-test rerun. Affected bond, FX, regional
+budget, UK forecast, operating-balance and grant regressions passed 87 tests.
+Earlier focused suites also qualified construction, founding, extraction,
+competitor spawning, law enactment, fiscal read models and monetary scope.
+Scoped strict TypeScript passed. ESLint and formatting passed across all changed
+files; the architecture audit has zero blocking findings. Full release gates
+are tracked by the PR's CI checks.
 
 ## Qualification limits
 
@@ -153,3 +154,12 @@ continuity. A source-pinned autonomous world run is separate qualification for
 later market clearing, input shortages, NPC borrowing and policy drift. Its
 status must be recorded separately from these deterministic results before reset
 promotion. Player policy choices can change interest rates and fiscal balance.
+
+A 96-turn sandbox job was queued on 2026-10-05 with plant markets, full labour
+and v5 autonomy, using the ordinary overnight start policy. Run ID:
+`48db372f-59c8-4c38-afbc-e8c15d45af46`. Its source is pinned to
+`7a80ee2c3dc6b43521a3c67260564b0b37152854`, the qualified implementation before
+this evidence-only update. No autonomous-run results were available when this
+deterministic evidence was recorded. The run uses the simulation bootstrap's
+default identities; the separate acceptance fixture qualifies both opt-in
+vehicle/media conversions.
