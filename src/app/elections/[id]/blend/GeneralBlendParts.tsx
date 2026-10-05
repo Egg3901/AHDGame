@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import Link from "next/link";
-import { BLEND, FONT } from "@/components/blend/tokens";
+import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import type { ElectionDetail } from "../components/ElectionDetailTypes";
 import { type DriverRowVM, type GeneralBlendVM } from "./generalBlendViewModel";
 
@@ -229,18 +229,7 @@ export function YourTicketBlock({
       <div style={{ marginTop: 9, fontFamily: FONT.sans, fontSize: 17, fontWeight: 600 }}>
         {vm.yourTicket.name}
       </div>
-      <div
-        style={{
-          marginTop: 9,
-          fontFamily: FONT.mono,
-          fontSize: 9,
-          letterSpacing: ".14em",
-          textTransform: "uppercase",
-          color: BLEND.mutedDim,
-        }}
-      >
-        Current projection
-      </div>
+      <div style={{ ...BLEND_LABEL, marginTop: 9 }}>Current projection</div>
       <div style={{ marginTop: 3, display: "flex", alignItems: "baseline", gap: 9 }}>
         <span
           style={{
@@ -322,18 +311,7 @@ export function NationalMoodBlock({ vm }: { vm: GeneralBlendVM }) {
       </p>
       {mood.components.length > 0 ? (
         <>
-          <div
-            style={{
-              margin: "14px 0 2px",
-              fontFamily: FONT.mono,
-              fontSize: 9,
-              letterSpacing: ".14em",
-              textTransform: "uppercase",
-              color: BLEND.mutedDim,
-            }}
-          >
-            What feeds it
-          </div>
+          <div style={{ ...BLEND_LABEL, margin: "14px 0 2px" }}>What feeds it</div>
           {mood.components.map((c) => (
             <div
               key={c.label}

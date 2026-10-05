@@ -67,7 +67,7 @@ describe("Hungarian modern constituency race header", () => {
         "Constituency by-election: HU_BUD:1. One seat for the remaining Assembly term."
       )
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Enter Race" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enter race" }));
     expect(onEnter).toHaveBeenCalledOnce();
   });
 });

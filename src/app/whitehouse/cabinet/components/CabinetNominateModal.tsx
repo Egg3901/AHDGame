@@ -132,7 +132,7 @@ export function CabinetNominateModal({
                   : "border-card-border bg-card text-muted hover:bg-card-elevated"
               }`}
             >
-              Player Character
+              Player character
             </button>
             <button
               type="button"

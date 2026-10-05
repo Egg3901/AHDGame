@@ -65,7 +65,7 @@ export function StateCDMapCompact({ electionId, state, countryId }: StateCDMapCo
   return (
     <div className="rounded-lg border border-card-border bg-card p-4 mb-6">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-foreground">District Results — {state}</h3>
+        <h3 className="text-sm font-semibold text-foreground">District results — {state}</h3>
         <Link
           href={electionRegionUrl(electionId, countryId, state)}
           className="text-xs text-primary hover:underline"

@@ -2,7 +2,7 @@
 
 import { BlendOptionPicker } from "./BlendOptionPicker";
 import { useState } from "react";
-import { BLEND, FONT } from "@/components/blend/tokens";
+import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import type { OpsRowVM, OpsBranchVM, OpsTreeVM } from "./campaignBlendViewModel";
 import type { UpgradeCategory } from "@/lib/campaigns/upgradeCosts";
 
@@ -89,18 +89,7 @@ function BranchCard({
       </div>
 
       {branch.statusText ? (
-        <div
-          style={{
-            marginTop: "auto",
-            fontFamily: FONT.mono,
-            fontSize: 10.5,
-            letterSpacing: ".1em",
-            textTransform: "uppercase",
-            color: BLEND.mutedDim,
-          }}
-        >
-          {branch.statusText}
-        </div>
+        <div style={{ ...BLEND_LABEL, marginTop: "auto" }}>{branch.statusText}</div>
       ) : null}
 
       {branch.actionable && canAct ? (
@@ -282,7 +271,7 @@ function Tree({
                 {unlockPending
                   ? "Working"
                   : !tree.starterAffordable
-                    ? "Insufficient Resources"
+                    ? "Insufficient resources"
                     : !targetSatisfied
                       ? "Choose a target first"
                       : "Unlock"}
@@ -316,16 +305,7 @@ function Tree({
               gap: 12,
             }}
           >
-            <span
-              style={{
-                fontFamily: FONT.mono,
-                fontSize: 10,
-                letterSpacing: ".14em",
-                textTransform: "uppercase",
-                color: BLEND.mutedDim,
-                flexShrink: 0,
-              }}
-            >
+            <span style={{ ...BLEND_LABEL, flexShrink: 0 }}>
               {chosenTargetName ? (tree.unlocked ? "Current target" : "Target") : "No target yet"}
             </span>
             <span style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
@@ -347,14 +327,10 @@ function Tree({
                   type="button"
                   onClick={() => setRetargeting((v) => !v)}
                   style={{
+                    ...BLEND_LABEL,
                     border: 0,
                     background: "transparent",
                     padding: 0,
-                    fontFamily: FONT.mono,
-                    fontSize: 10,
-                    letterSpacing: ".1em",
-                    textTransform: "uppercase",
-                    color: BLEND.muted,
                     cursor: "pointer",
                     flexShrink: 0,
                   }}

@@ -76,7 +76,7 @@ export function GeneralElectionNoTallyPanel({
         <div className="px-4 py-2 sm:px-5 sm:py-2.5 flex items-center justify-between text-xs font-medium bg-info/10 border-b border-info/20 text-info">
           <span className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
-            General Election — Awaiting First Turn
+            General election — Awaiting first turn
           </span>
           <span className="text-muted font-normal">Vote counting begins next turn</span>
         </div>
@@ -89,7 +89,7 @@ export function GeneralElectionNoTallyPanel({
             <div className="flex-1 min-w-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-[11px] font-medium uppercase tracking-wider text-muted border-b border-card-border">
+                  <tr className="text-left text-sm font-semibold text-foreground border-b border-card-border">
                     <th className="pb-1.5 font-medium">Candidate</th>
                     <th className="pb-1.5 font-medium text-right w-20">Votes</th>
                     <th className="pb-1.5 font-medium text-right w-14">%</th>
@@ -169,7 +169,7 @@ export function GeneralElectionNoTallyPanel({
       {totalSeats && (
         <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
           <div className="text-sm font-semibold mb-1">
-            Seats Up for Election · {totalSeats} total
+            Seats up for election · {totalSeats} total
           </div>
           <p className="text-xs text-muted">
             Projected seat allocation will appear once vote counting begins. Seats are awarded

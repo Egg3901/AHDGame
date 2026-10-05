@@ -147,7 +147,7 @@ function ContractsTab({ countryId }: { countryId: string }) {
               onClick={() => setShowIssueModal(true)}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark transition-colors"
             >
-              Issue Contract
+              Issue contract
             </button>
           )}
           {isAdmin && (
@@ -155,7 +155,7 @@ function ContractsTab({ countryId }: { countryId: string }) {
               onClick={() => setShowGrantModal(true)}
               className="rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-medium hover:bg-card-elevated transition-colors"
             >
-              Admin Grant
+              Admin grant
             </button>
           )}
         </div>
@@ -546,9 +546,7 @@ export function USCongressPage({ countryId }: { countryId: CountryId }) {
           <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
             {/* Majority party */}
             <div className="flex flex-col px-5 py-3 min-w-[140px]">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                Majority Party
-              </span>
+              <span className="text-body-sm font-medium text-muted">Majority party</span>
               {majorityParty ? (
                 <span
                   className="text-base font-bold tabular-nums"
@@ -563,9 +561,7 @@ export function USCongressPage({ countryId }: { countryId: CountryId }) {
 
             {/* Seats */}
             <div className="flex flex-col px-5 py-3 min-w-[100px]">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                Seats
-              </span>
+              <span className="text-body-sm font-medium text-muted">Seats</span>
               <span className="text-base font-bold tabular-nums">
                 {loading ? "…" : `${majoritySeats} / ${totalSeats}`}
               </span>
@@ -573,7 +569,7 @@ export function USCongressPage({ countryId }: { countryId: CountryId }) {
 
             {/* Speaker / Senate Majority Leader */}
             <div className="flex flex-col px-5 py-3 min-w-[160px]">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
+              <span className="text-body-sm font-medium text-muted">
                 {activeTab === "senate" ? `${upperChamberLabel} Leader` : "Speaker"}
               </span>
               {speakerOrSML && !speakerOrSML.isVacant && speakerOrSML.characterId ? (
@@ -594,9 +590,7 @@ export function USCongressPage({ countryId }: { countryId: CountryId }) {
 
             {/* Minority Leader */}
             <div className="flex flex-col px-5 py-3 min-w-[160px]">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                Minority Leader
-              </span>
+              <span className="text-body-sm font-medium text-muted">Minority leader</span>
               {minorityLeader && !minorityLeader.isVacant && minorityLeader.characterId ? (
                 <Link
                   href={
@@ -716,7 +710,7 @@ export function USCongressPage({ countryId }: { countryId: CountryId }) {
             href="/dashboard"
             className="text-sm text-muted hover:text-foreground transition-colors"
           >
-            ← Back to Dashboard
+            ← Back to dashboard
           </Link>
         </div>
       </main>

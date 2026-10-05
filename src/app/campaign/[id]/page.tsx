@@ -13,7 +13,7 @@ import { SuspendEndorsePanel } from "./components/SuspendEndorsePanel";
 import { RunningMateSurrogatePanel } from "./components/RunningMateSurrogatePanel";
 import { CampaignRoomBriefing } from "./components/CampaignRoomBriefing";
 import { CampaignBlendClient } from "./blend/CampaignBlendClient";
-import { BLEND, BLEND_CONTAINER, FONT } from "@/components/blend/tokens";
+import { BLEND, BLEND_CONTAINER, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import { BlendScope } from "@/components/blend/BlendScope";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
@@ -245,15 +245,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           </div>
           <Link
             href="/elections"
-            style={{
-              display: "inline-block",
-              marginTop: 16,
-              fontFamily: FONT.mono,
-              fontSize: 11,
-              letterSpacing: ".08em",
-              textTransform: "uppercase",
-              color: BLEND.muted,
-            }}
+            style={{ ...BLEND_LABEL, display: "inline-block", marginTop: 16 }}
           >
             &lsaquo; Back to elections
           </Link>
@@ -293,14 +285,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       {!isEmbedded && campaign.electionInfo && (
         <div
           className={BLEND_CONTAINER}
-          style={{
-            paddingTop: 14,
-            paddingBottom: 14,
-            fontFamily: FONT.mono,
-            fontSize: 11,
-            letterSpacing: ".06em",
-            textTransform: "uppercase",
-          }}
+          style={{ ...BLEND_LABEL, paddingTop: 14, paddingBottom: 14 }}
         >
           <Link href={`/elections/${campaign.electionId}`} style={{ color: BLEND.muted }}>
             &lsaquo; {campaign.electionInfo.state}{" "}

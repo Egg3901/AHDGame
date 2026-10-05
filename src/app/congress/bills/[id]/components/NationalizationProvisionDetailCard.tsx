@@ -138,7 +138,7 @@ function ApproximateNote() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col">
-      <dt className="text-[10px] uppercase tracking-wide text-muted">{label}</dt>
+      <dt className="text-body-sm font-medium text-muted">{label}</dt>
       <dd className="text-foreground">{value}</dd>
     </div>
   );

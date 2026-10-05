@@ -1,6 +1,6 @@
 "use client";
 
-import { BLEND, FONT } from "@/components/blend/tokens";
+import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import type { CampaignBlendVM, EndorsementFilter, LedgerTab } from "./campaignBlendViewModel";
 
 export interface BlendLedgerProps {
@@ -28,17 +28,13 @@ function pagerButtonStyle(enabled: boolean): React.CSSProperties {
 
 function tabStyle(active: boolean): React.CSSProperties {
   return {
+    ...BLEND_LABEL,
     border: "none",
     borderBottom: `2px solid ${active ? BLEND.ink : "transparent"}`,
     background: "transparent",
     padding: "6px 2px",
     font: "inherit",
-    fontFamily: FONT.mono,
-    fontSize: 11,
-    letterSpacing: ".08em",
-    textTransform: "uppercase",
     fontWeight: 600,
-    color: active ? BLEND.ink : BLEND.mutedDim,
     cursor: "pointer",
   };
 }

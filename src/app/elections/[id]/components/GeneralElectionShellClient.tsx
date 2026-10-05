@@ -55,9 +55,7 @@ export function GeneralElectionShellClient({
       <TierSelector countryId={countryId} activeTier="president" />
 
       <div className="rounded-xl border border-card-border bg-card p-3 sm:p-4">
-        <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted">
-          State drivers
-        </div>
+        <div className="mb-2 text-body-sm font-medium text-muted">State drivers</div>
 
         {closest.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5">
