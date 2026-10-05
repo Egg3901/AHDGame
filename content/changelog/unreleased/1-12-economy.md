@@ -18,3 +18,7 @@ areas: [engine, backend]
 - Computer-run firms open or expand healthcare and entertainment producers when those services stay far above base price.
 - Computer-run mining firms forecast revenue the way the market actually pays out.
 - Sector sentiment events move stock prices again.
+- The 1991 world opens with affordable construction, profitable default production methods, 3 to 4.5% prime rates and modest deficits, while other eras keep their existing prices.
+- Seeded competitors have country-specific names, and mining firms leave room for new entrants.
+- Foreign builds are charged exactly what the preview quoted, currency spread included.
+- Poland, Hungary, Romania and Bulgaria trade currencies in 2019 and 2027 worlds.

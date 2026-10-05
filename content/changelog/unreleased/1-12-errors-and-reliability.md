@@ -14,3 +14,4 @@ areas: [fullstack, backend]
 - Browser error reports are no longer dropped when only the server reporting address is set.
 - Supporter benefits are rechecked against Patreon every six hours.
 - Action costs come from one shared source, so the price shown is the price charged.
+- A fresh world starts clean: old ledgers, ballots, political effects and caches are cleared, while accounts and moderation history are kept.
