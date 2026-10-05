@@ -28,6 +28,10 @@ vi.mock("next-intl", () => ({
 
 vi.mock("@/lib/observability/sentryClientLazy", () => ({
   captureClientException: mocks.capture,
+  captureClientExceptionWithId: vi.fn(async (...args: unknown[]) => {
+    mocks.capture(...args);
+    return undefined;
+  }),
 }));
 
 vi.mock("next/link", async () => {
