@@ -14,5 +14,8 @@ separately and pairs funded household and deposit-insurance cash movements.
 
 The diagnostic uses shared funded sweep, rollover and market-demand rules. It
 tracks bill acquisition basis and realized sale or redemption gains, checks
-paired cash movements and reconciles income to equity. Neutral returns remain
-above the target; these results do not establish production balance acceptance.
+paired cash movements, reconciles income to equity, and applies the production
+annual-auction classifier to actual modeled primary fills. The seeded trace
+enters `crisisPending` at turn 328, so its 26.91% bank-only neutral return does
+not qualify as a full-horizon viability result. Crisis resolution and credit
+losses remain unmodeled; this report does not choose a resolution policy.
