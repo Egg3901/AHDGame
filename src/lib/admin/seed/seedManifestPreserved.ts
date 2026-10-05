@@ -272,6 +272,11 @@ export const PRESERVED: CollectionEntry[] = [
     notes: "Remediation authorization state has its own lifecycle.",
   },
   {
+    name: "emailChanges",
+    category: "preserved",
+    notes: "Pending account email confirmations are independent of a game world.",
+  },
+  {
     name: "passwordResets",
     category: "preserved",
     notes: "Account recovery records are independent of a game world.",

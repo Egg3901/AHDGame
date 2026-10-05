@@ -5,6 +5,7 @@ import {
   useState,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useSyncExternalStore,
 } from "react";
@@ -41,6 +42,8 @@ import { CampaignSongSection } from "./components/CampaignSongSection";
 import { PoliticsSection } from "./components/PoliticsSection";
 import { AppearanceSection } from "./components/AppearanceSection";
 import { SecuritySection } from "./components/SecuritySection";
+import { EmailSection } from "./components/EmailSection";
+import { fetchJson } from "@/lib/observability/fetchJson";
 import { BlockedPlayersSection } from "./components/BlockedPlayersSection";
 import { DangerZoneSection } from "./components/DangerZoneSection";
 import { ReferralsSection } from "./components/ReferralsSection";
@@ -86,7 +89,33 @@ export function SettingsPageContent() {
   const t = useTranslations("settings");
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { userData, rawUser, hasCharacter, loading, refetch } = useUserData();
+  const { userData, rawUser: navUser, hasCharacter, loading, refetch } = useUserData();
+  // The shared nav bootstrap (/api/client-nav) carries no account fields: no
+  // email, hasPassword, referral count, or linked-provider ids. Settings reads
+  // those from /api/auth/me and layers them over the nav user.
+  const [accountUser, setAccountUser] = useState<Record<string, unknown> | null>(null);
+  const navUserId = navUser?.id as string | undefined;
+  useEffect(() => {
+    if (!navUserId) return;
+    let cancelled = false;
+    fetchJson<{ user?: Record<string, unknown> }>("/api/auth/me", {
+      cache: "no-store",
+      feature: "settings-account",
+    })
+      .then((data) => {
+        if (!cancelled && data?.user) setAccountUser(data.user);
+      })
+      .catch(() => {
+        // fetchJson already reported real faults; the nav user stays as the fallback.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [navUserId]);
+  const rawUser = useMemo(
+    () => (navUser && accountUser ? { ...navUser, ...accountUser } : navUser),
+    [navUser, accountUser]
+  );
   const { refetch: refetchNav } = useAuthMe();
   const { theme } = useTheme();
   // Guards against a false "signed out" redirect when the user lands on /settings
@@ -246,7 +275,7 @@ export function SettingsPageContent() {
     }
   }, [searchParams, router]);
 
-  // Populate account fields from rawUser (already fetched by useUserData — no extra round-trip).
+  // Populate account fields from rawUser (nav user plus the /api/auth/me account fields).
   // One-time sync from server data to local state; these fields may be mutated by user actions later.
   useEffect(() => {
     if (!rawUser) return;
@@ -518,12 +547,7 @@ export function SettingsPageContent() {
                 {username || "..."}
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-muted mb-1">{t("page.email")}</label>
-              <div className="rounded-xl border border-card-border bg-background/50 px-4 py-2.5 text-sm text-foreground">
-                {email || t("common.notSet")}
-              </div>
-            </div>
+            <EmailSection email={email} hasPassword={hasPassword} />
             <p className="text-xs text-muted">{t("page.contactAdmin")}</p>
           </div>
         );
