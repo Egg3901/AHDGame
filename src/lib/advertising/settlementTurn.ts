@@ -50,6 +50,7 @@ import {
   supplierCoverageByState,
   type CoverageSectorInput,
 } from "./rules/coverage";
+import { hasTermEnded, normalizeAgreementTerm } from "./rules/term";
 import { finalizeAdvertisingAgreementLifecycle, pruneAdvertisingSettlements } from "./persistence";
 
 export interface ProcessAdvertisingTurnArgs {
@@ -136,17 +137,13 @@ export async function processAdvertisingTurn(
   // Finalize only when a loaded agreement actually hit its deadline, so idle
   // turns skip the lifecycle writes entirely.
   let finalized = 0;
-  const needsFinalize = allLive.some(
-    (a) =>
-      (a.status === "active" &&
-        a.expiresAtTurn !== undefined &&
-        Number.isFinite(a.expiresAtTurn) &&
-        turn >= a.expiresAtTurn) ||
-      (a.status === "cancelling" &&
-        a.cancelEffectiveTurn !== undefined &&
-        Number.isFinite(a.cancelEffectiveTurn) &&
-        turn >= a.cancelEffectiveTurn)
-  );
+  const needsFinalize = allLive.some((a) => {
+    const term = normalizeAgreementTerm(a);
+    return hasTermEnded(
+      a.status === "cancelling" ? term : { expiresAtTurn: term.expiresAtTurn },
+      turn
+    );
+  });
   if (needsFinalize) {
     const done = await finalizeAdvertisingAgreementLifecycle(db, turn);
     finalized = done.expired + done.cancelled;

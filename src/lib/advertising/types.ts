@@ -7,6 +7,8 @@
  * corporation turn already settles. Unallocated budget clears anonymously at
  * neutral efficacy (spot).
  */
+import { isTurnInTerm, normalizeAgreementTerm } from "./rules/term";
+
 export const ADVERTISING_AGREEMENTS_COLLECTION = "advertisingAgreements";
 export const ADVERTISING_SETTLEMENTS_COLLECTION = "advertisingSettlements";
 
@@ -48,13 +50,18 @@ export interface AdvertisingAgreement {
   allocationShareBps: number;
   /** Optional fixed term in turns. */
   durationTurns?: number;
-  /** Turn on which an accepted fixed-term agreement starts settling. */
+  /** First turn an accepted agreement settles (inclusive). */
   startsAtTurn?: number;
-  /** Turn on which an accepted fixed-term agreement stops settling. */
+  /** Turn on which a fixed-term agreement stops settling (exclusive). */
   expiresAtTurn?: number;
   status: AdvertisingAgreementStatus;
-  /** Turn on which a `cancelling` agreement stops settling. Absent otherwise. */
+  /** Turn on which a `cancelling` agreement stops settling (exclusive). Absent otherwise. */
   cancelEffectiveTurn?: number;
+  /**
+   * Term boundary version. Absent on legacy documents, whose turns recorded
+   * the last completed turn instead of the first unsettled one.
+   */
+  termVersion?: number;
   proposedByCorpId: string;
   /** Latest offer, including the accepted offer on active agreements. */
   currentOffer?: AdvertisingAgreementOffer;
@@ -114,20 +121,12 @@ export const AD_AGREEMENT_MIN_SHARE_BPS = 100;
 export function isAgreementSettling(
   agreement: Pick<
     AdvertisingAgreement,
-    "status" | "startsAtTurn" | "expiresAtTurn" | "cancelEffectiveTurn"
+    "status" | "startsAtTurn" | "expiresAtTurn" | "cancelEffectiveTurn" | "termVersion"
   >,
   turn: number
 ): boolean {
   if (agreement.status !== "active" && agreement.status !== "cancelling") return false;
-  if (!Number.isFinite(turn)) return false;
-  if (agreement.startsAtTurn !== undefined && turn < agreement.startsAtTurn) return false;
-  if (agreement.expiresAtTurn !== undefined && turn >= agreement.expiresAtTurn) return false;
-  if (
-    agreement.status === "cancelling" &&
-    agreement.cancelEffectiveTurn !== undefined &&
-    turn >= agreement.cancelEffectiveTurn
-  ) {
-    return false;
-  }
-  return true;
+  const term = normalizeAgreementTerm(agreement);
+  if (agreement.status === "active") delete term.cancelEffectiveTurn;
+  return isTurnInTerm(term, turn);
 }

@@ -11,6 +11,14 @@
 import { ObjectId, type Db } from "mongodb";
 import { advertisingEfficacyFactor } from "./rules/coverage";
 import {
+  AD_AGREEMENT_TERM_VERSION,
+  acceptedTerm,
+  cancelEffectiveTurnFor,
+  firstUnsettledTurn,
+  hasTermEnded,
+  normalizeAgreementTerm,
+} from "./rules/term";
+import {
   AD_AGREEMENT_BUDGET_BPS,
   AD_AGREEMENT_CANCEL_NOTICE_TURNS,
   AD_AGREEMENT_DURATION_MAX_TURNS,
@@ -234,13 +242,21 @@ export async function updateAdvertisingAgreementPersistent(
       return current ? { ok: true, agreement: current } : { ok: false, reason: "not_found" };
     }
     if (agreement.status === "active") {
-      const effectiveTurn = args.turn + AD_AGREEMENT_CANCEL_NOTICE_TURNS;
+      const effectiveTurn = cancelEffectiveTurnFor(args.turn, AD_AGREEMENT_CANCEL_NOTICE_TURNS);
+      // Legacy documents are upgraded in the same write so the new notice
+      // boundary and the shifted term boundaries share one version.
+      const upgraded = normalizeAgreementTerm(agreement);
       const cancelling = await collection.updateOne(
         { _id: args.agreementId, status: "active" } as never,
         {
           $set: {
             status: "cancelling",
             cancelEffectiveTurn: effectiveTurn,
+            termVersion: AD_AGREEMENT_TERM_VERSION,
+            ...(upgraded.startsAtTurn !== undefined ? { startsAtTurn: upgraded.startsAtTurn } : {}),
+            ...(upgraded.expiresAtTurn !== undefined
+              ? { expiresAtTurn: upgraded.expiresAtTurn }
+              : {}),
             updatedAt: now,
           },
         } as never
@@ -283,10 +299,9 @@ export async function updateAdvertisingAgreementPersistent(
         $set: {
           allocationShareBps: share,
           status: "active",
-          startsAtTurn: args.turn,
-          ...(durationTurns !== undefined
-            ? { durationTurns, expiresAtTurn: args.turn + durationTurns }
-            : {}),
+          ...acceptedTerm(args.turn, durationTurns),
+          termVersion: AD_AGREEMENT_TERM_VERSION,
+          ...(durationTurns !== undefined ? { durationTurns } : {}),
           updatedAt: now,
         },
       } as never
@@ -362,14 +377,15 @@ export async function getBuyerCommittedShareBps(
   const active = await collection
     .find({ buyerCorpId, status: { $in: ["active", "cancelling"] } } as never)
     .toArray();
+  const nextSettlementTurn = firstUnsettledTurn(turn);
   return active
-    .filter(
-      (a) =>
-        (a.expiresAtTurn === undefined || turn < a.expiresAtTurn) &&
-        (a.status !== "cancelling" ||
-          a.cancelEffectiveTurn === undefined ||
-          turn < a.cancelEffectiveTurn)
-    )
+    .filter((a) => {
+      const term = normalizeAgreementTerm(a);
+      return !hasTermEnded(
+        a.status === "cancelling" ? term : { expiresAtTurn: term.expiresAtTurn },
+        nextSettlementTurn
+      );
+    })
     .reduce((sum, a) => sum + a.allocationShareBps, 0);
 }
 
@@ -384,12 +400,25 @@ export async function finalizeAdvertisingAgreementLifecycle(
 ): Promise<{ expired: number; cancelled: number }> {
   const collection = db.collection<AdvertisingAgreement>(ADVERTISING_AGREEMENTS_COLLECTION);
   const now = new Date();
+  // Legacy documents (no termVersion) carry boundaries one turn early.
   const expired = await collection.updateMany(
-    { status: "active", expiresAtTurn: { $lte: turn } } as never,
+    {
+      status: "active",
+      $or: [
+        { termVersion: AD_AGREEMENT_TERM_VERSION, expiresAtTurn: { $lte: turn } },
+        { termVersion: { $exists: false }, expiresAtTurn: { $lte: turn - 1 } },
+      ],
+    } as never,
     { $set: { status: "expired", updatedAt: now } } as never
   );
   const cancelled = await collection.updateMany(
-    { status: "cancelling", cancelEffectiveTurn: { $lte: turn } } as never,
+    {
+      status: "cancelling",
+      $or: [
+        { termVersion: AD_AGREEMENT_TERM_VERSION, cancelEffectiveTurn: { $lte: turn } },
+        { termVersion: { $exists: false }, cancelEffectiveTurn: { $lte: turn - 1 } },
+      ],
+    } as never,
     { $set: { status: "cancelled", updatedAt: now } } as never
   );
   return { expired: expired.modifiedCount ?? 0, cancelled: cancelled.modifiedCount ?? 0 };

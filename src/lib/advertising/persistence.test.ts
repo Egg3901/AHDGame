@@ -256,8 +256,8 @@ describe("updateAdvertisingAgreementPersistent", () => {
     expect(accepted.ok).toBe(true);
     if (!accepted.ok) return;
     expect(accepted.agreement.status).toBe("active");
-    expect(accepted.agreement.startsAtTurn).toBe(102);
-    expect(accepted.agreement.expiresAtTurn).toBe(114);
+    expect(accepted.agreement.startsAtTurn).toBe(103);
+    expect(accepted.agreement.expiresAtTurn).toBe(115);
   });
 
   it("rejects accept when the buyer budget is already committed", async () => {
@@ -315,7 +315,7 @@ describe("updateAdvertisingAgreementPersistent", () => {
     });
     expect(cancelling.ok && cancelling.agreement.status).toBe("cancelling");
     if (!cancelling.ok) return;
-    expect(cancelling.agreement.cancelEffectiveTurn).toBe(100 + AD_AGREEMENT_CANCEL_NOTICE_TURNS);
+    expect(cancelling.agreement.cancelEffectiveTurn).toBe(101 + AD_AGREEMENT_CANCEL_NOTICE_TURNS);
   });
 
   it("rejects strangers and stale revisions", async () => {
@@ -361,12 +361,16 @@ describe("finalizeAdvertisingAgreementLifecycle", () => {
       expired: 0,
       cancelled: 0,
     });
-    // Notice served at 104, term ends at 112.
+    // Notice served at 100 takes effect at 105 (settles 101 to 104).
     expect(await finalizeAdvertisingAgreementLifecycle(db, 104)).toEqual({
+      expired: 0,
+      cancelled: 0,
+    });
+    expect(await finalizeAdvertisingAgreementLifecycle(db, 105)).toEqual({
       expired: 0,
       cancelled: 1,
     });
-    expect(await finalizeAdvertisingAgreementLifecycle(db, 112)).toEqual({
+    expect(await finalizeAdvertisingAgreementLifecycle(db, 113)).toEqual({
       expired: 0,
       cancelled: 0,
     });
@@ -376,18 +380,71 @@ describe("finalizeAdvertisingAgreementLifecycle", () => {
     const store = newStore();
     const db = fakeDb(store);
     await proposeActive(store, { durationTurns: 12 });
-    expect(await finalizeAdvertisingAgreementLifecycle(db, 111)).toEqual({
+    expect(await finalizeAdvertisingAgreementLifecycle(db, 112)).toEqual({
       expired: 0,
       cancelled: 0,
     });
-    expect(await finalizeAdvertisingAgreementLifecycle(db, 112)).toEqual({
+    expect(await finalizeAdvertisingAgreementLifecycle(db, 113)).toEqual({
       expired: 1,
       cancelled: 0,
     });
     // Replay is a no-op.
-    expect(await finalizeAdvertisingAgreementLifecycle(db, 112)).toEqual({
+    expect(await finalizeAdvertisingAgreementLifecycle(db, 113)).toEqual({
       expired: 0,
       cancelled: 0,
+    });
+  });
+});
+
+describe("legacy in-flight agreements", () => {
+  it("finalizes legacy documents one turn later than versioned ones", async () => {
+    const store = newStore();
+    const db = fakeDb(store);
+    // Legacy accept at 100 for 4 turns: stored start 100, expiry 104.
+    store.agreements.set("legacy", {
+      _id: "legacy",
+      buyerCorpId: "buyer",
+      supplierCorpId: "supplier",
+      allocationShareBps: 2500,
+      status: "active",
+      startsAtTurn: 100,
+      expiresAtTurn: 104,
+    });
+    expect(await finalizeAdvertisingAgreementLifecycle(db, 104)).toEqual({
+      expired: 0,
+      cancelled: 0,
+    });
+    expect(await finalizeAdvertisingAgreementLifecycle(db, 105)).toEqual({
+      expired: 1,
+      cancelled: 0,
+    });
+  });
+
+  it("upgrades a legacy document when a notice is served", async () => {
+    const store = newStore();
+    const db = fakeDb(store);
+    store.agreements.set("legacy", {
+      _id: "legacy",
+      buyerCorpId: "buyer",
+      supplierCorpId: "supplier",
+      allocationShareBps: 2500,
+      status: "active",
+      startsAtTurn: 100,
+      expiresAtTurn: 200,
+      currentOffer: { revision: 1, proposedByCorpId: "buyer", allocationShareBps: 2500 },
+    });
+    const result = await updateAdvertisingAgreementPersistent(db, {
+      agreementId: "legacy",
+      corpId: "buyer",
+      action: "cancel",
+      turn: 150,
+    });
+    if (!result.ok) throw new Error("cancel failed");
+    expect(result.agreement).toMatchObject({
+      termVersion: 2,
+      startsAtTurn: 101,
+      expiresAtTurn: 201,
+      cancelEffectiveTurn: 151 + AD_AGREEMENT_CANCEL_NOTICE_TURNS,
     });
   });
 });

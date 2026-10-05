@@ -25,9 +25,13 @@ function newStore(): FakeStore {
 
 function matches(doc: Record<string, unknown>, filter: Record<string, unknown>): boolean {
   return Object.entries(filter).every(([key, cond]) => {
+    if (key === "$or") {
+      return (cond as Record<string, unknown>[]).some((sub) => matches(doc, sub));
+    }
     const value = doc[key];
     if (typeof cond === "object" && cond !== null) {
       const c = cond as Record<string, unknown>;
+      if ("$exists" in c) return (value !== undefined) === Boolean(c.$exists);
       if ("$in" in c) return Array.isArray(c.$in) && c.$in.includes(value);
       if ("$lte" in c)
         return typeof value === "number" && typeof c.$lte === "number" && value <= c.$lte;
@@ -305,7 +309,7 @@ describe("processAdvertisingTurn", () => {
     const store = newStore();
     store.agreements.set(
       "ad1",
-      activeAgreement({ expiresAtTurn: 100 }) as unknown as Record<string, unknown>
+      activeAgreement({ expiresAtTurn: 100, termVersion: 2 }) as unknown as Record<string, unknown>
     );
     const args = {
       enabled: true,
