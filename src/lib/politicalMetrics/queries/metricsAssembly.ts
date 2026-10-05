@@ -175,7 +175,7 @@ export function buildRelevantLegislation(
   levels: ReadonlyMap<string, number>,
   base: { gdp: number; population: number },
   fallback: (law: PoliticalLaw) => number,
-  programCostScale = 1
+  programCostScale: number | ((law: PoliticalLaw) => number) = 1
 ): Map<string, MetricLegislationInfo> {
   const map = new Map<string, MetricLegislationInfo>();
   for (const law of getCatalog(countryId)) {
@@ -184,7 +184,8 @@ export function buildRelevantLegislation(
     const levelName = law.levels[level]?.name ?? "";
     if (law.kind === "primary") {
       const metricId = law.targets[0].metricId;
-      const { net } = computeLawCost(law.levels[level], base, countryId, null, programCostScale);
+      const scale = typeof programCostScale === "number" ? programCostScale : programCostScale(law);
+      const { net } = computeLawCost(law.levels[level], base, countryId, null, scale);
       const existing = map.get(metricId) ?? { primary: null, secondaries: [] };
       existing.primary = { lawId: law.id, title: law.title, level, levelName, annualNet: net };
       map.set(metricId, existing);

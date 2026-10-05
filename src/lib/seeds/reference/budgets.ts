@@ -5785,6 +5785,15 @@ function getUncalibratedNationalBudgetSeedConfigsForPreset(
   return NATIONAL_BUDGET_SEED_CONFIGS;
 }
 
+/**
+ * The authored 1991 central-government composition (HM Treasury FY1991/92 for
+ * the UK) before any envelope fit, keyed by the v2 law book's budget keys.
+ */
+export function getAuthoredNationalSpending1991(countryId: string): Record<string, number> | null {
+  const config = NATIONAL_BUDGET_SEED_CONFIGS_1991.find((row) => row.countryId === countryId);
+  return config ? { ...config.baselineSpendingByCategory } : null;
+}
+
 /** 1991 player budgets resize active programs while preserving receipts and historic debt. */
 export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalBudgetSeedConfig[] {
   const configs = getUncalibratedNationalBudgetSeedConfigsForPreset(preset);

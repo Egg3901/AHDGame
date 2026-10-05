@@ -40,9 +40,16 @@ import type { CountryId } from "@/lib/constants/countries";
 import { calculateFederalLawAnnualCosts } from "@/lib/budget/spending";
 import { PLAYER_RESET_DEFICIT_GDP_SHARE_1991 } from "@/lib/seeds/reference/rules/openingFiscalEnvelope";
 import {
+  openingProgramCategoryScales,
   openingProgramCostScale,
   scaleProgramCostModel,
 } from "@/lib/seeds/reference/rules/openingProgramCostScale";
+
+/**
+ * Player books refit per category to their authored 1991 composition. The US
+ * keeps the book-wide fit until its own composition is reviewed.
+ */
+const OPENING_COMPOSITION_REFIT_1991: ReadonlySet<string> = new Set(["UK"]);
 
 // The gate lives in ONE place (politicalMetrics/pipelinePreset) so the four
 // seed call sites cannot drift apart again. Re-exported under the historical
@@ -304,29 +311,75 @@ async function calibratePlayerOpeningPrograms1991(
     const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
     if (!budget) throw new Error(`Missing 1991 ${countryId} national budget after law sync`);
     const { items } = await calculateFederalLawAnnualCosts(db, budget);
-    const programCost = items.reduce((sum, item) => sum + item.amount, 0);
-    const fixedOperatingCost = Math.max(
-      0,
-      budget.spending.total - budget.spending.debtInterest - programCost
-    );
-    const scale = openingProgramCostScale({
-      gdp: budget.gdp,
-      annualRevenue: budget.revenue.total,
-      annualDebtService: budget.spending.debtInterest,
-      fixedOperatingCost,
-      programCost,
-      maximumDeficitGdpShare: PLAYER_RESET_DEFICIT_GDP_SHARE_1991,
-    });
+    const authored = OPENING_COMPOSITION_REFIT_1991.has(countryId)
+      ? (await import("@/lib/seeds/reference/budgets")).getAuthoredNationalSpending1991(countryId)
+      : null;
+    let scaleFor: (category: string) => number;
+    let scaleSet: Partial<FederalBudget>;
+    let scaleNote: string;
+    if (authored) {
+      // The catalog prices this book on 1953 anchors: GDP-share defence and
+      // social programs on a 1953 income anchor. Refit each category to the
+      // authored 1991 composition instead of one book-wide factor.
+      const programCostByCategory: Record<string, number> = {};
+      for (const { law, amount } of items) {
+        if (!law.costModelV2) continue;
+        const category = law.budgetCategory || "other";
+        programCostByCategory[category] = (programCostByCategory[category] ?? 0) + amount;
+      }
+      const programCost = Object.values(programCostByCategory).reduce((a, b) => a + b, 0);
+      const scales = openingProgramCategoryScales({
+        gdp: budget.gdp,
+        annualRevenue: budget.revenue.total,
+        annualDebtService: budget.spending.debtInterest,
+        fixedOperatingCost: Math.max(
+          0,
+          budget.spending.total - budget.spending.debtInterest - programCost
+        ),
+        programCostByCategory,
+        targetByCategory: authored,
+        maximumDeficitGdpShare: PLAYER_RESET_DEFICIT_GDP_SHARE_1991,
+      });
+      scaleFor = (category) => scales[category] ?? 1;
+      scaleSet = { programCostScaleBaseline: 1, programCostScaleByCategoryBaseline: scales };
+      scaleNote = Object.entries(scales)
+        .map(([category, scale]) => `${category}=${scale.toFixed(4)}`)
+        .join(", ");
+    } else {
+      const programCost = items.reduce((sum, item) => sum + item.amount, 0);
+      const fixedOperatingCost = Math.max(
+        0,
+        budget.spending.total - budget.spending.debtInterest - programCost
+      );
+      const scale = openingProgramCostScale({
+        gdp: budget.gdp,
+        annualRevenue: budget.revenue.total,
+        annualDebtService: budget.spending.debtInterest,
+        fixedOperatingCost,
+        programCost,
+        maximumDeficitGdpShare: PLAYER_RESET_DEFICIT_GDP_SHARE_1991,
+      });
+      scaleFor = () => scale;
+      scaleSet = { programCostScaleBaseline: scale };
+      scaleNote = scale.toFixed(6);
+    }
     await db
       .collection<FederalBudget>("federalBudget")
-      .updateOne({ _id: budgetId }, { $set: { programCostScaleBaseline: scale } });
+      .updateOne({ _id: budgetId }, { $set: scaleSet });
     const costOps: AnyBulkWriteOperation<EnactedLaw>[] = items.flatMap(({ law }) =>
       law.costModelV2
         ? [
             {
               updateOne: {
                 filter: { _id: law._id },
-                update: { $set: { costModelV2: scaleProgramCostModel(law.costModelV2, scale) } },
+                update: {
+                  $set: {
+                    costModelV2: scaleProgramCostModel(
+                      law.costModelV2,
+                      scaleFor(law.budgetCategory || "other")
+                    ),
+                  },
+                },
               },
             },
           ]
@@ -345,7 +398,10 @@ async function calibratePlayerOpeningPrograms1991(
               $set: {
                 policyOptions: doc.policyOptions!.map((option) => ({
                   ...option,
-                  costModelV2: scaleProgramCostModel(option.costModelV2!, scale),
+                  costModelV2: scaleProgramCostModel(
+                    option.costModelV2!,
+                    scaleFor(budgetKeyForLaw(law))
+                  ),
                 })),
               },
             },
@@ -355,7 +411,7 @@ async function calibratePlayerOpeningPrograms1991(
     if (typeOps.length > 0)
       await db.collection<LegislationType>("legislationTypes").bulkWrite(typeOps);
     await refreshNationalBudgetRevenue(db, [budgetId]);
-    log(`Calibrated 1991 ${countryId} program expense fractions by ${scale.toFixed(6)}`);
+    log(`Calibrated 1991 ${countryId} program expense fractions by ${scaleNote}`);
   }
 }
 
