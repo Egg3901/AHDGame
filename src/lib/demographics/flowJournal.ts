@@ -51,7 +51,7 @@ export interface DemographicFlowCohortReading {
   populationGrowthAnnualized: number;
   realizedTfr: number | null;
   periodLifeExpectancy: number | null;
-  dependencyBurden15To64: number;
+  dependencyBurden15To64: number | null;
 }
 
 export interface DemographicFlowRegionInput {
@@ -138,9 +138,10 @@ function freezeRegionInput(input: DemographicFlowRegionInput): DemographicFlowRe
   assertFiniteRecord(input.stateAfter, `stateAfter(${input.regionId})`);
   assertFiniteRecord(input.metricsAfter, `metricsAfter(${input.regionId})`);
   if (input.resetCohortReadingAfter) {
-    const { realizedTfr, periodLifeExpectancy, ...required } = input.resetCohortReadingAfter;
+    const { realizedTfr, periodLifeExpectancy, dependencyBurden15To64, ...required } =
+      input.resetCohortReadingAfter;
     assertFiniteRecord(required, `resetCohortReadingAfter(${input.regionId})`);
-    for (const nullable of [realizedTfr, periodLifeExpectancy])
+    for (const nullable of [realizedTfr, periodLifeExpectancy, dependencyBurden15To64])
       if (nullable !== null && !Number.isFinite(nullable))
         throw new Error(`resetCohortReadingAfter(${input.regionId}) must be finite or null`);
   }

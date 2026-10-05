@@ -51,6 +51,11 @@ const LABELS: Record<SingleplayerFeatureFlagKey, string> = {
   granularElectorateEnabled: "Granular electorate",
   macroGrowthV1: "Macro growth convergence",
   settlementCrisisEnabled: "Settlement crises",
+  departmentProgramSliceEnabled: "Department programs",
+  departmentFinanceEnabled: "Department finance",
+  lawAdministrationEnabled: "Law administration",
+  regionalLegislationFinanceEnabled: "Regional legislation finance",
+  canonicalPoliticalMetricsEnabled: "Canonical political metrics",
 };
 
 const descriptions: Partial<Record<SingleplayerFeatureFlagKey, string>> = {
