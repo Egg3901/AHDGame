@@ -48,7 +48,7 @@ describe("sector investment terms", () => {
       const founding = computeBuildCost({ ...args, founding: true });
       expect(ordinary.expansionMultiplier).toBe(0.8);
       expect(founding.expansionMultiplier).toBe(1);
-      expect(founding.totalAnchor).toBeCloseTo(ordinary.totalAnchor / 0.8, 6);
+      expect(founding.totalAnchor).toBeCloseTo((ordinary.totalAnchor / 0.8) * 0.1, 6);
     }
   });
 

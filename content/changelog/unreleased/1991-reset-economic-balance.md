@@ -35,3 +35,4 @@ areas: [backend]
   MongoDB's empty-batch error.
 - Correcting Ireland's 1991 exchange-rate anchor also changes the interpolated
   Irish opening rates in 1999 and 2007 presets.
+- Ireland's program cost scale is rebased for every era, a small change outside 1991.
