@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CorpTimerReport {
   id: string;
@@ -40,7 +41,7 @@ export function HealCorporationTimers() {
       if (res.ok) {
         setDiagnostic(data as DiagnosticResult);
       } else {
-        setResult({ ok: false, message: data.error ?? "Diagnostic failed" });
+        setResult({ ok: false, message: apiErrorText(data, "Diagnostic failed") });
       }
     } catch {
       setResult({ ok: false, message: "Network error" });

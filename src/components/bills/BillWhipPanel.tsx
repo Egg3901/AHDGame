@@ -6,6 +6,7 @@ import { useToast } from "@/contexts/ToastContext";
 import type { CountryId } from "@/lib/constants/countries";
 import type { BillWhipPanelData } from "@/lib/congress/billWhipPanelData";
 import { partyApiUrl, partyUrl } from "@/lib/urls";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BillWhipPanelProps {
   billId: string;
@@ -75,7 +76,7 @@ export function BillWhipPanel({
 
       const data = await res.json();
       if (!res.ok) {
-        showToast(data.error || "Failed to issue whip", "error");
+        showToast(apiErrorText(data, "Failed to issue whip"), "error");
         return;
       }
 

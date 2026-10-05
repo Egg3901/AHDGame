@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { currencySymbolSep } from "@/lib/currency/symbolSep";
 import { usePostHogVariant } from "@/lib/analytics/usePostHogVariant";
 import { captureProductEvent } from "@/lib/analytics/capture";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export interface OnboardingChecklistCardStep {
   id: string;
@@ -92,7 +93,7 @@ export function OnboardingChecklist({
       if (res.ok) {
         setClaimed(true);
       } else {
-        setClaimError(data?.error ?? t("claimFailed"));
+        setClaimError(apiErrorText(data, t("claimFailed")));
       }
     } catch {
       setClaimError(t("claimFailed"));

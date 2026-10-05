@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Slider } from "@/components/ui";
 import { apiBase } from "./caucusUtils";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function FoundCaucusForm({
   countryCode,
@@ -41,7 +42,7 @@ export function FoundCaucusForm({
         caucus?: { slug: string };
       };
       if (!res.ok || !data.success || !data.caucus) {
-        onError(data.error ?? "Failed to found caucus.");
+        onError(apiErrorText(data, "Failed to found caucus."));
       } else {
         onSuccess(data.caucus.slug);
       }

@@ -43,10 +43,7 @@ export async function POST(request: Request) {
             : apiAuth.reason === "insufficient_scope"
               ? 403
               : 401;
-      return NextResponse.json(
-        { error: `API key ${apiAuth.reason.replace("_", " ")}` },
-        { status }
-      );
+      return errorResponse(status, `API key ${apiAuth.reason.replace("_", " ")}`);
     }
 
     const forexActive = await isForexEnabled();
@@ -59,7 +56,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, marketOrderSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { fromCurrency, toCurrency, amount } = parsed.data;

@@ -1,4 +1,5 @@
 import { allowedPropOpeningAssets } from "@/lib/banking/rules/propAssets";
+import { unbookedSovereignAssetIncome } from "@/lib/banking/rules/sovereignClaims";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -171,6 +172,9 @@ async function handleGET(_request: Request, { params }: RouteParams) {
 
     const charter = corporation.bankCharter;
     const hasActiveCharter = charter?.status === "active";
+    const unbookedBankAssetIncome = charter
+      ? unbookedSovereignAssetIncome(charter)
+      : { couponIncome: 0, realizedGain: 0 };
     const visible = ownsFinancial || hasActiveCharter;
 
     if (!visible) {
@@ -549,7 +553,10 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               fundingCapacity: householdTargetInputs?.fundingCapacity ?? null,
               cashReserves: getCashReserves(charter),
               sovereignTreasuryMarkValue: charter.sovereignTreasuryMarkValue ?? 0,
-              lastBankingIncome: charter.lastBankingIncome ?? 0,
+              lastBankingIncome:
+                (charter.lastBankingIncome ?? 0) +
+                unbookedBankAssetIncome.couponIncome +
+                unbookedBankAssetIncome.realizedGain,
               lastBankingIncomeTurn: charter.lastBankingIncomeTurn ?? null,
               // Per-turn split behind the net: magnitudes in charter currency,
               // stamped by the same banking pass. Absent on charters last
@@ -557,6 +564,12 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               // so the console can always do arithmetic.
               lastBankingDepositInterest: charter.lastBankingDepositInterest ?? 0,
               lastBankingLoanInterest: charter.lastBankingLoanInterest ?? 0,
+              lastBankingSovereignCouponIncome:
+                (charter.lastBankingSovereignCouponIncome ?? 0) +
+                unbookedBankAssetIncome.couponIncome,
+              lastBankingTreasuryRealizedGain:
+                (charter.lastBankingTreasuryRealizedGain ?? 0) +
+                unbookedBankAssetIncome.realizedGain,
               lastBankingLoanOriginationFees: charter.lastBankingLoanOriginationFees ?? 0,
               lastBankingUnderwritingFees: charter.lastBankingUnderwritingFees ?? 0,
               loanOriginationFeesLifetime: charter.loanOriginationFeesLifetime ?? 0,
@@ -566,7 +579,6 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               lastBankingFacilityInterest: charter.lastBankingFacilityInterest ?? 0,
               lastBankingInsurancePremium: charter.lastBankingInsurancePremium ?? 0,
               lastBankingWriteoffs: charter.lastBankingWriteoffs ?? 0,
-              lastBankingSovereignCoupons: charter.lastBankingSovereignCoupons ?? 0,
               requiredReserves: requiredReserves(charter, reserveRatio ?? 0, sheetOptions),
               upstreamCapacity: upstreamCapacity(charter, reserveRatio ?? 0, sheetOptions),
               lendingProfile: charter.lendingProfile ?? DEFAULT_LENDING_PROFILE,

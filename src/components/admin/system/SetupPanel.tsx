@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { ImfInstitutionSeedForm } from "@/components/admin/economy/ImfInstitutionSeedForm";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface SetupStatus {
   ready: boolean;
@@ -92,7 +93,7 @@ export function SetupPanel() {
         body: JSON.stringify({ scope }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `Setup failed (${res.status})`);
+      if (!res.ok) throw new Error(apiErrorText(data, `Setup failed (${res.status})`));
       setResult(data);
       // Refresh status after setup
       await fetchStatus();

@@ -98,19 +98,23 @@ export function getCreateCharacterImage(era: string | number): string {
 
 const CDN_ACTIONS_BASE = "https://cdn.ahousedividedgame.com/static/actions";
 
-/** Action card + actions-page hero images (WebP on R2). */
+/**
+ * Era-neutral action card + actions-page hero images (WebP on R2). Used by
+ * surfaces that are not tied to a world's era; era-aware surfaces go through
+ * `getActionImage`.
+ */
 export const CDN_ACTION_IMAGE_URLS = {
-  campaign: `${CDN_ACTIONS_BASE}/campaign.webp`,
-  advertise: `${CDN_ACTIONS_BASE}/advertise.webp`,
-  fundraise: `${CDN_ACTIONS_BASE}/fundraise.webp`,
-  flipflop: `${CDN_ACTIONS_BASE}/flipflop.webp`,
-  debatePrep: `${CDN_ACTIONS_BASE}/debatePrep.webp`,
-  canvass: `${CDN_ACTIONS_BASE}/canvass.webp`,
-  convertCash: `${CDN_ACTIONS_BASE}/convertCash.webp`,
-  buildDonorBase: `${CDN_ACTIONS_BASE}/buildDonorBase.webp`,
-  poll: `${CDN_ACTIONS_BASE}/poll.webp`,
-  pollLarge: `${CDN_ACTIONS_BASE}/pollLarge.webp`,
-  hero: `${CDN_ACTIONS_BASE}/hero.webp`,
+  campaign: `${CDN_ACTIONS_BASE}/neutral/campaign.webp`,
+  advertise: `${CDN_ACTIONS_BASE}/neutral/advertise.webp`,
+  fundraise: `${CDN_ACTIONS_BASE}/neutral/fundraise.webp`,
+  flipflop: `${CDN_ACTIONS_BASE}/neutral/flipflop.webp`,
+  debatePrep: `${CDN_ACTIONS_BASE}/neutral/debatePrep.webp`,
+  canvass: `${CDN_ACTIONS_BASE}/neutral/canvass.webp`,
+  convertCash: `${CDN_ACTIONS_BASE}/neutral/convertCash.webp`,
+  buildDonorBase: `${CDN_ACTIONS_BASE}/neutral/buildDonorBase.webp`,
+  poll: `${CDN_ACTIONS_BASE}/neutral/poll.webp`,
+  pollLarge: `${CDN_ACTIONS_BASE}/neutral/pollLarge.webp`,
+  hero: `${CDN_ACTIONS_BASE}/neutral/hero.webp`,
 } as const;
 
 export const CDN_HERO_ACTIONS_URL = CDN_ACTION_IMAGE_URLS.hero;

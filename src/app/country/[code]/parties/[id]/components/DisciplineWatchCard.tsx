@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui";
 import { PARTY_SECTION_HEADING_CLASS } from "@/components/party/partyPageStyles";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Overview card listing NPPs in this party with low loyalty (default <40).
@@ -59,7 +60,7 @@ export function DisciplineWatchCard({ countryCode, partyId }: Props) {
         });
         if (!res.ok) {
           const body = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(body.error ?? `Failed to load watch (${res.status})`);
+          throw new Error(apiErrorText(body, `Failed to load watch (${res.status})`));
         }
         if (!cancelled) setData((await res.json()) as WatchResponse);
       } catch (err) {

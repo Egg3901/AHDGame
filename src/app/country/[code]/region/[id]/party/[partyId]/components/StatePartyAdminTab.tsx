@@ -6,6 +6,7 @@ import { AdminAppointmentPanel } from "./StatePartyLeadershipPanel";
 import { getMessageStyle } from "@/lib/utils/formatters";
 import { regionUrl } from "@/lib/urls";
 import type { StatePartyData } from "./types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface StatePartyAdminTabProps {
   stateParty: StatePartyData;
@@ -46,7 +47,7 @@ export function StatePartyAdminTab({ stateParty, onUpdate }: StatePartyAdminTabP
           router.push(regionUrl(stateParty.countryId ?? "US", stateParty.stateId));
         }, 1500);
       } else {
-        setMessage(`✗ ${data.error}`);
+        setMessage(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMessage("✗ Network error");

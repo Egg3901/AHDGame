@@ -56,8 +56,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     const parsed = await parseJsonBody(request, createSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const { id } = await params;
     const db = await getDb();

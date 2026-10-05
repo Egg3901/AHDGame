@@ -5,6 +5,7 @@ import { getMessageStyle } from "@/lib/utils/formatters";
 import { regionPartyUrl, partyUrl } from "@/lib/urls";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type PartyElectionStatus = "voting" | "completed" | "cancelled";
 type ElectionType = "state" | "national" | "committee";
@@ -76,7 +77,7 @@ export function PartyElectionsPanel() {
         setMessage("");
       } else {
         setRows([]);
-        setMessage(`✗ Failed to load elections: ${data?.error ?? `HTTP ${res.status}`}`);
+        setMessage(`✗ Failed to load elections: ${apiErrorText(data, `HTTP ${res.status}`)}`);
       }
     } catch {
       setRows([]);
@@ -119,7 +120,7 @@ export function PartyElectionsPanel() {
         }),
       });
       const data = await res.json();
-      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${data.error ?? "Failed"}`);
+      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Failed")}`);
       if (res.ok) await fetchRows();
     } catch {
       setMessage("Network error");
@@ -135,7 +136,7 @@ export function PartyElectionsPanel() {
     try {
       const res = await fetch(`/api/admin/state-party-elections/${id}`, { method: "DELETE" });
       const data = await res.json();
-      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${data.error}`);
+      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Request failed")}`);
       if (res.ok) await fetchRows();
     } catch {
       setMessage("✗ Network error");

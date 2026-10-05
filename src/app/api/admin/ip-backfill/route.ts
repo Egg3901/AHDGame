@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { withAdminAuth } from "@/lib/api/withAdminAuth";
 import { getDb } from "@/lib/mongodb";
 import { checkIpFireAndForget } from "@/lib/ip/ipteoh";
@@ -19,10 +19,7 @@ export const POST = withAdminAuth(async (_auth) => {
       .findOne({ _id: "default" }, { projection: { ipDetectionEnabled: 1 } });
 
     if (!config?.ipDetectionEnabled) {
-      return NextResponse.json(
-        { error: "IP detection is not enabled. Enable it in admin config first." },
-        { status: 503 }
-      );
+      return errorResponse(503, "IP detection is not enabled. Enable it in admin config first.");
     }
 
     // Find users without ipDetails, oldest first (they were registered first)

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /** Admin-only action bar on the crisis detail page (resolve a live crisis). */
 export default function CrisisAdminActions({
@@ -29,7 +30,7 @@ export default function CrisisAdminActions({
         router.refresh();
       } else {
         const d = await res.json().catch(() => ({}));
-        setMsg(d.error ?? "Failed to resolve");
+        setMsg(apiErrorText(d, "Failed to resolve"));
       }
     } catch {
       setMsg("Failed to resolve");

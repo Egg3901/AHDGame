@@ -106,12 +106,9 @@ export async function POST(
       db
     );
     if (!spend.ok) {
-      return NextResponse.json(
-        {
-          error:
-            spend.reason === "insufficient-ps" ? "Insufficient political strength" : spend.reason,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        spend.reason === "insufficient-ps" ? "Insufficient political strength" : spend.reason
       );
     }
 

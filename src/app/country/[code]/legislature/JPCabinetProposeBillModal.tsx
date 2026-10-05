@@ -28,6 +28,9 @@ import {
   postBillProposalWithElectionConfirmation,
 } from "@/components/bills/BillAutoFailWarning";
 import type { BillProposalAutoFailWarning } from "@/lib/legislature/billAutoFailWarning";
+import { useWorldFlags } from "@/hooks/useWorldFlags";
+import { GuidedLegislationModal } from "@/components/legislation/GuidedLegislationModal";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface LegislationPolicyOption {
   id: string;
@@ -52,7 +55,7 @@ interface LegislationTypeOption {
   eraNew?: boolean;
 }
 
-export function JPCabinetProposeBillModal({
+function LegacyJPCabinetProposeBillModal({
   countryId,
   proposalWarning,
   blockedProvisions,
@@ -191,7 +194,7 @@ export function JPCabinetProposeBillModal({
       });
       if (cancelled) return;
       if (!response.ok) {
-        showToast(data.error ?? "Failed to propose cabinet bill.", "error");
+        showToast(apiErrorText(data, "Failed to propose cabinet bill."), "error");
         return;
       }
       showToast("Cabinet bill proposed for cabinet review.", "success");
@@ -426,4 +429,29 @@ export function JPCabinetProposeBillModal({
       </div>
     </div>
   );
+}
+
+export function JPCabinetProposeBillModal(
+  props: Parameters<typeof LegacyJPCabinetProposeBillModal>[0]
+) {
+  const flags = useWorldFlags();
+  const useV2 =
+    flags.loaded &&
+    !flags.failed &&
+    flags.resetSystemVersions.legislation === "v2" &&
+    flags.resetV2Countries.includes(props.countryId);
+  if (useV2) {
+    return (
+      <GuidedLegislationModal
+        countryId={props.countryId}
+        endpoint={`${legislatureApiUrl(props.countryId)}/cabinet-bills`}
+        chambers={[]}
+        initialChamber="cabinet"
+        adminOverride={props.adminOverride}
+        onClose={props.onClose}
+        onSuccess={props.onSuccess}
+      />
+    );
+  }
+  return <LegacyJPCabinetProposeBillModal {...props} />;
 }

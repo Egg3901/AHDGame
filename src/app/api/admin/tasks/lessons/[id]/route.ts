@@ -32,8 +32,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!ObjectId.isValid(id)) return errorResponse(400, "Invalid id");
 
     const parsed = await parseJsonBody(request, patchLessonSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const col = getTaskLessonsCollection(db);

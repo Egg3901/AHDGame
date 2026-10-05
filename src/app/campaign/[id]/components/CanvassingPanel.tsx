@@ -8,6 +8,7 @@ import { getDemographicCategoriesForCountry } from "@/lib/demographics/countryDe
 import { DE_GROUP_EN_LABELS } from "@/lib/seeds/de/deDemographicCategories";
 import { BLEND, FONT } from "@/components/blend/tokens";
 import { blendButtonStyle, BlendLabel, BlendSelect } from "@/components/blend/BlendControls";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const COST_FUNDS = 100;
 const COST_ACTIONS = 1;
@@ -237,7 +238,7 @@ export function CanvassingPanel({
         setCount(1);
         onResourcesSpent?.();
       } else {
-        setMessage(`Error: ${data.error}`);
+        setMessage(`Error: ${apiErrorText(data, "Request failed")}`);
         if (
           data.error === ELIGIBILITY_MESSAGE.needs_travel ||
           data.error === ELIGIBILITY_MESSAGE.needs_primary_campaign ||

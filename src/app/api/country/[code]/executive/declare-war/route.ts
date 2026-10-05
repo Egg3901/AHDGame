@@ -57,7 +57,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const targetCountry = parsed.data.targetCountry.toUpperCase();
 
@@ -91,7 +91,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       countryId,
       currentTurn
     );
-    if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
+    if (!check.ok) return errorResponse(check.status, check.error);
 
     // One live declaration at a time, so a chamber is never asked to ratify two
     // wars against the same country at once.

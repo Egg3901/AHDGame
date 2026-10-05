@@ -131,7 +131,7 @@ export async function POST(req: Request) {
 
     const parsed = await parseJsonBody(req, createSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
     const db = await getDb();

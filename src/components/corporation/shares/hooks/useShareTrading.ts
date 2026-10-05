@@ -7,6 +7,7 @@ import {
   SHARE_CONSOLIDATION_MIN_TOTAL_SHARES,
 } from "@/lib/constants/corporations";
 import type { MarketOrder, UseShareTradingProps, UseShareTradingReturn } from "../types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function useShareTrading({
   corporation,
@@ -172,7 +173,7 @@ export function useShareTrading({
         onRefresh();
         await refreshOrders();
       } else {
-        setActionError(data.error || "Failed to sell shares");
+        setActionError(apiErrorText(data, "Failed to sell shares"));
       }
     } catch {
       setActionError("Network error");
@@ -201,7 +202,7 @@ export function useShareTrading({
         onRefresh();
         await refreshOrders();
       } else {
-        setActionError(data.error || "Failed to buy shares");
+        setActionError(apiErrorText(data, "Failed to buy shares"));
       }
     } catch {
       setActionError("Network error");
@@ -261,7 +262,7 @@ export function useShareTrading({
         onRefresh();
         await refreshOrders();
       } else {
-        setActionError(data.error || "Failed to place order");
+        setActionError(apiErrorText(data, "Failed to place order"));
       }
     } catch {
       setActionError("Network error");
@@ -284,7 +285,7 @@ export function useShareTrading({
         onRefresh();
         await refreshOrders();
       } else {
-        setActionError(data.error || "Failed to cancel order");
+        setActionError(apiErrorText(data, "Failed to cancel order"));
       }
     } catch {
       setActionError("Network error");
@@ -319,7 +320,7 @@ export function useShareTrading({
         onRefresh();
         await refreshOrders();
       } else {
-        setActionError(data.error || "Failed to fill order");
+        setActionError(apiErrorText(data, "Failed to fill order"));
       }
     } catch {
       setActionError("Network error");
@@ -347,7 +348,7 @@ export function useShareTrading({
         onRefresh();
         await refreshOrders();
       } else {
-        setActionError(data.error || "Failed to issue shares");
+        setActionError(apiErrorText(data, "Failed to issue shares"));
       }
     } catch {
       setActionError("Network error");
@@ -382,7 +383,7 @@ export function useShareTrading({
         onRefresh();
         await refreshOrders();
       } else {
-        setActionError(data.error || "Failed to change share structure");
+        setActionError(apiErrorText(data, "Failed to change share structure"));
       }
     } catch {
       setActionError("Network error");
@@ -411,7 +412,7 @@ export function useShareTrading({
         onRefresh();
         await refreshOrders();
       } else {
-        setActionError(data.error || "Failed to self-issue shares");
+        setActionError(apiErrorText(data, "Failed to self-issue shares"));
       }
     } catch {
       setActionError("Network error");

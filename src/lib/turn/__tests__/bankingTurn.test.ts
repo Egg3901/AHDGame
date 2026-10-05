@@ -475,6 +475,142 @@ describe("processBankingTurn", () => {
     expect(characterState.savings).toBe(savBefore);
   });
 
+  it("does not publish turn aggregates onto a replacement charter", async () => {
+    const originalUpdate = db.collectionMocks.corporations!.updateOne.getMockImplementation();
+    expect(originalUpdate).toBeDefined();
+    let publicationFilter: Record<string, unknown> | undefined;
+    db.collectionMocks.corporations!.updateOne.mockImplementation(async (filter, update) => {
+      const selector = filter as Record<string, unknown>;
+      const patch = update as { $set?: Record<string, unknown> };
+      if (patch.$set?.["bankCharter.lastBankingTurn"] === TURN) {
+        publicationFilter = selector;
+        liveCorp.bankCharter = makeCharter({
+          ...liveCorp.bankCharter,
+          charteredTurn: TURN + 1,
+          currency: "EUR",
+        });
+        const current = liveCorp.bankCharter;
+        const epochMatches =
+          selector["bankCharter.charteredTurn"] === undefined ||
+          selector["bankCharter.charteredTurn"] === current.charteredTurn;
+        const currencyMatches =
+          selector["bankCharter.currency"] === undefined ||
+          selector["bankCharter.currency"] === current.currency;
+        if (!epochMatches || !currencyMatches) return { matchedCount: 0, modifiedCount: 0 };
+      }
+      return originalUpdate!(filter, update);
+    });
+
+    await processBankingTurn(db as unknown as Db, TURN);
+
+    expect(publicationFilter?.["bankCharter.charteredTurn"]).toBe(1);
+    expect(publicationFilter?.["bankCharter.currency"]).toBe("USD");
+    expect(publicationFilter?.countryId).toBe("US");
+    expect(liveCorp.bankCharter?.charteredTurn).toBe(TURN + 1);
+    expect(liveCorp.bankCharter?.currency).toBe("EUR");
+    expect(liveCorp.bankCharter?.lastBankingTurn).toBeUndefined();
+  });
+
+  it("does not overwrite a funded coupon that lands after the banking snapshot", async () => {
+    const originalUpdate = db.collectionMocks.corporations!.updateOne.getMockImplementation();
+    expect(originalUpdate).toBeDefined();
+    const publicationFilters: Array<Record<string, unknown>> = [];
+    db.collectionMocks.corporations!.updateOne.mockImplementation(async (filter, update) => {
+      const selector = filter as Record<string, unknown>;
+      const patch = update as { $set?: Record<string, unknown> };
+      if (patch.$set?.["bankCharter.lastBankingTurn"] === TURN) {
+        publicationFilters.push(selector);
+        liveCorp.bankCharter!.sovereignCouponIncomePaidLifetime = 20;
+        liveCorp.bankCharter!.treasuryRealizedGainPaidLifetime = 6;
+        const observedIncomeTurn = selector["bankCharter.lastBankingIncomeTurn"];
+        const observedCoupon = selector["bankCharter.lastBankingSovereignCouponIncome"];
+        const observedGain = selector["bankCharter.lastBankingTreasuryRealizedGain"];
+        const observedCouponPaid = selector["bankCharter.sovereignCouponIncomePaidLifetime"];
+        const observedGainPaid = selector["bankCharter.treasuryRealizedGainPaidLifetime"];
+        const incomeTurnMatches =
+          typeof observedIncomeTurn === "object"
+            ? "$exists" in observedIncomeTurn &&
+              observedIncomeTurn.$exists === false &&
+              liveCorp.bankCharter.lastBankingIncomeTurn === undefined
+            : observedIncomeTurn === liveCorp.bankCharter.lastBankingIncomeTurn;
+        const couponMatches =
+          typeof observedCoupon === "object"
+            ? "$exists" in observedCoupon &&
+              observedCoupon.$exists === false &&
+              liveCorp.bankCharter.lastBankingSovereignCouponIncome === undefined
+            : observedCoupon === liveCorp.bankCharter.lastBankingSovereignCouponIncome;
+        const gainMatches =
+          typeof observedGain === "object"
+            ? "$exists" in observedGain &&
+              observedGain.$exists === false &&
+              liveCorp.bankCharter.lastBankingTreasuryRealizedGain === undefined
+            : observedGain === liveCorp.bankCharter.lastBankingTreasuryRealizedGain;
+        const couponPaidMatches =
+          typeof observedCouponPaid === "object"
+            ? "$exists" in observedCouponPaid &&
+              observedCouponPaid.$exists === false &&
+              liveCorp.bankCharter.sovereignCouponIncomePaidLifetime === undefined
+            : observedCouponPaid === liveCorp.bankCharter.sovereignCouponIncomePaidLifetime;
+        const gainPaidMatches =
+          typeof observedGainPaid === "object"
+            ? "$exists" in observedGainPaid &&
+              observedGainPaid.$exists === false &&
+              liveCorp.bankCharter.treasuryRealizedGainPaidLifetime === undefined
+            : observedGainPaid === liveCorp.bankCharter.treasuryRealizedGainPaidLifetime;
+        if (
+          !incomeTurnMatches ||
+          !couponMatches ||
+          !gainMatches ||
+          !couponPaidMatches ||
+          !gainPaidMatches
+        )
+          return { matchedCount: 0, modifiedCount: 0 };
+      }
+      return originalUpdate!(filter, update);
+    });
+
+    const summary = await processBankingTurn(db as unknown as Db, TURN);
+
+    expect(publicationFilters).toHaveLength(2);
+    expect(publicationFilters[0]["bankCharter.lastBankingIncomeTurn"]).toEqual({
+      $exists: false,
+    });
+    expect(publicationFilters[0]["bankCharter.lastBankingSovereignCouponIncome"]).toEqual({
+      $exists: false,
+    });
+    expect(publicationFilters[0]["bankCharter.lastBankingTreasuryRealizedGain"]).toEqual({
+      $exists: false,
+    });
+    expect(publicationFilters[1]["bankCharter.lastBankingIncomeTurn"]).toEqual({
+      $exists: false,
+    });
+    expect(publicationFilters[0]["bankCharter.sovereignCouponIncomePaidLifetime"]).toEqual({
+      $exists: false,
+    });
+    expect(publicationFilters[0]["bankCharter.treasuryRealizedGainPaidLifetime"]).toEqual({
+      $exists: false,
+    });
+    expect(publicationFilters[1]["bankCharter.sovereignCouponIncomePaidLifetime"]).toBe(20);
+    expect(publicationFilters[1]["bankCharter.treasuryRealizedGainPaidLifetime"]).toBe(6);
+    expect(liveCorp.bankCharter?.lastBankingIncome).toBeCloseTo(
+      (liveCorp.bankCharter?.lastBankingLoanInterest ?? 0) +
+        (liveCorp.bankCharter?.lastBankingLoanOriginationFees ?? 0) -
+        (liveCorp.bankCharter?.lastBankingDepositInterest ?? 0) -
+        (liveCorp.bankCharter?.lastBankingInsurancePremium ?? 0) -
+        (liveCorp.bankCharter?.lastBankingWriteoffs ?? 0) +
+        (liveCorp.bankCharter?.lastBankingSovereignCouponIncome ?? 0) +
+        (liveCorp.bankCharter?.lastBankingTreasuryRealizedGain ?? 0) +
+        (liveCorp.bankCharter?.lastBankingUnderwritingFees ?? 0),
+      5
+    );
+    expect(liveCorp.bankCharter?.lastBankingTurn).toBe(TURN);
+    expect(summary.banksProcessed).toBe(1);
+    expect(liveCorp.bankCharter?.lastBankingSovereignCouponIncome).toBe(20);
+    expect(liveCorp.bankCharter?.lastBankingTreasuryRealizedGain).toBe(6);
+    expect(liveCorp.bankCharter?.sovereignCouponIncomeBookedLifetime).toBe(20);
+    expect(liveCorp.bankCharter?.treasuryRealizedGainBookedLifetime).toBe(6);
+  });
+
   it.each(["current", "legacy"])(
     "recovers %s household fee funding after cash moves but tranche insertion fails",
     async (format) => {
@@ -592,9 +728,11 @@ describe("processBankingTurn", () => {
     expect(liveCorp.bankCharter!.lastBankingIncomeTurn).toBe(TURN);
   });
 
-  it("stamps the per-turn earnings split behind lastBankingIncome (issue 1748)", async () => {
+  it("includes already-paid Treasury coupons in the per-turn earnings split", async () => {
     liveCorp.bankCharter!.depositOffset = 0;
     liveCorp.bankCharter!.npcDeposits = 0;
+    liveCorp.bankCharter!.sovereignCouponIncomePaidLifetime = 25;
+    liveCorp.bankCharter!.treasuryRealizedGainPaidLifetime = 8;
     bankCorp.bankCharter!.npcDeposits = 0;
     // Zero broad money → no NPC deposit flow; npc interest = 0
     cbState.externalBroadMoney = 0;
@@ -635,6 +773,10 @@ describe("processBankingTurn", () => {
     expect(charter.lastBankingDepositInterest!).toBeCloseTo(expectedInterest, 5);
     expect(charter.lastBankingDepositInterest!).toBeCloseTo(summary.depositInterestPaid, 5);
     expect(charter.lastBankingLoanInterest!).toBeCloseTo(summary.loanInterestCollected, 5);
+    expect(charter.lastBankingSovereignCouponIncome).toBe(25);
+    expect(charter.lastBankingTreasuryRealizedGain).toBe(8);
+    expect(charter.sovereignCouponIncomeBookedLifetime).toBe(25);
+    expect(charter.treasuryRealizedGainBookedLifetime).toBe(8);
     expect(charter.lastBankingInsurancePremium!).toBeCloseTo(premiumPaid, 5);
     expect(charter.lastBankingWriteoffs!).toBeCloseTo(summary.defaultsWrittenOff, 5);
     // No interbank or facility legs in this fixture: those lines stay zero.
@@ -646,7 +788,9 @@ describe("processBankingTurn", () => {
       charter.lastBankingLoanInterest! -
         charter.lastBankingDepositInterest! -
         charter.lastBankingInsurancePremium! -
-        charter.lastBankingWriteoffs!,
+        charter.lastBankingWriteoffs! +
+        charter.lastBankingSovereignCouponIncome! +
+        charter.lastBankingTreasuryRealizedGain!,
       5
     );
   });

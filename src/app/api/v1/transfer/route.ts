@@ -45,10 +45,7 @@ export async function POST(request: Request) {
             : apiAuth.reason === "insufficient_scope"
               ? 403
               : 401;
-      return NextResponse.json(
-        { error: `API key ${apiAuth.reason.replace("_", " ")}` },
-        { status }
-      );
+      return errorResponse(status, `API key ${apiAuth.reason.replace("_", " ")}`);
     }
 
     const rateLimit = checkRateLimit(apiAuth.ownerUserId, 20, 60000);
@@ -56,7 +53,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, apiTransferSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { targetCharacterId: targetIdStr, amount: transferAmount } = parsed.data;
     const targetObjectId = new ObjectId(targetIdStr);
@@ -117,12 +114,10 @@ export async function POST(request: Request) {
       gameTime.effectiveNow.getTime()
     );
     if (barrier.blocked) {
-      return NextResponse.json(
-        {
-          error: `New characters cannot send funds for their first ${NEW_CHARACTER_TRANSFER_BARRIER_TURNS} turns. You can send funds in ${barrier.remainingTurns} turn(s).`,
-          remainingTurns: barrier.remainingTurns,
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        `New characters cannot send funds for their first ${NEW_CHARACTER_TRANSFER_BARRIER_TURNS} turns. You can send funds in ${barrier.remainingTurns} turn(s).`,
+        { extra: { remainingTurns: barrier.remainingTurns } }
       );
     }
 

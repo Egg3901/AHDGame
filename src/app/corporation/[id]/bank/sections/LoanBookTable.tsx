@@ -14,6 +14,7 @@ import type { ConsolePayload, OutlookPayload } from "../types";
 import { partyHref, turnsToHours } from "../lib/helpers";
 import { SmallButton, TableScroll, Td, Th } from "@/components/corporation/dense/DenseKit";
 import { BankPanel } from "../components/BankSection";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /** Rating tone: investment grade reads neutral, junk warns, CCC is the danger. */
 const BAND_TONE: Record<CreditBandId, string> = {
@@ -166,7 +167,7 @@ function LendingProfilePicker({
       });
       const json = await res.json();
       if (!res.ok) {
-        showToast(json.error ?? "Could not set the lending profile", "error");
+        showToast(apiErrorText(json, "Could not set the lending profile"), "error");
         return;
       }
       const preview = stancePreview?.find((s) => s.profile === profile);
@@ -290,7 +291,7 @@ export function LoanBookTable({
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        showToast(json.error ?? "Could not update the loan", "error");
+        showToast(apiErrorText(json, "Could not update the loan"), "error");
         return;
       }
       const subject = loans.find((l) => l.id === loanId);

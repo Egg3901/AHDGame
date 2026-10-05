@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import type { CountryId } from "@/lib/constants/countries";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export interface AdminSeatRow {
   id: string;
@@ -81,7 +82,7 @@ export function CabinetAdminTab({
       });
       const json = (await res.json()) as { message?: string; error?: string };
       if (!res.ok) {
-        showToast(json.error ?? "Action failed", "error");
+        showToast(apiErrorText(json, "Action failed"), "error");
         return;
       }
       showToast(json.message ?? "Done", "success");

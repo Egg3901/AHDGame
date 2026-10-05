@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CountryId } from "@/lib/constants/countries";
 import { WhippedBadge } from "@/components/bills/WhippedBadge";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type Stage = "house" | "senate" | "convicted" | "acquitted" | "dismissed" | "cancelled";
 
@@ -108,7 +109,7 @@ export default function ImpeachmentPanel({
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      setMessage(res.ok ? "Articles of impeachment filed." : (data.error ?? "Failed to file."));
+      setMessage(res.ok ? "Articles of impeachment filed." : apiErrorText(data, "Failed to file."));
       if (res.ok) await load();
     } catch {
       setMessage("Network error.");
@@ -128,7 +129,7 @@ export default function ImpeachmentPanel({
         body: JSON.stringify({ vote: value }),
       });
       const data = await res.json();
-      setMessage(res.ok ? "Vote recorded." : (data.error ?? "Failed to vote."));
+      setMessage(res.ok ? "Vote recorded." : apiErrorText(data, "Failed to vote."));
       if (res.ok) await load();
     } catch {
       setMessage("Network error.");

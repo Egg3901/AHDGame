@@ -6,6 +6,7 @@ import { getMessageStyle } from "@/lib/utils/formatters";
 import { US_STATES } from "@/lib/constants";
 import { OfficialsFilters } from "./officials/OfficialsFilters";
 import { OfficialsList } from "./officials/OfficialsList";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ElectedOfficial {
   _id: string;
@@ -98,7 +99,7 @@ export function OfficialsManager() {
       } else {
         dispatch({
           type: "SET_MESSAGE",
-          payload: `✗ ${data.error || `Failed to initialize ${type ?? "all"} positions`}`,
+          payload: `✗ ${apiErrorText(data, `Failed to initialize ${type ?? "all"} positions`)}`,
         });
       }
     } catch {
@@ -134,7 +135,7 @@ export function OfficialsManager() {
       } else {
         dispatch({
           type: "SET_MESSAGE",
-          payload: `✗ ${data.error || "Failed to reset officials"}`,
+          payload: `✗ ${apiErrorText(data, "Failed to reset officials")}`,
         });
       }
     } catch {
@@ -169,7 +170,7 @@ export function OfficialsManager() {
         await fetchOfficials();
         await fetchCharacters();
       } else {
-        dispatch({ type: "SET_MESSAGE", payload: `✗ ${data.error || "Failed to appoint"}` });
+        dispatch({ type: "SET_MESSAGE", payload: `✗ ${apiErrorText(data, "Failed to appoint")}` });
       }
     } catch {
       dispatch({ type: "SET_MESSAGE", payload: "✗ Network error" });
@@ -212,7 +213,7 @@ export function OfficialsManager() {
       } else {
         dispatch({
           type: "SET_MESSAGE",
-          payload: `✗ ${data.error || "Failed to create house representative"}`,
+          payload: `✗ ${apiErrorText(data, "Failed to create house representative")}`,
         });
       }
     } catch {
@@ -246,7 +247,7 @@ export function OfficialsManager() {
       } else {
         dispatch({
           type: "SET_CLEANUP_RESULT",
-          result: { ok: false, message: data.error ?? "Unknown error" },
+          result: { ok: false, message: apiErrorText(data, "Unknown error") },
         });
       }
     } catch {

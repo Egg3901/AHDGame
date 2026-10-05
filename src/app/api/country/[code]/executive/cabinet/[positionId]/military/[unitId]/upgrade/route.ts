@@ -137,13 +137,10 @@ export async function POST(_request: Request, { params }: RouteParams) {
     if (!(await debitAppropriation(db, countryId, price))) {
       await refundAction();
       const { balance } = await getDefenseAppropriation(db, countryId);
-      return NextResponse.json(
-        {
-          error:
-            `Defence appropriation is short — ${price.toLocaleString("en-US")} required, ` +
-            `${Math.max(0, balance).toLocaleString("en-US")} available`,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `Defence appropriation is short — ${price.toLocaleString("en-US")} required, ` +
+          `${Math.max(0, balance).toLocaleString("en-US")} available`
       );
     }
 

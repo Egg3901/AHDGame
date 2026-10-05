@@ -85,7 +85,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, partyInfluenceRequestSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     let queueItems: NationalPartyInfluenceQueueItem[];
@@ -101,7 +101,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       queueItems,
     });
     if ("error" in result) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     if (!("queue" in parsed.data)) {

@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, rejectCharterSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -58,7 +58,7 @@ export async function POST(request: Request, { params }: RouteParams) {
               : result.reason === "not-character-owner"
                 ? "Active character mismatch — re-authenticate and try again"
                 : "Your active character has already signed this charter";
-      return NextResponse.json({ error: message, reason: result.reason }, { status });
+      return errorResponse(status, message, { extra: { reason: result.reason } });
     }
 
     return NextResponse.json({ ok: true, status: result.status });

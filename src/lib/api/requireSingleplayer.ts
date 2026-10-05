@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { assertSingleplayerAllowed, isLoopbackOrigin, isSingleplayer } from "@/lib/singleplayer";
+import { errorResponse } from "@/lib/api/errors";
 
 /**
  * Gate for the handful of routes that only exist for a local singleplayer
@@ -18,10 +19,7 @@ export function requireSingleplayer(request: Request): NextResponse | null {
   assertSingleplayerAllowed();
   const host = request.headers.get("host");
   if (!host || !isLoopbackOrigin(`http://${host}`)) {
-    return NextResponse.json(
-      { error: "Singleplayer routes only answer on loopback" },
-      { status: 403 }
-    );
+    return errorResponse(403, "Singleplayer routes only answer on loopback");
   }
   return null;
 }

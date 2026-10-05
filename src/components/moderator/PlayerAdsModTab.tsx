@@ -3,6 +3,7 @@
 import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface AdRow {
   _id: string;
@@ -54,7 +55,7 @@ export function PlayerAdsModTab() {
       const data = await res.json();
 
       if (data.error) {
-        setError(data.error);
+        setError(apiErrorText(data, "Request failed. Try again."));
       } else {
         if (append) {
           setAds((prev) => [...prev, ...data.ads]);

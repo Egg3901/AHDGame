@@ -2,17 +2,23 @@
  * Era- and country-aware resolver for the action-card art on `/actions`.
  *
  * The original set was a flat `actions/<slug>.webp` map of modern stock and
- * 2000s-2020s press photos — jarring in a 1953 world. Art is now filed by era
- * and, where a genuinely era-correct national photo exists, by country:
+ * 2000s-2020s press photos (a 2024 billboard, a 2019 candidate portrait): jarring
+ * in a 1953 world and flatly wrong in 1991. Art is now filed by era and, where a
+ * genuinely era-correct national photo exists, by country:
  *
  *   static/actions/<era>/<country>/<slug>.webp   country-specific
- *   static/actions/<era>/<slug>.webp             era-generic
- *   static/actions/<slug>.webp                   legacy (pre-era) fallback
+ *   static/actions/<era>/<slug>.webp             era-generic (every era has a full set)
+ *   static/actions/neutral/<slug>.webp           era-neutral set, people-free where it can be
+ *
+ * The flat legacy `actions/<slug>.webp` files are no longer referenced: a
+ * missing or unknown era resolves to the neutral set, never to another era's
+ * photographs.
  *
  * Resolution never probes the network: `ERA_COUNTRY_SLUGS` lists exactly which
  * (era, country, slug) triples were uploaded, so a miss falls back to the
  * era-generic file rather than 404ing. Adding art therefore means uploading the
- * WebP *and* listing the slug here — see `scripts/fetch-action-images.mjs`.
+ * WebP *and* listing the slug here. Sources and licences are recorded in
+ * `scripts/action-image-sources.json`.
  */
 
 const CDN_ACTIONS_BASE = "https://cdn.ahousedividedgame.com/static/actions";
@@ -34,14 +40,27 @@ export const ACTION_IMAGE_SLUGS = [
 export type ActionImageSlug = (typeof ACTION_IMAGE_SLUGS)[number];
 
 /**
- * Eras that have a complete generic set uploaded under `actions/<era>/`.
+ * Eras that have a complete generic set uploaded under `actions/<era>/`. Every
+ * era the game seeds (`EraId`) is listed.
  *
  * "Complete" is load-bearing: once an era is listed here, EVERY slug resolves to
  * `actions/<era>/<slug>.webp` with no further fallback, so a missing file 404s
  * rather than degrading. `actionImages.test.ts` enforces the invariant against
  * `scripts/action-image-sources.json`.
  */
-const ERAS_WITH_GENERIC_SET = new Set(["1953", "1979"]);
+const ERAS_WITH_GENERIC_SET = new Set([
+  "1953",
+  "1979",
+  "1991",
+  "1999",
+  "2007",
+  "2019",
+  "2023",
+  "2027",
+]);
+
+/** Folder of the era-neutral set, used when the era is unknown or has no set. */
+export const NEUTRAL_ART_FOLDER = "neutral";
 
 /**
  * Country-specific art, by era. Only slugs listed here exist on the CDN under
@@ -70,8 +89,9 @@ export interface ActionImageContext {
 }
 
 /**
- * CDN URL for one action image. Falls back era-generic → legacy so a partially
- * uploaded era can never render a broken `<img>`.
+ * CDN URL for one action image. Falls back national → era-generic → era-neutral.
+ * It never falls back to a different era's art, so a world cannot be shown
+ * another decade's people.
  */
 export function getActionImage(slug: ActionImageSlug, ctx: ActionImageContext = {}): string {
   const era = ctx.era ?? null;
@@ -87,7 +107,7 @@ export function getActionImage(slug: ActionImageSlug, ctx: ActionImageContext = 
     }
   }
 
-  return `${CDN_ACTIONS_BASE}/${slug}.webp`;
+  return `${CDN_ACTIONS_BASE}/${NEUTRAL_ART_FOLDER}/${slug}.webp`;
 }
 
 /** Eras with a complete generic set, for tests and tooling. */

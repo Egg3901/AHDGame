@@ -36,7 +36,7 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -92,12 +92,10 @@ export async function POST(
     // segment — "07" and "7" resolve to the same party but compare unequal.
     const tenure = getLeadershipEligibility(auth.user.character, currentTurn, partyId);
     if (!tenure.eligible) {
-      return NextResponse.json(
-        {
-          error: `You must be a member of this party for ${tenure.turnsRemaining} more turn${tenure.turnsRemaining === 1 ? "" : "s"} before you can run for leadership.`,
-          turnsRemaining: tenure.turnsRemaining,
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        `You must be a member of this party for ${tenure.turnsRemaining} more turn${tenure.turnsRemaining === 1 ? "" : "s"} before you can run for leadership.`,
+        { extra: { turnsRemaining: tenure.turnsRemaining } }
       );
     }
 

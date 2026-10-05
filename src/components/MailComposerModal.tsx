@@ -2,6 +2,7 @@
 
 import { useEffect, useReducer, useRef } from "react";
 import Link from "next/link";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type MailComposerMode =
   | { type: "mail"; toCharacterId: string; toCharacterName: string }
@@ -147,7 +148,7 @@ export function MailComposerModal({ mode, onClose }: MailComposerModalProps) {
 
       const data = await res.json();
       if (!res.ok) {
-        dispatch({ type: "SUBMIT_ERROR", error: data.error || "Failed to send." });
+        dispatch({ type: "SUBMIT_ERROR", error: apiErrorText(data, "Failed to send.") });
         return;
       }
 

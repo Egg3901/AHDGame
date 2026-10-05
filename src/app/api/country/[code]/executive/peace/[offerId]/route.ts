@@ -54,7 +54,7 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { action } = parsed.data;
 
@@ -83,14 +83,11 @@ export async function POST(
     // Getting this backwards would let a country accept its own offer.
     const mustBe = action === "withdraw" ? offer.fromCountry : offer.toCountry;
     if (mustBe !== countryId) {
-      return NextResponse.json(
-        {
-          error:
-            action === "withdraw"
-              ? "Only the country that made an offer can withdraw it."
-              : "Only the country an offer was made to can answer it.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        action === "withdraw"
+          ? "Only the country that made an offer can withdraw it."
+          : "Only the country an offer was made to can answer it."
       );
     }
 

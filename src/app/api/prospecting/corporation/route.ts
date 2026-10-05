@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, corpProspectSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { corporationId, stateId, resource } = parsed.data;
 
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     const now = new Date();
     const result = await launchCorpProspect(db, corporation, { stateId, resource }, turn, now);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json({

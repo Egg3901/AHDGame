@@ -48,7 +48,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, stateCampaignerSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -118,12 +118,10 @@ export async function POST(request: Request, { params }: RouteParams) {
           STATE_LEADERSHIP_RELOCATION_DELAY_TURNS
         );
         if (!relocTenure.eligible) {
-          return NextResponse.json(
-            {
-              error: `${character.name} relocated recently and can't be made state campaigner for ${relocTenure.turnsRemaining} more turn${relocTenure.turnsRemaining === 1 ? "" : "s"}.`,
-              turnsRemaining: relocTenure.turnsRemaining,
-            },
-            { status: 403 }
+          return errorResponse(
+            403,
+            `${character.name} relocated recently and can't be made state campaigner for ${relocTenure.turnsRemaining} more turn${relocTenure.turnsRemaining === 1 ? "" : "s"}.`,
+            { extra: { turnsRemaining: relocTenure.turnsRemaining } }
           );
         }
       }

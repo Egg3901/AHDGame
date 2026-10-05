@@ -86,7 +86,20 @@ async function seedBondMarketPools(db: Db, ctx: MigrationContext): Promise<Migra
     };
   }
   if (docs.length > 0) {
-    await db.collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION).insertMany(docs);
+    const result = await db.collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION).bulkWrite(
+      docs.map((doc) => ({
+        updateOne: {
+          filter: { _id: doc._id },
+          update: { $setOnInsert: doc },
+          upsert: true,
+        },
+      }))
+    );
+    return {
+      notes: [`seeded ${result.upsertedCount} bond market pools`, ...notes],
+      documentsScanned: currencies.size,
+      documentsInserted: result.upsertedCount,
+    };
   }
   return {
     notes: [`seeded ${docs.length} bond market pools`, ...notes],

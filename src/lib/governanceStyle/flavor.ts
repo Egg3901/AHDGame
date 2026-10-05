@@ -131,9 +131,9 @@ export function governanceStyleFlavor(score: GovernanceStyleScore): GovernanceSt
             : "";
     const courtStatus =
       competition.courtPenalty > 0
-        ? ` The Supreme Court is ${competition.courtDominantShare.toFixed(1)}% one party among ${competition.courtSeated} seated justices, which subtracts ${competition.courtPenalty.toFixed(1)} points.`
+        ? ` The Supreme Court's largest ${competition.courtDominantBloc === "party_fallback" ? "fallback party" : "ideological"} bloc holds ${competition.courtDominantShare.toFixed(1)}% of ${competition.courtSeated} seated justices; Court concentration subtracts ${competition.courtPenalty.toFixed(1)} points.`
         : competition.courtSeated >= 5
-          ? " The Supreme Court is split enough to add no penalty."
+          ? ` The Supreme Court remains split enough that no ideological bloc adds a health cost.`
           : "";
     competitionNarrative =
       competition.penalty > 0

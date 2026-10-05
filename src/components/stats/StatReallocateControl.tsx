@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui";
 import { StatPointAllocator, defaultStatBuild, pointsRemaining } from "./StatPointAllocator";
 import type { CharacterStats } from "@/lib/stats/statsConstants";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Own-profile control for spending the single free stat reallocation. Opens a
@@ -41,7 +42,7 @@ export function StatReallocateControl() {
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || "Failed to reallocate your stats. Please try again.");
+        throw new Error(apiErrorText(d, "Failed to reallocate your stats. Please try again."));
       }
       setOpen(false);
       router.refresh();

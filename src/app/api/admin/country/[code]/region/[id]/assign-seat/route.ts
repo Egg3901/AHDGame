@@ -87,7 +87,7 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, adminAssignSeatSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { seatType, senateClass, entityId, entityType, seatsToAssign } = parsed.data;
 

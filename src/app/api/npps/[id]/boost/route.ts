@@ -39,7 +39,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       forexEnabled
     );
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return errorResponse(error.status, error.message);
     }
 
     return NextResponse.json(info);
@@ -63,7 +63,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id: targetId } = await params;
     const parsed = await parseJsonBody(request, characterInfluenceActionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { action } = parsed.data;
 
@@ -85,7 +85,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       forexEnabled
     );
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return errorResponse(error.status, error.message);
     }
 
     return NextResponse.json(result);

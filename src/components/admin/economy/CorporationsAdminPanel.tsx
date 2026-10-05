@@ -14,6 +14,7 @@ import { CorpSummaryCards } from "./corporations/CorpSummaryCards";
 import { CorporationsTable } from "./corporations/CorporationsTable";
 import { GlobalConfirmStrip } from "./corporations/GlobalConfirmStrip";
 import { SpawnNppPanel } from "./corporations/SpawnNppPanel";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function CorporationsAdminPanel() {
   const [state, dispatch] = useCorporationsAdminState();
@@ -96,7 +97,7 @@ export function CorporationsAdminPanel() {
       .then(async (res) => {
         if (!res.ok) {
           const j = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(j.error ?? `HTTP ${res.status}`);
+          throw new Error(apiErrorText(j, `HTTP ${res.status}`));
         }
         return res.json() as Promise<ImfBailoutPreviewResponse>;
       })
@@ -124,7 +125,7 @@ export function CorporationsAdminPanel() {
     });
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
-      throw new Error(j.error ?? `HTTP ${res.status}`);
+      throw new Error(apiErrorText(j, `HTTP ${res.status}`));
     }
     return res.json();
   };

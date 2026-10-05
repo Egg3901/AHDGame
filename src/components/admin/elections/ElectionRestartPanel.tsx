@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function ElectionRestartPanel() {
   const [loading, setLoading] = useState(false);
@@ -22,7 +23,7 @@ export function ElectionRestartPanel() {
       const data = await res.json();
       setResult({
         ok: res.ok && data.success,
-        message: data.message ?? data.error ?? "Unknown response",
+        message: data.message ?? apiErrorText(data, "Unknown response"),
       });
     } catch {
       setResult({ ok: false, message: "Network error" });
@@ -39,7 +40,7 @@ export function ElectionRestartPanel() {
       const data = await res.json();
       setResult({
         ok: res.ok && data.success,
-        message: data.message ?? data.error ?? "Unknown response",
+        message: data.message ?? apiErrorText(data, "Unknown response"),
       });
     } catch {
       setResult({ ok: false, message: "Network error" });
@@ -56,7 +57,7 @@ export function ElectionRestartPanel() {
       const data = await res.json();
       setResult({
         ok: res.ok && data.success,
-        message: data.message ?? data.error ?? "Unknown response",
+        message: data.message ?? apiErrorText(data, "Unknown response"),
       });
     } catch {
       setResult({ ok: false, message: "Network error" });
@@ -73,7 +74,7 @@ export function ElectionRestartPanel() {
       const data = await res.json();
       setResult({
         ok: res.ok && data.success,
-        message: data.message ?? data.error ?? "Unknown response",
+        message: data.message ?? apiErrorText(data, "Unknown response"),
       });
     } catch {
       setResult({ ok: false, message: "Network error" });
@@ -90,7 +91,7 @@ export function ElectionRestartPanel() {
       const data = await res.json();
       setResult({
         ok: res.ok && data.success,
-        message: data.message ?? data.error ?? "Unknown response",
+        message: data.message ?? apiErrorText(data, "Unknown response"),
       });
     } catch {
       setResult({ ok: false, message: "Network error" });
@@ -107,7 +108,7 @@ export function ElectionRestartPanel() {
       const data = await res.json();
       setResult({
         ok: res.ok && data.success,
-        message: data.message ?? data.error ?? "Unknown response",
+        message: data.message ?? apiErrorText(data, "Unknown response"),
       });
     } catch {
       setResult({ ok: false, message: "Network error" });
@@ -124,7 +125,7 @@ export function ElectionRestartPanel() {
       const data = await res.json();
       setResult({
         ok: res.ok && data.success,
-        message: data.message ?? data.error ?? "Unknown response",
+        message: data.message ?? apiErrorText(data, "Unknown response"),
       });
     } catch {
       setResult({ ok: false, message: "Network error" });
@@ -141,7 +142,7 @@ export function ElectionRestartPanel() {
       const data = await res.json();
       setResult({
         ok: res.ok && data.success,
-        message: data.message ?? data.error ?? "Unknown response",
+        message: data.message ?? apiErrorText(data, "Unknown response"),
       });
     } catch {
       setResult({ ok: false, message: "Network error" });
@@ -177,7 +178,7 @@ export function ElectionRestartPanel() {
       const data = await res.json();
       setResult({
         ok: res.ok && data.success,
-        message: data.message ?? data.error ?? "Unknown response",
+        message: data.message ?? apiErrorText(data, "Unknown response"),
       });
     } catch {
       setResult({ ok: false, message: "Network error" });

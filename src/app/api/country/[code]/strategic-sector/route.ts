@@ -61,8 +61,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const gate = await authorize(request, code);
     if (!gate.ok) return gate.response;
     const parsed = await parseJsonBody(request, designateStrategicSectorSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const sectorType = parsed.data.sectorType as CorporationType;
     // Cap the number of concurrently-designated sectors. Re-designating an
     // already-strategic sector is idempotent and never trips the cap.
@@ -92,8 +91,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     const gate = await authorize(request, code);
     if (!gate.ok) return gate.response;
     const parsed = await parseJsonBody(request, designateStrategicSectorSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     await removeStrategicSectorDesignation(
       gate.db,
       gate.countryId,

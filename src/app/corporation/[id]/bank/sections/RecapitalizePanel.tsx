@@ -16,6 +16,7 @@ import { turnsToHours } from "../lib/helpers";
 import { SmallButton } from "@/components/corporation/dense/DenseKit";
 import { BankPanel } from "../components/BankSection";
 import { StatCell } from "../components/StatCell";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function RecapitalizePanel({
   corporationId,
@@ -77,7 +78,7 @@ export function RecapitalizePanel({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
       if (!res.ok) {
-        showToast(json.error ?? "Could not move capital", "error");
+        showToast(apiErrorText(json, "Could not move capital"), "error");
         return;
       }
       showToast(

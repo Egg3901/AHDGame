@@ -6,6 +6,7 @@ import {
   allocatedManufacturingCapitalAnchor,
   manufacturingDevelopmentThresholdAnchor,
 } from "@/lib/products/rules/manufacturingRules";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ProductKind {
   id: string;
@@ -159,7 +160,7 @@ export function ManufacturingProductStudio({
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) {
-        setMessage(data.error ?? "Product project could not start.");
+        setMessage(apiErrorText(data, "Product project could not start."));
         return;
       }
       setMessage("Product development started. Paid R&D funds development until its cost is paid.");
@@ -185,7 +186,7 @@ export function ManufacturingProductStudio({
       );
       const data = (await response.json()) as { error?: string };
       if (!response.ok) {
-        setMessage(data.error ?? "Project could not be retired.");
+        setMessage(apiErrorText(data, "Project could not be retired."));
         return;
       }
       setMessage("Product project retired.");

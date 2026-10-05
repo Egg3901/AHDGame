@@ -3,6 +3,7 @@
 import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface AdRow {
   _id: string;
@@ -48,7 +49,7 @@ export function PlayerBannerAdsTab() {
     fetch("/api/admin/player-ads")
       .then((r) => r.json())
       .then((data) => {
-        if (data.error) setError(data.error);
+        if (data.error) setError(apiErrorText(data, "Request failed. Try again."));
         else setAds(data.ads as AdRow[]);
       })
       .catch(() => setError("Failed to load ads."))

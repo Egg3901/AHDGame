@@ -2,6 +2,7 @@
 
 import { InlineError } from "@/components/ui/InlineError";
 import React, { useState, useEffect, useCallback } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface TurnSnapshot {
   turn: number;
@@ -519,7 +520,7 @@ export function ForexAdminPanel() {
                 const res = await fetch("/api/admin/forex/seed-reserves", { method: "POST" });
                 const json = await res.json();
                 if (!res.ok) {
-                  setSeedResult({ error: json.error ?? `HTTP ${res.status}` });
+                  setSeedResult({ error: apiErrorText(json, `HTTP ${res.status}`) });
                 } else {
                   setSeedResult({ seeded: json.seeded, skipped: json.skipped });
                 }

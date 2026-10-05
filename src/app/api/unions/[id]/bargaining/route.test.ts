@@ -125,7 +125,7 @@ describe("POST /api/unions/[id]/bargaining", () => {
     });
 
     expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       error: "An open bargaining campaign already exists with this employer.",
     });
   });

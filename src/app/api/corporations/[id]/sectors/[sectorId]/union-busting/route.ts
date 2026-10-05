@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const result = await attemptUnionBusting(db, corporation, sectorId, currentTurn);
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json({

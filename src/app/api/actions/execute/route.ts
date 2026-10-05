@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, executeActionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { actionType, targetState, convertAmount, count: rawCount } = parsed.data;
     const count = rawCount ?? 1;
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
     });
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json({

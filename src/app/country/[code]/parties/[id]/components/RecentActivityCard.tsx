@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
 import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { PARTY_SECTION_HEADING_CLASS } from "@/components/party/partyPageStyles";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Recent activity feed - a single chronological view of treasury and slate
@@ -53,7 +54,7 @@ export function RecentActivityCard({ countryCode, partyId }: Props) {
         );
         if (!res.ok) {
           const body = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(body.error ?? `Failed to load feed (${res.status})`);
+          throw new Error(apiErrorText(body, `Failed to load feed (${res.status})`));
         }
         const json = (await res.json()) as FeedResponse;
         if (!cancelled) setItems(json.items);

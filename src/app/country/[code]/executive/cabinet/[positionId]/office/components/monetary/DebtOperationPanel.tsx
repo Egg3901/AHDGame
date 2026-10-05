@@ -5,6 +5,7 @@ import { Button } from "@/components/ui";
 import { MonetaryCard } from "./monetaryUi";
 import type { MonetaryView } from "../../useCabinetOffice";
 import { ActingLockNote, useActingLock } from "../ActingLock";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function DebtOperationPanel({
   countryCode,
@@ -45,7 +46,7 @@ export function DebtOperationPanel({
       );
       const json = (await res.json()) as { error?: string; expiresTurn?: number };
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Failed to launch" });
+        setFeedback({ type: "error", message: apiErrorText(json, "Failed to launch") });
         return;
       }
       setFeedback({

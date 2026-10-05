@@ -705,7 +705,10 @@ export default function SharePurchaseModal({
       if (!res.ok) {
         if (res.status === 409 && data.requiresCeoVacateConfirm) {
           setCeoVacateConfirm({
-            message: data.error ?? "Selling all your shares will remove you as CEO. Continue?",
+            message: apiErrorText(
+              data,
+              "Selling all your shares will remove you as CEO. Continue?"
+            ),
           });
           return;
         }

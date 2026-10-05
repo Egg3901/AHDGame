@@ -5,7 +5,7 @@ import { UKRegionPageTabsPolitics } from "./UKRegionPageTabsPolitics";
 import { RegionPartiesTab } from "@/components/region/RegionPartiesTab";
 import { countryUrl } from "@/lib/urls";
 import { UKRegionPageTabsMetrics } from "./UKRegionPageTabsMetrics";
-import { RegionRegistryTab } from "@/components/state/RegionRegistryTab";
+import { RegionMetricsTab } from "@/components/state/RegionMetricsTab";
 import { DemographicsAndTurnoutTab } from "@/components/state/StatePageTabsDemographicsAndTurnout";
 import { StateElections } from "@/components/StateElections";
 import { StateEconomy } from "@/components/state/StateEconomy";
@@ -196,7 +196,7 @@ export function UKRegionPageTabs({
     // promotion set out to remove.
     if (superTab === "metrics") {
       return (
-        <RegionRegistryTab
+        <RegionMetricsTab
           countryId="UK"
           regionId={stateForTabs?._id ?? region.id}
           regionName={stateForTabs?.name ?? region.name}

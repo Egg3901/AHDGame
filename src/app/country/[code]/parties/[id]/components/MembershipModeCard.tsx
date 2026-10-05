@@ -6,6 +6,7 @@ import { getMessageStyle } from "@/lib/utils/formatters";
 import { partyApiUrl } from "@/lib/urls";
 import { GameMonthTime } from "@/components/time/GameMonthTime";
 import type { PartyData } from "./types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface MembershipModeCardProps {
   party: PartyData;
@@ -48,7 +49,7 @@ export function MembershipModeCard({ party, countryCode, onUpdate }: MembershipM
         );
         onUpdate();
       } else {
-        setMsg(`✗ ${data.error}`);
+        setMsg(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMsg("✗ Network error");
@@ -72,7 +73,7 @@ export function MembershipModeCard({ party, countryCode, onUpdate }: MembershipM
         setMsg(`✓ ${data.message}`);
         onUpdate();
       } else {
-        setMsg(`✗ ${data.error}`);
+        setMsg(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMsg("✗ Network error");

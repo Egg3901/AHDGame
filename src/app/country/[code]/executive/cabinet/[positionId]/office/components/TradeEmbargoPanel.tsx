@@ -12,6 +12,7 @@ import {
   TRADE_EMBARGO_MAX_ACTIVE_PER_MEMBER,
 } from "@/lib/trade/constants";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface EmbargoItem {
   id: string;
@@ -113,7 +114,7 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Failed to impose embargo." });
+        setFeedback({ type: "error", message: apiErrorText(json, "Failed to impose embargo.") });
         return;
       }
       setFeedback({ type: "success", message: "Embargo imposed — it takes effect next turn." });
@@ -138,7 +139,7 @@ export function TradeEmbargoPanel({ countryId, canAct, actionsRemaining }: Props
       const res = await fetch(`/api/world/trade/embargoes?id=${id}`, { method: "DELETE" });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Failed to lift embargo." });
+        setFeedback({ type: "error", message: apiErrorText(json, "Failed to lift embargo.") });
         return;
       }
       setFeedback({ type: "success", message: "Embargo lifted." });

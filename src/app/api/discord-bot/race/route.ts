@@ -119,6 +119,7 @@ export async function GET(request: Request) {
     }
 
     if (!election) {
+      // eslint-disable-next-line local/no-uncoded-error-response -- diagnostic payload answered with 200, not an error response
       return NextResponse.json({ found: false, error: "No matching election found" });
     }
 

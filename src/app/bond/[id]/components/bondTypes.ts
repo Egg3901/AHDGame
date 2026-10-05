@@ -83,12 +83,14 @@ export interface PricePoint {
 }
 
 export interface Holder {
-  type: "character" | "corporation";
+  type: "character" | "corporation" | "fund" | "npp" | "central_bank";
   id: string;
   name: string;
   avatarUrl?: string;
   logoUrl?: string;
   sequentialId?: number;
+  slug?: string;
+  fundCountryId?: string | null;
   units: number;
   percentage: number;
   value: number;

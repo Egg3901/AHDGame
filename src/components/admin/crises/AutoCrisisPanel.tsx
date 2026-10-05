@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { COUNTRY_CONFIGS, COUNTRY_ORDER } from "@/lib/constants/countries";
 import type { AutoCooldownRow, AutoTemplate } from "./crisisAdminTypes";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface AutoCrisisPanelProps {
   autoTemplates: AutoTemplate[];
@@ -49,7 +50,7 @@ export function AutoCrisisPanel({
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      setMessage(res.ok ? "Crisis triggered" : (data.error ?? "Failed to trigger crisis"));
+      setMessage(res.ok ? "Crisis triggered" : apiErrorText(data, "Failed to trigger crisis"));
       if (res.ok) onRefresh();
     } catch {
       setMessage("Failed to trigger crisis");

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Candidate {
   appointeeId: string;
@@ -38,7 +39,7 @@ export default function AppointSenatorModal({
         const data = await res.json();
 
         if (!res.ok) {
-          throw new Error(data.error || "Failed to fetch candidates");
+          throw new Error(apiErrorText(data, "Failed to fetch candidates"));
         }
 
         setCandidates(data.candidates ?? []);
@@ -76,7 +77,7 @@ export default function AppointSenatorModal({
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to appoint senator");
+        throw new Error(apiErrorText(data, "Failed to appoint senator"));
       }
 
       router.refresh();

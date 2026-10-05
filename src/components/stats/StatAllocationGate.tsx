@@ -6,6 +6,7 @@ import { fetchJson } from "@/lib/observability/fetchJson";
 import { Button } from "@/components/ui";
 import { StatPointAllocator, defaultStatBuild, pointsRemaining } from "./StatPointAllocator";
 import type { CharacterStats } from "@/lib/stats/statsConstants";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Global blocking gate for grandfathered characters. When the active character
@@ -63,7 +64,7 @@ export function StatAllocationGate() {
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || "Failed to save your stats. Please try again.");
+        throw new Error(apiErrorText(d, "Failed to save your stats. Please try again."));
       }
       setDone(true);
       refetch(true);

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui";
 import type { WhipDefianceItem, WhipDefianceSnapshot } from "@/lib/partyWhips/whipDefiance";
 import { whipIssuerRoleLabel } from "@/lib/partyWhips/issuerRole";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 function formatIssuedAt(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -65,7 +66,7 @@ export function WhipDefiancePanel({ defianceUrl }: { defianceUrl: string }) {
         const response = await fetch(defianceUrl, { cache: "no-store" });
         if (!response.ok) {
           const body = (await response.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(body?.error ?? "Failed to load whip defiance");
+          throw new Error(apiErrorText(body, "Failed to load whip defiance"));
         }
         const body = (await response.json()) as WhipDefianceSnapshot;
         if (!cancelled) {

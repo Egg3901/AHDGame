@@ -295,7 +295,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
       );
       const json = (await response.json()) as { message?: string; error?: string };
       if (!response.ok) {
-        showToast(json.error ?? "Failed to record vote", "error");
+        showToast(apiErrorText(json, "Failed to record vote"), "error");
         return;
       }
       showToast(json.message ?? "Vote recorded", "success");
@@ -318,7 +318,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
       });
       const json = (await response.json()) as { message?: string; error?: string };
       if (!response.ok) {
-        showToast(json.error ?? "Failed to remove cabinet member", "error");
+        showToast(apiErrorText(json, "Failed to remove cabinet member"), "error");
         return;
       }
       showToast(json.message ?? "Cabinet member removed", "success");

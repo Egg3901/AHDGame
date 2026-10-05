@@ -62,6 +62,8 @@ describe("fresh-world flag policy", () => {
   it("turns every gameState gameplay flag on, at the top of every ladder", () => {
     for (const [key, value] of Object.entries(DEFAULT_GAME_STATE_FLAGS)) {
       if (key in FRESH_WORLD_FLAG_EXCLUSIONS) continue;
+      // Reset-era version selectors pick a system, they are not on/off features.
+      if (key.endsWith("SystemVersion")) continue;
       expect([key, value]).toEqual([key, typeof value === "boolean" ? true : LADDER_TOPS[key]]);
     }
   });
@@ -145,5 +147,23 @@ describe("missingGameStateFlagDefaults", () => {
     const out = missingGameStateFlagDefaults({ nppAutonomyLevel: "v2" });
     expect(out).not.toHaveProperty("nppAutonomyLevel");
     expect(out).not.toHaveProperty("nppAutonomyEnabled");
+  });
+
+  it("starts all reset-era systems on the live v1 path", () => {
+    expect(missingGameStateFlagDefaults(null)).toMatchObject({
+      metricsSystemVersion: "v1",
+      legislationSystemVersion: "v1",
+      cabinetSystemVersion: "v1",
+    });
+  });
+
+  it("preserves independently selected system versions across reset", () => {
+    const out = missingGameStateFlagDefaults({
+      metricsSystemVersion: "v2",
+      cabinetSystemVersion: "v1",
+    });
+    expect(out).not.toHaveProperty("metricsSystemVersion");
+    expect(out).not.toHaveProperty("cabinetSystemVersion");
+    expect(out).toHaveProperty("legislationSystemVersion", "v1");
   });
 });

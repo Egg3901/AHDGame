@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { GameState } from "@/lib/db/types/gameState";
 import { exportResearchPanel } from "@/lib/telemetry/research/export";
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       .findOne({ _id: "current" as never }, { projection: { currentTurn: 1 } });
     const params = Object.fromEntries(new URL(request.url).searchParams.entries());
     const parsed = parseResearchQuery(params, gameState?.currentTurn ?? 0);
-    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    if (!parsed.ok) return errorResponse(400, parsed.error);
 
     return NextResponse.json(await exportResearchPanel(db, parsed.query), {
       headers: { "Cache-Control": "no-store" },

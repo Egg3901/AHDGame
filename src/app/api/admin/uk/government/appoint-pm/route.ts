@@ -26,8 +26,7 @@ export async function POST(request: Request) {
     if (!auth.ok) return auth.response;
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const countryId = (parsed.data.countryId?.toUpperCase() ?? "UK") as CountryId;
     const countryConfig = COUNTRY_CONFIGS[countryId];

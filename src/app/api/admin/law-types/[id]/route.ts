@@ -26,7 +26,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     const parsed = await parseJsonBody(request, adminLawTypesUpdateSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const updates = parsed.data;
@@ -150,12 +150,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     });
 
     if (activeBillCount > 0) {
-      return NextResponse.json(
-        {
-          error: `Cannot delete law type: ${activeBillCount} active bill(s) reference it`,
-          activeBillCount,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `Cannot delete law type: ${activeBillCount} active bill(s) reference it`,
+        { extra: { activeBillCount } }
       );
     }
 

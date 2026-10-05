@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type LabourMode = "off" | "wages" | "macro" | "unions" | "full";
 
@@ -105,7 +106,7 @@ export function LabourAdminPanel() {
         kaitzRatio?: number;
       };
       if (!res.ok) {
-        setMwMessage(`Error: ${data.error || "Failed to set"}`);
+        setMwMessage(`Error: ${apiErrorText(data, "Failed to set")}`);
         return;
       }
       setMwMessage(

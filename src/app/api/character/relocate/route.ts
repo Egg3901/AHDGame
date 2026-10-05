@@ -76,7 +76,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, relocateBodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const normalizedTarget = parsed.data.targetStateId.trim();
     const targetCountryId = (
@@ -113,12 +113,10 @@ export async function POST(request: Request) {
       Date.now()
     );
     if (cooldown.onCooldown) {
-      return NextResponse.json(
-        {
-          error: `Relocation cooldown active. You can relocate again in ${cooldown.cooldownRemainingDays} day(s).`,
-          cooldownRemainingDays: cooldown.cooldownRemainingDays,
-        },
-        { status: 429 }
+      return errorResponse(
+        429,
+        `Relocation cooldown active. You can relocate again in ${cooldown.cooldownRemainingDays} day(s).`,
+        { extra: { cooldownRemainingDays: cooldown.cooldownRemainingDays } }
       );
     }
 

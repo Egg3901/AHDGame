@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { requireHumanSessionWithCharacter, requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import {
@@ -58,7 +58,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       })
     );
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     if (!ObjectId.isValid(parsed.data.electionId) || !ObjectId.isValid(parsed.data.candidateId)) {
       return errorResponse(400, "Invalid id");
@@ -70,7 +70,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       electionId: new ObjectId(parsed.data.electionId),
       candidateId: new ObjectId(parsed.data.candidateId),
     });
-    return NextResponse.json(result.body, { status: result.status });
+    return statusResponse(result.status, result.body);
   } catch (error) {
     return handleRouteError(error);
   }

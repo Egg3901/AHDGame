@@ -327,7 +327,7 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, joinSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -428,15 +428,13 @@ export async function POST(
         now,
       });
       if (!recruitability.eligible) {
-        return NextResponse.json(
-          {
-            error: recruitability.error,
+        return errorResponse(recruitability.statusCode, recruitability.error, {
+          extra: {
             relationshipScore,
             requiredRelationship: CAUCUS_NPP_RECRUIT_MIN_RELATIONSHIP,
             cooldownUntil: recruitability.cooldownUntil?.toISOString() ?? null,
           },
-          { status: recruitability.statusCode }
-        );
+        });
       }
     }
 
@@ -447,10 +445,9 @@ export async function POST(
       .collection<CaucusMembership>("caucusMemberships")
       .findOne({ caucusId: caucus._id, memberId: memberOid });
     if (existing && existing.status === "active") {
-      return NextResponse.json(
-        { error: "Already a member of this caucus.", membershipId: existing._id.toString() },
-        { status: 409 }
-      );
+      return errorResponse(409, "Already a member of this caucus.", {
+        extra: { membershipId: existing._id.toString() },
+      });
     }
     if (existing) {
       await db.collection<CaucusMembership>("caucusMemberships").updateOne(

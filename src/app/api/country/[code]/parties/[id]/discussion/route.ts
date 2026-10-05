@@ -114,16 +114,13 @@ export async function POST(request: Request, { params }: RouteParams) {
       const elapsed = Date.now() - new Date(character.lastDiscussionPostAt).getTime();
       if (elapsed < DISCUSSION_COOLDOWN_MS) {
         const retryAfter = Math.ceil((DISCUSSION_COOLDOWN_MS - elapsed) / 1000);
-        return NextResponse.json(
-          { error: "You can only post once per hour", retryAfter },
-          { status: 429 }
-        );
+        return errorResponse(429, "You can only post once per hour", { extra: { retryAfter } });
       }
     }
 
     const parsed = await parseJsonBody(request, postBodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const now = new Date();

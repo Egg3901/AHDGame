@@ -120,8 +120,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const limit = checkRateLimit(`federation:${auth.user.userId}`, 5, 60_000);
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
     const parsed = await parseJsonBody(request, bodySchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const db = await getDb();
     const state = await getGameState(db);
     const year = earliestFederationDecisionYear(state?.preset ?? "", sourceCountryId);

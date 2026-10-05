@@ -50,7 +50,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, issueSharesSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { percent } = parsed.data;
@@ -247,9 +247,9 @@ export async function POST(request: Request, { params }: RouteParams) {
           },
         });
         if (settlement.status !== "applied" && settlement.status !== "replayed") {
-          return NextResponse.json(
-            { error: "The share placement is settling; retry after its journal completes." },
-            { status: settlement.status === "partial" ? 202 : 409 }
+          return errorResponse(
+            settlement.status === "partial" ? 202 : 409,
+            "The share placement is settling; retry after its journal completes."
           );
         }
         result = corporation;

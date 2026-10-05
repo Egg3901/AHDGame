@@ -42,7 +42,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     // Contract ids are ObjectIds; the corporation param is addressed by sequentialId.
@@ -98,16 +98,12 @@ export async function PUT(request: Request, { params }: RouteParams) {
     );
     const free = Math.max(0, DEFENCE_FACTORY_SLOTS_PER_PLANT - usedByOthers);
     if (parsed.data.assignedFactories > free) {
-      return NextResponse.json(
-        {
-          error:
-            free > 0
-              ? `This plant has ${free} of ${DEFENCE_FACTORY_SLOTS_PER_PLANT} production lines free. Free one from another order first.`
-              : "Every production line at this plant is already committed to another order.",
-          freeFactories: free,
-          totalFactories: DEFENCE_FACTORY_SLOTS_PER_PLANT,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        free > 0
+          ? `This plant has ${free} of ${DEFENCE_FACTORY_SLOTS_PER_PLANT} production lines free. Free one from another order first.`
+          : "Every production line at this plant is already committed to another order.",
+        { extra: { freeFactories: free, totalFactories: DEFENCE_FACTORY_SLOTS_PER_PLANT } }
       );
     }
 

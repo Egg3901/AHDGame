@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Skeleton } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CSTooltipData {
   currentCS: number;
@@ -37,7 +38,7 @@ export function CsInfoIcon({ campaignId }: { campaignId: string | undefined | nu
       .then((r) => r.json())
       .then((j) => {
         if (j.error) {
-          setError(j.error);
+          setError(apiErrorText(j, "Request failed. Try again."));
           setData(null);
         } else {
           setData(j);

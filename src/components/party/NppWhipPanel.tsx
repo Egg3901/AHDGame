@@ -14,6 +14,7 @@ import { regionApiSubUrl, partyApiUrl, legislatureUrl } from "@/lib/urls";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { WhipTabsLayout } from "./whipTabsLayout";
 import type { WhipEndpointConfig } from "./WhipTabs";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BillWhipItem {
   bill: { id: string; title: string; status: string };
@@ -157,7 +158,7 @@ export function NppWhipPanel({
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => null);
-          throw new Error(body?.error ?? `Failed to load bills (${res.status})`);
+          throw new Error(apiErrorText(body, `Failed to load bills (${res.status})`));
         }
         return res.json();
       })
@@ -300,7 +301,7 @@ export function NppWhipPanel({
         showToast(data.message, "success");
         setRefreshKey((k) => k + 1);
       } else {
-        showToast(data.error || "Failed to issue whip", "error");
+        showToast(apiErrorText(data, "Failed to issue whip"), "error");
       }
     } catch {
       showToast("Network error", "error");
@@ -348,7 +349,7 @@ export function NppWhipPanel({
         showToast(data.message, "success");
         setRefreshKey((k) => k + 1);
       } else {
-        showToast(data.error || "Failed to issue whip", "error");
+        showToast(apiErrorText(data, "Failed to issue whip"), "error");
       }
     } catch {
       showToast("Network error", "error");
@@ -395,7 +396,7 @@ export function NppWhipPanel({
         showToast(data.message, "success");
         setRefreshKey((k) => k + 1);
       } else {
-        showToast(data.error || "Failed to issue whip", "error");
+        showToast(apiErrorText(data, "Failed to issue whip"), "error");
       }
     } catch {
       showToast("Network error", "error");
@@ -432,7 +433,7 @@ export function NppWhipPanel({
         showToast(data.message, "success");
         setRefreshKey((k) => k + 1);
       } else {
-        showToast(data.error || "Failed to issue whip", "error");
+        showToast(apiErrorText(data, "Failed to issue whip"), "error");
       }
     } catch {
       showToast("Network error", "error");

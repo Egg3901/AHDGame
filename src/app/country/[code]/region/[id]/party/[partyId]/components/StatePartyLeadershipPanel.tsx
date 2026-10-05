@@ -11,6 +11,7 @@ import { getMessageStyle } from "@/lib/utils/formatters";
 import { partyUrl } from "@/lib/urls";
 import type { StatePartyData, UserData, LeaderInfo, Position } from "./types";
 import { APPOINT_LABELS } from "./helpers";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 // ─── Admin Appointment Panel ──────────────────────────────────────────────────
 
@@ -59,7 +60,7 @@ function AdminAppointmentPanel({
         body: JSON.stringify({ position, characterId }),
       });
       const data = await res.json();
-      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${data.error}`);
+      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Request failed")}`);
       if (res.ok) onUpdate();
     } catch {
       setMessage("✗ Network error");
@@ -228,7 +229,7 @@ export function StatePartyLeadershipPanel({
               }
             );
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error ?? "Save failed");
+            if (!res.ok) throw new Error(apiErrorText(data, "Save failed"));
             onUpdate();
           }}
         />

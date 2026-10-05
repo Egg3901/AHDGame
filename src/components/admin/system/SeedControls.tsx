@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function SeedControls() {
   const [loading, setLoading] = useState(false);
@@ -35,7 +36,7 @@ export function SeedControls() {
       const data = await res.json();
       setResult({
         ok: res.ok,
-        message: data.message ?? data.error ?? "Unknown response",
+        message: data.message ?? apiErrorText(data, "Unknown response"),
         logs: data.logs,
       });
     } catch {

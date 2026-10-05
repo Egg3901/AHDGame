@@ -6,6 +6,7 @@ import { getNextSequentialId } from "@/lib/db/sequentialId";
 import type { NPP, StatePartyOrg, State, PoliticalParty } from "@/lib/db/types";
 import type { Db } from "@/lib/mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import { errorResponse } from "@/lib/api/errors";
 
 export async function handleSpawnNPPs(
   db: Db,
@@ -19,10 +20,10 @@ export async function handleSpawnNPPs(
   const { count, party, countryId, preferMode = "both" } = body;
 
   if (!count || count < 1 || count > 500) {
-    return NextResponse.json({ error: "count must be between 1 and 500." }, { status: 400 });
+    return errorResponse(400, "count must be between 1 and 500.");
   }
   if (!party) {
-    return NextResponse.json({ error: "party is required." }, { status: 400 });
+    return errorResponse(400, "party is required.");
   }
 
   const allStatesRaw = await db.collection<State>("states").find({}).toArray();
@@ -45,18 +46,16 @@ export async function handleSpawnNPPs(
       if (matchingParties.length === 1) {
         partyDoc = matchingParties[0];
       } else if (matchingParties.length > 1) {
-        return NextResponse.json(
-          {
-            error: `Multiple parties have sequentialId ${seqId}. Please specify countryId.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Multiple parties have sequentialId ${seqId}. Please specify countryId.`
         );
       }
     }
   }
 
   if (!partyDoc) {
-    return NextResponse.json({ error: "Party not found." }, { status: 400 });
+    return errorResponse(400, "Party not found.");
   }
 
   // Use party's country for state filtering (more reliable than input countryId)
@@ -68,7 +67,7 @@ export async function handleSpawnNPPs(
   const allStates = allStatesRaw.filter((s) => s.countryId === partyCountryId);
 
   if (allStates.length === 0) {
-    return NextResponse.json({ error: "No states found in database." }, { status: 400 });
+    return errorResponse(400, "No states found in database.");
   }
 
   const partyEcon =

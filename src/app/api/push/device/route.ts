@@ -1,4 +1,4 @@
-import { errorResponse } from "@/lib/api/errors";
+import { errorResponse, statusResponse } from "@/lib/api/errors";
 import { suppressTracing } from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
@@ -43,7 +43,7 @@ export const POST = withNoStore(async (request: Request) => {
     const registered = await suppressTracing(async () =>
       registerDevice(await getDb(), new ObjectId(auth.user.userId), parsed.data)
     );
-    return NextResponse.json({ registered }, { status: registered ? 200 : 409 });
+    return statusResponse(registered ? 200 : 409, { registered });
   } catch {
     return errorResponse(503, "Could not register this device");
   }

@@ -29,7 +29,7 @@ export const POST = withNoStore(async (request: Request) => {
 
     const parsed = await parseJsonBody(request, resetDiscordSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { userId } = parsed.data;
     const objectId = new ObjectId(userId);

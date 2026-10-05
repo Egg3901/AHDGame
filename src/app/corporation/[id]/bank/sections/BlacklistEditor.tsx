@@ -7,6 +7,7 @@ import { PartySearch } from "../components/PartySearch";
 import { BlacklistChip } from "../components/BlacklistChip";
 import { SmallButton } from "@/components/corporation/dense/DenseKit";
 import { BankPanel } from "../components/BankSection";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function BlacklistEditor({
   corporationId,
@@ -64,7 +65,7 @@ export function BlacklistEditor({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(json.error ?? "Could not update blacklist", "error");
+        showToast(apiErrorText(json, "Could not update blacklist"), "error");
         return;
       }
       const entryCount = corporations.length + characters.length + indexFunds.length;

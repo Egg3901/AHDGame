@@ -28,8 +28,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!ObjectId.isValid(id)) return errorResponse(400, "Invalid ID");
 
     const parsed = await parseJsonBody(request, PatchSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const crisis = await db.collection<Crisis>("crises").findOne({ _id: new ObjectId(id) });

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { requireHumanSessionWithCharacter, requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import {
@@ -41,8 +41,7 @@ export async function POST(
         candidateId: z.string().refine((v) => ObjectId.isValid(v), "Invalid candidateId"),
       })
     );
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const result = await createEndorsement(db, {
       countryId,
@@ -51,7 +50,7 @@ export async function POST(
       electionId: new ObjectId(parsed.data.electionId),
       candidateId: new ObjectId(parsed.data.candidateId),
     });
-    return NextResponse.json(result.body, { status: result.status });
+    return statusResponse(result.status, result.body);
   } catch (error) {
     return handleRouteError(error);
   }

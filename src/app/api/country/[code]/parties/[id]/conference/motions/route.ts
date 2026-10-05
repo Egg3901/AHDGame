@@ -52,7 +52,7 @@ async function postHandler(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, proposeMotionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

@@ -200,7 +200,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, createSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
 
@@ -343,7 +343,7 @@ export async function PATCH(request: Request) {
 
     const parsed = await parseJsonBody(request, updateSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
 

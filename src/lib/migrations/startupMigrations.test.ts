@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 
 const { runMigrationsMock } = vi.hoisted(() => ({
@@ -12,12 +12,22 @@ const { runMigrationsMock } = vi.hoisted(() => ({
 
 vi.mock("./runner", () => ({ runMigrations: runMigrationsMock }));
 
-import { REQUIRED_STARTUP_MIGRATIONS, runRequiredStartupMigrations } from "./startupMigrations";
+import {
+  REQUIRED_STARTUP_MIGRATIONS,
+  REQUIRED_STARTUP_INDEX_MIGRATIONS,
+  runRequiredStartupMigrations,
+} from "./startupMigrations";
+
+const findOne = vi.fn().mockResolvedValue(null);
+const db = { collection: vi.fn(() => ({ findOne })) } as unknown as Db;
+
+beforeEach(() => {
+  runMigrationsMock.mockClear();
+  findOne.mockReset().mockResolvedValue(null);
+});
 
 describe("runRequiredStartupMigrations", () => {
   it("runs only the audited idempotent startup allowlist", async () => {
-    const db = {} as Db;
-
     await runRequiredStartupMigrations(db);
 
     expect(REQUIRED_STARTUP_MIGRATIONS.map((migration) => migration.id)).toEqual([
@@ -32,7 +42,6 @@ describe("runRequiredStartupMigrations", () => {
       "2026-10-04-bank-treasury-trade-indexes",
       "2026-10-04-bank-prop-forex-fee-index",
       "2026-10-04-bank-failure-politics-index",
-      "2026-10-04-industry-model-market-indexes",
       "2026-10-04-media-discriminator-market-indexes",
       "2026-10-04-construction-service-lease-index",
       "2026-10-04-media-product-projects-v1-index",
@@ -41,9 +50,34 @@ describe("runRequiredStartupMigrations", () => {
       "2026-10-05-advertising-agreement-indexes",
     ]);
     expect(REQUIRED_STARTUP_MIGRATIONS.every((migration) => migration.idempotent)).toBe(true);
-    expect(runMigrationsMock).toHaveBeenCalledWith(db, {
+    expect(runMigrationsMock).toHaveBeenNthCalledWith(1, db, {
       migrations: [...REQUIRED_STARTUP_MIGRATIONS],
       dryRun: false,
     });
+    expect(runMigrationsMock).toHaveBeenNthCalledWith(2, db, {
+      migrations: [...REQUIRED_STARTUP_INDEX_MIGRATIONS],
+      only: REQUIRED_STARTUP_INDEX_MIGRATIONS.map((migration) => migration.id),
+      force: true,
+      dryRun: false,
+    });
+    expect(REQUIRED_STARTUP_INDEX_MIGRATIONS.every((migration) => migration.idempotent)).toBe(true);
+    expect(runMigrationsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("restores insert-only bond pools on a fresh 1991 world despite surviving markers", async () => {
+    findOne.mockResolvedValue({ preset: "1991-default", currentTurn: 1 });
+    await runRequiredStartupMigrations(db);
+    expect(runMigrationsMock).toHaveBeenNthCalledWith(3, db, {
+      migrations: [expect.objectContaining({ id: "2026-09-03-bond-market-pools" })],
+      only: ["2026-09-03-bond-market-pools"],
+      force: true,
+      dryRun: false,
+    });
+  });
+
+  it("does not bootstrap bond cash into an existing world", async () => {
+    findOne.mockResolvedValue({ preset: "1991-default", currentTurn: 1329 });
+    await runRequiredStartupMigrations(db);
+    expect(runMigrationsMock).toHaveBeenCalledTimes(2);
   });
 });

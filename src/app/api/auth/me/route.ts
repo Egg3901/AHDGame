@@ -63,10 +63,9 @@ export const GET = withNoStore(async () => {
     }
     if (user.isBanned) {
       await clearAuthCookie("auth_me:user_banned");
-      return NextResponse.json(
-        { error: "banned", reason: user.banReason || "Violation of rules" },
-        { status: 403 }
-      );
+      return errorResponse(403, "banned", {
+        extra: { reason: user.banReason || "Violation of rules" },
+      });
     }
     if (isAuthMigrationFenced(user) && !(await unifiedSessionIsCurrent(db, payload))) {
       await clearAuthCookie("auth_me:source_fenced");

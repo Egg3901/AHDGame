@@ -50,7 +50,7 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -99,13 +99,10 @@ export async function POST(
         includePartyJoinedAt: false,
       });
       if (cooldown.blocked) {
-        return NextResponse.json(
-          {
-            error:
-              "New characters can't vote in caucus chair elections for 24 hours. Try again later.",
-            unblockAt: cooldown.unblockAt.toISOString(),
-          },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "New characters can't vote in caucus chair elections for 24 hours. Try again later.",
+          { extra: { unblockAt: cooldown.unblockAt.toISOString() } }
         );
       }
     }
@@ -118,12 +115,10 @@ export async function POST(
       // Canonical `partyId`, not the raw `id` path segment ("07" vs "7").
       const tenure = getLeadershipEligibility(auth.user.character, currentTurn, partyId);
       if (!tenure.eligible) {
-        return NextResponse.json(
-          {
-            error: `You must be a member of this party for ${tenure.turnsRemaining} more turn${tenure.turnsRemaining === 1 ? "" : "s"} before you can vote in leadership elections.`,
-            turnsRemaining: tenure.turnsRemaining,
-          },
-          { status: 403 }
+        return errorResponse(
+          403,
+          `You must be a member of this party for ${tenure.turnsRemaining} more turn${tenure.turnsRemaining === 1 ? "" : "s"} before you can vote in leadership elections.`,
+          { extra: { turnsRemaining: tenure.turnsRemaining } }
         );
       }
     }

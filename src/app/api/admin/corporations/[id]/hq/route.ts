@@ -49,8 +49,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const { id } = await params;
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const corp = await db
@@ -97,10 +96,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         propertySectors
       );
       if (!convResult.ok) {
-        return NextResponse.json(
-          { error: convResult.error },
-          { status: convResult.rateUnavailable ? 503 : 400 }
-        );
+        return errorResponse(convResult.rateUnavailable ? 503 : 400, convResult.error);
       }
       currencyConversion = convResult;
     }

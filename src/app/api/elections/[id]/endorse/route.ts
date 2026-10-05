@@ -35,8 +35,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id: electionId } = await params;
 
     const parsed = await parseJsonBody(request, z.object({ candidateId: schemas.objectId }));
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { candidateId } = parsed.data;
 
     const db = await getDb();

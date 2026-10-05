@@ -35,7 +35,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!parsed) return errorResponse(400, "Invalid character ID");
 
     const body = await parseJsonBody(request, bodySchema);
-    if (!body.success) return NextResponse.json({ error: body.error }, { status: body.status });
+    if (!body.success) return errorResponse(body.status, body.error);
 
     const db = await getDb();
     const gs = await (
@@ -71,7 +71,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const curEra = await resolveGeneralEra(db);
     const res = trainNode(general, body.data.nodeId, curEra);
     if (!res.changed) {
-      return NextResponse.json({ error: res.reason ?? "Cannot train" }, { status: 400 });
+      return errorResponse(400, res.reason ?? "Cannot train");
     }
 
     await getCharacterGeneralsCollection(db).updateOne(

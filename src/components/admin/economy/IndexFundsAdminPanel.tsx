@@ -142,7 +142,7 @@ export function IndexFundsAdminPanel() {
       ]);
       if (!fundRes.ok) {
         const body = (await fundRes.json().catch(() => ({}))) as { error?: string };
-        setMessage(body.error || `Failed to load fund (HTTP ${fundRes.status})`);
+        setMessage(apiErrorText(body, `Failed to load fund (HTTP ${fundRes.status})`));
         return;
       }
       const fundJson = (await fundRes.json()) as { fund: Record<string, unknown> };
@@ -178,7 +178,7 @@ export function IndexFundsAdminPanel() {
         totalsByCurrency?: Record<string, number>;
       };
       if (!res.ok) {
-        setInjectAllMessage(body.error || "Bulk injection failed");
+        setInjectAllMessage(apiErrorText(body, "Bulk injection failed"));
         return;
       }
       const totals = body.totalsByCurrency
@@ -222,7 +222,7 @@ export function IndexFundsAdminPanel() {
         totalsByCurrency?: Record<string, number>;
       };
       if (!res.ok) {
-        setDeployAllMessage(body.error || "Bulk deploy failed");
+        setDeployAllMessage(apiErrorText(body, "Bulk deploy failed"));
         return;
       }
       const totals = body.totalsByCurrency
@@ -255,7 +255,7 @@ export function IndexFundsAdminPanel() {
       });
       const body = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setMessage(body.error || "Update failed");
+        setMessage(apiErrorText(body, "Update failed"));
         return;
       }
       setMessage(`Fund set to ${status}.`);
@@ -289,7 +289,7 @@ export function IndexFundsAdminPanel() {
         backingRatio?: number;
       };
       if (!res.ok) {
-        setInjectMessage(body.error || "Injection failed");
+        setInjectMessage(apiErrorText(body, "Injection failed"));
         return;
       }
       setInjectAmount("");

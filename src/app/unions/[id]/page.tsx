@@ -203,7 +203,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
       } else {
         setResult({
           ok: res.ok,
-          text: res.ok ? "Done." : (data.error ?? "Action failed"),
+          text: res.ok ? "Done." : apiErrorText(data, "Action failed"),
         });
       }
       if (res.ok) await loadData();

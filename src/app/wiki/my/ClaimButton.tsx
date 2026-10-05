@@ -3,6 +3,7 @@
 import { InlineError } from "@/components/ui/InlineError";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ClaimButtonProps {
   kind: "player" | "corporation" | "party";
@@ -32,7 +33,7 @@ export function ClaimButton({ kind }: ClaimButtonProps) {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Could not create page");
+        throw new Error(apiErrorText(data, "Could not create page"));
       }
       const { slug } = (await res.json()) as { slug: string };
       router.push(`/wiki/${slug}/edit`);

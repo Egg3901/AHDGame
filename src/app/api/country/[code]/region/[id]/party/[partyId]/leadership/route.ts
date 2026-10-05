@@ -62,7 +62,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, statePartyAppointmentSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { position, characterId } = parsed.data;
 
@@ -163,12 +163,10 @@ export async function POST(request: Request, { params }: RouteParams) {
         STATE_LEADERSHIP_RELOCATION_DELAY_TURNS
       );
       if (!relocTenure.eligible) {
-        return NextResponse.json(
-          {
-            error: `${appointedCharacter.name} relocated recently and can't be appointed to state leadership for ${relocTenure.turnsRemaining} more turn${relocTenure.turnsRemaining === 1 ? "" : "s"}.`,
-            turnsRemaining: relocTenure.turnsRemaining,
-          },
-          { status: 403 }
+        return errorResponse(
+          403,
+          `${appointedCharacter.name} relocated recently and can't be appointed to state leadership for ${relocTenure.turnsRemaining} more turn${relocTenure.turnsRemaining === 1 ? "" : "s"}.`,
+          { extra: { turnsRemaining: relocTenure.turnsRemaining } }
         );
       }
     }

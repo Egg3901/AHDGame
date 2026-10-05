@@ -55,7 +55,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, DecideSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const result = await decideListingPetition({
@@ -66,7 +66,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       currentTurn: gameState?.currentTurn ?? 0,
     });
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json({ ok: true });

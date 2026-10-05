@@ -57,12 +57,14 @@ import { resolveEnergyPosition } from "@/lib/constants/cabinetEnergy";
 import { resolveInfraPosition } from "@/lib/constants/cabinetInfra";
 import { resolveFinancePosition } from "@/lib/constants/cabinetMonetary";
 import { getCabinetIdentity } from "@/lib/constants/cabinetIdentity";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { TRADE_MINISTER_POSITION_BY_COUNTRY } from "@/lib/constants/internationalOrganizations";
 import { Skeleton } from "@/components/ui";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
+import { DepartmentProgramPanel } from "./components/DepartmentProgramPanel";
+import { DepartmentFinancePanel } from "./components/DepartmentFinancePanel";
+import { ResetCabinetActionPanel } from "./components/ResetCabinetActionPanel";
 
 export default function CabinetOfficePage() {
   const resolveCountryName = useCountryDisplayName();
@@ -278,7 +280,14 @@ export default function CabinetOfficePage() {
                   />
                 </div>
               ) : hasMonetary && data.monetary ? (
-                <CabinetMonetaryStrip m={data.monetary} />
+                <div className="divide-y divide-card-border">
+                  <CabinetStatStrip
+                    metrics={mechanics.nationalMetrics}
+                    values={data.nationalMetrics}
+                    currencySymbol={currencySymbol}
+                  />
+                  <CabinetMonetaryStrip m={data.monetary} />
+                </div>
               ) : (
                 <CabinetStatStrip
                   metrics={mechanics.nationalMetrics}
@@ -309,6 +318,24 @@ export default function CabinetOfficePage() {
             <div className="min-w-0 flex-1 space-y-6">
               {activeTab === "overview" && (
                 <>
+                  {data.departmentFinances?.map((department) => (
+                    <DepartmentFinancePanel
+                      key={department.departmentId}
+                      department={department}
+                      currencySymbol={currencySymbol}
+                      canAct={canAct}
+                      countryCode={countryCode}
+                      positionId={positionId}
+                      currentTurn={data.currentTurn}
+                      onUpdate={refetch}
+                    />
+                  ))}
+                  {data.departmentProgram && (
+                    <DepartmentProgramPanel
+                      program={data.departmentProgram}
+                      currencySymbol={currencySymbol}
+                    />
+                  )}
                   {mechanics.tierSetting && (
                     <TierSettingPanel
                       config={mechanics.tierSetting}
@@ -397,17 +424,28 @@ export default function CabinetOfficePage() {
                     />
                   )}
 
-                  <MinisterialOrderPanel
-                    orders={data.orders}
-                    activeOrders={data.activeOrders}
-                    actionsRemaining={data.member?.ministerialActions ?? 0}
-                    canAct={canAct}
-                    countryCode={countryCode}
-                    positionId={positionId}
-                    singleRegionFocus={mechanics.singleRegionFocus ?? null}
-                    regionData={data.regionData}
-                    onUpdate={refetch}
-                  />
+                  {data.cabinetVersion === "v2" && data.resetCabinetActions ? (
+                    <ResetCabinetActionPanel
+                      model={data.resetCabinetActions}
+                      canAct={canAct}
+                      countryCode={countryCode}
+                      positionId={positionId}
+                      currencySymbol={currencySymbol}
+                      onUpdate={refetch}
+                    />
+                  ) : (
+                    <MinisterialOrderPanel
+                      orders={data.orders}
+                      activeOrders={data.activeOrders}
+                      actionsRemaining={data.member?.ministerialActions ?? 0}
+                      canAct={canAct}
+                      countryCode={countryCode}
+                      positionId={positionId}
+                      singleRegionFocus={mechanics.singleRegionFocus ?? null}
+                      regionData={data.regionData}
+                      onUpdate={refetch}
+                    />
+                  )}
 
                   {!mechanics.singleRegionFocus && mechanics.regionalMetrics.length > 0 && (
                     <RegionalBreakdownTable

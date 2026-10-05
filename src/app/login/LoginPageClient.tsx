@@ -15,6 +15,7 @@ import { generateFingerprintData, type StoredFingerprintComponents } from "@/lib
 import { getOrCreateDeviceKey } from "@/lib/utils/deviceKey";
 import { loginDestination } from "@/lib/auth/lakesideLoginReturn";
 import { Input, Label, Button, SectionLabel } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /** Message keys under auth.login.errors, per OAuth failure reason. */
 const DISCORD_ERROR_KEYS: Record<string, string> = {
@@ -200,7 +201,7 @@ export default function LoginPageClient({
           router.push(`/banned?reason=${reason}`);
           return;
         }
-        throw new Error(data.error || t("errors.loginFailed"));
+        throw new Error(apiErrorText(data, t("errors.loginFailed")));
       }
 
       if (typeof data.unifiedRedirect === "string") {

@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { CreateIndexesOptions, IndexSpecification } from "mongodb";
 import { ALL_WRITE_GUARD_INDEXES } from "@/lib/admin/seed/indexes/writeGuardSpecs";
 
@@ -122,10 +122,9 @@ export async function POST() {
       .findOne({ _id: MIGRATION_ID });
 
     if (existing) {
-      return NextResponse.json(
-        { error: "Migration already completed", completedAt: existing.completedAt.toISOString() },
-        { status: 400 }
-      );
+      return errorResponse(400, "Migration already completed", {
+        extra: { completedAt: existing.completedAt.toISOString() },
+      });
     }
 
     // Pre-flight: check for duplicate (countryId, sequentialId) pairs in politicalParties
@@ -147,13 +146,10 @@ export async function POST() {
       const dupeDetails = dupes.map(
         (d) => `${d._id.countryId}:${d._id.sequentialId} (${d.count}x)`
       );
-      return NextResponse.json(
-        {
-          error:
-            "Cannot create unique index on politicalParties â€” duplicate (countryId, sequentialId) pairs found",
-          duplicates: dupeDetails,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Cannot create unique index on politicalParties â€” duplicate (countryId, sequentialId) pairs found",
+        { extra: { duplicates: dupeDetails } }
       );
     }
 

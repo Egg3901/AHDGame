@@ -4,6 +4,7 @@ import { useState } from "react";
 import { EXTRACTABLE_RESOURCES, COMMODITY_LABELS } from "@/lib/constants/commodities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import { Modal } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   legislatureId: string;
@@ -63,7 +64,7 @@ export function GrantContractModal({
       setFormState((s) => ({
         ...s,
         submitting: false,
-        error: json.error ?? "Failed to grant contract",
+        error: apiErrorText(json, "Failed to grant contract"),
       }));
       return;
     }

@@ -50,8 +50,7 @@ export async function POST(request: Request) {
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
 
     const parsed = await parseJsonBody(request, proposeNominationSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { positionId, nomineeCharacterId, nomineeNppId } = parsed.data;
 
     const countryId = resolvePresidentialCountry(request);

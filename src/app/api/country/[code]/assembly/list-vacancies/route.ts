@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
@@ -55,8 +55,7 @@ export async function POST(request: Request, { params }: Context) {
     const limit = checkRateLimit(`hu-list-vacancy:${auth.user.userId}`, 5, 60_000);
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const db = await getDb();
     const game = await getGameState(db);
     if (game?.preset !== "1991-default")
@@ -71,9 +70,10 @@ export async function POST(request: Request, { params }: Context) {
       ...parsed.data,
       actor: { characterId: character?._id ?? null, isAdmin: auth.user.isAdmin === true },
     });
-    return NextResponse.json(
+    return statusResponse(
+      installed ? 200 : 409,
       installed ? { success: true } : { error: "This list vacancy is no longer available" },
-      { status: installed ? 200 : 409, headers: { "Cache-Control": "private, no-store" } }
+      { headers: { "Cache-Control": "private, no-store" } }
     );
   } catch (error) {
     if (error instanceof Hu1991ListVacancyConflict) return errorResponse(409, error.message);

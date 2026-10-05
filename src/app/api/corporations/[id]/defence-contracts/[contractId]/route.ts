@@ -35,7 +35,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     // Contract ids are Mongo ObjectIds. The corporation param is not — corp pages
@@ -91,10 +91,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         assignedFactories: contract.assignedFactories,
       });
       if (!fill.eligible) {
-        return NextResponse.json(
-          { error: FILL_REASON_TEXT[fill.reason ?? "no_materiel_line"] },
-          { status: 409 }
-        );
+        return errorResponse(409, FILL_REASON_TEXT[fill.reason ?? "no_materiel_line"]);
       }
     }
     // Accepting turns a pending offer into a live, billing order - a NEW obligation, so it is

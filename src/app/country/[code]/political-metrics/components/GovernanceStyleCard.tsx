@@ -64,23 +64,38 @@ function BalanceRail({
 }
 
 function governmentStatus(competition: DemocraticCompetition) {
-  if (competition.executiveAlignedWithLegislature === true) {
-    return "Aligned presidency";
-  }
-  if (competition.executiveAlignedWithLegislature === false) {
-    return "Divided government";
+  if (competition.executiveSystem === "presidential") {
+    if (competition.executiveAlignedWithLegislature === true) {
+      return "Aligned presidency";
+    }
+    if (competition.executiveAlignedWithLegislature === false) {
+      return "Divided government";
+    }
+    return "Presidential government";
   }
   return "Parliamentary government";
 }
 
 function continuityStatus(competition: DemocraticCompetition) {
-  if (competition.executiveAlignedWithLegislature !== null) {
+  if (competition.executiveSystem === "presidential") {
     const terms = competition.consecutiveExecutiveTerms;
     return terms > 0 ? `${terms} executive ${terms === 1 ? "term" : "terms"}` : "New executive";
   }
   return competition.uninterruptedControlTurns > 0
     ? `${competition.uninterruptedControlTurns} turns of chamber lead`
     : "No recorded streak";
+}
+
+function courtComposition(competition: DemocraticCompetition) {
+  const parts = [
+    `${competition.courtLiberalSeats} liberal`,
+    `${competition.courtSwingSeats} swing`,
+    `${competition.courtConservativeSeats} conservative`,
+  ];
+  if (competition.courtUnclassifiedSeats > 0) {
+    parts.push(`${competition.courtUnclassifiedSeats} without lean data`);
+  }
+  return parts.join(" / ");
 }
 
 function PowerBalance({ competition }: { competition: DemocraticCompetition }) {
@@ -142,8 +157,8 @@ function PowerBalance({ competition }: { competition: DemocraticCompetition }) {
           </div>
           <div className="mt-1 text-body-sm text-muted">
             {competition.courtSeated >= 5
-              ? `Largest party of ${competition.courtSeated} seated justices`
-              : "Too few justices seated to score packing"}
+              ? courtComposition(competition)
+              : "Too few justices seated to score concentration"}
           </div>
         </div>
         <div className="bg-card px-3 py-3">
@@ -160,7 +175,7 @@ function PowerBalance({ competition }: { competition: DemocraticCompetition }) {
       <p className="mt-3 text-body-sm leading-relaxed text-muted">
         Chamber margins: {penaltyFigure(competition.seatMarginPenalty)}. Legislative continuity:{" "}
         {penaltyFigure(competition.legislativeContinuityPenalty)}. Executive continuity:{" "}
-        {penaltyFigure(competition.executiveContinuityPenalty)}. Court packing:{" "}
+        {penaltyFigure(competition.executiveContinuityPenalty)}. Court concentration:{" "}
         {penaltyFigure(competition.courtPenalty)}.
       </p>
     </div>

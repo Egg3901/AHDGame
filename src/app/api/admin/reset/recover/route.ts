@@ -19,8 +19,7 @@ export async function POST(request: Request) {
     const auth = await requireAdmin();
     if (!auth.ok) return auth.response;
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const db = await getDb();
     const plan = await preview1991BootstrapRecovery(db, parsed.data.runId);
     if (!parsed.data.apply) return NextResponse.json(plan);

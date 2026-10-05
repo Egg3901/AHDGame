@@ -19,6 +19,7 @@ import {
   PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER,
 } from "@/lib/treasury/payoutCapValues";
 import { NppAbbr } from "@/components/elections/NppAbbr";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function ChairSubtab({
   countryCode,
@@ -169,7 +170,7 @@ export function ChairSubtab({
       });
       const data = (await res.json()) as { success?: boolean; error?: string };
       if (!res.ok || !data.success) {
-        setMsg(`Error: ${data.error ?? "Failed to save."}`);
+        setMsg(`Error: ${apiErrorText(data, "Failed to save.")}`);
       } else {
         setMsg("Success: Caucus updated.");
         await Promise.all([refreshDetail(), refreshList()]);
@@ -196,7 +197,7 @@ export function ChairSubtab({
       });
       const data = (await res.json()) as { success?: boolean; error?: string };
       if (!res.ok || !data.success) {
-        setMsg(`Error: ${data.error ?? "Failed to add position."}`);
+        setMsg(`Error: ${apiErrorText(data, "Failed to add position.")}`);
       } else {
         setMsg("Success: Position added.");
         dispatch({ type: "CLEAR_NEW_POSITION" });
@@ -216,7 +217,7 @@ export function ChairSubtab({
     );
     const data = (await res.json()) as { success?: boolean; error?: string };
     if (!res.ok || !data.success) {
-      setMsg(`Error: ${data.error ?? "Failed to delete."}`);
+      setMsg(`Error: ${apiErrorText(data, "Failed to delete.")}`);
     } else {
       setMsg("Success: Position removed.");
       await refreshDetail();
@@ -235,7 +236,7 @@ export function ChairSubtab({
       });
       const data = (await res.json()) as { success?: boolean; error?: string };
       if (!res.ok || !data.success) {
-        setMsg(`Error: ${data.error ?? "Failed to recruit NPP."}`);
+        setMsg(`Error: ${apiErrorText(data, "Failed to recruit NPP.")}`);
       } else {
         const selectedNpp = recruitableNpps.find((option) => option.id === selectedRecruitNppId);
         setMsg(`Success: ${selectedNpp?.name ?? "NPP"} joined the caucus.`);
@@ -259,7 +260,7 @@ export function ChairSubtab({
       });
       const data = (await res.json()) as { error?: string; message?: string };
       if (!res.ok) {
-        setMsg(`Error: ${data.error ?? "Failed to send caucus funds."}`);
+        setMsg(`Error: ${apiErrorText(data, "Failed to send caucus funds.")}`);
       } else {
         const selectedMember = memberOptions.find((option) => option.id === selectedMemberId);
         setMsg(
@@ -286,7 +287,7 @@ export function ChairSubtab({
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setMsg(`Error: ${data.error ?? "Failed to transfer caucus funds."}`);
+        setMsg(`Error: ${apiErrorText(data, "Failed to transfer caucus funds.")}`);
       } else {
         setMsg("Success: Transferred caucus funds to the National Party.");
         dispatch({ type: "CLEAR_NATIONAL_TRANSFER" });

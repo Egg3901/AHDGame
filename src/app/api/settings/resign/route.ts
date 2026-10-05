@@ -1,7 +1,7 @@
 import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { handleRouteError, badRequest } from "@/lib/api/errors";
+import { handleRouteError, badRequest, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     const db = await getDb();
     const result = await resignPosition(db, authResult.user.character, positionId);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     await flushServerPosthog();

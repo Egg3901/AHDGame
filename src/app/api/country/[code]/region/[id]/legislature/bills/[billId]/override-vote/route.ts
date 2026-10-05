@@ -1,7 +1,6 @@
-import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -30,7 +29,7 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, z.object({ vote: z.enum(["for", "against"]) }));
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -42,7 +41,7 @@ export async function POST(
       auth.user,
       parsed.data.vote
     );
-    return NextResponse.json(result.body, { status: result.status });
+    return statusResponse(result.status, result.body);
   } catch (error) {
     return handleRouteError(error);
   }

@@ -26,8 +26,7 @@ export async function POST(request: Request) {
     const rateLimit = checkRateLimit(auth.user.userId, 10, 60_000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
     const parsed = await parseJsonBody(request, bodySchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const access = await getCountryAccess(parsed.data.targetCountryId);
     if (!access.enabledForPlayers) return errorResponse(403, "That country is not playable.");
     const db = await getDb();

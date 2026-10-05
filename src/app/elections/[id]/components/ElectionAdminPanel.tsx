@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { getMessageStyle } from "@/lib/utils/formatters";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ElectionAdminPanelProps {
   electionId: string;
@@ -33,7 +34,7 @@ export function ElectionAdminPanel({
         method: "POST",
       });
       const data = await res.json();
-      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${data.error}`);
+      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Request failed")}`);
       if (res.ok) onSuccess();
     } catch {
       setMessage("✗ Network error");

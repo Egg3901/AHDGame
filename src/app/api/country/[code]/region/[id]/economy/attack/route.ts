@@ -135,7 +135,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, splitSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { sectorType, splitStrength } = parsed.data;
@@ -346,17 +346,14 @@ export async function POST(request: Request, { params }: RouteParams) {
       corpFxRate
     );
     if (corpCapitalAnchor < splitCostInternal) {
-      return NextResponse.json(
-        {
-          // Display in the attacker's local currency (the math runs in ₳).
-          error: insufficientCapitalMessage(
-            "Split",
-            anchorToCorpLiquidCapital(splitCostInternal, corporation, corpFxRate),
-            corporation.liquidCapital,
-            resolveCorpLiquidCurrencyCode(corporation)
-          ),
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        insufficientCapitalMessage(
+          "Split",
+          anchorToCorpLiquidCapital(splitCostInternal, corporation, corpFxRate),
+          corporation.liquidCapital,
+          resolveCorpLiquidCurrencyCode(corporation)
+        )
       );
     }
 
@@ -371,11 +368,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     );
 
     if (corporation.marketingStrength < finalMsCost) {
-      return NextResponse.json(
-        {
-          error: `Insufficient marketing strength. This split costs ${finalMsCost} MS. You have ${roundMarketingStrength(corporation.marketingStrength)} MS.${currentEscalation > 0 ? ` (Escalated: split #${currentEscalation + 1} this period. Cost resets by half each turn.)` : ""}`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient marketing strength. This split costs ${finalMsCost} MS. You have ${roundMarketingStrength(corporation.marketingStrength)} MS.${currentEscalation > 0 ? ` (Escalated: split #${currentEscalation + 1} this period. Cost resets by half each turn.)` : ""}`
       );
     }
 

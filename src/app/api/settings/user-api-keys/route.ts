@@ -52,7 +52,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, createUserApiKeySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const scope: UserApiScope = parsed.data.scope;
@@ -100,7 +100,7 @@ export async function DELETE(request: Request) {
 
     const parsed = await parseJsonBody(request, revokeUserApiKeySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { formatDate, getMessageStyle, rawTurnToLarpDate } from "@/lib/utils/formatters";
 import { Skeleton } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface GameState {
   currentTurn: number;
@@ -165,7 +166,7 @@ export function TurnControls() {
         setMessage(`✓ ${data.message}`);
         await fetchGameState(true);
       } else {
-        setMessage(`✗ ${data.error || `Failed to ${label}`}`);
+        setMessage(`✗ ${apiErrorText(data, `Failed to ${label}`)}`);
       }
     } catch {
       setMessage("✗ Network error");
@@ -201,7 +202,7 @@ export function TurnControls() {
         );
         await fetchGameState(true);
       } else {
-        setMessage(`✗ ${data.error || "Failed to toggle random events"}`);
+        setMessage(`✗ ${apiErrorText(data, "Failed to toggle random events")}`);
       }
     } catch {
       setMessage("✗ Network error");
@@ -229,7 +230,7 @@ export function TurnControls() {
         setMessage("");
         await fetchGameState(true);
       } else {
-        setMessage(`✗ ${data.error || "Failed to process turn"}`);
+        setMessage(`✗ ${apiErrorText(data, "Failed to process turn")}`);
       }
     } catch {
       setMessage("✗ Network error");
@@ -266,7 +267,7 @@ export function TurnControls() {
         const res = await fetch("/api/admin/turn/process", { method: "POST" });
         const data = await res.json();
         if (!res.ok) {
-          setMessage(`✗ Turn ${i + 1} failed: ${data.error || "Unknown error"}`);
+          setMessage(`✗ Turn ${i + 1} failed: ${apiErrorText(data, "Unknown error")}`);
           break;
         }
         completed = i + 1;

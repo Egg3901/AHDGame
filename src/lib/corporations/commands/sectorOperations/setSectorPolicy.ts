@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
 import type { CorporateSector } from "@/lib/db/types";
@@ -31,7 +31,7 @@ export async function setSectorPolicy(request: Request, { params }: RouteParams)
     const { id, sectorId } = await params;
     const parsed = await parseJsonBody(request, setPolicySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { productionPolicy } = parsed.data;
@@ -47,7 +47,7 @@ export async function setSectorPolicy(request: Request, { params }: RouteParams)
 
     // Resolve sector
     if (!ObjectId.isValid(sectorId)) {
-      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+      return errorResponse(400, "Invalid sector ID");
     }
 
     const sector = await db
@@ -55,7 +55,7 @@ export async function setSectorPolicy(request: Request, { params }: RouteParams)
       .findOne({ _id: new ObjectId(sectorId), corporationId: corporation._id });
 
     if (!sector) {
-      return NextResponse.json({ error: "Sector not found" }, { status: 404 });
+      return errorResponse(404, "Sector not found");
     }
 
     const clamped = clampProductionPolicy(productionPolicy);

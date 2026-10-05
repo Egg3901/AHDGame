@@ -80,7 +80,7 @@ export async function POST(
     // Parse vote
     const parsed = await parseJsonBody(request, cabinetVoteSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { vote } = parsed.data;
 

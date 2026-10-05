@@ -15,6 +15,7 @@ import { PollResults } from "./components/PollResults";
 import { PositionsPanel } from "./components/pollResults/PositionsPanel";
 import { RecentPolls, type RecentPollEntry } from "./components/RecentPolls";
 import type { PollData } from "./types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 // Recent-poll history is kept client-side: the server only persists the single
 // most-recent poll per tier (on the character doc), so a short local history of
@@ -184,7 +185,7 @@ export default function PollPage() {
           setPollData(freshPollData);
         }
       } else {
-        showToast(data.error ?? "Failed to commission poll", "error");
+        showToast(apiErrorText(data, "Failed to commission poll"), "error");
       }
     } catch {
       showToast("Network error. Please try again.", "error");

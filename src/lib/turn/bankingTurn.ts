@@ -11,7 +11,7 @@ import { resumeMonetaryOperations } from "@/lib/moneySupply/monetaryOperationJou
 import { resumeLiquidityAdvances } from "@/lib/moneySupply/liquidityAdvance";
 import { MONETARY_OPERATION_COOLDOWN_TURNS } from "@/lib/moneySupply/operations";
 import type { Character, Corporation } from "@/lib/db/types";
-import type { BankCharter, BankLoan, InterbankLoan } from "@/lib/db/types/bank";
+import type { BankCharter, BankLoan } from "@/lib/db/types/bank";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
@@ -27,15 +27,14 @@ import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { computeNpcDepositShare, equityCappedDepositCeiling } from "@/lib/banking/deposits";
 import { domesticDepositRetention } from "@/lib/centralBank/marketEffects";
 import {
-  computeReserveRatioActual,
-  getInsuredCap,
-  sumInsuredPlayerDeposits,
-} from "@/lib/banking/insurance";
-import {
+  bankingTurnPublicationFilter,
+  insurancePremiumBasisForTurn,
   insurancePremiumReceiptKey,
+  loadInsurancePremiumReceiptsForTurn,
   settleInsurancePremiumForTurn,
   type FrozenInsurancePremiumReceipt,
 } from "@/lib/banking/insurancePremium";
+import { unbookedSovereignAssetIncome } from "@/lib/banking/rules/sovereignClaims";
 import {
   ARREARS_DEFAULT_TURNS,
   MAX_NPC_FLOW_PER_TURN_FRACTION,
@@ -52,36 +51,18 @@ import {
   acquireConstructionServiceLease,
   releaseConstructionServiceLease,
 } from "@/lib/banking/constructionServiceLease";
-import {
-  facilityInterestTransition,
-  facilityInterestAmounts,
-} from "@/lib/banking/rules/facilityInterest";
-import { serviceOneInterbankLoan } from "@/lib/banking/serviceInterbankLoan";
 import { settleLegacyDepositInterest } from "@/lib/banking/legacyDepositInterest";
-import {
-  settleTransition,
-  recoverProjections,
-  unfinishedSettlementFilter,
-} from "@/lib/banking/settlementJournal";
-import {
-  oid,
-  type BankingTransition,
-  type TransitionLeg,
-  type TransitionProjection,
-} from "@/lib/banking/rules/boundary";
-import { cbMarginRatePercent } from "@/lib/banking/interbank";
+import { settleTransition } from "@/lib/banking/settlementJournal";
+import { oid, type TransitionLeg, type TransitionProjection } from "@/lib/banking/rules/boundary";
 import { effectiveBankRatesFromPrime, playerDepositRatePercent } from "@/lib/banking/rates";
-import { getReserveRequirement } from "@/lib/banking/reserves";
 import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
 import { roundSavingsAmount, savingsApyPercent } from "@/lib/currency/savingsInterest";
 import { loadCentralBankPricingAdjustment } from "@/lib/monetaryPolicy/centralBankPricing";
-import { discountWindowRatePercent } from "@/lib/banking/discountWindow";
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { isDepositTakingCharter, isNamedLendingCharter } from "@/lib/banking/charterKinds";
 import { charterCapabilities, charterMay } from "@/lib/banking/rules/capabilities";
 import { getCashReserves, bankEquity } from "@/lib/banking/bankCash";
 import { processDeadBankLoans } from "@/lib/banking/deadBankLoans";
-import { unbookedSovereignCouponIncome } from "@/lib/banking/rules/sovereignCouponIncome";
 import { loanCharterEpoch, loanCharterEpochFilter } from "@/lib/banking/loanEpoch";
 import { turnMoveKey, type MoneyTarget } from "@/lib/banking/moneyMove";
 import {
@@ -91,6 +72,8 @@ import {
   type CreditBandId,
   type LendingProfileId,
 } from "@/lib/banking/creditBands";
+import { ZERO_BANKING_TURN_SUMMARY, type BankingTurnSummary } from "@/lib/turn/bankingTurnSummary";
+import { serviceInterbankAndCbMargin } from "./bankingInterbankTurn";
 
 // Re-exported for the turn's tests and dashboards; defined in the rules zone.
 export { ARREARS_DEFAULT_TURNS, MAX_NPC_FLOW_PER_TURN_FRACTION };
@@ -98,67 +81,7 @@ export { ARREARS_DEFAULT_TURNS, MAX_NPC_FLOW_PER_TURN_FRACTION };
 /** Rolling term for the synthetic NPC bulk book (re-sized each bankingTurn). */
 const NPC_BULK_TERM_TURNS = TURNS_PER_YEAR;
 
-export type BankingTurnSummary = {
-  banksProcessed: number;
-  depositInterestPaid: number;
-  depositInterestShortfall: number;
-  loanInterestCollected: number;
-  loanPrincipalRepaid: number;
-  defaultsWrittenOff: number;
-  npcDepositDelta: number;
-  npcBulkShortfall: number;
-  /** Premium due that could not be paid from the bank's cash reserves. */
-  premiumShortfall: number;
-  /** Interbank interest paid borrower → lender. */
-  interbankInterestPaid: number;
-  /** Interbank principal written off on default. */
-  interbankDefaultsWrittenOff: number;
-  /** CB margin interest destroyed from borrower cash. */
-  cbMarginInterestPaid: number;
-  /** CB margin interest that could not be paid. */
-  cbMarginInterestShortfall: number;
-  /** Loans serviced on behalf of a bank that has already been wound up. */
-  deadBankLoansServiced: number;
-  /** Recovered into a failed bank's estate, before its waterfall runs. */
-  deadBankRecoveredToEstate: number;
-  /** Recovered to the insurance fund after the estate was closed. */
-  deadBankRecoveredToInsurer: number;
-  /** Settlements that started and never finished, as of the end of this pass. */
-  unfinishedSettlements: number;
-  /** What the recovery worker finished, and did not, before this pass began. */
-  recovery: {
-    resumedSettlements: number;
-    stillPartial: number;
-    estatesRecovered: number;
-    estatesStillResolving: number;
-  };
-};
-
-const ZERO_SUMMARY: BankingTurnSummary = {
-  banksProcessed: 0,
-  depositInterestPaid: 0,
-  depositInterestShortfall: 0,
-  loanInterestCollected: 0,
-  loanPrincipalRepaid: 0,
-  defaultsWrittenOff: 0,
-  npcDepositDelta: 0,
-  npcBulkShortfall: 0,
-  premiumShortfall: 0,
-  interbankInterestPaid: 0,
-  interbankDefaultsWrittenOff: 0,
-  cbMarginInterestPaid: 0,
-  cbMarginInterestShortfall: 0,
-  deadBankLoansServiced: 0,
-  deadBankRecoveredToEstate: 0,
-  deadBankRecoveredToInsurer: 0,
-  unfinishedSettlements: 0,
-  recovery: {
-    resumedSettlements: 0,
-    stillPartial: 0,
-    estatesRecovered: 0,
-    estatesStillResolving: 0,
-  },
-};
+export type { BankingTurnSummary } from "@/lib/turn/bankingTurnSummary";
 
 type DepositTaker = {
   corp: Corporation;
@@ -185,7 +108,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   if (!policy.privateBanking) {
     const recovered = await recoverBankingSettlements(db, turn, policy);
     return {
-      ...ZERO_SUMMARY,
+      ...ZERO_BANKING_TURN_SUMMARY,
       recovery: {
         resumedSettlements: recovered.resumedSettlements.length,
         stillPartial: recovered.stillPartial.length,
@@ -256,20 +179,14 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     return savingsApyPercent(prime, inflation, centralBankPricing.depositBonusPercentPoints);
   };
 
-  // Current-turn premium claims are loaded in one bounded read so a retry can
-  // resume its frozen quote even when the latest exposure is zero. The same
-  // snapshot is shared by all bank calls below.
-  const premiumReceiptByKey = new Map<string, FrozenInsurancePremiumReceipt>();
-  if (depositTakers.length > 0) {
-    const premiumKeys = depositTakers.map((row) =>
-      insurancePremiumReceiptKey(row.corp._id, row.charter.charteredTurn ?? 0, turn)
-    );
-    const premiumReceipts = await db
-      .collection<FrozenInsurancePremiumReceipt>(MONEY_MOVE_COLLECTION)
-      .find({ _id: { $in: premiumKeys } })
-      .toArray();
-    for (const receipt of premiumReceipts) premiumReceiptByKey.set(receipt._id, receipt);
-  }
+  const premiumReceiptByKey = await loadInsurancePremiumReceiptsForTurn(
+    db,
+    depositTakers.map((row) => ({
+      bankId: row.corp._id,
+      charteredTurn: row.charter.charteredTurn ?? 0,
+    })),
+    turn
+  );
 
   // Competing deposit shares once per currency, among the deposit takers.
   const byCurrency = new Map<CurrencyCode, DepositTaker[]>();
@@ -301,7 +218,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     }
   }
 
-  const summary: BankingTurnSummary = { ...ZERO_SUMMARY, recovery };
+  const summary: BankingTurnSummary = { ...ZERO_BANKING_TURN_SUMMARY, recovery };
 
   for (const row of depositTakers) {
     const bankResult = await processOneBank(
@@ -451,7 +368,7 @@ async function processOneBank(
   // Re-check idempotency against live doc (concurrent / retry safety).
   const live = await db
     .collection<Corporation>("corporations")
-    .findOne({ _id: corp._id }, { projection: { liquidCapital: 1, bankCharter: 1 } });
+    .findOne({ _id: corp._id }, { projection: { liquidCapital: 1, bankCharter: 1, countryId: 1 } });
   if (!live?.bankCharter || live.bankCharter.lastBankingTurn === turn) {
     return result;
   }
@@ -828,27 +745,19 @@ async function processOneBank(
       policy.savingsAccounts === "authoritative" ? paid : (legacyNewCredits.get(id) ?? 0)
     );
   }
-  const postInterestBalances: number[] = [];
-  for (const ch of depositors) {
-    const bal = ch.currencyBalances?.savings?.[currency] ?? 0;
-    const interestPaid = paidByCharId.get(ch._id.toString()) ?? 0;
-    postInterestBalances.push(bal + interestPaid);
-  }
-  const insuredCap = await getInsuredCap(db, currency);
-  const insuredDeposits = sumInsuredPlayerDeposits(postInterestBalances, insuredCap) + npcDeposits;
-  // Reserves are held against deposits the bank actually RECEIVED in cash.
-  // Under the pointer model that is the NPC household book alone: player
-  // savings never left `currencyBalances.savings`, so requiring reserves
-  // against them would demand cash for a balance the bank does not hold. Once
-  // the currency's accounts are authoritative the player balances are cash in
-  // the vault and a liability on the book, and the base includes them.
-  // Insurance covers both either way, because a depositor's claim is a claim.
-  const playerCashDeposits = playerDepositsAreLiabilities
-    ? playerDeposits + playerInterestSettled
-    : 0;
-  const depositBaseForRatio = npcDeposits + playerCashDeposits;
-  const reserveRatioActual = computeReserveRatioActual(cashReserves, depositBaseForRatio);
-  const reserveRatioRequired = await getReserveRequirement(db, currency);
+  const premiumBasis = await insurancePremiumBasisForTurn(db, {
+    currency,
+    depositorSavings: depositors.map((ch) => ({
+      id: ch._id.toString(),
+      balance: ch.currencyBalances?.savings?.[currency] ?? 0,
+    })),
+    interestPaidByDepositor: paidByCharId,
+    npcDeposits,
+    playerDepositsAreLiabilities,
+    playerDeposits,
+    playerInterestSettled,
+    cashReserves,
+  });
   const premium = await settleInsurancePremiumForTurn(
     db,
     {
@@ -857,10 +766,10 @@ async function processOneBank(
       charteredTurn: live.bankCharter.charteredTurn,
       currency,
       turn,
-      insuredDeposits,
+      insuredDeposits: premiumBasis.insuredDeposits,
       cashReserves,
-      reserveRatioActual,
-      reserveRatioRequired,
+      reserveRatioActual: premiumBasis.reserveRatioActual,
+      reserveRatioRequired: premiumBasis.reserveRatioRequired,
     },
     caches.premiumReceiptByKey.get(
       insurancePremiumReceiptKey(corp._id, live.bankCharter.charteredTurn ?? 0, turn)
@@ -888,7 +797,8 @@ async function processOneBank(
   // by this bank after its reserve requirement. Rates set utilization, while
   // named loans consume the same capacity inside serviceNpcBulkBook.
   // Only cash-backed deposits can fund a loan; you cannot lend a pointer.
-  const loanFundingCapacity = (npcDeposits + playerCashDeposits) * (1 - reserveRatioRequired);
+  const loanFundingCapacity =
+    (npcDeposits + premiumBasis.playerCashDeposits) * (1 - premiumBasis.reserveRatioRequired);
   const bulkResult = await serviceNpcBulkBook(
     db,
     turn,
@@ -904,7 +814,8 @@ async function processOneBank(
       cbDocId,
       cb,
       bankName: corp.name,
-      requiredReserves: (npcDeposits + playerCashDeposits) * reserveRatioRequired,
+      requiredReserves:
+        (npcDeposits + premiumBasis.playerCashDeposits) * premiumBasis.reserveRatioRequired,
       lendingProfile: live.bankCharter.lendingProfile,
     }
   );
@@ -920,75 +831,122 @@ async function processOneBank(
   // (f) Recompute aggregates + stamp lastBankingTurn (END of bank pass)
   const finalPlayerDeposits = playerDeposits + playerInterestSettled;
   const totalDeposits = finalPlayerDeposits + npcDeposits;
-  const underwritingFeesForTurn =
-    corp.bankCharter?.lastBankingUnderwritingFeesTurn === turn
-      ? (corp.bankCharter.lastBankingUnderwritingFees ?? 0)
-      : 0;
-  // Coupons the Treasury phase (or an earlier BondTurn) paid since the last
-  // stamp. Read from the live document so a payout between passes is kept.
-  const sovereignCouponsForTurn = unbookedSovereignCouponIncome(corp.bankCharter ?? {});
-
-  await db.collection<Corporation>("corporations").updateOne(
-    {
-      _id: corp._id,
-      "bankCharter.status": "active",
-      $or: [
-        { "bankCharter.lastBankingTurn": { $ne: turn } },
-        { "bankCharter.lastBankingTurn": { $exists: false } },
-      ],
-    },
-    {
-      $set: {
-        // Cash is deliberately absent. Every movement in this pass now applies
-        // its own guarded `$inc` through the money primitive, so writing the
-        // in-memory figure here would silently overwrite anything that moved
-        // concurrently and would resurrect money a failed leg never sent. What
-        // is left are the derived aggregates, which are recomputed from the
-        // ledgers each turn and are not balances anyone can claim.
-        "bankCharter.npcDeposits": npcDeposits,
-        "bankCharter.totalDeposits": totalDeposits,
-        "bankCharter.depositCeiling": depositCeiling,
-        "bankCharter.lastBankingTurn": turn,
-        "bankCharter.lastBankingIncome":
-          result.loanInterestCollected +
-          result.loanOriginationFeesCollected -
-          result.depositInterestPaid -
-          result.insurancePremiumPaid -
-          result.defaultsWrittenOff +
-          underwritingFeesForTurn +
-          sovereignCouponsForTurn,
-        "bankCharter.lastBankingIncomeTurn": turn,
-        // The per-turn split behind the net above, so the console can show
-        // interest paid vs earned from the ledger instead of estimating.
-        // Interbank / facility legs land after this stamp and $inc both the
-        // net and their own lines below, starting from zero here.
-        "bankCharter.lastBankingDepositInterest": result.depositInterestPaid,
-        "bankCharter.lastBankingLoanInterest": result.loanInterestCollected,
-        "bankCharter.lastBankingLoanOriginationFees": result.loanOriginationFeesCollected,
-        "bankCharter.lastBankingUnderwritingFees": underwritingFeesForTurn,
-        "bankCharter.lastBankingUnderwritingFeesTurn": turn,
-        "bankCharter.lastBankingInterbankInterestPaid": 0,
-        "bankCharter.lastBankingInterbankInterestReceived": 0,
-        "bankCharter.lastBankingFacilityInterest": 0,
-        "bankCharter.lastBankingInsurancePremium": result.insurancePremiumPaid,
-        "bankCharter.lastBankingWriteoffs": result.defaultsWrittenOff,
-        "bankCharter.lastBankingSovereignCoupons": sovereignCouponsForTurn,
-        updatedAt: new Date(),
-      },
-      ...(sovereignCouponsForTurn > 0
-        ? { $inc: { "bankCharter.sovereignCouponIncomeBooked": sovereignCouponsForTurn } }
-        : {}),
-    }
-  );
-
-  result.bankingIncome =
+  const baseBankingIncome =
     result.loanInterestCollected +
     result.loanOriginationFeesCollected -
     result.depositInterestPaid -
     result.insurancePremiumPaid -
-    result.defaultsWrittenOff +
-    underwritingFeesForTurn +
-    sovereignCouponsForTurn;
+    result.defaultsWrittenOff;
+  let publicationCharter = live.bankCharter;
+  let bankingIncome = baseBankingIncome;
+  let sovereignCouponIncomeForTurn = 0;
+  let treasuryRealizedGainForTurn = 0;
+  let underwritingFeesForTurn = 0;
+  let published = false;
+  let superseded = false;
+  const corporations = db.collection<Corporation>("corporations");
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const unbooked = unbookedSovereignAssetIncome(publicationCharter);
+    sovereignCouponIncomeForTurn = unbooked.couponIncome;
+    treasuryRealizedGainForTurn = unbooked.realizedGain;
+    underwritingFeesForTurn =
+      publicationCharter.lastBankingUnderwritingFeesTurn === turn
+        ? (publicationCharter.lastBankingUnderwritingFees ?? 0)
+        : 0;
+    bankingIncome =
+      baseBankingIncome +
+      sovereignCouponIncomeForTurn +
+      treasuryRealizedGainForTurn +
+      underwritingFeesForTurn;
+
+    const resultWrite = await corporations.updateOne(
+      bankingTurnPublicationFilter({
+        bankId: corp._id,
+        countryId: live.countryId,
+        charteredTurn: live.bankCharter.charteredTurn,
+        currency,
+        turn,
+        observedIncomeTurn: publicationCharter.lastBankingIncomeTurn,
+        observedSovereignCouponIncome: publicationCharter.lastBankingSovereignCouponIncome,
+        observedTreasuryRealizedGain: publicationCharter.lastBankingTreasuryRealizedGain,
+        observedSovereignCouponPaidLifetime: publicationCharter.sovereignCouponIncomePaidLifetime,
+        observedSovereignCouponBookedLifetime:
+          publicationCharter.sovereignCouponIncomeBookedLifetime,
+        observedTreasuryGainPaidLifetime: publicationCharter.treasuryRealizedGainPaidLifetime,
+        observedTreasuryGainBookedLifetime: publicationCharter.treasuryRealizedGainBookedLifetime,
+        observedUnderwritingFeesTurn: publicationCharter.lastBankingUnderwritingFeesTurn,
+        observedUnderwritingFees: publicationCharter.lastBankingUnderwritingFees,
+      }),
+      {
+        $set: {
+          // Cash is deliberately absent. Every movement in this pass now applies
+          // its own guarded `$inc` through the money primitive, so writing the
+          // in-memory figure here would silently overwrite anything that moved
+          // concurrently and would resurrect money a failed leg never sent. What
+          // is left are the derived aggregates, which are recomputed from the
+          // ledgers each turn and are not balances anyone can claim.
+          "bankCharter.npcDeposits": npcDeposits,
+          "bankCharter.totalDeposits": totalDeposits,
+          "bankCharter.depositCeiling": depositCeiling,
+          "bankCharter.lastBankingTurn": turn,
+          "bankCharter.lastBankingIncome": bankingIncome,
+          "bankCharter.lastBankingIncomeTurn": turn,
+          // The per-turn split behind the net above, so the console can show
+          // interest paid vs earned from the ledger instead of estimating.
+          // Interbank / facility legs land after this stamp and $inc both the
+          // net and their own lines below, starting from zero here.
+          "bankCharter.lastBankingDepositInterest": result.depositInterestPaid,
+          "bankCharter.lastBankingLoanInterest": result.loanInterestCollected,
+          "bankCharter.lastBankingSovereignCouponIncome": sovereignCouponIncomeForTurn,
+          "bankCharter.lastBankingTreasuryRealizedGain": treasuryRealizedGainForTurn,
+          "bankCharter.sovereignCouponIncomeBookedLifetime":
+            publicationCharter.sovereignCouponIncomePaidLifetime ?? 0,
+          "bankCharter.treasuryRealizedGainBookedLifetime":
+            publicationCharter.treasuryRealizedGainPaidLifetime ?? 0,
+          "bankCharter.lastBankingLoanOriginationFees": result.loanOriginationFeesCollected,
+          "bankCharter.lastBankingUnderwritingFees": underwritingFeesForTurn,
+          "bankCharter.lastBankingUnderwritingFeesTurn": turn,
+          "bankCharter.lastBankingInterbankInterestPaid": 0,
+          "bankCharter.lastBankingInterbankInterestReceived": 0,
+          "bankCharter.lastBankingFacilityInterest": 0,
+          "bankCharter.lastBankingInsurancePremium": result.insurancePremiumPaid,
+          "bankCharter.lastBankingWriteoffs": result.defaultsWrittenOff,
+          updatedAt: new Date(),
+        },
+      }
+    );
+    if (resultWrite.matchedCount === 1) {
+      published = true;
+      break;
+    }
+    const current = await corporations.findOne(
+      { _id: corp._id },
+      { projection: { countryId: 1, bankCharter: 1 } }
+    );
+    const latestCharter = current?.bankCharter;
+    if (
+      !latestCharter ||
+      current?.countryId !== live.countryId ||
+      latestCharter.status !== "active" ||
+      latestCharter.charteredTurn !== live.bankCharter.charteredTurn ||
+      latestCharter.currency !== currency
+    ) {
+      superseded = true;
+      break;
+    }
+    if (latestCharter.lastBankingTurn === turn) {
+      published = true;
+      break;
+    }
+    publicationCharter = latestCharter;
+  }
+  if (!published && !superseded) {
+    throw new Error(
+      `Banking turn ${turn} could not publish for ${corp._id.toString()} after a concurrent charter update`
+    );
+  }
+
+  result.bankingIncome = bankingIncome;
 
   return result;
 }
@@ -1090,54 +1048,89 @@ async function processLoanBookOnlyBank(
   const serviced = await timedBankingStage(db, turn, "loanServicing", () =>
     serviceNamedLoanBook(db, turn, corp, currency, charter.charteredTurn)
   );
-  const sovereignCouponsForTurn = unbookedSovereignCouponIncome(charter);
 
-  await db.collection<Corporation>("corporations").updateOne(
-    {
-      _id: corp._id,
-      "bankCharter.status": "active",
-      $or: [
-        { "bankCharter.lastBankingTurn": { $ne: turn } },
-        { "bankCharter.lastBankingTurn": { $exists: false } },
-      ],
-    },
-    {
-      $set: {
-        // Cash and the loan book moved through their original receipts. An
-        // end-of-pass snapshot must not overwrite a concurrent origination,
-        // repayment or collateral recovery.
-        "bankCharter.lastBankingTurn": turn,
-        "bankCharter.lastBankingIncome":
-          serviced.interestCollected -
-          serviced.writtenOff +
-          (charter.lastBankingUnderwritingFeesTurn === turn
-            ? (charter.lastBankingUnderwritingFees ?? 0)
-            : 0) +
-          sovereignCouponsForTurn,
-        "bankCharter.lastBankingIncomeTurn": turn,
-        // No deposit base, so no deposit interest and no premium; the loan
-        // split still applies for the console breakdown.
-        "bankCharter.lastBankingDepositInterest": 0,
-        "bankCharter.lastBankingLoanInterest": serviced.interestCollected,
-        "bankCharter.lastBankingUnderwritingFees":
-          charter.lastBankingUnderwritingFeesTurn === turn
-            ? (charter.lastBankingUnderwritingFees ?? 0)
-            : 0,
-        "bankCharter.lastBankingUnderwritingFeesTurn": turn,
-        "bankCharter.lastBankingInterbankInterestPaid": 0,
-        "bankCharter.lastBankingInterbankInterestReceived": 0,
-        "bankCharter.lastBankingFacilityInterest": 0,
-        "bankCharter.lastBankingInsurancePremium": 0,
-        "bankCharter.lastBankingWriteoffs": serviced.writtenOff,
-        "bankCharter.lastBankingSovereignCoupons": sovereignCouponsForTurn,
-        updatedAt: new Date(),
-      },
-      ...(sovereignCouponsForTurn > 0
-        ? { $inc: { "bankCharter.sovereignCouponIncomeBooked": sovereignCouponsForTurn } }
-        : {}),
+  const corporations = db.collection<Corporation>("corporations");
+  let publicationCharter = charter;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0) {
+      const latest = await corporations.findOne(
+        { _id: corp._id },
+        { projection: { countryId: 1, bankCharter: 1 } }
+      );
+      if (
+        !isNamedLendingCharter(latest?.bankCharter) ||
+        latest.bankCharter.charteredTurn !== charter.charteredTurn ||
+        latest.bankCharter.currency !== charter.currency
+      ) {
+        return serviced;
+      }
+      if (latest.bankCharter.lastBankingTurn === turn) return serviced;
+      publicationCharter = latest.bankCharter;
     }
-  );
-  return serviced;
+
+    const unbooked = unbookedSovereignAssetIncome(publicationCharter);
+    const underwritingFeesForTurn =
+      publicationCharter.lastBankingUnderwritingFeesTurn === turn
+        ? (publicationCharter.lastBankingUnderwritingFees ?? 0)
+        : 0;
+    const publication = await corporations.updateOne(
+      bankingTurnPublicationFilter({
+        bankId: corp._id,
+        countryId: corp.countryId,
+        charteredTurn: charter.charteredTurn,
+        currency,
+        turn,
+        observedIncomeTurn: publicationCharter.lastBankingIncomeTurn,
+        observedSovereignCouponIncome: publicationCharter.lastBankingSovereignCouponIncome,
+        observedTreasuryRealizedGain: publicationCharter.lastBankingTreasuryRealizedGain,
+        observedSovereignCouponPaidLifetime:
+          publicationCharter.sovereignCouponIncomePaidLifetime,
+        observedSovereignCouponBookedLifetime:
+          publicationCharter.sovereignCouponIncomeBookedLifetime,
+        observedTreasuryGainPaidLifetime: publicationCharter.treasuryRealizedGainPaidLifetime,
+        observedTreasuryGainBookedLifetime:
+          publicationCharter.treasuryRealizedGainBookedLifetime,
+        observedUnderwritingFeesTurn: publicationCharter.lastBankingUnderwritingFeesTurn,
+        observedUnderwritingFees: publicationCharter.lastBankingUnderwritingFees,
+      }),
+      {
+        $set: {
+          // Cash and the loan book moved through their original receipts. An
+          // end-of-pass snapshot must not overwrite a concurrent origination,
+          // repayment or collateral recovery.
+          "bankCharter.lastBankingTurn": turn,
+          "bankCharter.lastBankingIncome":
+            serviced.interestCollected -
+            serviced.writtenOff +
+            unbooked.couponIncome +
+            unbooked.realizedGain +
+            underwritingFeesForTurn,
+          "bankCharter.lastBankingIncomeTurn": turn,
+          // No deposit base, so no deposit interest and no premium; the loan
+          // split still applies for the console breakdown.
+          "bankCharter.lastBankingDepositInterest": 0,
+          "bankCharter.lastBankingLoanInterest": serviced.interestCollected,
+          "bankCharter.lastBankingSovereignCouponIncome": unbooked.couponIncome,
+          "bankCharter.lastBankingTreasuryRealizedGain": unbooked.realizedGain,
+          "bankCharter.sovereignCouponIncomeBookedLifetime":
+            publicationCharter.sovereignCouponIncomePaidLifetime ?? 0,
+          "bankCharter.treasuryRealizedGainBookedLifetime":
+            publicationCharter.treasuryRealizedGainPaidLifetime ?? 0,
+          "bankCharter.lastBankingLoanOriginationFees": 0,
+          "bankCharter.lastBankingUnderwritingFees": underwritingFeesForTurn,
+          "bankCharter.lastBankingUnderwritingFeesTurn": turn,
+          "bankCharter.lastBankingInterbankInterestPaid": 0,
+          "bankCharter.lastBankingInterbankInterestReceived": 0,
+          "bankCharter.lastBankingFacilityInterest": 0,
+          "bankCharter.lastBankingInsurancePremium": 0,
+          "bankCharter.lastBankingWriteoffs": serviced.writtenOff,
+          updatedAt: new Date(),
+        },
+      }
+    );
+    if (publication.matchedCount > 0) return serviced;
+  }
+  throw new Error(`Bank ${corp._id.toHexString()} income publication changed too often`);
 }
 
 async function servicePlayerLoan(
@@ -1811,177 +1804,4 @@ async function serviceDeadNpcBulkLoan(
   }
   if (settled.status === "replayed") return empty;
   return { collected, interest, principal, writtenOff };
-}
-
-/**
- * Service interbank interest from borrower to lender, and central-bank
- * facility interest from bank vaults to central-bank reserves.
- * Runs even when no deposit-taking banks need a pass this turn.
- */
-async function serviceInterbankAndCbMargin(
-  db: Db,
-  turn: number,
-  summary: BankingTurnSummary,
-  propTrading: boolean,
-  centralBanks: ReadonlyMap<string, { primeRate?: number }>
-): Promise<void> {
-  if (propTrading) {
-    // A loan may already carry this turn's stamp while its journal still owns
-    // unfinished income projections. Never replay live cash legs here.
-    const pending = await db
-      .collection<{ _id: string; legs: { applied: boolean }[] }>(MONEY_MOVE_COLLECTION)
-      .find(
-        { ...unfinishedSettlementFilter(), kind: "interbank_interest", turn },
-        { projection: { _id: 1, legs: 1 } }
-      )
-      .toArray();
-    for (const receipt of pending) {
-      if (!receipt.legs.every((leg) => leg.applied)) continue;
-      const recovered = await recoverProjections(db, receipt._id);
-      if (recovered.status === "partial" || recovered.status === "rejected" || recovered.error)
-        throw new Error(recovered.error ?? "Interbank income recovery unfinished");
-    }
-  }
-  const loans = propTrading
-    ? await db
-        .collection<InterbankLoan>("interbankLoans")
-        .find({
-          status: "current",
-          lastProcessedTurn: { $ne: turn },
-        })
-        .toArray()
-    : [];
-
-  for (const loan of loans) {
-    const result = await serviceOneInterbankLoan(db, turn, loan);
-    summary.interbankInterestPaid += result.interestPaid;
-    summary.interbankDefaultsWrittenOff += result.writtenOff;
-  }
-
-  const marginBanks = await db
-    .collection<Corporation>("corporations")
-    .find({
-      "bankCharter.status": "active",
-      // Either central-bank facility puts a bank in this pass. Selecting on the
-      // margin line alone would leave a bank that drew ONLY on the discount
-      // window (B8) unserviced forever — borrowing interest-free.
-      $and: [
-        {
-          $or: [
-            ...(propTrading ? [{ "bankCharter.cbMarginDebt": { $gt: 0 } }] : []),
-            { "bankCharter.discountWindowDebt": { $gt: 0 } },
-          ],
-        },
-        {
-          $or: [
-            { "bankCharter.lastCbMarginTurn": { $ne: turn } },
-            { "bankCharter.lastCbMarginTurn": { $exists: false } },
-            { "bankCharter.lastDiscountWindowTurn": { $ne: turn } },
-            { "bankCharter.lastDiscountWindowTurn": { $exists: false } },
-          ],
-        },
-      ],
-    })
-    .project({ _id: 1, liquidCapital: 1, bankCharter: 1 })
-    .toArray();
-
-  const receiptKeys = marginBanks.flatMap((corp) => [
-    turnMoveKey("cb-margin-interest", corp._id.toString(), turn),
-    turnMoveKey("discount-window-interest", corp._id.toString(), turn),
-  ]);
-  type Receipt = {
-    _id: string;
-    kind: string;
-    turn: number;
-    currency: string;
-    legs: TransitionLeg[];
-    projections?: { projection: TransitionProjection }[];
-  };
-  const receipts =
-    receiptKeys.length > 0
-      ? await db
-          .collection<Receipt>(MONEY_MOVE_COLLECTION)
-          .find(
-            { _id: { $in: receiptKeys } },
-            { projection: { kind: 1, turn: 1, currency: 1, legs: 1, projections: 1 } }
-          )
-          .toArray()
-      : [];
-  const receiptByKey = new Map(receipts.map((receipt) => [receipt._id, receipt]));
-
-  for (const corp of marginBanks) {
-    const charter = corp.bankCharter;
-    if (!charter || charter.status !== "active") continue;
-    const currency = charter.currency as CurrencyCode;
-    const cbDocId = getBankId(getCountryIdForCurrency(currency));
-    const storedPrime = centralBanks.get(cbDocId)?.primeRate;
-    const prime = typeof storedPrime === "number" && Number.isFinite(storedPrime) ? storedPrime : 0;
-    let availableCash = getCashReserves(charter);
-    for (const facility of ["cbMargin", "discountWindow"] as const) {
-      const enabled = facility === "discountWindow" || propTrading;
-      const debt = Math.max(0, charter[`${facility}Debt`] ?? 0);
-      const stamp =
-        facility === "cbMargin" ? charter.lastCbMarginTurn : charter.lastDiscountWindowTurn;
-      if (!enabled || debt <= 0 || stamp === turn) continue;
-      const key = turnMoveKey(
-        facility === "cbMargin" ? "cb-margin-interest" : "discount-window-interest",
-        corp._id.toString(),
-        turn
-      );
-      const prior = receiptByKey.get(key);
-      // Old interrupted primitive-only receipts do not prove their original
-      // charge. Leave them for explicit recovery instead of inventing arrears.
-      if (prior && !prior.projections)
-        throw new Error("Legacy facility receipt requires explicit recovery");
-      const transition: BankingTransition = prior
-        ? {
-            key,
-            kind: prior.kind,
-            turn: prior.turn,
-            currency: prior.currency,
-            legs: prior.legs,
-            projections: prior.projections!.map((row) => row.projection),
-            event: { kind: "loan.paid", command: "bank.turn.facilityInterest" },
-          }
-        : facilityInterestTransition({
-            key,
-            bankId: corp._id.toString(),
-            centralBankId: cbDocId,
-            currency,
-            turn,
-            facility,
-            debt,
-            ratePercent:
-              facility === "cbMargin"
-                ? cbMarginRatePercent(prime)
-                : discountWindowRatePercent(prime),
-            availableCash,
-          });
-      const amounts = facilityInterestAmounts(transition);
-      const result = await settleTransition(db, transition);
-      if (result.status === "partial" || result.status === "rejected" || result.error)
-        throw new Error(
-          `Facility interest settlement unfinished: ${result.error ?? result.status}`
-        );
-      if (result.newlyAppliedProjections.includes(0))
-        emitBankingAuditEvent(
-          {
-            ...transition.event,
-            turn,
-            currency,
-            bankId: corp._id.toString(),
-            settlementId: key,
-            outcome: "ok",
-            amount: amounts.paid,
-          },
-          db
-        );
-      // A replay's debit is already present in the balance loaded above.
-      if (result.status === "applied") availableCash = Math.max(0, availableCash - amounts.paid);
-      if (facility === "cbMargin") {
-        summary.cbMarginInterestPaid += amounts.paid;
-        summary.cbMarginInterestShortfall += amounts.shortfall;
-      }
-    }
-  }
 }

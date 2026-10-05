@@ -64,6 +64,8 @@ import { TaxRateSliderControl } from "@/components/legislation/TaxRateSliderCont
 import { useEnabledCountryIds } from "@/lib/hooks/useEnabledCountryIds";
 import type { BillProposalAutoFailWarning } from "@/lib/legislature/billAutoFailWarning";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { GuidedLegislationModal } from "@/components/legislation/GuidedLegislationModal";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface LegislationTypeOption {
   _id: string;
@@ -143,7 +145,7 @@ const EMPTY_SUBSIDY = {
  *   - `proposalWarning` / `proposalWarnings` — single or per-chamber auto-fail warning
  * Submits to `${legislatureApiUrl(countryId)}/bills`.
  */
-export function ProposeLegislationModal({
+function LegacyProposeLegislationModal({
   countryId,
   adminOverride = false,
   blockedProvisions,
@@ -508,7 +510,7 @@ export function ProposeLegislationModal({
         return;
       }
       if (!res.ok) {
-        showToast(data.error ?? "Failed to propose bill.", "error");
+        showToast(apiErrorText(data, "Failed to propose bill."), "error");
       } else {
         showToast("Bill proposed and opened for voting.", "success");
         void captureProductEvent("bill_drafted");
@@ -1280,4 +1282,29 @@ export function ProposeLegislationModal({
       </div>
     </div>
   );
+}
+
+export function ProposeLegislationModal(
+  props: Parameters<typeof LegacyProposeLegislationModal>[0]
+) {
+  const flags = useWorldFlags();
+  const useV2 =
+    flags.loaded &&
+    !flags.failed &&
+    flags.resetSystemVersions.legislation === "v2" &&
+    flags.resetV2Countries.includes(props.countryId);
+  if (useV2) {
+    return (
+      <GuidedLegislationModal
+        countryId={props.countryId}
+        endpoint={`${legislatureApiUrl(props.countryId)}/bills`}
+        chambers={props.chambers}
+        initialChamber={props.defaultChamber ?? props.chambers[0]?.value ?? ""}
+        adminOverride={props.adminOverride}
+        onClose={props.onClose}
+        onSuccess={props.onSuccess}
+      />
+    );
+  }
+  return <LegacyProposeLegislationModal {...props} />;
 }

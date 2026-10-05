@@ -122,7 +122,7 @@ describe("PATCH /api/unions/[id]/bargaining/[campaignId]", () => {
     });
 
     expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       error: "Only the union leader can take this action.",
     });
   });

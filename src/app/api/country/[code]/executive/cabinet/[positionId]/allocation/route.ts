@@ -44,8 +44,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const parsed = await parseJsonBody(request, allocationSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const allocations =
       "allocations" in parsed.data ? parsed.data.allocations : parsed.data.allocationPercents;

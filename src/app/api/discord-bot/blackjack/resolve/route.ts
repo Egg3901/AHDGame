@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, resolveSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { discordId, gameId, result, payoutMultiplier = 1.0 } = parsed.data;
 
@@ -57,16 +57,14 @@ export async function POST(request: Request) {
     });
 
     if (!pendingWager) {
-      return NextResponse.json(
-        {
-          error: "Pending wager not found",
+      return errorResponse(404, "Pending wager not found", {
+        extra: {
           message:
             "No active wager found for this game. The wager may have already been resolved or never placed.",
           discordId,
           gameId,
         },
-        { status: 404 }
-      );
+      });
     }
 
     const wagerAmount = pendingWager.wagerAmount;
@@ -76,7 +74,7 @@ export async function POST(request: Request) {
     // Get current character state
     const character = await db.collection<Character>("characters").findOne({ _id: characterId });
     if (!character) {
-      return NextResponse.json({ error: "Character not found", discordId }, { status: 404 });
+      return errorResponse(404, "Character not found", { extra: { discordId } });
     }
 
     const forexEnabled = await isForexEnabled();
@@ -91,13 +89,9 @@ export async function POST(request: Request) {
       .findOne({ name: "blackjack_prize_pool" });
 
     if (!fund) {
-      return NextResponse.json(
-        {
-          error: "Prize pool not initialized",
-          message: "The blackjack prize pool has not been set up yet. Contact an admin.",
-        },
-        { status: 503 }
-      );
+      return errorResponse(503, "Prize pool not initialized", {
+        extra: { message: "The blackjack prize pool has not been set up yet. Contact an admin." },
+      });
     }
 
     // House edge applied server-side on all wins. Default 5% — configurable via
@@ -188,16 +182,14 @@ export async function POST(request: Request) {
         .collection<DiscordBotFund>("discordBotFunds")
         .updateOne(poolFilter, fundUpdate);
       if (poolDebit.matchedCount === 0) {
-        return NextResponse.json(
-          {
-            error: "Prize pool insufficient",
+        return errorResponse(503, "Prize pool insufficient", {
+          extra: {
             message: "The prize pool doesn't have enough funds for this payout. Contact an admin.",
             poolBalance,
             requiredPayout: winnings,
             currency: homeCurrency,
           },
-          { status: 503 }
-        );
+        });
       }
 
       const charUpdate = await db.collection<Character>("characters").updateOne(
@@ -216,10 +208,7 @@ export async function POST(request: Request) {
           .collection<DiscordBotFund>("discordBotFunds")
           .updateOne({ name: "blackjack_prize_pool" }, { $inc: reverseInc })
           .catch(() => {});
-        return NextResponse.json(
-          { error: "Failed to update character funds", discordId },
-          { status: 500 }
-        );
+        return errorResponse(500, "Failed to update character funds", { extra: { discordId } });
       }
     } else {
       // Loss/push only add to the pool (or leave it flat) — no sufficiency
@@ -238,17 +227,11 @@ export async function POST(request: Request) {
       ]);
 
       if (updateResults[0].matchedCount === 0) {
-        return NextResponse.json(
-          { error: "Failed to update character funds", discordId },
-          { status: 500 }
-        );
+        return errorResponse(500, "Failed to update character funds", { extra: { discordId } });
       }
 
       if (updateResults[1].matchedCount === 0) {
-        return NextResponse.json(
-          { error: "Failed to update prize pool", discordId },
-          { status: 500 }
-        );
+        return errorResponse(500, "Failed to update prize pool", { extra: { discordId } });
       }
     }
 

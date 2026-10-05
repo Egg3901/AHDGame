@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Card, Input } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface AgreementRow {
   id: string;
@@ -61,7 +62,7 @@ export default function AdvertisingAgreementsPanel({ corpId }: { corpId: string 
       }),
     });
     const data = await response.json();
-    setNotice(response.ok ? "Advertising proposal sent" : data.error || "Proposal failed");
+    setNotice(response.ok ? "Advertising proposal sent" : apiErrorText(data, "Proposal failed"));
     if (response.ok) {
       setSupplierCorpId("");
       await refresh();
@@ -78,7 +79,7 @@ export default function AdvertisingAgreementsPanel({ corpId }: { corpId: string 
       body: JSON.stringify({ action }),
     });
     const data = await response.json();
-    setNotice(response.ok ? `Agreement ${action}ed` : data.error || `${action} failed`);
+    setNotice(response.ok ? `Agreement ${action}ed` : apiErrorText(data, `${action} failed`));
     if (response.ok) await refresh();
     setBusy(false);
   }

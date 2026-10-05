@@ -15,6 +15,7 @@ import {
   requiresUnanimity,
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -69,7 +70,7 @@ export function DuesPanel({ org, viewer, currentTurn, votingWindowTurns, onChang
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to propose dues change");
+        throw new Error(apiErrorText(body, "Failed to propose dues change"));
       }
       setShowForm(false);
       onChange();
@@ -92,7 +93,7 @@ export function DuesPanel({ org, viewer, currentTurn, votingWindowTurns, onChang
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error ?? "Vote failed");
+      throw new Error(apiErrorText(body, "Vote failed"));
     }
     onChange();
   }

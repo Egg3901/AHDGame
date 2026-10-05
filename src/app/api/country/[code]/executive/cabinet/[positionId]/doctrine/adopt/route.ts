@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, adoptSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -80,7 +80,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         : await getNationalDoctrine(db, countryId);
     const res = adoptNode(current, parsed.data.key, currentEra);
     if (!res.changed) {
-      return NextResponse.json({ error: res.reason ?? "Cannot adopt" }, { status: 400 });
+      return errorResponse(400, res.reason ?? "Cannot adopt");
     }
 
     await getNationalDoctrineCollection(db).updateOne(

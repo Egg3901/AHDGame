@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * The staged activation of savings accounts: mode, read cohort, the gate and
@@ -112,7 +113,7 @@ export function BankingRolloutPanel() {
       });
       const data = (await res.json()) as RolloutSnapshot & { error?: string; reasons?: string[] };
       if (!res.ok) {
-        setError([data.error, ...(data.reasons ?? [])].filter(Boolean).join(" "));
+        setError([apiErrorText(data, ""), ...(data.reasons ?? [])].filter(Boolean).join(" "));
         return;
       }
       setSnapshot(data);

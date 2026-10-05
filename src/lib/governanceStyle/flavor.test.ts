@@ -66,26 +66,31 @@ describe("governanceStyleFlavor", () => {
       dominantSeatShare: 75,
       chambersMeasured: 2,
       executivePartyId: "dem",
+      executiveSystem: "presidential",
       executiveAlignedWithLegislature: true,
       uninterruptedControlTurns: 60,
       consecutiveExecutiveTerms: 3,
       seatMarginPenalty: 12,
       legislativeContinuityPenalty: 1.5,
       executiveContinuityPenalty: 4,
-      courtDominantPartyId: "dem",
+      courtDominantBloc: "liberal",
       courtDominantShare: 77.8,
       courtSeated: 9,
-      courtPenalty: 10.7,
-      penalty: 28.2,
+      courtLiberalSeats: 7,
+      courtSwingSeats: 0,
+      courtConservativeSeats: 2,
+      courtUnclassifiedSeats: 0,
+      courtPenalty: 4,
+      penalty: 21.5,
     };
     expect(governanceStyleFlavor(input).competitionNarrative).toContain(
-      "total democratic-health penalty of 28.2"
+      "total democratic-health penalty of 21.5"
     );
     expect(governanceStyleFlavor(input).competitionNarrative).toContain("2 elected chambers");
     expect(governanceStyleFlavor(input).competitionNarrative).toContain("presidency");
     expect(governanceStyleFlavor(input).competitionNarrative).toContain("continuity");
     expect(governanceStyleFlavor(input).competitionNarrative).toContain(
-      "Supreme Court is 77.8% one party"
+      "largest ideological bloc holds 77.8%"
     );
   });
 });

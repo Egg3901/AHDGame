@@ -20,8 +20,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ typ
 
     const { type } = await params;
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const result = await db

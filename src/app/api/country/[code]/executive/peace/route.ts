@@ -301,7 +301,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const toCountry = parsed.data.toCountry.toUpperCase() as CountryId;
     // Country codes arrive in whatever case the client sent. Normalised here so the

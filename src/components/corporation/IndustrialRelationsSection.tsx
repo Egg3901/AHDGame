@@ -179,7 +179,7 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
       const data = await response.json();
       setMessage({
         ok: response.ok,
-        text: response.ok ? "Bargaining response recorded." : (data.error ?? "Action failed."),
+        text: response.ok ? "Bargaining response recorded." : apiErrorText(data, "Action failed."),
       });
       if (response.ok) await load();
     } catch {

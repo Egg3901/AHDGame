@@ -13,7 +13,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -212,7 +212,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { taxRates, programLevels, action } = parsed.data;
 
@@ -221,7 +221,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     if (action === "preview") {
       const preview = await previewAnnualBudget(ctx.db, { taxRates, programLevels });
-      return NextResponse.json(preview, { status: preview.ok ? 200 : 400 });
+      return statusResponse(preview.ok ? 200 : 400, preview);
     }
 
     const now = new Date();

@@ -49,7 +49,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -62,13 +62,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     if ("error" in result) {
-      return NextResponse.json(
-        {
-          error: result.error,
-          ...(result.failure ? { failure: result.failure } : {}),
-        },
-        { status: result.status }
-      );
+      return errorResponse(result.status, result.error, {
+        extra: { ...(result.failure ? { failure: result.failure } : {}) },
+      });
     }
 
     return NextResponse.json(result);
@@ -99,7 +95,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       nppId: new ObjectId(id),
     });
     if ("error" in result) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json(result);

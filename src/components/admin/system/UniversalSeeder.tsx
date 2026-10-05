@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { INDEX_TARGETS } from "@/lib/admin/seed/indexTargets";
@@ -658,7 +659,7 @@ export function UniversalSeeder() {
       const data = await res.json();
       setResult({
         success: res.ok && data.success,
-        message: data.message ?? data.error ?? "Unknown response",
+        message: data.message ?? apiErrorText(data, "Unknown response"),
         logs: data.logs,
         targets: data.targets,
       });

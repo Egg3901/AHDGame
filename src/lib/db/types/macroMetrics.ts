@@ -22,6 +22,14 @@ export interface MacroMetricsDoc {
   /** stateId, or a national-scope rollup id ("federal", "uk_national", …). */
   _id: string;
   countryId?: string;
+  /** V2-only raw cohort owner reading; never reused as a legacy approval metric. */
+  resetCohortReading?: {
+    asOfTurn: number;
+    populationGrowthAnnualized: number;
+    realizedTfr: number | null;
+    dependencyBurden15To64: number | null;
+    periodLifeExpectancy?: number | null;
+  };
   economic: StateMetrics["economic"];
   population: StateMetrics["population"];
   /**

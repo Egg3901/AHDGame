@@ -60,7 +60,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, consolidateSharesSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { targetTotalShares } = parsed.data;
@@ -160,10 +160,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     } catch (cleanupErr) {
       const message = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
       const status = message.startsWith("Exchange rate") ? 503 : 400;
-      return NextResponse.json(
-        { error: `Could not clear open orders before restructure: ${message}` },
-        { status }
-      );
+      return errorResponse(status, `Could not clear open orders before restructure: ${message}`);
     }
 
     // Always re-read: listing cancels restore reserved shares onto the register.

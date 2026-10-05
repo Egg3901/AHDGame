@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { PolicyShiftControl } from "@/components/PolicyShiftControl";
 import { MessageBanner } from "./shared";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CharacterPolicies {
   economic: number;
@@ -50,7 +51,7 @@ export function PoliticsSection({ character, onCharacterUpdate, onReelectionChan
           });
         }
       } else {
-        setPolicyMsg({ text: data.error ?? t("politics.shiftFailed"), ok: false });
+        setPolicyMsg({ text: apiErrorText(data, t("politics.shiftFailed")), ok: false });
       }
     } catch {
       setPolicyMsg({ text: t("common.networkError"), ok: false });

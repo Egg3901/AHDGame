@@ -74,7 +74,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, updateSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const ctx = await loadChairContext(code, id, slug, auth.user.character);

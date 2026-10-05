@@ -25,6 +25,16 @@ import {
 } from "./flowJournal";
 import { ensureDemographicWorldEpoch } from "./worldEpoch";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import {
+  resetSystemVersionsForCountry,
+  type ResetSystem,
+  type ResetVersionState,
+} from "@/lib/resetVersions/rules";
+import { dependencyBurden15To64 } from "@/lib/resetMetrics/rules/cohortOpening";
+import { realizedTfrFromBirths } from "@/lib/resetMetrics/rules/realizedFertility";
+import { periodLifeExpectancy } from "@/lib/resetMetrics/rules/periodLifeExpectancy";
+import type { ResetMetricSnapshot } from "@/lib/resetMetrics/rules/snapshot";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { resolveVotingAgeEligible } from "@/lib/constants/votingAge";
 import { resolveGameYear } from "@/lib/era/era";
@@ -74,6 +84,27 @@ const MAX_INTERNAL_CHANGE_FRACTION = 0.05;
  */
 const REPLACEMENT_TFR = 2.06;
 
+type ResetOpeningSeed = typeof import("@/lib/resetMetrics/openingSeed1991");
+let resetCohortOpeningCache: {
+  life: ReturnType<ResetOpeningSeed["openingLifeCalibration1991"]>;
+  fertility: ReturnType<ResetOpeningSeed["openingFertilityPolicyInputs1991"]>;
+  migration: ReturnType<ResetOpeningSeed["openingMigrationPolicyInputs1991"]>;
+} | null = null;
+
+async function resetCohortOpeningCalibration() {
+  if (resetCohortOpeningCache) return resetCohortOpeningCache;
+  const {
+    openingLifeCalibration1991,
+    openingFertilityPolicyInputs1991,
+    openingMigrationPolicyInputs1991,
+  } = await import("@/lib/resetMetrics/openingSeed1991");
+  return (resetCohortOpeningCache ??= {
+    life: openingLifeCalibration1991(),
+    fertility: openingFertilityPolicyInputs1991(),
+    migration: openingMigrationPolicyInputs1991(),
+  });
+}
+
 interface MetricsDoc {
   _id: string;
   population?: { birthRate?: { value?: number }; migrationRate?: { value?: number } };
@@ -100,6 +131,8 @@ interface RegionWork {
   militaryServicePop: number; // active conscription withdrawal (§4.5)
   servingMaleByAge: readonly number[];
   servingFemaleByAge: readonly number[];
+  realizedTfr: number | null;
+  periodLifeExpectancy: number | null;
 }
 
 const val = (x: { value?: number } | undefined, dflt: number): number =>
@@ -156,7 +189,8 @@ const METRIC_BOUNDS = {
 export async function runDemographicFlows(
   db: Db,
   turn: number,
-  suppliedWorldEpochId?: string
+  suppliedWorldEpochId?: string,
+  v2Ready: Record<ResetSystem, boolean> = RESET_V2_READY
 ): Promise<{ regionsProcessed: number; circuitBreakerTrips: number }> {
   const worldEpochId = suppliedWorldEpochId ?? (await ensureDemographicWorldEpoch(db));
   const prior = await resumeDemographicFlowReceipt(db, worldEpochId, turn);
@@ -194,17 +228,19 @@ export async function runDemographicFlows(
       db.collection<RegionDemographics>("regionDemographics").find({}).toArray(),
       db.collection<State>("states").find({}).toArray(),
       db.collection("macroMetrics").find({}).project<MetricsDoc>(METRICS_PROJECTION).toArray(),
-      db.collection("gameState").findOne<{
-        votingAgeEligible?: number;
-        votingAgeEligibleByCountry?: Partial<Record<string, number>>;
-        workingAgeEligible?: number;
-        retirementAgeEligible?: number;
-        currentYear?: number;
-        currentTurn?: number;
-        startingYear?: number;
-        conscription?: Record<string, Partial<ConscriptionPolicy>>;
-        livingConflictsEnabled?: boolean;
-      }>({}),
+      db.collection("gameState").findOne<
+        {
+          votingAgeEligible?: number;
+          votingAgeEligibleByCountry?: Partial<Record<string, number>>;
+          workingAgeEligible?: number;
+          retirementAgeEligible?: number;
+          currentYear?: number;
+          currentTurn?: number;
+          startingYear?: number;
+          conscription?: Record<string, Partial<ConscriptionPolicy>>;
+          livingConflictsEnabled?: boolean;
+        } & ResetVersionState
+      >({}),
       // v2: read the labour mode via the SAME db (so tests' mock db is honored) and
       // feed it as preloaded — never let getLabourSystemMode hit its own getDb.
       db
@@ -247,9 +283,63 @@ export async function runDemographicFlows(
   const workLo = resolveWorkingAgeEligible(gameState ?? undefined);
   const workHi = resolveRetirementAgeEligible(gameState ?? undefined);
   const stateById = new Map(states.map((s) => [s._id, s]));
+  const v2Countries = new Set(
+    (["US", "UK", "JP"] as const).filter(
+      (countryId) => resetSystemVersionsForCountry(gameState, v2Ready, countryId).metrics === "v2"
+    )
+  );
+  // Building the historical crosswalk is relatively expensive. V1 worlds
+  // must not pay for it on every turn or merely by importing this phase.
+  const v2Opening = v2Countries.size > 0 ? await resetCohortOpeningCalibration() : null;
   const metricsById = new Map<string, MetricsDoc>(macroMetrics.map((m) => [m._id, m]));
   const real = demos.filter((d) => !NATIONAL_SCOPE_IDS.has(d._id));
   if (real.length === 0) return { regionsProcessed: 0, circuitBreakerTrips: 0 };
+
+  const v2HealthByRegion = new Map<string, ResetMetricSnapshot>();
+  if (v2Countries.size > 0) {
+    if (!gameState?.resetWorldId) throw new Error("V2 cohorts lack their reset world identity");
+    const healthBoards = await db
+      .collection<ResetMetricSnapshot>("resetMetricSnapshots")
+      .find(
+        {
+          worldId: gameState.resetWorldId,
+          scope: "regional",
+          countryId: { $in: [...v2Countries] },
+        },
+        {
+          projection: {
+            _id: 1,
+            worldId: 1,
+            countryId: 1,
+            regionId: 1,
+            asOfTurn: 1,
+            "observations.19.value": 1,
+          },
+        }
+      )
+      .toArray();
+    for (const board of healthBoards) {
+      if (v2HealthByRegion.has(board._id))
+        throw new Error(`Duplicate v2 health board ${board._id}`);
+      v2HealthByRegion.set(board._id, board);
+    }
+    for (const demo of real) {
+      if (!v2Countries.has(demo.countryId as "US" | "UK" | "JP")) continue;
+      const board = v2HealthByRegion.get(`${demo.countryId}:${demo._id}`);
+      const preventable = board?.observations?.["19"]?.value;
+      if (
+        board?.countryId !== demo.countryId ||
+        board.regionId !== demo._id ||
+        board.worldId !== gameState.resetWorldId ||
+        board.asOfTurn !== turn - 1 ||
+        typeof preventable !== "number" ||
+        !Number.isFinite(preventable) ||
+        !v2Opening!.life[demo.countryId as "US" | "UK" | "JP"][demo._id]
+      ) {
+        throw new Error(`V2 cohorts lack current health inputs for ${demo.countryId}:${demo._id}`);
+      }
+    }
+  }
 
   // v2: labour→macro coupling is active only at labourSystemMode ≥ "macro".
   const labourMacroEnabled = labourAtLeast(
@@ -287,8 +377,18 @@ export async function runDemographicFlows(
     // Bridge A — same shape as birthRate: the seeded rate is authored per
     // region, but no law moves it for playables. society.integration shifts it
     // ±1.5 annual percentage points at the board extremes, unchanged at 50.
-    const seededMigrationPct = val(m?.population?.migrationRate, 0);
-    const integrationScore = politicalInputs.score(demo._id, "society.integration");
+    const useResetMetrics = v2Countries.has(demo.countryId as "US" | "UK" | "JP");
+    const seededMigrationPct = useResetMetrics
+      ? v2Opening!.migration[demo.countryId as "US" | "UK" | "JP"][demo._id]
+      : val(m?.population?.migrationRate, 0);
+    if (seededMigrationPct === undefined) {
+      throw new Error(
+        `V2 cohorts lack a 1991 migration policy input for ${demo.countryId}:${demo._id}`
+      );
+    }
+    const integrationScore = useResetMetrics
+      ? null
+      : politicalInputs.score(demo._id, "society.integration");
     const migrationRatePct =
       integrationScore == null
         ? seededMigrationPct
@@ -400,8 +500,18 @@ export async function runDemographicFlows(
     // macroMetrics with an authored regional seed, but no law moves it for
     // playables. Keep the seed as the base so authored regional character
     // survives; ±25 index points at the board extremes, unchanged at 50.
-    const seededBirthRate = val(p.m?.population?.birthRate, 50);
-    const demographyScore = politicalInputs.score(p.demo._id, "society.demography");
+    const useResetMetrics = v2Countries.has(p.countryId as "US" | "UK" | "JP");
+    const seededBirthRate = useResetMetrics
+      ? v2Opening!.fertility[p.countryId as "US" | "UK" | "JP"][p.demo._id]
+      : val(p.m?.population?.birthRate, 50);
+    if (seededBirthRate === undefined) {
+      throw new Error(
+        `V2 cohorts lack a 1991 fertility policy input for ${p.countryId}:${p.demo._id}`
+      );
+    }
+    const demographyScore = useResetMetrics
+      ? null
+      : politicalInputs.score(p.demo._id, "society.demography");
     const birthRateIndex =
       demographyScore == null
         ? seededBirthRate
@@ -411,13 +521,22 @@ export async function runDemographicFlows(
       replacementTFR: REPLACEMENT_TFR,
       excessMortalityAnnual: pandemicMortality(pandemic, p.countryId),
       birthRateIndex,
-      healthcare: {
-        // Real-unit neutral defaults (years / per-100k) — the 0-100/centered-50
-        // defaults mis-fed healthcareMortalityModifier (P2b Task 0a).
-        lifeExpectancy: politicalLife ?? val(p.m?.healthcare?.lifeExpectancy, LIFE_EXPECTANCY_MID),
-        preventableMortality:
-          politicalPrev ?? val(p.m?.healthcare?.preventableMortality, PREVENTABLE_MORTALITY_MID),
-      },
+      healthcare: useResetMetrics
+        ? {
+            lifeExpectancy:
+              v2Opening!.life[p.countryId as "US" | "UK" | "JP"][p.demo._id]!.openingYears,
+            preventableMortality: v2HealthByRegion.get(`${p.countryId}:${p.demo._id}`)!
+              .observations["19"]!.value!,
+          }
+        : {
+            // Real-unit neutral defaults (years / per-100k) — the 0-100/centered-50
+            // defaults mis-fed healthcareMortalityModifier (P2b Task 0a).
+            lifeExpectancy:
+              politicalLife ?? val(p.m?.healthcare?.lifeExpectancy, LIFE_EXPECTANCY_MID),
+            preventableMortality:
+              politicalPrev ??
+              val(p.m?.healthcare?.preventableMortality, PREVENTABLE_MORTALITY_MID),
+          },
       netInternationalMigrants,
       migrantShareMale: 0.5,
       servingFemaleByAge: p.conscription.servingFemaleByAge,
@@ -443,6 +562,12 @@ export async function runDemographicFlows(
       militaryServicePop: p.conscription.activeServingPop,
       servingMaleByAge: serving.male,
       servingFemaleByAge: serving.female,
+      realizedTfr: v2Countries.has(p.countryId as "US" | "UK" | "JP")
+        ? realizedTfrFromBirths(p.before, flows.births, TURNS_PER_YEAR)
+        : null,
+      periodLifeExpectancy: v2Countries.has(p.countryId as "US" | "UK" | "JP")
+        ? periodLifeExpectancy(inputs.healthcare)
+        : null,
     });
   }
 
@@ -561,7 +686,16 @@ export async function runDemographicFlows(
   // ── Stage 3: derive readouts from the FINAL vectors and persist ──
   const regions: DemographicFlowRegionProjection[] = [];
 
-  for (const { id: regionId, countryId, before, vector, flows, militaryServicePop } of works) {
+  for (const {
+    id: regionId,
+    countryId,
+    before,
+    vector,
+    flows,
+    militaryServicePop,
+    realizedTfr,
+    periodLifeExpectancy: lifeYears,
+  } of works) {
     const newPop = Math.max(1, totalPopulation(vector));
     const eligible = Math.round(votingAgePopulation(vector, votingAgeFor(countryId)));
     const working = Math.round(workingAgePopulation(vector, workLo, workHi));
@@ -586,6 +720,17 @@ export async function runDemographicFlows(
         dependencyRatio: clamp(pm.dependencyRatio, ...METRIC_BOUNDS.dependencyRatio),
         demographicDecline: clamp(pm.demographicDecline, ...METRIC_BOUNDS.demographicDecline),
       },
+      ...(v2Countries.has(countryId as "US" | "UK" | "JP")
+        ? {
+            resetCohortReadingAfter: {
+              asOfTurn: turn,
+              populationGrowthAnnualized: pm.populationGrowth,
+              realizedTfr,
+              periodLifeExpectancy: lifeYears,
+              dependencyBurden15To64: dependencyBurden15To64(vector),
+            },
+          }
+        : {}),
     });
   }
 

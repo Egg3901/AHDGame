@@ -40,7 +40,7 @@ export async function POST(request: Request, { params }: NuclearRouteParams) {
 
     const parsed = await parseJsonBody(request, testSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const node = nuclearNode(parsed.data.nodeKey);

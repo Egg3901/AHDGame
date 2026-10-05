@@ -34,8 +34,7 @@ export async function POST(
     }
     const stateId = id;
     const parsed = await parseJsonBody(request, heroSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { heroImageUrl } = parsed.data;
 
     const auth = await requireAuthWithCharacter();

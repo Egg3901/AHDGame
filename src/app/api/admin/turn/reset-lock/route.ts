@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { invalidateGameStateCache } from "@/lib/gameState";
 import type { GameState } from "@/lib/db/types";
@@ -60,16 +60,18 @@ export async function POST() {
     if (!isStale) {
       const retryAfterSeconds = Math.ceil(retryAfterMs / 1000);
       const safeLastTouch = lastTouch ?? staleAfterAt;
-      return NextResponse.json(
+      return errorResponse(
+        409,
+        `Processing lock is still active and cannot be reset yet. Try again in about ${formatRetryDelay(retryAfterMs)}.`,
         {
-          error: `Processing lock is still active and cannot be reset yet. Try again in about ${formatRetryDelay(retryAfterMs)}.`,
-          processingPhase: gameState.processingPhase ?? null,
-          processingTargetTurn: gameState.processingTargetTurn ?? null,
-          lastHeartbeatAt: safeLastTouch.toISOString(),
-          retryAfterSeconds,
-          staleAfterAt: staleAfterAt.toISOString(),
-        },
-        { status: 409 }
+          extra: {
+            processingPhase: gameState.processingPhase ?? null,
+            processingTargetTurn: gameState.processingTargetTurn ?? null,
+            lastHeartbeatAt: safeLastTouch.toISOString(),
+            retryAfterSeconds,
+            staleAfterAt: staleAfterAt.toISOString(),
+          },
+        }
       );
     }
 

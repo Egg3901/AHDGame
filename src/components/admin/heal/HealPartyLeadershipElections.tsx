@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface OrphanedCandidate {
   candidateId: string;
@@ -36,7 +37,7 @@ export function HealPartyLeadershipElections() {
       if (res.ok) {
         setDiagnostic(data);
       } else {
-        setResult({ ok: false, message: data.error ?? "Diagnostic failed" });
+        setResult({ ok: false, message: apiErrorText(data, "Diagnostic failed") });
       }
     } catch {
       setResult({ ok: false, message: "Network error" });
@@ -59,7 +60,7 @@ export function HealPartyLeadershipElections() {
     try {
       const res = await fetch("/api/admin/heal/party-leadership-elections", { method: "POST" });
       const data = await res.json();
-      setResult({ ok: res.ok, message: data.message ?? data.error ?? "Unknown response" });
+      setResult({ ok: res.ok, message: data.message ?? apiErrorText(data, "Unknown response") });
     } catch {
       setResult({ ok: false, message: "Network error" });
     } finally {

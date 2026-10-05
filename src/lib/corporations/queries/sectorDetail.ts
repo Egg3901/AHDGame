@@ -4,7 +4,7 @@ import { findMergedRegionMetrics } from "@/lib/macroMetrics/merge";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { buildPoliticalBaseModifiers } from "@/lib/politicalLegislation/marginAdapter";
 import { isPoliticalApprovalCountry } from "@/lib/politicalLegislation/politicalApprovalProvider";
@@ -141,7 +141,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
 
     // Resolve sector
     if (!ObjectId.isValid(sectorId)) {
-      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+      return errorResponse(400, "Invalid sector ID");
     }
 
     const governorConfig = await db.collection<GameConfig>("gameConfig").findOne(
@@ -171,7 +171,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
     );
 
     if (!sector) {
-      return NextResponse.json({ error: "Sector not found" }, { status: 404 });
+      return errorResponse(404, "Sector not found");
     }
     const editorialStance =
       governorConfig?.mediaEditorialEnabled === true && sector.sectorType === "media"

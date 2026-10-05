@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/ui";
 import { LawTypeCard } from "./LawTypeCard";
 import { LawTypeWizard } from "./LawTypeWizard";
 import type { LegislationType } from "@/lib/db/types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface LawTypeWithMeta extends LegislationType {
   source: "seed" | "admin";
@@ -53,7 +54,7 @@ export function LawTypesTab() {
     setMessage("");
     const res = await fetch(`/api/admin/law-types/${id}`, { method: "DELETE" });
     const data = await res.json();
-    setMessage(res.ok ? data.message : `Error: ${data.error}`);
+    setMessage(res.ok ? data.message : `Error: ${apiErrorText(data, "Request failed")}`);
     if (res.ok) fetchLawTypes();
   };
 
@@ -61,7 +62,7 @@ export function LawTypesTab() {
     setMessage("");
     const res = await fetch(`/api/admin/law-types/${id}/make-permanent`, { method: "POST" });
     const data = await res.json();
-    setMessage(res.ok ? data.message : `Error: ${data.error}`);
+    setMessage(res.ok ? data.message : `Error: ${apiErrorText(data, "Request failed")}`);
     if (res.ok) fetchLawTypes();
   };
 
@@ -71,7 +72,7 @@ export function LawTypesTab() {
     setMessage("");
     const res = await fetch(`/api/admin/law-types/${id}/remove-permanent`, { method: "POST" });
     const data = await res.json();
-    setMessage(res.ok ? data.message : `Error: ${data.error}`);
+    setMessage(res.ok ? data.message : `Error: ${apiErrorText(data, "Request failed")}`);
     if (res.ok) fetchLawTypes();
   };
 

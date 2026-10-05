@@ -12,6 +12,7 @@ import { mergeState } from "../lib/helpers";
 import { SmallButton } from "@/components/corporation/dense/DenseKit";
 import { BankPanel } from "../components/BankSection";
 import { StatCell } from "../components/StatCell";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Draws above half the remaining capacity ask first: the debt is cheap to take
@@ -49,7 +50,10 @@ export function DiscountWindowPanel({
         error?: string;
       };
       if (!res.ok) {
-        updateWindowState({ error: json.error ?? "Failed to load discount window", quote: null });
+        updateWindowState({
+          error: apiErrorText(json, "Failed to load discount window"),
+          quote: null,
+        });
         return;
       }
       updateWindowState({ error: null, quote: json });
@@ -97,7 +101,7 @@ export function DiscountWindowPanel({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(json.error ?? `Could not ${action} from the window`, "error");
+        showToast(apiErrorText(json, `Could not ${action} from the window`), "error");
         return;
       }
       if (action === "draw" && quote) {

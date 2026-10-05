@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   countryCode: string;
@@ -53,7 +54,7 @@ export function FxReserveTransferPanel({ countryCode, canAct, onUpdate }: Props)
       const json = await res.json();
       if (res.ok || (res.status >= 400 && res.status < 500)) pending.current = null;
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Transfer failed." });
+        setFeedback({ type: "error", message: apiErrorText(json, "Transfer failed.") });
       } else {
         setFeedback({
           type: "success",

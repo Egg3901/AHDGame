@@ -2,6 +2,7 @@
 
 import { InlineError } from "@/components/ui/InlineError";
 import React, { useState, useEffect, useCallback } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BondRow {
   id: string;
@@ -157,7 +158,7 @@ export function BondsAdminPanel() {
         body: JSON.stringify({ countryId: reconcileCountry }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      if (!res.ok) throw new Error(apiErrorText(json, `HTTP ${res.status}`));
       setReconcileResult(json);
       await fetchData();
     } catch (e) {

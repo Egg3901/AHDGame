@@ -3,6 +3,7 @@
 import type { Dispatch } from "react";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import type { CorporationsAdminAction, CorporationsAdminState } from "../useCorporationsAdminState";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function SpawnNppPanel({
   spawnNppForm,
@@ -199,7 +200,7 @@ export function SpawnNppPanel({
               if (!res.ok) {
                 dispatch({
                   type: "SET_SPAWN_NPP_RESULT",
-                  value: { success: false, error: json.error ?? `HTTP ${res.status}` },
+                  value: { success: false, error: apiErrorText(json, `HTTP ${res.status}`) },
                 });
               } else {
                 dispatch({
@@ -261,7 +262,7 @@ export function SpawnNppPanel({
               if (!res.ok) {
                 dispatch({
                   type: "SET_SPAWN_NPP_RESULT",
-                  value: { success: false, error: json.error ?? `HTTP ${res.status}` },
+                  value: { success: false, error: apiErrorText(json, `HTTP ${res.status}`) },
                 });
               } else {
                 dispatch({

@@ -126,7 +126,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, fileSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { countryId, office, state, targetCharacterId } = parsed.data;
     if (!(countryId in COUNTRY_CONFIGS)) {

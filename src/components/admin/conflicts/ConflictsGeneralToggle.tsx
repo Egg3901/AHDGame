@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const ENDPOINT = "/api/admin/conflicts/general/toggle";
 
@@ -57,7 +58,7 @@ export function ConflictsGeneralToggle() {
           })
           .catch(() => {});
       } else {
-        setMessage(data.error ?? "Failed to update flag.");
+        setMessage(apiErrorText(data, "Failed to update flag."));
       }
     } catch {
       setMessage("Failed to update flag.");

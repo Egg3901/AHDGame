@@ -41,7 +41,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, duesSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { id } = await params;
@@ -53,7 +53,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     const result = await setUnionDues(db, character, id, parsed.data.duesPerWorkerAnnual);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
     const { ok: _ok, status: _status, ...payload } = result;
     return NextResponse.json({ success: true, ...payload });

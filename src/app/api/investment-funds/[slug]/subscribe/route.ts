@@ -65,7 +65,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
     const parsed = await parseJsonBody(request, subscribeIndexFundSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { units, operationId, payCurrency } = parsed.data;
     claimedOperationId = operationId;
@@ -333,14 +333,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
         );
 
         if (debitError) {
-          return NextResponse.json(
-            {
-              error:
-                debitError === "Insufficient funds"
-                  ? `Insufficient funds. Need ${totalCostAnchor.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${fundCurrency}.`
-                  : debitError,
-            },
-            { status: 400 }
+          return errorResponse(
+            400,
+            debitError === "Insufficient funds"
+              ? `Insufficient funds. Need ${totalCostAnchor.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${fundCurrency}.`
+              : debitError
           );
         }
 

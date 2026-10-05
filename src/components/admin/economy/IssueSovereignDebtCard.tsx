@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { Button, Input, Label } from "@/components/ui";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { CountryId } from "@/lib/constants/countries";
@@ -52,7 +53,7 @@ export function IssueSovereignDebtCard() {
       const json = await response.json();
       setResult({
         success: response.ok && json.success,
-        message: json.message ?? json.error ?? "Unknown response",
+        message: json.message ?? apiErrorText(json, "Unknown response"),
         result: json.result,
       });
     } catch {

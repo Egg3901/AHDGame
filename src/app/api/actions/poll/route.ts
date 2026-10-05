@@ -302,7 +302,7 @@ export async function POST(request: NextRequest) {
 
     const parsed = await parseJsonBody(request, pollCommissionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const pollType = parsed.data.type;
     const actionKey = pollType === "large" ? "pollLarge" : "poll";

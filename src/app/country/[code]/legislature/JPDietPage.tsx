@@ -29,6 +29,7 @@ import {
   type LegislatureBillStatusFilter,
 } from "@/lib/legislature/billStatusFilters";
 import type { BillProposalAutoFailWarning } from "@/lib/legislature/billAutoFailWarning";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const DIET_HERO = {
   image: "/api/images/hero/national-diet",
@@ -285,7 +286,7 @@ export function JPDietPage({ countryId }: Props) {
       });
       const data = await res.json();
       if (!res.ok) {
-        showToast(data.error ?? "Failed to propose no-confidence motion.", "error");
+        showToast(apiErrorText(data, "Failed to propose no-confidence motion."), "error");
       } else {
         showToast("No-confidence motion proposed.", "success");
         fetchGovernmentData();

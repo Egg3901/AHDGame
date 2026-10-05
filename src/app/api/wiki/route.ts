@@ -83,7 +83,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, createWikiPageSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     // Moderators and admins bypass the player-category list and the 12 h
@@ -116,10 +116,9 @@ export async function POST(request: Request) {
     // 12 h cooldown on new page creation (edits are always allowed).
     const cooldown = await checkWikiCreateCooldown(db, userId, { bypass: isMod });
     if (!cooldown.ok) {
-      return NextResponse.json(
-        { error: formatCooldownMessage(cooldown), retryAfterMs: cooldown.remainingMs },
-        { status: 429 }
-      );
+      return errorResponse(429, formatCooldownMessage(cooldown), {
+        extra: { retryAfterMs: cooldown.remainingMs },
+      });
     }
 
     // Check slug uniqueness

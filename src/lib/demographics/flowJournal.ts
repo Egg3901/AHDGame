@@ -45,11 +45,21 @@ export interface DemographicFlowMetricsProjection {
   demographicDecline: number;
 }
 
+/** Raw realized cohort outcomes for a seed-verified v2 metrics country. */
+export interface DemographicFlowCohortReading {
+  asOfTurn: number;
+  populationGrowthAnnualized: number;
+  realizedTfr: number | null;
+  periodLifeExpectancy: number | null;
+  dependencyBurden15To64: number | null;
+}
+
 export interface DemographicFlowRegionInput {
   regionId: string;
   agesAfter: AgeSexVector;
   stateAfter: DemographicFlowStateProjection;
   metricsAfter: DemographicFlowMetricsProjection;
+  resetCohortReadingAfter?: DemographicFlowCohortReading;
 }
 
 export type DemographicFlowRegionProjection = DemographicFlowRegionInput;
@@ -127,6 +137,14 @@ function freezeRegionInput(input: DemographicFlowRegionInput): DemographicFlowRe
   }
   assertFiniteRecord(input.stateAfter, `stateAfter(${input.regionId})`);
   assertFiniteRecord(input.metricsAfter, `metricsAfter(${input.regionId})`);
+  if (input.resetCohortReadingAfter) {
+    const { realizedTfr, periodLifeExpectancy, dependencyBurden15To64, ...required } =
+      input.resetCohortReadingAfter;
+    assertFiniteRecord(required, `resetCohortReadingAfter(${input.regionId})`);
+    for (const nullable of [realizedTfr, periodLifeExpectancy, dependencyBurden15To64])
+      if (nullable !== null && !Number.isFinite(nullable))
+        throw new Error(`resetCohortReadingAfter(${input.regionId}) must be finite or null`);
+  }
   if (Object.values(input.stateAfter).some((value) => value < 0)) {
     throw new Error(`Invalid demographic projection for ${input.regionId}`);
   }
@@ -135,6 +153,9 @@ function freezeRegionInput(input: DemographicFlowRegionInput): DemographicFlowRe
     agesAfter: { male: [...input.agesAfter.male], female: [...input.agesAfter.female] },
     stateAfter: { ...input.stateAfter },
     metricsAfter: { ...input.metricsAfter },
+    ...(input.resetCohortReadingAfter
+      ? { resetCohortReadingAfter: { ...input.resetCohortReadingAfter } }
+      : {}),
   };
 }
 
@@ -328,6 +349,9 @@ async function materializeReceipt(
             "population.sexRatio.value": projection.metricsAfter.sexRatio,
             "population.dependencyRatio.value": projection.metricsAfter.dependencyRatio,
             "population.demographicDecline.value": projection.metricsAfter.demographicDecline,
+            ...(projection.resetCohortReadingAfter
+              ? { resetCohortReading: projection.resetCohortReadingAfter }
+              : {}),
             lastUpdated: receipt.createdAt,
             [STAMP_FIELD]: stamp,
           },

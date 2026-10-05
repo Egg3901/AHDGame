@@ -163,9 +163,9 @@ export function buildCdnCatalog(): PublicCdnCatalog {
       {
         name: "actions",
         description:
-          "Action-card art. Era-generic files live under actions/{era}/; a subset of eras and countries has bespoke national art under actions/{era}/{country}/.",
+          "Action-card art. Every era has a generic set under actions/{era}/, a subset of eras and countries has bespoke national art under actions/{era}/{country}/, and actions/neutral/ is the era-neutral fallback.",
         urlTemplates: [
-          `${staticBase}/actions/{slug}.webp`,
+          `${staticBase}/actions/neutral/{slug}.webp`,
           `${staticBase}/actions/{era}/{slug}.webp`,
           `${staticBase}/actions/{era}/{country}/{slug}.webp`,
         ],

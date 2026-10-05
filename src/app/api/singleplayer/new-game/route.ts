@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   try {
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
     const preset = body.preset ?? DEFAULT_SEED_PRESET;

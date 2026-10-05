@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { LandingGlobe } from "@/components/LandingGlobe";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Headline {
   turn: number;
@@ -74,7 +75,7 @@ export function WorldsimPageClient() {
       });
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
       if (!response.ok)
-        throw new Error(body?.error ?? `Worldsim advance failed (${response.status})`);
+        throw new Error(apiErrorText(body, `Worldsim advance failed (${response.status})`));
       await loadStats();
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "Worldsim advance failed");

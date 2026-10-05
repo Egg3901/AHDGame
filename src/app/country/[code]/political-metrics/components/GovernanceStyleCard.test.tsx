@@ -28,15 +28,20 @@ const COMPETITION: DemocraticCompetition = {
   dominantSeatShare: 62,
   chambersMeasured: 2,
   executivePartyId: "rep",
+  executiveSystem: "presidential",
   executiveAlignedWithLegislature: false,
   uninterruptedControlTurns: 40,
   consecutiveExecutiveTerms: 0,
   seatMarginPenalty: 1,
   legislativeContinuityPenalty: 0.5,
   executiveContinuityPenalty: 0,
-  courtDominantPartyId: null,
+  courtDominantBloc: null,
   courtDominantShare: 0,
   courtSeated: 3,
+  courtLiberalSeats: 0,
+  courtSwingSeats: 0,
+  courtConservativeSeats: 0,
+  courtUnclassifiedSeats: 3,
   courtPenalty: 0,
   penalty: 1.5,
 };
@@ -106,7 +111,7 @@ describe("GovernanceStyleCard", () => {
     );
     expect(container.textContent).toContain("Chamber margins: −1.0.");
     expect(container.textContent).toContain("Executive continuity: 0.0.");
-    expect(container.textContent).toContain("Court packing: 0.0.");
+    expect(container.textContent).toContain("Court concentration: 0.0.");
     expect(container.textContent).not.toContain("−0.0");
   });
 

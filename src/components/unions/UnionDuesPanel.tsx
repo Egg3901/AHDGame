@@ -14,6 +14,7 @@ import {
   maxDuesForWage,
 } from "@/lib/unions/unionDues";
 import type { UnionServiceId } from "@/lib/unions/unionServices";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface UnionDuesPanelProps {
   unionId: string;
@@ -126,7 +127,7 @@ export function UnionDuesPanel({
       const data = await res.json();
       setResult({
         ok: res.ok,
-        text: res.ok ? "Dues updated." : (data.error ?? "Failed to update dues."),
+        text: res.ok ? "Dues updated." : apiErrorText(data, "Failed to update dues."),
       });
       if (res.ok) onSaved();
     } catch {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import { useGameClock } from "@/contexts/useGameClock";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface NominationDisplay {
   _id: string;
@@ -85,7 +86,7 @@ export function BundestagspraesidentPanel() {
         showToast(body.message ?? "Done.", "success");
         await fetchData();
       } else {
-        showToast(body.error ?? "Action failed.", "error");
+        showToast(apiErrorText(body, "Action failed."), "error");
       }
     } catch {
       showToast("Network error.", "error");

@@ -61,6 +61,16 @@ export const DEFAULT_GAME_STATE_FLAGS = {
   nppIntelligenceOperationsEnabled: true,
   worldEventsEnabled: true,
   legislationDemographicEffectsV2Enabled: true,
+  // The reset-era systems are staged independently. These are version
+  // selectors, not the older legislation-demographics subfeature above.
+  metricsSystemVersion: "v1",
+  legislationSystemVersion: "v1",
+  cabinetSystemVersion: "v1",
+  departmentProgramSliceEnabled: true,
+  departmentFinanceEnabled: true,
+  lawAdministrationEnabled: true,
+  regionalLegislationFinanceEnabled: true,
+  canonicalPoliticalMetricsEnabled: true,
   granularPollEnabled: true,
   granularElectorateEnabled: true,
   demographicsLayer1PositionsEnabled: true,

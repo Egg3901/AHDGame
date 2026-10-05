@@ -1158,7 +1158,7 @@ function YourSavingsSection({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(json.error ?? "Could not move savings", "error");
+        showToast(apiErrorText(json, "Could not move savings"), "error");
         return;
       }
       showToast("Savings holder updated", "success");
@@ -1186,7 +1186,7 @@ function YourSavingsSection({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(json.error ?? "Withdrawal failed", "error");
+        showToast(apiErrorText(json, "Withdrawal failed"), "error");
         return;
       }
       showToast(`Withdrew ${formatBankMoney(amount, currency)} from savings`, "success");
@@ -1523,7 +1523,7 @@ function AdminUnwindPanel({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(json.error ?? "Unwind failed", "error");
+        showToast(apiErrorText(json, "Unwind failed"), "error");
         return;
       }
       showToast("Bank unwound", "success");

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui";
 
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
 import { useEntityName } from "../useEntityName";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -52,7 +53,7 @@ export function FundOrgPanel({ org, viewer, onChange }: Props) {
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to propose funding");
+        throw new Error(apiErrorText(body, "Failed to propose funding"));
       }
       setSuccess("Funding appropriation sent to the legislature.");
       setShowForm(false);

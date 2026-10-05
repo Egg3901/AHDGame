@@ -384,7 +384,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { bondId } = await params;
     const parsed = await parseJsonBody(request, sellBondSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { units } = parsed.data;
@@ -442,13 +442,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // its seller-specific branch resume the stamped debit instead of rejecting
     // the retry from a newly observed pool balance.
     if (fillableUnits < units && !pendingSale) {
-      return NextResponse.json(
-        {
-          error: bondPoolDepthMessage(fillableUnits, bondCurrency),
-          marketDepthUnits: fillableUnits,
-        },
-        { status: 409 }
-      );
+      return errorResponse(409, bondPoolDepthMessage(fillableUnits, bondCurrency), {
+        extra: { marketDepthUnits: fillableUnits },
+      });
     }
     const poolDepthRefusal = async () => {
       const cash = await readBondPoolCash(db, bondCurrency);

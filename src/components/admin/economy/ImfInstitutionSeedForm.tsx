@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { PlayerSelector } from "@/components/PlayerSelector";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type Selected = { id: string; name: string } | null;
 
@@ -40,7 +41,7 @@ export function ImfInstitutionSeedForm({ onSuccess, compact }: ImfInstitutionSee
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+      if (!res.ok) throw new Error(apiErrorText(data, `Request failed (${res.status})`));
       const parts: string[] = [];
       if (data.created) parts.push("Created IMF corporation.");
       else if (data.updated) parts.push("Updated IMF ownership.");

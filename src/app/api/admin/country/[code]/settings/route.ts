@@ -111,7 +111,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
     const parsed = await parseJsonBody(request, settingsSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { enabledForPlayers, status, economyPreview } = parsed.data;
@@ -130,9 +130,8 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         });
       } catch (err) {
         if (err instanceof PlayerOpenBlockedError) {
-          return NextResponse.json(
-            {
-              error: err.message,
+          return errorResponse(409, err.message, {
+            extra: {
               readiness: {
                 presetId: err.report.presetId,
                 archetypes: err.report.archetypes,
@@ -142,8 +141,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
                 flavorGaps: err.report.flavorGaps,
               },
             },
-            { status: 409 }
-          );
+          });
         }
         throw err;
       }

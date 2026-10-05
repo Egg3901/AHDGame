@@ -34,6 +34,7 @@ import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning
 import { captureProductEvent } from "@/lib/analytics/capture";
 import { getStoredConsent } from "@/components/CookieConsent";
 import { huDistrictIds } from "@/lib/countries/hu/rules/constituencies2014";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ElectionDetailClientProps {
   id: string;
@@ -346,7 +347,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           .catch(() => {});
         await fetchElection();
       } else {
-        showToast(data.error ?? "Failed to enter race", "error");
+        showToast(apiErrorText(data, "Failed to enter race"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");
@@ -375,7 +376,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
         showToast(data.message ?? "Withdrawn from race", "success");
         await fetchElection();
       } else {
-        showToast(data.error ?? "Failed to withdraw", "error");
+        showToast(apiErrorText(data, "Failed to withdraw"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");

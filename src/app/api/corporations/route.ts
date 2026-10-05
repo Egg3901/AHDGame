@@ -274,7 +274,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, foundCorporationSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const {
@@ -458,11 +458,9 @@ export async function POST(request: Request) {
     const cashOnHand = getPersonalBalance(character, homeCurrency, forexEnabled);
     if (cashOnHand < totalPlayerCost) {
       const sym = CURRENCY_SYMBOLS[homeCurrency] ?? "$";
-      return NextResponse.json(
-        {
-          error: `Insufficient personal funds. Founding this corporation costs ${sym}${totalPlayerCost.toLocaleString()} (${sym}${foundingFeeLocal.toLocaleString()} founding fee + ${sym}${extraCapitalLocal.toLocaleString()} extra treasury${confidencePremiumLocal > 0 ? ` + ${sym}${confidencePremiumLocal.toLocaleString()} low-confidence premium` : ""}). You have ${sym}${Math.floor(cashOnHand).toLocaleString()} liquid. Withdraw savings or trade FX to top up.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient personal funds. Founding this corporation costs ${sym}${totalPlayerCost.toLocaleString()} (${sym}${foundingFeeLocal.toLocaleString()} founding fee + ${sym}${extraCapitalLocal.toLocaleString()} extra treasury${confidencePremiumLocal > 0 ? ` + ${sym}${confidencePremiumLocal.toLocaleString()} low-confidence premium` : ""}). You have ${sym}${Math.floor(cashOnHand).toLocaleString()} liquid. Withdraw savings or trade FX to top up.`
       );
     }
 

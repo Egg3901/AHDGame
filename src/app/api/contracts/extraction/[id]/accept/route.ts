@@ -51,7 +51,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       new Date(),
       settings.treasuryCashLedgerEnabled
     );
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
 
     recordAudit({
       source: "api",

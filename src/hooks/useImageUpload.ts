@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Shared upload logic for image upload components.
@@ -54,7 +55,7 @@ export function useImageUpload(
         const data = await res.json();
 
         if (!res.ok) {
-          setError(data.error ?? "Upload failed");
+          setError(apiErrorText(data, "Upload failed"));
           return;
         }
 

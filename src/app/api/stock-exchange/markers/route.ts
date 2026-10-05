@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getAuthUser } from "@/lib/auth";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
 import type { CountryId } from "@/lib/constants/countries";
@@ -39,9 +39,9 @@ export async function GET(request: Request) {
     const toTurn = Number(searchParams.get("toTurn"));
 
     if (!EXCHANGE_API_KEYS.has(exchange)) {
-      return NextResponse.json(
-        { error: `Invalid exchange. Use one of: ${[...EXCHANGE_API_KEYS].join(", ")}` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Invalid exchange. Use one of: ${[...EXCHANGE_API_KEYS].join(", ")}`
       );
     }
     if (
@@ -51,9 +51,9 @@ export async function GET(request: Request) {
       toTurn < fromTurn ||
       toTurn - fromTurn > MAX_SPAN
     ) {
-      return NextResponse.json(
-        { error: "fromTurn/toTurn must be integers with toTurn >= fromTurn and span <= 9000." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "fromTurn/toTurn must be integers with toTurn >= fromTurn and span <= 9000."
       );
     }
 

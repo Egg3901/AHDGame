@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { createModAuditLog } from "@/lib/modAuditLog";
 import type { Character, NewsPost, User } from "@/lib/db/types";
 
@@ -23,10 +23,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     if (!post) throw notFound("News post not found");
 
     if (post.isSystem) {
-      return NextResponse.json(
-        { error: "System-generated posts cannot be removed by moderators" },
-        { status: 403 }
-      );
+      return errorResponse(403, "System-generated posts cannot be removed by moderators");
     }
 
     const authorCharacter = await db
@@ -39,10 +36,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
       : null;
 
     if (authorUser?.role === "admin") {
-      return NextResponse.json(
-        { error: "Cannot perform actions on admin-authored posts" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Cannot perform actions on admin-authored posts");
     }
 
     const replies = await db

@@ -31,7 +31,7 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, adminRemoveOfficialSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { officialId } = parsed.data;
 
