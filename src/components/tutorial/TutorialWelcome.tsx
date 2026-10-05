@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/Button";
-import { INTEREST_CHAPTERS } from "@/lib/tutorial/chapters";
+import { INTEREST_CHAPTERS, estimateTourMinutes } from "@/lib/tutorial/chapters";
+import { whatsNewEditionForPreset, type WhatsNewEdition } from "@/lib/tutorial/world";
+import { useWorldFlags } from "@/hooks/useWorldFlags";
 import {
   TUTORIAL_INTERESTS,
   type TutorialExperience,
@@ -23,12 +25,17 @@ import {
  * already long character-creation form, where nobody read it.
  */
 
-/** Message keys under "tutorial" for each experience card. */
-const EXPERIENCES: Array<{
+/**
+ * Message keys under "tutorial" for each experience card. The returning blurb
+ * names the world the player is coming from, so it is chosen per edition.
+ */
+const experiences = (
+  edition: WhatsNewEdition
+): Array<{
   value: TutorialExperience;
   title: string;
   blurb: string;
-}> = [
+}> => [
   {
     value: "new",
     title: "welcome.experienceNewTitle",
@@ -37,7 +44,10 @@ const EXPERIENCES: Array<{
   {
     value: "returning",
     title: "welcome.experienceReturningTitle",
-    blurb: "welcome.experienceReturningBlurb",
+    blurb:
+      edition === "1991"
+        ? "welcome.experienceReturning1991Blurb"
+        : "welcome.experienceReturningBlurb",
   },
   {
     value: "skip",
@@ -57,6 +67,8 @@ export interface TutorialWelcomeProps {
 
 export function TutorialWelcome({ characterName, onConfirm, onDismiss }: TutorialWelcomeProps) {
   const t = useTranslations("tutorial");
+  const { preset } = useWorldFlags();
+  const edition = whatsNewEditionForPreset(preset);
   const [experience, setExperience] = useState<TutorialExperience | null>(null);
   const [interests, setInterests] = useState<TutorialInterest[]>([]);
   const [saving, setSaving] = useState(false);
@@ -65,14 +77,11 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
   const panel = experience === null || experience === "skip" ? 1 : 2;
   const allSelected = interests.length === TUTORIAL_INTERESTS.length;
 
+  // Read off the same chapter list the tour runs, so the "what changed" and
+  // core chapters are counted rather than guessed at.
   const estimate = useMemo(
-    () =>
-      INTEREST_CHAPTERS.filter((c) => interests.includes(c.id as TutorialInterest)).reduce(
-        // 4 minutes for the always-on core chapter.
-        (total, c) => total + c.estimatedMinutes,
-        4
-      ),
-    [interests]
+    () => estimateTourMinutes({ experience: experience ?? "new", interests }),
+    [experience, interests]
   );
 
   /**
@@ -81,8 +90,9 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
    * for the sum of all of them without ever naming it.
    */
   const fullEstimate = useMemo(
-    () => INTEREST_CHAPTERS.reduce((total, c) => total + c.estimatedMinutes, 4),
-    []
+    () =>
+      estimateTourMinutes({ experience: experience ?? "new", interests: [...TUTORIAL_INTERESTS] }),
+    [experience]
   );
 
   // Escape closes without saving, matching every other overlay in the app.
@@ -131,7 +141,7 @@ export function TutorialWelcome({ characterName, onConfirm, onDismiss }: Tutoria
 
           {panel === 1 ? (
             <div className="grid gap-3 p-6 sm:grid-cols-3 sm:p-8 sm:pt-4">
-              {EXPERIENCES.map((opt) => (
+              {experiences(edition).map((opt) => (
                 <button
                   key={opt.value}
                   type="button"

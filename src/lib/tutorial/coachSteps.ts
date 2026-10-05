@@ -3,6 +3,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { legislatureUrl } from "@/lib/urls";
 import type { TutorialChapterId } from "@/lib/onboarding/tutorialPlan";
 import type { TutorialFactKey } from "@/lib/tutorial/facts";
+import { DEFAULT_TUTORIAL_WORLD, type TutorialWorld } from "@/lib/tutorial/world";
 
 /**
  * Interactive tutorial coach — the step vocabulary.
@@ -80,7 +81,7 @@ export interface CoachStep {
   advanceSignal?: CoachAdvanceSignal;
   /**
    * Explains something a returning player already knows. Dropped from the
-   * "new to this iteration" tour (see stepVisibleForExperience).
+   * "played before" tour (see stepVisibleForExperience).
    */
   fundamental?: boolean;
   /** Live world numbers to show on the card, from GET /api/tutorial/context. */
@@ -114,9 +115,14 @@ export interface CoachCountryContext {
   legislatureName: string;
   /** Canonical legislature route. Never a redirect shell (see below). */
   legislatureLink: string;
+  /** World shape: which "what changed" edition, no-party start, founding round. */
+  world: TutorialWorld;
 }
 
-export function coachCountryContext(character: CoachCharacter): CoachCountryContext {
+export function coachCountryContext(
+  character: CoachCharacter,
+  world: TutorialWorld = DEFAULT_TUTORIAL_WORLD
+): CoachCountryContext {
   const countryId = character.countryId;
   const config = COUNTRY_CONFIGS[countryId as CountryId];
   return {
@@ -131,5 +137,6 @@ export function coachCountryContext(character: CoachCharacter): CoachCountryCont
     // `onStepPage` never becomes true and the button stays on "Take me there"
     // with no way past. This shipped once; the redirect test now guards it.
     legislatureLink: legislatureUrl(countryId),
+    world,
   };
 }
