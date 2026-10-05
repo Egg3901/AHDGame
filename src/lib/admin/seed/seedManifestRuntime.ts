@@ -809,6 +809,12 @@ export const RUNTIME: CollectionEntry[] = [
     notes:
       "Archived float settlement plans reference this world's funds and corporations; reset them with fund positions so prior-world recovery and undo records cannot survive.",
   },
+  {
+    name: "fundWritedownCompensationLedger",
+    category: "runtime",
+    notes:
+      "Retired fund compensation receipts belong to the outgoing characters and wallets. Keep legacy databases covered by the reset sweep.",
+  },
   { name: "indexFundRedemptionQueue", category: "runtime" },
   { name: "indexFundSnapshots", category: "runtime" },
   { name: "indexFundTransactions", category: "runtime" },
