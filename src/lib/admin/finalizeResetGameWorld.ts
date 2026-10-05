@@ -31,7 +31,7 @@ import {
   loadStartingPartiesMode,
   type StartingPartiesMode,
 } from "./startingParties";
-import type { Db, ObjectId } from "mongodb";
+import type { Collection, Db, Document, ObjectId } from "mongodb";
 import type { PoliticalParty, StateDemographics, StatePartyOrg } from "@/lib/db/types";
 import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
 import { getPresetById } from "@/lib/constants/historicalSeats";
@@ -126,6 +126,19 @@ export async function loadResetPartySeedCatalog(): Promise<PartySeed[]> {
     ...Object.values(SUCCESSOR_PARTIES_1991).flat(),
     ...Object.values(PARTY_ROSTERS_2019).flat(),
   ];
+}
+
+/** Delete rows whose (countryId, partyId) pair names no surviving default party. */
+export async function deleteRowsOfRemovedParties(
+  collection: Collection<Document>,
+  defaultPartyKeys: ReadonlySet<string>
+): Promise<number> {
+  const rows = await collection.find({}, { projection: { countryId: 1, partyId: 1 } }).toArray();
+  const stale = rows
+    .filter((row) => !defaultPartyKeys.has(`${String(row.countryId)}:${String(row.partyId)}`))
+    .map((row) => row._id);
+  if (stale.length === 0) return 0;
+  return (await collection.deleteMany({ _id: { $in: stale } })).deletedCount;
 }
 
 export async function finalizeResetGameWorld(
@@ -347,13 +360,27 @@ export async function finalizeResetGameWorld(
     const defaultParties = await db
       .collection<PoliticalParty>("politicalParties")
       .find({ isDefault: true })
-      .project({ sequentialId: 1 })
+      .project<{ sequentialId: number; countryId: string }>({ sequentialId: 1, countryId: 1 })
       .toArray();
     const defaultPartyIds = defaultParties.map((p) => String(p.sequentialId));
 
     partyOrgCleanupResult = await db
       .collection<StatePartyOrg>("statePartyOrg")
       .deleteMany({ partyId: { $nin: defaultPartyIds } });
+    // `partyId` is a per-country sequence number, so the filter above keeps a
+    // row for a removed party whenever another country has a party with the
+    // same number. Settle the (country, party) pair for the org rows and the
+    // party budgets `seedPartyBudgets` wrote before the era cleanup ran.
+    const defaultPartyKeys = new Set(defaultParties.map((p) => `${p.countryId}:${p.sequentialId}`));
+    const strandedOrgRows = await deleteRowsOfRemovedParties(
+      db.collection("statePartyOrg"),
+      defaultPartyKeys
+    );
+    partyOrgCleanupResult = {
+      ...partyOrgCleanupResult,
+      deletedCount: partyOrgCleanupResult.deletedCount + strandedOrgRows,
+    };
+    await deleteRowsOfRemovedParties(db.collection("partyBudget"), defaultPartyKeys);
 
     await db.collection<StatePartyOrg>("statePartyOrg").updateMany(
       { partyId: { $in: defaultPartyIds } },
