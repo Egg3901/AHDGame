@@ -25,6 +25,8 @@ export interface Condition {
   metric: string;
   op: ">=" | "<=" | ">" | "<";
   value: number;
+  /** Year the threshold was authored for; semantic sign boundaries never move. */
+  thresholdYear?: number | "absolute";
 }
 
 interface ModifierDef {
@@ -419,7 +421,7 @@ const MODIFIER_DEFS: ModifierDef[] = [
     label: "Recession",
     effect: -3,
     conditions: [
-      { category: "economic", metric: "gdpGrowth", op: "<=", value: 0 },
+      { category: "economic", metric: "gdpGrowth", op: "<=", value: 0, thresholdYear: "absolute" },
       { category: "economic", metric: "unemploymentRate", op: ">=", value: 7 },
     ],
   },
@@ -755,7 +757,12 @@ function check(
   // Era drift: condition values are authored against the modern world; judge
   // against the era's normal by translating with the band curve's midpoint
   // movement. Zero for non-curve metrics and when year is null (legacy).
-  const threshold = cond.value + getEraConditionShift(cond.metric, countryId ?? undefined, year);
+  const shift =
+    cond.thresholdYear === "absolute" || year == null
+      ? 0
+      : getEraConditionShift(cond.metric, countryId ?? undefined, year) -
+        getEraConditionShift(cond.metric, countryId ?? undefined, cond.thresholdYear ?? 2019);
+  const threshold = cond.value + shift;
   switch (cond.op) {
     case ">=":
       return val >= threshold;

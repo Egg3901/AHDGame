@@ -244,3 +244,23 @@ describe("seedPoliticalMetrics", () => {
     expect(written).not.toContain("ZZZ");
   });
 });
+
+it("clears old-world channels while seeding a versioned 1991 opening", async () => {
+  const db = createMockDb();
+  db.collection("states").find().toArray.mockResolvedValue(STATES);
+  await seedPoliticalMetrics(db as unknown as Db, false, () => {}, 1991, "1991-default");
+  const updates = bulkOps(db.collectionMocks["politicalMetrics"]!.bulkWrite);
+  for (const [, update] of updates) {
+    expect(update).toMatchObject({
+      $set: { politicalOpeningVersion: "1991-v1-2026-10-05" },
+      $unset: {
+        cabinetResiduals: "",
+        cabinetResidualsBySource: "",
+        labourResiduals: "",
+        livingConflictResiduals: "",
+        appliedEventEffects: "",
+        residuals: "",
+      },
+    });
+  }
+});
