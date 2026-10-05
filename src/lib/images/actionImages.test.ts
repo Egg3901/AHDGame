@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { bypassNextImageOptimization } from "./bypassImageOptimization";
 import {
+  ACTION_ART_REVISIONS,
   ACTION_IMAGE_SLUGS,
   countriesWithArt,
   erasWithGenericSet,
@@ -55,8 +56,9 @@ describe("getActionImage", () => {
 
   it("serves each modern era its own set, not the neutral or another era's", () => {
     for (const era of ["1991", "1999", "2007", "2019", "2023", "2027"]) {
+      const rev = ACTION_ART_REVISIONS[`${era}/campaign`];
       expect(getActionImage("campaign", { era, countryId: "US" })).toBe(
-        `${BASE}/${era}/campaign.webp`
+        `${BASE}/${era}/campaign${rev ? `-v${rev}` : ""}.webp`
       );
     }
   });
@@ -83,6 +85,7 @@ describe("getActionImage", () => {
     expect(getActionImage("poll", { era: "1960", countryId: "US" })).toBe(
       `${BASE}/neutral/poll.webp`
     );
+    expect(getActionImage("fundraise", { era: "1960" })).toBe(`${BASE}/neutral/fundraise-v2.webp`);
     expect(getActionImage("poll", { era: "1953" })).toBe(`${BASE}/1953/poll.webp`);
   });
 
@@ -113,6 +116,7 @@ describe("era isolation", () => {
           const rel = url.slice(BASE.length + 1);
           const folder = rel.split("/")[0];
           const own = era !== null && erasWithGenericSet().includes(era);
+          // strip the `-v<n>` revision suffix; the folder is what isolation is about
           expect(folder, `${era}/${countryId}/${slug} -> ${url}`).toBe(
             own ? era : NEUTRAL_ART_FOLDER
           );
@@ -140,6 +144,30 @@ describe("era isolation", () => {
     for (const slug of ACTION_IMAGE_SLUGS) {
       expect(`${NEUTRAL_ART_FOLDER}/${slug}` in sources, slug).toBe(true);
     }
+  });
+});
+
+describe("replaced art revisions", () => {
+  const sources: Record<string, { revision?: number }> = JSON.parse(
+    readFileSync(path.join(process.cwd(), "scripts", "action-image-sources.json"), "utf8")
+  );
+
+  it("serves a replaced image under its versioned name, never the cached original", () => {
+    expect(getActionImage("fundraise", { era: "2023", countryId: "US" })).toBe(
+      `${BASE}/2023/fundraise-v2.webp`
+    );
+    expect(getActionImage("canvass", { era: "2027" })).toBe(`${BASE}/2027/canvass-v2.webp`);
+    // Untouched art keeps its original name.
+    expect(getActionImage("poll", { era: "2023" })).toBe(`${BASE}/2023/poll.webp`);
+  });
+
+  it("keeps the resolver revisions equal to the source manifest", () => {
+    const fromManifest = Object.fromEntries(
+      Object.entries(sources)
+        .filter(([key, v]) => !key.startsWith("_") && v.revision)
+        .map(([key, v]) => [key, v.revision])
+    );
+    expect(ACTION_ART_REVISIONS).toEqual(fromManifest);
   });
 });
 

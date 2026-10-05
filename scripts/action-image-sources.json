@@ -9,7 +9,8 @@
     "off centre; use it when the subject sits high or low in the frame.",
     "Eras 1991/1999/2007/2019/2023/2027 and the era-neutral set `neutral/<slug>` were added for 1.12.",
     "Optional `color: true` keeps the source in colour; the pre-2000 sets and the neutral set are greyscaled for one tonal treatment.",
-    "Optional `page` is the Commons file page; `credit` is the attribution line shown in public/static/actions/CREDITS.md."
+    "Optional `page` is the Commons file page; `credit` is the attribution line shown in public/static/actions/CREDITS.md.",
+    "Optional `revision: n` marks replaced art: the file is published as `<slug>-v<n>.webp` (new R2 object, the old one stays so cached URLs never show new art under an old name) and must also be listed in ACTION_ART_REVISIONS in src/lib/images/actionImages.ts."
   ],
   "1953/campaign": {
     "url": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Large_crowd_assembled_at_a_political_rally_in_South_Bend%2C_Indiana%2C_for_presidential_candidate_Dwight_Eisenhower.jpg",
@@ -341,10 +342,11 @@
     "page": "https://commons.wikimedia.org/wiki/File:Golkar_campaigners_1997.jpg"
   },
   "1999/fundraise": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/0/0b/Delegates_voting_at_the_Second_European_Ecumenical_Assembly%2C_Graz%2C_June_1997.jpg",
-    "credit": "Gleyshon, via Wikimedia Commons",
-    "license": "CC BY-SA 3.0",
-    "page": "https://commons.wikimedia.org/wiki/File:Delegates_voting_at_the_Second_European_Ecumenical_Assembly,_Graz,_June_1997.jpg"
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/2d/President_and_Nancy_Reagan_Attending_a_Fundraising_Reception_for_The_John_F._Kennedy_Library_Foundation_%28From_Left_to_Right%29_Senator_Edward_Kennedy_President_Ronald_Reagan_Nancy_Rea_-_DPLA_-_cde1e4be16592924064bb6c754e0daee.jpg",
+    "credit": "President (1981-1989 : Reagan). White House Photographic Office. 1981-1989, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:President_and_Nancy_Reagan_Attending_a_Fundraising_Reception_for_The_John_F._Kennedy_Library_Foundation_(From_Left_to_Right)_Senator_Edward_Kennedy_President_Ronald_Reagan_Nancy_Rea_-_DPLA_-_cde1e4be16592924064bb6c754e0daee.jpg",
+    "revision": 2
   },
   "1999/buildDonorBase": {
     "url": "https://upload.wikimedia.org/wikipedia/commons/1/16/RIAN_archive_858217_Boris_Yeltsin_and_Michel_Camdessus.jpg",
@@ -359,16 +361,18 @@
     "page": "https://commons.wikimedia.org/wiki/File:Launching_of_the_Euro_-_Press_conference_-_1998.jpg"
   },
   "1999/poll": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/3/33/Cameramen_during_VLT_first_light_press_conference_%28vlt-fl-press-conf-3%29.jpg",
-    "credit": "ESO, via Wikimedia Commons",
-    "license": "CC BY 4.0",
-    "page": "https://commons.wikimedia.org/wiki/File:Cameramen_during_VLT_first_light_press_conference_(vlt-fl-press-conf-3).jpg"
+    "url": "https://upload.wikimedia.org/wikipedia/commons/1/1b/Blue_Collar_Voters_NBC_1980_presidential_exit_poll.png",
+    "credit": "NBC News, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Blue_Collar_Voters_NBC_1980_presidential_exit_poll.png",
+    "revision": 2
   },
   "1999/pollLarge": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/d/d9/RIAN_archive_858219_Boris_Yeltsin_and_Michel_Camdessus.jpg",
-    "credit": "Vladimir Rodionov / Владимир Родионов, via Wikimedia Commons",
-    "license": "CC BY-SA 3.0",
-    "page": "https://commons.wikimedia.org/wiki/File:RIAN_archive_858219_Boris_Yeltsin_and_Michel_Camdessus.jpg"
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/40/Issue_One_Exit_Polling_Results_May_6%2C_1986_-_DPLA_-_5637d277156ad83f90077970182b9e85_%28page_4%29.jpg",
+    "credit": "Columbus (Ohio) Department of Development, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Issue_One_Exit_Polling_Results_May_6,_1986_-_DPLA_-_5637d277156ad83f90077970182b9e85_(page_4).jpg",
+    "revision": 2
   },
   "1999/canvass": {
     "url": "https://upload.wikimedia.org/wikipedia/commons/5/52/Ismail_Kosan_beim_Wahlkampf_der_Gr%C3%BCnen_f%C3%BCr_die_Bundestagswahl_1998.jpg",
@@ -458,10 +462,11 @@
     "color": true
   },
   "2007/debatePrep": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/4/44/Meeting_Royal_2007_02_06_n6.jpg",
-    "credit": "Jastrow, via Wikimedia Commons",
-    "license": "CC BY 2.5",
-    "page": "https://commons.wikimedia.org/wiki/File:Meeting_Royal_2007_02_06_n6.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/8e/HUJI_Election_Debate_%288361985738%29.jpg",
+    "credit": "The Israel Project, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:HUJI_Election_Debate_(8361985738).jpg",
+    "revision": 2,
     "color": true
   },
   "2007/hero": {
@@ -472,10 +477,11 @@
     "color": true
   },
   "2019/campaign": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/4/43/Crowd_of_protesters_on_the_main_intersection_of_Queen_Street%2C_Auckland%2C_at_the_Stand_Against_Racism_protest_in_Auckland_city%2C_Sunday_24_March_2019.jpg",
-    "credit": "Thomas Le Bas, via Wikimedia Commons",
-    "license": "CC BY-SA 4.0",
-    "page": "https://commons.wikimedia.org/wiki/File:Crowd_of_protesters_on_the_main_intersection_of_Queen_Street,_Auckland,_at_the_Stand_Against_Racism_protest_in_Auckland_city,_Sunday_24_March_2019.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/35/Election_2016-_Bernie_Sanders_NYC_Fundraiser_Draws_Campaign_Supporters_Who_Are_%27Feelin%27_The_Bern%27_%2821647292132%29.jpg",
+    "credit": "Michael Vadon, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Election_2016-_Bernie_Sanders_NYC_Fundraiser_Draws_Campaign_Supporters_Who_Are_'Feelin'_The_Bern'_(21647292132).jpg",
+    "revision": 2,
     "color": true
   },
   "2019/advertise": {
@@ -486,10 +492,11 @@
     "color": true
   },
   "2019/fundraise": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/f/f3/Green_Party_Presidential_Primary_Debate_-_2019.jpg",
-    "credit": "Dario Hunter, via Wikimedia Commons",
-    "license": "CC BY-SA 4.0",
-    "page": "https://commons.wikimedia.org/wiki/File:Green_Party_Presidential_Primary_Debate_-_2019.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/e/ee/Tpac-donors-dinner_16803559592_o.jpg",
+    "credit": "Eric Haynes for the Office of the Governor of Massachusetts, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Tpac-donors-dinner_16803559592_o.jpg",
+    "revision": 2,
     "color": true
   },
   "2019/buildDonorBase": {
@@ -521,24 +528,27 @@
     "color": true
   },
   "2019/canvass": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/b/ba/Make_Detroit_the_Engine_of_the_Green_New_Deal%21_IMG_300_%2816%29_%2848423001132%29.jpg",
-    "credit": "Becker1999 from Grove City, OH, via Wikimedia Commons",
-    "license": "CC BY 2.0",
-    "page": "https://commons.wikimedia.org/wiki/File:Make_Detroit_the_Engine_of_the_Green_New_Deal!_IMG_300_(16)_(48423001132).jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/dd/22-09-22_Campagna_elettorale_mercato_di_Cascina_24.jpg",
+    "credit": "Alexmar983, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:22-09-22_Campagna_elettorale_mercato_di_Cascina_24.jpg",
+    "revision": 2,
     "color": true
   },
   "2019/flipflop": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/0/0a/Doha_Debates-Refugees_2019-2-26.jpg",
-    "credit": "Doha Debates, via Wikimedia Commons",
-    "license": "CC BY-SA 4.0",
-    "page": "https://commons.wikimedia.org/wiki/File:Doha_Debates-Refugees_2019-2-26.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/b0/Le_chef_lib%C3%A9ral_Michael_Ignatieff_lors_de_la_visite_dun_centre_de_ressources_communautaires_%C3%A0_Charlesbourg.jpg",
+    "credit": "Michael Ignatieff, via Wikimedia Commons",
+    "license": "CC BY 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Le_chef_lib%C3%A9ral_Michael_Ignatieff_lors_de_la_visite_dun_centre_de_ressources_communautaires_%C3%A0_Charlesbourg.jpg",
+    "revision": 2,
     "color": true
   },
   "2019/debatePrep": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/d/d9/Bipartisan_Background_Checks_Act_of_2019_press_conference_2020_01.jpg",
-    "credit": "Mike Thompson, via Wikimedia Commons",
-    "license": "Public domain",
-    "page": "https://commons.wikimedia.org/wiki/File:Bipartisan_Background_Checks_Act_of_2019_press_conference_2020_01.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/82/Republican_Presidential_debate_2016_by_Gage_Skidmore.jpg",
+    "credit": "Gage Skidmore, via Wikimedia Commons",
+    "license": "CC BY-SA 3.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Republican_Presidential_debate_2016_by_Gage_Skidmore.jpg",
+    "revision": 2,
     "color": true
   },
   "2019/hero": {
@@ -549,28 +559,33 @@
     "color": true
   },
   "neutral/campaign": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/4/43/Crowd_of_protesters_on_the_main_intersection_of_Queen_Street%2C_Auckland%2C_at_the_Stand_Against_Racism_protest_in_Auckland_city%2C_Sunday_24_March_2019.jpg",
-    "credit": "Thomas Le Bas, via Wikimedia Commons",
-    "license": "CC BY-SA 4.0",
-    "page": "https://commons.wikimedia.org/wiki/File:Crowd_of_protesters_on_the_main_intersection_of_Queen_Street,_Auckland,_at_the_Stand_Against_Racism_protest_in_Auckland_city,_Sunday_24_March_2019.jpg"
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/b2/Obama_Rally_%282286936605%29.jpg",
+    "credit": "Joel Gillman from Minneapolis, USA, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Obama_Rally_(2286936605).jpg",
+    "revision": 2
   },
   "neutral/advertise": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/0/0e/Flooding_%5E_Hurricane-Tropical_Storm_-_Lodi%2C_N._J._%2C_September_20%2C_2011_--_September_20%2C_2011_--_FEMA%2C_along_with_state_partners%2C_put_up_billboards_around_the_NJ_area_to_get_people_i_-_DPLA_-_70785b9f0bd1052b0356beb0a8a9765a.jpg",
-    "credit": "Department of Homeland Security. Federal Emergency Management Agency. Public Affairs Division. 3/1/2, via Wikimedia Commons",
-    "license": "Public domain",
-    "page": "https://commons.wikimedia.org/wiki/File:Flooding_%5E_Hurricane-Tropical_Storm_-_Lodi,_N._J._,_September_20,_2011_--_September_20,_2011_--_FEMA,_along_with_state_partners,_put_up_billboards_around_the_NJ_area_to_get_people_i_-_DPLA_-_70785b9f0bd1052b0356beb0a8a9765a.jpg"
+    "url": "https://upload.wikimedia.org/wikipedia/commons/7/74/Brno%2C_Kn%C3%ADni%C4%8Dsk%C3%A1%2C_billboard_ODS_%284040%29.jpg",
+    "credit": "Martin Strachoň, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Brno,_Kn%C3%ADni%C4%8Dsk%C3%A1,_billboard_ODS_(4040).jpg",
+    "gravity": "north",
+    "revision": 2
   },
   "neutral/fundraise": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/f/f3/Green_Party_Presidential_Primary_Debate_-_2019.jpg",
-    "credit": "Dario Hunter, via Wikimedia Commons",
-    "license": "CC BY-SA 4.0",
-    "page": "https://commons.wikimedia.org/wiki/File:Green_Party_Presidential_Primary_Debate_-_2019.jpg"
+    "url": "https://upload.wikimedia.org/wikipedia/commons/e/ee/Tpac-donors-dinner_16803559592_o.jpg",
+    "credit": "Eric Haynes for the Office of the Governor of Massachusetts, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Tpac-donors-dinner_16803559592_o.jpg",
+    "revision": 2
   },
   "neutral/buildDonorBase": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/3/33/Cameramen_during_VLT_first_light_press_conference_%28vlt-fl-press-conf-3%29.jpg",
-    "credit": "ESO, via Wikimedia Commons",
-    "license": "CC BY 4.0",
-    "page": "https://commons.wikimedia.org/wiki/File:Cameramen_during_VLT_first_light_press_conference_(vlt-fl-press-conf-3).jpg"
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/c1/Gov._Strickland_visits_Phone_Bank.jpg",
+    "credit": "aflcio2008, via Wikimedia Commons",
+    "license": "CC BY 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Gov._Strickland_visits_Phone_Bank.jpg",
+    "revision": 2
   },
   "neutral/convertCash": {
     "url": "https://upload.wikimedia.org/wikipedia/commons/5/50/Euro_banknotes%2C_First_series.png",
@@ -597,16 +612,18 @@
     "page": "https://commons.wikimedia.org/wiki/File:Socialist_campaign_booth_2007.JPG"
   },
   "neutral/flipflop": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/4/44/Meeting_Royal_2007_02_06_n6.jpg",
-    "credit": "Jastrow, via Wikimedia Commons",
-    "license": "CC BY 2.5",
-    "page": "https://commons.wikimedia.org/wiki/File:Meeting_Royal_2007_02_06_n6.jpg"
+    "url": "https://upload.wikimedia.org/wikipedia/commons/f/f0/Hillary_Clinton_with_press.jpg",
+    "credit": "Terry Ross from Corpus Christi, Texas, United States, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Hillary_Clinton_with_press.jpg",
+    "revision": 2
   },
   "neutral/debatePrep": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/0/0a/Doha_Debates-Refugees_2019-2-26.jpg",
-    "credit": "Doha Debates, via Wikimedia Commons",
-    "license": "CC BY-SA 4.0",
-    "page": "https://commons.wikimedia.org/wiki/File:Doha_Debates-Refugees_2019-2-26.jpg"
+    "url": "https://upload.wikimedia.org/wikipedia/commons/e/eb/HUJI_Election_Debate_%288367953626%29.jpg",
+    "credit": "The Israel Project, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:HUJI_Election_Debate_(8367953626).jpg",
+    "revision": 2
   },
   "neutral/hero": {
     "url": "https://upload.wikimedia.org/wikipedia/commons/2/2c/European_Parliament_Strasbourg_Hemicycle_-_Diliff.jpg",
@@ -615,31 +632,35 @@
     "page": "https://commons.wikimedia.org/wiki/File:European_Parliament_Strasbourg_Hemicycle_-_Diliff.jpg"
   },
   "2023/campaign": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/c/cd/Crowd_at_the_stage_of_Christopher_Street_Day_Berlin_2023-07-22_02.jpg",
-    "credit": "Leonhard Lenz, via Wikimedia Commons",
-    "license": "CC0",
-    "page": "https://commons.wikimedia.org/wiki/File:Crowd_at_the_stage_of_Christopher_Street_Day_Berlin_2023-07-22_02.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/0/0b/Millet_%C4%B0ttifak%C4%B1_%C4%B0zmir_mitingi.jpg",
+    "credit": "BSRF, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Millet_%C4%B0ttifak%C4%B1_%C4%B0zmir_mitingi.jpg",
+    "revision": 2,
     "color": true
   },
   "2023/advertise": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/e/e8/Voting_in_Sonoma_-_November_2024_-_Sarah_Stierch_03.jpg",
-    "credit": "Missvain, via Wikimedia Commons",
-    "license": "CC0",
-    "page": "https://commons.wikimedia.org/wiki/File:Voting_in_Sonoma_-_November_2024_-_Sarah_Stierch_03.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/f/fe/Predvolebn%C3%A1_kampa%C5%88%2C_parlamentn%C3%A9_vo%C4%BEby_2023%2C_Doln%C3%BD_Kub%C3%ADn%2C_Slovensko_01.jpg",
+    "credit": "Oto Zapletal, via Wikimedia Commons",
+    "license": "CC BY 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Predvolebn%C3%A1_kampa%C5%88,_parlamentn%C3%A9_vo%C4%BEby_2023,_Doln%C3%BD_Kub%C3%ADn,_Slovensko_01.jpg",
+    "revision": 2,
     "color": true
   },
   "2023/fundraise": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/f/f4/Climate_strike_fifth_anniversary_press_conference_in_Berlin_2023-08-20_13.jpg",
-    "credit": "Leonhard Lenz, via Wikimedia Commons",
-    "license": "CC0",
-    "page": "https://commons.wikimedia.org/wiki/File:Climate_strike_fifth_anniversary_press_conference_in_Berlin_2023-08-20_13.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/b1/Election_2016-_Bernie_Sanders_NYC_Fundraiser_Draws_Campaign_Supporters_Who_Are_%27Feelin%27_The_Bern%27_%2821668863331%29.jpg",
+    "credit": "Michael Vadon, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Election_2016-_Bernie_Sanders_NYC_Fundraiser_Draws_Campaign_Supporters_Who_Are_'Feelin'_The_Bern'_(21668863331).jpg",
+    "revision": 2,
     "color": true
   },
   "2023/buildDonorBase": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/b/ba/2023_State_Opening_of_Parliament_UK.jpg",
-    "credit": "Daniel Cooper, via Wikimedia Commons",
-    "license": "CC BY-SA 2.0",
-    "page": "https://commons.wikimedia.org/wiki/File:2023_State_Opening_of_Parliament_UK.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/58/Phone_bank_-_Lawrence%2C_MA_%2831127827577%29.jpg",
+    "credit": "ElizabethForMA, via Wikimedia Commons",
+    "license": "CC BY 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Phone_bank_-_Lawrence,_MA_(31127827577).jpg",
+    "revision": 2,
     "color": true
   },
   "2023/convertCash": {
@@ -664,10 +685,11 @@
     "color": true
   },
   "2023/canvass": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/8/89/2023_TH-election_queue-for-voting_IMG_4056.jpg",
-    "credit": "Per Meistrup, via Wikimedia Commons",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/26/22-09-22_Campagna_elettorale_mercato_di_Cascina_18.jpg",
+    "credit": "Alexmar983, via Wikimedia Commons",
     "license": "CC BY-SA 4.0",
-    "page": "https://commons.wikimedia.org/wiki/File:2023_TH-election_queue-for-voting_IMG_4056.jpg",
+    "page": "https://commons.wikimedia.org/wiki/File:22-09-22_Campagna_elettorale_mercato_di_Cascina_18.jpg",
+    "revision": 2,
     "color": true
   },
   "2023/flipflop": {
@@ -741,17 +763,19 @@
     "color": true
   },
   "2027/canvass": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/e/e3/July_30_Bike_Protest_crowd_02.jpg",
-    "credit": "Ian McCausland, via Wikimedia Commons",
-    "license": "Public domain",
-    "page": "https://commons.wikimedia.org/wiki/File:July_30_Bike_Protest_crowd_02.jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/1/1f/22-09-22_Campagna_elettorale_mercato_di_Cascina_22.jpg",
+    "credit": "Alexmar983, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:22-09-22_Campagna_elettorale_mercato_di_Cascina_22.jpg",
+    "revision": 2,
     "color": true
   },
   "2027/flipflop": {
-    "url": "https://upload.wikimedia.org/wikipedia/commons/c/c6/Polling_station_entrance%2C_Hull_%28geograph_7474634%29.jpg",
-    "credit": "Paul Harrop, via Wikimedia Commons",
-    "license": "CC BY-SA 2.0",
-    "page": "https://commons.wikimedia.org/wiki/File:Polling_station_entrance,_Hull_(geograph_7474634).jpg",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/d1/Scrum_-_M%C3%AAl%C3%A9e_de_presse_%2837100733570%29.jpg",
+    "credit": "Andrew Scheer, via Wikimedia Commons",
+    "license": "CC0",
+    "page": "https://commons.wikimedia.org/wiki/File:Scrum_-_M%C3%AAl%C3%A9e_de_presse_(37100733570).jpg",
+    "revision": 2,
     "color": true
   },
   "2027/debatePrep": {
