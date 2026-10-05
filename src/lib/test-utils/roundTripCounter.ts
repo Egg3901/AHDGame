@@ -46,7 +46,8 @@ export function countRoundTrips(db: InMemoryDb): RoundTripCounter {
     if (wrapped.has(collection)) return;
     wrapped.add(collection);
     for (const method of COUNTED) {
-      const original = Reflect.get(collection, method);
+      const original = Reflect.get(collection, method) as
+        ((this: unknown, ...args: unknown[]) => unknown) | undefined;
       if (typeof original !== "function") continue;
       Reflect.set(collection, method, (...args: unknown[]) => {
         if (depth === 0) {
