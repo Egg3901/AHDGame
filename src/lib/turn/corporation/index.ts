@@ -26,6 +26,9 @@ import { isFairnessDoctrineInEffect } from "@/lib/mediaRegulation/rules";
 import { runClearingPrePass } from "./clearingPrePass";
 import { computeQualityUpdates } from "./brandQualityTurn";
 import { consumeManufacturingDevelopmentReceiptsV2 } from "@/lib/products/manufacturingProjectPersistence";
+import { processAdvertisingTurn } from "@/lib/advertising/settlementTurn";
+import { loadAdvertisingEfficacyByCorp } from "@/lib/advertising/persistence";
+import type { CoverageSectorInput } from "@/lib/advertising/rules/coverage";
 import {
   MANUFACTURING_PRODUCT_PROJECTS_V2,
   type ManufacturingProductProject,
@@ -302,12 +305,18 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const politicalMediaOrders: PoliticalMediaOrderForClearing[] = politicalMediaMarketEnabled
     ? await loadPoliticalMediaOrdersForClearing(db, turn ?? 0)
     : [];
+  // Coverage efficacy earned by last turn's advertising agreements. Empty when
+  // the gate is off, which leaves product brand formation neutral.
+  const advertisingEfficacyByCorpId = mediaOperatingModelsEnabled
+    ? await loadAdvertisingEfficacyByCorp(db, (turn ?? gameState?.currentTurn ?? 0) - 1)
+    : new Map<string, { turn: number; factor: number }>();
   if (lookups.productLinesV2Enabled && lookups.manufacturingProductByCorpId) {
     await consumeManufacturingDevelopmentReceiptsV2({
       db,
       corporations: lookups.corporations,
       projectsByCorporationId: lookups.manufacturingProductByCorpId,
       completedTurn: (turn ?? gameState?.currentTurn ?? 0) - 1,
+      advertisingEfficacyByCorporationId: advertisingEfficacyByCorpId,
     });
   }
   const currentYear = gameState?.currentYear;
@@ -567,6 +576,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       projectsByCorporationId: lookups.mediaProductProjectsByCorpId,
       currentTurn: turn ?? 1,
       sectorQualityBySectorId: lookups.productSectorQualityById ?? new Map(),
+      advertisingEfficacyByCorporationId: advertisingEfficacyByCorpId,
     });
     const projectsBySectorId = new Map<
       string,
@@ -722,6 +732,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     labourDemandWageIndexByState,
     strikeEvents,
     capacityBindingEvents,
+    settledMarketingSpendAnchorByBuyerId,
+    advertisingDeliveredAnchorBySellerId,
   } = processSectors(
     lookups,
     turn,
@@ -949,6 +961,37 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // on pre-migration worlds.
   await creditEquityPoolsBatch(db, equityPoolDividendAccruals, "dividendsIn", now);
   mark("sector+corp bulkWrites");
+
+  // Advertising agreements attribute the spend this turn already settled across
+  // each buyer's agreements and spot. Attribution only: no cash, revenue, or
+  // market write. Gate off performs zero advertising reads or writes.
+  if (mediaOperatingModelsEnabled) {
+    const advertisingSectorsByCorp = new Map<string, CoverageSectorInput[]>();
+    for (const [corpId, sectors] of lookups.sectorsByCorp) {
+      advertisingSectorsByCorp.set(
+        corpId,
+        sectors.map((sector) => ({
+          stateId: sector.stateId,
+          revenue: sector.revenue,
+          countryId: sector.countryId,
+          mothballed: sector.mothballed,
+          embargoSuspended: sector.embargoSuspended,
+          activeCapacityPercent: sector.activeCapacityPercent,
+          strategyId: sector.strategyId,
+        }))
+      );
+    }
+    await processAdvertisingTurn(db, {
+      enabled: true,
+      turn: turn ?? gameState?.currentTurn,
+      corpsById: lookups.corpById,
+      sectorsByCorp: advertisingSectorsByCorp,
+      fxByCurrency: lookups.exchangeRatesByCurrency,
+      deliveredAnchorBySellerId: advertisingDeliveredAnchorBySellerId,
+      settledSpendAnchorByBuyerId: settledMarketingSpendAnchorByBuyerId,
+    });
+    mark("advertisingSettlement");
+  }
 
   const settledPoliticalMediaOrders = [];
   const currentTurnNumber = turn ?? gameState?.currentTurn ?? 0;

@@ -110,6 +110,7 @@ import { migration as manufacturingProductProjectsV2Index } from "./entries/2026
 import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-media-product-projects-v1-index";
 import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank-treasury-trade-indexes";
 import { migration as underwritingRecoveryIndexes } from "./entries/2026-10-04-underwriting-recovery-indexes";
+import { migration as advertisingAgreementIndexes } from "./entries/2026-10-05-advertising-agreement-indexes";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -344,6 +345,7 @@ export const MIGRATIONS: Migration[] = [
   bankTreasuryTradeIndexes,
   underwritingRecoveryIndexes,
   bankFailurePoliticsIndex,
+  advertisingAgreementIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
