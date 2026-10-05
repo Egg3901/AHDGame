@@ -21,7 +21,7 @@ import type { MacroCountryState } from "@/lib/world/macro/types";
 import type { Bond } from "@/lib/db/types/bond";
 import type { SeedDiagnosticCheck } from "./types";
 import { check } from "./checkFactory";
-import { nonFinitePaths, reconciles } from "./rules/economicOpening";
+import { nonFinitePaths, openingBalanceWithinEnvelope, reconciles } from "./rules/economicOpening";
 import { OPENING_INFLATION_BOUNDS } from "@/lib/seeds/reference/openingInflation1991";
 import { openingInflationProblem } from "@/lib/seeds/reference/rules/openingInflation";
 
@@ -114,7 +114,7 @@ export async function checkEconomicOpening(db: Db, preset: string): Promise<Seed
       assert(
         country,
         "opening-deficit",
-        -budget.surplus / budget.gdp <= 0.0075,
+        openingBalanceWithinEnvelope(budget.surplus, budget.gdp),
         `${((-100 * budget.surplus) / budget.gdp).toFixed(4)}% GDP`
       );
     }

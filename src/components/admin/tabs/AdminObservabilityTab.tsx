@@ -33,8 +33,8 @@ export function AdminObservabilityTab() {
       if (data.issues) {
         setIssues(data.issues);
       }
-      if (data.message) {
-        setError(data.message);
+      if (data.error || data.message) {
+        setError(data.error || data.message);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load issues");
@@ -76,17 +76,19 @@ export function AdminObservabilityTab() {
       {configured && (
         <>
           <div className="flex items-center justify-between">
-            <div className="flex gap-3">
-              <Badge color="error" variant="subtle">
-                {issues.filter((i) => i.level === "fatal" || i.level === "error").length} errors
-              </Badge>
-              <Badge color="warning" variant="subtle">
-                {issues.filter((i) => i.level === "warning").length} warnings
-              </Badge>
-              <Badge color="default" variant="subtle">
-                {issues.length} total
-              </Badge>
-            </div>
+            {!error && (
+              <div className="flex gap-3">
+                <Badge color="error" variant="subtle">
+                  {issues.filter((i) => i.level === "fatal" || i.level === "error").length} errors
+                </Badge>
+                <Badge color="warning" variant="subtle">
+                  {issues.filter((i) => i.level === "warning").length} warnings
+                </Badge>
+                <Badge color="default" variant="subtle">
+                  {issues.length} total
+                </Badge>
+              </div>
+            )}
             <button
               onClick={() => void fetchIssues()}
               disabled={loading}
@@ -132,7 +134,7 @@ export function AdminObservabilityTab() {
               </div>
             ))}
 
-            {!loading && issues.length === 0 && (
+            {!loading && !error && issues.length === 0 && (
               <div className="rounded-lg border border-card-border bg-card p-8 text-center">
                 <p className="text-sm text-muted">No issues in the last 24 hours. 🎉</p>
               </div>
