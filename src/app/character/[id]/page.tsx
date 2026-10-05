@@ -24,12 +24,7 @@ import { fundraiseYieldLocal } from "@/lib/actions";
 import { resolveStartingCountryId } from "@/lib/utils/profileDemographics";
 import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
 import { getSiteUrl } from "@/lib/siteMetadata";
-import type {
-  Character,
-  CongressLeader,
-  SupremeCourtSeat,
-  ElectedOfficial,
-} from "@/lib/db/types";
+import type { Character, CongressLeader, SupremeCourtSeat, ElectedOfficial } from "@/lib/db/types";
 import { PolicyDemographicsCard } from "@/app/profile/components/PolicyDemographicsCard";
 import type { CompassMarker } from "@/components/PoliticalCompass";
 import { InteractCard } from "@/app/profile/components/InteractCard";

@@ -29,7 +29,7 @@ export type SimActorMode = "pure-npp" | "synthetic";
 export type ActorGateStatus = "covered" | "partial" | "unreachable";
 
 /** Registry version stamped into every manifest; bump on entry changes. */
-export const ACTOR_COVERAGE_REGISTRY_VERSION = 3;
+export const ACTOR_COVERAGE_REGISTRY_VERSION = 4;
 
 /** Exact explicit result for the presidential-nomination gate in pure NPP mode. */
 export const UNCOVERED_PRESIDENTIAL_NOMINATION = "uncovered: presidential nomination";
@@ -66,7 +66,7 @@ export const ACTOR_GATED_MECHANICS: readonly ActorGatedMechanic[] = [
     requires: "characters funding and submitting currency orders",
     seams: [
       seam("src/app/api/forex/orders/route.ts", "Atomic escrow"),
-      seam("src/lib/turn/forexTurn.ts", "Find open/partial limit orders"),
+      seam("src/lib/turn/forexLimitOrders.ts", "Find open/partial limit orders"),
     ],
     pureNpp: {
       status: "unreachable",

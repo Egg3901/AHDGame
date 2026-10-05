@@ -27,7 +27,7 @@ vi.mock("next-intl", () => ({
 }));
 
 vi.mock("@/lib/observability/sentryClientLazy", () => ({
-  captureClientException: mocks.capture,
+  captureClientExceptionWithId: mocks.capture,
 }));
 
 vi.mock("next/link", async () => {
@@ -48,7 +48,7 @@ describe("country route transport recovery", () => {
   beforeEach(() => {
     clearNetworkRetry(route);
     mocks.refresh.mockClear();
-    mocks.capture.mockClear();
+    mocks.capture.mockReset().mockResolvedValue("test-event-id");
   });
 
   afterEach(() => {

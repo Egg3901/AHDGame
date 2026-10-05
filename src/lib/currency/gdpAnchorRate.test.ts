@@ -73,17 +73,25 @@ describe("getGdpAnchorRate", () => {
     );
     // Guard the guard, as above: an empty set would pass vacuously.
     expect(authored.sort()).toEqual([
+      "AT",
       "BG",
       "CN",
       "CS",
       "DE",
+      "ES",
+      "FI",
+      "FR",
+      "GR",
       "HU",
       "IE",
+      "IT",
       "JP",
       "NG",
       "PL",
       "RO",
       "RU",
+      "SE",
+      "TR",
       "UK",
       "YU",
     ]);

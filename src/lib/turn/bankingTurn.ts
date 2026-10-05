@@ -1083,13 +1083,11 @@ async function processLoanBookOnlyBank(
         observedIncomeTurn: publicationCharter.lastBankingIncomeTurn,
         observedSovereignCouponIncome: publicationCharter.lastBankingSovereignCouponIncome,
         observedTreasuryRealizedGain: publicationCharter.lastBankingTreasuryRealizedGain,
-        observedSovereignCouponPaidLifetime:
-          publicationCharter.sovereignCouponIncomePaidLifetime,
+        observedSovereignCouponPaidLifetime: publicationCharter.sovereignCouponIncomePaidLifetime,
         observedSovereignCouponBookedLifetime:
           publicationCharter.sovereignCouponIncomeBookedLifetime,
         observedTreasuryGainPaidLifetime: publicationCharter.treasuryRealizedGainPaidLifetime,
-        observedTreasuryGainBookedLifetime:
-          publicationCharter.treasuryRealizedGainBookedLifetime,
+        observedTreasuryGainBookedLifetime: publicationCharter.treasuryRealizedGainBookedLifetime,
         observedUnderwritingFeesTurn: publicationCharter.lastBankingUnderwritingFeesTurn,
         observedUnderwritingFees: publicationCharter.lastBankingUnderwritingFees,
       }),

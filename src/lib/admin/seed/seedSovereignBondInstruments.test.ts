@@ -190,10 +190,17 @@ describe("seedSovereignBondInstruments", () => {
 
     await seedSovereignBondInstruments(db as unknown as Db, () => {}, 0, new Date());
 
-    expect(inserted.map((bond) => [bond.maturityTurns, bond.couponRate])).toEqual([
+    // Opening stock now uses several quarterly cohorts per tenor. Every
+    // cohort must still use the budget's credit tier for that tenor.
+    expect(new Set(inserted.map((bond) => bond.maturityTurns))).toEqual(new Set([48, 96, 240]));
+    const coupons = new Map([
       [48, 8],
       [96, 8.25],
       [240, 8.75],
     ]);
+    for (const bond of inserted) {
+      expect(bond.countryId).toBe("US");
+      expect(bond.couponRate).toBe(coupons.get(bond.maturityTurns));
+    }
   });
 });
