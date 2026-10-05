@@ -83,7 +83,9 @@ function literalStrings(type: ts.Type, checker: ts.TypeChecker): string[] | unde
   return [...new Set(values)].sort();
 }
 
-function isCollectionCall(node: ts.Node): node is ts.CallExpression {
+function isCollectionCall(
+  node: ts.Node
+): node is ts.CallExpression & { expression: ts.PropertyAccessExpression } {
   return (
     ts.isCallExpression(node) &&
     ts.isPropertyAccessExpression(node.expression) &&
