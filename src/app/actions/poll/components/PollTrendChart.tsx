@@ -37,7 +37,7 @@ export function PollTrendChart({ polls }: { polls: RecentPollEntry[] }) {
   const delta = last - first;
 
   return (
-    <figure className="mt-3">
+    <figure className="mt-3 max-w-2xl">
       <figcaption className="mb-1 flex flex-wrap items-baseline gap-x-3 text-body-sm text-muted">
         <span className="inline-flex items-center gap-1.5">
           <span className="h-0.5 w-5 rounded-full bg-secondary" aria-hidden />
@@ -47,60 +47,62 @@ export function PollTrendChart({ polls }: { polls: RecentPollEntry[] }) {
           {delta >= 0 ? "Up" : "Down"} {Math.abs(delta).toFixed(1)} since the oldest saved poll
         </span>
       </figcaption>
-      <svg
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        className="h-auto w-full"
-        role="img"
-        aria-label={`Overall appeal across your last ${ordered.length} polls, from ${first.toFixed(1)} to ${last.toFixed(1)}`}
-      >
-        {Y_TICKS.map((v) => (
-          <g key={v}>
-            <line
-              x1={PAD_LEFT}
-              x2={WIDTH - PAD_RIGHT}
-              y1={toY(v)}
-              y2={toY(v)}
-              stroke="var(--card-border)"
-              strokeWidth={1}
-            />
-            <text
-              x={PAD_LEFT - 6}
-              y={toY(v) + 4}
-              textAnchor="end"
-              fontSize={11}
-              fill="var(--muted)"
-            >
-              {v}
-            </text>
-          </g>
-        ))}
-        <polyline
-          points={line}
-          fill="none"
-          stroke="var(--secondary)"
-          strokeWidth={2}
-          strokeLinejoin="round"
-        />
-        {points.map((pt, i) => (
-          <g key={`${pt.p.takenAt}-${i}`}>
-            <circle cx={pt.x} cy={pt.y} r={4} fill="var(--secondary)">
-              <title>{`Poll ${i + 1}: ${pt.p.overallAppeal.toFixed(1)} appeal`}</title>
-            </circle>
-            <text x={pt.x} y={HEIGHT - 22} textAnchor="middle" fontSize={11} fill="var(--muted)">
-              {i + 1}
-            </text>
-          </g>
-        ))}
-        <text
-          x={PAD_LEFT + INNER_W / 2}
-          y={HEIGHT - 4}
-          textAnchor="middle"
-          fontSize={11}
-          fill="var(--muted)"
+      <div className="overflow-x-auto">
+        <svg
+          viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+          className="h-auto w-full min-w-[460px]"
+          role="img"
+          aria-label={`Overall appeal across your last ${ordered.length} polls, from ${first.toFixed(1)} to ${last.toFixed(1)}`}
         >
-          Poll number, oldest to newest
-        </text>
-      </svg>
+          {Y_TICKS.map((v) => (
+            <g key={v}>
+              <line
+                x1={PAD_LEFT}
+                x2={WIDTH - PAD_RIGHT}
+                y1={toY(v)}
+                y2={toY(v)}
+                stroke="var(--card-border)"
+                strokeWidth={1}
+              />
+              <text
+                x={PAD_LEFT - 6}
+                y={toY(v) + 4}
+                textAnchor="end"
+                fontSize={11}
+                fill="var(--muted)"
+              >
+                {v}
+              </text>
+            </g>
+          ))}
+          <polyline
+            points={line}
+            fill="none"
+            stroke="var(--secondary)"
+            strokeWidth={2}
+            strokeLinejoin="round"
+          />
+          {points.map((pt, i) => (
+            <g key={`${pt.p.takenAt}-${i}`}>
+              <circle cx={pt.x} cy={pt.y} r={4} fill="var(--secondary)">
+                <title>{`Poll ${i + 1}: ${pt.p.overallAppeal.toFixed(1)} appeal`}</title>
+              </circle>
+              <text x={pt.x} y={HEIGHT - 22} textAnchor="middle" fontSize={11} fill="var(--muted)">
+                {i + 1}
+              </text>
+            </g>
+          ))}
+          <text
+            x={PAD_LEFT + INNER_W / 2}
+            y={HEIGHT - 4}
+            textAnchor="middle"
+            fontSize={11}
+            fill="var(--muted)"
+          >
+            Poll number, oldest to newest
+          </text>
+        </svg>
+      </div>
     </figure>
   );
 }
