@@ -36,10 +36,7 @@ export async function GET(request: Request) {
     // Look up user by Discord ID
     const user = await db.collection<User>("users").findOne({ discordId });
     if (!user) {
-      return NextResponse.json(
-        { error: "No user found with that Discord ID", discordId },
-        { status: 404 }
-      );
+      return errorResponse(404, "No user found with that Discord ID", { extra: { discordId } });
     }
 
     const [character, forexEnabled] = await Promise.all([
@@ -48,10 +45,9 @@ export async function GET(request: Request) {
     ]);
 
     if (!character) {
-      return NextResponse.json(
-        { error: "User has no character. Create a character first.", discordId },
-        { status: 404 }
-      );
+      return errorResponse(404, "User has no character. Create a character first.", {
+        extra: { discordId },
+      });
     }
 
     return NextResponse.json({

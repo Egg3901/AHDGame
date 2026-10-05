@@ -40,9 +40,9 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, z.object({ mode: z.enum(["quiet", "mass"]) }));
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Choose how to organize: mode must be "quiet" or "mass".' },
-        { status: parsed.status }
+      return errorResponse(
+        parsed.status,
+        'Choose how to organize: mode must be "quiet" or "mass".'
       );
     }
     const body = parsed.data;
@@ -60,7 +60,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const result = await organizeUnderground(db, character, union, body.mode);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json({

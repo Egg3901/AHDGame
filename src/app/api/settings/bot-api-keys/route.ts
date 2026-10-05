@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, createBotApiKeySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { token, tokenHash, prefix } = generateBotApiToken();
@@ -90,7 +90,7 @@ export async function DELETE(request: Request) {
 
     const parsed = await parseJsonBody(request, revokeBotApiKeySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

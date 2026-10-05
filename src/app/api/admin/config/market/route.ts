@@ -171,7 +171,7 @@ export async function PATCH(request: Request) {
 
     const parsed = await parseJsonBody(request, patchSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const {
@@ -248,13 +248,10 @@ export async function PATCH(request: Request) {
     // of truth for "has this tier actually shipped"; enforce it here so the API
     // agrees with the selector instead of trusting the client.
     if (MARKET_MODE_INFO[mode].live !== true && allowNonLive !== true) {
-      return NextResponse.json(
-        {
-          error:
-            `Market mode "${mode}" is not live yet. ` +
-            `Pass allowNonLive: true to set it deliberately.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Market mode "${mode}" is not live yet. ` +
+          `Pass allowNonLive: true to set it deliberately.`
       );
     }
 
@@ -332,14 +329,11 @@ export async function PATCH(request: Request) {
       sovereignIssuanceConsolidationEnabled === true ||
       domesticSovereignBondCoverageEnabled === true
     ) {
-      return NextResponse.json(
-        {
-          error:
-            "Sovereign issuance consolidation and domestic sovereign-bond coverage " +
-            "are sandbox-only until #1001 worldsim evidence lands: queue a worldsim " +
-            "comparison instead of enabling them on the live world.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Sovereign issuance consolidation and domestic sovereign-bond coverage " +
+          "are sandbox-only until #1001 worldsim evidence lands: queue a worldsim " +
+          "comparison instead of enabling them on the live world."
       );
     }
     if (indexFundBondLiquidityEnabled === true) {

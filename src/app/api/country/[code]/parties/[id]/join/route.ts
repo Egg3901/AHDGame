@@ -98,12 +98,10 @@ export async function POST(
       currentTurn
     );
     if (!auth.isAdmin && purgeBlock.blocked) {
-      return NextResponse.json(
-        {
-          error: `You were expelled from ${party.name}. You can rejoin in ${purgeBlock.turnsRemaining} turn${purgeBlock.turnsRemaining === 1 ? "" : "s"}.`,
-          turnsRemaining: purgeBlock.turnsRemaining,
-        },
-        { status: 429 }
+      return errorResponse(
+        429,
+        `You were expelled from ${party.name}. You can rejoin in ${purgeBlock.turnsRemaining} turn${purgeBlock.turnsRemaining === 1 ? "" : "s"}.`,
+        { extra: { turnsRemaining: purgeBlock.turnsRemaining } }
       );
     }
 

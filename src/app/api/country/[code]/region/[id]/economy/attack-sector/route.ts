@@ -98,7 +98,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, attackSectorSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     if (!ObjectId.isValid(parsed.data.sectorId)) {
       return errorResponse(400, "Invalid sector ID");
@@ -482,7 +482,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const rejected = rejection as SplitRejection | null;
     if (rejected) {
-      return NextResponse.json({ error: rejected.error }, { status: rejected.status });
+      return errorResponse(rejected.status, rejected.error);
     }
     if (!resolution) {
       return errorResponse(409, "The split could not be resolved.");

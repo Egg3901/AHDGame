@@ -139,7 +139,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, draftCharterSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { name, abbreviation, platform, foundersCharacterIds, foundingCohort } = parsed.data;
     const proposerCharacterId = auth.user.character._id;
@@ -160,10 +160,9 @@ export async function POST(request: Request) {
     );
 
     if (!result.ok) {
-      return NextResponse.json(
-        { error: draftCharterErrorMessage(result.reason), reason: result.reason },
-        { status: 400 }
-      );
+      return errorResponse(400, draftCharterErrorMessage(result.reason), {
+        extra: { reason: result.reason },
+      });
     }
 
     return NextResponse.json(

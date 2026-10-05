@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import "@/lib/events/pree/index";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { badRequest, conflict, notFound, handleRouteError } from "@/lib/api/errors";
+import { badRequest, conflict, notFound, handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Character } from "@/lib/db/types/character";
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, TriggerSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { kind } = parsed.data;
 

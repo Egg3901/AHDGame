@@ -53,7 +53,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, claimSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -134,10 +134,9 @@ export async function POST(request: Request) {
     const isMod = user.isAdmin === true || user.role === "moderator";
     const cooldown = await checkWikiCreateCooldown(db, userObjectId, { bypass: isMod });
     if (!cooldown.ok) {
-      return NextResponse.json(
-        { error: formatCooldownMessage(cooldown), retryAfterMs: cooldown.remainingMs },
-        { status: 429 }
-      );
+      return errorResponse(429, formatCooldownMessage(cooldown), {
+        extra: { retryAfterMs: cooldown.remainingMs },
+      });
     }
 
     const stub: Omit<WikiPage, "_id"> = {

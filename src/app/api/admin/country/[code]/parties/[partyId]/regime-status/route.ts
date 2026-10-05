@@ -46,7 +46,7 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, BODY_SCHEMA);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { newStatus, reason } = parsed.data;
 

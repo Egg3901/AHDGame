@@ -43,7 +43,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
     const parsed = await parseJsonBody(request, actionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { id, campaignId } = await params;
     const db = await getDb();
@@ -59,7 +59,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       await getCurrentTurn(db),
       terms
     );
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return handleRouteError(error);

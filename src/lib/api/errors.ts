@@ -44,17 +44,49 @@ export class ApiError extends Error {
 export function errorResponse(
   status: number,
   message: unknown,
-  options: { code?: string; details?: unknown; headers?: HeadersInit } = {}
+  options: {
+    code?: string;
+    details?: unknown;
+    headers?: HeadersInit;
+    /** Extra top-level body fields (retry hints, counters). Never override the envelope. */
+    extra?: Record<string, unknown>;
+  } = {}
 ): NextResponse {
   // Call sites forward upstream validation results whose message can be
   // missing; fall back to the catalog copy for the status rather than ship an
-  // empty error.
+  // empty error. Structured (non-string) messages are passed through as-is so
+  // clients that already read them keep working.
   const text =
     typeof message === "string" && message.length > 0
       ? message
-      : defaultMessageFor(options.code ?? errorCodeForStatus(status));
-  const body = new ApiError(status, text, options.code, options.details).toJson();
+      : message !== null && typeof message === "object"
+        ? message
+        : defaultMessageFor(options.code ?? errorCodeForStatus(status));
+  const envelope = new ApiError(status, "", options.code, options.details).toJson();
+  const body = { ...options.extra, ...envelope, error: text };
   return NextResponse.json(body, { status, headers: options.headers });
+}
+
+/**
+ * Respond with a body produced by a command layer whose status is only known at
+ * runtime. Success statuses pass through untouched; error statuses (>= 400)
+ * gain the shared envelope (`code`, `ref`, and an `error` string) while every
+ * field the command already returned is preserved.
+ */
+export function statusResponse(
+  status: number,
+  body: unknown,
+  options: { headers?: HeadersInit } = {}
+): NextResponse {
+  if (status < 400 || body === null || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json(body, { status, headers: options.headers });
+  }
+  const { error, code, ...rest } = body as Record<string, unknown>;
+  return errorResponse(status, error, {
+    code: typeof code === "string" ? code : undefined,
+    extra: rest,
+    headers: options.headers,
+  });
 }
 
 /**

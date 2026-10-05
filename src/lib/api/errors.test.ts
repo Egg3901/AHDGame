@@ -11,6 +11,7 @@ import {
   internalError,
   handleRouteError,
   errorResponse,
+  statusResponse,
 } from "./errors";
 
 // Mock NextResponse and Sentry
@@ -246,5 +247,35 @@ describe("errorResponse", () => {
     expect((custom as any).data.code).toBe("TURN_IN_PROGRESS");
     const empty = errorResponse(429, undefined);
     expect((empty as any).data.error).toMatch(/too many requests/i);
+  });
+
+  it("keeps extra top-level fields and cannot be overridden by them", () => {
+    const res = errorResponse(409, "Locked", { extra: { turnsRemaining: 3, code: "NOPE" } });
+    expect((res as any).data).toMatchObject({
+      error: "Locked",
+      turnsRemaining: 3,
+      code: "CONFLICT",
+    });
+  });
+
+  it("passes structured messages through unchanged", () => {
+    const res = errorResponse(400, { fieldErrors: { a: ["bad"] } });
+    expect((res as any).data.error).toEqual({ fieldErrors: { a: ["bad"] } });
+    expect((res as any).data.code).toBe("BAD_REQUEST");
+  });
+});
+
+describe("statusResponse", () => {
+  it("leaves success statuses untouched", () => {
+    const res = statusResponse(200, { ok: true });
+    expect((res as any).data).toEqual({ ok: true });
+  });
+
+  it("adds code and ref to error statuses and keeps command fields", () => {
+    const res = statusResponse(422, { error: "Nope", reason: "cap" });
+    expect(res.status).toBe(422);
+    expect((res as any).data).toMatchObject({ error: "Nope", reason: "cap" });
+    expect(typeof (res as any).data.code).toBe("string");
+    expect(typeof (res as any).data.ref).toBe("string");
   });
 });

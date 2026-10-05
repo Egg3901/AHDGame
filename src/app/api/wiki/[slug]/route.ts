@@ -91,7 +91,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const { slug } = await context.params;
     const parsed = await parseJsonBody(request, updateWikiPageSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

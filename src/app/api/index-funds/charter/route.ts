@@ -45,8 +45,7 @@ export async function POST(request: Request) {
     if (!(await isIndexFundsEnabled())) return errorResponse(403, INDEX_FUNDS_DISABLED_MESSAGE);
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const body = parsed.data;
 
     if (body.countryId && !COUNTRY_CONFIGS[body.countryId as never])
@@ -74,7 +73,7 @@ export async function POST(request: Request) {
       seedCapitalAnchor: body.seedCapitalAnchor,
       currentTurn: await getCurrentTurn(db),
     });
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
 
     return NextResponse.json({
       success: true,

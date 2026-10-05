@@ -239,7 +239,7 @@ export async function PATCH(request: Request) {
 
     const parsed = await parseJsonBody(request, notificationsPatchSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { id, forUserId, forCharacterId } = parsed.data;
     const db = await getDb();
@@ -326,7 +326,7 @@ export async function DELETE(request: Request) {
 
     const parsed = await parseJsonBody(request, notificationsDeleteSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { id, ids, deleteAll } = parsed.data;
 

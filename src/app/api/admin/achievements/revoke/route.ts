@@ -20,7 +20,7 @@ export const POST = withAdminAuth(async (_auth, request: Request) => {
   try {
     const parsed = await parseJsonBody(request, revokeSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { characterId, achievementSlug } = parsed.data;

@@ -42,8 +42,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!ObjectId.isValid(id)) return errorResponse(400, "Invalid review id");
 
     const parsed = await parseJsonBody(request, decideSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const review = await db
@@ -77,7 +76,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       decidedByCharacterId: character._id,
       ...(parsed.data.note ? { decisionNote: parsed.data.note } : {}),
     });
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
 
     return NextResponse.json({
       success: true,

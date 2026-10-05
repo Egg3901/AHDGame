@@ -29,10 +29,7 @@ export async function GET(request: Request) {
       Object.fromEntries(new URL(request.url).searchParams.entries())
     );
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Invalid query", details: parsed.error.flatten() },
-        { status: 400 }
-      );
+      return errorResponse(400, "Invalid query", { extra: { details: parsed.error.flatten() } });
     }
 
     const db = await getDb();

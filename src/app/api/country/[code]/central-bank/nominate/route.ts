@@ -61,8 +61,7 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json(forbidden().toJson(), { status: 403 });
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const centralBanks = db.collection<CentralBank>("centralBanks");
 

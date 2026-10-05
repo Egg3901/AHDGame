@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import type { Character } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, FOREX_ACTIVE_COUNTRIES } from "@/lib/constants/currencies";
@@ -32,18 +32,12 @@ export async function GET(_request: Request, context: RouteContext) {
       return NextResponse.json(notFound("Country not found").toJson(), { status: 404 });
 
     if (!FOREX_ACTIVE_COUNTRIES.includes(countryId)) {
-      return NextResponse.json(
-        { error: "High-yield savings are not available for this country." },
-        { status: 404 }
-      );
+      return errorResponse(404, "High-yield savings are not available for this country.");
     }
 
     const forexEnabled = await isForexEnabled();
     if (!forexEnabled) {
-      return NextResponse.json(
-        { error: "Forex savings require the forex system." },
-        { status: 404 }
-      );
+      return errorResponse(404, "Forex savings require the forex system.");
     }
 
     const db = await getDb();

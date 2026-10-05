@@ -63,7 +63,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, loginBodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { email, password, fingerprint, deviceKey, fingerprintComponents } = parsed.data;
 
@@ -114,10 +114,9 @@ export async function POST(request: Request) {
         outcome: "rejected",
         reason: "banned",
       });
-      return NextResponse.json(
-        { error: "banned", reason: user.banReason || "Violation of rules" },
-        { status: 403 }
-      );
+      return errorResponse(403, "banned", {
+        extra: { reason: user.banReason || "Violation of rules" },
+      });
     }
 
     // Fenced accounts never authenticate via legacy password login. Same

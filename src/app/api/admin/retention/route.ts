@@ -49,10 +49,7 @@ export async function POST(request: Request) {
     }
     const parsedBody = bodySchema.safeParse(raw);
     if (!parsedBody.success) {
-      return NextResponse.json(
-        { error: parsedBody.error.issues[0]?.message ?? "Invalid body" },
-        { status: 400 }
-      );
+      return errorResponse(400, parsedBody.error.issues[0]?.message ?? "Invalid body");
     }
     const { dryRun, collections, compact } = parsedBody.data;
 

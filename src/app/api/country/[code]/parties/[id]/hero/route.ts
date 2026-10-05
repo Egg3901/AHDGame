@@ -31,8 +31,7 @@ export async function POST(
       return errorResponse(400, "Invalid country code");
     }
     const parsed = await parseJsonBody(request, heroSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { heroImageUrl } = parsed.data;
 
     const authResult = await requireAuthWithCharacter();

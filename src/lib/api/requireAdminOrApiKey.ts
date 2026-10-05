@@ -7,7 +7,7 @@
  */
 import { NextResponse } from "next/server";
 import { getAuthAdmin } from "@/lib/auth";
-import { forbidden, unauthorized } from "@/lib/api/errors";
+import { forbidden, unauthorized, errorResponse } from "@/lib/api/errors";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import crypto from "crypto";
 
@@ -24,7 +24,7 @@ export async function requireAdminOrApiKey(request: Request): Promise<AdminOrApi
     if (!expected) {
       return {
         ok: false,
-        response: NextResponse.json({ error: "INTERNAL_API_KEY not configured" }, { status: 500 }),
+        response: errorResponse(500, "INTERNAL_API_KEY not configured"),
       };
     }
     // Length check before timingSafeEqual to avoid Buffer length mismatch errors

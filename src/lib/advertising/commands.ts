@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getCurrentTurn } from "@/lib/currentTurn";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
@@ -83,10 +83,7 @@ export async function listAdvertisingAgreements(corpId: string) {
     const ceoCheck = requireCeo(corp, auth.user.userId);
     if (ceoCheck) return ceoCheck;
     if (!(await isAdvertisingAgreementsEnabled(db))) {
-      return NextResponse.json(
-        { error: "Advertising agreements are not enabled in this world" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Advertising agreements are not enabled in this world");
     }
 
     const corpHex = corp._id.toString();
@@ -145,7 +142,7 @@ export async function proposeAdvertisingAgreement(request: Request, initiatingCo
     if (!auth.ok) return auth.response;
     const parsed = await parseJsonBody(request, advertisingAgreementProposalSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const db = await getDb();
     const resolved = await resolveCorporation(db, initiatingCorpId);
@@ -154,10 +151,7 @@ export async function proposeAdvertisingAgreement(request: Request, initiatingCo
     const ceoCheck = requireCeo(initiator, auth.user.userId);
     if (ceoCheck) return ceoCheck;
     if (!(await isAdvertisingAgreementsEnabled(db))) {
-      return NextResponse.json(
-        { error: "Advertising agreements are not enabled in this world" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Advertising agreements are not enabled in this world");
     }
 
     const body = parsed.data;
@@ -169,10 +163,7 @@ export async function proposeAdvertisingAgreement(request: Request, initiatingCo
     if (!counterpartyResolved.ok) return counterpartyResolved.response;
     const counterparty = counterpartyResolved.corporation;
     if (counterparty._id.equals(initiator._id)) {
-      return NextResponse.json(
-        { error: "A corporation cannot contract with itself" },
-        { status: 400 }
-      );
+      return errorResponse(400, "A corporation cannot contract with itself");
     }
     const initiatorHex = initiator._id.toString();
     const counterpartyHex = counterparty._id.toString();
@@ -183,16 +174,10 @@ export async function proposeAdvertisingAgreement(request: Request, initiatingCo
       .project<{ strategyId?: string }>({ strategyId: 1 })
       .toArray();
     if (supplierSectors.length === 0) {
-      return NextResponse.json(
-        { error: "Advertising suppliers must be Media & Entertainment corporations" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Advertising suppliers must be Media & Entertainment corporations");
     }
     if (!supplierSectors.some((sector) => getMediaOperatingModel(sector.strategyId ?? ""))) {
-      return NextResponse.json(
-        { error: "Advertising suppliers need an operating model" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Advertising suppliers need an operating model");
     }
     const turn = await getCurrentTurn(db);
     const now = new Date();
@@ -208,7 +193,7 @@ export async function proposeAdvertisingAgreement(request: Request, initiatingCo
     });
     if (!proposed.ok) {
       const status = proposed.reason === "feature_disabled" ? 403 : 400;
-      return NextResponse.json({ error: proposed.reason }, { status });
+      return errorResponse(status, proposed.reason);
     }
     return NextResponse.json({
       success: true,
@@ -231,11 +216,11 @@ export async function updateAdvertisingAgreement(
     if (!auth.ok) return auth.response;
     const parsed = await parseJsonBody(request, advertisingAgreementUpdateSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const db = await getDb();
     if (!ObjectId.isValid(agreementId)) {
-      return NextResponse.json({ error: "Invalid agreement id" }, { status: 400 });
+      return errorResponse(400, "Invalid agreement id");
     }
     const resolved = await resolveCorporation(db, corpId);
     if (!resolved.ok) return resolved.response;
@@ -244,21 +229,18 @@ export async function updateAdvertisingAgreement(
     if (ceoCheck) return ceoCheck;
 
     if (!(await isAdvertisingAgreementsEnabled(db))) {
-      return NextResponse.json(
-        { error: "Advertising agreements are not enabled in this world" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Advertising agreements are not enabled in this world");
     }
 
     const agreement = await db
       .collection<AdvertisingAgreement>(ADVERTISING_AGREEMENTS_COLLECTION)
       .findOne({ _id: agreementId } as never);
     if (!agreement) {
-      return NextResponse.json({ error: "Agreement not found" }, { status: 404 });
+      return errorResponse(404, "Agreement not found");
     }
     const corpHex = corp._id.toString();
     if (agreement.buyerCorpId !== corpHex && agreement.supplierCorpId !== corpHex) {
-      return NextResponse.json({ error: "Not a party to this agreement" }, { status: 403 });
+      return errorResponse(403, "Not a party to this agreement");
     }
 
     const body = parsed.data;
@@ -291,7 +273,7 @@ export async function updateAdvertisingAgreement(
                 updated.reason === "already_closed"
               ? 409
               : 400;
-      return NextResponse.json({ error: updated.reason }, { status });
+      return errorResponse(status, updated.reason);
     }
     return NextResponse.json({
       success: true,

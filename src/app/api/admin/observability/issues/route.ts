@@ -42,6 +42,7 @@ export async function GET() {
     });
 
     if (!res.ok) {
+      // eslint-disable-next-line local/no-uncoded-error-response -- diagnostic payload answered with 200, not an error response
       return NextResponse.json(
         {
           configured: true,

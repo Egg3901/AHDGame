@@ -32,7 +32,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, bondDefaultRefinanceSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { maturityTurns } = parsed.data;
 
@@ -101,7 +101,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           : result.reason === "Refinance limit reached"
             ? `Refinance limit reached. A corporation can refinance defaulted debt at most ${MAX_BOND_DEFAULT_REFINANCES} times. Dissolution is the only remaining option for the defaulted bonds.`
             : "Cannot refinance within debt limits. The defaulted principal exceeds the 2× equity issuance cap (or falls below the minimum issuance size).";
-      return NextResponse.json({ error }, { status });
+      return errorResponse(status, error);
     }
 
     return NextResponse.json({

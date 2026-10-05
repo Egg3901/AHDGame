@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { createNotification } from "@/lib/notifications";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import type { Corporation, State } from "@/lib/db/types";
@@ -37,20 +37,14 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const { corporation } = resolved;
 
     if (!corporation.pendingCeoCharacterId) {
-      return NextResponse.json(
-        { error: "No CEO offer is pending for this corporation" },
-        { status: 400 }
-      );
+      return errorResponse(400, "No CEO offer is pending for this corporation");
     }
 
     const myChar = auth.user.character;
 
     // Verify this user is the one being offered the position
     if (corporation.pendingCeoCharacterId.toString() !== myChar._id.toString()) {
-      return NextResponse.json(
-        { error: "You have not been offered the CEO position" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You have not been offered the CEO position");
     }
 
     // Residency rule depends on ownership. A National Corporation is a
@@ -58,12 +52,9 @@ export async function POST(_request: Request, { params }: RouteParams) {
     // COUNTRY (any state). A private corp keeps the stricter HQ-state rule.
     if (isStateOwned(corporation)) {
       if (corporation.countryId && myChar.countryId !== corporation.countryId) {
-        return NextResponse.json(
-          {
-            error:
-              "You must reside in this country to accept the National Corporation CEO position.",
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "You must reside in this country to accept the National Corporation CEO position."
         );
       }
     } else {
@@ -74,21 +65,16 @@ export async function POST(_request: Request, { params }: RouteParams) {
           .collection<State>("states")
           .findOne({ _id: corporation.headquartersState });
         const hqName = hqState?.name ?? corporation.headquartersState;
-        return NextResponse.json(
-          {
-            error: `You must reside in ${hqName} to accept the CEO position. Relocate to the headquarters state first.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `You must reside in ${hqName} to accept the CEO position. Relocate to the headquarters state first.`
         );
       }
 
       if (corporation.countryId && myChar.countryId !== corporation.countryId) {
-        return NextResponse.json(
-          {
-            error:
-              "You must be in the same country as this corporation to accept the CEO position.",
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "You must be in the same country as this corporation to accept the CEO position."
         );
       }
     }
@@ -100,11 +86,9 @@ export async function POST(_request: Request, { params }: RouteParams) {
       _id: { $ne: corporation._id },
     });
     if (existingCeo) {
-      return NextResponse.json(
-        {
-          error: `You are already CEO of ${existingCeo.name}. You must resign from that position before accepting another.`,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `You are already CEO of ${existingCeo.name}. You must resign from that position before accepting another.`
       );
     }
 
@@ -113,11 +97,9 @@ export async function POST(_request: Request, { params }: RouteParams) {
     // invariant design.
     const bondConflict = await holdsAnyBondsInCorp(db, myChar._id, "characterId", corporation._id);
     if (bondConflict.holds) {
-      return NextResponse.json(
-        {
-          error: `You hold ${bondConflict.units.toLocaleString()} units of this corporation's bonds. Sell them before taking the CEO seat.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `You hold ${bondConflict.units.toLocaleString()} units of this corporation's bonds. Sell them before taking the CEO seat.`
       );
     }
 

@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { currency, mode } = parsed.data;
     const c = currency as CurrencyCode;
@@ -86,12 +86,10 @@ export async function POST(request: Request) {
       currentTurn - lastChangedTurn < LOC_PAYMENT_MODE_COOLDOWN_TURNS
     ) {
       const nextEligibleTurn = lastChangedTurn + LOC_PAYMENT_MODE_COOLDOWN_TURNS;
-      return NextResponse.json(
-        {
-          error: `Payment mode can only change every ${LOC_PAYMENT_MODE_COOLDOWN_TURNS} turns. Next eligible at turn ${nextEligibleTurn}.`,
-          nextEligibleTurn,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `Payment mode can only change every ${LOC_PAYMENT_MODE_COOLDOWN_TURNS} turns. Next eligible at turn ${nextEligibleTurn}.`,
+        { extra: { nextEligibleTurn } }
       );
     }
 

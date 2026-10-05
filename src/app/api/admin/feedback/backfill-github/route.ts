@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { createGitHubIssue, syncFeedbackToGitHub } from "@/lib/github";
 import type { Feedback, User } from "@/lib/db/types";
 import { ObjectId } from "mongodb";
@@ -26,9 +26,9 @@ export async function POST() {
     const token = process.env.GIT_TOKEN;
     const repo = process.env.GITHUB_REPO;
     if (!token || !repo) {
-      return NextResponse.json(
-        { error: "GIT_TOKEN and GITHUB_REPO environment variables are not configured." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "GIT_TOKEN and GITHUB_REPO environment variables are not configured."
       );
     }
 

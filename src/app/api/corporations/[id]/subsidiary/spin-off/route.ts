@@ -47,8 +47,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const parsed = await parseJsonBody(request, bodySchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     if (!(CORPORATION_TYPES as readonly string[]).includes(parsed.data.sectorType)) {
       return errorResponse(400, "Invalid sector type.");
@@ -73,7 +72,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       turn,
       now: new Date(),
     });
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
 
     return NextResponse.json({ success: true, newCorporationId: result.newCorporationId });
   } catch (error) {

@@ -22,8 +22,7 @@ export async function POST(request: Request) {
     const rateLimit = checkRateLimit(auth.user.userId, 10, 60_000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
     const parsed = await parseJsonBody(request, bodySchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const db = await getDb();
     const client = await getMongoClient();
     const session = client.startSession();

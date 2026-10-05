@@ -99,13 +99,11 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const slot = getApproverSlotForRow(party, pending, characterId);
     if (slot == null) {
       const isSelfRequest = pending.type === "request" && pending.proposedBy.equals(characterId);
-      return NextResponse.json(
-        {
-          error: isSelfRequest
-            ? "You can't approve your own Request Funds."
-            : "Only an officer (Treasurer / Chair / Vice-Chair) who has not already signed this transaction can approve it.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        isSelfRequest
+          ? "You can't approve your own Request Funds."
+          : "Only an officer (Treasurer / Chair / Vice-Chair) who has not already signed this transaction can approve it."
       );
     }
 

@@ -166,8 +166,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const limit = checkRateLimit(auth.user.userId, 20, 60_000);
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
     const parsed = await parseJsonBody(request, startSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { id } = await params;
     const db = await getDb();
     const resolved = await resolveCorporation(db, id);

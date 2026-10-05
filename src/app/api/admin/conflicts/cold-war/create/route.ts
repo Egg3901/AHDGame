@@ -69,7 +69,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const preset = typeof gs.preset === "string" ? gs.preset : DEFAULT_SEED_PRESET;
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
       knownEntityIds,
       isCountryId: (id) => id in COUNTRY_CONFIGS,
     });
-    if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
+    if (!check.ok) return errorResponse(check.status, check.error);
 
     const currentTurn = gs.currentTurn ?? 0;
     const id = `cw_${draft.hostCountry}_${currentTurn}`.toLowerCase();

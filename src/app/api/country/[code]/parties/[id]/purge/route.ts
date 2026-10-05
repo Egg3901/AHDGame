@@ -61,7 +61,7 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -109,12 +109,10 @@ export async function POST(
       currentTurn - party.lastPurgeAtTurn < PURGE_COOLDOWN_TURNS
     ) {
       const turnsRemaining = PURGE_COOLDOWN_TURNS - (currentTurn - party.lastPurgeAtTurn);
-      return NextResponse.json(
-        {
-          error: `Purge is on cooldown for ${turnsRemaining} more turn${turnsRemaining === 1 ? "" : "s"}`,
-          turnsRemaining,
-        },
-        { status: 429 }
+      return errorResponse(
+        429,
+        `Purge is on cooldown for ${turnsRemaining} more turn${turnsRemaining === 1 ? "" : "s"}`,
+        { extra: { turnsRemaining } }
       );
     }
 

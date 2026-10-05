@@ -111,7 +111,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, FileSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const gameState = await getGameState();
@@ -124,7 +124,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       currentYear: gameState?.currentYear ?? null,
     });
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json({ ok: true, petitionId: result.petition._id.toString() });

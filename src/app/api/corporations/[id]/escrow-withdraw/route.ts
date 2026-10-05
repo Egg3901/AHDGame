@@ -48,7 +48,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { amount } = parsed.data;
 
@@ -74,7 +74,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       lastWithdrawalTurn: corporation.lastEscrowWithdrawalTurn,
     });
     if (!verdict.ok) {
-      return NextResponse.json({ error: verdict.error }, { status: verdict.status });
+      return errorResponse(verdict.status, verdict.error);
     }
 
     // Atomic, race-safe move: the filter re-asserts the positive-balance and

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { armSettlementLadder } from "@/lib/settlement/commands/armLadder";
 
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     const db = await getDb();
     const result = await armSettlementLadder(db, auth.user.character._id);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
     return NextResponse.json({ success: true, heat: result.heat });
   } catch (error) {

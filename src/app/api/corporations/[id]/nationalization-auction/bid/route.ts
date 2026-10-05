@@ -32,7 +32,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     const parsed = await parseJsonBody(request, auctionBidSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     if (parsed.data.asCorporationId && !ObjectId.isValid(parsed.data.asCorporationId)) {
       return errorResponse(400, "Invalid corporation ID");
@@ -68,10 +68,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           extra: { auctionId: auction._id.toString(), amount: parsed.data.amount },
         });
       }
-      return NextResponse.json(
-        { error: err instanceof Error ? err.message : "Bid failed" },
-        { status: 400 }
-      );
+      return errorResponse(400, err instanceof Error ? err.message : "Bid failed");
     }
   } catch (error) {
     return handleRouteError(error);

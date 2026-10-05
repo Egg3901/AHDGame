@@ -13,6 +13,7 @@ import {
   forbidden,
   isDuplicateKeyError,
   notFound,
+  errorResponse,
 } from "@/lib/api/errors";
 import { assertSameCountry } from "@/lib/api/sameCountry";
 import { checkRateLimit, CONGRESS_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -304,7 +305,7 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
       positionId,
     });
     if (existingMember) {
-      return NextResponse.json({ error: "This position is already filled" }, { status: 409 });
+      return errorResponse(409, "This position is already filled");
     }
 
     const cooldown = await getUKCabinetCooldownsCollection(db).findOne({
@@ -326,14 +327,12 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
         typeof cooldown!.cooldownUntilTurn === "number"
           ? cooldown!.cooldownUntilTurn - appointTurn
           : null;
-      return NextResponse.json(
-        {
-          error: turnsRemaining
-            ? `This position was recently filled and can be reappointed in ${turnsRemaining} turn${turnsRemaining === 1 ? "" : "s"}.`
-            : `This position is on cooldown until ${cooldown!.cooldownUntil.toISOString()}`,
-          cooldownUntil: cooldown!.cooldownUntil.toISOString(),
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        turnsRemaining
+          ? `This position was recently filled and can be reappointed in ${turnsRemaining} turn${turnsRemaining === 1 ? "" : "s"}.`
+          : `This position is on cooldown until ${cooldown!.cooldownUntil.toISOString()}`,
+        { extra: { cooldownUntil: cooldown!.cooldownUntil.toISOString() } }
       );
     }
 

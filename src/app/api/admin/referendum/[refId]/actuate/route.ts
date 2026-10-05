@@ -1,8 +1,7 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { actuateReferendumTransfer } from "@/lib/referendum/transfer/actuateReferendum";
@@ -25,7 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ref
       z.object({ action: z.union([z.literal("resolve"), z.literal("block")]).default("resolve") })
     );
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const currentTurn = await getCurrentTurn(db);
@@ -34,7 +33,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ref
       currentTurn,
       action: parsed.data.action,
     });
-    return NextResponse.json(result.body, { status: result.status });
+    return statusResponse(result.status, result.body);
   } catch (error) {
     return handleRouteError(error);
   }

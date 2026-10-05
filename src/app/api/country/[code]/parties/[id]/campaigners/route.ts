@@ -68,12 +68,10 @@ async function validateCandidates(
     }))
     .find((entry) => !entry.tenure.eligible);
   if (blocked) {
-    return NextResponse.json(
-      {
-        error: `${blocked.character.name} relocated recently and can't be made a campaigner for ${blocked.tenure.turnsRemaining} more turn${blocked.tenure.turnsRemaining === 1 ? "" : "s"}.`,
-        turnsRemaining: blocked.tenure.turnsRemaining,
-      },
-      { status: 403 }
+    return errorResponse(
+      403,
+      `${blocked.character.name} relocated recently and can't be made a campaigner for ${blocked.tenure.turnsRemaining} more turn${blocked.tenure.turnsRemaining === 1 ? "" : "s"}.`,
+      { extra: { turnsRemaining: blocked.tenure.turnsRemaining } }
     );
   }
 
@@ -145,7 +143,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, campaignersSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

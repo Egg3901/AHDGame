@@ -12,7 +12,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { DE_WAHLKREIS_SEATS } from "@/lib/constants/states";
 import type { ElectedOfficial } from "@/lib/db/types";
 
@@ -135,12 +135,9 @@ export async function GET() {
 }
 
 export async function POST() {
-  return NextResponse.json(
-    {
-      error:
-        "POST not supported for DE Bundestag. Seat allocation requires the full AMS resolver. " +
-        "Use admin election tools or re-seed instead.",
-    },
-    { status: 405 }
+  return errorResponse(
+    405,
+    "POST not supported for DE Bundestag. Seat allocation requires the full AMS resolver. " +
+      "Use admin election tools or re-seed instead."
   );
 }

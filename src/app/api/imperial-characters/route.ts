@@ -50,7 +50,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, createSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { countryId, name, gender, royalHouse, homeState, bio } = parsed.data;

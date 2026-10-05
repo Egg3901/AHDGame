@@ -154,7 +154,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, patchBodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
 

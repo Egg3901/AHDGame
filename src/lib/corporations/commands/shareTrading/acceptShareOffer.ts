@@ -5,7 +5,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { acceptOfferSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { assertCeoTradeNotBlocked } from "@/lib/corporations/commands/privatization/openVoteGuard";
@@ -64,8 +64,7 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
 
     const { id, listingId, offerId } = await params;
     const parsed = await parseJsonBody(request, acceptOfferSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const { sharesToAccept } = parsed.data;
     const db = await getDb();
@@ -80,7 +79,7 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
     const { corporation } = resolved;
 
     if (!ObjectId.isValid(listingId) || !ObjectId.isValid(offerId)) {
-      return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+      return errorResponse(400, "Invalid ID");
     }
 
     const [listing, offer] = await Promise.all([
@@ -88,17 +87,15 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
       db.collection<ShareOffer>("shareOffers").findOne({ _id: new ObjectId(offerId) }),
     ]);
 
-    if (!listing) return NextResponse.json({ error: "Listing not found" }, { status: 404 });
+    if (!listing) return errorResponse(404, "Listing not found");
     if (!listing.corporationId.equals(corporation._id)) {
-      return NextResponse.json({ error: "Listing not found" }, { status: 404 });
+      return errorResponse(404, "Listing not found");
     }
-    if (!offer) return NextResponse.json({ error: "Offer not found" }, { status: 404 });
-    if (listing.status !== "open")
-      return NextResponse.json({ error: "Listing is not open" }, { status: 400 });
-    if (offer.status !== "pending")
-      return NextResponse.json({ error: "Offer is not pending" }, { status: 400 });
+    if (!offer) return errorResponse(404, "Offer not found");
+    if (listing.status !== "open") return errorResponse(400, "Listing is not open");
+    if (offer.status !== "pending") return errorResponse(400, "Offer is not pending");
     if (!offer.listingId.equals(listing._id))
-      return NextResponse.json({ error: "Offer does not belong to this listing" }, { status: 400 });
+      return errorResponse(400, "Offer does not belong to this listing");
     // Turn-first expiry guard (matches the turn processor) with a Date fallback
     // for legacy listings — so a turn-expired listing can't accept offers during
     // a cron lag before the processor closes it.
@@ -106,26 +103,23 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
       typeof listing.expiresAtTurn === "number"
         ? (await getCurrentTurn(db)) >= listing.expiresAtTurn
         : new Date() >= listing.expiresAt;
-    if (listingExpired) return NextResponse.json({ error: "Listing has expired" }, { status: 400 });
+    if (listingExpired) return errorResponse(400, "Listing has expired");
 
     const character = await getCharacterByUserId(db, auth.user.userId);
-    if (!character) return NextResponse.json({ error: "Character not found" }, { status: 404 });
+    if (!character) return errorResponse(404, "Character not found");
 
     const tradeLock = await assertCeoTradeNotBlocked(db, corporation, character._id);
     if (tradeLock.blocked) {
-      return NextResponse.json({ error: tradeLock.error }, { status: tradeLock.status });
+      return errorResponse(tradeLock.status, tradeLock.error);
     }
 
     if (listing.sellerCharacterId.toString() !== character._id.toString()) {
-      return NextResponse.json({ error: "Only the seller can accept offers" }, { status: 403 });
+      return errorResponse(403, "Only the seller can accept offers");
     }
 
     const maxAcceptable = Math.min(offer.shares, listing.sharesRemaining);
     if (sharesToAccept > maxAcceptable) {
-      return NextResponse.json(
-        { error: `Cannot accept more than ${maxAcceptable.toLocaleString()} shares` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Cannot accept more than ${maxAcceptable.toLocaleString()} shares`);
     }
 
     const now = new Date();
@@ -158,10 +152,7 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
     if (!listing.sellerCorporationId && forexEnabled) {
       const fxResult = await loadCharacterFxRate(db, sellerCurrency);
       if (!fxResult.ok) {
-        return NextResponse.json(
-          { error: "Exchange rate unavailable for seller" },
-          { status: 503 }
-        );
+        return errorResponse(503, "Exchange rate unavailable for seller");
       }
       sellerFxRate = fxResult.rate;
     }
@@ -177,7 +168,7 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
     if (refund > 0 && !offer.buyerCorporationId && forexEnabled) {
       const fxResult = await loadCharacterFxRate(db, buyerCurrency);
       if (!fxResult.ok) {
-        return NextResponse.json({ error: "Exchange rate unavailable for buyer" }, { status: 503 });
+        return errorResponse(503, "Exchange rate unavailable for buyer");
       }
       buyerFxRate = fxResult.rate;
     }
@@ -192,10 +183,7 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
     );
 
     if (!claimedOffer) {
-      return NextResponse.json(
-        { error: "Offer changed before this acceptance could be applied" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Offer changed before this acceptance could be applied");
     }
 
     // Atomic update: check sharesRemaining and update listing in one operation
@@ -222,15 +210,12 @@ export async function acceptShareOffer(request: Request, { params }: RouteParams
         .collection<ShareOffer>("shareOffers")
         .updateOne({ _id: offer._id, status: "accepted" }, { $set: { status: "pending" } });
       if (!freshListing) {
-        return NextResponse.json({ error: "Listing not found" }, { status: 404 });
+        return errorResponse(404, "Listing not found");
       }
       if (freshListing.status !== "open") {
-        return NextResponse.json({ error: "Listing is no longer open" }, { status: 400 });
+        return errorResponse(400, "Listing is no longer open");
       }
-      return NextResponse.json(
-        { error: "Not enough shares remaining (concurrent acceptance detected)" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Not enough shares remaining (concurrent acceptance detected)");
     }
     const listingSharesRemaining = listingUpdate.sharesRemaining;
     if (listingSharesRemaining === 0) {

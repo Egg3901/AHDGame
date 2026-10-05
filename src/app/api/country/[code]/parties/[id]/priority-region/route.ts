@@ -126,7 +126,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, setPriorityRegionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { stateIds } = parsed.data;
     const upperStateIds = stateIds.map((id) => id.toUpperCase());
@@ -145,14 +145,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { currentTurn } = await getGameTime();
     if (isPriorityRegionLocked(party, currentTurn)) {
       const unlockAt = priorityRegionUnlockTurn(party);
-      return NextResponse.json(
-        {
-          error: `Priority Region is locked until turn ${unlockAt}.`,
+      return errorResponse(409, `Priority Region is locked until turn ${unlockAt}.`, {
+        extra: {
           unlockTurn: unlockAt,
           turnsRemaining: unlockAt != null ? unlockAt - currentTurn : 0,
         },
-        { status: 409 }
-      );
+      });
     }
 
     // Governor anchor check (Phase F): the party gets +1 cluster slot

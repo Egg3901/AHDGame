@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { adminResourcesGrantSchema } from "@/lib/api/schemas/admin";
 import type { Character, ExchangeRate } from "@/lib/db/types";
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, adminResourcesGrantSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { characterIds, allPlayers, actions, funds, cashOnHand, currency } = parsed.data;
 

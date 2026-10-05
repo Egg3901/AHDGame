@@ -6,7 +6,7 @@ import { getAuthUser } from "@/lib/auth"; // Optional auth — intentionally use
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { createNewsPost } from "@/lib/news/commands/newsCommands";
 import { getNewsFeed } from "@/lib/news/queries/newsQueries";
 
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, createPostSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

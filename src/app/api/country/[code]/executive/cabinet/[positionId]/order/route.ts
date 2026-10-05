@@ -61,8 +61,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const parsed = await parseJsonBody(request, orderSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const metricConfigs = [...mechanics.nationalMetrics, ...mechanics.regionalMetrics];
     // Normalize a `null` region (national orders) to `undefined` so it stores as

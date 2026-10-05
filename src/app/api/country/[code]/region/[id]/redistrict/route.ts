@@ -116,7 +116,7 @@ export async function POST(
     );
     const { legal, violations } = validateRedistrictMap(proposed, budget, caps);
     if (!legal) {
-      return NextResponse.json({ error: "Illegal map", violations }, { status: 400 });
+      return errorResponse(400, "Illegal map", { extra: { violations } });
     }
 
     // Persist the redraw + ledger.

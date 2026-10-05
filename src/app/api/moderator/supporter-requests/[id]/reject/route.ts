@@ -35,7 +35,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     if (request.headers.get("content-length")) {
       const parsed = await parseJsonBody(request, bodySchema);
       if (!parsed.success) {
-        return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+        return errorResponse(parsed.status, parsed.error);
       }
       reason = parsed.data.reason;
     }

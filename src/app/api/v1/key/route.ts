@@ -27,10 +27,7 @@ async function handleGET(request: Request) {
     const apiAuth = await requireUserApiKey(request, "public");
     if (!apiAuth.ok) {
       const status = apiAuth.reason === "insufficient_scope" ? 403 : 401;
-      return NextResponse.json(
-        { error: `API key ${apiAuth.reason.replace("_", " ")}` },
-        { status }
-      );
+      return errorResponse(status, `API key ${apiAuth.reason.replace("_", " ")}`);
     }
 
     // Keep introspection separate from the owner's transfer and forex quotas.

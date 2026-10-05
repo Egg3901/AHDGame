@@ -54,8 +54,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       return errorResponse(400, "This corporation has no active bank charter.");
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const amount = Math.round(parsed.data.amount);
 
     // Corporation → bank, across the ring-fence, in one atomic write. Capped

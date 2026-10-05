@@ -75,18 +75,15 @@ export async function POST(request: Request, { params }: RouteParams) {
       partyJoinedAt: authUser.character.partyJoinedAt,
     });
     if (cooldown.blocked) {
-      return NextResponse.json(
-        {
-          error: "New characters can't run for national committee for 24 hours. Try again later.",
-          unblockAt: cooldown.unblockAt.toISOString(),
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "New characters can't run for national committee for 24 hours. Try again later.",
+        { extra: { unblockAt: cooldown.unblockAt.toISOString() } }
       );
     }
 
     const parsed = await parseJsonBody(request, z.object({ withdraw: z.boolean().optional() }));
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { withdraw } = parsed.data;
 
     // Find active election for this party in this country
@@ -103,13 +100,10 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const gameTime = await getGameTime();
     if (hasTurnBackedWindowClosed(election, gameTime.currentTurn, gameTime.effectiveNow)) {
-      return NextResponse.json(
-        {
-          error:
-            "Voting for this committee election has ended. " +
-            "A new election opens automatically each turn — please refresh shortly to declare for the next cycle.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Voting for this committee election has ended. " +
+          "A new election opens automatically each turn — please refresh shortly to declare for the next cycle."
       );
     }
 

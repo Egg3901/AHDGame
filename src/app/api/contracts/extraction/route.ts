@@ -9,7 +9,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { z } from "zod";
 import { EXTRACTABLE_RESOURCES } from "@/lib/constants/commodities";
 import { ZOD_COUNTRY_ENUM } from "@/lib/constants/countries";
@@ -120,8 +120,7 @@ export async function POST(request: Request) {
     if (!auth.ok) return auth.response;
 
     const parsed = await parseJsonBody(request, grantSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const { stateId, countryId, corporationId, resource, share, grantedBy, grantedByLevel, force } =
       parsed.data;
@@ -137,7 +136,7 @@ export async function POST(request: Request) {
 
     // Require explicit force:true before inserting an over-allocated contract
     if (overAllocated && !force) {
-      return NextResponse.json({ overAllocated: true, needsConfirmation: true }, { status: 409 });
+      return statusResponse(409, { overAllocated: true, needsConfirmation: true });
     }
 
     const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });

@@ -1,7 +1,6 @@
-import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { canManageOffice } from "@/lib/governorOffice/access";
@@ -42,7 +41,7 @@ export async function DELETE(
     }
 
     const result = await cancelQueue(db, oid, "manual");
-    return NextResponse.json(result.body, { status: result.status });
+    return statusResponse(result.status, result.body);
   } catch (error) {
     return handleRouteError(error);
   }

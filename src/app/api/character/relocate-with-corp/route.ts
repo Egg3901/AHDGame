@@ -94,7 +94,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { targetStateId, targetCountryId, paymentMethod } = parsed.data;
     const normalizedTarget = targetStateId.trim();
@@ -128,12 +128,10 @@ export async function POST(request: Request) {
       Date.now()
     );
     if (cooldown.onCooldown) {
-      return NextResponse.json(
-        {
-          error: `Relocation cooldown active. You can relocate again in ${cooldown.cooldownRemainingDays} day(s).`,
-          cooldownRemainingDays: cooldown.cooldownRemainingDays,
-        },
-        { status: 429 }
+      return errorResponse(
+        429,
+        `Relocation cooldown active. You can relocate again in ${cooldown.cooldownRemainingDays} day(s).`,
+        { extra: { cooldownRemainingDays: cooldown.cooldownRemainingDays } }
       );
     }
     const currentCountryId = auth.character.countryId ?? "US";
@@ -292,10 +290,7 @@ export async function POST(request: Request) {
         propertySectors
       );
       if (!convResult.ok) {
-        return NextResponse.json(
-          { error: convResult.error },
-          { status: convResult.rateUnavailable ? 503 : 400 }
-        );
+        return errorResponse(convResult.rateUnavailable ? 503 : 400, convResult.error);
       }
       currencyConversion = convResult;
       if (convResult.converted) {

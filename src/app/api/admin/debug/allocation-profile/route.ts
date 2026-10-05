@@ -109,13 +109,9 @@ export async function POST(request: Request) {
     }
 
     if (isAllocationProfileCaptureInProgress()) {
-      return NextResponse.json(
-        {
-          error: "Another allocation-profile capture is already in progress",
-          current: getCurrentCaptureState(),
-        },
-        { status: 409 }
-      );
+      return errorResponse(409, "Another allocation-profile capture is already in progress", {
+        extra: { current: getCurrentCaptureState() },
+      });
     }
 
     try {

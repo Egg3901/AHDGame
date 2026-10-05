@@ -100,7 +100,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     const parsed = await parseJsonBody(request, adminElectionsCreateSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { cycle, senateClass, includeHouse, includeStateSenate, includeGovernor } = parsed.data;
 
@@ -247,7 +247,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ co
 
     const parsed = await parseJsonBody(request, adminElectionsPatchSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const {
       electionType,

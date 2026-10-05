@@ -91,7 +91,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     const result = await cancelShareOrderAndRefund(db, order);
     if (!result.ok) {
       const status = result.error.startsWith("Exchange rate") ? 503 : 400;
-      return NextResponse.json({ error: result.error }, { status });
+      return errorResponse(status, result.error);
     }
 
     return NextResponse.json({ success: true });

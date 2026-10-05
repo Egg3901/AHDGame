@@ -33,7 +33,7 @@ export async function POST(req: Request, { params }: RouteParams) {
 
   const parsed = await parseJsonBody(req, bodySchema);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    return errorResponse(parsed.status, parsed.error);
   }
   const vote = parsed.data.vote;
 

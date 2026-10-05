@@ -177,7 +177,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     const parsed = await parseJsonBody(request, npcscChairActionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { action, nominationId } = parsed.data;
 
@@ -198,7 +198,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     });
 
     if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
     return NextResponse.json({ message: result.message });
   } catch (error) {

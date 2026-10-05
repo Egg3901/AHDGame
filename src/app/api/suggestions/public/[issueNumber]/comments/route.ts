@@ -152,7 +152,7 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, suggestionCommentSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { body } = parsed.data;
 

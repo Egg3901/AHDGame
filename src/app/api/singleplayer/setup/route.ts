@@ -55,8 +55,7 @@ export async function POST(request: Request) {
       progress: 2,
     });
     const parsed = await parseJsonBody(request, bodySchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { preset, mode, difficulty, autonomyLevel, featureFlags, displayName } = parsed.data;
     if (!isKnownPreset(preset)) {
       return errorResponse(400, `Unknown preset "${preset}"`);

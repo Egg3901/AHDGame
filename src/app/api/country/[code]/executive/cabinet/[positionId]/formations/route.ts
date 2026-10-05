@@ -57,7 +57,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -116,7 +116,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       }
       const validGenerals = new Set((await listCountryGenerals(db, countryId)).map((g) => g.id));
       const error = validateAssignments(conflictAssignments, { validGenerals });
-      if (error) return NextResponse.json({ error }, { status: 400 });
+      if (error) return errorResponse(400, error);
     }
 
     // Patch only what was sent, so one page's save never erases the other's half.

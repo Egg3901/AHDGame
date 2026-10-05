@@ -33,7 +33,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
       characterId: auth.user.character?._id,
     });
     if (!detail.ok) {
-      return NextResponse.json({ error: detail.error }, { status: detail.status });
+      return errorResponse(detail.status, detail.error);
     }
 
     return NextResponse.json(detail.body);

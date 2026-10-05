@@ -129,7 +129,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, whipSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { targetType, targetId, chamber, direction, mode } = parsed.data;
     if (!isWhippableChamber(countryId, chamber)) {

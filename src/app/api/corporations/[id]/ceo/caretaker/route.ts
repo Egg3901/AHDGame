@@ -65,8 +65,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     const parsed = await parseJsonBody(request, appointSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const resolved = await resolveCorporation(db, id);
@@ -141,8 +140,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const rateLimit = checkRateLimit(auth.user.userId, 20, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
     const parsed = await parseJsonBody(request, mandateSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const resolved = await resolveCorporation(db, (await params).id);

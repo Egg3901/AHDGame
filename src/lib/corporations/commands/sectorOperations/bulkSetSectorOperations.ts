@@ -11,7 +11,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { bulkSectorOperationsSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { Character, CorporateSector } from "@/lib/db/types";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
@@ -53,7 +53,7 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
     const { id } = await params;
     const parsed = await parseJsonBody(request, bulkSectorOperationsSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
     const { countryId, sectorType, targetGrowthRate, preview } = body;
@@ -72,7 +72,7 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
     if (ceoCheck) return ceoCheck;
 
     if (wageLevel !== undefined && !(await isLabourWagesEnabled())) {
-      return NextResponse.json({ error: "The labour system is not enabled." }, { status: 403 });
+      return errorResponse(403, "The labour system is not enabled.");
     }
 
     const bulkMode =
@@ -81,10 +81,7 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
         : undefined;
     if (pricingPosture !== undefined) {
       if (!isMarketSystemMode(bulkMode) || !marketAtLeast(bulkMode, "clearing")) {
-        return NextResponse.json(
-          { error: "Market clearing is not enabled on this world" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Market clearing is not enabled on this world");
       }
     }
 
@@ -96,9 +93,9 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
       isMarketSystemMode(bulkMode) &&
       marketAtLeast(bulkMode, "plants")
     ) {
-      return NextResponse.json(
-        { error: "Growth targets are retired on this world. Use Build capacity instead." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Growth targets are retired on this world. Use Build capacity instead."
       );
     }
 

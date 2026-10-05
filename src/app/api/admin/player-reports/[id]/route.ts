@@ -28,8 +28,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return errorResponse(400, "Invalid report id");
     }
     const parsed = await parseJsonBody(request, reviewSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const now = new Date();

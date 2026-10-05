@@ -53,7 +53,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { email, tier, active, currentPeriodEnd } = parsed.data;
 
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
       .findOne({ email: { $regex: `^${escapeRegex(normalized)}$`, $options: "i" } });
 
     if (!user) {
-      return NextResponse.json({ ok: false, error: "unknown_email" }, { status: 404 });
+      return errorResponse(404, "unknown_email", { extra: { ok: false } });
     }
 
     if (active && tier !== null) {

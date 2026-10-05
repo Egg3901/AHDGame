@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     }
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     return NextResponse.json(await advanceWorldsim(parsed.data.turns), {
       headers: { "Cache-Control": "no-store" },

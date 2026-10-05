@@ -66,7 +66,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, recruitSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     // Live year gates which branches/archetypes exist (e.g. Bundeswehr 1955,
@@ -77,25 +77,20 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const branch = getBranches(countryId, liveYear).find((b) => b.id === parsed.data.branchId);
     if (!branch) {
-      return NextResponse.json(
-        {
-          error: liveYear != null ? `Branch is not available in ${liveYear}` : "Invalid branch",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        liveYear != null ? `Branch is not available in ${liveYear}` : "Invalid branch"
       );
     }
     const archetype = getUnitTypesForYear(branch.domain, liveYear).find(
       (t) => t.type === parsed.data.type
     );
     if (!archetype) {
-      return NextResponse.json(
-        {
-          error:
-            liveYear != null
-              ? `Unit type is not available in ${liveYear}`
-              : "Invalid unit type for this branch",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        liveYear != null
+          ? `Unit type is not available in ${liveYear}`
+          : "Invalid unit type for this branch"
       );
     }
 
@@ -168,13 +163,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     // guard to a concurrent order, which is retryable rather than malformed.
     if (poolBefore < archetype.personnel) {
       await refundAction();
-      return NextResponse.json(
-        {
-          error:
-            `Insufficient manpower — ${archetype.personnel.toLocaleString("en-US")} required, ` +
-            `${poolBefore.toLocaleString("en-US")} available`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient manpower — ${archetype.personnel.toLocaleString("en-US")} required, ` +
+          `${poolBefore.toLocaleString("en-US")} available`
       );
     }
 
@@ -216,13 +208,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       await returnManpower(db, countryId, archetype.personnel);
       await refundAction();
       const { balance } = await getDefenseAppropriation(db, countryId);
-      return NextResponse.json(
-        {
-          error:
-            `Defence appropriation is short — ${price.toLocaleString("en-US")} required, ` +
-            `${Math.max(0, balance).toLocaleString("en-US")} available`,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `Defence appropriation is short — ${price.toLocaleString("en-US")} required, ` +
+          `${Math.max(0, balance).toLocaleString("en-US")} available`
       );
     }
 

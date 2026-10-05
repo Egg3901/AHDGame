@@ -142,16 +142,13 @@ export async function POST(request: Request, { params }: RouteParams) {
         election.bulgarianFoundingRound?.round !== 1 &&
         !election.bulgarianFoundingRound?.newNominationDistrictIds?.length
       )
-        return NextResponse.json(
-          { error: bgFoundingFilingMessages["filing-closed"] },
-          { status: 403 }
-        );
+        return errorResponse(403, bgFoundingFilingMessages["filing-closed"]);
       if (
         hu1991 &&
         !election.hungarianModernByElection &&
         election.hungarianAssemblyRound?.round !== 1
       )
-        return NextResponse.json({ error: hu1991FilingMessages["filing-closed"] }, { status: 403 });
+        return errorResponse(403, hu1991FilingMessages["filing-closed"]);
       const text = await request.text();
       let body: unknown = {};
       try {
@@ -313,10 +310,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       : null;
     if (councilFiling && !councilFiling.allowed) {
       logRequest("POST", path, 403, Date.now() - start);
-      return NextResponse.json(
-        { error: councilFilingErrors[councilFiling.reason] },
-        { status: 403 }
-      );
+      return errorResponse(403, councilFilingErrors[councilFiling.reason]);
     }
     const dumaFiling = election.russianDumaRound
       ? await validateRussianDumaPlayerFiling({
@@ -346,7 +340,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           "Join an existing unbanned Russian party before contesting the national list.",
       };
       logRequest("POST", path, 403, Date.now() - start);
-      return NextResponse.json({ error: errors[dumaFiling.reason] }, { status: 403 });
+      return errorResponse(403, errors[dumaFiling.reason]);
     }
     const electionRuntimeConfig = { governmentType: electionRuntime.governmentType };
     if (electionRuntime.governmentType === "onePartyState") {
@@ -464,9 +458,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       existingCandidate?.party !== undefined &&
       existingCandidate.party !== character.party
     )
-      return NextResponse.json(
-        { error: (bgFounding ? bgFoundingFilingMessages : hu1991FilingMessages)["party-changed"] },
-        { status: 403 }
+      return errorResponse(
+        403,
+        (bgFounding ? bgFoundingFilingMessages : hu1991FilingMessages)["party-changed"]
       );
     if (existingCandidate) {
       // If they have an active candidacy under a different party, withdraw it first
@@ -574,7 +568,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         });
         if (!filed.allowed) {
           logRequest("POST", path, 403, Date.now() - start);
-          return NextResponse.json({ error: councilFilingErrors[filed.reason] }, { status: 403 });
+          return errorResponse(403, councilFilingErrors[filed.reason]);
         }
         result = { insertedId: filed.insertedId };
       } else if (bgFounding) {
@@ -586,11 +580,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           turn: currentTurn,
           now,
         });
-        if (!filed.allowed)
-          return NextResponse.json(
-            { error: bgFoundingFilingMessages[filed.reason] },
-            { status: 403 }
-          );
+        if (!filed.allowed) return errorResponse(403, bgFoundingFilingMessages[filed.reason]);
         result = { insertedId: filed.insertedId };
       } else if (hu1991) {
         const filed = await registerHu1991PlayerFiling({
@@ -602,14 +592,11 @@ export async function POST(request: Request, { params }: RouteParams) {
           now,
         });
         if (!filed.allowed)
-          return NextResponse.json(
-            {
-              error:
-                election.hungarianModernByElection && filed.reason === "filing-closed"
-                  ? "Filing has closed for this constituency by-election."
-                  : hu1991FilingMessages[filed.reason],
-            },
-            { status: 403 }
+          return errorResponse(
+            403,
+            election.hungarianModernByElection && filed.reason === "filing-closed"
+              ? "Filing has closed for this constituency by-election."
+              : hu1991FilingMessages[filed.reason]
           );
         result = { insertedId: filed.insertedId };
       } else if (hu2014) {

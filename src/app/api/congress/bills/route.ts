@@ -364,7 +364,7 @@ export async function POST(request: Request) {
     const parsed = await parseJsonBody(request, proposeBillSchema);
     if (!parsed.success) {
       logRequest("POST", path, parsed.status, Date.now() - start);
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const {
       title,
@@ -413,7 +413,7 @@ export async function POST(request: Request) {
       const natValidation = await validateNationalizationProvisions(db, rawProvisions, "US");
       if (!natValidation.ok) {
         logRequest("POST", path, natValidation.status, Date.now() - start);
-        return NextResponse.json({ error: natValidation.error }, { status: natValidation.status });
+        return errorResponse(natValidation.status, natValidation.error);
       }
 
       const now = new Date();
@@ -425,14 +425,9 @@ export async function POST(request: Request) {
       );
       if (proposalWarning && !confirmElectionRisk && !usingSovereignOverride) {
         logRequest("POST", path, 409, Date.now() - start);
-        return NextResponse.json(
-          {
-            error: getBillProposalAutoFailWarningError(proposalWarning),
-            autoFailWarning: proposalWarning,
-            requiresElectionRiskConfirmation: true,
-          },
-          { status: 409 }
-        );
+        return errorResponse(409, getBillProposalAutoFailWarningError(proposalWarning), {
+          extra: { autoFailWarning: proposalWarning, requiresElectionRiskConfirmation: true },
+        });
       }
 
       const npiCost = getProvisionCostTotal(
@@ -980,14 +975,9 @@ export async function POST(request: Request) {
     );
     if (proposalWarning && !confirmElectionRisk) {
       logRequest("POST", path, 409, Date.now() - start);
-      return NextResponse.json(
-        {
-          error: getBillProposalAutoFailWarningError(proposalWarning),
-          autoFailWarning: proposalWarning,
-          requiresElectionRiskConfirmation: true,
-        },
-        { status: 409 }
-      );
+      return errorResponse(409, getBillProposalAutoFailWarningError(proposalWarning), {
+        extra: { autoFailWarning: proposalWarning, requiresElectionRiskConfirmation: true },
+      });
     }
 
     // NPI cost: policy, subsidy, union-law and standalone rows share one ladder;

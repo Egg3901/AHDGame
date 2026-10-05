@@ -114,8 +114,7 @@ export async function POST(request: Request, context: Context) {
     const limit = checkRateLimit(`supply-listings:${a.userId}`, 20, 60000);
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
     const parsed = await parseJsonBody(request, supplyListingActionSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const body = parsed.data;
     const id = `${a.corp._id}:${body.slot}`;
     const collection = a.db.collection<SupplyListing>("supplyListings");

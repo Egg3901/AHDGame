@@ -9,7 +9,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth"; // Optional auth — intentionally uses getAuthUser() in GET
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, errorResponse } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { parseJsonBody } from "@/lib/api/validate";
 import { proposeBillSchema } from "@/lib/api/schemas/congress";
@@ -118,14 +118,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     const parsed = await parseJsonBody(request, proposeBillSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     if (!allowedOriginKeys.includes(parsed.data.chamber)) {
       return errorResponse(400, `Invalid chamber for ${countryId} legislature.`);
     }
 
     const result = await proposeNationalBill(db, countryId, auth.user, parsed.data);
-    return NextResponse.json(result.body, { status: result.status });
+    return statusResponse(result.status, result.body);
   } catch (error) {
     return handleRouteError(error);
   }
