@@ -309,6 +309,7 @@ describe("bootstrap contract: orchestrator wiring", () => {
       collection: () => ({
         findOne: async () => null,
         updateOne: async () => ({}),
+        updateMany: async () => ({ modifiedCount: 0 }),
         insertOne: async () => ({}),
       }),
     } as never;
@@ -391,6 +392,7 @@ describe("bootstrap contract: orchestrator wiring", () => {
         collection: () => ({
           findOne: async () => null,
           updateOne: async () => ({}),
+          updateMany: async () => ({ modifiedCount: 0 }),
           insertOne: async () => ({}),
         }),
       } as never,
@@ -464,6 +466,7 @@ describe("bootstrap contract: orchestrator wiring", () => {
         collection: () => ({
           findOne: async () => null,
           updateOne,
+          updateMany: async () => ({ modifiedCount: 0 }),
           insertOne: async () => {
             order.push("adminLogs.insertOne");
             return {};
