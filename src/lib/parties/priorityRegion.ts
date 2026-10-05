@@ -2,9 +2,9 @@
  * Priority Region cluster lifecycle helpers.
  *
  * A party's `priorityRegion` is a 2–4 state cluster the chair picks to
- * concentrate the party's PS-spending firepower. Actions targeting a
- * cluster state get a `+PRIORITY_REGION_EFFECT_BONUS` (+25%) multiplier
- * on their primary effect. Setting the cluster locks the slot for
+ * record a cluster where the party intends to concentrate its activity.
+ * Build Org's fixed bucket contribution is deliberately not multiplied by
+ * this designation. Setting the cluster locks the slot for
  * `PRIORITY_REGION_LOCKOUT_TURNS` (168) turns — no changes, no clears,
  * no re-set until the cooldown expires.
  *
@@ -212,8 +212,7 @@ export async function partyHoldsStateExecutiveInCluster(
 
 /**
  * Returns true when the given state is currently in the party's
- * priority-region cluster. Used by action handlers to decide whether
- * to apply the `PRIORITY_REGION_EFFECT_BONUS` multiplier.
+ * priority-region cluster.
  *
  * Defensive on absent / empty / null cluster — returns false.
  */

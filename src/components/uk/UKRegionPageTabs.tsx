@@ -150,7 +150,7 @@ export function UKRegionPageTabs({
             partyOrg={partyOrg}
             config={{
               description:
-                "Party organization reflects each party's share of the regional Org pool. Org decays passively each turn; spend Political Strength on Build Org to push it back up.",
+                "Party organization reflects each party's share of accumulated regional Org units. Build Org adds one fixed unit, and organization can decay if a party becomes inactive here.",
               emptyStateHint:
                 "Party organization data will appear when the UK simulation is fully active.",
               emptyStateLink: { href: countryUrl("UK"), label: "Browse UK overview →" },

@@ -169,15 +169,13 @@ export function PriorityRegionCard({ party, countryCode }: PriorityRegionCardPro
     <div className="rounded-xl border border-card-border bg-card p-6">
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <h2 className="text-lg font-semibold">Priority region</h2>
-        <span className="text-xs text-muted">
-          +25% effectiveness on national PS actions in cluster states
-        </span>
+        <span className="text-xs text-muted">Planning focus for adjacent states</span>
       </div>
 
       <p className="text-xs text-muted mb-4">
-        Pick 2–3 adjacent states (4 with a Governor anchor) where this party will concentrate its
-        organizing efforts. Cluster states get a +25% effectiveness bonus on direct national PS
-        actions — Build Org, NPP placement, Contest, etc. Once set, the cluster is{" "}
+        Pick 2-3 adjacent states (4 with a Governor anchor) where this party will concentrate its
+        organizing efforts. Build Org contributes the same fixed bucket unit in every state, so this
+        designation does not multiply it. Once set, the cluster is{" "}
         <strong>locked for {data?.lockoutDurationTurns ?? 168} turns</strong>; no changes until the
         cooldown expires.
       </p>

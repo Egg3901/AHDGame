@@ -1,6 +1,5 @@
 /**
- * The bulk National-HQ tool only drives Build Org now (Contest was folded into
- * Build Org's rival-poach on 2026-06-24). Kept as a single-member union so the
+ * The bulk National-HQ tool only drives Build Org now. Kept as a single-member union so the
  * container's `bulkMode` state and the estimate plumbing stay explicit.
  */
 export type BulkMode = "build";

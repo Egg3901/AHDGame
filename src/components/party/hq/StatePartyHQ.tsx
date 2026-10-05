@@ -84,7 +84,7 @@ export function StatePartyHQ({
   const [bulkMode, setBulkMode] = useState<BulkMode | null>(null);
   const [busy, setBusy] = useState(false);
   // Local copy so the bulk bar updates immediately after spends without waiting
-  // on a parent refetch (activity recovery means we can't subtract exactly).
+  // on a parent refetch.
   const [nationalPs, setNationalPs] = useState(nationalPoliticalStrength);
   useEffect(() => {
     setNationalPs(nationalPoliticalStrength);
@@ -343,7 +343,7 @@ export function StatePartyHQ({
         failed > 0
           ? `Built org in ${done} states from national PS${cashPart} · ${failed} failed`
           : `Built org in ${done} states from national PS` +
-              (spent > 0 ? ` (−${spent.toFixed(0)} Nat'l PS before recovery${cashPart})` : ""),
+              (spent > 0 ? ` (−${spent.toFixed(0)} Nat'l PS${cashPart})` : ""),
         failed > 0 ? "info" : "success"
       );
       setBulkMode(null);

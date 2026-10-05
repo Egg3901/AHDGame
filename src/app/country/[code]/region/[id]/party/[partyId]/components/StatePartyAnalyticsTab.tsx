@@ -296,7 +296,7 @@ export function StatePartyAnalyticsTab({
       <section className="space-y-4">
         <SectionHeader
           title="Local organization"
-          description="This section shows the state party's current organization and the passive decay baseline. Growth itself is event-driven through Build Org (PS-spend), not a per-turn rate."
+          description="This section shows the state party's current bucket-derived organization share. Build Org adds fixed contribution units, and organization can decay if the party becomes inactive here."
           link={data.links.treasury}
         />
         {data.org ? (

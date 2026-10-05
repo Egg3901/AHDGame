@@ -143,6 +143,14 @@ export async function PATCH(request: Request) {
       { _id: compoundId },
       {
         $set: updateData,
+        ...(organization !== undefined
+          ? {
+              // A manual percentage override becomes a fresh legacy snapshot.
+              // The next bucket read converts it into units using the complete
+              // regional context instead of retaining a stale durable balance.
+              $unset: { organizationUnits: "", lastOrganizationBuildTurn: "" },
+            }
+          : {}),
         $setOnInsert: {
           _id: compoundId,
           countryId: state.countryId,

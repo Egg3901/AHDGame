@@ -4,32 +4,22 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { EstimateBox } from "./EstimateBox";
-import type { BuildOrgFactors } from "@/components/state/politics/FactorBreakdown";
-
-const FACTORS: BuildOrgFactors = {
-  base: 2,
-  headroom: 0.5,
-  ownDiminishing: 0.5,
-  psLeverage: 1,
-  catchup: 1,
-};
 
 describe("EstimateBox", () => {
-  it("renders Build projection with Cost/Org gain and ladder subtext", () => {
+  it("renders Build projection with Cost/Org share and ladder subtext", () => {
     render(
       <EstimateBox
         variant="projection"
         tone="build"
         cost={{ effectivePS: 7, basePS: 5, ladderPS: 2 }}
-        gain={{ label: "Estimated gain", value: 1.25, sign: "+", unit: "Org" }}
-        factors={FACTORS}
+        gain={{ label: "Estimated share", value: 1.25, sign: "+", unit: "Org" }}
       />
     );
     expect(screen.getByText("This click")).toBeTruthy();
     expect(screen.getByText("Cost")).toBeTruthy();
     expect(screen.getByText("7")).toBeTruthy();
     expect(screen.getByText(/base 5 \+ ladder 2/)).toBeTruthy();
-    expect(screen.getByText("Org gain")).toBeTruthy();
+    expect(screen.getByText("Org share")).toBeTruthy();
     expect(screen.getByText(/\+1\.25/)).toBeTruthy();
   });
 
@@ -39,8 +29,7 @@ describe("EstimateBox", () => {
         variant="projection"
         tone="build"
         cost={{ effectivePS: 5, basePS: 5, ladderPS: 0 }}
-        gain={{ label: "Estimated gain", value: 1, sign: "+", unit: "Org" }}
-        factors={FACTORS}
+        gain={{ label: "Estimated share", value: 1, sign: "+", unit: "Org" }}
       />
     );
     expect(screen.queryByText(/ladder \d/)).toBeNull();
@@ -54,7 +43,6 @@ describe("EstimateBox", () => {
         tone="contest"
         cost={{ effectivePS: 6, basePS: 5, ladderPS: 1 }}
         gain={{ label: "Estimated Effect", value: 0.8, sign: "−", unit: "Org", clamped: true }}
-        factors={FACTORS}
       />
     );
     expect(screen.getByText("Effect")).toBeTruthy();
@@ -69,7 +57,6 @@ describe("EstimateBox", () => {
         tone="build"
         cost={{ effectivePS: 5, basePS: 5, ladderPS: 0 }}
         gain={{ label: "Gain", value: 1, sign: "+", unit: "Org" }}
-        factors={FACTORS}
       />
     );
     expect(screen.getByText("Last click")).toBeTruthy();
@@ -82,8 +69,7 @@ describe("EstimateBox", () => {
         variant="projection"
         tone="build"
         cost={{ effectivePS: 5, basePS: 5, ladderPS: 0 }}
-        gain={{ label: "Estimated gain", value: 1, sign: "+", unit: "Org" }}
-        factors={FACTORS}
+        gain={{ label: "Estimated share", value: 1, sign: "+", unit: "Org" }}
       />
     );
     expect(screen.queryByText("Estimated funds")).toBeNull();
@@ -93,8 +79,7 @@ describe("EstimateBox", () => {
         tone="build"
         cost={{ effectivePS: 5, basePS: 5, ladderPS: 0 }}
         funds={{ amount: 1000, currencyCode: "USD" }}
-        gain={{ label: "Estimated gain", value: 1, sign: "+", unit: "Org" }}
-        factors={FACTORS}
+        gain={{ label: "Estimated share", value: 1, sign: "+", unit: "Org" }}
       />
     );
     expect(screen.getByText("Estimated funds")).toBeTruthy();

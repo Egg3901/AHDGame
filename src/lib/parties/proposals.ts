@@ -1,4 +1,4 @@
-import type { Db, ObjectId } from "mongodb";
+import type { AnyBulkWriteOperation, Db, ObjectId } from "mongodb";
 import type {
   CommitteeProposal,
   CommitteeProposalVote,
@@ -22,6 +22,10 @@ import { selectMergeNppCull } from "@/lib/npp/mergeNppCap";
 import { selectNationalMergeNppCull } from "@/lib/npp/rules/mergeNationalCap";
 import { getPartyNppCapacity } from "@/lib/npp/partyCapacity";
 import { notifyGovernorOfSenateVacancy } from "@/lib/governors/senateVacancy";
+import {
+  deriveOrganizationShares,
+  resolveOrganizationUnits,
+} from "@/lib/parties/rules/organizationBucket";
 import {
   REQUIRED_YES_FRACTION,
   POSITION_SHIFT_COOLDOWN_TURNS,
@@ -616,46 +620,97 @@ export async function processMergeProposal(
       );
   }
 
-  // 4. Merge state org — add 50% of each proposing state org's organization to target
-  const proposingOrgs = await db
-    .collection<StatePartyOrg>("statePartyOrg")
+  // 4. Merge state org. Organization percentages are cached bucket shares, so
+  // transfer half of the absorbed party's durable units rather than mutating
+  // the percentage directly.
+  const statePartyOrgCol = db.collection<StatePartyOrg>("statePartyOrg");
+  const proposingOrgs = await statePartyOrgCol
     .find({ partyId: proposingStrId, countryId })
     .toArray();
 
-  for (const org of proposingOrgs) {
-    const bonus = Math.floor(org.organization * 0.5);
-    if (bonus <= 0) continue;
-    const targetOrgId = `${org.stateId}_${targetStrId}`;
-    const exists = await db
-      .collection<StatePartyOrg>("statePartyOrg")
-      .findOne({ _id: targetOrgId }, { projection: { _id: 1 } });
+  const affectedStateIds = [...new Set(proposingOrgs.map((org) => org.stateId))];
+  const regionalRows =
+    affectedStateIds.length > 0
+      ? await statePartyOrgCol.find({ countryId, stateId: { $in: affectedStateIds } }).toArray()
+      : [];
+  const rowsByState = new Map<string, StatePartyOrg[]>();
+  for (const row of regionalRows) {
+    const rows = rowsByState.get(row.stateId) ?? [];
+    rows.push(row);
+    rowsByState.set(row.stateId, rows);
+  }
 
-    if (exists) {
-      await db
-        .collection<StatePartyOrg>("statePartyOrg")
-        .updateOne(
-          { _id: targetOrgId },
-          { $inc: { organization: bonus }, $set: { hasPresence: true, updatedAt: now } }
-        );
+  const targetOrgWrites: AnyBulkWriteOperation<StatePartyOrg>[] = [];
+  for (const org of proposingOrgs) {
+    const stateRows = rowsByState.get(org.stateId) ?? [org];
+    const resolved = deriveOrganizationShares(
+      stateRows.map((row) => ({
+        id: row._id ?? `${row.stateId}_${row.partyId}`,
+        organization: row.organization ?? 0,
+        organizationUnits: row.organizationUnits,
+        lastOrganizationBuildTurn: row.lastOrganizationBuildTurn,
+      }))
+    );
+    const sourceId = org._id ?? `${org.stateId}_${proposingStrId}`;
+    const sourceUnits =
+      resolved.rows.find((row) => row.id === sourceId)?.organizationUnits ??
+      resolveOrganizationUnits(org);
+    const bonusUnits = Math.floor(sourceUnits * 0.5 * 1_000_000) / 1_000_000;
+    if (bonusUnits <= 0) continue;
+    const targetOrgId = `${org.stateId}_${targetStrId}`;
+    const target = stateRows.find((row) => row._id === targetOrgId || row.partyId === targetStrId);
+    const targetUnits =
+      resolved.rows.find((row) => row.id === (target?._id ?? targetOrgId))?.organizationUnits ?? 0;
+
+    if (target) {
+      targetOrgWrites.push({
+        updateOne: {
+          filter: { _id: targetOrgId },
+          update: [
+            {
+              $set: {
+                organizationUnits: {
+                  $add: [
+                    { $max: [{ $ifNull: ["$organizationUnits", targetUnits] }, 0] },
+                    bonusUnits,
+                  ],
+                },
+                lastOrganizationBuildTurn: currentTurn,
+                hasPresence: true,
+                updatedAt: now,
+              },
+            },
+          ],
+        },
+      });
     } else {
       // Create minimal state org record for target in this state
-      await db.collection<StatePartyOrg>("statePartyOrg").insertOne({
-        _id: targetOrgId,
-        countryId,
-        stateId: org.stateId,
-        partyId: targetStrId,
-        organization: bonus,
-        chairId: null,
-        viceChairId: null,
-        treasurerId: null,
-        treasury: 0,
-        stateTaxRate: 0,
-        politicalStrength: 0,
-        hasPresence: true,
-        createdAt: now,
-        updatedAt: now,
+      targetOrgWrites.push({
+        insertOne: {
+          document: {
+            _id: targetOrgId,
+            countryId,
+            stateId: org.stateId,
+            partyId: targetStrId,
+            organization: 0,
+            organizationUnits: bonusUnits,
+            lastOrganizationBuildTurn: currentTurn,
+            chairId: null,
+            viceChairId: null,
+            treasurerId: null,
+            treasury: 0,
+            stateTaxRate: 0,
+            politicalStrength: 0,
+            hasPresence: true,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
       });
     }
+  }
+  if (targetOrgWrites.length > 0) {
+    await statePartyOrgCol.bulkWrite(targetOrgWrites, { ordered: false });
   }
 
   // 4b. Wipe the absorbed party's state footprint. The target kept 50% of each
@@ -675,9 +730,54 @@ export async function processMergeProposal(
         );
     }
   }
-  await db
-    .collection<StatePartyOrg>("statePartyOrg")
-    .deleteMany({ partyId: proposingStrId, countryId });
+  await statePartyOrgCol.deleteMany({ partyId: proposingStrId, countryId });
+
+  // Refresh the cached shares after the absorbed rows are gone. Unit filters
+  // prevent this compatibility write from overwriting a concurrent Build Org
+  // contribution.
+  if (affectedStateIds.length > 0) {
+    const remainingRows = await statePartyOrgCol
+      .find({ countryId, stateId: { $in: affectedStateIds } })
+      .toArray();
+    const remainingByState = new Map<string, StatePartyOrg[]>();
+    for (const row of remainingRows) {
+      const rows = remainingByState.get(row.stateId) ?? [];
+      rows.push(row);
+      remainingByState.set(row.stateId, rows);
+    }
+    const shareWrites = [...remainingByState.values()].flatMap((rows) => {
+      const result = deriveOrganizationShares(
+        rows.map((row) => ({
+          id: row._id,
+          organization: row.organization ?? 0,
+          organizationUnits: row.organizationUnits,
+          lastOrganizationBuildTurn: row.lastOrganizationBuildTurn,
+        }))
+      );
+      const sourceById = new Map(rows.map((row) => [row._id, row]));
+      return result.rows.map((row) => {
+        const source = sourceById.get(row.id);
+        return {
+          updateOne: {
+            filter:
+              source?.organizationUnits === undefined
+                ? { _id: row.id, organizationUnits: { $exists: false } }
+                : { _id: row.id, organizationUnits: row.organizationUnits },
+            update: {
+              $set: {
+                organization: row.organization,
+                ...(source?.organizationUnits === undefined
+                  ? { organizationUnits: row.organizationUnits }
+                  : {}),
+                updatedAt: now,
+              },
+            },
+          },
+        };
+      });
+    });
+    if (shareWrites.length > 0) await statePartyOrgCol.bulkWrite(shareWrites);
+  }
 
   // 4c. Transfer NPPs with the per-state recruitment cap enforced. The target
   //     keeps all its own NPPs, even if already over a cap. Incoming active NPPs

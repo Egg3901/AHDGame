@@ -695,7 +695,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
             newTurn
           )
         );
-        await runtime.runPhase("partyOrgTurn", () => processPartyOrgTurn());
+        await runtime.runPhase("partyOrgTurn", () => processPartyOrgTurn(newTurn, realNow));
 
         // Phase 3 turn-pipeline additions: drift→decay (Phase 0.5 §8.3 steps 3-4),
         // PS pressure decay, and Priority Region cluster validation. Run sequentially

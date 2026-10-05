@@ -17,3 +17,4 @@ areas: [backend, engine]
 - War damage destroys part of the fought-over regions' capital, and the state pays to rebuild it over two game years.
 - UK 1991 regions keep their census composition, and age, education and income attitudes follow published 1991 survey data.
 - 2027 worlds get Bulgarian regional demographics, regional populations that match national totals and a modern Turkey profile.
+- A fresh reset restores the banking, product and media safeguards and starts bond markets with funded pools.

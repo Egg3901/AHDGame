@@ -8,12 +8,7 @@ import { crossCountryActionGuard } from "@/lib/api/crossCountryGuard";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { isNonPartyOrganizationUsRegion } from "@/lib/constants/states";
-import type {
-  OrgRegLedger,
-  StatePartyOrg,
-  PoliticalParty,
-  PartyStrengthPressure,
-} from "@/lib/db/types";
+import type { OrgRegLedger, PartyStrengthPressure } from "@/lib/db/types";
 import { findPartyBySequentialId, findStatePartyOrgRow } from "@/lib/db/partyLookup";
 import { checkPartyPresence } from "@/lib/turn/partyOrg/presence";
 import { ensureStatePartyOrgRow } from "@/lib/turn/partyOrg/ensureStatePartyOrgRow";
@@ -26,10 +21,6 @@ import {
 } from "@/lib/parties/access";
 import {
   BUILD_ORG_BASE_PS_COST,
-  NATIONAL_PS_CAP,
-  NATIONAL_PS_ACTIVITY_RECOVERY_FRACTION,
-  PRIORITY_REGION_EFFECT_BONUS,
-  blendedComparisonPs,
   effectivePsCost,
 } from "@/lib/turn/politicalStrength/strengthConstants";
 import {
@@ -39,10 +30,9 @@ import {
 } from "@/lib/politicalStrength/buildOrgFunding";
 import { chargeOrgBuildFunds } from "@/lib/parties/commands/chargeOrgBuildFunds";
 import { resolveOrgBuildSizeMultiplier } from "@/lib/politicalStrength/orgBuildStateSize";
-import { calcUnifiedBuildOrg } from "@/lib/turn/politicalStrength/buildOrgGain";
-import { isStateInPriorityRegion } from "@/lib/parties/priorityRegion";
-import { resolveUnmannedDefaultCaptureMultiplier } from "@/lib/parties/unmannedDefenseShield";
 import { computeBuildOrgPreview } from "@/lib/turn/politicalStrength/computeBuildOrgPreview";
+import { buildOrganizationBucket } from "@/lib/parties/commands/buildOrganizationBucket";
+import { ORG_BUILD_UNITS_PER_CLICK } from "@/lib/constants/partyOrg";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string; partyId: string }>;
@@ -50,18 +40,14 @@ interface RouteParams {
 
 /**
  * POST /api/country/[code]/region/[id]/party/[partyId]/build-org —
- * spend PS to grow your party's Org% in this state, drawing from the
- * unaffiliated/independent pool AND poaching rivals in one click
- * (2026-06-24 unified Build Org). Per-click gain + sourcing breakdown is
- * computed by `calcUnifiedBuildOrg` from the state's current Org distribution
- * and the relative PS reserves of the spender vs each rival.
+ * spend PS to deposit one fixed contribution unit in the party's regional Org
+ * bucket. Org% is derived from accumulated units, so new investment dilutes
+ * established shares proportionally instead of directly poaching points.
  *
  * Acceptance:
  *  - PS debit + per-state pressure ladder via `spendPoliticalStrength`
- *  - Returns 400 only when nothing can be taken (empty pool AND no rival holds
- *    any Org to poach)
- *  - Spender gain logged in `orgRegLedger` with `source: "action"`,
- *    `note: "action:build-org"`; each rival's loss logged with `source: "poach"`
+ *  - One fixed contribution unit and inactivity-clock reset per successful click
+ *  - Every resulting cached Org-share change is written to `orgRegLedger`
  *  - Auth: state chair / vice-chair / national chair / vice-chair / admin
  */
 const buildOrgBodySchema = z.object({
@@ -186,74 +172,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
   }
 
-  // Pull all parties' state-party rows in this state for the gain calculation.
   const ownId = String(spenderParty.sequentialId);
-  const allStateRows = await db
-    .collection<StatePartyOrg>("statePartyOrg")
-    .find({ countryId, stateId: upperRegionId })
-    .toArray();
-
-  const totalPartyOrgPct = allStateRows.reduce((s, r) => s + (r.organization ?? 0), 0);
-  const rivalRows = allStateRows.filter((r) => r.partyId !== ownId && (r.organization ?? 0) > 0);
-  const rivalLeadOrgPct = rivalRows.reduce((max, r) => Math.max(max, r.organization ?? 0), 0);
-
-  // Resolve each rival party doc for (a) the unmanned-default shield (0.5 for an
-  // abandoned default stronghold, else 1) and (b) its NATIONAL PS pool, which is
-  // blended into the per-state strength comparison below.
-  const rivalParties = rivalRows.length
-    ? await db
-        .collection<PoliticalParty>("politicalParties")
-        .find({ countryId, sequentialId: { $in: rivalRows.map((r) => Number(r.partyId)) } })
-        .toArray()
-    : [];
-  const partyBySeq = new Map(rivalParties.map((p) => [String(p.sequentialId), p]));
-  const shieldByPartyId = new Map<string, number>(
-    await Promise.all(
-      rivalRows.map(async (r) => {
-        const p = partyBySeq.get(r.partyId);
-        return [r.partyId, p ? await resolveUnmannedDefaultCaptureMultiplier(db, p) : 1] as [
-          string,
-          number,
-        ];
-      })
-    )
-  );
-
-  // Effective PS = state PS + a fraction of national PS, applied to spender and
-  // every rival so leverage + poach weighting compare like with like.
-  const ownPS = blendedComparisonPs(
-    spenderRow.politicalStrength ?? 0,
-    spenderParty.politicalStrength ?? 0
-  );
-  const rivals = rivalRows.map((r) => ({
-    partyId: r.partyId,
-    orgPct: r.organization ?? 0,
-    ps: blendedComparisonPs(
-      r.politicalStrength ?? 0,
-      partyBySeq.get(r.partyId)?.politicalStrength ?? 0
-    ),
-    shield: shieldByPartyId.get(r.partyId) ?? 1,
-  }));
-  const rivalsWithPS = rivals.filter((r) => r.ps > 0);
-  const avgRivalPS =
-    rivalsWithPS.length > 0 ? rivalsWithPS.reduce((s, r) => s + r.ps, 0) / rivalsWithPS.length : 0;
-
-  const breakdown = calcUnifiedBuildOrg({
-    ownOrgPct: spenderRow.organization ?? 0,
-    ownPS,
-    totalPartyOrgPct,
-    rivalLeadOrgPct,
-    avgRivalPS,
-    rivals,
-  });
-
-  if (breakdown.totalGain <= 0) {
-    return errorResponse(
-      400,
-      "Nothing to build here — the unaffiliated pool is empty and no rival holds any Org to poach."
-    );
-  }
-
   const gameState = await getGameState(db);
   const currentTurn = gameState?.currentTurn ?? 0;
   const now = new Date();
@@ -332,27 +251,6 @@ export async function POST(request: Request, { params }: RouteParams) {
     return errorResponse(400, `Spend failed: ${spendResult.reason}`);
   }
 
-  // National PS activity recovery (2026-06-28, ticket #0762): refund a fraction
-  // of the effective cost back to the national party's PS pool so treasury-poor
-  // parties recover PS through active org-building rather than pure investment.
-  // Capped at NATIONAL_PS_CAP via an update pipeline to prevent overshoot.
-  if (scope === "national-targeted") {
-    const recoveryPS = Math.ceil(
-      spendResult.effectiveCost * NATIONAL_PS_ACTIVITY_RECOVERY_FRACTION
-    );
-    await db
-      .collection<PoliticalParty>("politicalParties")
-      .updateOne({ countryId, sequentialId: spenderParty.sequentialId }, [
-        {
-          $set: {
-            politicalStrength: {
-              $min: [NATIONAL_PS_CAP, { $add: ["$politicalStrength", recoveryPS] }],
-            },
-          },
-        },
-      ]);
-  }
-
   // Charge the cash. Priced off the PS cost the spend ACTUALLY paid, so the two
   // halves of the bill always agree even if a concurrent click nudged the ladder
   // between the quote above and the debit. `chargeOrgBuildFunds` never
@@ -388,110 +286,64 @@ export async function POST(request: Request, { params }: RouteParams) {
   // into zero Org.
   const fundedFraction = chargePrice > 0 ? clampFundedFraction(charged / chargePrice) : 1;
 
-  // No per-party Org cap — the state-wide Org pool sum constraint
-  // (`Σ party Org + Unaffiliated Org = 100`) is the only ceiling, enforced by
-  // the conservation in `calcUnifiedBuildOrg` (each poach clamps at the rival's
-  // current Org; the pool slice clamps at the unaffiliated remainder).
-  //
-  // Two multipliers scale the EFFECT (never the cost): the Priority Region bonus
-  // (+25% when the target is in the spender's cluster, 2026-05-23 spec for #13)
-  // and the funded fraction. Scale the pool slice and each rival's loss by both,
-  // then re-clamp so neither can overdraw the pool or a rival's current Org.
-  const priorityBonus = isStateInPriorityRegion(spenderParty, upperRegionId)
-    ? 1 + PRIORITY_REGION_EFFECT_BONUS
-    : 1;
-  const effectMultiplier = priorityBonus * fundedFraction;
-  const poolAvailablePct = Math.max(0, 100 - totalPartyOrgPct);
-  const appliedPoolGain = Math.min(breakdown.poolGain * effectMultiplier, poolAvailablePct);
-  const rivalOrgById = new Map(rivalRows.map((r) => [r.partyId, r.organization ?? 0]));
-  const appliedPoaches = breakdown.rivalPoaches
-    .map((p) => ({
-      partyId: p.partyId,
-      loss: Math.min(p.loss * effectMultiplier, rivalOrgById.get(p.partyId) ?? 0),
-    }))
-    .filter((p) => p.loss > 0);
-  const actualGain = appliedPoolGain + appliedPoaches.reduce((s, p) => s + p.loss, 0);
-
-  // Apply Org gain to spender (round to 2 decimals to match prior precision).
-  const newOwnOrg = Math.round(((spenderRow.organization ?? 0) + actualGain) * 100) / 100;
-  await db
-    .collection<StatePartyOrg>("statePartyOrg")
-    .updateOne({ _id: spenderRow._id }, { $set: { organization: newOwnOrg, updatedAt: now } });
-
-  // Apply each rival's poach loss + write a per-rival poach ledger row.
-  const poachOutcomes: Array<{
-    partyId: string;
-    loss: number;
-    newOrg: number;
-    partyName?: string;
-    abbreviation?: string;
-  }> = [];
-  const rivalUpdates: Array<{
-    updateOne: {
-      filter: { _id: StatePartyOrg["_id"] };
-      update: { $set: { organization: number; updatedAt: Date } };
-    };
-  }> = [];
-  const poachLedgerRows: OrgRegLedger[] = [];
-  for (const poach of appliedPoaches) {
-    const rivalRow = rivalRows.find((r) => r.partyId === poach.partyId);
-    if (!rivalRow) continue;
-    const rivalParty = partyBySeq.get(poach.partyId);
-    const rivalNewOrg =
-      Math.round(Math.max(0, (rivalRow.organization ?? 0) - poach.loss) * 100) / 100;
-    rivalUpdates.push({
-      updateOne: {
-        filter: { _id: rivalRow._id },
-        update: { $set: { organization: rivalNewOrg, updatedAt: now } },
-      },
-    });
-    poachLedgerRows.push({
-      _id: new ObjectId(),
-      turn: currentTurn,
-      countryId,
-      stateId: upperRegionId,
-      partyId: poach.partyId,
-      metric: "org",
-      delta: -poach.loss,
-      value: rivalNewOrg,
-      source: "poach",
-      actorId: authUser.character._id,
-      note: `poach:build-org:from:${spenderParty.sequentialId}`,
-      createdAt: now,
-    });
-    poachOutcomes.push({
-      partyId: poach.partyId,
-      loss: poach.loss,
-      newOrg: rivalNewOrg,
-      ...(rivalParty ? { partyName: rivalParty.name, abbreviation: rivalParty.abbreviation } : {}),
-    });
-  }
-  if (rivalUpdates.length > 0) {
-    await db.collection<StatePartyOrg>("statePartyOrg").bulkWrite(rivalUpdates);
-    await db.collection<OrgRegLedger>("orgRegLedger").insertMany(poachLedgerRows);
-  }
-
-  // Log the spender's Org gain in orgRegLedger.
-  await db.collection<OrgRegLedger>("orgRegLedger").insertOne({
-    _id: new ObjectId(),
-    turn: currentTurn,
+  const bucketResult = await buildOrganizationBucket(db, {
     countryId,
     stateId: upperRegionId,
     partyId: ownId,
-    metric: "org",
-    delta: actualGain,
-    value: newOwnOrg,
-    source: "action",
-    actorId: authUser.character._id,
-    note: "action:build-org",
-    createdAt: now,
+    stateRowId: spenderRow._id,
+    currentTurn,
+    now,
   });
+  if (!bucketResult) {
+    return errorResponse(500, "Organization bucket update failed");
+  }
+  const rowById = new Map(bucketResult.sourceRows.map((row) => [row._id, row]));
+  const ownResult = bucketResult.rows.find((row) => row.id === spenderRow._id);
+  if (!ownResult) {
+    return errorResponse(500, "Organization bucket update failed");
+  }
+
+  const changedRows = bucketResult.rows.filter(
+    (row) => row.id === spenderRow._id || Math.abs(row.delta) >= 0.00005
+  );
+  if (changedRows.length > 0) {
+    await db.collection<OrgRegLedger>("orgRegLedger").insertMany(
+      changedRows.map((row) => {
+        const stored = rowById.get(row.id);
+        const isSpender = row.id === spenderRow._id;
+        return {
+          _id: new ObjectId(),
+          turn: currentTurn,
+          countryId,
+          stateId: upperRegionId,
+          partyId: stored?.partyId ?? ownId,
+          metric: "org" as const,
+          delta: row.delta,
+          value: row.organization,
+          source: isSpender ? ("action" as const) : ("passive" as const),
+          actorId: isSpender ? authUser.character._id : null,
+          note: isSpender
+            ? "action:build-org"
+            : `dilution:build-org:by:${spenderParty.sequentialId}`,
+          createdAt: now,
+        } satisfies OrgRegLedger;
+      })
+    );
+  }
+
+  const dilutions = bucketResult.rows
+    .filter((row) => row.id !== spenderRow._id && row.delta < 0)
+    .map((row) => ({
+      partyId: rowById.get(row.id)?.partyId ?? row.id,
+      loss: Math.abs(row.delta),
+      newOrg: row.organization,
+    }));
 
   // Authoritative estimate for the NEXT click, computed from the just-committed
   // state via the same helper the preview GET uses. Returning it lets the client
   // update its estimate line immediately — no async refetch that could lag the
   // escalating pressure ladder during rapid building. Re-read the party so the
-  // national PS pool reflects this spend's debit + activity recovery.
+  // national PS pool reflects this spend's full debit.
   const refreshedParty = (await findPartyBySequentialId(db, partyId, countryId)) ?? spenderParty;
   const nextPreview = await computeBuildOrgPreview(db, {
     countryId,
@@ -512,11 +364,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     cashPrice: chargePrice,
     cashCost: charged,
     fundedFraction,
-    orgGain: actualGain,
-    newOrg: newOwnOrg,
-    poaches: poachOutcomes,
-    factors: breakdown.factors,
-    priorityRegionBonusApplied: priorityBonus > 1,
+    contributionUnits: ORG_BUILD_UNITS_PER_CLICK,
+    organizationUnits: ownResult.organizationUnits,
+    orgGain: ownResult.delta,
+    newOrg: ownResult.organization,
+    dilutions,
     nextPreview,
   });
 }
