@@ -27,15 +27,15 @@ The annual auction trace runs after modeled BondTurn coupon and maturity settlem
 
 The seeded neutral auction trace is fully subscribed at turns 40, 88, and 136. Turn 184 is undersubscribed at a 0.708 pool fill. Turns 232, 280, and 328 fail at pool fills of 0.518, 0.443, and 0.401; the third consecutive annual failure enters `crisisPending` at turn 328. Those dates are the configured US fiscal closes, and the fills are sums of actual modeled primary placements over requested units. The source diagnostic's 12-turn executive decision window ends at turn 340. No resolution choice is modeled, and the bank-only ROE after that point is not a valid neutral acceptance result.
 
-| US fiscal close | Annual realized ROE | Annual economic ROE | Annual equity CAGR | Auction state | Neutral window |
-| --------------: | -----------------: | -----------------: | ----------------: | ------------- | -------------- |
-|              40 |            -12.46% |            -30.27% |           -27.81% | fully subscribed | pre-crisis |
-|              88 |             24.80% |             19.36% |            -3.09% | fully subscribed | pre-crisis |
-|             136 |             26.06% |             30.82% |             9.36% | fully subscribed | pre-crisis |
-|             184 |             37.63% |             34.13% |            17.08% | undersubscribed | pre-crisis |
-|             232 |             37.01% |             33.57% |            21.80% | failed, count 1 | pre-crisis |
-|             280 |             32.28% |             32.25% |            24.62% | failed, count 2 | pre-crisis |
-|             328 |             27.72% |             27.09% |            25.62% | crisis pending | invalid-distress |
+| US fiscal close | Annual realized ROE | Annual economic ROE | Annual equity CAGR | Auction state    | Neutral window   |
+| --------------: | ------------------: | ------------------: | -----------------: | ---------------- | ---------------- |
+|              40 |             -12.46% |             -30.27% |            -27.81% | fully subscribed | pre-crisis       |
+|              88 |              24.80% |              19.36% |             -3.09% | fully subscribed | pre-crisis       |
+|             136 |              26.06% |              30.82% |              9.36% | fully subscribed | pre-crisis       |
+|             184 |              37.63% |              34.13% |             17.08% | undersubscribed  | pre-crisis       |
+|             232 |              37.01% |              33.57% |             21.80% | failed, count 1  | pre-crisis       |
+|             280 |              32.28% |              32.25% |             24.62% | failed, count 2  | pre-crisis       |
+|             328 |              27.72% |              27.09% |             25.62% | crisis pending   | invalid-distress |
 
 Annual values are derived after the model's current-turn bond claims and maturity face changes. The first row annualizes the available partial opening window to 48 turns; later rows use trailing 48-turn income and equity windows. Early windows can be reviewed independently, while turn 328 and any full-horizon summary are distress-ineligible.
 
