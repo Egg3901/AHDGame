@@ -23,6 +23,17 @@ describe("proposeBillSchema — custom category", () => {
     });
     expect(r.success).toBe(false);
   });
+
+  it("does not accept a proposal-selected responsibility model", () => {
+    const r = proposeBillSchema.safeParse({
+      ...base,
+      category: "economy",
+      jurisdictionMode: "regional_discretion",
+      provisions: [{ legislationTypeId: "x", effectDirection: 0 }],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data).not.toHaveProperty("jurisdictionMode");
+  });
 });
 
 describe("proposeBillSchema — central bank independence", () => {

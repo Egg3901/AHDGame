@@ -162,7 +162,8 @@ describe("processBondTurn", () => {
    * a holder-less doc (`bond.holders is not iterable`).
    */
   function mockBondFinds(fullDocs: unknown[], snapshotDocs: unknown[]) {
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
+    db.collectionMocks["bonds"]!.find.mockImplementation((query: { issuedAtTurn?: number }) => {
+      if (query.issuedAtTurn !== undefined) return makeCursor([]);
       const fullCursor = makeCursor(fullDocs);
       const snapshotCursor = makeCursor(snapshotDocs);
       snapshotCursor.project = vi.fn().mockReturnValue(snapshotCursor);
@@ -173,6 +174,7 @@ describe("processBondTurn", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getBondCountryId).mockReturnValue("US");
     resetCorpFxRateCacheForTests();
     db = createMockDb();
     for (const name of ["bonds", "corporations", "centralBanks", "bondHistory", "characters"]) {
@@ -189,6 +191,25 @@ describe("processBondTurn", () => {
     expect(result.couponsPaid).toBe(0);
     expect(result.bondsMatured).toBe(0);
     expect(result.bondsDefaulted).toBe(0);
+  });
+
+  it("captures only actual new at-par sovereign cash when requested", async () => {
+    db.collectionMocks["bonds"]!.find.mockImplementation((query: { issuedAtTurn?: number }) =>
+      makeCursor(query.issuedAtTurn === 10 ? [{ countryId: "US", totalIssued: 25_000 }] : [])
+    );
+
+    const result = await processBondTurn(10, { captureSovereignCashProceeds: true });
+
+    expect(result.sovereignCashProceedsByCountry).toEqual({ US: 25_000 });
+    expect(result.sovereignDebtFaceIssuedByCountry).toEqual({ US: 25_000 });
+    expect(db.collectionMocks["bonds"]!.find).toHaveBeenCalledWith(
+      {
+        issuerType: "sovereign",
+        issuedAtTurn: 10,
+        reconcile: { $ne: true },
+      },
+      { projection: { countryId: 1, totalIssued: 1 } }
+    );
   });
 
   it("defers maturity while a funded bank treasury reservation is pending", async () => {
@@ -1528,6 +1549,8 @@ describe("processBondTurn", () => {
       matured: false,
       defaulted: false,
       isCorporate: false,
+      totalIssued: 10_000,
+      restructureHaircutPercent: 0.2,
       holders: [{ characterId: charHolderId, units: 3 }],
       publicFloat: 7, // 3 + 7 = 10 units × $1000
       corporationId: new ObjectId(), // schema requires it; sovereign path uses countryId
@@ -1543,7 +1566,11 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    await processBondTurn(10);
+    const result = await processBondTurn(10, { captureSovereignCashProceeds: true });
+
+    expect(result.sovereignCouponPaidByCountry).toEqual({ US: 100 });
+    expect(result.sovereignMaturityCashPaidByCountry).toEqual({ US: 10_000 });
+    expect(result.sovereignDebtFaceRetiredByCountry).toEqual({ US: 8_000 });
 
     const allEntries = vi.mocked(emitTxBulk).mock.calls.flatMap((c) => c[1] as unknown[]);
     const govEntry = allEntries.find(

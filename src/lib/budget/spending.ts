@@ -202,6 +202,7 @@ export async function calculateFederalLawAnnualCosts(
   hoistedEraContext?: EraContext
 ): Promise<{
   items: FederalLawAnnualCost[];
+  activeLaws: EnactedLaw[];
   eraYear: number | null;
   commandEconomyEnabled: boolean;
 }> {
@@ -230,8 +231,10 @@ export async function calculateFederalLawAnnualCosts(
   const { year: eraYear, incomeBandIndexByCountry } = eraContext;
   const nationalGdpPerCapita = population > 0 ? budget.gdp / population : undefined;
   const incomeBandIndex = incomeBandIndexByCountry?.[budgetCountryId] ?? null;
-  const items = keepLatestActiveLawPerType(rawLaws)
-    .filter((law) => isLegislationTypeActive(law.legislationTypeId, eraYear))
+  const activeLaws = keepLatestActiveLawPerType(rawLaws).filter((law) =>
+    isLegislationTypeActive(law.legislationTypeId, eraYear)
+  );
+  const items = activeLaws
     .map((law) => ({
       law,
       amount: calculateEnactedLawAnnualCost(law, {
@@ -248,7 +251,12 @@ export async function calculateFederalLawAnnualCosts(
     }))
     .filter((item) => Number.isFinite(item.amount) && item.amount !== 0);
 
-  return { items, eraYear, commandEconomyEnabled: gameConfig?.commandEconomyEnabled === true };
+  return {
+    items,
+    activeLaws,
+    eraYear,
+    commandEconomyEnabled: gameConfig?.commandEconomyEnabled === true,
+  };
 }
 
 export async function calculateFederalSpending(
@@ -377,10 +385,24 @@ export async function calculateStateSpending(
   countryId: CountryId,
   budget: StateBudget
 ): Promise<StateBudget["spending"]> {
-  const enactedLaws = await db
-    .collection<EnactedLaw>("enactedLaws")
-    .find({ scope: "state", stateId, repealedAt: { $exists: false } })
-    .toArray();
+  return (await calculateStateSpendingDetail(db, stateId, countryId, budget)).spending;
+}
+
+export async function calculateStateSpendingDetail(
+  db: Db,
+  stateId: string,
+  countryId: CountryId,
+  budget: StateBudget
+): Promise<{
+  spending: StateBudget["spending"];
+  lawCosts: Array<{ law: EnactedLaw; annualCost: number; category: string }>;
+}> {
+  const enactedLaws = keepLatestActiveLawPerType(
+    await db
+      .collection<EnactedLaw>("enactedLaws")
+      .find({ scope: "state", stateId, repealedAt: { $exists: false } })
+      .toArray()
+  );
 
   const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
   // The cost-scale ramp is a national-era factor, so it uses the country's national
@@ -395,6 +417,7 @@ export async function calculateStateSpending(
   const v2Base = countryId in COST_INCOME_ANCHORS ? await regionFiscalBase(db, stateId) : undefined;
   const incomeBandIndex = incomeBandIndexByCountry?.[countryId] ?? null;
   const byCategory: Record<string, number> = {};
+  const lawCosts: Array<{ law: EnactedLaw; annualCost: number; category: string }> = [];
 
   for (const law of enactedLaws) {
     // Phantom-line gate (Spec B): skip era-inactive laws while the flag is on.
@@ -412,15 +435,19 @@ export async function calculateStateSpending(
     });
     const category = law.budgetCategory || "other";
     byCategory[category] = (byCategory[category] || 0) + cost;
+    lawCosts.push({ law, annualCost: cost, category });
   }
 
-  return normalizeStateSpending({
-    byCategory,
-    // Read the persisted state-prospecting spend back so it survives this
-    // rebuild-from-laws recompute (same treatment as revenue.resourceRoyalties).
-    resourceProspecting: budget.spending?.resourceProspecting ?? 0,
-    total: 0,
-  });
+  return {
+    spending: normalizeStateSpending({
+      byCategory,
+      // Read the persisted state-prospecting spend back so it survives this
+      // rebuild-from-laws recompute (same treatment as revenue.resourceRoyalties).
+      resourceProspecting: budget.spending?.resourceProspecting ?? 0,
+      total: 0,
+    }),
+    lawCosts,
+  };
 }
 
 /**

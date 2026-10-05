@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type { EconomicSystemTarget } from "@/lib/db/types/legislation";
+import type { EconomicSystemTarget, JurisdictionMode, LawImplementationMode } from "./legislation";
 
 export type CreditRating = "AAA" | "AA" | "A" | "BBB" | "BB" | "B" | "CCC";
 export type BudgetDocumentId = "federal" | "UK" | string;
@@ -418,6 +418,69 @@ export interface IntelligenceAppropriation {
   accruedThroughTurn: number;
 }
 
+export interface DepartmentCapacityPool {
+  capacityType: string;
+  availableThroughput: number;
+  maintenanceDemand: number;
+  sourceBreakdown: {
+    workforce: number;
+    facilities: number;
+    systems: number;
+    efficiency: number;
+  };
+}
+
+export interface DepartmentProgramState {
+  programId: string;
+  legislationTypeId: string;
+  policyOptionId: string;
+  status: "authorized" | "operating" | "winding_down" | "closed";
+  annualDemand: number;
+  periodDemand: number;
+  authorityThisTurn: number;
+  obligated: number;
+  /** Outstanding commitments owned by this program. */
+  encumbered?: number;
+  outlaid: number;
+  cumulativeOutlays?: number;
+  arrears: number;
+  fundingRatio: number;
+  capacityRatio: number;
+  coverageRatio: number;
+  rampFactor: number;
+  implementationFactor: number;
+  bindingConstraint: "funding" | "capacity" | "coverage" | "ramp" | "none";
+  jurisdictionMode?: JurisdictionMode;
+  implementationMode?: LawImplementationMode;
+  lastSettledTurn: number;
+  repealTurn?: number;
+}
+
+export interface DepartmentAccount {
+  departmentId: string;
+  /** Compatibility field for the proof-slice account. */
+  portfolioId: string;
+  portfolioIds?: string[];
+  accountPolicyId?: string;
+  balance: number;
+  encumbered: number;
+  arrears?: number;
+  accruedThroughTurn: number;
+  annualAuthority?: number;
+  operatingAuthority?: number;
+  capitalAuthority?: number;
+  transferAuthority?: number;
+  /**
+   * Cabinet-authored program shares. These influence only claims in the same
+   * legal priority tier; protected arrears and commitments remain senior.
+   */
+  programAllocationPercents?: Record<string, number>;
+  lastAllocationChangedTurn?: number;
+  lastAllocationChangedBy?: string;
+  capacityPools: Record<string, DepartmentCapacityPool>;
+  programs: Record<string, DepartmentProgramState>;
+}
+
 /** Durable witness stored atomically with signed cash, recoverable on the next invocation. */
 export interface TreasuryAccrualReceipt {
   turn: number;
@@ -586,6 +649,12 @@ export interface FederalBudget {
    * never healed to a year's accrual, because nobody has voted the money.
    */
   intelligenceAppropriation?: IntelligenceAppropriation;
+  /**
+   * Persistent institutional accounts. Stage 1 authors only `us_health_department`.
+   * They are sub-ledgers of spending already charged by `processTreasuryTurn`,
+   * never a second sovereign expense.
+   */
+  departmentAccounts?: Record<string, DepartmentAccount>;
   /**
    * GDP at the moment this world's military prices were anchored. Unit prices are quoted
    * against `militaryPriceAnchor(gdp, this)` rather than live GDP, so a growing economy
@@ -934,6 +1003,24 @@ export interface StateBudget {
   taxRates: StateTaxRates;
   taxBases: StateTaxBases;
   spending: StateSpending;
+  /** Authorized law demand before cabinet-free regional funding settlement. */
+  authorizedSpending?: StateSpending;
+  regionalProgramSettlements?: Record<
+    string,
+    {
+      programId: string;
+      legislationTypeId: string;
+      policyOptionId: string;
+      authorizedCost: number;
+      fundedAmount: number;
+      unfundedAmount: number;
+      implementationFactor: number;
+      obligationPriority: number;
+      lastSettledTurn: number;
+      /** Inclusive turn through which this cadence-based settlement is current. */
+      validThroughTurn?: number;
+    }
+  >;
   balance: number;
   surplus: number;
   stateGdp: number; // State GDP for reference
@@ -948,6 +1035,8 @@ export interface EnactedLaw {
   scope: "national" | "state";
   countryId?: string;
   stateId?: string;
+  /** Delivery model derived from the enacted policy option. Absent legacy records use catalog defaults. */
+  jurisdictionMode?: JurisdictionMode;
   /** @deprecated Legacy percentage-of-budget cost (0-100). Use annualCostUsd for new laws. */
   budgetCost: number;
   /** Fixed annual cost in the local currency. */

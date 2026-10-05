@@ -11,6 +11,8 @@ export interface DemocraticCompetition {
   dominantSeatShare: number;
   chambersMeasured: number;
   executivePartyId: string | null;
+  /** Constitutional system, independent of whether an executive is currently seated. */
+  executiveSystem: "presidential" | "parliamentary";
   /** Null when the country has no separately elected executive. */
   executiveAlignedWithLegislature: boolean | null;
   uninterruptedControlTurns: number;
@@ -18,13 +20,24 @@ export interface DemocraticCompetition {
   seatMarginPenalty: number;
   legislativeContinuityPenalty: number;
   executiveContinuityPenalty: number;
-  /** Party holding the most seated SCOTUS justices, or null when the Court is too empty to score. */
-  courtDominantPartyId: string | null;
-  /** Share of seated justices held by that party, 0-100. */
+  /** Largest scored Court bloc, or null when the Court is too empty or entirely unclassified. */
+  courtDominantBloc: "liberal" | "conservative" | "party_fallback" | null;
+  /** Share of all seated justices in the largest scored bloc, 0-100. */
   courtDominantShare: number;
   courtSeated: number;
+  courtLiberalSeats: number;
+  courtSwingSeats: number;
+  courtConservativeSeats: number;
+  courtUnclassifiedSeats: number;
   courtPenalty: number;
   penalty: number;
+}
+
+export interface CourtJusticeAlignment {
+  economicLean: number | null;
+  socialLean: number | null;
+  /** Used only when the justice has no usable lean data. */
+  partyId?: string | null;
 }
 
 const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
@@ -80,46 +93,82 @@ function uninterruptedControlTurns(
 }
 
 /**
- * One-party control of the seated Supreme Court. Vacant seats do not count,
- * but occupied seats without a recorded party still count toward the seated
- * bench: pass the full occupied headcount as `seatedTotal` so unaffiliated
- * justices dilute the dominant share instead of vanishing from it.
- * A 5-4 split is 55.6% and costs nothing. Penalty starts at 60% of seated
- * justices (about 6-3) and scales to a 24-point cap at a 9-0 bench. Courts
- * with fewer than 5 seated justices are too empty to score as packed.
+ * Ideological concentration of the seated Supreme Court. A justice is liberal
+ * below -1 average lean, conservative above +1, and a swing justice between
+ * those bounds. Swing and unclassified justices remain in the denominator, so
+ * neither ideological bloc can claim them. Appointing party is only a fallback
+ * for a justice whose lean data is unavailable. Penalty starts above a two-thirds
+ * bloc and scales to a 12-point cap for a unanimous bench. Courts with fewer
+ * than 5 seated justices are too empty to score concentration.
  */
-export function assessCourtPacking(
-  justicesByParty?: Record<string, number>,
-  seatedTotal?: number
-): {
-  courtDominantPartyId: string | null;
+export function assessCourtConcentration(justices: readonly CourtJusticeAlignment[] = []): {
+  courtDominantBloc: "liberal" | "conservative" | "party_fallback" | null;
   courtDominantShare: number;
   courtSeated: number;
+  courtLiberalSeats: number;
+  courtSwingSeats: number;
+  courtConservativeSeats: number;
+  courtUnclassifiedSeats: number;
   courtPenalty: number;
 } {
-  const entries = Object.entries(justicesByParty ?? {}).filter(
-    ([, seats]) => Number.isFinite(seats) && seats > 0
-  );
-  const partied = entries.reduce((sum, [, seats]) => sum + seats, 0);
-  const seated = Math.max(
-    partied,
-    Number.isFinite(seatedTotal) ? Math.floor(seatedTotal as number) : partied
-  );
+  const seated = justices.length;
+  let liberal = 0;
+  let swing = 0;
+  let conservative = 0;
+  let unclassified = 0;
+  const fallbackParties = new Map<string, number>();
+
+  for (const justice of justices) {
+    if (Number.isFinite(justice.economicLean) && Number.isFinite(justice.socialLean)) {
+      const averageLean = ((justice.economicLean as number) + (justice.socialLean as number)) / 2;
+      if (averageLean < -1) liberal += 1;
+      else if (averageLean > 1) conservative += 1;
+      else swing += 1;
+    } else if (justice.partyId) {
+      unclassified += 1;
+      fallbackParties.set(justice.partyId, (fallbackParties.get(justice.partyId) ?? 0) + 1);
+    } else {
+      unclassified += 1;
+    }
+  }
+
   if (seated < 5) {
     return {
-      courtDominantPartyId: null,
+      courtDominantBloc: null,
       courtDominantShare: 0,
       courtSeated: seated,
+      courtLiberalSeats: liberal,
+      courtSwingSeats: swing,
+      courtConservativeSeats: conservative,
+      courtUnclassifiedSeats: unclassified,
       courtPenalty: 0,
     };
   }
-  const [party, count] = [...entries].sort((a, b) => b[1] - a[1])[0];
+
+  const ideologicalEntries = [
+    ["liberal", liberal],
+    ["conservative", conservative],
+  ] as const;
+  const strongestIdeological = [...ideologicalEntries].sort((a, b) => b[1] - a[1])[0];
+  const strongestFallback = [...fallbackParties.entries()].sort((a, b) => b[1] - a[1])[0] ?? null;
+  const useFallback = Boolean(strongestFallback && strongestFallback[1] > strongestIdeological[1]);
+  const bloc = useFallback ? "party_fallback" : strongestIdeological[0];
+  const count = useFallback ? strongestFallback![1] : strongestIdeological[1];
   const share = (count / seated) * 100;
-  const penalty = clamp((share - 60) * 0.6, 0, 24);
+  const twoThirds = 2 / 3;
+  const concentration = count / seated;
+  const penalty =
+    concentration <= twoThirds
+      ? 0
+      : clamp(((concentration - twoThirds) / (1 - twoThirds)) * 12, 0, 12);
   return {
-    courtDominantPartyId: party,
+    courtDominantBloc: count > 0 ? bloc : null,
     courtDominantShare: Math.round(share * 10) / 10,
     courtSeated: seated,
+    courtLiberalSeats: liberal,
+    courtSwingSeats: swing,
+    courtConservativeSeats: conservative,
+    courtUnclassifiedSeats: unclassified,
     courtPenalty: Math.round(penalty * 10) / 10,
   };
 }
@@ -129,18 +178,16 @@ export function assessCourtPacking(
  * no cost. Large seat monopolies cost health immediately. Uninterrupted chamber
  * leadership and repeated executive wins add slower pressure, but presidential
  * tenure compounds legislative dominance only when the same party holds both.
- * A one-party Supreme Court is a separate sliding cost: packing the bench is
- * not free.
+ * An ideologically concentrated Supreme Court is a separate sliding cost.
  */
 export function assessDemocraticCompetition(input: {
   seatsByParty?: Record<string, number>;
   chambersByParty?: readonly Record<string, number>[];
   history?: readonly SeatControlHistoryRow[];
   executivePartyId?: string | null;
+  executiveSystem?: "presidential" | "parliamentary";
   consecutiveExecutiveTerms?: number;
-  justicesByParty?: Record<string, number>;
-  /** Full occupied headcount, including seated justices without a recorded party. */
-  seatedJustices?: number;
+  justices?: readonly CourtJusticeAlignment[];
 }): DemocraticCompetition {
   const current = tallyChambers(input.chambersByParty ?? [input.seatsByParty ?? {}]);
   const executivePartyId = input.executivePartyId || null;
@@ -148,7 +195,7 @@ export function assessDemocraticCompetition(input: {
   const continuityPartyId = executivePartyId ?? current.party;
   const controlTurns = uninterruptedControlTurns(continuityPartyId, input.history ?? []);
   const executiveTerms = Math.max(0, Math.floor(input.consecutiveExecutiveTerms ?? 0));
-  const court = assessCourtPacking(input.justicesByParty, input.seatedJustices);
+  const court = assessCourtConcentration(input.justices);
 
   const seatPenalty = clamp((current.share * 100 - 55) * 0.6, 0, 27);
   const legislativeContinuityPenalty = clamp(((controlTurns - 48) / 48) * 6, 0, 6);
@@ -162,6 +209,9 @@ export function assessDemocraticCompetition(input: {
     dominantSeatShare: Math.round(current.share * 1000) / 10,
     chambersMeasured: current.chambersMeasured,
     executivePartyId,
+    executiveSystem:
+      input.executiveSystem ??
+      (input.executivePartyId !== undefined ? "presidential" : "parliamentary"),
     executiveAlignedWithLegislature: executiveAligned,
     uninterruptedControlTurns: controlTurns,
     consecutiveExecutiveTerms: executiveTerms,

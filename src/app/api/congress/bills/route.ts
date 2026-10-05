@@ -26,11 +26,12 @@ import {
 } from "@/lib/congress/vetoOverrideTally";
 import {
   checkDuplicateProvisions,
+  checkDuplicateResetLawFamilies,
   checkDuplicateTariffProvisions,
   checkCurrentPolicyLevel,
   NATIONAL_TERMINAL_STATUSES,
 } from "@/lib/congress/billProposalLimits";
-import { snapshotBillPolicyProvisions } from "@/lib/congress/billProposal";
+import { snapshotBillPolicyProvisions, validateBillProvisions } from "@/lib/congress/billProposal";
 import { resolveTaxSliderProvisionFields } from "@/lib/politicalLegislation/taxSlider";
 import { canonicalizeLegislationTypeId } from "@/lib/legislationTypeAliases";
 import { getEraContext } from "@/lib/era/context";
@@ -42,6 +43,7 @@ import type {
   BillProvision,
   Character,
   ElectedOfficial,
+  GameState,
   LegislationType,
   PoliticalParty,
 } from "@/lib/db/types";
@@ -50,6 +52,7 @@ import type {
   EmbargoProvision,
   EndEmbargoProvision,
   UnionLawProvision,
+  ResetLawProvision,
 } from "@/lib/db/types/legislation";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -79,6 +82,8 @@ import {
   getBillProposalAutoFailWarningError,
   type BillProposalOriginChamber,
 } from "@/lib/legislature/billAutoFailWarning";
+import { validateBillAdministration } from "@/lib/legislature/jurisdiction";
+import { findAdministrationConflict } from "@/lib/legislature/administrationConflictCheck";
 export type { BillDisplay, BillsResponse } from "@/lib/legislature/dto/billDisplay";
 
 const VOTING_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -590,6 +595,7 @@ export async function POST(request: Request) {
     const validatedEmbargoProvisions: (EmbargoProvision | EndEmbargoProvision)[] = [];
     const validatedUnionLawProvisions: UnionLawProvision[] = [];
     const validatedElectoralLawProvisions: ElectoralLawProvision[] = [];
+    const validatedResetLawProvisions: ResetLawProvision[] = [];
     // This is the US Congress route; every bill it creates is countryId "US".
     // Named so the self-embargo guard isn't a bare literal if the route ever
     // becomes country-agnostic.
@@ -614,8 +620,27 @@ export async function POST(request: Request) {
           .toArray()
       ).map((lt) => [lt._id, lt])
     );
+    const administrationState = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { lawAdministrationEnabled: 1 } });
+    const administrationEnabled = administrationState?.lawAdministrationEnabled === true;
+
+    const rawResetLawProvisions = rawProvisions.filter(
+      (provision) => "type" in provision && provision.type === "reset_law"
+    );
+    if (rawResetLawProvisions.length > 0) {
+      const reviewed = await validateBillProvisions(db, rawResetLawProvisions, category, "US");
+      if (!reviewed.ok) {
+        logRequest("POST", path, reviewed.status, Date.now() - start);
+        return NextResponse.json({ error: reviewed.error }, { status: reviewed.status });
+      }
+      validatedResetLawProvisions.push(...reviewed.resetLawProvisions);
+    }
 
     for (const rawP of rawProvisions) {
+      if ("type" in rawP && rawP.type === "reset_law") {
+        continue;
+      }
       // Central-bank independence is carried by the country-legislature route,
       // which runs `validateBillProvisions`; this route validates provisions
       // inline and has no branch for it. The shared body schema is deliberately
@@ -994,6 +1019,40 @@ export async function POST(request: Request) {
     }
 
     // Constraint 2: no duplicate provision at same policy level across active US Congress bills
+    const administrationValidation = validateBillAdministration({
+      enabled: administrationEnabled,
+      legislationTypes: validatedPolicyProvisions
+        .map((provision) => legislationTypeById.get(provision.legislationTypeId))
+        .filter((type): type is LegislationType => type !== undefined),
+    });
+    if (!administrationValidation.ok) {
+      logRequest("POST", path, 400, Date.now() - start);
+      return NextResponse.json(
+        { error: administrationValidation.error ?? "Invalid administration metadata." },
+        { status: 400 }
+      );
+    }
+
+    if (administrationEnabled) {
+      const conflict = await findAdministrationConflict(
+        db,
+        "US",
+        validatedPolicyProvisions
+          .map((provision) => legislationTypeById.get(provision.legislationTypeId))
+          .filter((type): type is LegislationType => type !== undefined)
+      );
+      if (conflict) {
+        logRequest("POST", path, 409, Date.now() - start);
+        return NextResponse.json(
+          {
+            error: `This bill conflicts with active law ${conflict.existingLegislationTypeId} through ${conflict.conflictSetId}. Repeal or replace that regime first.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Constraint 2: no duplicate provision at same policy level across active US Congress bills
     const duplicateCheck = await checkDuplicateProvisions(
       db,
       "bills",
@@ -1003,6 +1062,17 @@ export async function POST(request: Request) {
     if (duplicateCheck) {
       logRequest("POST", path, 409, Date.now() - start);
       return NextResponse.json({ error: duplicateCheck.error }, { status: 409 });
+    }
+
+    const resetLawDuplicateCheck = await checkDuplicateResetLawFamilies(
+      db,
+      "bills",
+      { countryId: "US", status: { $nin: NATIONAL_TERMINAL_STATUSES } },
+      validatedResetLawProvisions
+    );
+    if (resetLawDuplicateCheck) {
+      logRequest("POST", path, 409, Date.now() - start);
+      return NextResponse.json({ error: resetLawDuplicateCheck.error }, { status: 409 });
     }
 
     const tariffDuplicateCheck = await checkDuplicateTariffProvisions(
@@ -1058,7 +1128,8 @@ export async function POST(request: Request) {
       policyProvisionCount: validatedPolicyProvisions.length,
       subsidyProvisionCount: validatedSubsidyProvisions.length,
       unionLawProvisionCount: validatedUnionLawProvisions.length,
-      standaloneProvisionCount: validatedElectoralLawProvisions.length,
+      standaloneProvisionCount:
+        validatedElectoralLawProvisions.length + validatedResetLawProvisions.length,
     });
     const npiCost = getProvisionCostTotal(influenceProvisionCount);
     const actionCost = BILL_PROPOSE_ACTION_COST;
@@ -1121,6 +1192,7 @@ export async function POST(request: Request) {
       ...validatedEmbargoProvisions,
       ...validatedUnionLawProvisions,
       ...validatedElectoralLawProvisions,
+      ...validatedResetLawProvisions,
     ];
 
     const bill: Omit<Bill, "_id"> = {

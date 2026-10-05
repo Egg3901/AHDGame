@@ -42,6 +42,24 @@ describe("missingGameStateFlagDefaults", () => {
     });
   });
 
+  it("starts all reset-era systems on the live v1 path", () => {
+    expect(missingGameStateFlagDefaults(null)).toMatchObject({
+      metricsSystemVersion: "v1",
+      legislationSystemVersion: "v1",
+      cabinetSystemVersion: "v1",
+    });
+  });
+
+  it("preserves independently selected system versions across reset", () => {
+    const out = missingGameStateFlagDefaults({
+      metricsSystemVersion: "v2",
+      cabinetSystemVersion: "v1",
+    });
+    expect(out).not.toHaveProperty("metricsSystemVersion");
+    expect(out).not.toHaveProperty("cabinetSystemVersion");
+    expect(out).toHaveProperty("legislationSystemVersion", "v1");
+  });
+
   it("preserves an explicit foreign policy hold", () => {
     const out = missingGameStateFlagDefaults({
       nppForeignPolicyMode: "shadow",

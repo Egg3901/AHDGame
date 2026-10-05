@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
-import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { seedSovereignBondInstruments } from "./seedSovereignBondInstruments";
 
@@ -65,7 +64,7 @@ describe("seedSovereignBondInstruments", () => {
     const result = await seedSovereignBondInstruments(db as unknown as Db, () => {}, 0, new Date());
 
     expect(result.countriesSeeded).toBe(2);
-    expect(result.bondsInserted).toBe(6); // 3 tranches × 2 countries
+    expect(result.bondsInserted).toBe(64); // 32 quarterly opening cohorts × 2 countries
     expect(result.totalFaceIssued).toBeGreaterThan(0);
 
     // Budget must not be rewritten — principal stays the scalar SSOT; bonds are
@@ -75,8 +74,8 @@ describe("seedSovereignBondInstruments", () => {
 
     const usBonds = inserted.filter((b) => (b as { countryId: string }).countryId === "US");
     const ukBonds = inserted.filter((b) => (b as { countryId: string }).countryId === "UK");
-    expect(usBonds).toHaveLength(3);
-    expect(ukBonds).toHaveLength(3);
+    expect(usBonds).toHaveLength(32);
+    expect(ukBonds).toHaveLength(32);
 
     // The batched preload supplies the US issuer; the un-batched findOne
     // fallback supplies the UK one. If the fallback were dropped in favour of a
@@ -92,9 +91,7 @@ describe("seedSovereignBondInstruments", () => {
       (s: number, b) => s + (b as { totalIssued: number }).totalIssued,
       0
     );
-    // Floor to bond units; distribution leave a small remainder unissued.
-    expect(usFace).toBeLessThanOrEqual(275_000_000_000);
-    expect(usFace).toBeGreaterThan(275_000_000_000 - BOND_UNIT_FACE_VALUE * 3);
+    expect(usFace).toBe(275_000_000_000);
 
     for (const bond of inserted) {
       const b = bond as {
@@ -109,9 +106,24 @@ describe("seedSovereignBondInstruments", () => {
       expect(b.matured).toBe(false);
       expect(b.holders).toEqual([]);
     }
+    expect([
+      ...new Set(usBonds.map((b) => (b as { maturityTurns: number }).maturityTurns)),
+    ]).toEqual([48, 96, 240]);
     expect(
-      usBonds.map((b) => (b as { maturityTurns: number }).maturityTurns).sort((a, b) => a - b)
-    ).toEqual([48, 96, 240]);
+      [...new Set(usBonds.map((b) => (b as { maturityTurn: number }).maturityTurn))].sort(
+        (a, b) => a - b
+      )
+    ).toEqual(Array.from({ length: 20 }, (_, index) => (index + 1) * 12));
+    expect(
+      usBonds.every((bond) => {
+        const row = bond as {
+          issuedAtTurn: number;
+          maturityTurns: number;
+          maturityTurn: number;
+        };
+        return row.issuedAtTurn + row.maturityTurns === row.maturityTurn;
+      })
+    ).toBe(true);
   });
 
   it("is idempotent when bonds already cover principal", async () => {

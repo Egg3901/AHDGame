@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { assessCourtPacking, assessDemocraticCompetition } from "./competition";
+import { assessCourtConcentration, assessDemocraticCompetition } from "./competition";
+
+const liberalJustice = (partyId = "dem") => ({ economicLean: -3, socialLean: -3, partyId });
+const swingJustice = (partyId = "ind") => ({ economicLean: 1, socialLean: -1, partyId });
+const conservativeJustice = (partyId = "rep") => ({ economicLean: 3, socialLean: 3, partyId });
 
 describe("assessDemocraticCompetition", () => {
   it("does not punish an ordinary democratic majority", () => {
@@ -95,58 +99,122 @@ describe("assessDemocraticCompetition", () => {
   it("does not punish a 5-4 Supreme Court", () => {
     const score = assessDemocraticCompetition({
       seatsByParty: { dem: 218, rep: 217 },
-      justicesByParty: { "1": 5, "2": 4 },
+      justices: [
+        ...Array.from({ length: 5 }, () => liberalJustice()),
+        ...Array.from({ length: 4 }, () => conservativeJustice()),
+      ],
     });
     expect(score).toMatchObject({
-      courtDominantPartyId: "1",
+      courtDominantBloc: "liberal",
       courtDominantShare: 55.6,
       courtSeated: 9,
+      courtLiberalSeats: 5,
+      courtSwingSeats: 0,
+      courtConservativeSeats: 4,
       courtPenalty: 0,
       penalty: 0,
     });
   });
 
-  it("scales a packed Court from 6-3 up to a 9-0 cap", () => {
-    expect(assessDemocraticCompetition({ justicesByParty: { "1": 6, "2": 3 } }).courtPenalty).toBe(
-      4
-    );
-    expect(assessDemocraticCompetition({ justicesByParty: { "1": 7, "2": 2 } }).courtPenalty).toBe(
-      10.7
-    );
-    expect(assessDemocraticCompetition({ justicesByParty: { "1": 8, "2": 1 } }).courtPenalty).toBe(
-      17.3
-    );
-    expect(assessDemocraticCompetition({ justicesByParty: { "1": 9 } }).courtPenalty).toBe(24);
-  });
+  it("recognizes liberal and swing justices independently of appointing party", () => {
+    const score = assessDemocraticCompetition({
+      justices: [
+        liberalJustice("rep"),
+        liberalJustice("rep"),
+        liberalJustice("rep"),
+        liberalJustice("dem"),
+        conservativeJustice("rep"),
+        conservativeJustice("rep"),
+        conservativeJustice("rep"),
+        swingJustice("rep"),
+        swingJustice("dem"),
+      ],
+    });
 
-  it("ignores vacant seats and does not score a Court with fewer than 5 justices", () => {
-    const short = assessDemocraticCompetition({ justicesByParty: { "1": 4 } });
-    expect(short).toMatchObject({ courtSeated: 4, courtPenalty: 0, courtDominantPartyId: null });
-    const sixOne = assessDemocraticCompetition({ justicesByParty: { "1": 6, "2": 1 } });
-    expect(sixOne).toMatchObject({
-      courtSeated: 7,
-      courtDominantShare: 85.7,
-      courtPenalty: 15.4,
+    expect(score).toMatchObject({
+      courtDominantBloc: "liberal",
+      courtDominantShare: 44.4,
+      courtLiberalSeats: 4,
+      courtSwingSeats: 2,
+      courtConservativeSeats: 3,
+      courtPenalty: 0,
     });
   });
 
-  it("counts seated justices without a party in the bench denominator", () => {
-    expect(assessCourtPacking({ "1": 6 }, 9)).toMatchObject({
-      courtDominantPartyId: "1",
+  it("starts concentration pressure above two-thirds and caps it at 12", () => {
+    const bench = (conservative: number, liberal: number) => [
+      ...Array.from({ length: conservative }, () => conservativeJustice()),
+      ...Array.from({ length: liberal }, () => liberalJustice()),
+    ];
+    expect(assessDemocraticCompetition({ justices: bench(6, 3) }).courtPenalty).toBe(0);
+    expect(assessDemocraticCompetition({ justices: bench(7, 2) }).courtPenalty).toBe(4);
+    expect(assessDemocraticCompetition({ justices: bench(8, 1) }).courtPenalty).toBe(8);
+    expect(assessDemocraticCompetition({ justices: bench(9, 0) }).courtPenalty).toBe(12);
+  });
+
+  it("ignores vacant seats and does not score a Court with fewer than 5 justices", () => {
+    const short = assessDemocraticCompetition({
+      justices: Array.from({ length: 4 }, () => conservativeJustice()),
+    });
+    expect(short).toMatchObject({ courtSeated: 4, courtPenalty: 0, courtDominantBloc: null });
+    const sixOne = assessDemocraticCompetition({
+      justices: [...Array.from({ length: 6 }, () => conservativeJustice()), liberalJustice()],
+    });
+    expect(sixOne).toMatchObject({
+      courtSeated: 7,
+      courtDominantShare: 85.7,
+      courtPenalty: 6.9,
+    });
+  });
+
+  it("counts seated justices without lean data in the bench denominator", () => {
+    expect(
+      assessCourtConcentration([
+        ...Array.from({ length: 6 }, () => conservativeJustice()),
+        ...Array.from({ length: 3 }, () => ({
+          economicLean: null,
+          socialLean: null,
+          partyId: null,
+        })),
+      ])
+    ).toMatchObject({
+      courtDominantBloc: "conservative",
       courtDominantShare: 66.7,
       courtSeated: 9,
+      courtUnclassifiedSeats: 3,
+      courtPenalty: 0,
+    });
+  });
+
+  it("falls back to appointing party only when lean data is missing", () => {
+    const result = assessCourtConcentration([
+      ...Array.from({ length: 7 }, () => ({
+        economicLean: null,
+        socialLean: null,
+        partyId: "rep",
+      })),
+      ...Array.from({ length: 2 }, () => ({
+        economicLean: null,
+        socialLean: null,
+        partyId: "dem",
+      })),
+    ]);
+    expect(result).toMatchObject({
+      courtDominantBloc: "party_fallback",
+      courtDominantShare: 77.8,
+      courtUnclassifiedSeats: 9,
       courtPenalty: 4,
     });
   });
 
-  it("adds Court packing to the existing legislative penalty", () => {
+  it("adds Court concentration to the existing legislative penalty", () => {
     const score = assessDemocraticCompetition({
       seatsByParty: { dem: 75, rep: 25 },
-      justicesByParty: { dem: 9 },
+      justices: Array.from({ length: 9 }, () => liberalJustice()),
     });
     expect(score.seatMarginPenalty).toBe(12);
-    expect(score.courtPenalty).toBe(24);
-    expect(score.penalty).toBe(36);
+    expect(score.courtPenalty).toBe(12);
+    expect(score.penalty).toBe(24);
   });
 
   it("stops the control streak at the last alternation", () => {

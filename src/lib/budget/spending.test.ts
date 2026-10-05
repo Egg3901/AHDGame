@@ -199,9 +199,13 @@ describe("calculateFederalSpending", () => {
       toArray: vi.fn().mockResolvedValue([{ _id: "HB", countryId: "CN", population: 1000 }]),
     });
 
-    const { items } = await calculateFederalLawAnnualCosts(db as unknown as Db, mockBudget());
+    const { items, activeLaws } = await calculateFederalLawAnnualCosts(
+      db as unknown as Db,
+      mockBudget()
+    );
 
     expect(items).toHaveLength(1);
+    expect(activeLaws).toHaveLength(2);
     expect(items[0].law._id).toBe("health-law");
     expect(items[0].amount).toBe(200 * getGdpIndexedCostScale("CN", 1000));
   });

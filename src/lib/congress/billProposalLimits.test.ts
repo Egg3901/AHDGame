@@ -156,6 +156,40 @@ describe("checkDuplicateProvisions", () => {
   });
 });
 
+describe("checkDuplicateResetLawFamilies", () => {
+  it("rejects an in-flight bill that targets the same v2 family", async () => {
+    const { checkDuplicateResetLawFamilies } = await import("./billProposalLimits");
+    db.collectionMocks.bills.findOne.mockResolvedValue({
+      provisions: [{ type: "reset_law", familyId: "L19" }],
+    });
+
+    const result = await checkDuplicateResetLawFamilies(
+      db as unknown as Db,
+      "bills",
+      { countryId: "US", status: { $nin: ["failed"] } },
+      [{ familyId: "L19" }]
+    );
+
+    expect(result?.error).toMatch(/this v2 law family/i);
+    expect(db.collectionMocks.bills.findOne).toHaveBeenCalledWith(
+      {
+        countryId: "US",
+        status: { $nin: ["failed"] },
+        provisions: { $elemMatch: { type: "reset_law", familyId: { $in: ["L19"] } } },
+      },
+      { projection: { provisions: 1 } }
+    );
+  });
+
+  it("skips the database when there are no v2 families", async () => {
+    const { checkDuplicateResetLawFamilies } = await import("./billProposalLimits");
+    await expect(
+      checkDuplicateResetLawFamilies(db as unknown as Db, "bills", {}, [])
+    ).resolves.toBeNull();
+    expect(db.collectionMocks.bills.findOne).not.toHaveBeenCalled();
+  });
+});
+
 describe("checkCurrentPolicyLevel", () => {
   async function loadHelper() {
     const { checkCurrentPolicyLevel } = await import("./billProposalLimits");

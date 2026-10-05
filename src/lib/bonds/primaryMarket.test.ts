@@ -10,6 +10,11 @@ vi.mock("@/lib/bonds/marketPool", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/banking/settlementJournal", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/banking/settlementJournal")>();
+  return { ...actual, settleTransition: vi.fn().mockResolvedValue({ status: "applied" }) };
+});
+
 import { loadBondQuote } from "@/lib/bonds/marketPool";
 import {
   placeUnsoldBondUnits,
@@ -194,5 +199,44 @@ describe("placeUnsoldBondUnits", () => {
     const result = await placeUnsoldBondUnits(db as unknown as Db, 1, new Date());
     expect(result.unitsPlaced).toBe(0);
     expect(db.collectionMocks.bonds.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("reports actual sovereign placement cash separately from debt face", async () => {
+    db.collection("exchangeRates");
+    db.collectionMocks.exchangeRates.find.mockReturnValue({
+      toArray: async () => [{ currencyCode: "USD", rate: 1 }],
+    });
+    const bond = {
+      _id: new ObjectId(),
+      issuerType: "sovereign",
+      countryId: "US",
+      currencyCode: "USD",
+      couponRate: 5,
+      requestedUnits: 1_000,
+      unsoldUnits: 600,
+      publicFloat: 400,
+      totalIssued: 400_000,
+      marketPrice: 1,
+      matured: false,
+      defaulted: false,
+    };
+    db.collectionMocks.bonds.find.mockReturnValue({
+      sort: () => ({ toArray: async () => [bond] }),
+    });
+    db.collectionMocks.bondMarketPools.findOne.mockResolvedValue({
+      cashLocal: 150_000,
+      targetCashLocal: 0,
+    });
+    db.collectionMocks.bondMarketPools.findOneAndUpdate.mockResolvedValue({ cashLocal: 100_000 });
+    vi.mocked(loadBondQuote).mockResolvedValue({ askPerUnit: 1_020 } as never);
+    db.collectionMocks.bonds.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+
+    const result = await placeUnsoldBondUnits(db as unknown as Db, 600, new Date());
+
+    expect(result.sovereignFaceByCountry.get("US")).toEqual({
+      face: 14_000,
+      cashPaid: 14_280,
+      annualCoupon: 700,
+    });
   });
 });

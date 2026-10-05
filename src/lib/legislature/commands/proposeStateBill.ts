@@ -15,6 +15,7 @@ import type {
   Character,
   ElectedOfficial,
   PoliticalParty,
+  ResetLawProvision,
   StateBill,
   StateBillProvision,
 } from "@/lib/db/types";
@@ -34,6 +35,12 @@ import { getEraContext } from "@/lib/era/context";
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
 import { stampTaxSliderProvisions } from "@/lib/politicalLegislation/taxSlider";
 import { snapshotPolicyProvisionsInPlace } from "@/lib/legislature/provisionEnrichment";
+import type { GameState } from "@/lib/db/types/gameState";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { loadReviewedLawCatalog } from "@/lib/resetLegislation/loadReviewedCatalog";
+import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
+import type { LawChoice } from "@/lib/resetLegislation/rules/eligibility";
 
 const VOTING_DURATION_HOURS = 24;
 
@@ -144,8 +151,124 @@ export async function proposeStateBill(
   const votingEndsAt = new Date(now.getTime() + VOTING_DURATION_HOURS * 3_600_000);
   const gameStateForTurn = await getGameState(db);
   const votingEndsOnTurn = (gameStateForTurn?.currentTurn ?? 0) + VOTING_DURATION_HOURS;
+  const rawResetSelections = (Array.isArray(effectiveProvisions) ? effectiveProvisions : []).filter(
+    (
+      provision
+    ): provision is {
+      type: "reset_law";
+      familyId: string;
+      scope: "regional";
+      regionId: string;
+      choice: LawChoice;
+    } =>
+      typeof provision === "object" &&
+      provision !== null &&
+      "type" in provision &&
+      provision.type === "reset_law"
+  );
+  const validatedResetLawProvisions: ResetLawProvision[] = [];
+  if (rawResetSelections.length > 0) {
+    if (!["US", "UK", "JP"].includes(countryId)) {
+      return { status: 400, body: { error: "Legislation v2 is unavailable in this country." } };
+    }
+    const gameState = await db.collection<GameState>("gameState").findOne(
+      { _id: "current" },
+      {
+        projection: {
+          resetWorldId: 1,
+          startingYear: 1,
+          currentYear: 1,
+          metricsSystemVersion: 1,
+          legislationSystemVersion: 1,
+          resetVersionSeeds: 1,
+        },
+      }
+    );
+    if (
+      !gameState?.resetWorldId ||
+      resetSystemVersionsForCountry(gameState, RESET_V2_READY, countryId).legislation !== "v2"
+    ) {
+      return { status: 409, body: { error: "Legislation v2 is not enabled." } };
+    }
+    const catalog = await loadReviewedLawCatalog({
+      db,
+      worldId: gameState.resetWorldId,
+      country: countryId as ResetCountry,
+      scope: "regional",
+      regionId: stateId,
+      year: gameState.currentYear ?? gameState.startingYear ?? 1991,
+    });
+    const seen = new Set<string>();
+    for (const selection of rawResetSelections) {
+      if (
+        selection.scope !== "regional" ||
+        selection.regionId.toUpperCase() !== stateId ||
+        seen.has(selection.familyId)
+      ) {
+        return {
+          status: 400,
+          body: { error: "Each v2 regional law family may appear once for this region." },
+        };
+      }
+      const family = catalog.find((candidate) => candidate.familyId === selection.familyId);
+      const entry = family?.options.find(
+        (candidate) => candidate.option.choice === selection.choice
+      );
+      if (!family || !entry || entry.option.choice === entry.currentChoice) {
+        return { status: 400, body: { error: "This v2 regional law option is unavailable." } };
+      }
+      seen.add(family.familyId);
+      validatedResetLawProvisions.push({
+        type: "reset_law",
+        familyId: family.familyId,
+        scope: "regional",
+        regionId: stateId,
+        choice: entry.option.choice,
+        reviewedOption: entry.option,
+        titleSnapshot: entry.title,
+        descriptionSnapshot: entry.description,
+        currentLawSnapshot: family.currentLaw,
+        currentLawDescriptionSnapshot: family.currentLawDescription,
+        currentChoiceSnapshot: entry.currentChoice,
+        currentAnnualAllocationSnapshot: entry.currentAnnualAllocation,
+        annualAllocationDeltaSnapshot: entry.annualAllocationDelta,
+        overseeingSeatIdSnapshot: null,
+        overseeingAgencyIdSnapshot: family.overseeingAgencyId,
+        primaryMetricEffectsSnapshot: entry.primaryMetricEffects,
+        balanceBasis: entry.balanceBasis,
+      });
+    }
+    const duplicateProgramBill = await db.collection<StateBill>("stateBills").findOne({
+      stateId,
+      countryId,
+      status: { $nin: STATE_TERMINAL_STATUSES },
+      provisions: {
+        $elemMatch: {
+          type: "reset_law",
+          familyId: { $in: [...seen] },
+        },
+      },
+    });
+    if (duplicateProgramBill) {
+      return {
+        status: 409,
+        body: { error: "An active bill already contains one of these v2 law families." },
+      };
+    }
+  }
+  const legacyEffectiveProvisions = (
+    Array.isArray(effectiveProvisions) ? effectiveProvisions : []
+  ).filter(
+    (provision) =>
+      !(
+        typeof provision === "object" &&
+        provision !== null &&
+        "type" in provision &&
+        provision.type === "reset_law"
+      )
+  );
   const sanitizedProvisions: StateBillProvision[] | undefined = Array.isArray(effectiveProvisions)
-    ? effectiveProvisions.map((provision) => {
+    ? legacyEffectiveProvisions.map((provision) => {
         if (
           typeof provision === "object" &&
           provision != null &&
@@ -239,6 +362,7 @@ export async function proposeStateBill(
     sanitizedProvisions.length = 0;
     sanitizedProvisions.push(...stamped.provisions);
   }
+  sanitizedProvisions?.push(...validatedResetLawProvisions);
 
   const policyProvisionsForCheck = (sanitizedProvisions ?? [])
     .filter(
@@ -249,7 +373,10 @@ export async function proposeStateBill(
         policyOptionId?: string;
         effectDirection: number;
       } =>
-        !("type" in provision) || (provision.type !== "subsidy" && provision.type !== "end_subsidy")
+        !("type" in provision) ||
+        (provision.type !== "subsidy" &&
+          provision.type !== "end_subsidy" &&
+          provision.type !== "reset_law")
     )
     .filter((provision) => provision.legislationTypeId);
 
@@ -328,7 +455,7 @@ export async function proposeStateBill(
   }
 
   const influenceProvisionCount = countProvisionsChargedNationalInfluence({
-    policyProvisionCount: policyProvisionsForCheck.length,
+    policyProvisionCount: policyProvisionsForCheck.length + validatedResetLawProvisions.length,
     subsidyProvisionCount,
   });
   const npiCost = getProvisionCostTotal(influenceProvisionCount);

@@ -99,6 +99,7 @@ import { migration as repairDuplicateCorporationSequentialIds } from "./entries/
 import { migration as normalizeShareCorporateActions } from "./entries/2026-09-18-normalize-share-corporate-actions";
 
 import { migration as turnClockIndexes } from "./entries/2026-09-20-turn-clock-indexes";
+import { migration as legislativeAdministrationMetadata } from "./entries/2026-09-21-legislative-administration-metadata";
 import { migration as activatePendingNppDefenceContracts } from "./entries/2026-09-24-activate-pending-npp-defence-contracts";
 import { migration as backfillNppTechBaselines } from "./entries/2026-09-24-backfill-npp-tech-baselines";
 import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-long-horizon-telemetry-indexes";
@@ -309,6 +310,7 @@ export const MIGRATIONS: Migration[] = [
   marketChartIndexes,
   unionProsecutionBarIndex,
   turnClockIndexes,
+  legislativeAdministrationMetadata,
   // True NPP-owned suppliers never had a player who could answer an offer, so
   // awards made before automatic activation shipped remain pending forever.
   // Activate those legacy rows while preserving offers to player-owned corps

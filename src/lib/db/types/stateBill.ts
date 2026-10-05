@@ -2,7 +2,7 @@ import type { ObjectId } from "mongodb";
 import type { CorporationType } from "../../constants/corporations";
 import type { CountryId } from "../../constants/countries";
 import type { BillVoteSnapshot } from "./voteSnapshot";
-import type { PolicyShiftLedgerEntry } from "./legislation";
+import type { PolicyShiftLedgerEntry, ResetLawProvision } from "./legislation";
 
 export type StateBillStatus =
   | "proposed"
@@ -68,7 +68,10 @@ export interface StateBillEndSubsidyProvision {
 }
 
 export type StateBillProvision =
-  StateBillPolicyProvision | StateBillSubsidyProvision | StateBillEndSubsidyProvision;
+  | StateBillPolicyProvision
+  | StateBillSubsidyProvision
+  | StateBillEndSubsidyProvision
+  | ResetLawProvision;
 
 export interface StateBill {
   _id: ObjectId;

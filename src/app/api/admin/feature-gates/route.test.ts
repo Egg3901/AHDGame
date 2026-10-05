@@ -124,4 +124,65 @@ describe("admin feature gates foreign policy mode", () => {
     expect(response.status).toBe(400);
     expect(db.collection("gameState").updateOne).not.toHaveBeenCalled();
   });
+
+  it("reports all reset-era versions as v1 on an existing world", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ _id: "current" });
+    const { GET } = await import("./route");
+
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      resetSystemVersions: { metrics: "v1", legislation: "v1", cabinet: "v1" },
+      resetV2Ready: { metrics: true, legislation: true, cabinet: true },
+    });
+  });
+
+  it("allows an admin to select the completed metrics v2 path for the next reset", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ _id: "current" });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      request({ kind: "reset-system-version", system: "metrics", value: "v2" })
+    );
+
+    expect(response.status).toBe(200);
+    const [, update] = db.collection("gameState").updateOne.mock.calls[0];
+    expect(update.$set).toMatchObject({
+      "resetSystemSelections.metrics": "v2",
+      "resetSystemSelectionsAudit.metrics": { by: "tester" },
+    });
+  });
+
+  it("allows an admin to select v1 with an audit stamp", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({ _id: "current" });
+    const { POST } = await import("./route");
+
+    const response = await POST(
+      request({ kind: "reset-system-version", system: "legislation", value: "v1" })
+    );
+
+    expect(response.status).toBe(200);
+    const [, update] = db.collection("gameState").updateOne.mock.calls[0];
+    expect(update.$set).toMatchObject({
+      "resetSystemSelections.legislation": "v1",
+      "resetSystemSelectionsAudit.legislation": { by: "tester" },
+    });
+    expect(update.$set["resetSystemSelectionsAudit.legislation"].at).toBeTruthy();
+    expect(update.$set).not.toHaveProperty("metricsSystemVersion");
+    expect(update.$set).not.toHaveProperty("cabinetSystemVersion");
+  });
+
+  it("rejects unknown versions and system names", async () => {
+    const { POST } = await import("./route");
+
+    expect(
+      (await POST(request({ kind: "reset-system-version", system: "metrics", value: "v3" }))).status
+    ).toBe(400);
+    expect(
+      (await POST(request({ kind: "reset-system-version", system: "treasury", value: "v1" })))
+        .status
+    ).toBe(400);
+    expect(db.collection("gameState").updateOne).not.toHaveBeenCalled();
+  });
 });

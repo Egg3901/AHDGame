@@ -1,0 +1,461 @@
+[
+  {
+    "familyId": "L01",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00012,
+    "allocationFactors": [2.5, 1.15, 1.35, 0.72, 0.48],
+    "primaryResponse": [0.72, 0.49, 0.53, 0.43, 0.27],
+    "secondaryResponseFactors": [0.9, 0.7, 0.8, 0.65, 0.4],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L02",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00018,
+    "allocationFactors": [1.3, 1.1, 1, 0.88, 0.75],
+    "primaryResponse": [0.74, 0.46, 0.42, 0.33, 0.16],
+    "secondaryResponseFactors": [0.85, 0.8, 0.65, 0.55, 0.3],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L03",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00015,
+    "allocationFactors": [2.8, 1.35, 1.05, 0.72, 0.5],
+    "primaryResponse": [0.48, 0.37, 0.5, 0.54, 0.65],
+    "secondaryResponseFactors": [0.8, 0.7, 0.75, 0.65, 0.55],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L04",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0005,
+    "allocationFactors": [1.8, 1, 1.2, 0.65, 0.34],
+    "primaryResponse": [0.12, 0.26, 0.39, 0.5, 0.46],
+    "secondaryResponseFactors": [0.95, 0.8, 0.75, 0.6, 0.4],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L05",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00035,
+    "allocationFactors": [2.2, 1.2, 1, 0.65, 0.3],
+    "primaryResponse": [0.38, 0.29, 0.47, 0.59, 0.5],
+    "secondaryResponseFactors": [0.75, 0.8, 0.8, 0.75, 0.55],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L06",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0008,
+    "allocationFactors": [3.3, 1.55, 1.18, 0.7, 0.48],
+    "primaryResponse": [0.76, 0.5, 0.49, 0.4, 0.31],
+    "secondaryResponseFactors": [0.8, 0.75, 0.85, 0.75, 0.55],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L07",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00012,
+    "allocationFactors": [2, 1.25, 0.95, 0.58, 0.28],
+    "primaryResponse": [0.05, 0.18, 0.41, 0.62, 0.73],
+    "secondaryResponseFactors": [0.8, 0.65, 0.8, 0.7, 0.55],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L08",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00006,
+    "allocationFactors": [1.4, 1.1, 1, 0.9, 0.8],
+    "primaryResponse": [0.19, 0.3, 0.43, 0.64, 0.76],
+    "secondaryResponseFactors": [0.9, 0.85, 0.75, 0.65, 0.5],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L09",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0007,
+    "allocationFactors": [2.7, 1.3, 1.05, 0.64, 0.42],
+    "primaryResponse": [0.73, 0.59, 0.52, 0.44, 0.35],
+    "secondaryResponseFactors": [0.7, 0.72, 0.7, 0.7, 0.55],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L10",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0012,
+    "allocationFactors": [3, 1.45, 1.2, 0.8, 0.47],
+    "primaryResponse": [0.88, 0.68, 0.59, 0.44, 0.32],
+    "secondaryResponseFactors": [0.8, 0.78, 0.85, 0.7, 0.5],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L11",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.001,
+    "allocationFactors": [2.65, 1.25, 1.05, 0.68, 0.37],
+    "primaryResponse": [0.66, 0.56, 0.48, 0.53, 0.38],
+    "secondaryResponseFactors": [0.9, 0.79, 0.8, 0.65, 0.45],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L12",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00045,
+    "allocationFactors": [2.1, 1.1, 0.95, 0.62, 0.28],
+    "primaryResponse": [0.62, 0.49, 0.55, 0.44, 0.29],
+    "secondaryResponseFactors": [0.8, 0.85, 0.7, 0.55, 0.3],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L13",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0008,
+    "allocationFactors": [2.85, 1.4, 1.13, 0.73, 0.35],
+    "primaryResponse": [0.79, 0.66, 0.57, 0.61, 0.38],
+    "secondaryResponseFactors": [0.72, 0.76, 0.8, 0.72, 0.45],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L14",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0011,
+    "allocationFactors": [3, 1.35, 1.05, 0.7, 0.42],
+    "primaryResponse": [0.8, 0.54, 0.56, 0.45, 0.26],
+    "secondaryResponseFactors": [0.8, 0.85, 0.7, 0.6, 0.4],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L15",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0009,
+    "allocationFactors": [2.9, 1.45, 1.2, 0.83, 0.57],
+    "primaryResponse": [0.79, 0.65, 0.58, 0.54, 0.46],
+    "secondaryResponseFactors": [0.65, 0.69, 0.8, 0.7, 0.55],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L16",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0025,
+    "allocationFactors": [1.25, 1.1, 1, 0.95, 0.85],
+    "primaryResponse": [0.91, 0.73, 0.65, 0.49, 0.36],
+    "secondaryResponseFactors": [0.8, 0.82, 0.85, 0.68, 0.43],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L17",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.001,
+    "allocationFactors": [2.7, 1.4, 1.05, 0.64, 0.36],
+    "primaryResponse": [0.83, 0.58, 0.53, 0.47, 0.29],
+    "secondaryResponseFactors": [0.75, 0.75, 0.85, 0.65, 0.42],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L18",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0014,
+    "allocationFactors": [3.2, 1.5, 1.18, 0.83, 0.55],
+    "primaryResponse": [0.82, 0.64, 0.55, 0.62, 0.39],
+    "secondaryResponseFactors": [0.82, 0.82, 0.75, 0.65, 0.5],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L19",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0009,
+    "allocationFactors": [2.9, 1.35, 1.1, 0.73, 0.48],
+    "primaryResponse": [0.85, 0.65, 0.57, 0.48, 0.37],
+    "secondaryResponseFactors": [0.75, 0.76, 0.78, 0.65, 0.45],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L20",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0011,
+    "allocationFactors": [3.1, 1.48, 1.2, 0.68, 0.44],
+    "primaryResponse": [0.88, 0.68, 0.59, 0.47, 0.3],
+    "secondaryResponseFactors": [0.8, 0.78, 0.85, 0.55, 0.35],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L21",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0015,
+    "allocationFactors": [3.25, 1.5, 1.23, 0.72, 0.5],
+    "primaryResponse": [0.89, 0.72, 0.63, 0.45, 0.32],
+    "secondaryResponseFactors": [0.75, 0.84, 0.7, 0.6, 0.4],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L22",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0016,
+    "allocationFactors": [3.2, 1.65, 1.05, 0.58, 0.24],
+    "primaryResponse": [0.67, 0.66, 0.58, 0.72, 0.92],
+    "secondaryResponseFactors": [0.55, 0.62, 0.72, 0.75, 0.7],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L23",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0011,
+    "allocationFactors": [3.2, 1.48, 1.15, 0.72, 0.44],
+    "primaryResponse": [0.78, 0.69, 0.61, 0.4, 0.27],
+    "secondaryResponseFactors": [0.72, 0.74, 0.75, 0.58, 0.35],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L24",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0008,
+    "allocationFactors": [3, 1.42, 1.1, 0.65, 0.46],
+    "primaryResponse": [0.88, 0.64, 0.58, 0.49, 0.31],
+    "secondaryResponseFactors": [0.82, 0.83, 0.75, 0.6, 0.4],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L25",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.001,
+    "allocationFactors": [3, 1.43, 1.08, 0.7, 0.4],
+    "primaryResponse": [0.89, 0.69, 0.6, 0.54, 0.3],
+    "secondaryResponseFactors": [0.55, 0.69, 0.7, 0.7, 0.4],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L26",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0009,
+    "allocationFactors": [3, 1.43, 1.1, 0.67, 0.37],
+    "primaryResponse": [0.86, 0.67, 0.58, 0.47, 0.35],
+    "secondaryResponseFactors": [0.75, 0.76, 0.8, 0.6, 0.45],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L27",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0007,
+    "allocationFactors": [3.15, 1.5, 1.12, 0.7, 0.3],
+    "primaryResponse": [0.91, 0.65, 0.62, 0.5, 0.28],
+    "secondaryResponseFactors": [0.8, 0.85, 0.75, 0.62, 0.35],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L28",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0009,
+    "allocationFactors": [3.2, 1.47, 1.12, 0.69, 0.44],
+    "primaryResponse": [0.91, 0.65, 0.61, 0.52, 0.32],
+    "secondaryResponseFactors": [0.85, 0.8, 0.8, 0.65, 0.38],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L29",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0011,
+    "allocationFactors": [3.15, 1.42, 1.07, 0.75, 0.39],
+    "primaryResponse": [0.88, 0.71, 0.63, 0.54, 0.35],
+    "secondaryResponseFactors": [0.72, 0.71, 0.75, 0.55, 0.3],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L30",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0012,
+    "allocationFactors": [3, 1.4, 1.12, 0.62, 0.35],
+    "primaryResponse": [0.7, 0.5, 0.67, 0.73, 0.89],
+    "secondaryResponseFactors": [0.7, 0.68, 0.75, 0.55, 0.25],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L31",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00055,
+    "allocationFactors": [2.65, 1.36, 1.1, 0.68, 0.42],
+    "primaryResponse": [0.88, 0.63, 0.59, 0.51, 0.39],
+    "secondaryResponseFactors": [0.75, 0.75, 0.78, 0.65, 0.48],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L32",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.001,
+    "allocationFactors": [3.25, 1.6, 1.15, 0.72, 0.4],
+    "primaryResponse": [0.92, 0.66, 0.64, 0.53, 0.26],
+    "secondaryResponseFactors": [0.85, 0.78, 0.75, 0.65, 0.3],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L33",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00045,
+    "allocationFactors": [2.9, 1.38, 1.05, 0.69, 0.44],
+    "primaryResponse": [0.89, 0.58, 0.57, 0.49, 0.35],
+    "secondaryResponseFactors": [0.7, 0.7, 0.78, 0.6, 0.45],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L34",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00085,
+    "allocationFactors": [2.8, 1.4, 1.15, 0.8, 0.58],
+    "primaryResponse": [0.82, 0.7, 0.62, 0.72, 0.78],
+    "secondaryResponseFactors": [0.8, 0.82, 0.75, 0.65, 0.48],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L35",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00065,
+    "allocationFactors": [2.7, 1.4, 1.1, 0.69, 0.42],
+    "primaryResponse": [0.86, 0.71, 0.62, 0.44, 0.34],
+    "secondaryResponseFactors": [0.78, 0.78, 0.75, 0.6, 0.45],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L36",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00055,
+    "allocationFactors": [2.8, 1.43, 1.13, 0.7, 0.4],
+    "primaryResponse": [0.85, 0.62, 0.61, 0.49, 0.32],
+    "secondaryResponseFactors": [0.7, 0.7, 0.8, 0.7, 0.45],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L50",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00014,
+    "allocationFactors": [2.15, 1.42, 1, 0.86, 1.2],
+    "primaryResponse": [0.35, 0.45, 0.5, 0.65, 0.8],
+    "secondaryResponseFactors": [0.65, 0.72, 0.8, 0.73, 0.58],
+    "responseMeaning": "legal access only; safety and health outcomes unscored"
+  },
+  {
+    "familyId": "L37",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0008,
+    "allocationFactors": [3.1, 1.42, 1.14, 0.7, 0.36],
+    "primaryResponse": [0.9, 0.62, 0.65, 0.47, 0.35],
+    "secondaryResponseFactors": [0.8, 0.82, 0.75, 0.6, 0.35],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L38",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0013,
+    "allocationFactors": [3.2, 1.51, 1.23, 0.72, 0.52],
+    "primaryResponse": [0.67, 0.59, 0.52, 0.37, 0.25],
+    "secondaryResponseFactors": [0.75, 0.75, 0.78, 0.62, 0.45],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L51",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00024,
+    "allocationFactors": [2.3, 1.48, 1, 1.12, 1.54],
+    "primaryResponse": [0.9, 0.72, 0.5, 0.34, 0.2],
+    "secondaryResponseFactors": [0.78, 0.82, 0.8, 0.66, 0.5],
+    "responseMeaning": "legal access only; safety and health outcomes unscored"
+  },
+  {
+    "familyId": "L39",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00045,
+    "allocationFactors": [2.7, 1.42, 1.12, 0.68, 0.34],
+    "primaryResponse": [0.85, 0.71, 0.62, 0.51, 0.31],
+    "secondaryResponseFactors": [0.78, 0.78, 0.8, 0.65, 0.45],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L49",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0002,
+    "allocationFactors": [2.35, 1.38, 1, 1.18, 1.52],
+    "primaryResponse": [1.7, 1.3, 1, 0.8, 0.5],
+    "secondaryResponseFactors": [0.74, 0.72, 0.7, 0.59, 0.4],
+    "responseMeaning": "country-relative entry access, not migration flow"
+  },
+  {
+    "familyId": "L40",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00055,
+    "allocationFactors": [2.7, 1.43, 1.15, 0.67, 0.33],
+    "primaryResponse": [0.83, 0.61, 0.59, 0.46, 0.24],
+    "secondaryResponseFactors": [0.78, 0.8, 0.75, 0.65, 0.35],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L41",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0003,
+    "allocationFactors": [2.8, 1.38, 1.1, 0.62, 0.39],
+    "primaryResponse": [0.84, 0.71, 0.63, 0.46, 0.31],
+    "secondaryResponseFactors": [0.75, 0.81, 0.8, 0.6, 0.45],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L42",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.001,
+    "allocationFactors": [3.2, 1.57, 1.18, 0.68, 0.41],
+    "primaryResponse": [0.36, 0.34, 0.28, 0.2, 0.13],
+    "secondaryResponseFactors": [0.8, 0.82, 0.78, 0.65, 0.4],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L43",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00025,
+    "allocationFactors": [2.6, 1.31, 1.12, 0.7, 0.43],
+    "primaryResponse": [0.78, 0.7, 0.62, 0.48, 0.31],
+    "secondaryResponseFactors": [0.75, 0.8, 0.85, 0.68, 0.45],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L44",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00018,
+    "allocationFactors": [2.5, 1.3, 1.06, 0.67, 0.4],
+    "primaryResponse": [0.82, 0.72, 0.63, 0.5, 0.28],
+    "secondaryResponseFactors": [0.75, 0.85, 0.85, 0.65, 0.4],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L45",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.00022,
+    "allocationFactors": [2.8, 1.42, 1.1, 0.65, 0.38],
+    "primaryResponse": [0.84, 0.72, 0.62, 0.53, 0.36],
+    "secondaryResponseFactors": [0.75, 0.81, 0.82, 0.72, 0.5],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L46",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0002,
+    "allocationFactors": [2.5, 1.3, 1.08, 0.65, 0.39],
+    "primaryResponse": [0.86, 0.73, 0.66, 0.51, 0.29],
+    "secondaryResponseFactors": [0.8, 0.85, 0.85, 0.65, 0.38],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L47",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.0003,
+    "allocationFactors": [2.6, 1.36, 1.1, 0.64, 0.32],
+    "primaryResponse": [0.72, 0.66, 0.57, 0.43, 0.29],
+    "secondaryResponseFactors": [0.75, 0.84, 0.83, 0.65, 0.4],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  },
+  {
+    "familyId": "L48",
+    "status": "provisional-design-only",
+    "baseCostFractionOfGdp": 0.003,
+    "allocationFactors": [3.1, 1.52, 1.17, 0.83, 0.47],
+    "primaryResponse": [0.82, 0.72, 0.61, 0.55, 0.31],
+    "secondaryResponseFactors": [0.6, 0.67, 0.7, 0.7, 0.5],
+    "responseMeaning": "illustrative normalized response, not approved game balance"
+  }
+]
