@@ -7,8 +7,7 @@ import type { GameState } from "@/lib/db/types";
  * retirements attach none, and the post-reset gate surfaces nothing. Fail-closed:
  * only an explicit `true` on the gameState singleton enables it. Flipped from the
  * admin Feature Gates panel (`/api/admin/feature-gates`, key `seasonRecapEnabled`).
- * NOT in DEFAULT_GAME_STATE_FLAGS — staged rollout, default off; an explicit
- * enable survives resets (missingGameStateFlagDefaults only fills absent flags).
+ * Fresh worlds seed it on (DEFAULT_GAME_STATE_FLAGS).
  */
 export function isSeasonRecapEnabled(
   preloaded?: {

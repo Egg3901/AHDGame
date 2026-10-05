@@ -59,7 +59,7 @@ export function PostResetChecklist() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-card-border bg-card p-5 sm:p-6">
-        <h2 className="text-sm font-semibold">Post Reset Checklist</h2>
+        <h2 className="text-sm font-semibold">Post reset checklist</h2>
         <p className="mt-1 text-sm text-muted">
           Run these top to bottom after a world reset. Step 1 (server setup, readiness checks, and
           the IMF institution corporation) runs right here; the follow-up steps deep-link to their

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { logBotApiRequest, requireBotApiAccess } from "@/lib/api/botApiAuth";
 import { checkRateLimit, rateLimitResponse, BOT_READ_LIMITS } from "@/lib/api/rateLimit";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
         path: "/api/discord-bot/elections",
         status: 401,
       });
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const rateLimit = checkRateLimit(

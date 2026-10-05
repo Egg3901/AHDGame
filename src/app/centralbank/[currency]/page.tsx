@@ -19,7 +19,7 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { currency } = await params;
   const resolved = resolveCentralBankCurrency(currency);
-  if (!resolved) return { title: "Central Bank Not Found | A House Divided" };
+  if (!resolved) return { title: "Central bank not found | A House Divided" };
   const bankName = resolved.config.centralBank.name;
   return {
     title: `${bankName} | A House Divided`,

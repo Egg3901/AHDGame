@@ -227,16 +227,12 @@ export function ProfileSwitcher({
   if (variant === "mobile") {
     return (
       <div className="mt-0.5 space-y-0.5 border-l border-card-border/60 pl-3">
-        <p className="px-3 py-1 text-xs font-medium uppercase tracking-wider text-muted/60">
-          {charactersLabel}
-        </p>
+        <p className="px-3 py-1 text-body-sm font-medium text-muted">{charactersLabel}</p>
         {characters.map(renderCharacterRow)}
         {imperialCharacter && (
           <>
             <div className="mx-3 border-t border-card-border/40 py-1">
-              <p className="py-1 text-xs font-medium uppercase tracking-wider text-amber-400/60">
-                {imperialLabel}
-              </p>
+              <p className="py-1 text-body-sm font-medium text-amber-400/60">{imperialLabel}</p>
             </div>
             {renderImperialRow()}
           </>
@@ -256,7 +252,7 @@ export function ProfileSwitcher({
         {imperialCharacter && (
           <>
             <div className={MENU_DIVIDER_CLASS} />
-            <p className="px-2.5 pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-wider text-amber-400/60">
+            <p className="px-2.5 pb-1 pt-2.5 text-body-sm font-medium text-amber-400/60">
               {imperialLabel}
             </p>
             {renderImperialRow()}

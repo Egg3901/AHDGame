@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, type FormEvent } from "react";
 import Link from "next/link";
 import {
@@ -154,7 +156,7 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
         }),
       });
       const body = (await res.json()) as { error?: string; slug?: string };
-      if (!res.ok) setError(body.error || "Failed to charter the fund");
+      if (!res.ok) setError(apiErrorText(body, "Failed to charter the fund"));
       else setChartered({ slug: body.slug ?? "", ticker });
     } catch {
       setError("Network error");
@@ -318,7 +320,7 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
           </p>
         </form>
       )}
-      {error && <p className="mt-2 text-xs text-error">{error}</p>}
+      <InlineError error={error} className="mt-2 text-xs text-error" />
     </section>
   );
 }

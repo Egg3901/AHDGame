@@ -26,6 +26,7 @@ import { RevokeCharterForm } from "./RevokeCharterForm";
 import { CharterSwitchForm } from "./CharterSwitchForm";
 import { CustomerBankPanel } from "./CustomerBankPanel";
 import { BankTreasuryPanel } from "./BankTreasuryPanel";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /** CEO toggle for opt-in loan approval. When on, new loans queue as pending. */
 function LoanApprovalToggle({
@@ -55,7 +56,7 @@ function LoanApprovalToggle({
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        showToast(json.error ?? "Could not update approval mode", "error");
+        showToast(apiErrorText(json, "Could not update approval mode"), "error");
         return;
       }
       showToast(

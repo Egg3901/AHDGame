@@ -35,7 +35,7 @@ export function BlendDetailHero({ model, countryName, regionName, year }: BlendD
       </div>
 
       <div className="px-5 py-6">
-        <div className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-muted">
+        <div className="text-body-sm font-medium text-muted">
           {countryName} · {regionName}
           {year ? ` · ${year}` : ""}
         </div>
@@ -48,9 +48,7 @@ export function BlendDetailHero({ model, countryName, regionName, year }: BlendD
           <div className="mt-5 flex flex-wrap gap-7 border-t border-card-border pt-4">
             {model.facts.map((f) => (
               <div key={f.key} className="min-w-0">
-                <div className="whitespace-nowrap text-[9px] font-extrabold uppercase tracking-[0.18em] text-muted">
-                  {f.key}
-                </div>
+                <div className="whitespace-nowrap text-body-sm font-medium text-muted">{f.key}</div>
                 <div
                   className="mt-0.5 text-2xl font-bold tabular-nums"
                   style={f.color ? { color: f.color } : undefined}
@@ -70,17 +68,13 @@ export function BlendDetailHero({ model, countryName, regionName, year }: BlendD
 export function BlendClock({ rows }: { rows: BlendClockRow[] }) {
   return (
     <div className="rounded-xl border border-card-border bg-card p-4">
-      <div className="mb-3.5 text-[10px] font-black uppercase tracking-[0.16em] text-muted">
-        Clock
-      </div>
+      <div className="mb-3.5 text-body-sm font-medium font-black text-muted">Clock</div>
       {rows.map((r) => (
         <div
           key={r.label}
           className="flex items-baseline justify-between gap-2.5 border-b border-card-border/50 py-2.5 last:border-b-0"
         >
-          <span className="text-[11px] font-bold uppercase tracking-wide text-muted">
-            {r.label}
-          </span>
+          <span className="text-body-sm font-medium text-muted">{r.label}</span>
           <span
             className="text-[17px] font-bold tabular-nums"
             style={r.color ? { color: r.color } : undefined}

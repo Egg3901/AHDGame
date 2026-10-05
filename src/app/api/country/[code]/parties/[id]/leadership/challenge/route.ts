@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -25,13 +25,13 @@ async function postHandler(_request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
     if (authResult.user.isBanned) {
-      return NextResponse.json({ error: "Account is banned" }, { status: 403 });
+      return errorResponse(403, "Account is banned");
     }
     const authUser = authResult.user;
 
@@ -41,13 +41,10 @@ async function postHandler(_request: Request, { params }: RouteParams) {
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     if (authUser.character.party !== partyId || !isSameCountry(authUser.character, party)) {
-      return NextResponse.json(
-        { error: "You must be a member of this party to challenge its leader" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You must be a member of this party to challenge its leader");
     }
 
     const gameTime = await getGameTime();

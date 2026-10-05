@@ -7,6 +7,7 @@ import { type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { centralBankApiUrl, centralBankUrl } from "@/lib/urls";
 import { PlayerSelector } from "@/components/PlayerSelector";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BankSummary {
   countryId: CountryId;
@@ -65,7 +66,7 @@ export function CentralBankAdminPanel() {
       );
       if (!res.ok) {
         const json = await res.json();
-        throw new Error(json.error || "Failed to appoint chair");
+        throw new Error(apiErrorText(json, "Failed to appoint chair"));
       }
       await fetchBanks();
     } catch (err) {
@@ -89,7 +90,7 @@ export function CentralBankAdminPanel() {
       );
       if (!res.ok) {
         const json = await res.json();
-        throw new Error(json.error || "Failed to vacate chair");
+        throw new Error(apiErrorText(json, "Failed to vacate chair"));
       }
       await fetchBanks();
     } catch (err) {
@@ -109,7 +110,7 @@ export function CentralBankAdminPanel() {
       );
       if (!res.ok) {
         const json = await res.json();
-        throw new Error(json.error || "Failed to trigger selection");
+        throw new Error(apiErrorText(json, "Failed to trigger selection"));
       }
       await fetchBanks();
     } catch (err) {
@@ -130,7 +131,7 @@ export function CentralBankAdminPanel() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-foreground">Central Banks</h2>
+        <h2 className="text-lg font-semibold text-foreground">Central banks</h2>
       </div>
 
       {error && (
@@ -159,7 +160,7 @@ export function CentralBankAdminPanel() {
                     {bank.bankName}
                   </Link>
                   <p className="text-xs text-muted">
-                    Prime Rate: <span className="font-semibold">{bank.primeRate.toFixed(2)}%</span>
+                    Prime rate: <span className="font-semibold">{bank.primeRate.toFixed(2)}%</span>
                   </p>
                 </div>
               </div>
@@ -211,7 +212,7 @@ export function CentralBankAdminPanel() {
                   </span>
                 </span>
                 <span>
-                  Total Lobbying:{" "}
+                  Total lobbying:{" "}
                   <span className="font-semibold text-foreground">
                     $
                     {(
@@ -227,7 +228,7 @@ export function CentralBankAdminPanel() {
 
               {/* Appoint */}
               <div>
-                <p className="mb-1.5 text-xs font-medium text-muted">Appoint Chair</p>
+                <p className="mb-1.5 text-xs font-medium text-muted">Appoint chair</p>
                 <PlayerSelector
                   placeholder="Search character..."
                   onSelect={(char) => handleAppoint(bank.countryId as CountryId, char.id)}
@@ -240,7 +241,7 @@ export function CentralBankAdminPanel() {
                 disabled={isActioning}
                 className="w-full rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-2 text-xs font-medium text-secondary hover:bg-secondary/20 transition-colors disabled:opacity-40"
               >
-                {isActioning ? "Processing..." : "Trigger Selection"}
+                {isActioning ? "Processing..." : "Trigger selection"}
               </button>
             </div>
           );

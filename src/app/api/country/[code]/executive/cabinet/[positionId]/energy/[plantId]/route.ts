@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
@@ -23,13 +23,13 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     const { code, positionId, plantId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (!resolveEnergyPosition(countryId, positionId)) {
-      return NextResponse.json({ error: "Not an energy cabinet position" }, { status: 404 });
+      return errorResponse(404, "Not an energy cabinet position");
     }
     if (!ObjectId.isValid(plantId)) {
-      return NextResponse.json({ error: "Invalid plant id" }, { status: 400 });
+      return errorResponse(400, "Invalid plant id");
     }
 
     const db = await getDb();
@@ -40,10 +40,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the energy holder or admin can retire plants" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the energy holder or admin can retire plants");
     }
 
     // Retiring a plant is not something the successor can undo.
@@ -56,7 +53,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       positionId,
     });
     if (result.deletedCount === 0) {
-      return NextResponse.json({ error: "Plant not found" }, { status: 404 });
+      return errorResponse(404, "Plant not found");
     }
     return NextResponse.json({ success: true });
   } catch (error) {

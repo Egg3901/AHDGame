@@ -5,6 +5,7 @@ import { PAGE_SIZE, STAGES, type StatusKey, type FeedbackItem, type FeedbackDeta
 import { FeedbackFilters } from "./FeedbackFilters";
 import { FeedbackList } from "./FeedbackList";
 import { FeedbackDetail as FeedbackDetailPanel } from "./FeedbackDetail";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
 
@@ -194,7 +195,7 @@ export function FeedbackTab({ initialIssueNumber }: { initialIssueNumber?: numbe
           total: data.total,
         });
       } else {
-        dispatch({ type: "LIST_LOAD_ERROR", error: data.error ?? "Failed to fetch" });
+        dispatch({ type: "LIST_LOAD_ERROR", error: apiErrorText(data, "Failed to fetch") });
       }
     } catch {
       dispatch({ type: "LIST_LOAD_ERROR", error: "Network error" });
@@ -243,7 +244,7 @@ export function FeedbackTab({ initialIssueNumber }: { initialIssueNumber?: numbe
           dispatch({ type: "TOGGLE_SCREENSHOT" });
         }
       } else {
-        dispatch({ type: "SET_ERROR", error: data.error ?? "Failed to fetch" });
+        dispatch({ type: "SET_ERROR", error: apiErrorText(data, "Failed to fetch") });
       }
     } catch {
       dispatch({ type: "SET_ERROR", error: "Network error" });
@@ -277,8 +278,11 @@ export function FeedbackTab({ initialIssueNumber }: { initialIssueNumber?: numbe
         fetchList();
         fetchStageCounts();
       } else {
-        dispatch({ type: "SET_UPDATE_MESSAGE", message: `✗ ${data.error}` });
-        dispatch({ type: "UPDATE_SUCCESS", message: `✗ ${data.error}` });
+        dispatch({
+          type: "SET_UPDATE_MESSAGE",
+          message: `✗ ${apiErrorText(data, "Request failed")}`,
+        });
+        dispatch({ type: "UPDATE_SUCCESS", message: `✗ ${apiErrorText(data, "Request failed")}` });
       }
     } catch {
       dispatch({ type: "UPDATE_SUCCESS", message: "✗ Network error" });
@@ -309,7 +313,7 @@ export function FeedbackTab({ initialIssueNumber }: { initialIssueNumber?: numbe
         fetchList();
         if (selectedId) fetchDetail(selectedId);
       } else {
-        dispatch({ type: "SYNC_SUCCESS", message: `✗ ${data.error ?? "Failed"}` });
+        dispatch({ type: "SYNC_SUCCESS", message: `✗ ${apiErrorText(data, "Failed")}` });
       }
     } catch {
       dispatch({ type: "SYNC_SUCCESS", message: "✗ Network error" });

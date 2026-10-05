@@ -42,6 +42,14 @@ export interface Election {
   };
   /** Allocation rule fixed when the race opens, so reform only changes later races. */
   allocationMethod?: ElectionMethod;
+  /** Frozen post-approval Japan lower-house method and regional tier capacities. */
+  japanShugiinRules?: {
+    ruleVersion: "sntv-1991-v1" | "mixed-1994-v1";
+    districtSeats: number;
+    listSeats: number;
+    authorizedOnTurn?: number;
+    reformBillId?: string;
+  };
   /** Missing means legacy campaigning for this entire race. */
   campaignRulesVersion?: number;
   _id: ObjectId;
@@ -189,8 +197,12 @@ export interface ElectionCandidate {
   targetedAdsRevision?: number;
   _id: ObjectId;
   electionId: ObjectId;
-  /** Hungarian post-2014 National Assembly district selected at filing. */
+  /** District selected at filing for Hungary or post-1994 Japan lower-house contests. */
   constituencyId?: string;
+  /** Filed party-list order for the Japan post-1994 regional list tier. */
+  japanShugiinListOrder?: number;
+  /** Runtime uniqueness key for party constituency slots; independent nominees omit it. */
+  japanShugiinDistrictPartyKey?: string;
   /** Denormalized from Election.countryId so party IDs are not ambiguous across countries. */
   countryId?: CountryId;
   characterId: ObjectId;

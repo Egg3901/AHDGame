@@ -257,7 +257,21 @@ describe("spawnNppCorporation — plants", () => {
       headquartersState: "CA",
       limitToUnownedPool: true,
     });
-    expect(spawned).toHaveLength(2);
+    expect(spawned).toHaveLength(3);
+    expect(pool.headroomUnits).toBeGreaterThan(0);
+    const grantedBeforeDrain = db.collectionMocks.corporateSectors!.insertOne.mock.calls.reduce(
+      (sum: number, call) => sum + (call[0] as { capitalStock: number }).capitalStock,
+      0
+    );
+    expect(grantedBeforeDrain + pool.headroomUnits).toBeCloseTo(initialUnits, 6);
+    await spawnNppCorporation(db as unknown as Db, {
+      name: "Pool drain",
+      type: "manufacturing",
+      countryId: "US",
+      headquartersState: "CA",
+      limitToUnownedPool: true,
+      startingRevenue: poolRevenue,
+    });
     await expect(
       spawnNppCorporation(db as unknown as Db, {
         name: "Three",
@@ -274,7 +288,7 @@ describe("spawnNppCorporation — plants", () => {
     expect(grantedUnits).toBeCloseTo(initialUnits, 6);
     expect(pool.revenue).toBe(0);
     expect(pool.headroomUnits).toBeCloseTo(0, 6);
-    expect(db.collectionMocks.corporateSectors!.insertOne).toHaveBeenCalledTimes(2);
+    expect(db.collectionMocks.corporateSectors!.insertOne).toHaveBeenCalledTimes(4);
   });
 
   it("never drives the pool negative", async () => {

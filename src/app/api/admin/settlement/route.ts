@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Filter } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getSettlementCrisesCollection } from "@/lib/db/collections";
 import {
@@ -141,7 +141,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
 
@@ -160,13 +160,13 @@ export async function POST(request: Request) {
             // fought. The UI shows it as a warning, not as part of the success.
             ...(result.warning ? { warning: result.warning } : {}),
           })
-        : NextResponse.json({ error: result.reason }, { status: 409 });
+        : errorResponse(409, result.reason);
     }
 
     if (body.action === "close") {
       const result = await closeSettlementCrisis(db, { turn: currentTurn });
       if (!result.closed) {
-        return NextResponse.json({ error: result.reason }, { status: 409 });
+        return errorResponse(409, result.reason);
       }
       return NextResponse.json({
         success: true,
@@ -181,8 +181,7 @@ export async function POST(request: Request) {
     const live = await crises.findOne({
       status: { $in: ["open", "frozen"] },
     } as Filter<SettlementCrisisDoc>);
-    if (!live)
-      return NextResponse.json({ error: "No settlement crisis is live." }, { status: 404 });
+    if (!live) return errorResponse(404, "No settlement crisis is live.");
 
     if (body.action === "setRule") {
       await crises.updateOne(
@@ -225,7 +224,7 @@ export async function POST(request: Request) {
       }
     );
     if (claimed.matchedCount !== 1) {
-      return NextResponse.json({ error: "The crisis closed before this landed." }, { status: 409 });
+      return errorResponse(409, "The crisis closed before this landed.");
     }
 
     // A forced resolution ENDS an attachment, so the war the crisis had frozen

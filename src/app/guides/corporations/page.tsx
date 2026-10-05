@@ -16,7 +16,7 @@ import {
 } from "@/app/guides/_components/GuideBlocks";
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "Corporation Guide | A House Divided",
+  title: "Corporation guide | A House Divided",
   description:
     "How to run a successful corporation in A House Divided: sector focus, profit margins, commodities, sprawl, shares, bonds, and political strategy.",
   pathname: "/guides/corporations",
@@ -48,12 +48,12 @@ export default function CorporationGuidePage() {
             Guides
           </Link>
           <span>/</span>
-          <span className="text-foreground">Running a Corporation</span>
+          <span className="text-foreground">Running a corporation</span>
         </nav>
 
         {/* Page header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Running a Successful Corporation</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Running a successful corporation</h1>
           <p className="mt-2 text-sm text-muted">
             A player&apos;s guide from founding to market leadership
           </p>
@@ -70,7 +70,7 @@ export default function CorporationGuidePage() {
               <Link href="/corporations" className="text-primary hover:underline font-mono text-xs">
                 /corporations
               </Link>{" "}
-              and click <strong className="text-foreground">Found Corporation</strong>. You pay{" "}
+              and click <strong className="text-foreground">Found corporation</strong>. You pay{" "}
               <strong className="text-foreground">$1,000,000</strong> from your character&apos;s
               cash on hand. The corporation starts with that same amount as liquid capital.
               It&apos;s a transfer, not a loss.
@@ -81,7 +81,7 @@ export default function CorporationGuidePage() {
                 <ul className="space-y-1 text-sm text-muted">
                   <li>• $1,000,000 liquid capital (in the corp)</li>
                   <li>• 10,000,000 CEO shares @ $0.10</li>
-                  <li>• Marketing Strength (MS): 10</li>
+                  <li>• Marketing strength (MS): 10</li>
                   <li>• No sectors yet</li>
                 </ul>
               </div>
@@ -375,7 +375,7 @@ Escalation drops by 1 each turn. Costs halve if you wait`}</FormulaBlock>
                     <td className="px-4 py-2.5 text-foreground font-medium">Commodity market</td>
                     <td className="px-4 py-2.5 text-muted">Uncapped</td>
                     <td className="px-4 py-2.5">Sector-dependent</td>
-                    <td className="px-4 py-2.5">See Commodity Market section</td>
+                    <td className="px-4 py-2.5">See commodity market section</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-2.5 text-foreground font-medium">Logistical sprawl</td>
@@ -609,7 +609,7 @@ Logistics & Operations Strength (LS) raises the threshold and halves the slope:
               </table>
             </div>
             <Callout>
-              Invest in <strong className="text-foreground">Logistics & Operations Strength</strong>{" "}
+              Invest in <strong className="text-foreground">Logistics & operations strength</strong>{" "}
               before aggressively expanding past 15 sectors. At LS 200, your penalty-free threshold
               doubles to 30 and the slope halves. Find the spending option in CEO Office → Settings.
             </Callout>
@@ -961,7 +961,7 @@ sectorNPV = (yearly sector profit) ÷ 0.25         ← 25% discount rate`}</Form
                 d="M15 19l-7-7 7-7"
               />
             </svg>
-            All Guides
+            All guides
           </Link>
           <Link href="/stockmarket/us" className="hover:text-foreground transition-colors">
             NYSE →

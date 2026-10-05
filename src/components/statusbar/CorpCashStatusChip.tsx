@@ -65,7 +65,7 @@ export function CorpCashStatusChip({
           <Sparkline data={cashHistory} color="#38bdf8" width={188} height={30} />
         </div>
       )}
-      <TooltipLink href={`/corporation/${corp.sequentialId}`}>View Corporation</TooltipLink>
+      <TooltipLink href={`/corporation/${corp.sequentialId}`}>View corporation</TooltipLink>
     </InfoTooltip>
   );
 }

@@ -89,7 +89,7 @@ export function RegionReferendumCampaign({
           href={referendumDetailUrl(countryId, regionId)}
           className="inline-flex items-center gap-1 rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-600/90"
         >
-          View Campaign →
+          View campaign →
         </Link>
       </div>
     </div>

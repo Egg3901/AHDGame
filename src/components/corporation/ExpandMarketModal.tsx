@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -168,7 +170,7 @@ export default function ExpandMarketModal({
       );
       const data = await res.json();
       if (!res.ok) {
-        setSuggestionError(data.error ?? "Failed to load suggestions");
+        setSuggestionError(apiErrorText(data, "Failed to load suggestions"));
         return;
       }
       setSuggestions(data.suggestions ?? []);
@@ -284,7 +286,7 @@ export default function ExpandMarketModal({
       });
       const data = (await res.json()) as { error?: string; sectorId?: string };
       if (!res.ok) {
-        setFoundingError(data.error ?? "Could not start this plant");
+        setFoundingError(apiErrorText(data, "Could not start this plant"));
         return;
       }
       onClose();
@@ -324,7 +326,7 @@ export default function ExpandMarketModal({
         <div className="flex shrink-0 items-center justify-between border-b border-card-border px-4 py-3 sm:px-6 sm:py-4">
           <div>
             <h2 id={titleId} className="text-base font-bold text-foreground">
-              {plantsMode ? "Build a new sector" : "Expand Into New Market"}
+              {plantsMode ? "Build a new sector" : "Expand into new market"}
             </h2>
             {step === "suggestions" && !plantsMode && (
               <button
@@ -396,7 +398,7 @@ export default function ExpandMarketModal({
                 })}
               </div>
 
-              {suggestionError && <p className="text-sm text-error">{suggestionError}</p>}
+              <InlineError error={suggestionError} className="text-sm text-error" />
 
               <button
                 type="button"
@@ -415,8 +417,8 @@ export default function ExpandMarketModal({
                 {loadingSuggestions
                   ? "Loading..."
                   : plantsMode
-                    ? "Find Untapped Markets"
-                    : "Find Best Opportunities"}
+                    ? "Find untapped markets"
+                    : "Find best opportunities"}
               </button>
             </div>
           )}
@@ -472,7 +474,7 @@ export default function ExpandMarketModal({
                       : "bg-card-elevated/40 text-muted hover:text-foreground"
                   }`}
                 >
-                  {plantsMode ? "Untapped Markets" : "Unowned Markets"}
+                  {plantsMode ? "Untapped markets" : "Unowned markets"}
                 </button>
                 <button
                   type="button"
@@ -486,15 +488,13 @@ export default function ExpandMarketModal({
                 >
                   {loadingSuggestions && suggestionMode === "unowned"
                     ? "Loading..."
-                    : "Player Corp Markets"}
+                    : "Player corp markets"}
                 </button>
               </div>
 
               {/* Ownership filter — hide markets you already operate in, or show only those */}
               <div className={`${plantsMode ? "hidden" : "flex"} items-center gap-1.5 flex-wrap`}>
-                <span className="text-[11px] font-medium uppercase tracking-wider text-muted">
-                  Show
-                </span>
+                <span className="text-body-sm font-medium text-muted">Show</span>
                 {OWNERSHIP_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
@@ -525,9 +525,7 @@ export default function ExpandMarketModal({
               {plantsMode && !confirming && (
                 <div className="grid grid-cols-2 gap-2 rounded-xl border border-card-border bg-card-elevated/25 p-3">
                   <label className="col-span-2 space-y-1">
-                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted">
-                      Sector type
-                    </span>
+                    <span className="block text-body-sm font-medium text-muted">Sector type</span>
                     <select
                       value={selectedType}
                       disabled={loadingSuggestions}
@@ -553,9 +551,7 @@ export default function ExpandMarketModal({
                     </select>
                   </label>
                   <label className="space-y-1">
-                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted">
-                      Rank by
-                    </span>
+                    <span className="block text-body-sm font-medium text-muted">Rank by</span>
                     <select
                       value={suggestionMode}
                       disabled={loadingSuggestions}
@@ -569,9 +565,7 @@ export default function ExpandMarketModal({
                     </select>
                   </label>
                   <label className="space-y-1">
-                    <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted">
-                      Show
-                    </span>
+                    <span className="block text-body-sm font-medium text-muted">Show</span>
                     <select
                       value={ownershipFilter}
                       disabled={loadingSuggestions}
@@ -587,9 +581,7 @@ export default function ExpandMarketModal({
                   </label>
                   {availableCountries.length > 1 && (
                     <label className="col-span-2 space-y-1">
-                      <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted">
-                        Country
-                      </span>
+                      <span className="block text-body-sm font-medium text-muted">Country</span>
                       <select
                         value={countryFilters.size === 1 ? [...countryFilters][0] : ""}
                         disabled={loadingSuggestions}
@@ -639,9 +631,7 @@ export default function ExpandMarketModal({
                   <div
                     className={`${plantsMode ? "hidden" : "flex"} items-center gap-1.5 flex-wrap`}
                   >
-                    <span className="text-[11px] font-medium uppercase tracking-wider text-muted">
-                      Country
-                    </span>
+                    <span className="text-body-sm font-medium text-muted">Country</span>
                     <button
                       type="button"
                       onClick={clearCountryFilter}
@@ -677,7 +667,7 @@ export default function ExpandMarketModal({
                       down a column rather than by clicking through them. */}
                   {plantsMode && !confirming && (
                     <div className="overflow-hidden rounded-lg border border-card-border">
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-3 border-b border-card-border bg-card-elevated/40 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted">
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-3 border-b border-card-border bg-card-elevated/40 px-3 py-2 text-sm font-semibold text-foreground">
                         <span>Market</span>
                         <span className="text-right">Room for</span>
                         <span className="text-right">Entry</span>
@@ -833,16 +823,14 @@ export default function ExpandMarketModal({
                       {plantsMode && foundingQuote && (
                         <div className="grid grid-cols-3 gap-2">
                           <div className="rounded-lg bg-background/60 px-3 py-2 text-center">
-                            <p className="text-[10px] text-muted uppercase tracking-wide">
-                              In-state demand
-                            </p>
+                            <p className="text-body-sm font-medium text-muted">In-state demand</p>
                             <p className="text-sm font-bold text-foreground tabular-nums">
                               {formatUnits(activeSuggestion.headroomUnits)}
                             </p>
                             <p className="text-[10px] text-muted">{CAPACITY_UNIT_LABEL}</p>
                           </div>
                           <div className="rounded-lg bg-background/60 px-3 py-2 text-center">
-                            <p className="text-[10px] text-muted uppercase tracking-wide">
+                            <p className="text-body-sm font-medium text-muted">
                               Your first {facilitySingular(selectedType)}
                             </p>
                             <p className="text-sm font-bold text-success tabular-nums">1</p>
@@ -851,9 +839,7 @@ export default function ExpandMarketModal({
                             </p>
                           </div>
                           <div className="rounded-lg bg-background/60 px-3 py-2 text-center">
-                            <p className="text-[10px] text-muted uppercase tracking-wide">
-                              Comes online
-                            </p>
+                            <p className="text-body-sm font-medium text-muted">Comes online</p>
                             <p className="text-sm font-bold text-foreground tabular-nums">
                               {foundingQuote.foundingBuildTurns}
                             </p>
@@ -868,7 +854,7 @@ export default function ExpandMarketModal({
                       <div className={`${plantsMode ? "hidden" : "grid"} grid-cols-3 gap-2`}>
                         <div className="rounded-lg bg-background/60 px-3 py-2 text-center">
                           <p
-                            className="text-[10px] text-muted uppercase tracking-wide"
+                            className="text-body-sm font-medium text-muted"
                             title={marketCurrencyTitle}
                           >
                             Unowned pool
@@ -882,7 +868,7 @@ export default function ExpandMarketModal({
                         </div>
                         <div className="rounded-lg bg-background/60 px-3 py-2 text-center">
                           <p
-                            className="text-[10px] text-muted uppercase tracking-wide"
+                            className="text-body-sm font-medium text-muted"
                             title={marketCurrencyTitle}
                           >
                             Split cost
@@ -911,7 +897,7 @@ export default function ExpandMarketModal({
                         </div>
                         <div className="rounded-lg bg-background/60 px-3 py-2 text-center">
                           <p
-                            className="text-[10px] text-muted uppercase tracking-wide"
+                            className="text-body-sm font-medium text-muted"
                             title={marketCurrencyTitle}
                           >
                             Est. new revenue
@@ -934,7 +920,7 @@ export default function ExpandMarketModal({
                         activeSuggestion.totalCompetitorRevenue > 0 && (
                           <div className="rounded-lg bg-background/60 px-3 py-2 flex items-center justify-between">
                             <span
-                              className="text-[10px] text-muted uppercase tracking-wide"
+                              className="text-body-sm font-medium text-muted"
                               title={marketCurrencyTitle}
                             >
                               Total competitor revenue
@@ -959,7 +945,7 @@ export default function ExpandMarketModal({
                       {/* Competitors */}
                       {activeSuggestion.competitors.length > 0 && (
                         <div>
-                          <p className="text-[10px] text-muted uppercase tracking-wide mb-1.5">
+                          <p className="text-body-sm font-medium text-muted mb-1.5">
                             Competing in this market
                           </p>
                           <div className="space-y-1">

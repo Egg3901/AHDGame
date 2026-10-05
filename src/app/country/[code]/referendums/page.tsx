@@ -82,9 +82,7 @@ export default async function ReferendumsIndexPage({
       />
 
       <div className="mb-3.5 flex flex-wrap items-center justify-between gap-4">
-        <div className="text-xs font-bold uppercase tracking-wider text-muted">
-          Live campaigns · choose a view
-        </div>
+        <div className="text-body-sm font-medium text-muted">Live campaigns · choose a view</div>
         <HubLayoutSwitcher active={layout} />
       </div>
 

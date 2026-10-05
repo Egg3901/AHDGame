@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_BLACKJACK_LIMITS } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -27,7 +27,7 @@ const placeWagerSchema = z.object({
 export async function POST(request: Request) {
   try {
     if (!requireBotToken(request, false)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const rateLimit = checkRateLimit(
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, placeWagerSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { discordId, wagerAmount: rawWagerAmount, gameId: bodyGameId } = parsed.data;
 
@@ -51,25 +51,21 @@ export async function POST(request: Request) {
     // Look up user by Discord ID
     const user = await db.collection<User>("users").findOne({ discordId });
     if (!user) {
-      return NextResponse.json(
-        { error: "No user found with that Discord ID", discordId },
-        { status: 404 }
-      );
+      return errorResponse(404, "No user found with that Discord ID", { extra: { discordId } });
     }
 
     // Look up character by user ID
     const character = await db.collection<Character>("characters").findOne({ userId: user._id });
 
     if (!character) {
-      return NextResponse.json(
-        { error: "User has no character. Create a character first.", discordId },
-        { status: 404 }
-      );
+      return errorResponse(404, "User has no character. Create a character first.", {
+        extra: { discordId },
+      });
     }
 
     // Check if user is banned
     if (user.isBanned) {
-      return NextResponse.json({ error: "This account is banned", discordId }, { status: 403 });
+      return errorResponse(403, "This account is banned", { extra: { discordId } });
     }
 
     // Check liquid capital
@@ -87,16 +83,14 @@ export async function POST(request: Request) {
     );
     if (!debitResult.ok) {
       const currentCash = getTotalPersonalWealth(character, forexEnabled);
-      return NextResponse.json(
-        {
-          error: "Insufficient funds",
+      return errorResponse(402, "Insufficient funds", {
+        extra: {
           message: `You need ${wagerAmount.toLocaleString()} to wager, but you only have ${Math.floor(currentCash).toLocaleString()} in liquid capital.`,
           currentCash,
           requiredAmount: wagerAmount,
           shortAmount: wagerAmount - currentCash,
         },
-        { status: 402 }
-      );
+      });
     }
 
     const now = new Date();

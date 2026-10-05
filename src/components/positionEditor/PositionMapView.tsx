@@ -151,7 +151,7 @@ export function PositionMapView() {
     <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
       <div className="flex flex-col gap-3 border-b border-card-border py-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl text-foreground">Position Editor</h1>
+          <h1 className="text-2xl text-foreground">Position editor</h1>
           <p className="mt-0.5 text-sm text-muted">
             Author Layer-1 demographic positions, turnout, and archetype composition by state.
           </p>
@@ -275,9 +275,7 @@ function ToolbarSelect({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-        {label}
-      </span>
+      <span className="text-body-sm font-medium text-muted">{label}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}

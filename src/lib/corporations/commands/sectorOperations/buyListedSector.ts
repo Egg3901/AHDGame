@@ -22,7 +22,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { applyBrandFacilityLoss } from "@/lib/corporations/brandFacilityLoss";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -84,12 +84,12 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
     const { id, sectorId } = await params;
     const parsed = await parseJsonBody(request, buySectorSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { buyerCorporationId } = parsed.data;
 
     if (!ObjectId.isValid(sectorId)) {
-      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+      return errorResponse(400, "Invalid sector ID");
     }
 
     const db = await getDb();
@@ -104,21 +104,15 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
       .collection<Corporation>("corporations")
       .findOne({ _id: new ObjectId(buyerCorporationId) });
     if (!buyer) {
-      return NextResponse.json({ error: "Buyer corporation not found" }, { status: 404 });
+      return errorResponse(404, "Buyer corporation not found");
     }
 
     if (buyer._id.equals(seller._id)) {
-      return NextResponse.json(
-        { error: "A corporation cannot buy its own sector" },
-        { status: 400 }
-      );
+      return errorResponse(400, "A corporation cannot buy its own sector");
     }
 
     if (buyer.ceoVacant === true || !buyer.userId || buyer.userId.toString() !== auth.user.userId) {
-      return NextResponse.json(
-        { error: "You must be the CEO of the buying corporation" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You must be the CEO of the buying corporation");
     }
 
     const sector = await db
@@ -129,7 +123,7 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
       securedClaim?.borrowerId === String(seller._id) &&
       securedClaim.sale?.buyerId === String(buyer._id);
     if (!sector || (!sector.corporationId.equals(seller._id) && !saleRetry)) {
-      return NextResponse.json({ error: "Sector not found" }, { status: 404 });
+      return errorResponse(404, "Sector not found");
     }
 
     if (
@@ -140,9 +134,9 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
         !saleRetry &&
         (await isPrivateEnterpriseBlocked(db, sector.countryId ?? seller.countryId))
       )
-        return NextResponse.json(
-          { error: "This market is state-controlled and closed to private acquisition." },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "This market is state-controlled and closed to private acquisition."
         );
       const result = await buySecuredConstructionProperty({
         db,
@@ -151,7 +145,7 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
         buyerId: buyer._id,
         turn: await getCurrentTurn(db),
       });
-      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 });
+      if (!result.ok) return errorResponse(409, result.error);
       return NextResponse.json({
         success: true,
         priceAnchor: result.quote.priceAnchor,
@@ -164,21 +158,15 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
       });
     }
     if (hasProtectedConstructionProperty(sector)) {
-      return NextResponse.json(
-        { error: "This sector has secured construction and cannot be acquired yet" },
-        { status: 409 }
-      );
+      return errorResponse(409, "This sector has secured construction and cannot be acquired yet");
     }
     if (securedClaim && !["released", "cancelled"].includes(securedClaim.status))
-      return NextResponse.json(
-        { error: "Resolve the pending construction request before selling its site." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Resolve the pending construction request before selling its site."
       );
     if (!sector.forSale) {
-      return NextResponse.json(
-        { error: "Sector is not currently listed for sale" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Sector is not currently listed for sale");
     }
 
     // Keyed on the SECTOR's country, not the buyer's: a foreign private corp
@@ -187,12 +175,9 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
     // unguarded route to the same outcome.
     const sectorCountryId = sector.countryId ?? seller.countryId;
     if (await isPrivateEnterpriseBlocked(db, sectorCountryId)) {
-      return NextResponse.json(
-        {
-          error:
-            "This market is state-controlled under a command economy and is closed to private sector expansion.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "This market is state-controlled under a command economy and is closed to private sector expansion."
       );
     }
 
@@ -205,17 +190,11 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
       ...getCorporateSectorLaneQuery(sector),
     });
     if (existingBuyerSector && hasProtectedConstructionProperty(existingBuyerSector))
-      return NextResponse.json(
-        { error: "The buyer's existing site has an unfinished secured obligation." },
-        { status: 409 }
-      );
+      return errorResponse(409, "The buyer's existing site has an unfinished secured obligation.");
 
     const priceAnchor = sector.forSale.priceAnchor;
     if (!Number.isFinite(priceAnchor) || priceAnchor <= 0) {
-      return NextResponse.json(
-        { error: "Listing price is invalid; ask the seller to relist." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Listing price is invalid; ask the seller to relist.");
     }
 
     // Pull live FX rates for both sides — the seller and buyer can be on
@@ -247,13 +226,11 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
     // out from under us.
     const buyerDebit = await atomicallyDebitCorpLiquidCapital(db, buyer._id, priceInBuyerCapital);
     if (!buyerDebit.ok) {
-      return NextResponse.json(
-        {
-          error: `Insufficient corporate funds. Need ${priceInBuyerCapital.toLocaleString()} ${
-            buyerCurrency ?? "USD"
-          } to purchase this sector.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient corporate funds. Need ${priceInBuyerCapital.toLocaleString()} ${
+          buyerCurrency ?? "USD"
+        } to purchase this sector.`
       );
     }
 
@@ -303,9 +280,9 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
         );
       if (claimResult.matchedCount === 0) {
         await refundCorpLiquidCapital(db, buyer._id, priceInBuyerCapital);
-        return NextResponse.json(
-          { error: "Listing was unlisted or already sold. Refresh and try another sector." },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "Listing was unlisted or already sold. Refresh and try another sector."
         );
       }
 
@@ -580,23 +557,19 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
         );
         if (transferResult.matchedCount === 0) {
           await refundCorpLiquidCapital(db, buyer._id, priceInBuyerCapital);
-          return NextResponse.json(
-            {
-              error: "Listing was unlisted or already sold. Refresh and try another sector.",
-            },
-            { status: 409 }
+          return errorResponse(
+            409,
+            "Listing was unlisted or already sold. Refresh and try another sector."
           );
         }
       } catch (error) {
         if (isCorporateSectorDuplicateKey(error)) {
           await refundCorpLiquidCapital(db, buyer._id, priceInBuyerCapital);
-          return NextResponse.json(
-            {
-              error: `Your corporation already operates a ${
-                CORPORATION_TYPE_LABELS[sector.sectorType as CorporationType]
-              } sector in this state.`,
-            },
-            { status: 400 }
+          return errorResponse(
+            400,
+            `Your corporation already operates a ${
+              CORPORATION_TYPE_LABELS[sector.sectorType as CorporationType]
+            } sector in this state.`
           );
         }
         throw error;

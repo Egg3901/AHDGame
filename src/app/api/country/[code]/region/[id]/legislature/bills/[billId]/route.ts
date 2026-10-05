@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getStateLegislatureBillDetail } from "@/lib/legislature/queries/stateBillQueries";
 
@@ -20,10 +20,10 @@ export async function GET(
     const { code, id, billId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     if (!ObjectId.isValid(billId)) {
-      return NextResponse.json({ error: "Invalid bill ID" }, { status: 400 });
+      return errorResponse(400, "Invalid bill ID");
     }
     const stateId = id;
 
@@ -34,7 +34,7 @@ export async function GET(
       billId,
       authUser,
     });
-    if (!bill) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+    if (!bill) return errorResponse(404, "Bill not found");
 
     return NextResponse.json(bill);
   } catch (error) {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { publicApiGuard } from "@/lib/publicApi/middleware";
 
 // GET /api/public/v1/market?type=SECTOR&country=CODE&page=N&view=share|unowned
@@ -16,10 +16,7 @@ export async function GET(request: Request) {
     const view = url.searchParams.get("view") ?? "share";
 
     if (!type) {
-      return NextResponse.json(
-        { ok: false, error: "type is required", code: "BAD_REQUEST" },
-        { status: 400 }
-      );
+      return errorResponse(400, "type is required", { code: "BAD_REQUEST", extra: { ok: false } });
     }
 
     const db = await getDb();

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 
 interface Props {
@@ -47,7 +48,7 @@ export function EndorseButton({
     if (res.ok) onSuccess();
     else {
       const data = await res.json().catch(() => ({}));
-      setError(data?.error ?? "Endorse failed.");
+      setError(apiErrorText(data, "Endorse failed."));
     }
     setBusy(false);
   }

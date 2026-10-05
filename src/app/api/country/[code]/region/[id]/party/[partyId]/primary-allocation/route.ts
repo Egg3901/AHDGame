@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import type { StatePartyOrg, State, Election } from "@/lib/db/types";
@@ -31,7 +31,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
 
@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { method } = parsed.data;
 
@@ -52,12 +52,12 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const partyKey = getPartyIdString(party);
@@ -75,12 +75,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isStateTreasurer = stateParty?.treasurerId?.equals(authUser.character._id);
 
     if (!isAdmin && !isNationalChair && !isStateChair && !isStateViceChair && !isStateTreasurer) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the state chair, vice chair, treasurer, national chair, or an admin can change primary allocation",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the state chair, vice chair, treasurer, national chair, or an admin can change primary allocation"
       );
     }
 
@@ -95,12 +92,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       ...primaryOpenFilter(currentTurn, effectiveNow),
     });
     if (activePresPrimary && !isAdmin) {
-      return NextResponse.json(
-        {
-          error:
-            "Presidential primary is currently active — allocation is locked for this cycle. Admins may override.",
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Presidential primary is currently active — allocation is locked for this cycle. Admins may override."
       );
     }
 

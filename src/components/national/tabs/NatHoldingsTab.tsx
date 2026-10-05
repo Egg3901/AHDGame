@@ -154,7 +154,7 @@ function HoldingCard({
               />
               {s.mappedMetricLabels.length > 0 && (
                 <div className="col-span-2 flex flex-col justify-end">
-                  <div className="text-[9px] uppercase tracking-wide text-muted">
+                  <div className="text-body-sm font-medium text-muted">
                     {s.mappedMetricLabels[0]} (region)
                   </div>
                   <div className="mt-1">
@@ -221,7 +221,7 @@ function HoldingDetail({
             {terms.map((t, i) => (
               <div key={t.label} className="flex items-stretch gap-1.5">
                 <div className="flex-1 rounded-md bg-card-muted px-2 py-1.5 text-center">
-                  <div className="text-[8px] uppercase tracking-wide text-muted">{t.label}</div>
+                  <div className="text-body-sm font-medium text-muted">{t.label}</div>
                   <div
                     className={`text-body-sm font-bold tabular-nums ${
                       t.val < 0 ? "text-error" : t.val > 0 ? "text-success" : "text-muted"
@@ -344,9 +344,7 @@ function Cell({
             : "text-foreground";
   return (
     <div>
-      <div className="min-h-6 text-[9px] uppercase leading-tight tracking-wide text-muted">
-        {label}
-      </div>
+      <div className="min-h-6 text-body-sm font-medium leading-tight text-muted">{label}</div>
       <div className={`mt-0.5 text-[13px] font-bold tabular-nums ${t}`}>{value}</div>
     </div>
   );
@@ -383,9 +381,7 @@ function CompareRow({
       >
         {a}
       </span>
-      <span className="px-1 text-center text-[8px] uppercase tracking-wide text-muted">
-        {label}
-      </span>
+      <span className="px-1 text-center text-body-sm font-medium text-muted">{label}</span>
       <span
         className={`text-[12px] tabular-nums ${bBetter ? "font-semibold text-success" : "text-foreground"}`}
       >

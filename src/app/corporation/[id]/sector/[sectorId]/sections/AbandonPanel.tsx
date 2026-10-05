@@ -34,7 +34,7 @@ export default function AbandonPanel({
       <div className="rounded-xl border border-error/20 bg-error/5 p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-error">Abandon Sector</h3>
+            <h3 className="text-sm font-semibold text-error">Abandon sector</h3>
             <p className="text-xs text-muted mt-0.5">
               Revenue returns to the unowned pool. This cannot be undone.
             </p>
@@ -67,7 +67,7 @@ export default function AbandonPanel({
             disabled={abandoning}
             className="rounded-lg bg-error px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-error/90 disabled:opacity-50"
           >
-            {abandoning ? "Abandoning..." : "Confirm Abandon"}
+            {abandoning ? "Abandoning..." : "Confirm abandon"}
           </button>
           <button
             onClick={onCancel}

@@ -345,6 +345,8 @@ export interface ElectoralLawProvision {
   votingAge?: number;
   /** -50 (heavily restricted registration) .. +50 (automatic registration). */
   registrationAccess?: number;
+  /** Japan 1991 only: propose the approved 1994 lower-house mixed-system transition. */
+  japanShugiinReform?: true;
 }
 
 /**

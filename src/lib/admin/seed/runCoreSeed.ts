@@ -377,30 +377,40 @@ export async function runSeed(
             : entry.name === "demographicCategories"
               ? { _id: { $in: ownedCategoryIds } }
               : {};
-      const res = await db
-        .collection(entry.name)
-        // Untyped handles across a heterogeneous list; each filter is validated
-        // by the scope contract test rather than by the collection's generic.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .deleteMany(filter as any)
-        .catch(() => ({ deletedCount: 0 }));
-      deleted += res.deletedCount ?? 0;
+      try {
+        const res = await db
+          .collection(entry.name)
+          // Untyped handles across a heterogeneous list; each filter is validated
+          // by the scope contract test rather than by the collection's generic.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .deleteMany(filter as any);
+        deleted += res.deletedCount ?? 0;
+      } catch (error) {
+        throw new Error(`RESET cleanup failed while clearing ${entry.name}`, {
+          cause: error,
+        });
+      }
     }
-    log(
-      `RESET mode: cleared ${deleted} US row(s) across ${RESET_DROP_COLLECTIONS.length} collections`
-    );
     // gameConfig is NOT dropped — see RESET_DROP_COLLECTIONS. Clear only the
     // per-world markers the turn engine stamped onto it, so the operational
     // half of the document (maintenance, webhooks, feature gates) survives.
-    await db
-      .collection<GameConfig>("gameConfig")
-      .updateOne({ _id: gameConfig._id }, { $unset: STALE_PER_WORLD_GAME_CONFIG_UNSET })
-      .catch(() => {});
+    try {
+      await db
+        .collection<GameConfig>("gameConfig")
+        .updateOne({ _id: gameConfig._id }, { $unset: STALE_PER_WORLD_GAME_CONFIG_UNSET });
+    } catch (error) {
+      throw new Error("RESET cleanup failed while clearing per-world gameConfig markers", {
+        cause: error,
+      });
+    }
     // Reset the US party counter so the US parties deleted above get consistent
     // ids on re-insert. Scoped: the other 23 countries' parties are untouched by
     // this function, so wiping their counters would hand the next insert a
     // colliding seqId.
     await resetPartyCounters(db, [US_COUNTRY_ID]);
+    log(
+      `RESET mode: cleared ${deleted} US row(s) across ${RESET_DROP_COLLECTIONS.length} collections`
+    );
   }
 
   for (const state of statesBundle) {

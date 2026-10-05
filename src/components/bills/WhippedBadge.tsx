@@ -53,7 +53,7 @@ export function WhippedBadge({ originalVote, onRevert, originalLabel }: WhippedB
       role="status"
       className="inline-flex flex-wrap items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-1 text-xs text-warning"
     >
-      <span className="font-semibold">Whipped by Party</span>
+      <span className="font-semibold">Whipped by party</span>
       <span>— original: {label}</span>
       {isUnvoted ? (
         <span className="italic">Vote normally to clear this badge.</span>

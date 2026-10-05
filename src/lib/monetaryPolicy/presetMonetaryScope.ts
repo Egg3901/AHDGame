@@ -1,3 +1,8 @@
+/**
+ * Monetary coverage determines which countries have tradable currencies and banks.
+ * getPresetMonetaryScope follows the scenario's fiscal books and excludes absent
+ * countries or duplicate shared-currency banks.
+ */
 import type { CountryId } from "@/lib/constants/countries";
 import { FOREX_ACTIVE_COUNTRIES } from "@/lib/constants/currencies";
 
@@ -11,11 +16,11 @@ export interface MonetaryCoverageExclusion {
 }
 
 export interface PresetMonetaryScope {
-  /** Currencies remain tradable even when their issuing country's fiscal model is unavailable. */
+  /** Tradable currencies for this preset; 1991 excludes issuers absent in that era. */
   forexCountries: readonly CountryId[];
   /** Countries with both an active currency and an authored national fiscal model. */
   centralBankCountries: CountryId[];
-  /** Active currencies deliberately kept out of central-bank/fiscal processing. */
+  /** Country monetary models deliberately excluded from the current preset. */
   exclusions: MonetaryCoverageExclusion[];
 }
 
@@ -46,7 +51,7 @@ export function getPresetMonetaryScope(preset: string): PresetMonetaryScope {
   const exclusions = COLD_WAR_FISCAL_PRESETS.has(preset)
     ? []
     : POST_COLD_WAR_EXCLUSIONS.filter(
-        (entry) => preset !== "2019-default" || entry.countryId !== "RU"
+        (entry) => !["1991-default", "2019-default"].includes(preset) || entry.countryId !== "RU"
       );
   // The 2027 Bulgarian fiscal row is EUR. Its exchange-rate row remains
   // country-addressable, while DE's existing EUR bank represents the shared
@@ -59,12 +64,21 @@ export function getPresetMonetaryScope(preset: string): PresetMonetaryScope {
     });
   }
   const excluded = new Set(exclusions.map(({ countryId }) => countryId));
+  const candidateForexCountries =
+    preset === "1991-default"
+      ? ([...FOREX_ACTIVE_COUNTRIES, "PL", "HU", "RO", "BG", "CS", "YU"] as CountryId[])
+      : preset === "2019-default"
+        ? ([...FOREX_ACTIVE_COUNTRIES, "PL", "HU", "RO", "BG"] as CountryId[])
+        : preset === "2027-default"
+          ? [...FOREX_ACTIVE_COUNTRIES, "BG" as CountryId]
+          : FOREX_ACTIVE_COUNTRIES;
+  const absentInEra = new Set(
+    exclusions.filter((entry) => entry.reason === "absent-in-era").map((entry) => entry.countryId)
+  );
   const forexCountries =
-    preset === "2019-default"
-      ? ([...FOREX_ACTIVE_COUNTRIES, "PL", "HU", "RO", "BG"] as CountryId[])
-      : preset === "2027-default"
-        ? [...FOREX_ACTIVE_COUNTRIES, "BG" as CountryId]
-        : FOREX_ACTIVE_COUNTRIES;
+    preset === "1991-default"
+      ? candidateForexCountries.filter((countryId) => !absentInEra.has(countryId))
+      : candidateForexCountries;
   const centralBankCountries = forexCountries.filter((countryId) => !excluded.has(countryId));
 
   return {

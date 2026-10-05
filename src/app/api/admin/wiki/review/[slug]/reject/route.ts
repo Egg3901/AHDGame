@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { rejectWikiPageSchema } from "@/lib/api/schemas/wiki";
 import { notifySubmitterOfWikiDecision } from "@/lib/wiki/reviewNotifications";
 import { createModAuditLog } from "@/lib/modAuditLog";
@@ -25,7 +25,7 @@ export async function POST(request: Request, context: RouteContext) {
 
     const parsed = await parseJsonBody(request, rejectWikiPageSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -37,7 +37,7 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     if (existing.status !== "pending_review") {
-      return NextResponse.json({ error: "Page is not pending review" }, { status: 400 });
+      return errorResponse(400, "Page is not pending review");
     }
 
     const now = new Date();

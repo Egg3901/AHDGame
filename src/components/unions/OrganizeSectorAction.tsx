@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { organizeSectorTreasuryCost } from "@/lib/unions/organizeSectorEconomy";
 
 interface MyUnion {
@@ -116,7 +117,7 @@ export function OrganizeSectorAction({
         ok: res.ok,
         text: res.ok
           ? (data.message ?? (isRaid ? "Raid succeeded." : "Sector organized."))
-          : (data.error ?? (isRaid ? "The raid failed." : "Failed to organize this sector.")),
+          : apiErrorText(data, isRaid ? "The raid failed." : "Failed to organize this sector."),
       });
       if (res.ok) onOrganized?.();
     } catch {
@@ -128,7 +129,7 @@ export function OrganizeSectorAction({
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4">
-      <h3 className="mb-1 text-sm font-bold text-foreground">Union Organizing</h3>
+      <h3 className="mb-1 text-sm font-bold text-foreground">Union organizing</h3>
       <p className="mb-2 text-xs text-muted">
         You lead <span className="font-medium text-foreground">{myUnion.name}</span>, which
         organizes this industry in this country.
@@ -145,7 +146,7 @@ export function OrganizeSectorAction({
             onClick={handleOrganize}
             className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
-            {pending ? "Working…" : "Organize This Sector"}
+            {pending ? "Working…" : "Organize this sector"}
           </button>
           <span className="ml-2 text-[11px] text-muted">
             Costs {myUnion.organizeActionCost} action points and{" "}
@@ -176,7 +177,7 @@ export function OrganizeSectorAction({
               isRaid ? "bg-error hover:bg-error/90" : "bg-primary hover:bg-primary/90"
             }`}
           >
-            {pending ? "Working…" : isRaid ? "Raid This Sector" : "Organize This Sector"}
+            {pending ? "Working…" : isRaid ? "Raid this sector" : "Organize this sector"}
           </button>
           <span className="ml-2 text-[11px] text-muted">
             Costs {myUnion.organizeActionCost} action points and{" "}

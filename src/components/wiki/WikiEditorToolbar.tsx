@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface WikiEditorToolbarProps {
   onInsert: (before: string, after: string, placeholder?: string) => void;
@@ -16,8 +17,8 @@ const FORMAT_BUTTONS = [
   { label: "H2", icon: "H2", before: "## ", after: "", placeholder: "Heading 2" },
   { label: "H3", icon: "H3", before: "### ", after: "", placeholder: "Heading 3" },
   { label: "Link", icon: "🔗", before: "[", after: "](url)", placeholder: "link text" },
-  { label: "Bullet List", icon: "•", before: "- ", after: "", placeholder: "list item" },
-  { label: "Number List", icon: "1.", before: "1. ", after: "", placeholder: "list item" },
+  { label: "Bullet list", icon: "•", before: "- ", after: "", placeholder: "list item" },
+  { label: "Number list", icon: "1.", before: "1. ", after: "", placeholder: "list item" },
   { label: "Quote", icon: '"', before: "> ", after: "", placeholder: "quote" },
   {
     label: "Table",
@@ -27,14 +28,14 @@ const FORMAT_BUTTONS = [
     placeholder: "cell",
   },
   {
-    label: "Code Block",
+    label: "Code block",
     icon: "{ }",
     before: "```\n",
     after: "\n```",
     placeholder: "code block",
   },
   {
-    label: "Wiki Link",
+    label: "Wiki link",
     icon: "[[ ]]",
     before: "[[",
     after: "]]",
@@ -61,7 +62,7 @@ export function WikiEditorToolbar({ onInsert, onInsertImage }: WikiEditorToolbar
       const res = await fetch("/api/upload/wiki-image", { method: "POST", body: fd });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Upload failed");
+        throw new Error(apiErrorText(data, "Upload failed"));
       }
       const { url } = (await res.json()) as { url: string };
       // Strip characters that would break out of markdown image syntax.

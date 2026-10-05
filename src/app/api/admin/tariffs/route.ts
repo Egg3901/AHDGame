@@ -9,7 +9,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError, badRequest, notFound } from "@/lib/api/errors";
+import { handleRouteError, badRequest, notFound, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import type { Tariff } from "@/lib/db/types";
@@ -47,8 +47,7 @@ export async function POST(request: Request) {
     if (!auth.ok) return auth.response;
 
     const parsed = await parseJsonBody(request, upsertSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const {
       countryId,

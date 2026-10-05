@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/ui/ResponsiveTable";
 import { fetchJson } from "@/lib/observability/fetchJson";
@@ -112,7 +113,7 @@ export function IndexFundsAdminPanel() {
       const res = await fetch("/api/admin/investment-funds");
       if (!res.ok) {
         const body = (await res.json()) as { error?: string };
-        setError(body.error || "Failed to load funds");
+        setError(apiErrorText(body, "Failed to load funds"));
         return;
       }
       const data = (await res.json()) as { funds: AdminFundRow[] };
@@ -141,7 +142,7 @@ export function IndexFundsAdminPanel() {
       ]);
       if (!fundRes.ok) {
         const body = (await fundRes.json().catch(() => ({}))) as { error?: string };
-        setMessage(body.error || `Failed to load fund (HTTP ${fundRes.status})`);
+        setMessage(apiErrorText(body, `Failed to load fund (HTTP ${fundRes.status})`));
         return;
       }
       const fundJson = (await fundRes.json()) as { fund: Record<string, unknown> };
@@ -177,7 +178,7 @@ export function IndexFundsAdminPanel() {
         totalsByCurrency?: Record<string, number>;
       };
       if (!res.ok) {
-        setInjectAllMessage(body.error || "Bulk injection failed");
+        setInjectAllMessage(apiErrorText(body, "Bulk injection failed"));
         return;
       }
       const totals = body.totalsByCurrency
@@ -221,7 +222,7 @@ export function IndexFundsAdminPanel() {
         totalsByCurrency?: Record<string, number>;
       };
       if (!res.ok) {
-        setDeployAllMessage(body.error || "Bulk deploy failed");
+        setDeployAllMessage(apiErrorText(body, "Bulk deploy failed"));
         return;
       }
       const totals = body.totalsByCurrency
@@ -254,7 +255,7 @@ export function IndexFundsAdminPanel() {
       });
       const body = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setMessage(body.error || "Update failed");
+        setMessage(apiErrorText(body, "Update failed"));
         return;
       }
       setMessage(`Fund set to ${status}.`);
@@ -288,7 +289,7 @@ export function IndexFundsAdminPanel() {
         backingRatio?: number;
       };
       if (!res.ok) {
-        setInjectMessage(body.error || "Injection failed");
+        setInjectMessage(apiErrorText(body, "Injection failed"));
         return;
       }
       setInjectAmount("");
@@ -318,7 +319,7 @@ export function IndexFundsAdminPanel() {
           onClick={() => void injectCapitalAll()}
           className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-40"
         >
-          {injectAllLoading ? "Recapitalizing…" : "Inject Capital — All Funds to 100%"}
+          {injectAllLoading ? "Recapitalizing…" : "Inject capital — All Funds to 100%"}
         </button>
         {injectAllMessage && (
           <span
@@ -345,7 +346,7 @@ export function IndexFundsAdminPanel() {
           onClick={() => void deployCashAll()}
           className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-40"
         >
-          {deployAllLoading ? "Deploying…" : "Deploy Cash to All Funds"}
+          {deployAllLoading ? "Deploying…" : "Deploy cash to all funds"}
         </button>
         {deployAllMessage && (
           <span
@@ -425,9 +426,7 @@ export function IndexFundsAdminPanel() {
           )}
 
           <div className="rounded-lg border border-card-border bg-card-elevated p-4 space-y-3">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted">
-              Inject Capital
-            </h4>
+            <h4 className="text-body-sm font-medium text-muted">Inject capital</h4>
             <p className="text-xs text-muted">
               Adds anchor-currency cash to the fund without minting units. Raises NAV and improves
               backing ratio.
@@ -454,7 +453,7 @@ export function IndexFundsAdminPanel() {
                 onClick={() => void injectCapital()}
                 className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-40"
               >
-                {injectLoading ? "Injecting…" : "Inject Capital"}
+                {injectLoading ? "Injecting…" : "Inject capital"}
               </button>
             </div>
             {injectMessage && (
@@ -506,7 +505,7 @@ export function IndexFundsAdminPanel() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-card-border bg-card-elevated px-3 py-2">
-      <p className="text-[10px] uppercase tracking-widest text-muted">{label}</p>
+      <p className="text-body-sm font-medium text-muted">{label}</p>
       <p className="font-semibold tabular-nums">{value}</p>
     </div>
   );

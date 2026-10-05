@@ -126,6 +126,23 @@ describe("resolveHeadOfStateAppointmentVote", () => {
       expect.objectContaining({ office: "headOfState", status: "active" }),
       expect.anything()
     );
+    const { sendCountryGameEvent } = await import("@/lib/discordWebhooks");
+    expect(sendCountryGameEvent).toHaveBeenCalledTimes(1);
+    expect(sendCountryGameEvent).toHaveBeenCalledWith(
+      "RU",
+      expect.objectContaining({
+        title: "New Chairman of the Presidium Elected",
+        description: expect.stringContaining("Test Chairman"),
+        cardVoteSplit: [
+          expect.objectContaining({
+            label: "Supreme Soviet",
+            votesFor: 10,
+            votesAgainst: 3,
+            votesAbstain: 0,
+          }),
+        ],
+      })
+    );
   });
 
   it.each([
@@ -208,6 +225,8 @@ describe("resolveHeadOfStateAppointmentVote", () => {
     expect((voteUpdates[0] as { $set: Doc }).$set.status).toBe("failed");
     expect(officialInserts).toHaveLength(0);
     expect(govUpdates).toHaveLength(0);
+    const { sendCountryGameEvent } = await import("@/lib/discordWebhooks");
+    expect(sendCountryGameEvent).not.toHaveBeenCalled();
   });
 
   it("ignores non-hos votes (defensive)", async () => {

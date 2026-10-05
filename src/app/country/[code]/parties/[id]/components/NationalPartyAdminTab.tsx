@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getMessageStyle } from "@/lib/utils/formatters";
 import { getPositionLabels } from "./helpers";
 import type { PartyData, Position } from "./types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface NationalPartyAdminTabProps {
   party: PartyData;
@@ -60,7 +61,7 @@ function AdminAppointmentPanel({
         }
       );
       const data = await res.json();
-      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${data.error}`);
+      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Request failed")}`);
       if (res.ok) onUpdate();
     } catch {
       setMessage("✗ Network error");
@@ -150,7 +151,7 @@ export function NationalPartyAdminTab({ party, onUpdate }: NationalPartyAdminTab
           router.push("/parties");
         }, 1500);
       } else {
-        setMessage(`✗ ${data.error}`);
+        setMessage(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMessage("✗ Network error");
@@ -224,7 +225,7 @@ export function NationalPartyAdminTab({ party, onUpdate }: NationalPartyAdminTab
         <div className="rounded-lg border border-red-500/30 bg-background p-4">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <div className="font-medium text-sm">Delete Party</div>
+              <div className="font-medium text-sm">Delete party</div>
               <div className="text-xs text-muted mt-1">
                 Permanently delete the {party.name} party and ALL associated state party
                 organizations. This action cannot be undone.

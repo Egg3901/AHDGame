@@ -20,8 +20,8 @@ export default async function LoginPage() {
       .findOne({ _id: "default" }, { projection: { maintenanceMode: 1, seedYear: 1 } });
 
     // The login page only ever needs "is maintenance active at all" — no
-    // partial-specific copy here (see MaintenanceModePanel for the admin
-    // toggle, MaintenancePartialBanner for the player-facing partial notice).
+    // partial-specific copy here (MaintenancePartialBanner carries the
+    // player-facing partial notice).
     maintenanceMode = normalizeMaintenanceMode(config?.maintenanceMode) !== "off";
     const eraConfig = getEraConfig(config?.seedYear ?? 1979);
     wireframeColor = eraConfig.wireframeColor ?? undefined;

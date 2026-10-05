@@ -12,7 +12,7 @@
  */
 import { NextResponse } from "next/server";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseFormData } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { optimizeImage, IMAGE_PRESETS } from "@/lib/imageOptimize";
@@ -35,22 +35,19 @@ export async function POST(request: Request) {
 
     const parsed = await parseFormData(request);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const formData = parsed.data;
 
     const file = formData.get("file");
     if (!file || !(file instanceof Blob)) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+      return errorResponse(400, "No file uploaded");
     }
     if (!ALLOWED_TYPES.has(file.type)) {
-      return NextResponse.json(
-        { error: "Only PNG, JPEG, WebP, and GIF images are allowed." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Only PNG, JPEG, WebP, and GIF images are allowed.");
     }
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: "Image must be under 8 MB." }, { status: 400 });
+      return errorResponse(400, "Image must be under 8 MB.");
     }
 
     const rawBuffer = Buffer.from(await file.arrayBuffer());

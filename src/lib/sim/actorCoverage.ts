@@ -66,7 +66,7 @@ export const ACTOR_GATED_MECHANICS: readonly ActorGatedMechanic[] = [
     requires: "characters funding and submitting currency orders",
     seams: [
       seam("src/app/api/forex/orders/route.ts", "Atomic escrow"),
-      seam("src/lib/turn/forexTurn.ts", "Find open/partial limit orders"),
+      seam("src/lib/turn/forexLimitOrders.ts", "Find open/partial limit orders"),
     ],
     pureNpp: {
       status: "unreachable",

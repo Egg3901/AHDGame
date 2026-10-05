@@ -7,7 +7,7 @@
 // otherwise the defense holder; admin always). Gated by conflictsEnabled + defense seat.
 // Errors: 400, 401, 403, 404.
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { authorizeBattleAction, canActAtTheater } from "@/lib/api/battleAuthz";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -49,7 +49,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     // The conflict must be live — the same requirement as declaring here.
     const conflict = await getConflict(db, theaterId);
     if (!conflict) {
-      return NextResponse.json({ error: "No such conflict" }, { status: 400 });
+      return errorResponse(400, "No such conflict");
     }
     const denied = await canActAtTheater(db, countryId, theaterId, {
       characterId,
@@ -61,7 +61,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     // this mirrors the declare route: in a proxy war the enemy is a FACTION with no
     // COUNTRY_CONFIGS row, and the roster check below is the real gate.
     if (!isFactionEntity(conflict, targetCountry) && !COUNTRY_CONFIGS[targetCountry as CountryId]) {
-      return NextResponse.json({ error: "Invalid target country" }, { status: 400 });
+      return errorResponse(400, "Invalid target country");
     }
     // The same gate the declare route applies, resolved from THIS conflict's rosters
     // rather than a global bloc table — a projection must be refused exactly when the
@@ -73,20 +73,14 @@ export async function GET(request: Request, { params }: RouteParams) {
     const blocs = await loadMilitaryBlocs(db);
     const ownSide = sideOf(conflict, countryId, blocs);
     if (!ownSide) {
-      return NextResponse.json(
-        { error: "Your nation has no side in this conflict" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Your nation has no side in this conflict");
     }
     const enemySide = belligerentSideOf(conflict, targetCountry);
     if (!enemySide) {
-      return NextResponse.json(
-        { error: "Target is not a belligerent in this conflict" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Target is not a belligerent in this conflict");
     }
     if (enemySide === ownSide) {
-      return NextResponse.json({ error: "Target is on your own side" }, { status: 400 });
+      return errorResponse(400, "Target is on your own side");
     }
 
     const fronts: Record<string, Front> = { [theaterId]: conflictToFront(conflict) };

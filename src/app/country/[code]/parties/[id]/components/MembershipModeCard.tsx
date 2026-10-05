@@ -4,8 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { getMessageStyle } from "@/lib/utils/formatters";
 import { partyApiUrl } from "@/lib/urls";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import type { PartyData } from "./types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface MembershipModeCardProps {
   party: PartyData;
@@ -48,7 +49,7 @@ export function MembershipModeCard({ party, countryCode, onUpdate }: MembershipM
         );
         onUpdate();
       } else {
-        setMsg(`✗ ${data.error}`);
+        setMsg(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMsg("✗ Network error");
@@ -72,7 +73,7 @@ export function MembershipModeCard({ party, countryCode, onUpdate }: MembershipM
         setMsg(`✓ ${data.message}`);
         onUpdate();
       } else {
-        setMsg(`✗ ${data.error}`);
+        setMsg(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMsg("✗ Network error");
@@ -117,7 +118,7 @@ export function MembershipModeCard({ party, countryCode, onUpdate }: MembershipM
                 : "bg-card text-muted hover:text-foreground"
             }`}
           >
-            Approval Required
+            Approval required
           </button>
         </div>
         {savingMode && <span className="text-xs text-muted">Saving…</span>}
@@ -151,8 +152,7 @@ export function MembershipModeCard({ party, countryCode, onUpdate }: MembershipM
                       {req.characterName}
                     </Link>
                     <div className="text-xs text-muted mt-0.5">
-                      Requested{" "}
-                      <LocalTime value={req.requestedAt} options={{ dateStyle: "medium" }} />
+                      Requested <GameMonthTime value={req.requestedAt} />
                     </div>
                   </div>
                   <div className="flex gap-2">

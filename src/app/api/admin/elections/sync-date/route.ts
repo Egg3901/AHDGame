@@ -39,7 +39,7 @@ import { NextResponse } from "next/server";
 import type { Filter } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 
 import type { Election, State, ElectedOfficial, GameState } from "@/lib/db/types";
 import { SENATE_CLASSES, STATE_SENATE_SEATS, UK_REGIONAL_COUNCIL_SEATS } from "@/lib/constants";
@@ -130,9 +130,9 @@ export async function POST() {
         },
       });
     if (updateResult.matchedCount === 0) {
-      return NextResponse.json(
-        { error: "GameState document not found; cannot reset. Run /api/admin/init first." },
-        { status: 500 }
+      return errorResponse(
+        500,
+        "GameState document not found; cannot reset. Run /api/admin/init first."
       );
     }
     invalidateGameTimeCache(); // ensure next request sees fresh effectiveNow

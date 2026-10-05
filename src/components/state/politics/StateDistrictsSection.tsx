@@ -73,7 +73,7 @@ export function StateDistrictsSection({
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-lg font-semibold">Congressional Districts</h3>
+          <h3 className="text-lg font-semibold">Congressional districts</h3>
           <p className="text-xs text-muted">
             House seats here are decided district by district. The map can be redrawn in census
             years by a governor whose party also controls the state legislature.

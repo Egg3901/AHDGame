@@ -8,7 +8,7 @@ import { loadGermanQuestionWarNotice } from "@/lib/settlement/queries/warNotice"
 import { GermanQuestionClient } from "./GermanQuestionClient";
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "The German Question | A House Divided",
+  title: "The German question | A House Divided",
   description:
     "Four institutions decide whether West Germany stays sovereign inside NATO or dissolves into a reunified Germany in the Warsaw Pact, contested by East Berlin, Moscow, Washington and London.",
   pathname: "/world/german-question",

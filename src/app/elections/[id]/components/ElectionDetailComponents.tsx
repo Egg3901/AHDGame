@@ -8,6 +8,8 @@ import { Card, CardSubLabel } from "@/components/ui";
 import { PrimaryLineGraph } from "./ElectionDetailCharts";
 import { buildCandidateColorMap } from "@/lib/campaigns/candidateColor";
 import type { CandidateDetail, PartyGroup, SnapshotPoint } from "./ElectionDetailTypes";
+import { NppAbbr } from "@/components/elections/NppAbbr";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 function RemoveCandidateButton({
   candidateId,
@@ -33,7 +35,7 @@ function RemoveCandidateButton({
           });
           const data = await res.json();
           if (res.ok) onRemoveSuccess();
-          else alert(data.error ?? "Failed to remove");
+          else alert(apiErrorText(data, "Failed to remove"));
         } catch {
           alert("Network error");
         } finally {
@@ -68,9 +70,7 @@ function PresidentialPrimaryDelegateRace({ group }: { group: PartyGroup }) {
   return (
     <div className="px-4 sm:px-5 pb-4 pt-1 border-t border-card-border">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <div className="text-xs text-muted/70 uppercase tracking-wide font-medium">
-          Projected Delegate Race
-        </div>
+        <div className="text-body-sm font-medium text-muted">Projected delegate race</div>
         <span className="text-[11px] text-muted">
           Awarded delegates locked, remaining states projected
         </span>
@@ -223,7 +223,7 @@ export function PartySection({
       action={
         isGuaranteedAdvance ? (
           <span className="text-xs italic text-muted">
-            {isUncontested ? "Uncontested" : "All Advance"}
+            {isUncontested ? "Uncontested" : "All advance"}
           </span>
         ) : undefined
       }
@@ -262,7 +262,7 @@ export function PartySection({
                       )}
                       {c.isNPP && (
                         <span className="rounded-full bg-purple-500/20 border border-purple-500/40 px-1.5 py-0.5 text-[10px] text-purple-400 shrink-0">
-                          NPP
+                          <NppAbbr />
                         </span>
                       )}
                       {c.travelState && (
@@ -278,7 +278,7 @@ export function PartySection({
                       )}
                       {isAdvancing && !isUncontested && inPrimary && (
                         <span className="rounded-full bg-green-500/20 border border-green-500/40 px-1.5 py-0.5 text-[10px] text-green-400 shrink-0 font-medium">
-                          {isGuaranteedAdvance ? "Advancing" : "Projected to Advance"}
+                          {isGuaranteedAdvance ? "Advancing" : "Projected to advance"}
                         </span>
                       )}
                     </div>

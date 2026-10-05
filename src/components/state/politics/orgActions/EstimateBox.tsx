@@ -57,14 +57,14 @@ export function EstimateBox({ variant, tone, cost, funds, gain }: EstimateBoxPro
 
   return (
     <div className="rounded-lg border border-card-border/40 bg-background/50 px-4 py-3 space-y-3">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted">{title}</div>
+      <div className="text-body-sm font-medium text-muted">{title}</div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-md border border-card-border/30 bg-card/50 px-3 py-2">
-          <div className="flex items-center text-[10px] font-medium uppercase tracking-wide text-muted">
+          <div className="flex items-center text-body-sm font-medium text-muted">
             {costLabel}
             <Tooltip
-              label="About Build Org cost"
+              label="About build org cost"
               content="Base Political Strength (PS) cost plus a per-state pressure ladder that rises after each spend in this state. Higher pressure = more PS per click, and more money: the cash price scales with the PS cost and is billed to the same treasury tier that pays the Strength."
             />
           </div>
@@ -82,7 +82,7 @@ export function EstimateBox({ variant, tone, cost, funds, gain }: EstimateBoxPro
         </div>
 
         <div className="rounded-md border border-card-border/30 bg-card/50 px-3 py-2">
-          <div className="flex items-center text-[10px] font-medium uppercase tracking-wide text-muted">
+          <div className="flex items-center text-body-sm font-medium text-muted">
             {gain.label.includes("Effect") ? "Effect" : "Org share"}
             <Tooltip
               label="About Org share"
@@ -106,7 +106,7 @@ export function EstimateBox({ variant, tone, cost, funds, gain }: EstimateBoxPro
         <div className="space-y-1">
           <div className="flex items-center justify-between gap-3 text-xs">
             <span className="text-muted">
-              {variant === "projection" ? "Estimated Funds" : "Funds"}
+              {variant === "projection" ? "Estimated funds" : "Funds"}
             </span>
             <span className="font-bold tabular-nums">
               {fundsSymbol}

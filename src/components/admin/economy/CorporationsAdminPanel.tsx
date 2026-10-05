@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useCallback } from "react";
 import { SubsidiaryCorporationsToggle } from "@/components/admin/economy/SubsidiaryCorporationsToggle";
 import {
@@ -13,6 +14,7 @@ import { CorpSummaryCards } from "./corporations/CorpSummaryCards";
 import { CorporationsTable } from "./corporations/CorporationsTable";
 import { GlobalConfirmStrip } from "./corporations/GlobalConfirmStrip";
 import { SpawnNppPanel } from "./corporations/SpawnNppPanel";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function CorporationsAdminPanel() {
   const [state, dispatch] = useCorporationsAdminState();
@@ -95,7 +97,7 @@ export function CorporationsAdminPanel() {
       .then(async (res) => {
         if (!res.ok) {
           const j = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(j.error ?? `HTTP ${res.status}`);
+          throw new Error(apiErrorText(j, `HTTP ${res.status}`));
         }
         return res.json() as Promise<ImfBailoutPreviewResponse>;
       })
@@ -123,7 +125,7 @@ export function CorporationsAdminPanel() {
     });
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
-      throw new Error(j.error ?? `HTTP ${res.status}`);
+      throw new Error(apiErrorText(j, `HTTP ${res.status}`));
     }
     return res.json();
   };
@@ -407,7 +409,7 @@ export function CorporationsAdminPanel() {
             }
             className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-background/60 transition-colors"
           >
-            Reset All Timers
+            Reset all timers
           </button>
           <button
             onClick={() =>
@@ -418,7 +420,7 @@ export function CorporationsAdminPanel() {
             }
             className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-background/60 transition-colors"
           >
-            Resume All Suspended
+            Resume all suspended
           </button>
           <button
             onClick={() =>
@@ -429,7 +431,7 @@ export function CorporationsAdminPanel() {
             }
             className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-background/60 transition-colors"
           >
-            Spawn Unowned (20% Boost)
+            Spawn unowned (20% boost)
           </button>
           <button
             onClick={() =>
@@ -440,7 +442,7 @@ export function CorporationsAdminPanel() {
             }
             className="text-xs px-3 py-1.5 rounded border border-primary/40 text-primary hover:bg-primary/10 transition-colors"
           >
-            Spawn NPP Corp
+            Spawn NPP corp
           </button>
         </div>
       </div>
@@ -482,7 +484,7 @@ export function CorporationsAdminPanel() {
       {/* Summary cards */}
       {summary && <CorpSummaryCards summary={summary} />}
 
-      {error && <p className="text-sm text-error bg-error/10 rounded-lg px-4 py-3">{error}</p>}
+      <InlineError error={error} className="text-sm text-error bg-error/10 rounded-lg px-4 py-3" />
       {actionError && (
         <p className="text-sm text-error bg-error/10 rounded-lg px-4 py-3">{actionError}</p>
       )}

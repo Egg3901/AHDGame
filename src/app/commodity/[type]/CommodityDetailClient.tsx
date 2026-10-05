@@ -284,7 +284,7 @@ export default function CommodityDetailClient({ initialData }: CommodityDetailCl
           className="mb-6 flex items-center justify-between rounded-xl border border-card-border bg-card px-4 py-3 transition-colors hover:border-foreground/30"
         >
           <span className="text-[12.5px] font-semibold text-foreground">
-            World Trade Ledger
+            World trade ledger
             <span className="ml-2 font-normal text-muted">
               cross-border balance of trade by nation
             </span>

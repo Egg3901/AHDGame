@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getSuggestionCommentsCollection } from "@/lib/db/collections/suggestionComments";
 import { getSuggestionsCollection } from "@/lib/db/collections/suggestions";
@@ -20,35 +20,35 @@ export async function DELETE(
     const { issueNumber: rawIssue, commentId: rawComment } = await params;
     const issueNum = parseInt(rawIssue, 10);
     if (isNaN(issueNum) || issueNum < 1) {
-      return NextResponse.json({ error: "Invalid suggestion id" }, { status: 400 });
+      return errorResponse(400, "Invalid suggestion id");
     }
 
     if (!ObjectId.isValid(rawComment)) {
-      return NextResponse.json({ error: "Invalid comment id" }, { status: 400 });
+      return errorResponse(400, "Invalid comment id");
     }
 
     const db = await getDb();
     const suggestions = getSuggestionsCollection(db);
     const suggestion = await suggestions.findOne({ issueNumber: issueNum });
     if (!suggestion) {
-      return NextResponse.json({ error: "Suggestion not found" }, { status: 404 });
+      return errorResponse(404, "Suggestion not found");
     }
 
     const comments = getSuggestionCommentsCollection(db);
     const comment = await comments.findOne({ _id: new ObjectId(rawComment) });
     if (!comment) {
-      return NextResponse.json({ error: "Comment not found" }, { status: 404 });
+      return errorResponse(404, "Comment not found");
     }
 
     if (!comment.suggestionId.equals(suggestion._id)) {
-      return NextResponse.json({ error: "Comment does not belong to this suggestion" }, { status: 400 });
+      return errorResponse(400, "Comment does not belong to this suggestion");
     }
 
     const userId = new ObjectId(auth.user.userId);
     const isAuthor = comment.userId.equals(userId);
     const isAdmin = auth.user.isAdmin === true;
     if (!isAuthor && !isAdmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return errorResponse(403, "Forbidden");
     }
 
     await comments.deleteOne({ _id: comment._id });

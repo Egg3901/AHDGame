@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
@@ -33,7 +33,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -43,12 +43,12 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
 
     const isMember = character.party === partyId;
     const canView = isMember || user.isAdmin || user.isModerator;
     if (!canView) {
-      return NextResponse.json({ error: "Members only" }, { status: 403 });
+      return errorResponse(403, "Members only");
     }
 
     const url = new URL(request.url);
@@ -89,7 +89,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -102,28 +102,25 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
 
     const isMember = character.party === partyId;
     const canPost = isMember || user.isAdmin || user.isModerator;
     if (!canPost) {
-      return NextResponse.json({ error: "Members only" }, { status: 403 });
+      return errorResponse(403, "Members only");
     }
 
     if (character.lastDiscussionPostAt) {
       const elapsed = Date.now() - new Date(character.lastDiscussionPostAt).getTime();
       if (elapsed < DISCUSSION_COOLDOWN_MS) {
         const retryAfter = Math.ceil((DISCUSSION_COOLDOWN_MS - elapsed) / 1000);
-        return NextResponse.json(
-          { error: "You can only post once per hour", retryAfter },
-          { status: 429 }
-        );
+        return errorResponse(429, "You can only post once per hour", { extra: { retryAfter } });
       }
     }
 
     const parsed = await parseJsonBody(request, postBodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const now = new Date();

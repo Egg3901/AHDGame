@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { isIndexFundsEnabled, INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFunds/featureFlag";
 import { listActiveFunds, listSnapshotsForFunds } from "@/lib/indexFunds/fundQueries";
 import { buildFundNavMetrics } from "@/lib/indexFunds/fundNavMetrics";
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   try {
     const db = await getDb();
     if (!(await isIndexFundsEnabled())) {
-      return NextResponse.json({ error: INDEX_FUNDS_DISABLED_MESSAGE }, { status: 403 });
+      return errorResponse(403, INDEX_FUNDS_DISABLED_MESSAGE);
     }
 
     const { searchParams } = new URL(request.url);

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId, type Filter } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -195,12 +195,12 @@ function toMessage(
 export async function POST(request: Request) {
   try {
     if (!requireBotToken(request, false)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const parsed = await parseJsonBody(request, createSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
 
@@ -338,12 +338,12 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     if (!requireBotToken(request, false)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const parsed = await parseJsonBody(request, updateSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
 
@@ -359,10 +359,7 @@ export async function PATCH(request: Request) {
           ? { discordChannelId: body.discordChannelId }
           : null;
     if (!filter) {
-      return NextResponse.json(
-        { error: "ticketNumber or discordChannelId is required" },
-        { status: 400 }
-      );
+      return errorResponse(400, "ticketNumber or discordChannelId is required");
     }
     const now = new Date();
 
@@ -374,7 +371,7 @@ export async function PATCH(request: Request) {
         $set: { updatedAt: now },
       });
       if (!res.matchedCount) {
-        return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+        return errorResponse(404, "Ticket not found");
       }
       return NextResponse.json({ ok: true });
     }
@@ -385,7 +382,7 @@ export async function PATCH(request: Request) {
         $push: { statusHistory: { status: body.status, at: now, source: "bot" } },
       });
       if (!res.matchedCount) {
-        return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+        return errorResponse(404, "Ticket not found");
       }
       return NextResponse.json({ ok: true });
     }
@@ -398,7 +395,7 @@ export async function PATCH(request: Request) {
         projection: { "resolution.message": 1 },
       });
       if (!current) {
-        return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+        return errorResponse(404, "Ticket not found");
       }
       const hasResolution = Boolean(
         (current as typeof current & { resolution?: { message?: string } }).resolution?.message
@@ -419,7 +416,7 @@ export async function PATCH(request: Request) {
         $push: { statusHistory: { status: "open", at: now, source: "bot", note: "retriage" } },
       });
       if (!res.matchedCount) {
-        return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+        return errorResponse(404, "Ticket not found");
       }
       return NextResponse.json({ ok: true });
     }
@@ -429,7 +426,7 @@ export async function PATCH(request: Request) {
         projection: { status: 1, "resolution.createdAt": 1 },
       });
       if (!current) {
-        return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+        return errorResponse(404, "Ticket not found");
       }
       const note = channelDeliveryNote(
         (current as typeof current & { resolution?: { createdAt?: Date } }).resolution?.createdAt
@@ -456,7 +453,7 @@ export async function PATCH(request: Request) {
       if (!res.matchedCount) {
         const ticket = await coll.findOne(filter, { projection: { _id: 1 } });
         if (!ticket) {
-          return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+          return errorResponse(404, "Ticket not found");
         }
         return NextResponse.json({ ok: true, alreadyRecorded: true });
       }
@@ -468,7 +465,7 @@ export async function PATCH(request: Request) {
         $set: { "resolution.deliveredAt": new Date(), updatedAt: now },
       });
       if (!res.matchedCount) {
-        return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+        return errorResponse(404, "Ticket not found");
       }
       return NextResponse.json({ ok: true });
     }
@@ -478,7 +475,7 @@ export async function PATCH(request: Request) {
         projection: { status: 1, "resolution.createdAt": 1 },
       });
       if (!current) {
-        return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+        return errorResponse(404, "Ticket not found");
       }
       const note = dmDeliveryNote(
         (current as typeof current & { resolution?: { createdAt?: Date } }).resolution?.createdAt
@@ -500,7 +497,7 @@ export async function PATCH(request: Request) {
       if (!res.matchedCount) {
         const ticket = await coll.findOne(filter, { projection: { _id: 1 } });
         if (!ticket) {
-          return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+          return errorResponse(404, "Ticket not found");
         }
         return NextResponse.json({ ok: true, alreadyRecorded: true });
       }
@@ -523,7 +520,7 @@ export async function PATCH(request: Request) {
       },
     });
     if (!existing) {
-      return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+      return errorResponse(404, "Ticket not found");
     }
     const deliveryState = existing as typeof existing & {
       resolution?: {
@@ -599,7 +596,7 @@ export async function PATCH(request: Request) {
       },
     });
     if (!res.matchedCount) {
-      return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+      return errorResponse(404, "Ticket not found");
     }
     return NextResponse.json({
       ok: true,

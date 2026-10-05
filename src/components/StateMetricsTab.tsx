@@ -231,16 +231,16 @@ function USBudgetPanel({ budget, countryId }: { budget: StateBudgetSummary; coun
       ? { label: taxLabel("Property Tax", "propertyTax"), value: budget.revenue.propertyTax }
       : null,
     budget.revenue.federalGrants && budget.revenue.federalGrants > 0
-      ? { label: "Federal Grants", value: budget.revenue.federalGrants }
+      ? { label: "Federal grants", value: budget.revenue.federalGrants }
       : null,
-    { label: "Total Revenue", value: budget.revenue.total },
-    { label: "Total Spending", value: budget.spending.total },
+    { label: "Total revenue", value: budget.revenue.total },
+    { label: "Total spending", value: budget.spending.total },
     { label: netBalance >= 0 ? "Surplus" : "Deficit", value: netBalance, colorClass: balanceColor },
   ].filter((s): s is NonNullable<typeof s> => s !== null);
 
   return (
     <BudgetSummaryPanel
-      title="State Budget"
+      title="State budget"
       currencySymbol={currencySymbol}
       balance={netBalance}
       stats={stats}
@@ -372,7 +372,7 @@ export function StateMetricsTab({ stateId, countryId }: StateMetricsTabProps) {
             onClick={fetchMetrics}
             className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
           >
-            Try Again
+            Try again
           </button>
         </div>
       </div>

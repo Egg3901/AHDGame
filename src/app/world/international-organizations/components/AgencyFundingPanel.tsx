@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import { canTableResolutionType } from "@/lib/constants/orgCategory";
@@ -15,6 +16,7 @@ import {
   requiresUnanimity,
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -87,7 +89,7 @@ export function AgencyFundingPanel({
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to propose agency funding");
+        throw new Error(apiErrorText(body, "Failed to propose agency funding"));
       }
       setShowForm(false);
       setAgencyKey("");
@@ -111,7 +113,7 @@ export function AgencyFundingPanel({
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error ?? "Vote failed");
+      throw new Error(apiErrorText(body, "Vote failed"));
     }
     onChange();
   }
@@ -165,7 +167,7 @@ export function AgencyFundingPanel({
               </p>
             )}
           </div>
-          {error && <p className="mt-2 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-2 text-xs text-error" />
           <div className="mt-4 flex gap-2">
             <Button variant="primary" size="md" onClick={submit} isLoading={submitting}>
               Submit for a vote
@@ -180,7 +182,7 @@ export function AgencyFundingPanel({
       {/* Funded */}
       {active.length > 0 && (
         <div className="space-y-3">
-          <h4 className="text-xs font-semibold uppercase tracking-widest text-muted">Funded</h4>
+          <h4 className="text-body-sm font-medium text-muted">Funded</h4>
           {active.map((l) => {
             const def = getAgencyDef(l.agencyKey);
             const turnsLeft =
@@ -215,9 +217,7 @@ export function AgencyFundingPanel({
 
       {/* Pending */}
       <div className="space-y-3">
-        <h4 className="text-xs font-semibold uppercase tracking-widest text-muted">
-          Awaiting a vote
-        </h4>
+        <h4 className="text-body-sm font-medium text-muted">Awaiting a vote</h4>
         {pending.length === 0 ? (
           <div className="rounded-xl border border-card-border bg-card p-5">
             <p className="text-sm text-muted">No pending agency funding.</p>

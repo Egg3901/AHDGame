@@ -17,7 +17,7 @@ import { resolveSeedPartyTier } from "@/lib/seeds/defaultPartyTiers";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { withUniformMetricSet } from "@/lib/seeds/shared/uniformStateMetrics";
 
-export type ModernTransitionCountryId = "PL" | "RO" | "RU";
+export type ModernTransitionCountryId = "PL" | "RO" | "RU" | "BG";
 
 /**
  * Generic modern (2027-default) seed path for the post-communist transition
@@ -45,6 +45,7 @@ const TRANSITION_COUNTRIES: Record<ModernTransitionCountryId, TransitionCountryC
   PL: { categoryId: "pl_voterGroups", categoryName: "Poland Voter Groups" },
   RO: { categoryId: "ro_voterGroups", categoryName: "Romania Voter Groups" },
   RU: { categoryId: "ru_voterGroups", categoryName: "Russia Voter Groups" },
+  BG: { categoryId: "bg_voterGroups", categoryName: "Bulgaria Voter Groups" },
 };
 
 /** Display names + turnout for the modern Layer-1 groups (leans come from the model). */
@@ -78,6 +79,13 @@ const GROUP_META: Record<
     rural_50_64: { name: "Rural 50-64", turnout: 55 },
     rural_65_plus: { name: "Rural 65+", turnout: 55 },
   },
+  BG: {
+    social_conservative: { name: "Social Conservative", turnout: 48 },
+    urban_reformist: { name: "Urban Reformist", turnout: 46 },
+    centre_right: { name: "Centre Right", turnout: 44 },
+    turkish_minority: { name: "Turkish Minority", turnout: 46 },
+    nationalist: { name: "Nationalist", turnout: 40 },
+  },
 };
 
 async function loadRegionBundle(countryId: ModernTransitionCountryId): Promise<State[]> {
@@ -88,6 +96,10 @@ async function loadRegionBundle(countryId: ModernTransitionCountryId): Promise<S
   if (countryId === "RU") {
     const { ruRegions2027 } = await import("@/lib/countries/ru/data/ruRegions2027");
     return [...ruRegions2027];
+  }
+  if (countryId === "BG") {
+    const { bgRegions2027 } = await import("@/lib/countries/bg/data/bgRegions2027");
+    return [...bgRegions2027];
   }
   const { roRegions2027 } = await import("@/lib/countries/ro/data/roRegions2027");
   return [...roRegions2027];
@@ -101,6 +113,10 @@ async function loadPartySeeds(countryId: ModernTransitionCountryId): Promise<Par
   if (countryId === "RU") {
     const { ruParties } = await import("@/lib/countries/ru/data/ruParties");
     return [...ruParties];
+  }
+  if (countryId === "BG") {
+    const { bgParties } = await import("@/lib/countries/bg/data/bgParties");
+    return [...bgParties];
   }
   const { roParties } = await import("@/lib/countries/ro/data/roParties");
   return [...roParties];
@@ -365,6 +381,13 @@ async function loadMetricsBundle(
       return overlay ? applyMetricPresetToMetrics(metric, overlay) : metric;
     });
   }
+  if (countryId === "BG") {
+    const { bgStateMetrics2027 } = await import("@/lib/countries/bg/data/bgStateMetrics2027");
+    return bgStateMetrics2027.map((metric) => {
+      const overlay = getRegionMetricPresets("BG", String(metric._id), preset);
+      return overlay ? applyMetricPresetToMetrics(metric, overlay) : metric;
+    });
+  }
   const regions = await loadRegionBundle("PL");
   const bundle = buildPlTransitionalMetrics(regions);
   return bundle.map((metric) => {
@@ -537,6 +560,7 @@ export async function seedModernTransitionGovernmentFormation(
 ) {
   if (!isModernTransitionPreset(preset)) return;
   if (countryId === "RU") return; // Presidential formation is seeded by seedRUGovernmentFormation.
+  if (countryId === "BG") return; // The 240-seat formation is seeded by seedBG2027.
   const now = new Date();
   const totalSeats = countryId === "PL" ? 460 : 331;
   const majorityThreshold = Math.floor(totalSeats / 2) + 1;

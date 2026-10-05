@@ -147,7 +147,7 @@ describe("UK cabinet actions (issue #859)", () => {
   it("shows reshuffle availability to the PM with a roster editor entry point", async () => {
     installFetch({ isPrimeMinister: true });
     renderUk();
-    await waitFor(() => expect(screen.getByText("Cabinet Reshuffle")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Cabinet reshuffle")).toBeTruthy());
     expect(screen.getByText(/Reshuffle available/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Open the cabinet reshuffle editor" })).toBeTruthy();
   });
@@ -158,7 +158,7 @@ describe("UK cabinet actions (issue #859)", () => {
       reshuffle: { available: false, reason: "already reshuffled this parliament" },
     });
     renderUk();
-    await waitFor(() => expect(screen.getByText("Cabinet Reshuffle")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Cabinet reshuffle")).toBeTruthy());
     expect(screen.getByText(/already reshuffled this parliament/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Open the cabinet reshuffle editor" })).toBeNull();
   });
@@ -166,7 +166,7 @@ describe("UK cabinet actions (issue #859)", () => {
   it("submits the complete roster to the reshuffle endpoint", async () => {
     installFetch({ isPrimeMinister: true });
     renderUk();
-    await waitFor(() => expect(screen.getByText("Cabinet Reshuffle")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Cabinet reshuffle")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Open the cabinet reshuffle editor" }));
 
     await waitFor(() =>
@@ -197,7 +197,7 @@ describe("UK cabinet actions (issue #859)", () => {
   it("surfaces a reshuffle conflict without posting twice", async () => {
     installFetch({ isPrimeMinister: true });
     renderUk();
-    await waitFor(() => expect(screen.getByText("Cabinet Reshuffle")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Cabinet reshuffle")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Open the cabinet reshuffle editor" }));
     await waitFor(() =>
       expect(screen.getByLabelText("New minister for Chancellor of the Exchequer")).toBeTruthy()
@@ -220,7 +220,7 @@ describe("UK cabinet actions (issue #859)", () => {
   it("rejects a roster that seats one minister twice", async () => {
     installFetch({ isPrimeMinister: true });
     renderUk();
-    await waitFor(() => expect(screen.getByText("Cabinet Reshuffle")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Cabinet reshuffle")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Open the cabinet reshuffle editor" }));
     await waitFor(() =>
       expect(screen.getByLabelText("New minister for Chancellor of the Exchequer")).toBeTruthy()
@@ -297,7 +297,7 @@ describe("UK cabinet actions (issue #859)", () => {
       },
     });
     renderUk();
-    await waitFor(() => expect(screen.getByText("Party Whip")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Party whip")).toBeTruthy());
     await waitFor(() => expect(screen.getByText("Whip withdrawn")).toBeTruthy());
     expect(screen.getByText(/Reselection risk: elevated/)).toBeTruthy();
 
@@ -328,7 +328,7 @@ describe("UK cabinet actions (issue #859)", () => {
       body: { error: "Invalid character ID" },
     };
     renderUk();
-    await waitFor(() => expect(screen.getByText("Party Whip")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Party whip")).toBeTruthy());
     fireEvent.change(screen.getByLabelText("Character ID of the MP to suspend"), {
       target: { value: "nope" },
     });
@@ -347,8 +347,8 @@ describe("UK cabinet actions (issue #859)", () => {
   it("hides the whip panel from non-PM viewers and never calls the whip endpoint", async () => {
     installFetch({ isPrimeMinister: false });
     renderUk();
-    await waitFor(() => expect(screen.getByText("Cabinet Reshuffle")).toBeTruthy());
-    expect(screen.queryByText("Party Whip")).toBeNull();
+    await waitFor(() => expect(screen.getByText("Cabinet reshuffle")).toBeTruthy());
+    expect(screen.queryByText("Party whip")).toBeNull();
     const fetchMock = global.fetch as unknown as ReturnType<typeof vi.fn>;
     expect(
       vi.mocked(fetchMock).mock.calls.some(([url]) => String(url).endsWith("/cabinet/whip"))

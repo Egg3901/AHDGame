@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -53,22 +53,21 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     const forexEnabled = await isForexEnabled();
 
     if (!ObjectId.isValid(offerId)) {
-      return NextResponse.json({ error: "Invalid offer ID" }, { status: 400 });
+      return errorResponse(400, "Invalid offer ID");
     }
 
     const offer = await db
       .collection<ShareOffer>("shareOffers")
       .findOne({ _id: new ObjectId(offerId) });
 
-    if (!offer) return NextResponse.json({ error: "Offer not found" }, { status: 404 });
-    if (offer.status !== "pending")
-      return NextResponse.json({ error: "Offer is not pending" }, { status: 400 });
+    if (!offer) return errorResponse(404, "Offer not found");
+    if (offer.status !== "pending") return errorResponse(400, "Offer is not pending");
 
     const character = await getCharacterByUserId(db, auth.user.userId);
-    if (!character) return NextResponse.json({ error: "Character not found" }, { status: 404 });
+    if (!character) return errorResponse(404, "Character not found");
 
     if (offer.buyerCharacterId.toString() !== character._id.toString()) {
-      return NextResponse.json({ error: "Not your offer" }, { status: 403 });
+      return errorResponse(403, "Not your offer");
     }
 
     const now = new Date();
@@ -104,7 +103,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
           { $set: { status: "cancelled", updatedAt: now } }
         );
       if (claim.matchedCount === 0) {
-        return NextResponse.json({ error: "Offer is not pending" }, { status: 400 });
+        return errorResponse(400, "Offer is not pending");
       }
       let refundCredited = false;
       try {
@@ -156,10 +155,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       if (forexEnabled) {
         const fxResult = await loadCharacterFxRate(db, homeCurrency);
         if (!fxResult.ok) {
-          return NextResponse.json(
-            { error: "Exchange rate unavailable, try again shortly" },
-            { status: 503 }
-          );
+          return errorResponse(503, "Exchange rate unavailable, try again shortly");
         }
         charFxRate = fxResult.rate;
       }
@@ -171,7 +167,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
           { $set: { status: "cancelled", updatedAt: now } }
         );
       if (claim.matchedCount === 0) {
-        return NextResponse.json({ error: "Offer is not pending" }, { status: 400 });
+        return errorResponse(400, "Offer is not pending");
       }
       let refundCredited = false;
       try {

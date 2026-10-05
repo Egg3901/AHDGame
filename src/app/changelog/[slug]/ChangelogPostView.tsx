@@ -88,7 +88,7 @@ export function ChangelogPostView({
               href={`/changelog/${newer.slug}`}
               className="group rounded-xl border border-card-border bg-card p-4 transition-colors hover:border-primary/40"
             >
-              <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted">
+              <span className="flex items-center gap-1.5 text-body-sm font-medium text-muted">
                 <ArrowLeft className="h-3 w-3" />
                 Newer
               </span>
@@ -104,7 +104,7 @@ export function ChangelogPostView({
               href={`/changelog/${older.slug}`}
               className="group rounded-xl border border-card-border bg-card p-4 text-right transition-colors hover:border-primary/40 sm:col-start-2"
             >
-              <span className="flex items-center justify-end gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted">
+              <span className="flex items-center justify-end gap-1.5 text-body-sm font-medium text-muted">
                 Older
                 <ArrowRight className="h-3 w-3" />
               </span>

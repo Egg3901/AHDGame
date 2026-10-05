@@ -7,7 +7,7 @@
 // read model falls back to the country-derived display currency.
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getDb } from "@/lib/mongodb";
 import { loadFederalBudgetDetail } from "@/lib/publicFinance/queries/federalBudgetDetail";
@@ -20,7 +20,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const db = await getDb();
@@ -33,7 +33,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
       characterId: auth.user.character?._id,
     });
     if (!detail.ok) {
-      return NextResponse.json({ error: detail.error }, { status: detail.status });
+      return errorResponse(detail.status, detail.error);
     }
 
     return NextResponse.json(detail.body);

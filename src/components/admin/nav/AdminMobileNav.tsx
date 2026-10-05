@@ -134,8 +134,8 @@ export function AdminMobileNav({
         >
           <span className="h-8 w-1 shrink-0 rounded-full bg-primary" aria-hidden />
           <span className="min-w-0 flex-1">
-            <span className="block text-[10px] leading-tight font-semibold tracking-widest text-muted uppercase">
-              Admin Panel
+            <span className="block text-body-sm font-medium leading-tight text-muted">
+              Admin panel
             </span>
             {/* Breadcrumb: Tab / Sub / (Heal category) */}
             <span className="flex min-w-0 items-center gap-1.5 text-sm">
@@ -197,9 +197,7 @@ export function AdminMobileNav({
             {/* Main tabs, grouped */}
             {ADMIN_NAV_GROUPS.map((group) => (
               <div key={group.label}>
-                <div className="px-1 pb-1.5 text-[10px] font-semibold tracking-widest text-muted uppercase">
-                  {group.label}
-                </div>
+                <div className="px-1 pb-1.5 text-body-sm font-medium text-muted">{group.label}</div>
                 <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                   {group.ids.map((id) => {
                     const tab = TAB_BY_ID.get(id);
@@ -250,7 +248,7 @@ export function AdminMobileNav({
             {/* Sub-tabs of the active tab */}
             {subTabs.length > 0 && (
               <div className="border-t border-card-border pt-3">
-                <div className="px-1 pb-1.5 text-[10px] font-semibold tracking-widest text-muted uppercase">
+                <div className="px-1 pb-1.5 text-body-sm font-medium text-muted">
                   {activeTabConfig?.label} sections
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -280,9 +278,7 @@ export function AdminMobileNav({
             {/* Heal categories (System → Heal third level) */}
             {showHeal && (
               <div className="border-t border-card-border pt-3">
-                <div className="px-1 pb-1.5 text-[10px] font-semibold tracking-widest text-muted uppercase">
-                  Heal category
-                </div>
+                <div className="px-1 pb-1.5 text-body-sm font-medium text-muted">Heal category</div>
                 <div className="flex flex-wrap gap-1.5">
                   {HEAL_CATEGORIES_NAV.map((cat) => {
                     const isActive = activeHeal === cat.id;

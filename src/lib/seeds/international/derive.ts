@@ -55,7 +55,7 @@ export function buildModelRegionDemographics(
     const pops = deriveCountryGroupPopulations(merged, config);
     const groups: Record<string, StateDemographicGroup> = {};
     for (const gid of merged.groupIds) {
-      const lean = deriveCountryGroupLean(merged, gid, config, mergedPositions);
+      const lean = deriveCountryGroupLean(merged, gid, config, mergedPositions, regionId);
       groups[gid] = {
         population: Math.round((pops[gid] ?? 0) * 100) / 100,
         economicLean: lean.economicLean,
@@ -78,7 +78,8 @@ export function deriveCountryGroupLean(
   model: CountryLayer1Model,
   groupId: string,
   config: Record<string, Record<string, number>>,
-  positionsOverride?: CountryLayer1Model["positions"]
+  positionsOverride?: CountryLayer1Model["positions"],
+  regionId?: string
 ): { economicLean: number; socialLean: number } {
   const positions = positionsOverride ?? model.positions;
   const comp = model.composition[groupId];
@@ -102,7 +103,11 @@ export function deriveCountryGroupLean(
     s += weight * pos.socialLean;
   }
   if (wSum <= 0) return fallback;
-  return { economicLean: clampLean(e / wSum), socialLean: clampLean(s / wSum) };
+  const context = regionId ? model.regionalContext?.[regionId] : undefined;
+  return {
+    economicLean: clampLean(e / wSum + (context?.economicLean ?? 0)),
+    socialLean: clampLean(s / wSum + (context?.socialLean ?? 0)),
+  };
 }
 
 export function deriveCountryGroupPopulations(

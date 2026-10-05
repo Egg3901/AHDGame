@@ -164,9 +164,7 @@ export function MetricTile({
 }) {
   return (
     <div className="flex min-w-[110px] flex-1 flex-col justify-between gap-1 px-4 py-3.5">
-      <span className="whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-        {label}
-      </span>
+      <span className="whitespace-nowrap text-body-sm font-medium text-muted">{label}</span>
       <div className="flex flex-col">
         <span
           className="text-lg font-bold leading-tight tabular-nums"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface DiagnosticResult {
   status: string;
@@ -39,7 +40,7 @@ export function HealPresidentialElection() {
       if (res.ok) {
         setDiagnostic(data);
       } else {
-        setResult({ ok: false, message: data.error ?? "Diagnostic failed" });
+        setResult({ ok: false, message: apiErrorText(data, "Diagnostic failed") });
       }
     } catch {
       setResult({ ok: false, message: "Network error" });
@@ -62,7 +63,7 @@ export function HealPresidentialElection() {
     try {
       const res = await fetch("/api/admin/heal/presidential-election", { method: "POST" });
       const data = await res.json();
-      setResult({ ok: res.ok, message: data.message ?? data.error ?? "Unknown response" });
+      setResult({ ok: res.ok, message: data.message ?? apiErrorText(data, "Unknown response") });
     } catch {
       setResult({ ok: false, message: "Network error" });
     } finally {
@@ -73,7 +74,7 @@ export function HealPresidentialElection() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Presidential Election</h3>
+        <h3 className="font-semibold text-sm">Heal presidential election</h3>
         <p className="mt-1 text-xs text-muted">
           Fixes presidential elections with wrong durations. Resets timers to 24h primary + 24h
           general and withdraws candidates so they can re-enter the fresh primary.
@@ -93,7 +94,7 @@ export function HealPresidentialElection() {
           disabled={loading}
           className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
         >
-          {loading ? "Healing…" : "Heal Now"}
+          {loading ? "Healing…" : "Heal now"}
         </button>
       </div>
 

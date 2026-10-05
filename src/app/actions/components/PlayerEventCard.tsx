@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import type { EventEffect } from "@/lib/db/types/events";
@@ -159,7 +161,7 @@ export default function PlayerEventCard() {
             statAdjustment: data.statAdjustment ?? null,
           });
         } else {
-          setError(data.error ?? "Failed to resolve the event.");
+          setError(apiErrorText(data, "Failed to resolve the event."));
         }
       } catch {
         setError("Network error.");
@@ -340,7 +342,7 @@ export default function PlayerEventCard() {
           </>
         )}
 
-        {error && <p className="text-sm font-medium text-error">{error}</p>}
+        <InlineError error={error} className="text-sm font-medium text-error" />
         {!result && (
           <p className="text-body-sm text-muted">
             No action points required. If you don&apos;t respond in time, &ldquo;

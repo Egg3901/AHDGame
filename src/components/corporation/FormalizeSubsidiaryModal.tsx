@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useDialogA11y } from "@/components/ui";
 
@@ -42,7 +43,7 @@ export function FormalizeSubsidiaryModal({
       });
       const data = await res.json();
       if (!res.ok) {
-        setErr(data.error || "Failed to formalize subsidiary");
+        setErr(apiErrorText(data, "Failed to formalize subsidiary"));
         return;
       }
       onFormalized();

@@ -1,10 +1,12 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Badge, Button, Slider, Tooltip } from "@/components/ui";
 import { formatCompactNumber, formatIndex100 } from "@/lib/utils/formatters";
 import { CE_TERMS } from "./glossary";
 import type { CommandEconomyDashboard } from "@/lib/economy/commandEconomyDashboard";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   dashboard: CommandEconomyDashboard;
@@ -44,7 +46,7 @@ export function GosbankChairPanel({ dashboard, onSaved }: Props) {
       );
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.error ?? `Save failed (${res.status})`);
+        throw new Error(apiErrorText(j, `Save failed (${res.status})`));
       }
       onSaved();
     } catch (e) {
@@ -90,7 +92,7 @@ export function GosbankChairPanel({ dashboard, onSaved }: Props) {
       );
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.error ?? `Save failed (${res.status})`);
+        throw new Error(apiErrorText(j, `Save failed (${res.status})`));
       }
       onSaved();
     } catch (e) {
@@ -104,7 +106,7 @@ export function GosbankChairPanel({ dashboard, onSaved }: Props) {
     <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="flex items-center text-sm font-bold text-foreground">
-          Gosbank Chair
+          Gosbank chair
           <Tooltip content={CE_TERMS.gosbank} label="About Gosbank" />
         </h3>
         <Badge color="info" variant="subtle">
@@ -219,7 +221,7 @@ export function GosbankChairPanel({ dashboard, onSaved }: Props) {
         </p>
       )}
 
-      {error && <p className="mt-3 text-xs text-error">{error}</p>}
+      <InlineError error={error} className="mt-3 text-xs text-error" />
       <div className="mt-4 flex items-center gap-2">
         <Button size="sm" onClick={save} disabled={saving}>
           {saving ? "Saving..." : "Set credit policy"}
@@ -263,9 +265,7 @@ export function GosbankChairPanel({ dashboard, onSaved }: Props) {
               effective={rep.blackMarketPressureEffective}
             />
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
-                Legitimacy cost / turn
-              </div>
+              <div className="text-body-sm font-medium text-muted">Legitimacy cost / turn</div>
               <div className="mt-0.5 text-sm font-bold tabular-nums text-foreground">
                 {rep.legitimacyCostPerTurn == null || !Number.isFinite(rep.legitimacyCostPerTurn)
                   ? "n/a"
@@ -275,7 +275,7 @@ export function GosbankChairPanel({ dashboard, onSaved }: Props) {
           </div>
           <p className="mt-2 text-[11px] leading-snug text-warning">{rep.costLabel}</p>
 
-          {repError && <p className="mt-3 text-xs text-error">{repError}</p>}
+          <InlineError error={repError} className="mt-3 text-xs text-error" />
           <div className="mt-3 flex items-center gap-2">
             <Button size="sm" variant="secondary" onClick={saveRepression} disabled={savingRep}>
               {savingRep ? "Saving..." : "Set repression"}
@@ -293,7 +293,7 @@ function PressureReadout({ base, effective }: { base: number | null; effective: 
     v == null || !Number.isFinite(v) ? "n/a" : `${Math.round(v * 100)}%`;
   return (
     <div>
-      <div className="flex items-center justify-center text-[10px] font-bold uppercase tracking-wide text-muted">
+      <div className="flex items-center justify-center text-body-sm font-medium text-muted">
         Black market pressure
         <Tooltip content={CE_TERMS.blackMarketPressure} label="About black market pressure" />
       </div>
@@ -320,7 +320,7 @@ function compactOrNa(value: number | null): string {
 function Readout({ label, value, tip }: { label: string; value: string; tip?: string }) {
   return (
     <div>
-      <div className="flex items-center justify-center text-[10px] font-bold uppercase tracking-wide text-muted">
+      <div className="flex items-center justify-center text-body-sm font-medium text-muted">
         {label}
         {tip && <Tooltip content={tip} label={`About ${label}`} />}
       </div>

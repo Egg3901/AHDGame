@@ -5,7 +5,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { setGrowthRateSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { Character, CorporateSector, State } from "@/lib/db/types";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -35,7 +35,7 @@ export async function setSectorGrowth(request: Request, { params }: RouteParams)
     const { id, sectorId } = await params;
     const parsed = await parseJsonBody(request, setGrowthRateSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { targetGrowthRate: growthRate, preview } = parsed.data;
@@ -51,9 +51,9 @@ export async function setSectorGrowth(request: Request, { params }: RouteParams)
         await import("@/lib/market/featureFlag");
       const mode = await getMarketSystemModeForDb(db);
       if (isMarketSystemMode(mode) && marketAtLeast(mode, "plants")) {
-        return NextResponse.json(
-          { error: "Growth targets are retired on this world. Use Build capacity instead." },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "Growth targets are retired on this world. Use Build capacity instead."
         );
       }
     }
@@ -68,7 +68,7 @@ export async function setSectorGrowth(request: Request, { params }: RouteParams)
 
     // Find sector
     if (!ObjectId.isValid(sectorId)) {
-      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+      return errorResponse(400, "Invalid sector ID");
     }
 
     const sector = await db.collection<CorporateSector>("corporateSectors").findOne({
@@ -76,7 +76,7 @@ export async function setSectorGrowth(request: Request, { params }: RouteParams)
       corporationId: corporation._id,
     });
     if (!sector) {
-      return NextResponse.json({ error: "Sector not found" }, { status: 404 });
+      return errorResponse(404, "Sector not found");
     }
 
     // Recompute cost on the **active** growth rate, not the new target. The turn

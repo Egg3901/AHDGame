@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CorpTimerReport {
   id: string;
@@ -40,7 +41,7 @@ export function HealCorporationTimers() {
       if (res.ok) {
         setDiagnostic(data as DiagnosticResult);
       } else {
-        setResult({ ok: false, message: data.error ?? "Diagnostic failed" });
+        setResult({ ok: false, message: apiErrorText(data, "Diagnostic failed") });
       }
     } catch {
       setResult({ ok: false, message: "Network error" });
@@ -81,7 +82,7 @@ export function HealCorporationTimers() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Corporation Timers</h3>
+        <h3 className="font-semibold text-sm">Heal corporation timers</h3>
         <p className="mt-1 text-xs text-muted">
           Diagnoses and clears stale type-switch cooldown timers on corporations. Expired timers are
           safe to clear. Force-clear removes active cooldowns too (use only to fix corrupt state).
@@ -101,14 +102,14 @@ export function HealCorporationTimers() {
           disabled={loading}
           className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs font-medium text-warning transition-colors hover:bg-warning/20 disabled:opacity-50"
         >
-          {loading ? "Clearing…" : "Clear Expired"}
+          {loading ? "Clearing…" : "Clear expired"}
         </button>
         <button
           onClick={() => runHeal(true)}
           disabled={loading}
           className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
         >
-          {loading ? "Clearing…" : "Force Clear All"}
+          {loading ? "Clearing…" : "Force clear all"}
         </button>
       </div>
 

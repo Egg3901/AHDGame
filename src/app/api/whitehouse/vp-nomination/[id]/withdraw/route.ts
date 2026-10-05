@@ -6,7 +6,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseObjectId } from "@/lib/utils/objectId";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { createNotification } from "@/lib/notifications";
 import type { CabinetNomination, ElectedOfficial, Character } from "@/lib/db/types";
@@ -19,7 +19,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const { id } = await params;
     const nominationOid = parseObjectId(id);
     if (!nominationOid) {
-      return NextResponse.json({ error: "Invalid nomination ID" }, { status: 400 });
+      return errorResponse(400, "Invalid nomination ID");
     }
 
     const auth = await requireBasicAuth();
@@ -38,27 +38,21 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       status: { $in: ["active", "proposed"] },
     });
     if (!nomination) {
-      return NextResponse.json(
-        { error: "Nomination not found or already resolved" },
-        { status: 404 }
-      );
+      return errorResponse(404, "Nomination not found or already resolved");
     }
 
     const presidentOfficial = await db
       .collection<ElectedOfficial>("electedOfficials")
       .findOne({ countryId: "US", officeType: "president", characterId: { $ne: null } });
     if (!presidentOfficial?.characterId) {
-      return NextResponse.json({ error: "No President in office" }, { status: 400 });
+      return errorResponse(400, "No President in office");
     }
 
     const myCharacter = await db.collection<Character>("characters").findOne({
       userId: new ObjectId(authUser.userId),
     });
     if (!myCharacter || !presidentOfficial.characterId.equals(myCharacter._id)) {
-      return NextResponse.json(
-        { error: "Only the President can withdraw a VP nomination" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the President can withdraw a VP nomination");
     }
 
     await db

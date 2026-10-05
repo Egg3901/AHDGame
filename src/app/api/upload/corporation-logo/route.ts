@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import type { Corporation } from "@/lib/db/types";
 import { optimizeImage, IMAGE_PRESETS } from "@/lib/imageOptimize";
@@ -27,22 +27,19 @@ export async function POST(request: Request) {
 
     const parsed = await parseFormData(request);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const formData = parsed.data;
     const file = formData.get("file");
 
     if (!file || !(file instanceof Blob)) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+      return errorResponse(400, "No file uploaded");
     }
     if (!ALLOWED_TYPES.has(file.type)) {
-      return NextResponse.json(
-        { error: "Only JPEG, PNG, WebP, and GIF images are allowed." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Only JPEG, PNG, WebP, and GIF images are allowed.");
     }
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: "File must be under 2 MB." }, { status: 400 });
+      return errorResponse(400, "File must be under 2 MB.");
     }
 
     const db = await getDb();
@@ -72,7 +69,7 @@ export async function POST(request: Request) {
     }
 
     if (!corporation) {
-      return NextResponse.json({ error: "You don't own a corporation" }, { status: 400 });
+      return errorResponse(400, "You don't own a corporation");
     }
 
     const rawBuffer = Buffer.from(await file.arrayBuffer());

@@ -9,7 +9,7 @@ describe("RedistrictingGuide", () => {
   it("gives blocked players the full route to a partisan redraw", () => {
     render(<RedistrictingGuide />);
 
-    expect(screen.getByText("State Redistricting Authority Act")).toBeTruthy();
+    expect(screen.getByText("State redistricting authority act")).toBeTruthy();
     expect(screen.getByText("Legislature-drawn")).toBeTruthy();
     expect(screen.getByText(/state trifecta/i)).toBeTruthy();
     expect(screen.getByText(/census year/i)).toBeTruthy();

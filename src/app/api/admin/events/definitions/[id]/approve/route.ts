@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { getEventDefinitionsCollection } from "@/lib/db/collections/eventDefinitions";
 import { getEventHandler } from "@/lib/events/substrate/registry";
 import "@/lib/events/pree/index";
@@ -14,7 +14,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid definition id" }, { status: 400 });
+      return errorResponse(400, "Invalid definition id");
     }
 
     const db = await getDb();
@@ -26,10 +26,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
     const handler = getEventHandler(existing.kind);
     if (!handler) {
-      return NextResponse.json(
-        { error: `No code-first handler registered for kind ${existing.kind}` },
-        { status: 400 }
-      );
+      return errorResponse(400, `No code-first handler registered for kind ${existing.kind}`);
     }
 
     // The handler owns option ids and the default; the definition supplies
@@ -42,11 +39,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       handlerOptionIds.size !== definitionOptionIds.size ||
       [...handlerOptionIds].some((id) => !definitionOptionIds.has(id));
     if (mismatched) {
-      return NextResponse.json(
-        {
-          error: `Definition options for ${existing.kind} do not match the registered handler (handler: ${[...handlerOptionIds].join(", ")} / default ${handler.defaultOptionId}; definition: ${[...definitionOptionIds].join(", ")} / default ${existing.defaultOptionId}). Re-seed to sync.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Definition options for ${existing.kind} do not match the registered handler (handler: ${[...handlerOptionIds].join(", ")} / default ${handler.defaultOptionId}; definition: ${[...definitionOptionIds].join(", ")} / default ${existing.defaultOptionId}). Re-seed to sync.`
       );
     }
 

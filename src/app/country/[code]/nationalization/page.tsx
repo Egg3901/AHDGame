@@ -88,9 +88,7 @@ export default function NationalizationSurfacePage() {
             const inDebt = balance < 0;
             return (
               <div className="rounded-xl border border-gold/30 bg-gold/5 p-4">
-                <div className="text-body-xs uppercase tracking-wide text-muted">
-                  National treasury balance
-                </div>
+                <div className="text-body-sm font-medium text-muted">National treasury balance</div>
                 <div
                   className={`text-heading font-semibold ${inDebt ? "text-error" : "text-success"}`}
                 >

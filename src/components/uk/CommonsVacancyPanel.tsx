@@ -10,6 +10,7 @@ import type {
   CommonsVacancyStatus,
   RecallPetitionDto,
 } from "@/lib/uk/elections/commonsVacancyStatus";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const VACANCY_REASON_LABELS: Record<string, string> = {
   death: "Death",
@@ -249,7 +250,7 @@ export function CommonsVacancyPanel({ countryId }: { countryId: CountryId }) {
       const res = await fetch("/api/uk/commons/vacancies", { cache: "no-store" });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `Request failed (${res.status})`);
+        throw new Error(apiErrorText(body, `Request failed (${res.status})`));
       }
       setStatus((await res.json()) as CommonsVacancyStatus);
     } catch (err) {

@@ -70,6 +70,14 @@ function findCursor(docs: unknown[]) {
   };
 }
 
+/** True when a Mongo equality selector matches the live value (`{ $exists: false }` means absent). */
+function selectorMatches(observed: unknown, live: unknown): boolean {
+  if (observed !== null && typeof observed === "object") {
+    return "$exists" in observed && observed.$exists === false && live === undefined;
+  }
+  return observed === live;
+}
+
 describe("processBankingTurn", () => {
   let db: MockDb;
   let bankId: ObjectId;
@@ -520,44 +528,29 @@ describe("processBankingTurn", () => {
       const patch = update as { $set?: Record<string, unknown> };
       if (patch.$set?.["bankCharter.lastBankingTurn"] === TURN) {
         publicationFilters.push(selector);
+        liveCorp.bankCharter!.sovereignCouponIncomePaidLifetime = 20;
+        liveCorp.bankCharter!.treasuryRealizedGainPaidLifetime = 6;
         const charter = liveCorp.bankCharter!;
-        charter.sovereignCouponIncomePaidLifetime = 20;
-        charter.treasuryRealizedGainPaidLifetime = 6;
-        const observedIncomeTurn = selector["bankCharter.lastBankingIncomeTurn"];
-        const observedCoupon = selector["bankCharter.lastBankingSovereignCouponIncome"];
-        const observedGain = selector["bankCharter.lastBankingTreasuryRealizedGain"];
-        const observedCouponPaid = selector["bankCharter.sovereignCouponIncomePaidLifetime"];
-        const observedGainPaid = selector["bankCharter.treasuryRealizedGainPaidLifetime"];
-        const incomeTurnMatches =
-          observedIncomeTurn !== null && typeof observedIncomeTurn === "object"
-            ? "$exists" in observedIncomeTurn &&
-              observedIncomeTurn.$exists === false &&
-              charter.lastBankingIncomeTurn === undefined
-            : observedIncomeTurn === charter.lastBankingIncomeTurn;
-        const couponMatches =
-          observedCoupon !== null && typeof observedCoupon === "object"
-            ? "$exists" in observedCoupon &&
-              observedCoupon.$exists === false &&
-              charter.lastBankingSovereignCouponIncome === undefined
-            : observedCoupon === charter.lastBankingSovereignCouponIncome;
-        const gainMatches =
-          observedGain !== null && typeof observedGain === "object"
-            ? "$exists" in observedGain &&
-              observedGain.$exists === false &&
-              charter.lastBankingTreasuryRealizedGain === undefined
-            : observedGain === charter.lastBankingTreasuryRealizedGain;
-        const couponPaidMatches =
-          observedCouponPaid !== null && typeof observedCouponPaid === "object"
-            ? "$exists" in observedCouponPaid &&
-              observedCouponPaid.$exists === false &&
-              charter.sovereignCouponIncomePaidLifetime === undefined
-            : observedCouponPaid === charter.sovereignCouponIncomePaidLifetime;
-        const gainPaidMatches =
-          observedGainPaid !== null && typeof observedGainPaid === "object"
-            ? "$exists" in observedGainPaid &&
-              observedGainPaid.$exists === false &&
-              charter.treasuryRealizedGainPaidLifetime === undefined
-            : observedGainPaid === charter.treasuryRealizedGainPaidLifetime;
+        const incomeTurnMatches = selectorMatches(
+          selector["bankCharter.lastBankingIncomeTurn"],
+          charter.lastBankingIncomeTurn
+        );
+        const couponMatches = selectorMatches(
+          selector["bankCharter.lastBankingSovereignCouponIncome"],
+          charter.lastBankingSovereignCouponIncome
+        );
+        const gainMatches = selectorMatches(
+          selector["bankCharter.lastBankingTreasuryRealizedGain"],
+          charter.lastBankingTreasuryRealizedGain
+        );
+        const couponPaidMatches = selectorMatches(
+          selector["bankCharter.sovereignCouponIncomePaidLifetime"],
+          charter.sovereignCouponIncomePaidLifetime
+        );
+        const gainPaidMatches = selectorMatches(
+          selector["bankCharter.treasuryRealizedGainPaidLifetime"],
+          charter.treasuryRealizedGainPaidLifetime
+        );
         if (
           !incomeTurnMatches ||
           !couponMatches ||

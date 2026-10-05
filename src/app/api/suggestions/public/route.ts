@@ -3,7 +3,7 @@ import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseBoundedIntParam } from "@/lib/api/validate";
 import type { Suggestion, SuggestionStatus } from "@/lib/db/types";
 import { getSuggestionsCollection } from "@/lib/db/collections/suggestions";
@@ -64,13 +64,13 @@ async function handleGET(request: Request) {
     const offset = Math.max(0, parseInt(searchParams.get("offset") ?? "0", 10));
 
     if (category && !CATEGORIES.includes(category as (typeof CATEGORIES)[number])) {
-      return NextResponse.json({ error: "Invalid category filter" }, { status: 400 });
+      return errorResponse(400, "Invalid category filter");
     }
     if (gameSystem && !GAME_SYSTEMS.includes(gameSystem as (typeof GAME_SYSTEMS)[number])) {
-      return NextResponse.json({ error: "Invalid gameSystem filter" }, { status: 400 });
+      return errorResponse(400, "Invalid gameSystem filter");
     }
     if (statusFilter && !STATUSES.includes(statusFilter as SuggestionStatus)) {
-      return NextResponse.json({ error: "Invalid status filter" }, { status: 400 });
+      return errorResponse(400, "Invalid status filter");
     }
 
     const filter: Record<string, unknown> = { mergedInto: { $exists: false } };

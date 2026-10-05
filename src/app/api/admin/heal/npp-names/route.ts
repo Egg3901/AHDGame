@@ -4,7 +4,7 @@
 // Errors: 403
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { planNppNameHeal, applyNppNameHeal } from "@/lib/npp/healNames";
 
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     const limitParam = url.searchParams.get("limit");
     const limit = limitParam ? Number(limitParam) : undefined;
     if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
-      return NextResponse.json({ error: "limit must be a positive number" }, { status: 400 });
+      return errorResponse(400, "limit must be a positive number");
     }
 
     const db = await getDb();

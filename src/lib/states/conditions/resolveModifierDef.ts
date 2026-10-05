@@ -19,13 +19,21 @@ export interface ResolveModifierContext {
 
 function applyPatch<T extends ModifierDefLike>(
   def: T,
-  patch?: { suppress?: boolean; conditions?: T["conditions"]; marginFactor?: number }
+  patch?: { suppress?: boolean; conditions?: T["conditions"]; marginFactor?: number },
+  thresholdYear = 2019
 ): T | null {
   if (!patch) return def;
   if (patch.suppress) return null;
   return {
     ...def,
-    ...(patch.conditions ? { conditions: patch.conditions } : {}),
+    ...(patch.conditions
+      ? {
+          conditions: patch.conditions.map((c) => ({
+            ...c,
+            thresholdYear: c.thresholdYear ?? thresholdYear,
+          })),
+        }
+      : {}),
     ...(patch.marginFactor != null ? { marginFactor: patch.marginFactor } : {}),
   };
 }
@@ -39,7 +47,7 @@ export function resolveModifierDef<T extends ModifierDefLike>(
   let resolved: T | null = def;
 
   if (profile === "era1991") {
-    resolved = applyPatch(resolved, ERA1991_MODIFIER_PATCHES[def.id]);
+    resolved = applyPatch(resolved, ERA1991_MODIFIER_PATCHES[def.id], 1991);
     if (!resolved) return null;
   }
 
@@ -50,7 +58,7 @@ export function resolveModifierDef<T extends ModifierDefLike>(
   }
 
   if (profile === "era1991" && country && COUNTRY_ERA1991_PATCHES[country]?.[def.id]) {
-    resolved = applyPatch(resolved, COUNTRY_ERA1991_PATCHES[country]![def.id]);
+    resolved = applyPatch(resolved, COUNTRY_ERA1991_PATCHES[country]![def.id], 1991);
     if (!resolved) return null;
   }
 

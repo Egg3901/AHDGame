@@ -38,6 +38,7 @@ import {
   supportsSnapElections,
   type CountryId,
 } from "@/lib/constants/countries";
+import { getJpShugiinSeats } from "@/lib/constants/states";
 import {
   getGovernmentFormationsCollection,
   getNoConfidenceVotesCollection,
@@ -54,6 +55,7 @@ import { cycleAnchorContextFromGameState } from "@/lib/elections/cycleAnchorCont
 import { byElectionTypesFor } from "@/lib/utils/electionLabels";
 import type {
   Character,
+  CountryGameState,
   ElectedOfficial,
   Election,
   ElectionStatus,
@@ -63,6 +65,7 @@ import type {
 } from "@/lib/db/types";
 import { officialsCountryScope } from "@/lib/db/electedOfficialScope";
 import { snapElectionResolutionYear } from "@/lib/turn/rules/snapElection";
+import { japanShugiinRulesForRegion } from "@/lib/countries/jp/rules/shugiinElectoralLaw";
 
 export const SNAP_ELECTION_LIMIT = 2;
 export const SNAP_ELECTION_COOLDOWN_TURNS = 336;
@@ -288,6 +291,13 @@ export async function triggerSnapElection(
     .find({ countryId, electionType: lowerChamberKey })
     .toArray();
   const seatsByRegion = new Map(seats.map((s) => [s.state, s.totalSeats ?? 1]));
+  const jpCountryState =
+    countryId === COUNTRY_CONFIGS.JP.id
+      ? await db
+          .collection<CountryGameState>("countryGameStates")
+          .findOne({ _id: COUNTRY_CONFIGS.JP.id }, { projection: { jpShugiinElectoralMandate: 1 } })
+      : null;
+  const jpLegacySeats = gameState?.preset ? getJpShugiinSeats(gameState.preset) : {};
 
   // Inherit cycle number from most recent regular-or-snap election per region,
   // so snap elections slot into the same cycle sequence as regulars.
@@ -309,11 +319,35 @@ export async function triggerSnapElection(
     const regionId = r._id as string;
     const prev = lastByRegion.get(regionId);
     const cycle = (prev?.cycle ?? 0) + 1;
+    const japanRules =
+      countryId === COUNTRY_CONFIGS.JP.id
+        ? japanShugiinRulesForRegion(
+            gameState?.preset,
+            regionId,
+            jpLegacySeats[regionId] ?? seatsByRegion.get(regionId) ?? 0,
+            jpCountryState?.jpShugiinElectoralMandate
+          )
+        : null;
     return {
       countryId,
       electionType: snapElectionType,
       state: regionId,
-      allocationMethod: getElectionMethod(countryId, snapElectionType, gameState?.preset),
+      ...(japanRules?.law === "mixed-1994-v1"
+        ? {}
+        : { allocationMethod: getElectionMethod(countryId, snapElectionType, gameState?.preset) }),
+      ...(japanRules
+        ? {
+            japanShugiinRules: {
+              ruleVersion: japanRules.law,
+              districtSeats: japanRules.districtSeats,
+              listSeats: japanRules.listSeats,
+              ...(japanRules.authorizedOnTurn != null
+                ? { authorizedOnTurn: japanRules.authorizedOnTurn }
+                : {}),
+              ...(japanRules.reformBillId ? { reformBillId: japanRules.reformBillId } : {}),
+            },
+          }
+        : {}),
       seatId: getSeatIdFromElection({
         countryId,
         electionType: lowerChamberKey,
@@ -328,7 +362,7 @@ export async function triggerSnapElection(
       // election is not.
       ...(imposed && { imposedSnap: true }),
       ...(opts.conversionTerms && { conversionTerms: opts.conversionTerms }),
-      totalSeats: seatsByRegion.get(regionId) ?? 1,
+      totalSeats: japanRules?.totalSeats ?? seatsByRegion.get(regionId) ?? 1,
       startTime: now,
       primaryEndTime: new Date(now.getTime() + snapDur.primaryDurationHours * 3_600_000),
       endTime: new Date(now.getTime() + snapDur.durationHours * 3_600_000),

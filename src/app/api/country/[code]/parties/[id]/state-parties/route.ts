@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import type { State, StatePartyOrg, NPP, Character } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -21,7 +21,7 @@ export async function GET(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
@@ -30,7 +30,7 @@ export async function GET(
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const partyIdStr = String(party.sequentialId);
 
@@ -40,7 +40,7 @@ export async function GET(
     const isChair = party.chairId?.toString() === charId;
     const isViceChair = party.viceChairId?.toString() === charId;
     if (!auth.isAdmin && !isMember && !isChair && !isViceChair) {
-      return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+      return errorResponse(403, "Not authorized");
     }
 
     const states = await db.collection<State>("states").find({ countryId }).toArray();

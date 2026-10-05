@@ -4,9 +4,7 @@ import { useState } from "react";
 import type { Character } from "@/lib/db/types";
 import { ElectionComparisonPanel } from "./ElectionComparisonPanel";
 import type { StoredPoll, PollData } from "../types";
-import { PollTimestampBanner } from "./pollResults/PollTimestampBanner";
 import { StatCards } from "./pollResults/StatCards";
-import { PositionsPanel } from "./pollResults/PositionsPanel";
 import { DemographicTurnoutPanel } from "./pollResults/DemographicTurnoutPanel";
 import { GranularPollPanel } from "./pollResults/GranularPollPanel";
 import { AppealLegend } from "./pollResults/AppealLegend";
@@ -26,8 +24,8 @@ export function PollResults({
   const [demoTurnoutOpen, setDemoTurnoutOpen] = useState(false);
 
   return (
-    <>
-      <PollTimestampBanner poll={poll} />
+    <div className="space-y-8">
+      <StatCards poll={poll} />
 
       {pollData.electionContext && (
         <ElectionComparisonPanel
@@ -36,23 +34,18 @@ export function PollResults({
           myAppeal={poll.overallAppeal}
           inRaceVoteShare={poll.inRaceVoteShare}
           myParty={character.party}
+          partyColors={pollData.partyColors}
         />
       )}
-
-      <StatCards poll={poll} />
 
       {/* Archetype-based panel, hidden when the granular electorate is active
           (the granular panel + segment explorer supersede it). */}
       {!poll.granular && <PollRecommendations poll={poll} pollData={pollData} />}
 
-      <PositionsPanel pollData={pollData} />
-
       {selectedTier === "large" && poll.categories ? (
-        <div className="space-y-3">
+        <>
           {/* The granular electorate IS the poll: it is the substrate the vote
-              engine counts, so it is the only per-group breakdown shown. The
-              archetype Topline/Breakdown/TopBottom panels that used to sit here
-              described a projection of the electorate, not the electorate. */}
+              engine counts, so it is the only per-group breakdown shown. */}
           {poll.granular && <GranularPollPanel poll={poll} pollData={pollData} />}
 
           {pollData.demographicTurnout && (
@@ -62,19 +55,17 @@ export function PollResults({
               setDemoTurnoutOpen={setDemoTurnoutOpen}
             />
           )}
-        </div>
+        </>
       ) : selectedTier === "large" && !poll.categories ? (
-        <div className="rounded-xl border border-secondary/20 bg-secondary/5 p-6 text-center">
-          <div className="text-secondary font-semibold mb-1">
-            Full breakdown requires commissioning the Full Poll
-          </div>
-          <p className="text-sm text-muted">
-            Commission the poll above to unlock the complete per-group analysis.
+        <section className="text-body">
+          <h2 className="text-heading font-semibold">Full breakdown needs the Full Poll</h2>
+          <p className="mt-1 text-muted">
+            Commission the Full Poll above to unlock the per-group analysis.
           </p>
-        </div>
+        </section>
       ) : null}
 
-      <AppealLegend poll={poll} />
-    </>
+      <AppealLegend />
+    </div>
   );
 }

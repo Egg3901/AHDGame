@@ -41,7 +41,7 @@ export default function VacanciesPanel({
   return (
     <>
       <div className="rounded-xl border border-card-border bg-card p-6">
-        <h2 className="mb-4 text-xl font-semibold text-foreground">Current Vacancies</h2>
+        <h2 className="mb-4 text-xl font-semibold text-foreground">Current vacancies</h2>
 
         {senateVacancies.length > 0 && (
           <div className="mb-4">
@@ -63,7 +63,7 @@ export default function VacanciesPanel({
                         onClick={() => handleAppointClick(vacancy)}
                         className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-white hover:bg-primary-dark transition-colors"
                       >
-                        Appoint Replacement
+                        Appoint replacement
                       </button>
                     )}
                   </div>

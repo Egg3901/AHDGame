@@ -30,7 +30,9 @@ describe("1991 provisional cost-to-source audit", () => {
   it("does not erase the US fiscal source claim with a small prototype price", () => {
     const row = rows.find((entry) => entry.country === "US" && entry.familyId === "L08")!;
     expect(row.centerToSourceRatio).toBeLessThan(0.01);
-    expect(row.fiveAnchoredAnnual[2]).toBe(117_262_305_000);
+    // Keep the funded source claim after opening-envelope calibration, rather
+    // than substituting the much smaller provisional agency design estimate.
+    expect(row.fiveAnchoredAnnual[2]).toBe(108_308_193_146);
     expect(row.designCenterAnnual).toBe(372_000_000);
   });
 });

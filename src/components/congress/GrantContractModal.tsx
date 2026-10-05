@@ -4,6 +4,7 @@ import { useState } from "react";
 import { EXTRACTABLE_RESOURCES, COMMODITY_LABELS } from "@/lib/constants/commodities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import { Modal } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   legislatureId: string;
@@ -63,7 +64,7 @@ export function GrantContractModal({
       setFormState((s) => ({
         ...s,
         submitting: false,
-        error: json.error ?? "Failed to grant contract",
+        error: apiErrorText(json, "Failed to grant contract"),
       }));
       return;
     }
@@ -77,7 +78,7 @@ export function GrantContractModal({
   }
 
   return (
-    <Modal open title="Grant Resource Contract" onClose={onClose}>
+    <Modal open title="Grant resource contract" onClose={onClose}>
       {formState.awaitingConfirmation && (
         <div className="mb-4 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
           Warning: this contract over-allocates the state&apos;s capacity for this resource.
@@ -166,7 +167,7 @@ export function GrantContractModal({
               disabled={formState.submitting}
               className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
-              {formState.submitting ? "Granting..." : "Grant Contract"}
+              {formState.submitting ? "Granting..." : "Grant contract"}
             </button>
             <button
               type="button"

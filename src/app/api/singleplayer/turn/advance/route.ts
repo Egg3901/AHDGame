@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireSingleplayer } from "@/lib/api/requireSingleplayer";
 import { getDb } from "@/lib/mongodb";
 import { getSingleplayerConfig } from "@/lib/singleplayerServer";
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     const db = await getDb();
     const config = await getSingleplayerConfig(db);
     if (!config || config.mode === "worldsim") {
-      return NextResponse.json({ error: "A player world is not configured" }, { status: 409 });
+      return errorResponse(409, "A player world is not configured");
     }
 
     const character = await db
@@ -30,22 +30,16 @@ export async function POST(request: Request) {
         { projection: { _id: 1, funds: 1, currencyBalances: 1, actions: 1 } }
       );
     if (!character) {
-      return NextResponse.json(
-        { error: "Create a character before ending a turn." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Create a character before ending a turn.");
     }
 
     if ((await getSingleplayerWorldAvailability(db)) !== "off") {
-      return NextResponse.json(
-        { error: "Resume the world before ending a turn." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Resume the world before ending a turn.");
     }
     const started = performance.now();
     const result = await processTurn();
     if (result.turn <= 0) {
-      return NextResponse.json({ error: result.message }, { status: 500 });
+      return errorResponse(500, result.message);
     }
 
     // Lonely share-fill orphans are re-driven by the periodic cron sweep in

@@ -1,6 +1,6 @@
 "use client";
 
-import { BLEND, FONT } from "@/components/blend/tokens";
+import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import type { MoneyVM, SparklineBarVM } from "./campaignBlendViewModel";
 
 /** Height of the sparkline box in the design's money pane. */
@@ -144,18 +144,7 @@ function ContributeBlock({
 }) {
   return (
     <div style={{ marginTop: 16 }}>
-      <div
-        style={{
-          fontFamily: FONT.mono,
-          fontSize: 9.5,
-          letterSpacing: ".16em",
-          textTransform: "uppercase",
-          color: BLEND.mutedDimmer,
-          marginBottom: 8,
-        }}
-      >
-        {heading}
-      </div>
+      <div style={{ ...BLEND_LABEL, marginBottom: 8 }}>{heading}</div>
       <div style={{ display: "flex", gap: 8 }}>
         <input
           placeholder="Amount"

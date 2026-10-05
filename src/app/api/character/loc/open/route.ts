@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, badRequest } from "@/lib/api/errors";
+import { handleRouteError, badRequest, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse, SAVINGS_WALLET_LIMITS } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, openSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { currency } = parsed.data;
     const c = currency as CurrencyCode;
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     ]);
 
     if (!locEnabled) {
-      return NextResponse.json({ error: "Line of credit is not available" }, { status: 404 });
+      return errorResponse(404, "Line of credit is not available");
     }
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (!character) {

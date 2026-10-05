@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { getMessageStyle } from "@/lib/utils/formatters";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CandidateDisplay {
   id: string;
@@ -83,7 +84,9 @@ export function CaucusChairElectionPanel({
         body: JSON.stringify(body),
       });
       const payload = (await response.json()) as { message?: string; error?: string };
-      setMessage(response.ok ? `✓ ${payload.message}` : `✗ ${payload.error}`);
+      setMessage(
+        response.ok ? `✓ ${payload.message}` : `✗ ${apiErrorText(payload, "Request failed")}`
+      );
       if (response.ok) {
         await fetchData();
       }
@@ -171,7 +174,7 @@ export function CaucusChairElectionPanel({
                 className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:opacity-90 disabled:opacity-40"
                 style={{ backgroundColor: caucusColor }}
               >
-                {actionLoading ? "..." : "Run for Chair"}
+                {actionLoading ? "..." : "Run for chair"}
               </button>
             )}
             {data.isCandidate && (
@@ -191,7 +194,7 @@ export function CaucusChairElectionPanel({
                 disabled={actionLoading}
                 className="rounded-lg border border-error/40 bg-error/10 px-3 py-1.5 text-xs font-semibold text-error hover:bg-error/20 disabled:opacity-40"
               >
-                {actionLoading ? "..." : "Withdraw Vote"}
+                {actionLoading ? "..." : "Withdraw vote"}
               </button>
             )}
           </div>
@@ -240,7 +243,7 @@ export function CaucusChairElectionPanel({
                       )}
                       {isMyVote && (
                         <span className="shrink-0 text-body-sm font-medium text-success">
-                          Your Vote
+                          Your vote
                         </span>
                       )}
                     </div>

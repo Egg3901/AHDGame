@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 import { SectionCard, Badge } from "../dossier";
 import { WAR_GOALS, WAR_DECLARATION_COOLDOWN_TURNS } from "@/lib/military/warGoals";
@@ -96,7 +97,7 @@ export function DeclareWarPanel({
         // The route refuses for reasons invisible here — already at war, a
         // declaration already before the chambers, the seat lost since load.
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(body?.error ?? "The declaration could not be filed.");
+        setError(apiErrorText(body, "The declaration could not be filed."));
         return;
       }
       const body = (await res.json()) as { billId?: string };

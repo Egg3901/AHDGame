@@ -8,6 +8,7 @@ import {
   SINGLEPLAYER_FEATURE_FLAGS,
   type SingleplayerFeatureFlagKey,
 } from "@/lib/singleplayerFeatureFlags";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BriefingItem {
   category: string;
@@ -54,7 +55,8 @@ export function SingleplayerAdmin({
         body: JSON.stringify({ availability: next }),
       });
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
-      if (!response.ok) throw new Error(body?.error ?? `World control failed (${response.status})`);
+      if (!response.ok)
+        throw new Error(apiErrorText(body, `World control failed (${response.status})`));
       setAvailability(next);
       if (next === "open") router.push(status.hasCharacter ? "/profile" : "/create-character");
       router.refresh();
@@ -75,7 +77,7 @@ export function SingleplayerAdmin({
         body: JSON.stringify({ difficulty, autonomyLevel: autonomy, featureFlags }),
       });
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
-      if (!response.ok) throw new Error(body?.error ?? "Could not save world rules");
+      if (!response.ok) throw new Error(apiErrorText(body, "Could not save world rules"));
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Could not save world rules");
     } finally {
@@ -89,7 +91,7 @@ export function SingleplayerAdmin({
     try {
       const response = await fetch("/api/singleplayer/operator/diagnostics", { cache: "no-store" });
       const body = (await response.json()) as Record<string, unknown> & { error?: string };
-      if (!response.ok) throw new Error(body.error ?? "Could not read diagnostics");
+      if (!response.ok) throw new Error(apiErrorText(body, "Could not read diagnostics"));
       setDiagnostics(JSON.stringify(body, null, 2));
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Could not read diagnostics");
@@ -104,7 +106,7 @@ export function SingleplayerAdmin({
     try {
       const response = await fetch("/api/singleplayer/operator/turn", { method: "POST" });
       const result = (await response.json()) as { error?: string; turn?: number };
-      if (!response.ok || result.turn == null) throw new Error(result.error ?? "Turn failed");
+      if (!response.ok || result.turn == null) throw new Error(apiErrorText(result, "Turn failed"));
       setTurn(result.turn);
       const statusResponse = await fetch("/api/client-status?layout=full", { cache: "no-store" });
       if (statusResponse.ok) {
@@ -122,9 +124,7 @@ export function SingleplayerAdmin({
     <main className="min-h-screen bg-background px-4 py-12">
       <div className="mx-auto max-w-3xl">
         <header className="mb-8">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-            Singleplayer controls
-          </p>
+          <p className="mb-2 text-body-sm font-medium text-primary">Singleplayer controls</p>
           <h1 className="text-3xl font-bold tracking-tight">Your local world</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted">
             This panel controls only the world stored on this device. Hosted administration,
@@ -135,9 +135,7 @@ export function SingleplayerAdmin({
         <section className="rounded border border-card-border bg-card-muted p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                World state
-              </p>
+              <p className="text-body-sm font-medium text-muted">World state</p>
               <h2 className="mt-1 text-xl font-semibold">
                 {availability === "sealed" ? "Paused and sealed" : "Open for play"}
               </h2>
@@ -293,7 +291,7 @@ export function SingleplayerAdmin({
                     href={item.href}
                     className="block rounded border border-card-border p-3 hover:bg-card-muted"
                   >
-                    <span className="block text-xs uppercase tracking-wide text-muted">
+                    <span className="block text-body-sm font-medium text-muted">
                       {item.category}
                     </span>
                     <span className="font-medium">{item.label}</span>{" "}

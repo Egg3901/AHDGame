@@ -126,7 +126,7 @@ export function UserApiKeysTab() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">User API Keys</h2>
+      <h2 className="text-lg font-semibold">User API keys</h2>
 
       {error && (
         <div className="rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
@@ -186,7 +186,7 @@ export function UserApiKeysTab() {
               >
                 User{sortIcon("username")}
               </th>
-              <th className="px-3 py-2 text-left font-medium text-muted">Key Name</th>
+              <th className="px-3 py-2 text-left font-medium text-muted">Key name</th>
               <th
                 className="cursor-pointer px-3 py-2 text-left font-medium text-muted hover:text-foreground"
                 onClick={() => toggleSort("scope")}
@@ -204,7 +204,7 @@ export function UserApiKeysTab() {
                 className="cursor-pointer px-3 py-2 text-left font-medium text-muted hover:text-foreground"
                 onClick={() => toggleSort("lastUsedAt")}
               >
-                Last Used{sortIcon("lastUsedAt")}
+                Last used{sortIcon("lastUsedAt")}
               </th>
               <th
                 className="cursor-pointer px-3 py-2 text-left font-medium text-muted hover:text-foreground"

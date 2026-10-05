@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MACRO_BOUND, MACRO_WEIGHT, macroResidualFor } from "./macroResidual";
+import { MACRO_BOUND, macroResidualFor } from "./macroResidual";
 
 const GOOD = { "economic.unemploymentRate": 2, "economic.costOfLiving": 30 };
 const BAD = { "economic.unemploymentRate": 22, "economic.costOfLiving": 95 };
@@ -54,4 +54,11 @@ describe("macroResidualFor", () => {
     expect(crossing).toBeGreaterThan(0);
     expect(crossing).toBeLessThan(100);
   });
+});
+
+it("scores historical macro observations against that year's bands", () => {
+  const macro = { "economic.productivityGrowth": 1.2, "economic.rdIntensity": 2.1 };
+  const historical = macroResidualFor("economy.productivity", 50, macro, "UK", 1991);
+  const modern = macroResidualFor("economy.productivity", 50, macro, "UK", 2019);
+  expect(historical).not.toBe(modern);
 });

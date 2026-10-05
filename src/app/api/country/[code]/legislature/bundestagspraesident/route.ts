@@ -19,7 +19,7 @@ import { getPartyMap } from "@/lib/db/partyMap";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getAuthUser } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getBundestagComposition } from "@/lib/congress/bundestagComposition";
 import { resolveBundestagspraesidentElection } from "@/lib/congress/bundestagspraesident/resolveElection";
@@ -53,10 +53,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase();
     if (countryId !== "DE" || !COUNTRY_CONFIGS.DE) {
-      return NextResponse.json(
-        { error: "Bundestagspräsident endpoint is DE-only" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Bundestagspräsident endpoint is DE-only");
     }
     const db = await getDb();
     const partyMap = await getPartyMap(db, "DE");
@@ -176,10 +173,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase();
     if (countryId !== "DE" || !COUNTRY_CONFIGS.DE) {
-      return NextResponse.json(
-        { error: "Bundestagspräsident endpoint is DE-only" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Bundestagspräsident endpoint is DE-only");
     }
 
     const auth = await requireBasicAuth();
@@ -190,7 +184,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     const parsed = await parseJsonBody(request, bundestagspraesidentActionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { action, nominationId } = parsed.data;
 
@@ -211,7 +205,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     });
 
     if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
     return NextResponse.json({ message: result.message });
   } catch (error) {

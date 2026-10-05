@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -23,10 +23,7 @@ export async function POST() {
     const db = await getDb();
     const result = await resignCommonsSeat(db, auth.user.character);
     if (!result.ok) {
-      return NextResponse.json(
-        { error: result.error },
-        { status: result.status, headers: NO_STORE }
-      );
+      return errorResponse(result.status, result.error, { headers: NO_STORE });
     }
     return NextResponse.json(
       {

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { Suspense, useCallback, useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { FeedbackModal } from "@/components/FeedbackModal";
@@ -109,7 +110,7 @@ function FeedbackBoardInner() {
       const res = await fetch(`/api/suggestions/public?${params}`);
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to load");
+        setError(apiErrorText(data, "Failed to load"));
         setItems([]);
         return;
       }
@@ -188,7 +189,7 @@ function FeedbackBoardInner() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Merge failed");
+        setError(apiErrorText(data, "Merge failed"));
         return;
       }
       setSelectedIds(new Set());
@@ -217,7 +218,7 @@ function FeedbackBoardInner() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Delete failed");
+        setError(apiErrorText(data, "Delete failed"));
         return;
       }
       setSelectedIds(new Set());
@@ -237,7 +238,7 @@ function FeedbackBoardInner() {
         });
         if (!res.ok) {
           const data = await res.json();
-          setError(data.error ?? "Update failed");
+          setError(apiErrorText(data, "Update failed"));
           return;
         }
         setItems((prev) =>

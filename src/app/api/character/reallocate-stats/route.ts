@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireHumanSession } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import type { Character, User } from "@/lib/db/types";
 import { validateStatAllocation } from "@/lib/stats/validateStatAllocation";
@@ -40,37 +40,28 @@ export async function POST(request: Request) {
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     if (!(await isRpgStatsEnabled())) {
-      return NextResponse.json(
-        { error: "The stat system is not currently enabled." },
-        { status: 403 }
-      );
+      return errorResponse(403, "The stat system is not currently enabled.");
     }
 
     const parsed = await parseJsonBody(request, reallocateStatsSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const validation = validateStatAllocation(parsed.data.stats);
     if (!validation.ok) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+      return errorResponse(400, validation.error);
     }
 
     const { db, character } = await loadActiveCharacter(auth.user.userId);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
     if (!character.statsAllocated) {
-      return NextResponse.json(
-        { error: "Allocate your stats before reallocating." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Allocate your stats before reallocating.");
     }
     if (character.statsReallocationUsed) {
-      return NextResponse.json(
-        { error: "You have already used your free stat reallocation." },
-        { status: 409 }
-      );
+      return errorResponse(409, "You have already used your free stat reallocation.");
     }
 
     // Atomic guard: only spend the reallocation if it is still unused (prevents
@@ -88,10 +79,7 @@ export async function POST(request: Request) {
       }
     );
     if (result.matchedCount === 0) {
-      return NextResponse.json(
-        { error: "You have already used your free stat reallocation." },
-        { status: 409 }
-      );
+      return errorResponse(409, "You have already used your free stat reallocation.");
     }
 
     return NextResponse.json({ success: true, stats: validation.stats });

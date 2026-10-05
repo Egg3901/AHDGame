@@ -92,7 +92,7 @@ describe("POST /api/client/statistics", () => {
     const body = await response.json();
 
     expect(response.status).toBe(400);
-    expect(body).toEqual({ error: "Invalid report" });
+    expect(body).toMatchObject({ error: "Invalid report" });
     expect(insertOne).not.toHaveBeenCalled();
   });
 
@@ -106,7 +106,7 @@ describe("POST /api/client/statistics", () => {
     const body = await response.json();
 
     expect(response.status).toBe(400);
-    expect(body).toEqual({ error: "Invalid report" });
+    expect(body).toMatchObject({ error: "Invalid report" });
     expect(JSON.stringify(body)).not.toContain("507f1f77bcf86cd799439011");
     expect(JSON.stringify(body)).not.toContain("Ada");
     expect(insertOne).not.toHaveBeenCalled();
@@ -117,7 +117,7 @@ describe("POST /api/client/statistics", () => {
     const body = await response.json();
 
     expect(response.status).toBe(400);
-    expect(body).toEqual({ error: "Invalid report" });
+    expect(body).toMatchObject({ error: "Invalid report" });
     expect(insertOne).not.toHaveBeenCalled();
   });
 
@@ -128,7 +128,7 @@ describe("POST /api/client/statistics", () => {
     const body = await response.json();
 
     expect(response.status).toBe(500);
-    expect(body).toEqual({ error: "Unable to store report" });
+    expect(body).toMatchObject({ error: "Unable to store report" });
   });
 
   it("sends no cookies and needs no auth headers", async () => {

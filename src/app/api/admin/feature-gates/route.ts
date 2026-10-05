@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import type {
   GameState,
@@ -183,7 +183,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     if (
@@ -191,11 +191,9 @@ export async function POST(request: Request) {
       parsed.data.value === "v2" &&
       !RESET_V2_READY[parsed.data.system]
     ) {
-      return NextResponse.json(
-        {
-          error: `${parsed.data.system} v2 is not available until its complete runtime path ships.`,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `${parsed.data.system} v2 is not available until its complete runtime path ships.`
       );
     }
 
@@ -216,7 +214,7 @@ export async function POST(request: Request) {
         }
       );
       if (!gameState) {
-        return NextResponse.json({ error: "No game world is initialized." }, { status: 409 });
+        return errorResponse(409, "No game world is initialized.");
       }
       const eligibility = resetVersionSelectionEligibility(
         gameState,
@@ -231,7 +229,7 @@ export async function POST(request: Request) {
             : eligibility.reason === "dependent_v2"
               ? "Return Legislation and Cabinet to v1 before selecting Metrics v1."
               : `${resetChange.system} v2 is not available until its complete runtime path ships.`;
-        return NextResponse.json({ error }, { status: 409 });
+        return errorResponse(409, error);
       }
       resetFilter = {
         _id: "current",
@@ -299,9 +297,9 @@ export async function POST(request: Request) {
 
     const result = await db.collection<GameState>("gameState").updateOne(resetFilter, update);
     if (resetChange && result.matchedCount === 0) {
-      return NextResponse.json(
-        { error: "The system versions changed during this request. Reload and try again." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "The system versions changed during this request. Reload and try again."
       );
     }
 

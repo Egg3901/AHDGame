@@ -3,8 +3,8 @@
 import type { StoredPoll, PollData } from "../../types";
 
 /**
- * Generates 2–3 brief, vague recommendations based on what's hurting the player's poll numbers most.
- * Intentionally avoids exact numbers or prescriptive actions — just directional hints.
+ * Generates 2 to 3 brief, vague recommendations based on what's hurting the player's poll numbers most.
+ * Intentionally avoids exact numbers or prescriptive actions, just directional hints.
  */
 export function PollRecommendations({ poll, pollData }: { poll: StoredPoll; pollData: PollData }) {
   const tips = generateTips(poll, pollData);
@@ -12,19 +12,21 @@ export function PollRecommendations({ poll, pollData }: { poll: StoredPoll; poll
   if (tips.length === 0) return null;
 
   return (
-    <div className="mb-6 rounded-xl border border-secondary/20 bg-secondary/5 p-4">
-      <div className="text-xs text-secondary uppercase tracking-wide mb-2 font-medium">
-        Pollster&apos;s Notes
-      </div>
-      <ul className="space-y-1.5">
+    <section aria-labelledby="poll-notes-heading">
+      <h2 id="poll-notes-heading" className="text-heading font-semibold">
+        Pollster&apos;s notes
+      </h2>
+      <ul className="mt-3 space-y-2">
         {tips.map((tip, i) => (
-          <li key={i} className="flex gap-2 text-sm text-muted/80">
-            <span className="text-secondary shrink-0">&#x2022;</span>
+          <li key={i} className="flex gap-2 text-body text-muted">
+            <span className="text-primary shrink-0" aria-hidden>
+              &#x2022;
+            </span>
             <span>{tip}</span>
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
 
@@ -38,12 +40,12 @@ function generateTips(poll: StoredPoll, pollData: PollData): string[] {
     {
       name: "influence",
       value: politicalInfluence,
-      tip: "Your name recognition is low — most voters don't know who you are yet. Building influence should be a priority.",
+      tip: "Your name recognition is low, so most voters don't know who you are yet. Building influence should be a priority.",
     },
     {
       name: "favorability",
       value: favorability,
-      tip: "Your favorability is dragging you down — even voters who know you aren't sold. Focus on improving your public image.",
+      tip: "Your favorability is dragging you down, and even voters who know you aren't sold. Focus on improving your public image.",
     },
   ];
 
@@ -55,7 +57,7 @@ function generateTips(poll: StoredPoll, pollData: PollData): string[] {
     });
   }
 
-  // Find the weakest stat (normalize: influence/fav are 0–100, org is 0–100)
+  // Find the weakest stat (normalize: influence/fav are 0 to 100, org is 0 to 100)
   const weakest = stats.reduce((min, s) => (s.value < min.value ? s : min), stats[0]);
   if (weakest.value < 40) {
     tips.push(weakest.tip);

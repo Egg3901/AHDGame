@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
@@ -20,7 +20,7 @@ type Context = { params: Promise<{ code: string }> };
 export async function GET(_request: Request, { params }: Context) {
   try {
     if ((await params).code.toUpperCase() !== "HU")
-      return NextResponse.json({ error: "No Hungarian electoral decision here" }, { status: 404 });
+      return errorResponse(404, "No Hungarian electoral decision here");
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     const db = await getDb();
@@ -39,18 +39,17 @@ export async function GET(_request: Request, { params }: Context) {
 export async function POST(request: Request, { params }: Context) {
   try {
     if ((await params).code.toUpperCase() !== "HU")
-      return NextResponse.json({ error: "No Hungarian electoral decision here" }, { status: 404 });
+      return errorResponse(404, "No Hungarian electoral decision here");
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     const limit = checkRateLimit(`hu-electoral-reform:${auth.user.userId}`, 5, 60_000);
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
     const parsed = await parseJsonBody(request, bodySchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const db = await getDb();
     const game = await getGameState(db);
     if (game?.preset !== "1991-default")
-      return NextResponse.json({ error: "No electoral decision in this era" }, { status: 409 });
+      return errorResponse(409, "No electoral decision in this era");
     const character = await getCharacterByUserId(db, auth.user.userId);
     const official = character
       ? await db.collection("electedOfficials").findOne(
@@ -64,10 +63,7 @@ export async function POST(request: Request, { params }: Context) {
         )
       : null;
     if (!official && auth.user.isAdmin !== true)
-      return NextResponse.json(
-        { error: "A seated Hungarian deputy must open this decision" },
-        { status: 403 }
-      );
+      return errorResponse(403, "A seated Hungarian deputy must open this decision");
     const freeze = await checkLegislationFreeze("HU");
     if (!freeze.ok) return freeze.response;
     const proposal = await openHu2011ElectoralProposal({
@@ -87,8 +83,7 @@ export async function POST(request: Request, { params }: Context) {
       { status: 201, headers: { "Cache-Control": "private, no-store" } }
     );
   } catch (error) {
-    if (error instanceof Hu2011ElectoralConflict)
-      return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof Hu2011ElectoralConflict) return errorResponse(409, error.message);
     return handleRouteError(error);
   }
 }

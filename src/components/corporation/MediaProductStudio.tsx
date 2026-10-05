@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button, Card, LoadingSpinner } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface MediaKind {
   id: string;
@@ -93,7 +94,7 @@ export function MediaProductStudio({
         body: JSON.stringify({ kindId, sectorId, title, allocationShare }),
       });
       const body = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(body.error ?? "Could not start the project.");
+      if (!response.ok) throw new Error(apiErrorText(body, "Could not start the project."));
       setTitle("");
       setMessage(
         "Development started. Paid research and delivered advertising count during turns."
@@ -116,7 +117,7 @@ export function MediaProductStudio({
         { method: "POST" }
       );
       const body = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(body.error ?? "Could not retire the project.");
+      if (!response.ok) throw new Error(apiErrorText(body, "Could not retire the project."));
       await refresh();
       onUpdate?.();
     } catch (error) {
@@ -138,7 +139,7 @@ export function MediaProductStudio({
   return (
     <Card className="space-y-4 p-4">
       <div>
-        <h3 className="text-lg font-semibold">Media Product Studio</h3>
+        <h3 className="text-lg font-semibold">Media product studio</h3>
         <p className="text-sm text-muted-foreground">
           Develop named titles with paid research. Titles use existing sector output and never add
           units.

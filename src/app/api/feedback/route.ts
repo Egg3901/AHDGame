@@ -5,7 +5,7 @@ import { getAuthUser } from "@/lib/auth"; // Optional auth — intentionally use
 import { getClientIp } from "@/lib/utils/network";
 import { checkRateLimit, FEEDBACK_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
 import { logRequest } from "@/lib/api/requestLog";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { feedbackSchema } from "@/lib/api/schemas/feedback";
 import { getNextFeedbackNumber } from "@/lib/feedbackCounter";
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     const parsed = await parseJsonBody(request, feedbackSchema);
     if (!parsed.success) {
       logRequest("POST", path, parsed.status, Date.now() - start);
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
     const { type, category, title, description, context } = body;

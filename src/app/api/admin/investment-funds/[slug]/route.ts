@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { isIndexFundsEnabled, INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFunds/featureFlag";
 import { resolveFundBySlugOrId, setFundStatus } from "@/lib/indexFunds/fundQueries";
@@ -22,7 +22,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
 
     const db = await getDb();
     if (!(await isIndexFundsEnabled())) {
-      return NextResponse.json({ error: INDEX_FUNDS_DISABLED_MESSAGE }, { status: 403 });
+      return errorResponse(403, INDEX_FUNDS_DISABLED_MESSAGE);
     }
 
     const { slug } = await params;
@@ -43,12 +43,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sl
 
     const parsed = await parseJsonBody(request, pauseSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     if (!(await isIndexFundsEnabled())) {
-      return NextResponse.json({ error: INDEX_FUNDS_DISABLED_MESSAGE }, { status: 403 });
+      return errorResponse(403, INDEX_FUNDS_DISABLED_MESSAGE);
     }
 
     const { slug } = await params;
@@ -58,10 +58,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sl
     const { status, pauseReason } = parsed.data;
 
     if (status === "paused" && fund.status === "paused") {
-      return NextResponse.json({ error: "Fund is already paused" }, { status: 400 });
+      return errorResponse(400, "Fund is already paused");
     }
     if (status === "delisted" && fund.status === "delisted") {
-      return NextResponse.json({ error: "Fund is already delisted" }, { status: 400 });
+      return errorResponse(400, "Fund is already delisted");
     }
 
     const reason =

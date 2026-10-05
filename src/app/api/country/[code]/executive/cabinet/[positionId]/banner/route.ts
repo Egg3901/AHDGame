@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isR2Enabled, uploadFile, deleteByPrefix } from "@/lib/r2";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
@@ -32,27 +32,24 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const parsed = await parseFormData(request);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const formData = parsed.data;
     const file = formData.get("file");
 
     if (!file || !(file instanceof Blob)) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+      return errorResponse(400, "No file uploaded");
     }
     if (!ALLOWED_TYPES.has(file.type)) {
-      return NextResponse.json(
-        { error: "Only JPEG, PNG, WebP, and GIF images are allowed." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Only JPEG, PNG, WebP, and GIF images are allowed.");
     }
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: "File must be under 4 MB." }, { status: 400 });
+      return errorResponse(400, "File must be under 4 MB.");
     }
 
     const db = await getDb();
@@ -63,10 +60,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // off the member doc, so without one there's nowhere to persist the URL and
     // the uploaded file would be stranded in R2.
     if (!member) {
-      return NextResponse.json(
-        { error: "No cabinet member holds this position." },
-        { status: 404 }
-      );
+      return errorResponse(404, "No cabinet member holds this position.");
     }
 
     const isHolder =
@@ -74,10 +68,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       !!member.characterId &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the cabinet holder or admin can upload a banner" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the cabinet holder or admin can upload a banner");
     }
 
     const ext = file.type.split("/")[1] === "jpeg" ? "jpg" : file.type.split("/")[1];

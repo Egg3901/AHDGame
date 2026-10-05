@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Character, CharacterAchievement, User } from "@/lib/db/types";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 
 interface RouteParams {
   params: Promise<{ achievementId: string }>;
@@ -12,7 +12,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
   try {
     const { achievementId } = await params;
     if (!ObjectId.isValid(achievementId)) {
-      return NextResponse.json({ error: "Invalid achievement ID" }, { status: 400 });
+      return errorResponse(400, "Invalid achievement ID");
     }
     const db = await getDb();
     const awards = await db

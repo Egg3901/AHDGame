@@ -11,7 +11,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { buySharesSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import {
   corpPurchaseWouldCycle,
   OWNERSHIP_CYCLE_ERROR,
@@ -84,7 +84,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
     const { id } = await params;
     const parsed = await parseJsonBody(request, buySharesSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { shares, buyAsCorporation, payCurrency } = parsed.data;
@@ -115,9 +115,9 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
 
       const publicFloat = corporation.publicFloat ?? 0;
       if (publicFloat < shares) {
-        return NextResponse.json(
-          { error: `Only ${publicFloat.toLocaleString()} shares available in public float` },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Only ${publicFloat.toLocaleString()} shares available in public float`
         );
       }
 
@@ -135,7 +135,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
           userId: new ObjectId(corpAuth.user.userId),
         });
         if (!imperial) {
-          return NextResponse.json({ error: "Imperial character not found" }, { status: 404 });
+          return errorResponse(404, "Imperial character not found");
         }
         ceoId = imperial._id;
       } else {
@@ -144,7 +144,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
           : { userId: new ObjectId(corpAuth.user.userId) };
         const character = await db.collection<Character>("characters").findOne(characterQuery);
         if (!character) {
-          return NextResponse.json({ error: "Character not found" }, { status: 404 });
+          return errorResponse(404, "Character not found");
         }
         ceoId = character._id;
       }
@@ -154,26 +154,17 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
         .collection<Corporation>("corporations")
         .findOne({ ceoId, ceoVacant: { $ne: true } });
       if (!buyingCorp) {
-        return NextResponse.json(
-          { error: "You must be a CEO to buy shares on behalf of a corporation" },
-          { status: 403 }
-        );
+        return errorResponse(403, "You must be a CEO to buy shares on behalf of a corporation");
       }
       if (buyingCorp._id.equals(corporation._id)) {
-        return NextResponse.json(
-          { error: "A corporation cannot purchase its own shares" },
-          { status: 400 }
-        );
+        return errorResponse(400, "A corporation cannot purchase its own shares");
       }
       if (buyingCorp.countryOwnerId) {
-        return NextResponse.json(
-          { error: "National corporations cannot hold equity positions" },
-          { status: 400 }
-        );
+        return errorResponse(400, "National corporations cannot hold equity positions");
       }
 
       if (await corpPurchaseWouldCycle(db, buyingCorp._id, corporation._id)) {
-        return NextResponse.json({ error: OWNERSHIP_CYCLE_ERROR }, { status: 400 });
+        return errorResponse(400, OWNERSHIP_CYCLE_ERROR);
       }
 
       // sharePrice is stored in the target corp's liquidCurrencyCode (v0.2.6).
@@ -199,10 +190,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
         rates: fxRates,
       });
       if (!corpPurchaseEstimate) {
-        return NextResponse.json(
-          { error: "Exchange rate unavailable, try again shortly" },
-          { status: 503 }
-        );
+        return errorResponse(503, "Exchange rate unavailable, try again shortly");
       }
       const costInBuyerCapital =
         buyingCurrency !== targetCurrency
@@ -234,14 +222,11 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
           buyingCurrency !== targetCurrency
             ? ` (${buySym}${adjustedStr} ${buyingCurrency} incl. FX, corp has ${buySym}${haveStr} ${buyingCurrency})`
             : "";
-        return NextResponse.json(
-          {
-            error:
-              buyingCurrency !== targetCurrency
-                ? `Insufficient funds. Need ${targetSym}${costStr}${currencyNote}`
-                : `Insufficient funds. Need ${targetSym}${costStr}, corp has ${buySym}${haveStr} ${buyingCurrency}`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          buyingCurrency !== targetCurrency
+            ? `Insufficient funds. Need ${targetSym}${costStr}${currencyNote}`
+            : `Insufficient funds. Need ${targetSym}${costStr}, corp has ${buySym}${haveStr} ${buyingCurrency}`
         );
       }
 
@@ -289,10 +274,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
         );
         if (!credited) {
           await refundCorpLiquidCapital(db, buyingCorp._id, costInBuyerCapital);
-          return NextResponse.json(
-            { error: "Not enough shares remain in public float" },
-            { status: 409 }
-          );
+          return errorResponse(409, "Not enough shares remain in public float");
         }
         sharesCredited = true;
 
@@ -430,9 +412,9 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
 
     const publicFloat = corporation.publicFloat ?? 0;
     if (publicFloat < shares) {
-      return NextResponse.json(
-        { error: `Only ${publicFloat.toLocaleString()} shares available in public float` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Only ${publicFloat.toLocaleString()} shares available in public float`
       );
     }
 
@@ -458,7 +440,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
         userId: new ObjectId(basicAuth.user.userId),
       });
       if (!imperial) {
-        return NextResponse.json({ error: "Imperial character not found" }, { status: 404 });
+        return errorResponse(404, "Imperial character not found");
       }
       const ceoCapImp = await assertCeoAcquisitionWithinCap(
         db,
@@ -469,7 +451,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
         await getCurrentTurn(db)
       );
       if (ceoCapImp) {
-        return NextResponse.json({ error: ceoCapImp.error }, { status: ceoCapImp.status });
+        return errorResponse(ceoCapImp.status, ceoCapImp.error);
       }
       // Convert cost from ₳ to imperial character's home currency
       const imperialHomeCurrency = getHomeCurrency(imperial);
@@ -477,10 +459,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
       if (forexEnabled) {
         const fxResult = await loadCharacterFxRate(db, imperialHomeCurrency);
         if (!fxResult.ok) {
-          return NextResponse.json(
-            { error: "Exchange rate unavailable, try again shortly" },
-            { status: 503 }
-          );
+          return errorResponse(503, "Exchange rate unavailable, try again shortly");
         }
         imperialFxRate = fxResult.rate;
       }
@@ -502,7 +481,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
             collectionName: "imperialCharacters",
           });
           if (!convertResult.success) {
-            return NextResponse.json({ error: convertResult.error }, { status: 400 });
+            return errorResponse(400, convertResult.error);
           }
         } else {
           const convertResult = await autoConvertForPurchase(db, {
@@ -514,7 +493,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
             collectionName: "imperialCharacters",
           });
           if (convertResult.needed && !convertResult.success) {
-            return NextResponse.json({ error: convertResult.error }, { status: 400 });
+            return errorResponse(400, convertResult.error);
           }
         }
       }
@@ -530,11 +509,9 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
         forexEnabled
       );
       if (!debitResult.ok) {
-        return NextResponse.json(
-          {
-            error: `Insufficient funds. Need ${costInImperialHome.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${imperialHomeCurrency}.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Insufficient funds. Need ${costInImperialHome.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${imperialHomeCurrency}.`
         );
       }
 
@@ -585,10 +562,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
             costInImperialHome,
             forexEnabled
           );
-          return NextResponse.json(
-            { error: "Not enough shares remain in public float" },
-            { status: 409 }
-          );
+          return errorResponse(409, "Not enough shares remain in public float");
         }
         sharesCredited = true;
 
@@ -688,16 +662,16 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
       : { userId: new ObjectId(basicAuth.user.userId) };
     const character = await db.collection<Character>("characters").findOne(characterQuery);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
     const tradeLock = await assertCeoTradeNotBlocked(db, corporation, character._id);
     if (tradeLock.blocked) {
-      return NextResponse.json({ error: tradeLock.error }, { status: tradeLock.status });
+      return errorResponse(tradeLock.status, tradeLock.error);
     }
     // Load full character doc for balance check and home currency lookup.
     const charDoc = await db.collection<Character>("characters").findOne({ _id: character._id });
     if (!charDoc) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const ceoCap = await assertCeoAcquisitionWithinCap(
@@ -709,7 +683,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
       await getCurrentTurn(db)
     );
     if (ceoCap) {
-      return NextResponse.json({ error: ceoCap.error }, { status: ceoCap.status });
+      return errorResponse(ceoCap.status, ceoCap.error);
     }
 
     // Cost is in ₳; convert to character's home currency before deducting.
@@ -718,10 +692,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
     if (forexEnabled) {
       const fxResult = await loadCharacterFxRate(db, homeCurrency);
       if (!fxResult.ok) {
-        return NextResponse.json(
-          { error: "Exchange rate unavailable, try again shortly" },
-          { status: 503 }
-        );
+        return errorResponse(503, "Exchange rate unavailable, try again shortly");
       }
       charFxRate = fxResult.rate;
     }
@@ -743,7 +714,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
           forexEnabled,
         });
         if (!convertResult.success) {
-          return NextResponse.json({ error: convertResult.error }, { status: 400 });
+          return errorResponse(400, convertResult.error);
         }
         charSpreadCharged = convertResult.spreadCharged;
       } else {
@@ -755,7 +726,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
           forexEnabled,
         });
         if (convertResult.needed && !convertResult.success) {
-          return NextResponse.json({ error: convertResult.error }, { status: 400 });
+          return errorResponse(400, convertResult.error);
         }
         charSpreadCharged = convertResult.spreadCharged;
       }
@@ -774,11 +745,9 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
       forexEnabled
     );
     if (!debitResult.ok) {
-      return NextResponse.json(
-        {
-          error: `Insufficient funds. Need ${costInHome.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${homeCurrency}.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient funds. Need ${costInHome.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${homeCurrency}.`
       );
     }
 
@@ -823,10 +792,7 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
       );
       if (!credited) {
         await refundCharacterCash(db, character._id, homeCurrency, costInHome, forexEnabled);
-        return NextResponse.json(
-          { error: "Not enough shares remain in public float" },
-          { status: 409 }
-        );
+        return errorResponse(409, "Not enough shares remain in public float");
       }
       sharesCredited = true;
 

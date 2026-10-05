@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { processTurn } from "@/lib/turnSystem";
 import { parseJsonBody } from "@/lib/api/validate";
 import { adminTurnBatchSchema } from "@/lib/api/schemas/admin";
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, adminTurnBatchSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { count } = parsed.data;
 
@@ -26,14 +26,9 @@ export async function POST(request: Request) {
       const result = await processTurn();
       if (result.turn === 0) {
         // Critical failure — turn didn't advance at all
-        return NextResponse.json(
-          {
-            error: `Turn ${i + 1} failed: ${result.message}`,
-            completed: i,
-            results,
-          },
-          { status: 500 }
-        );
+        return errorResponse(500, `Turn ${i + 1} failed: ${result.message}`, {
+          extra: { completed: i, results },
+        });
       }
       results.push({
         turn: result.turn,

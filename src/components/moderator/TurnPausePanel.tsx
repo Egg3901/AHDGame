@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface GameState {
   currentTurn: number;
@@ -52,7 +53,7 @@ export function TurnPausePanel() {
         setMessage(`✓ ${data.message}`);
         await fetchStatus();
       } else {
-        setMessage(`✗ ${data.error || "Operation failed"}`);
+        setMessage(`✗ ${apiErrorText(data, "Operation failed")}`);
       }
     } catch {
       setMessage("✗ Network error");
@@ -78,7 +79,7 @@ export function TurnPausePanel() {
         setMessage(`✓ ${data.message}`);
         await fetchStatus();
       } else {
-        setMessage(`✗ ${data.error || "Operation failed"}`);
+        setMessage(`✗ ${apiErrorText(data, "Operation failed")}`);
       }
     } catch {
       setMessage("✗ Network error");

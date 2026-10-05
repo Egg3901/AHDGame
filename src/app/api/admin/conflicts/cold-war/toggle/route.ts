@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { GameState } from "@/lib/db/types";
 
 // GET /api/admin/conflicts/cold-war/toggle - Read the Cold War subsystem flag.
@@ -42,12 +42,9 @@ export async function POST() {
     const auth = await requireAdmin();
     if (!auth.ok) return auth.response;
 
-    return NextResponse.json(
-      {
-        error:
-          "The legacy coldWarEnabled flag is retired. Use conflictsEnabled for the live conflict system.",
-      },
-      { status: 409 }
+    return errorResponse(
+      409,
+      "The legacy coldWarEnabled flag is retired. Use conflictsEnabled for the live conflict system."
     );
   } catch (error) {
     return handleRouteError(error);

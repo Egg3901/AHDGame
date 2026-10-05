@@ -1,6 +1,11 @@
+/**
+ * Commodity trade clearing matches national surpluses and deficits before convergence.
+ * `buildTradeFlowSnapshot` values cleared routes; state-scoped services remain local.
+ */
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { COMMODITY_TYPES } from "@/lib/constants/commodities";
+import { isStateScopedCommodity } from "@/lib/market/rules/commodityMarketScope";
 import type {
   TradeFlowSnapshot,
   CommodityTradeFlows,
@@ -28,12 +33,19 @@ export interface TradeSnapshotInput {
     exporter: CountryId,
     importer: CountryId
   ) => number | undefined;
+  /** Optional tariff-inclusive route cost used against each raw importer deficit. */
+  importCostMultiplierFor?: (
+    commodity: CommodityType,
+    exporter: CountryId,
+    importer: CountryId
+  ) => number | undefined;
   turn: number;
   now: Date;
 }
 
 /**
- * Run trade clearing (in UNITS) for every commodity from per-country balances.
+ * Run trade clearing (in UNITS) from per-country balances. State-local
+ * services retain their surplus and deficit without international flows.
  * Returned per-commodity results feed both the dampened-convergence step
  * (`applyTradeConvergence`) and the ₳ valuation (`valueTradeSnapshot`). Pure.
  */
@@ -42,6 +54,11 @@ export function clearAllCommodities(
   byCountry: ByCountryBalances,
   affinityFor: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => number,
   capUnitsFor?: (
+    commodity: CommodityType,
+    exporter: CountryId,
+    importer: CountryId
+  ) => number | undefined,
+  importCostMultiplierFor?: (
     commodity: CommodityType,
     exporter: CountryId,
     importer: CountryId
@@ -62,8 +79,13 @@ export function clearAllCommodities(
         countries,
         supply,
         demand,
-        affinity: (e, i) => affinityFor(commodity, e, i),
+        affinity: isStateScopedCommodity(commodity)
+          ? () => 0
+          : (e, i) => affinityFor(commodity, e, i),
         capUnits: capUnitsFor ? (e, i) => capUnitsFor(commodity, e, i) : undefined,
+        importCostMultiplier: importCostMultiplierFor
+          ? (e, i) => importCostMultiplierFor(commodity, e, i)
+          : undefined,
       })
     );
   }
@@ -208,7 +230,8 @@ export function buildTradeFlowSnapshot(input: TradeSnapshotInput): Omit<TradeFlo
     input.countries,
     input.byCountry,
     input.affinityFor,
-    input.capUnitsFor
+    input.capUnitsFor,
+    input.importCostMultiplierFor
   );
   return valueTradeSnapshot(
     input.countries,

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
@@ -83,7 +84,7 @@ export function OpenShareOrdersPanel() {
         setOrders((prev) => prev.filter((o) => o._id !== order._id));
       } else {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Failed to cancel order.");
+        setError(apiErrorText(data, "Failed to cancel order."));
       }
     } catch {
       setError("Network error. Please try again.");
@@ -174,7 +175,7 @@ export function OpenShareOrdersPanel() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-xs uppercase tracking-wider text-muted">
+                    <tr className="text-left text-body-sm font-medium text-muted">
                       <th className="py-1 pr-4 font-medium">Side</th>
                       <th className="py-1 pr-4 font-medium">Shares</th>
                       <th className="py-1 pr-4 font-medium">Price</th>

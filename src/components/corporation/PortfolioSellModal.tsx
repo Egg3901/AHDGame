@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useId } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { PortfolioStockHolding, PortfolioBondHolding } from "./CorporationPageTypes";
@@ -64,7 +65,7 @@ export default function PortfolioSellModal(props: PortfolioSellModalProps) {
         );
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error ?? "Failed to sell bond");
+          setError(apiErrorText(data, "Failed to sell bond"));
           setSubmitting(false);
           return;
         }
@@ -87,7 +88,7 @@ export default function PortfolioSellModal(props: PortfolioSellModalProps) {
         });
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error ?? "Failed to sell");
+          setError(apiErrorText(data, "Failed to sell"));
           setSubmitting(false);
           return;
         }
@@ -110,7 +111,7 @@ export default function PortfolioSellModal(props: PortfolioSellModalProps) {
         });
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error ?? "Failed to place order");
+          setError(apiErrorText(data, "Failed to place order"));
           setSubmitting(false);
           return;
         }
@@ -161,17 +162,13 @@ export default function PortfolioSellModal(props: PortfolioSellModalProps) {
           {props.type === "stock" ? (
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-muted mb-1">
-                  Shares Held
-                </div>
+                <div className="text-body-sm font-medium text-muted mb-1">Shares held</div>
                 <div className="font-mono font-semibold">
                   {props.holding.shares.toLocaleString("en-US")}
                 </div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-muted mb-1">
-                  Mkt Price
-                </div>
+                <div className="text-body-sm font-medium text-muted mb-1">Mkt price</div>
                 <div className="font-mono font-semibold">
                   {fmtPrice(norm(props.holding.sharePrice, holdingCcy))}
                 </div>
@@ -179,17 +176,13 @@ export default function PortfolioSellModal(props: PortfolioSellModalProps) {
               {props.holding.avgCostPerShare !== null && (
                 <>
                   <div>
-                    <div className="text-[10px] uppercase tracking-wider text-muted mb-1">
-                      Avg Cost
-                    </div>
+                    <div className="text-body-sm font-medium text-muted mb-1">Avg cost</div>
                     <div className="font-mono text-muted">
                       {fmtPrice(norm(props.holding.avgCostPerShare, holdingCcy))}
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] uppercase tracking-wider text-muted mb-1">
-                      Unr. P&amp;L
-                    </div>
+                    <div className="text-body-sm font-medium text-muted mb-1">Unr. P&amp;L</div>
                     <div className={`font-mono font-semibold ${pnlColor}`}>
                       {props.holding.unrealizedPnl !== null
                         ? `${props.holding.unrealizedPnl >= 0 ? "+" : ""}${formatAmount(norm(props.holding.unrealizedPnl, holdingCcy))}`
@@ -208,31 +201,25 @@ export default function PortfolioSellModal(props: PortfolioSellModalProps) {
           ) : (
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-muted mb-1">
-                  Units Held
-                </div>
+                <div className="text-body-sm font-medium text-muted mb-1">Units held</div>
                 <div className="font-mono font-semibold">
                   {props.holding.units.toLocaleString("en-US")}
                 </div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-muted mb-1">
-                  Market Price
-                </div>
+                <div className="text-body-sm font-medium text-muted mb-1">Market price</div>
                 <div className="font-mono font-semibold">
                   {(props.holding.marketPrice * 100).toFixed(1)}¢
                 </div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-muted mb-1">Coupon</div>
+                <div className="text-body-sm font-medium text-muted mb-1">Coupon</div>
                 <div className="font-mono font-semibold text-warning">
                   {props.holding.couponRate}%
                 </div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-muted mb-1">
-                  Turns Left
-                </div>
+                <div className="text-body-sm font-medium text-muted mb-1">Turns left</div>
                 <div className="font-mono">{props.holding.turnsRemaining}</div>
               </div>
             </div>
@@ -251,7 +238,7 @@ export default function PortfolioSellModal(props: PortfolioSellModalProps) {
                     : "bg-card-elevated text-muted hover:text-foreground"
                 }`}
               >
-                Instant Sell
+                Instant sell
               </button>
               <button
                 type="button"
@@ -262,7 +249,7 @@ export default function PortfolioSellModal(props: PortfolioSellModalProps) {
                     : "bg-card-elevated text-muted hover:text-foreground"
                 }`}
               >
-                Limit Order
+                Limit order
               </button>
             </div>
           )}
@@ -351,7 +338,7 @@ export default function PortfolioSellModal(props: PortfolioSellModalProps) {
               disabled={submitting}
               className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
-              {submitting ? "Selling…" : mode === "limit" ? "Place Order" : "Sell"}
+              {submitting ? "Selling…" : mode === "limit" ? "Place order" : "Sell"}
             </button>
           </div>
         </form>

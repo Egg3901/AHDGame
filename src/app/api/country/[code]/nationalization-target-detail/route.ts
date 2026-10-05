@@ -11,7 +11,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Corporation } from "@/lib/db/types";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -30,11 +30,11 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const corporationId = new URL(request.url).searchParams.get("corporationId");
     if (!corporationId || !ObjectId.isValid(corporationId)) {
-      return NextResponse.json({ error: "Invalid corporation ID" }, { status: 400 });
+      return errorResponse(400, "Invalid corporation ID");
     }
 
     const db = await getDb();
@@ -42,16 +42,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       .collection<Corporation>("corporations")
       .findOne({ _id: new ObjectId(corporationId) });
     if (!corp || corp.countryId !== countryId) {
-      return NextResponse.json(
-        { error: "Corporation not found in this country." },
-        { status: 404 }
-      );
+      return errorResponse(404, "Corporation not found in this country.");
     }
     if (isStateOwned(corp)) {
-      return NextResponse.json(
-        { error: "That corporation is already state-owned." },
-        { status: 400 }
-      );
+      return errorResponse(400, "That corporation is already state-owned.");
     }
 
     const currentTurn = await getCurrentTurn(db);

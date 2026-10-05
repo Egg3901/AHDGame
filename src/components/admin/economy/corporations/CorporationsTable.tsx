@@ -92,10 +92,7 @@ export function CorporationsTable({
                 "Timers",
                 "Actions",
               ].map((h) => (
-                <th
-                  key={h}
-                  className="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider"
-                >
+                <th key={h} className="px-4 py-3 text-left text-body-sm font-medium text-muted">
                   {h}
                 </th>
               ))}
@@ -137,7 +134,7 @@ export function CorporationsTable({
                       )}
                       {row.bondDefaultCreditPenaltyUntilTurn != null && (
                         <span className="text-[10px] font-semibold bg-warning/20 text-warning px-1.5 py-0.5 rounded w-fit">
-                          Bond Default
+                          Bond default
                         </span>
                       )}
                       {row.creditRatingSnapshot && (
@@ -232,7 +229,7 @@ export function CorporationsTable({
                             }
                             className="text-xs px-2 py-1 rounded border border-error/50 text-error hover:bg-error/10 transition-colors"
                           >
-                            Force Liq
+                            Force liq
                           </button>
                         </>
                       )}

@@ -88,7 +88,7 @@ function priority(pct: number): string {
 function Mini({ label, value, tone }: { label: string; value: string; tone?: "gold" }) {
   return (
     <div className="rounded-md bg-card px-2.5 py-1.5">
-      <div className="text-[8px] font-bold uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div
         className={`mt-0.5 font-mono text-body-xs font-bold tabular-nums ${tone === "gold" ? "text-gold" : "text-foreground"}`}
       >
@@ -179,7 +179,7 @@ export function BudgetBreakdownPanel({
                     </span>
                     {l.soeLink && (
                       <span className="shrink-0 rounded-full border border-gold/40 bg-gold/10 px-1.5 py-0.5 text-[9px] font-semibold text-gold">
-                        National Corp →
+                        National corp →
                       </span>
                     )}
                   </div>
@@ -253,7 +253,7 @@ export function BudgetBreakdownPanel({
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block text-body-xs font-semibold text-gold">
-                          Open the National Corporation
+                          Open the national corporation
                         </span>
                         <span className="block text-[11px] text-muted">
                           See the state enterprise behind this line
@@ -304,7 +304,7 @@ export function BudgetBreakdownPanel({
 
                   {l.laws && l.laws.length > 0 && (
                     <div className="mt-2.5">
-                      <div className="mb-1 text-[8px] font-bold uppercase tracking-wide text-muted">
+                      <div className="mb-1 text-body-sm font-medium text-muted">
                         {isRev ? "Governing statutes" : "Driving legislation"}
                       </div>
                       <div className="flex flex-wrap gap-1.5">
@@ -324,7 +324,7 @@ export function BudgetBreakdownPanel({
 
                   {l.grants && l.grants.length > 0 && (
                     <div className="mt-2.5">
-                      <div className="mb-1 text-[8px] font-bold uppercase tracking-wide text-muted">
+                      <div className="mb-1 text-body-sm font-medium text-muted">
                         Top recipients · {grantRecipientLabel}
                       </div>
                       <div className="space-y-1">

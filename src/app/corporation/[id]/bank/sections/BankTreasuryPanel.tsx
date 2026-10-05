@@ -6,6 +6,7 @@ import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import { BankPanel } from "../components/BankSection";
 import type { BankTreasuryOverview, BankTreasuryPosition } from "@/lib/banking/bankTreasury";
 import type { ShowToast } from "../types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function BankTreasuryPanel({
   corporationId,
@@ -52,7 +53,7 @@ export function BankTreasuryPanel({
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok && response.status !== 202) {
-        showToast(result.error ?? "The sovereign subscription was refused.", "error");
+        showToast(apiErrorText(result, "The sovereign subscription was refused."), "error");
         return;
       }
       showToast(
@@ -82,7 +83,7 @@ export function BankTreasuryPanel({
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
-        showToast(result.error ?? "Could not update automatic bill purchases.", "error");
+        showToast(apiErrorText(result, "Could not update automatic bill purchases."), "error");
         return;
       }
       showToast(
@@ -119,7 +120,7 @@ export function BankTreasuryPanel({
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok && response.status !== 202) {
-        showToast(result.error ?? "The bill trade was refused.", "error");
+        showToast(apiErrorText(result, "The bill trade was refused."), "error");
         return;
       }
       showToast(

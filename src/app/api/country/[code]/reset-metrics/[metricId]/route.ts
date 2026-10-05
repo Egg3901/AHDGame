@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { primaryMetricById } from "@/lib/resetMetrics/catalog";
 import { readResetMetricBoard } from "@/lib/resetMetrics/readBoard";
@@ -16,26 +16,25 @@ export async function GET(
       (countryId !== "US" && countryId !== "UK" && countryId !== "JP") ||
       !primaryMetricById(metricId)
     ) {
-      return NextResponse.json({ error: "V2 metric was not found" }, { status: 404 });
+      return errorResponse(404, "V2 metric was not found");
     }
     const regionId = new URL(request.url).searchParams.get("region") ?? undefined;
     const db = await getDb();
     const board = await readResetMetricBoard(db, countryId, regionId);
     if (board.status === "not_enabled") {
-      return NextResponse.json({ error: "V2 metrics are not enabled" }, { status: 409 });
+      return errorResponse(409, "V2 metrics are not enabled");
     }
     if (board.status !== "ready") {
-      return NextResponse.json(
-        { error: "V2 metrics board is unavailable", reason: board.status },
-        { status: 503, headers: { "Cache-Control": "no-store" } }
-      );
+      return errorResponse(503, "V2 metrics board is unavailable", {
+        extra: { reason: board.status },
+        headers: { "Cache-Control": "no-store" },
+      });
     }
     const detail = await readResetMetricDetail(db, board.board, metricId);
     if (!detail) {
-      return NextResponse.json(
-        { error: "V2 metric detail is unavailable" },
-        { status: 503, headers: { "Cache-Control": "no-store" } }
-      );
+      return errorResponse(503, "V2 metric detail is unavailable", {
+        headers: { "Cache-Control": "no-store" },
+      });
     }
     return NextResponse.json(detail, {
       headers: { "Cache-Control": "no-store, no-transform" },

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -108,11 +108,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     const character = await db
       .collection<Character>("characters")
       .findOne({ _id: corporation.ceoId });
-    if (!character) return NextResponse.json({ error: "CEO character not found" }, { status: 404 });
+    if (!character) return errorResponse(404, "CEO character not found");
 
     const parsed = await parseJsonBody(request, OpenVoteSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
     const gameState = await getGameState();
@@ -122,9 +122,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       body.type === "share_issuance" &&
       (corporation.pendingShareIssuance?.remainingShares ?? 0) > 0
     ) {
-      return NextResponse.json(
-        { error: "This corporation still has an approved share issue awaiting market placement" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "This corporation still has an approved share issue awaiting market placement"
       );
     }
 
@@ -133,13 +133,10 @@ export async function POST(request: Request, { params }: RouteParams) {
         .collection("corporations")
         .findOne({ tickerSymbol: body.newTicker, _id: { $ne: corporation._id } });
       if (conflict) {
-        return NextResponse.json(
-          { error: "That ticker is already in use by another corporation" },
-          { status: 409 }
-        );
+        return errorResponse(409, "That ticker is already in use by another corporation");
       }
       if (body.newTicker === corporation.tickerSymbol) {
-        return NextResponse.json({ error: "That is already your ticker symbol" }, { status: 400 });
+        return errorResponse(400, "That is already your ticker symbol");
       }
     }
 
@@ -151,7 +148,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         body.destinationCountryId
       );
       if (commandEconomyBlock) {
-        return NextResponse.json({ error: commandEconomyBlock }, { status: 400 });
+        return errorResponse(400, commandEconomyBlock);
       }
     }
 
@@ -160,10 +157,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (body.type === "dissolution") {
       const ageBlock = corporationDissolutionAgeBlock(corporation.foundedAtTurn, currentTurn);
       if (ageBlock.blocked) {
-        return NextResponse.json(
-          { error: dissolutionAgeBlockedMessage(ageBlock.turnsRemaining) },
-          { status: 400 }
-        );
+        return errorResponse(400, dissolutionAgeBlockedMessage(ageBlock.turnsRemaining));
       }
     }
 
@@ -195,7 +189,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       type: body.type as CorporationVoteType,
       payload,
     });
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
 
     const inserted = await db
       .collection<CorporationVote>("corporationVotes")

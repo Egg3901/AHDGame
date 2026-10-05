@@ -12,6 +12,7 @@ import {
 } from "@/components/extraction/types";
 import { CONTRACT_DEFAULT_MISSED_PAYMENTS } from "@/lib/constants/prospecting";
 import { DenseSection, SmallButton, TableScroll, Td, Th } from "./dense/DenseKit";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CorporationContractsTabProps {
   corpId: string;
@@ -59,7 +60,7 @@ export default function CorporationContractsTab({ corpId, isCeo }: CorporationCo
       const res = await fetch(`/api/contracts/extraction/${id}/${action}`, { method: "POST" });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        showToast(json.error ?? `Failed to ${action} the offer.`, "error");
+        showToast(apiErrorText(json, `Failed to ${action} the offer.`), "error");
         return;
       }
       showToast(action === "accept" ? "Contract accepted." : "Offer declined.", "success");

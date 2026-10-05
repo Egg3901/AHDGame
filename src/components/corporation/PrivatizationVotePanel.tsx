@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -95,7 +96,7 @@ export function PrivatizationVotePanel({
       });
       if (!res.ok) {
         const d = await res.json();
-        setError(d.error || "Failed to vote");
+        setError(apiErrorText(d, "Failed to vote"));
         return;
       }
       const data = await res.json();
@@ -115,7 +116,7 @@ export function PrivatizationVotePanel({
       });
       if (!res.ok) {
         const d = await res.json();
-        setError(d.error || "Failed to cancel");
+        setError(apiErrorText(d, "Failed to cancel"));
         return;
       }
       onResolved?.();
@@ -136,7 +137,7 @@ export function PrivatizationVotePanel({
   return (
     <div className="rounded-xl border border-warning/40 bg-warning/5 p-4 my-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-base font-bold text-foreground">Privatization Vote</h3>
+        <h3 className="text-base font-bold text-foreground">Privatization vote</h3>
         <span
           className={`text-xs px-2 py-0.5 rounded font-semibold border ${
             vote.status === "open"
@@ -184,7 +185,7 @@ export function PrivatizationVotePanel({
             disabled={submitting}
             className="rounded-lg border border-card-border px-3 py-1.5 text-sm hover:bg-card transition-colors disabled:opacity-50"
           >
-            {submitting ? "Cancelling…" : "Cancel Vote"}
+            {submitting ? "Cancelling…" : "Cancel vote"}
           </button>
         </div>
       )}
@@ -200,7 +201,7 @@ export function PrivatizationVotePanel({
                 : "border border-card-border hover:bg-card"
             }`}
           >
-            Vote Yes
+            Vote yes
           </button>
           <button
             onClick={() => castVote("no")}
@@ -211,7 +212,7 @@ export function PrivatizationVotePanel({
                 : "border border-card-border hover:bg-card"
             }`}
           >
-            Vote No
+            Vote no
           </button>
         </div>
       )}

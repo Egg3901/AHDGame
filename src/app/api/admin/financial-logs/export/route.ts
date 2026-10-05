@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { buildTxLogFilter } from "@/lib/financialTxLog/queryLogs";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const built = buildTxLogFilter(searchParams);
-    if (!built.ok) return NextResponse.json({ error: built.error }, { status: 400 });
+    if (!built.ok) return errorResponse(400, built.error);
 
     const db = await getDb();
 

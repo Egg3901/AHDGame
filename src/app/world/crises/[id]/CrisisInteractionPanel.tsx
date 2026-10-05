@@ -1,8 +1,11 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import type { CrisisDecisionNode, CrisisEffect } from "@/lib/db/types/crisis";
+import type { RefugeeReceptionResult } from "@/lib/livingConflict/rules/refugeeReception";
+import type { ConflictCivilianLossResult } from "@/lib/livingConflict/rules/civilianLoss";
 import { formatCrisisEffectTarget, formatCrisisEffectValue } from "@/lib/crises/effectLabels";
 import { buildDecisionHistory } from "@/lib/crises/decisionHistory";
 import { computeFiscalImpact } from "@/lib/budget/fiscalImpact";
@@ -12,6 +15,7 @@ import { type CountryId } from "@/lib/constants/countries";
 import { getCountryFlagUrlForEra } from "@/lib/constants/flags";
 import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { Tooltip as HoverTooltip } from "@/components/Tooltip";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 /** One leader's response to a multi-responder (global) crisis. */
@@ -25,6 +29,7 @@ interface LeaderResponse {
   effects?: CrisisEffect[];
   responseScores?: Record<string, number>;
   respondedAt: string;
+  refugeeReceptionResult?: RefugeeReceptionResult;
 }
 
 /** Interaction shape as serialized by GET /api/crises/[id]/interaction (ObjectId → string). */
@@ -50,6 +55,7 @@ interface SerializedInteraction {
     eligibleCountries: number;
     campaignStageBefore?: string;
     campaignStageAfter?: string;
+    civilianLossResult?: ConflictCivilianLossResult;
   };
 }
 
@@ -161,9 +167,7 @@ function EffectChips({ effects, max = 4 }: { effects: CrisisEffect[]; max?: numb
               : "border-success/30 bg-success/5 text-success"
           }`}
         >
-          <span className="text-muted uppercase tracking-wide text-[9.5px]">
-            {formatCrisisEffectTarget(e)}
-          </span>
+          <span className="text-muted text-body-sm font-medium">{formatCrisisEffectTarget(e)}</span>
           <span className="font-mono font-semibold">
             {e.value > 0 ? "+" : ""}
             {formatCrisisEffectValue(e.value)}
@@ -206,6 +210,23 @@ function LeaderResponseRow({ r, effects }: { r: LeaderResponse; effects: CrisisE
       ) : null}
       <span className="text-muted/70 shrink-0">·</span>
       <span className="text-muted truncate">{r.characterName}</span>
+      {r.refugeeReceptionResult ? (
+        <span
+          className="text-muted tabular-nums"
+          title={[
+            ...r.refugeeReceptionResult.routes.map(
+              (route) =>
+                `${route.originRegionId} to ${route.destinationRegionId}: ${Math.round(route.people).toLocaleString()} people`
+            ),
+            `Annual initial services in host currency: ${Math.round(r.refugeeReceptionResult.annualServiceCost).toLocaleString()}`,
+          ].join("; ")}
+        >
+          {Math.round(r.refugeeReceptionResult.movedPeople).toLocaleString()} received;
+          {r.refugeeReceptionResult.movedPeople > 0
+            ? `support through turn ${r.refugeeReceptionResult.serviceEndTurn - 1}`
+            : ""}
+        </span>
+      ) : null}
       <span className="ml-auto flex items-center gap-1.5 shrink-0">
         <span className="rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary">
           {r.optionLabel}
@@ -243,9 +264,7 @@ function CampaignBriefPanel({ brief }: { brief: CampaignBrief }) {
     <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-primary">
-            Campaign cycle {brief.cycle}
-          </p>
+          <p className="text-body-sm font-medium text-primary">Campaign cycle {brief.cycle}</p>
           <p className="text-sm font-semibold text-foreground">{brief.stageLabel}</p>
         </div>
         <p className="text-[11px] text-muted">{brief.stageTurns} turns in this stage</p>
@@ -258,7 +277,7 @@ function CampaignBriefPanel({ brief }: { brief: CampaignBrief }) {
                 index <= currentStage ? "bg-primary" : "bg-card-border"
               }`}
             />
-            <p className="mt-1 truncate text-[8px] uppercase tracking-wide text-muted">
+            <p className="mt-1 truncate text-body-sm font-medium text-muted">
               {campaignLabel(stage)}
             </p>
           </div>
@@ -266,9 +285,7 @@ function CampaignBriefPanel({ brief }: { brief: CampaignBrief }) {
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         <div className="rounded-md border border-card-border bg-card p-2.5">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-muted">
-            Intelligence estimate
-          </p>
+          <p className="text-body-sm font-medium text-muted">Intelligence estimate</p>
           <p className="mt-1 text-xs font-medium text-foreground">
             {campaignLabel(brief.intelligence.riskBand)} risk
           </p>
@@ -278,9 +295,7 @@ function CampaignBriefPanel({ brief }: { brief: CampaignBrief }) {
           </p>
         </div>
         <div className="rounded-md border border-card-border bg-card p-2.5">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-muted">
-            National memory
-          </p>
+          <p className="text-body-sm font-medium text-muted">National memory</p>
           <p className="mt-1 text-[11px] text-muted">
             Credibility {Math.round(brief.countryMemory.credibility)} · War weariness{" "}
             {Math.round(brief.countryMemory.warWeariness)}
@@ -293,9 +308,7 @@ function CampaignBriefPanel({ brief }: { brief: CampaignBrief }) {
       </div>
       <div>
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-muted">
-            National capacity
-          </p>
+          <p className="text-body-sm font-medium text-muted">National capacity</p>
           <p className="text-[10px] text-muted">{treasuryLabel}</p>
         </div>
         <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-4">
@@ -401,7 +414,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to submit decision");
+        setError(apiErrorText(data, "Failed to submit decision"));
         return;
       }
       if (data.appliedEffects?.length) {
@@ -431,7 +444,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to pledge aid");
+        setError(apiErrorText(data, "Failed to pledge aid"));
         return;
       }
       showToast("Aid pledged — bill sent to your legislature", "success");
@@ -479,7 +492,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
       />
       <div className="px-5 py-4 border-b border-card-border flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-foreground flex items-center gap-1">
-          Crisis Response
+          Crisis response
           <Tooltip content="Interactive crises let players choose a response. Each option has different mechanical effects and political consequences." />
         </h2>
         {!resolved && interaction.decisionDeadline && (
@@ -516,7 +529,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
             {currentNode.type === "collective" && (
               <div className="mb-3">
                 <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-muted">Response Fund</span>
+                  <span className="text-muted">Response fund</span>
                   <span className="tabular-nums">
                     ${interaction.collectiveCurrent.toLocaleString("en-US")} / $
                     {(interaction.collectiveTarget ?? 0).toLocaleString("en-US")}
@@ -644,9 +657,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
             ) : null}
             {interaction.globalResponseOutcome ? (
               <div className="mt-3 rounded-lg border border-primary/25 bg-primary/5 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-primary">
-                  Global outcome
-                </p>
+                <p className="text-body-sm font-medium text-primary">Global outcome</p>
                 <p className="mt-1 text-sm font-semibold text-foreground">
                   {interaction.globalResponseOutcome.label}
                 </p>
@@ -658,6 +669,27 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
                   {interaction.globalResponseOutcome.eligibleCountries} eligible governments
                   responded
                 </p>
+                {interaction.globalResponseOutcome.civilianLossResult ? (
+                  <p className="mt-1 text-[11px] text-muted">
+                    <HoverTooltip
+                      content={
+                        interaction.globalResponseOutcome.civilianLossResult.regions
+                          .map(
+                            (region) =>
+                              `${region.regionId}: ${Math.round(region.deaths).toLocaleString()} civilian deaths`
+                          )
+                          .join("; ") || "No eligible civilian stock in the authorized territory"
+                      }
+                    >
+                      <span>
+                        {Math.round(
+                          interaction.globalResponseOutcome.civilianLossResult.deaths
+                        ).toLocaleString()}{" "}
+                        civilian deaths recorded
+                      </span>
+                    </HoverTooltip>
+                  </p>
+                ) : null}
                 {interaction.globalResponseOutcome.campaignStageAfter ? (
                   <p className="mt-1 text-[11px] text-muted">
                     Campaign stage:{" "}
@@ -686,7 +718,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
             ) : null}
             {terminalNode?.outcomeEffects && terminalNode.outcomeEffects.length > 0 && (
               <div className="mt-3 rounded-lg border border-card-border bg-card-elevated p-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-2">
+                <p className="text-body-sm font-medium text-muted mb-2">
                   Net effect, applied at turn resolve
                 </p>
                 <EffectChips effects={terminalNode.outcomeEffects} max={8} />
@@ -698,8 +730,8 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
         {/* Leadership responses (multi-responder global crises) */}
         {(interaction.leaderResponses?.length ?? 0) > 0 && (
           <div className="pt-3 border-t border-card-border">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-2">
-              Leadership Responses · {interaction.leaderResponses!.length}
+            <p className="text-body-sm font-medium text-muted mb-2">
+              Leadership responses · {interaction.leaderResponses!.length}
             </p>
             <ul className="space-y-1.5">
               {interaction.leaderResponses!.map((r) => {
@@ -712,9 +744,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
         {/* Decision history */}
         {interaction.resolutionPath.length > 0 && (
           <div className="pt-3 border-t border-card-border">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1.5">
-              Decision History
-            </p>
+            <p className="text-body-sm font-medium text-muted mb-1.5">Decision history</p>
             <ul className="text-xs text-muted space-y-0.5">
               {buildDecisionHistory(interaction.decisionTree, interaction.resolutionPath).map(
                 (line, i) => (
@@ -793,7 +823,7 @@ function AidSlider({
           disabled={disabled || amountLocal <= 0}
           className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm font-medium text-primary disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Pledge Aid
+          Pledge aid
         </button>
         <button
           onClick={onDecline}

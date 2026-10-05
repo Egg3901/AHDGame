@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { State } from "@/lib/db/types";
+import { errorResponse } from "@/lib/api/errors";
 
 /**
  * Returns the canonical URL path segment for a corporation document.
@@ -37,7 +38,7 @@ export async function resolveCorporation(
   if (!query) {
     return {
       ok: false,
-      response: NextResponse.json({ error: "Invalid corporation ID" }, { status: 400 }),
+      response: errorResponse(400, "Invalid corporation ID"),
     };
   }
   // Keep the editorial default exclusion with exclusion projections. Inclusion
@@ -53,7 +54,7 @@ export async function resolveCorporation(
   if (!corporation) {
     return {
       ok: false,
-      response: NextResponse.json({ error: "Corporation not found" }, { status: 404 }),
+      response: errorResponse(404, "Corporation not found"),
     };
   }
 
@@ -80,7 +81,7 @@ export function requireCeo(corporation: Corporation, userId: string): NextRespon
     !corporation.userId ||
     corporation.userId.toString() !== userId
   ) {
-    return NextResponse.json({ error: "Only the CEO can perform this action" }, { status: 403 });
+    return errorResponse(403, "Only the CEO can perform this action");
   }
   return null;
 }

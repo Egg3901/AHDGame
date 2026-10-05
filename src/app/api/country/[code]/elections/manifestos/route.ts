@@ -21,7 +21,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { PoliticalParty } from "@/lib/db/types";
@@ -40,28 +40,25 @@ export const GET = withNoStore(
       const { code } = await params;
       const countryId = code.toUpperCase() as CountryId;
       if (!COUNTRY_CONFIGS[countryId]) {
-        return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+        return errorResponse(400, "Invalid country");
       }
       if (countryId !== "UK") {
-        return NextResponse.json({ error: "Manifestos are UK-only" }, { status: 400 });
+        return errorResponse(400, "Manifestos are UK-only");
       }
 
       const raw = new URL(request.url).searchParams.get("electionIds");
       if (!raw) {
-        return NextResponse.json({ error: "electionIds is required" }, { status: 400 });
+        return errorResponse(400, "electionIds is required");
       }
       const requested = raw.split(",").filter(Boolean);
       if (requested.length === 0) {
-        return NextResponse.json({ error: "electionIds is required" }, { status: 400 });
+        return errorResponse(400, "electionIds is required");
       }
       if (requested.length > MAX_MANIFESTO_ELECTION_IDS) {
-        return NextResponse.json(
-          { error: `At most ${MAX_MANIFESTO_ELECTION_IDS} elections per request` },
-          { status: 400 }
-        );
+        return errorResponse(400, `At most ${MAX_MANIFESTO_ELECTION_IDS} elections per request`);
       }
       if (!requested.every((id) => ObjectId.isValid(id))) {
-        return NextResponse.json({ error: "Invalid electionId" }, { status: 400 });
+        return errorResponse(400, "Invalid electionId");
       }
       // De-duplicate, and remember each id's canonical (lowercase) form against
       // the caller's own spelling. `ObjectId.isValid` accepts uppercase hex,

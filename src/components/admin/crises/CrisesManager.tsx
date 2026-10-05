@@ -10,6 +10,7 @@ import { CrisesTable } from "./CrisesTable";
 import { AutoCrisisPanel } from "./AutoCrisisPanel";
 import { CreateCrisisModal } from "./CreateCrisisModal";
 import { CreateFromTemplateModal } from "./CreateFromTemplateModal";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function CrisesManager() {
   const [crises, setCrises] = useState<Crisis[]>([]);
@@ -126,7 +127,7 @@ export function CrisesManager() {
         setForm(makeEmptyForm());
         fetchCrises();
       } else {
-        setMessage(data.error ?? "Failed to create crisis");
+        setMessage(apiErrorText(data, "Failed to create crisis"));
       }
     } finally {
       setSubmitting(false);
@@ -147,7 +148,7 @@ export function CrisesManager() {
         setAutoCrisisPaused(data.autoCrisisPaused === true);
         setMessage(data.autoCrisisPaused ? "Crisis spawning paused" : "Crisis spawning resumed");
       } else {
-        setMessage(data.error ?? "Failed to toggle pause");
+        setMessage(apiErrorText(data, "Failed to toggle pause"));
       }
     } catch {
       setMessage("Failed to toggle pause");
@@ -176,7 +177,7 @@ export function CrisesManager() {
         setMessage(`${data.message ?? "Hero images reseeded"}${unmatched}`);
         fetchCrises();
       } else {
-        setMessage(data.error ?? "Failed to reseed crisis images");
+        setMessage(apiErrorText(data, "Failed to reseed crisis images"));
       }
     } catch {
       setMessage("Failed to reseed crisis images");
@@ -212,7 +213,7 @@ export function CrisesManager() {
             : "Automatic natural disasters disabled"
         );
       } else {
-        setMessage(data.error ?? "Failed to toggle automatic natural disasters");
+        setMessage(apiErrorText(data, "Failed to toggle automatic natural disasters"));
       }
     } catch {
       setMessage("Failed to toggle automatic natural disasters");
@@ -240,7 +241,7 @@ export function CrisesManager() {
             : "Crisis interaction system disabled"
         );
       } else {
-        setMessage(data.error ?? "Failed to toggle crisis interaction system");
+        setMessage(apiErrorText(data, "Failed to toggle crisis interaction system"));
       }
     } catch {
       setMessage("Failed to toggle crisis interaction system");
@@ -280,7 +281,7 @@ export function CrisesManager() {
         setTemplateDuration("");
         fetchCrises();
       } else {
-        setMessage(data.error ?? "Failed to create from template");
+        setMessage(apiErrorText(data, "Failed to create from template"));
       }
     } finally {
       setTemplateSubmitting(false);

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { SpinnerIcon, MessageBanner } from "@/app/settings/components/shared";
@@ -34,7 +35,7 @@ export function CharacterDangerZone({ characterName }: Props) {
         window.location.href = "/settings";
       } else {
         const data = await res.json();
-        setError(data.error || "Failed to retire character");
+        setError(apiErrorText(data, "Failed to retire character"));
       }
     } catch {
       setError("Network error - please try again");
@@ -52,7 +53,7 @@ export function CharacterDangerZone({ characterName }: Props) {
 
   return (
     <>
-      <h4 className="text-sm font-semibold text-foreground mb-1">Retire Character</h4>
+      <h4 className="text-sm font-semibold text-foreground mb-1">Retire character</h4>
       <p className="text-sm text-muted mb-2">
         Retiring your character preserves their record in your account history. You will be able to
         create a new character afterward. This action cannot be undone.
@@ -65,7 +66,7 @@ export function CharacterDangerZone({ characterName }: Props) {
         onClick={() => setShowConfirm(true)}
         className="rounded-xl border border-error/50 bg-error/10 px-4 py-2.5 text-sm font-medium text-error transition-colors hover:bg-error/20"
       >
-        Retire Character
+        Retire character
       </button>
 
       {showConfirm &&
@@ -100,7 +101,7 @@ export function CharacterDangerZone({ characterName }: Props) {
                   </svg>
                 </div>
                 <h3 id="retire-dialog-title" className="text-base font-bold text-error">
-                  Retire Character
+                  Retire character
                 </h3>
               </div>
               <p className="text-sm text-muted mb-4">
@@ -150,7 +151,7 @@ export function CharacterDangerZone({ characterName }: Props) {
                   className="rounded-xl bg-error px-4 py-2.5 font-medium text-white transition-colors hover:bg-error/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {retiring && <SpinnerIcon />}
-                  {retiring ? "Retiring..." : "Confirm Retirement"}
+                  {retiring ? "Retiring..." : "Confirm retirement"}
                 </button>
                 <button
                   onClick={closeDialog}

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import { executiveApiUrl } from "@/lib/urls";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export interface ReshuffleCandidate {
   _id: string;
@@ -105,19 +106,22 @@ export function ReshufflePanel({
         setSelections({});
         onSubmitted();
       } else if (res.status === 409) {
-        const message = data.error ?? "The reshuffle token is already spent for this parliament.";
+        const message = apiErrorText(
+          data,
+          "The reshuffle token is already spent for this parliament."
+        );
         setError(message);
         showToast(message, "error");
       } else if (res.status === 400) {
-        const message = data.error ?? "The new roster is invalid.";
+        const message = apiErrorText(data, "The new roster is invalid.");
         setError(message);
         showToast(message, "error");
       } else if (res.status === 403) {
-        const message = data.error ?? "Only the Prime Minister can reshuffle the cabinet.";
+        const message = apiErrorText(data, "Only the Prime Minister can reshuffle the cabinet.");
         setError(message);
         showToast(message, "error");
       } else {
-        const message = data.error ?? "Failed to reshuffle the cabinet";
+        const message = apiErrorText(data, "Failed to reshuffle the cabinet");
         setError(message);
         showToast(message, "error");
       }
@@ -138,7 +142,7 @@ export function ReshufflePanel({
         id="cabinet-reshuffle-heading"
         className="text-sm font-semibold uppercase tracking-widest text-muted"
       >
-        Cabinet Reshuffle
+        Cabinet reshuffle
       </h2>
       <p className="mt-2 text-sm text-foreground" aria-live="polite">
         {available ? (
@@ -155,7 +159,7 @@ export function ReshufflePanel({
           className="mt-3"
           aria-label="Open the cabinet reshuffle editor"
         >
-          Reshape Cabinet
+          Reshape cabinet
         </Button>
       )}
       {isPrimeMinister && !available && (
@@ -236,7 +240,7 @@ export function ReshufflePanel({
               className="flex-1"
               aria-label="Submit the new cabinet roster"
             >
-              {submitting ? "Reshuffling..." : "Confirm Reshuffle"}
+              {submitting ? "Reshuffling..." : "Confirm reshuffle"}
             </Button>
           </div>
         </div>

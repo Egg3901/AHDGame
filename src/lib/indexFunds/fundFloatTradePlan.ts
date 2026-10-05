@@ -588,3 +588,275 @@ export async function prepareFundFloatTrade(db: Db, input: Input) {
     currency,
   };
 }
+
+/** A batch stays well under the 16 MB document limit: the plan lives on the fund document. */
+const BATCH_MAX_TRADES = 24;
+const BATCH_MAX_CUSTODY_BYTES = 2_000_000;
+
+export type FundFloatBatchTrade = Pick<
+  Input,
+  "corp" | "shares" | "priceLocal" | "priceAnchor" | "amountAnchor" | "note" | "holdingsAfter"
+>;
+
+export type FundFloatBatchAdd =
+  | { status: "accepted"; poolDelta: number; currency: CurrencyCode }
+  | { status: "refused" }
+  | { status: "full" };
+
+/**
+ * Several public float purchases for one fund, frozen as ONE settlement plan.
+ *
+ * Each trade is judged in order against the fund's running cash and holdings,
+ * with the same refusal rules and per-trade rounding as `prepareFundFloatTrade`,
+ * so a batch accepts exactly the trades a sequential run would. What changes is
+ * the commit: one claim, one journal key, aggregated fund and pool cash legs,
+ * and receipts published as grouped inserts. The sealed plan is the recoverable
+ * settlement record: it is claimed atomically against the fund's cash, holdings
+ * and settlement generation (the epoch that serialises concurrent player trades),
+ * and `recoverAllFundFloatSettlements` finishes it after a crash without posting
+ * anything twice. Purchases only; liquidity sales keep their own sequential flow.
+ */
+export async function openFundFloatBatch(
+  db: Db,
+  ctx: {
+    fund: SettlementFund;
+    corps: FloatCorp[];
+    turn: number;
+    pools: ReadonlyMap<CurrencyCode, EquityMarketPool>;
+    audit: FloatAuditContext;
+    expectedGeneration?: number;
+  }
+) {
+  const snapshotProjection = {
+    shareholders: 1,
+    publicFloat: 1,
+    pendingShareIssuance: 1,
+    shareEscrowBalance: 1,
+    liquidCapital: 1,
+    orderFlowWindowBuyValue: 1,
+    orderFlowWindowSellValue: 1,
+  };
+  const [fundRow, snapshotRows] = await Promise.all([
+    db.collection<SettlementFund>("indexFunds").findOne(
+      { _id: ctx.fund._id },
+      {
+        projection: {
+          cashAnchor: 1,
+          holdings: 1,
+          floatSettlementPlan: 1,
+          floatSettlementGeneration: 1,
+        },
+      }
+    ),
+    db
+      .collection<CorpSnapshot>("corporations")
+      .find({ _id: { $in: ctx.corps.map((corp) => corp._id) } }, { projection: snapshotProjection })
+      .toArray(),
+  ]);
+  if (!fundRow || fundRow.floatSettlementPlan?.state === "pending") return undefined;
+  const expected = ctx.expectedGeneration ?? ctx.fund.floatSettlementGeneration ?? 0;
+  if ((fundRow.floatSettlementGeneration ?? 0) !== expected) return undefined;
+  const snapshots = new Map(snapshotRows.map((row) => [row._id.toString(), row]));
+  const fund: SettlementFund = { ...ctx.fund, ...fundRow };
+  const key = `fund-float:${fund._id}:${randomUUID()}`;
+
+  type Staged = {
+    input: Input;
+    route: ReturnType<typeof cashRouting>;
+    assets: NonNullable<ReturnType<typeof custody>>;
+    currency: CurrencyCode;
+    witness: ReturnType<typeof receipts>;
+  };
+  const staged: Staged[] = [];
+  const seen = new Set<string>();
+  let cash = fund.cashAnchor;
+  let holdings: IndexFundHolding[] = fund.holdings ?? [];
+  let custodyBytes = 0;
+
+  return {
+    fund,
+    key,
+    /** Judge one more purchase against the running book. */
+    add(trade: FundFloatBatchTrade): FundFloatBatchAdd {
+      if (staged.length >= BATCH_MAX_TRADES || custodyBytes > BATCH_MAX_CUSTODY_BYTES)
+        return { status: "full" };
+      if (
+        !Number.isFinite(trade.amountAnchor) ||
+        trade.amountAnchor <= 0 ||
+        !Number.isFinite(trade.priceLocal) ||
+        trade.priceLocal <= 0 ||
+        !Number.isFinite(trade.priceAnchor) ||
+        trade.priceAnchor <= 0 ||
+        !Number.isSafeInteger(trade.shares) ||
+        trade.shares <= 0
+      )
+        return { status: "refused" };
+      const corpKey = trade.corp._id.toString();
+      const snapshot = snapshots.get(corpKey);
+      // One position per corporation per batch: a second buy of the same name
+      // would need the first buy's custody, which a batch freezes up front.
+      if (!snapshot || seen.has(corpKey)) return { status: "refused" };
+      if (cash < trade.amountAnchor) return { status: "refused" };
+      const input: Input = {
+        ...trade,
+        fund: { ...fund, cashAnchor: cash, holdings },
+        direction: "buy",
+        turn: ctx.turn,
+        pools: ctx.pools,
+        audit: ctx.audit,
+      };
+      const currency = equityPoolCurrency(trade.corp);
+      const route = cashRouting(input, snapshot, currency);
+      if (!Number.isFinite(route.amount) || route.amount <= 0 || route.sides.length === 0)
+        return { status: "refused" };
+      const assets = custody(input, snapshot, route.ipoShares);
+      if (!assets) return { status: "refused" };
+      const witness = receipts(
+        input,
+        fund,
+        `${key}:t${staged.length}`,
+        route.sides,
+        currency,
+        new Date()
+      );
+      seen.add(corpKey);
+      cash -= trade.amountAnchor;
+      holdings = trade.holdingsAfter(holdings);
+      custodyBytes += JSON.stringify([assets.forward, assets.inverse]).length;
+      staged.push({ input, route, assets, currency, witness });
+      return {
+        status: "accepted",
+        currency,
+        poolDelta: route.sides
+          .filter((side) => side.collection === "equityMarketPools")
+          .reduce((sum, side) => sum + side.amount, 0),
+      };
+    },
+    count: () => staged.length,
+    /** Freeze every accepted purchase into the single recoverable plan. */
+    seal() {
+      if (staged.length === 0) return undefined;
+      const totalAnchor = staged.reduce((sum, trade) => sum + trade.input.amountAnchor, 0);
+      const credits = new Map<string, TransitionLeg>();
+      let burn = 0;
+      let mint = 0;
+      const assetLegs: TransitionLeg[] = [];
+      for (const trade of staged) {
+        assetLegs.push(trade.assets.forward);
+        for (const side of trade.route.sides) {
+          const id = `${side.collection}:${String(side.id)}:${side.path}`;
+          const existing = credits.get(id);
+          if (existing) existing.amount += side.amount;
+          else
+            credits.set(id, {
+              kind: "credit",
+              amount: side.amount,
+              collection: side.collection,
+              filter: { _id: side.id },
+              path: side.path,
+              note: "Original frozen cash counterparty",
+            });
+        }
+        const native = trade.route.sides.reduce((sum, side) => sum + side.amount, 0);
+        if (native !== trade.input.amountAnchor) {
+          burn += trade.input.amountAnchor;
+          mint += native;
+        }
+      }
+      const legs: TransitionLeg[] = [
+        {
+          kind: "debit",
+          amount: totalAnchor,
+          collection: "indexFunds",
+          path: "cashAnchor",
+          filter: { _id: fund._id, "floatSettlementPlan.key": key, holdings: fund.holdings },
+          set: { holdings },
+          note: "Original frozen fund cash and holding book",
+        },
+        ...assetLegs,
+        ...credits.values(),
+      ];
+      if (burn > 0 || mint > 0)
+        legs.push(
+          {
+            kind: "burn",
+            amount: burn,
+            note: "Frozen debit side of the existing FX conversion",
+          },
+          {
+            kind: "mint",
+            amount: mint,
+            note: "Frozen credit side of the same FX conversion",
+          }
+        );
+      // Pool counters aggregate per pool; issuer counters stay per corporation.
+      const counters = new Map<string, TransitionProjection>();
+      const reversalCounters: TransitionProjection[] = [];
+      for (const trade of staged) {
+        for (const counter of cashCounters(trade.input, trade.route.sides)) {
+          const id = `${counter.collection}:${JSON.stringify(counter.filter)}`;
+          const existing = counters.get(id);
+          if (!existing) {
+            const inc = (counter.update as { $inc: Record<string, number> }).$inc;
+            counters.set(id, { ...counter, update: { $inc: { ...inc } } });
+          } else {
+            const inc = (existing.update as { $inc: Record<string, number> }).$inc;
+            const add = (counter.update as { $inc: Record<string, number> }).$inc;
+            for (const [path, amount] of Object.entries(add)) inc[path] = (inc[path] ?? 0) + amount;
+          }
+        }
+        reversalCounters.push(...cashCounters(trade.input, trade.route.sides, true));
+      }
+      const groupInserts = (
+        pick: (witness: Staged["witness"]) => TransitionProjection[]
+      ): TransitionProjection[] => {
+        const byCollection = new Map<string, Record<string, unknown>[]>();
+        for (const trade of staged)
+          for (const projection of pick(trade.witness))
+            if (projection.insert) {
+              const rows = byCollection.get(projection.collection) ?? [];
+              rows.push(projection.insert);
+              byCollection.set(projection.collection, rows);
+            }
+        return [...byCollection].map(([collection, inserts]) => ({
+          collection,
+          inserts,
+          note: "Original batched trade receipts",
+        }));
+      };
+      const projections: TransitionProjection[] = [
+        ...counters.values(),
+        ...groupInserts((witness) => witness.forward),
+        {
+          collection: "indexFunds",
+          filter: { _id: fund._id, "floatSettlementPlan.key": key },
+          update: { $set: { "floatSettlementPlan.state": "completed" } },
+          note: "Release the completed original trade quote",
+        },
+      ];
+      const plan: FundFloatPlan = {
+        key,
+        state: "pending",
+        direction: "buy",
+        corporationId: staged[0].input.corp._id,
+        shares: staged.reduce((sum, trade) => sum + trade.input.shares, 0),
+        amountAnchor: totalAnchor,
+        holdingsBefore: fund.holdings,
+        holdingsAfter: holdings,
+        inverseCustody: staged[0].assets.inverse,
+        inverseCustodies: staged.map((trade) => trade.assets.inverse),
+        reversalProjections: [...reversalCounters, ...groupInserts((witness) => witness.reversal)],
+        transition: {
+          key,
+          kind: "fund_float_buy",
+          turn: ctx.turn,
+          currency: staged[0].currency,
+          legs,
+          projections,
+          event: { kind: "prop.traded", command: "fund_float_buy" },
+        },
+      };
+      return { fund, plan };
+    },
+  };
+}

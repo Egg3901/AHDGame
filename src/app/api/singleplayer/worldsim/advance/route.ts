@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireSingleplayer } from "@/lib/api/requireSingleplayer";
 import { getDb } from "@/lib/mongodb";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -23,26 +23,20 @@ export async function POST(request: Request) {
     const db = await getDb();
     const config = await getSingleplayerConfig(db);
     if (config?.mode !== "worldsim") {
-      return NextResponse.json({ error: "Worldsim mode is not configured" }, { status: 409 });
+      return errorResponse(409, "Worldsim mode is not configured");
     }
     if ((await getSingleplayerWorldAvailability(db)) !== "off") {
-      return NextResponse.json(
-        { error: "Resume the world before ending a turn." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Resume the world before ending a turn.");
     }
     const playerCount = await db
       .collection("characters")
       .countDocuments({ retiredAt: { $exists: false } });
     if (playerCount > 0) {
-      return NextResponse.json(
-        { error: "Worldsim mode requires a playerless world" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Worldsim mode requires a playerless world");
     }
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     return NextResponse.json(await advanceWorldsim(parsed.data.turns), {
       headers: { "Cache-Control": "no-store" },

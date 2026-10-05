@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -201,7 +202,7 @@ export default function SupremeCourtClient({ countryId }: { countryId: CountryId
       });
       const json = (await response.json()) as { message?: string; error?: string };
       if (!response.ok) {
-        setNominateError(json.error ?? "Failed to submit nomination");
+        setNominateError(apiErrorText(json, "Failed to submit nomination"));
         return;
       }
       showToast(json.message ?? "Nomination submitted", "success");
@@ -224,7 +225,7 @@ export default function SupremeCourtClient({ countryId }: { countryId: CountryId
       });
       const json = (await response.json()) as { message?: string; error?: string };
       if (!response.ok) {
-        showToast(json.error ?? "Failed to record vote", "error");
+        showToast(apiErrorText(json, "Failed to record vote"), "error");
         return;
       }
       showToast(json.message ?? "Vote recorded", "success");
@@ -308,7 +309,7 @@ export default function SupremeCourtClient({ countryId }: { countryId: CountryId
                   href={scotusJusticeOfficeUrl(countryId)}
                   className="text-primary transition-colors hover:underline"
                 >
-                  My Justice Office
+                  My justice office
                 </Link>
               </>
             )}
@@ -351,6 +352,11 @@ export default function SupremeCourtClient({ countryId }: { countryId: CountryId
                         A diverged ruling changes real policy, national and state metrics, and
                         regional political lean.
                       </li>
+                      <li>
+                        Players cannot bring cases. Landmark cases arrive on their historical dates
+                        and rare unscripted cases can appear on their own; the Docket History tab
+                        explains each outcome.
+                      </li>
                     </ul>
                   </div>
                 </InfoTooltip>
@@ -363,18 +369,14 @@ export default function SupremeCourtClient({ countryId }: { countryId: CountryId
               </p>
               <div className="mt-4 flex items-center gap-6 border-t border-card-border pt-4">
                 <div>
-                  <span className="text-[10px] font-medium uppercase tracking-widest text-muted">
-                    Seated
-                  </span>
+                  <span className="text-body-sm font-medium text-muted">Seated</span>
                   <p className="text-base font-bold tabular-nums">
                     {seatedCount}
                     <span className="text-xs font-normal text-muted"> / 9</span>
                   </p>
                 </div>
                 <div>
-                  <span className="text-[10px] font-medium uppercase tracking-widest text-muted">
-                    Pending Votes
-                  </span>
+                  <span className="text-body-sm font-medium text-muted">Pending votes</span>
                   <p className="text-base font-bold tabular-nums">{activeNominations.length}</p>
                 </div>
               </div>
@@ -405,7 +407,7 @@ export default function SupremeCourtClient({ countryId }: { countryId: CountryId
               }`}
               aria-current={activeTab === "docket" ? "page" : undefined}
             >
-              Docket History
+              Docket history
             </button>
           </nav>
 
@@ -423,7 +425,7 @@ export default function SupremeCourtClient({ countryId }: { countryId: CountryId
                       </p>
                     </div>
                     <Button variant="primary" onClick={() => openNominateModal()}>
-                      Nominate a Justice
+                      Nominate a justice
                     </Button>
                   </div>
                 </div>

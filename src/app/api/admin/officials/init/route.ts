@@ -2,7 +2,7 @@ import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { State, ElectedOfficial, SenateClass, Election, GameState } from "@/lib/db/types";
 import { SENATE_CLASSES } from "@/lib/constants";
 import { getHouseSeats, isUsElectoralState } from "@/lib/constants/states";
@@ -38,10 +38,9 @@ export async function POST(request: Request) {
         .collection("electedOfficials")
         .countDocuments({ countryId: "US", officeType: "vicePresident" });
       if (existingPres > 0 && existingVP > 0) {
-        return NextResponse.json(
-          { error: "President and Vice President positions already exist", count: 2 },
-          { status: 409 }
-        );
+        return errorResponse(409, "President and Vice President positions already exist", {
+          extra: { count: 2 },
+        });
       }
       const execToInsert: Omit<ElectedOfficial, "_id">[] = [];
       if (existingPres === 0) {
@@ -93,10 +92,7 @@ export async function POST(request: Request) {
     );
 
     if (states.length === 0) {
-      return NextResponse.json(
-        { error: "No states found. Please seed states first." },
-        { status: 400 }
-      );
+      return errorResponse(400, "No states found. Please seed states first.");
     }
 
     // Check if officials of this type already exist
@@ -105,13 +101,15 @@ export async function POST(request: Request) {
 
     if (existingCount > 0) {
       const typeLabel = officeType ? `${officeType} positions` : "elected officials";
-      return NextResponse.json(
+      return errorResponse(
+        409,
+        `${typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)} already initialized`,
         {
-          error: `${typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)} already initialized`,
-          count: existingCount,
-          message: "Use the reset endpoint to reinitialize if needed.",
-        },
-        { status: 409 }
+          extra: {
+            count: existingCount,
+            message: "Use the reset endpoint to reinitialize if needed.",
+          },
+        }
       );
     }
 

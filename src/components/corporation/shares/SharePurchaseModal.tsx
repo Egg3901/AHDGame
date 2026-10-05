@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { Button, useDialogA11y } from "@/components/ui";
 import type { CorporationDetail, MarketOrder, MyShareOrder } from "../CorporationPageTypes";
@@ -634,7 +636,7 @@ export default function SharePurchaseModal({
         });
         const data = (await res.json()) as { cost?: number; error?: string };
         if (!res.ok) {
-          setError(data.error ?? "Could not open investment-bank position");
+          setError(apiErrorText(data, "Could not open investment-bank position"));
           return;
         }
         setSuccessMsg(
@@ -656,7 +658,7 @@ export default function SharePurchaseModal({
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setError(data.error ?? "Purchase failed");
+        setError(apiErrorText(data, "Purchase failed"));
         return;
       }
       onSuccess();
@@ -682,7 +684,7 @@ export default function SharePurchaseModal({
         });
         const data = (await res.json()) as { error?: string };
         if (!res.ok) {
-          setError(data.error ?? "Could not close investment-bank position");
+          setError(apiErrorText(data, "Could not close investment-bank position"));
           return;
         }
         onSuccess();
@@ -703,11 +705,14 @@ export default function SharePurchaseModal({
       if (!res.ok) {
         if (res.status === 409 && data.requiresCeoVacateConfirm) {
           setCeoVacateConfirm({
-            message: data.error ?? "Selling all your shares will remove you as CEO. Continue?",
+            message: apiErrorText(
+              data,
+              "Selling all your shares will remove you as CEO. Continue?"
+            ),
           });
           return;
         }
-        setError(data.error ?? "Sell failed");
+        setError(apiErrorText(data, "Sell failed"));
         return;
       }
       setCeoVacateConfirm(null);
@@ -749,7 +754,7 @@ export default function SharePurchaseModal({
         escrowAmount?: number;
       };
       if (!res.ok) {
-        setError(data.error ?? "Failed to place order");
+        setError(apiErrorText(data, "Failed to place order"));
         return;
       }
       if (data.filled) {
@@ -801,11 +806,11 @@ export default function SharePurchaseModal({
                     ← Back
                   </button>
                   <h2 id={titleId} className="text-base font-semibold text-foreground">
-                    Open Orders
+                    Open orders
                   </h2>
                 </div>
               ) : (
-                <h2 className="text-base font-semibold text-foreground">Buy / Sell Shares</h2>
+                <h2 className="text-base font-semibold text-foreground">Buy / Sell shares</h2>
               )}
               <p className="mt-0.5 text-sm text-muted">
                 {corporation.name}
@@ -1048,7 +1053,7 @@ export default function SharePurchaseModal({
               </p>
             )}
 
-            {error && <p className="text-xs text-error">{error}</p>}
+            <InlineError error={error} className="text-xs text-error" />
           </div>
 
           {/* ─── Footer ──────────────────────────────────────────────────────── */}
@@ -1068,7 +1073,7 @@ export default function SharePurchaseModal({
                     : "bg-success hover:bg-success/90"
                 }`}
               >
-                {atMarketSide === "buy" ? "Buy Shares" : "Sell Shares"}
+                {atMarketSide === "buy" ? "Buy shares" : "Sell shares"}
               </Button>
             )}
             {mode === "limit" && (
@@ -1083,7 +1088,7 @@ export default function SharePurchaseModal({
                     : "bg-success hover:bg-success/90"
                 }`}
               >
-                {orderSide === "buy" ? "Place Buy Order" : "Place Sell Order"}
+                {orderSide === "buy" ? "Place buy order" : "Place sell order"}
               </Button>
             )}
           </div>
@@ -1112,7 +1117,7 @@ export default function SharePurchaseModal({
                 isLoading={loading}
                 className="text-sm bg-error hover:bg-error/90"
               >
-                Sell &amp; Step Down
+                Sell &amp; step down
               </Button>
             </div>
           </div>

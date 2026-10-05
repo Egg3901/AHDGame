@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
@@ -23,13 +23,13 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     const { code, positionId, unitId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (DEFENSE_POSITION_BY_COUNTRY[countryId] !== positionId) {
-      return NextResponse.json({ error: "Not a defense cabinet position" }, { status: 404 });
+      return errorResponse(404, "Not a defense cabinet position");
     }
     if (!ObjectId.isValid(unitId)) {
-      return NextResponse.json({ error: "Invalid unit id" }, { status: 400 });
+      return errorResponse(400, "Invalid unit id");
     }
 
     const db = await getDb();
@@ -40,21 +40,18 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the defence minister may disband units." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the defence minister may disband units.");
     }
 
     const unitsCol = getMilitaryUnitsCollection(db);
     const unit = await unitsCol.findOne({ _id: new ObjectId(unitId), countryId });
     if (!unit) {
-      return NextResponse.json({ error: "Unit not found" }, { status: 404 });
+      return errorResponse(404, "Unit not found");
     }
 
     const result = await unitsCol.deleteOne({ _id: new ObjectId(unitId), countryId });
     if (result.deletedCount === 0) {
-      return NextResponse.json({ error: "Unit not found" }, { status: 404 });
+      return errorResponse(404, "Unit not found");
     }
 
     // Demobilised men go home. No cash refund — the unrefunded purchase price is

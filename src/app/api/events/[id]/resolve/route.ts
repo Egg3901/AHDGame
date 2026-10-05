@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import "@/lib/events/pree/index";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { badRequest, handleRouteError, notFound } from "@/lib/api/errors";
+import { badRequest, handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getEventInstancesCollection } from "@/lib/db/collections/eventInstances";
@@ -45,7 +45,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

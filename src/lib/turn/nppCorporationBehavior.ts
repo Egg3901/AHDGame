@@ -1,68 +1,90 @@
-import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
-import type { CurrencyCode } from "@/lib/constants/currencies";
-import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
-import type { CapacityDecisionObservation } from "@/lib/corporations/capacityDecisionTelemetry/rules";
-import type { BuildCapexTxInput } from "@/lib/corporations/capexTxLog";
-import { corpDailyGrossRevenueLocalFromSectors } from "@/lib/corporations/dailyGrossRevenue";
-import type { RelocationPrimeBank } from "@/lib/corporations/issueRelocationBond";
-import { type NppOperatorObservation } from "@/lib/corporations/nppOperatorTelemetry/rules";
-import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlockLedger";
-import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
-import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
-import { currencyForCountry } from "@/lib/currency/sectorFxSpread";
-import type { CorporateSector, Corporation, ExchangeRate, GameState } from "@/lib/db/types";
-import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
-import type { NPP } from "@/lib/db/types/npp";
-import type { UnownedSector } from "@/lib/db/types/unownedSector";
-import { partitionOpenMarkets } from "@/lib/economy/queries/privateEnterpriseGate";
-import { isLabourSystemMode, labourAtLeast } from "@/lib/labour/modes";
-import {
-  bucketKey,
-  computeStateControlledBuckets,
-  loadNationalCorpIds,
-} from "@/lib/nationalization/stateControlledBuckets";
-import type { ManufacturingProductProject } from "@/lib/products/manufacturingProject";
-import {
-  ceoArchetypeModifiers,
-  deriveCeoArchetype,
-  type CeoArchetype,
-} from "@/lib/turn/ceoArchetype";
-import { loadNppBankRateSnapshot } from "@/lib/turn/npp/bankRateSnapshot";
-import { loadNppBehaviorConfig } from "@/lib/turn/npp/behaviorConfig";
-import {
-  buildCapacityCompetitorIndex,
-  makeCapacityCompetitorCounter,
-  mergeCapacityObservations,
-} from "@/lib/turn/npp/capacityDecisionTelemetry";
-import {
-  drawFoundedCapacityFromPools,
-  flushNppCapacityWriteback,
-} from "@/lib/turn/npp/capacityWriteback";
-import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
-import { maybePushNppTechUnlock } from "@/lib/turn/npp/corpBehaviorConfig";
-import type {
-  NppCorpDecision,
-  NppCorpDecisionContext,
-  NppPlantsContext,
-  NppSectorUpdateDoc,
-} from "@/lib/turn/npp/corpDecisionTypes";
-import {
-  resolveNppMarketEntryCredit,
-  type NppMarketEntryDiagnostic,
-} from "@/lib/turn/npp/entryDiagnostics";
+/**
+ * NPP corporation decisions use shared market and funding observations.
+ * processNppCorporationDecisions loads them and prepares corporation and sector writes.
+ */
+import { makeNppCorpDecision } from "@/lib/turn/npp/makeCorpDecision";
+import { strategyStateNeedsPersist } from "@/lib/turn/npp/rules/strategyCadence";
+export { makeNppCorpDecision } from "@/lib/turn/npp/makeCorpDecision";
 import {
   buildNppDecisionCashWrites,
   type NppFoundingCashWitness,
 } from "@/lib/turn/npp/foundingCashLedger";
-import { loadNppPlacementSignals } from "@/lib/turn/npp/fragileMarketSupply";
-import { createFrontierEntryTurnState } from "@/lib/turn/npp/frontierEntryCandidate";
+import type { Db, ObjectId } from "mongodb";
+import type { Corporation, CorporateSector, GameState, ExchangeRate } from "@/lib/db/types";
+import type { CurrencyCode } from "@/lib/constants/currencies";
+import { currencyForCountry } from "@/lib/currency/sectorFxSpread";
+import { netPerTurnDebtServiceAnchor } from "@/lib/bonds/corpBondCashflows";
+import { buildActiveMarketBuckets, markMarketsActive } from "@/lib/turn/npp/marketSignals";
+
+export {
+  sectorShortageScore,
+  computeMacroProductionPolicy,
+  type CommodityPriceRatioFn,
+} from "@/lib/turn/npp/marketSignals";
+
+import { glutStaggerEligible } from "@/lib/turn/npp/cohort";
+
+export { GLUT_STATE_CHANGE_STAGGER, glutStaggerEligible } from "@/lib/turn/npp/cohort";
+export {
+  STRATEGY_SHIFT_MARGIN_TRIGGER,
+  STRATEGY_SHIFT_MIN_ADVANTAGE,
+  STRATEGY_SHIFT_PROFIT_SEEK_ADVANTAGE,
+  strategyPriceScore,
+} from "@/lib/turn/npp/strategyRetooling";
+import type { NPP } from "@/lib/db/types/npp";
+import type { UnownedSector } from "@/lib/db/types/unownedSector";
+import { ceoArchetypeModifiers } from "@/lib/turn/ceoArchetype";
+import {
+  buildNppCorporationDecisionIndexes,
+  indexOpenUnownedSectors,
+  nppDecisionCohortIds,
+} from "@/lib/turn/npp/decisionSnapshotIndexes";
+
+import { partitionOpenMarkets } from "@/lib/economy/queries/privateEnterpriseGate";
+import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
+import type { ManufacturingProductProject } from "@/lib/products/manufacturingProject";
+
+import { labourAtLeast, isLabourSystemMode } from "@/lib/labour/modes";
+
+import {
+  computeStateControlledBuckets,
+  loadNationalCorpIds,
+} from "@/lib/nationalization/stateControlledBuckets";
+
+import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+
+import type { BuildCapexTxInput } from "@/lib/corporations/capexTxLog";
+
+import { buildNppNationalShareResolver } from "@/lib/turn/npp/nationalDominancePricing";
+import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
+import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
+import type { RelocationPrimeBank } from "@/lib/corporations/issueRelocationBond";
+import { loadNppBankRateSnapshot } from "@/lib/turn/npp/bankRateSnapshot";
 import {
   buildNppProductProjectsV2,
   loadNppCostOfLivingByState,
   loadNppProductProjectsV2,
 } from "@/lib/turn/npp/manufacturingProducts";
-import { buildActiveMarketBuckets, markMarketsActive } from "@/lib/turn/npp/marketSignals";
-import { buildNppNationalShareResolver } from "@/lib/turn/npp/nationalDominancePricing";
+
+import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
+import type { CapacityDecisionObservation } from "@/lib/corporations/capacityDecisionTelemetry/rules";
+import { type NppOperatorObservation } from "@/lib/corporations/nppOperatorTelemetry/rules";
+import {
+  buildCapacityCompetitorIndex,
+  makeCapacityCompetitorCounter,
+  mergeCapacityObservations,
+} from "@/lib/turn/npp/capacityDecisionTelemetry";
+
+import type { NppCorpUpdateOp } from "./npp/nppCashWrite";
+import type { NppReinvestmentCashWitness } from "./npp/reinvestmentCashLedger";
+
+import {
+  drawFoundedCapacityFromPools,
+  flushNppCapacityWriteback,
+} from "@/lib/turn/npp/capacityWriteback";
+import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+
+import { loadNppBehaviorConfig } from "@/lib/turn/npp/behaviorConfig";
 import {
   boundNppConstructionFinanceCandidates,
   loadNppConstructionFundingPool,
@@ -71,51 +93,47 @@ import {
   type NppConstructionFinanceCandidate,
   type NppConstructionFinanceRequest,
 } from "@/lib/turn/npp/nppConstructionFinance";
+import { maybePushNppTechUnlock } from "@/lib/turn/npp/corpBehaviorConfig";
+import { corpDailyGrossRevenueLocalFromSectors } from "@/lib/corporations/dailyGrossRevenue";
+import type { TechUnlockLedgerInput } from "@/lib/corporations/techTree/techUnlockLedger";
+import { loadNppPlacementSignals } from "@/lib/turn/npp/fragileMarketSupply";
+import {
+  resolveNppMarketEntryCredit,
+  type NppMarketEntryDiagnostic,
+} from "@/lib/turn/npp/entryDiagnostics";
+
+import { createFrontierEntryTurnState } from "@/lib/turn/npp/frontierEntryCandidate";
+import type {
+  NppCorpDecision,
+  NppCorpDecisionContext,
+  NppPlantsContext,
+  NppSectorUpdateDoc,
+} from "@/lib/turn/npp/corpDecisionTypes";
 import {
   loadNppCorporationBondLookups,
   type NppCorporationDecisionPreload,
 } from "@/lib/turn/npp/nppCorporationBondLookups";
-import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
-import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContract";
-import type { Db, ObjectId } from "mongodb";
-import { makeNppCorpDecision } from "./npp/makeCorpDecision";
-import type { NppCorpUpdateOp } from "./npp/nppCashWrite";
-import type { NppReinvestmentCashWitness } from "./npp/reinvestmentCashLedger";
-export { makeNppCorpDecision } from "./npp/makeCorpDecision";
-
-export { GLUT_STATE_CHANGE_STAGGER, glutStaggerEligible } from "@/lib/turn/npp/cohort";
 export type { NppPlantsContext } from "@/lib/turn/npp/corpDecisionTypes";
-export {
-  computeMacroProductionPolicy,
-  sectorShortageScore,
-  type CommodityPriceRatioFn,
-} from "@/lib/turn/npp/marketSignals";
-export {
-  STRATEGY_SHIFT_MARGIN_TRIGGER,
-  STRATEGY_SHIFT_MIN_ADVANTAGE,
-  STRATEGY_SHIFT_PROFIT_SEEK_ADVANTAGE,
-  strategyPriceScore,
-} from "@/lib/turn/npp/strategyRetooling";
 
 export { computeExtractionHeadroomByState } from "@/lib/turn/nppExtractionOpportunity";
 
 import {
-  DEFAULT_ARCHETYPE,
-  NPP_FOUNDING_DEPLOY_FRACTION,
-  NPP_FOUNDING_HEADROOM_SHARE,
-  NPP_GROWTH_MAX_STEP_OF_RUN,
   NPP_GROWTH_MIN_SHORTAGE,
   NPP_GROWTH_MIN_UTILIZATION,
+  NPP_GROWTH_MAX_STEP_OF_RUN,
   NPP_SHORTAGE_ENTRIES_PER_TURN,
+  NPP_FOUNDING_DEPLOY_FRACTION,
+  NPP_FOUNDING_HEADROOM_SHARE,
+  DEFAULT_ARCHETYPE,
 } from "@/lib/turn/npp/nppCorporationTuning";
 
 export {
-  NPP_FOUNDING_DEPLOY_FRACTION,
-  NPP_FOUNDING_HEADROOM_SHARE,
-  NPP_GROWTH_MAX_STEP_OF_RUN,
   NPP_GROWTH_MIN_SHORTAGE,
   NPP_GROWTH_MIN_UTILIZATION,
+  NPP_GROWTH_MAX_STEP_OF_RUN,
   NPP_SHORTAGE_ENTRIES_PER_TURN,
+  NPP_FOUNDING_DEPLOY_FRACTION,
+  NPP_FOUNDING_HEADROOM_SHARE,
 };
 
 export async function processNppCorporationDecisions(
@@ -172,10 +190,7 @@ export async function processNppCorporationDecisions(
       constructionFinanceBacklogCount: 0,
     };
 
-  const corpIds = nppCorps.map((c) => c._id);
-  // Resolve each corp's CEO NPP so its personality can shape the corp's behavior.
-  // ceoId holds the NPP _id when ceoType === "npp".
-  const ceoNppIds = nppCorps.filter((c) => c.ceoType === "npp" && c.ceoId).map((c) => c.ceoId);
+  const { corporationIds: corpIds, ceoNppIds } = nppDecisionCohortIds(nppCorps);
   // All four reads depend only on the NPP cohort. Start them together rather
   // than making the decision phase wait for each collection in sequence.
   const [allSectors, ceoNpps, commodityPriceDocs, unownedSectors] = await Promise.all([
@@ -193,29 +208,11 @@ export async function processNppCorporationDecisions(
     db.collection<CommodityPrice>("commodityPrices").find({}).toArray(),
     db.collection<UnownedSector>("unownedSectors").find({}).toArray(),
   ]);
-  const archetypeByNppId = new Map<string, CeoArchetype>();
-  for (const npp of ceoNpps) {
-    if (npp.personality) {
-      archetypeByNppId.set(npp._id.toString(), deriveCeoArchetype(npp.personality));
-    }
-  }
-
-  const sectorsByCorp = new Map<string, CorporateSector[]>();
-  for (const sector of allSectors) {
-    const cid = sector.corporationId.toString();
-    if (!sectorsByCorp.has(cid)) sectorsByCorp.set(cid, []);
-    sectorsByCorp.get(cid)!.push(sector);
-  }
-
-  // Commodity price snapshot for macro-aware production policy (SP5). One doc
-  // per commodity; keep the latest turn if duplicates exist.
-  const priceByCommodity = new Map<string, CommodityPrice>();
-  for (const doc of commodityPriceDocs) {
-    const existing = priceByCommodity.get(doc.commodity);
-    if (!existing || (doc.turn ?? 0) >= (existing.turn ?? 0)) {
-      priceByCommodity.set(doc.commodity, doc);
-    }
-  }
+  const { archetypeByNppId, sectorsByCorp, priceByCommodity } = buildNppCorporationDecisionIndexes(
+    ceoNpps,
+    allSectors,
+    commodityPriceDocs
+  );
   const { priceRatioOf, statePriceRatioOf, stateDemandOf } = buildNppPriceSignals(priceByCommodity);
 
   const placementSignals = await loadNppPlacementSignals(db, turn, allSectors, statePriceRatioOf);
@@ -223,20 +220,7 @@ export async function processNppCorporationDecisions(
 
   const { open: openUnowned, blocked } = await partitionOpenMarkets(db, unownedSectors);
 
-  // Index unowned sectors by countryId for fast lookup
-  const unownedByCountry = new Map<string, UnownedSector[]>();
-  for (const us of openUnowned) {
-    if (!unownedByCountry.has(us.countryId)) unownedByCountry.set(us.countryId, []);
-    unownedByCountry.get(us.countryId)!.push(us);
-  }
-  // Shared object references let each founding deplete later candidates in this pass.
-  const unownedIndex = new Map<string, UnownedSector>();
-  for (const us of openUnowned) {
-    unownedIndex.set(
-      bucketKey(us.stateId, us.sectorType, us.industryModel, us.mediaDiscriminator),
-      us
-    );
-  }
+  const { unownedByCountry, unownedIndex } = indexOpenUnownedSectors(openUnowned);
 
   // NPPs cannot auto-expand into state-controlled buckets; players still may.
   const [nationalCorpIds, globalSectors] = await Promise.all([
@@ -522,7 +506,9 @@ export async function processNppCorporationDecisions(
       });
     }
 
-    if (decision.strategy) {
+    // Accrual (the score memory) happens every turn inside the decision, but the
+    // stored document only needs rewriting when its meaningful content changed.
+    if (decision.strategy && strategyStateNeedsPersist(corp.nppStrategy, decision.strategy)) {
       corpUpdates.push({
         filter: { _id: corp._id },
         update: { $set: { nppStrategy: decision.strategy, updatedAt: now } },

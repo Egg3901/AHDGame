@@ -1,5 +1,6 @@
 "use client";
 
+import { BLEND_LABEL } from "@/components/blend/tokens";
 import type { ReactNode } from "react";
 import { BLEND, FONT } from "./tokens";
 import styles from "./blend.module.css";
@@ -95,17 +96,7 @@ export function BlendRail({
       }}
     >
       <div style={{ padding: "0 18px 16px", borderBottom: `1px solid ${BLEND.hairline}` }}>
-        <div
-          style={{
-            fontFamily: FONT.mono,
-            fontSize: 9.5,
-            letterSpacing: ".16em",
-            textTransform: "uppercase",
-            color: BLEND.mutedDimmer,
-          }}
-        >
-          {eyebrow}
-        </div>
+        <div style={BLEND_LABEL}>{eyebrow}</div>
         <div
           style={{
             marginTop: 6,

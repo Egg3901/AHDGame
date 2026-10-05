@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { setCampaignColor } from "@/lib/campaigns/commands/campaignCommands";
 
@@ -27,7 +27,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid campaign ID" }, { status: 400 });
+      return errorResponse(400, "Invalid campaign ID");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -38,7 +38,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { color } = parsed.data;
 

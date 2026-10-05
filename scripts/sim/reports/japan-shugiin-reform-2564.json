@@ -1,0 +1,106 @@
+{
+  "issue": 2564,
+  "method": "Portable full-map ballot counter and progressive sitting-capacity replay",
+  "limitation": "Fixed synthetic regional support; no campaign-year world, historical microdistrict votes or policy feedback",
+  "statutoryDistricts": 300,
+  "initialSittingCapacity": 512,
+  "finalSittingCapacity": 500,
+  "rows": [
+    {
+      "regionId": "HOK",
+      "frozenBeforeApproval": 23,
+      "futureDistrictSeats": 13,
+      "futureListSeats": 9,
+      "seated": 22,
+      "partyListSeats": {
+        "a": 8,
+        "b": 1
+      },
+      "sittingCapacityAfterResolution": 511
+    },
+    {
+      "regionId": "TOH",
+      "frozenBeforeApproval": 50,
+      "futureDistrictSeats": 26,
+      "futureListSeats": 16,
+      "seated": 42,
+      "partyListSeats": {
+        "a": 13,
+        "b": 3
+      },
+      "sittingCapacityAfterResolution": 503
+    },
+    {
+      "regionId": "KAN",
+      "frozenBeforeApproval": 145,
+      "futureDistrictSeats": 85,
+      "futureListSeats": 63,
+      "seated": 148,
+      "partyListSeats": {
+        "a": 51,
+        "b": 12
+      },
+      "sittingCapacityAfterResolution": 506
+    },
+    {
+      "regionId": "CHU",
+      "frozenBeforeApproval": 86,
+      "futureDistrictSeats": 57,
+      "futureListSeats": 36,
+      "seated": 93,
+      "partyListSeats": {
+        "a": 29,
+        "b": 7
+      },
+      "sittingCapacityAfterResolution": 513
+    },
+    {
+      "regionId": "KNS",
+      "frozenBeforeApproval": 92,
+      "futureDistrictSeats": 47,
+      "futureListSeats": 33,
+      "seated": 80,
+      "partyListSeats": {
+        "a": 27,
+        "b": 6
+      },
+      "sittingCapacityAfterResolution": 501
+    },
+    {
+      "regionId": "CGK",
+      "frozenBeforeApproval": 34,
+      "futureDistrictSeats": 21,
+      "futureListSeats": 13,
+      "seated": 34,
+      "partyListSeats": {
+        "a": 11,
+        "b": 2
+      },
+      "sittingCapacityAfterResolution": 501
+    },
+    {
+      "regionId": "SHI",
+      "frozenBeforeApproval": 20,
+      "futureDistrictSeats": 13,
+      "futureListSeats": 7,
+      "seated": 20,
+      "partyListSeats": {
+        "a": 6,
+        "b": 1
+      },
+      "sittingCapacityAfterResolution": 501
+    },
+    {
+      "regionId": "KYU",
+      "frozenBeforeApproval": 62,
+      "futureDistrictSeats": 38,
+      "futureListSeats": 23,
+      "seated": 61,
+      "partyListSeats": {
+        "a": 19,
+        "b": 4
+      },
+      "sittingCapacityAfterResolution": 500
+    }
+  ]
+}

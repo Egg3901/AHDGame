@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import type { FederalBudget } from "@/lib/db/types/budget";
@@ -30,15 +30,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     const auth = await requireAuth();
     if (!auth.ok) return auth.response;
     const parsed = await parseJsonBody(request, bodySchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { code, positionId } = await params;
     const countryId = code.toUpperCase();
     if (!supported.has(countryId)) {
-      return NextResponse.json(
-        { error: "Cabinet v2 is not available for this country" },
-        { status: 404 }
-      );
+      return errorResponse(404, "Cabinet v2 is not available for this country");
     }
     const action = resetCabinetActions.find(
       (candidate) =>
@@ -46,7 +42,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         candidate.country === countryId &&
         candidate.seatId === positionId
     );
-    if (!action) return NextResponse.json({ error: "Unknown Cabinet action" }, { status: 400 });
+    if (!action) return errorResponse(400, "Unknown Cabinet action");
 
     const db = await getDb();
     const member = await getCabinetMembersCollection(db).findOne({
@@ -58,10 +54,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if ((!isHolder && !auth.user.isAdmin) || !member?.characterId) {
-      return NextResponse.json(
-        { error: "Only the seated Cabinet member or an admin can use this action" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the seated Cabinet member or an admin can use this action");
     }
     const actorId = member.characterId.toString();
     const result = await runRequiredTransaction(async (session) => {

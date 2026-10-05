@@ -18,7 +18,7 @@ import {
   type AlignmentPoleId,
   type AlignmentPoleToken,
 } from "@/lib/constants/alignmentEras";
-import { ROSTER_BY_KEY, type AlignmentCountryKey } from "@/lib/constants/alignmentRoster";
+import { rosterNameAt, type AlignmentCountryKey } from "@/lib/constants/alignmentRoster";
 import { getAllCountryAccess } from "@/lib/countryAccess";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import {
@@ -393,6 +393,7 @@ export async function loadOrgInfluence(
       poleIds,
       memberPoleIds: new Set<AlignmentPoleId>(),
       preset,
+      year,
     });
     if (!standing) continue;
     allStandings.push(standing);
@@ -508,7 +509,7 @@ export async function loadOrgInfluence(
     targetEntityId: p.targetEntityId,
     targetName:
       COUNTRY_CONFIGS[p.targetEntityId as CountryId]?.name ??
-      ROSTER_BY_KEY[p.targetEntityId]?.name ??
+      rosterNameAt(p.targetEntityId, year) ??
       p.targetEntityId,
     sponsorCountryId: p.sponsorCountryId,
     amountLocal: p.amountLocal,
@@ -539,7 +540,7 @@ export async function loadOrgInfluence(
       countryId: m.countryId as CountryId,
       name:
         COUNTRY_CONFIGS[m.countryId as CountryId]?.name ??
-        ROSTER_BY_KEY[m.countryId as AlignmentCountryKey]?.name ??
+        rosterNameAt(m.countryId, year) ??
         m.countryId,
       eligible: standing.eligible,
       share: standing.share,

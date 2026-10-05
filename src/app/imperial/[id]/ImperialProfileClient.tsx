@@ -224,7 +224,7 @@ export default function ImperialProfileClient({ id }: { id: string }) {
             <CampaignSongPlayer
               videoId={data.campaignSongUrl}
               characterName={data.fullName}
-              label="Royal Anthem"
+              label="Royal anthem"
             />
           </div>
         )}

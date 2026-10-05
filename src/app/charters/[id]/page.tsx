@@ -195,13 +195,11 @@ export default async function CharterDetailPage({ params }: PageParams) {
               >
                 <div className="flex items-center justify-between">
                   <span className="flex items-baseline gap-2">
-                    <span className="text-[10px] uppercase tracking-wide text-muted">{role}</span>
+                    <span className="text-body-sm font-medium text-muted">{role}</span>
                     <span className="font-medium">
                       {characterName}
                       {isMine && (
-                        <span className="ml-2 text-[10px] uppercase tracking-wide text-primary">
-                          yours
-                        </span>
+                        <span className="ml-2 text-body-sm font-medium text-primary">yours</span>
                       )}
                     </span>
                   </span>

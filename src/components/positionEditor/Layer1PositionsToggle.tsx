@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const ENDPOINT = "/api/admin/demographics/layer1-positions/toggle";
 
@@ -38,7 +39,7 @@ export function Layer1PositionsToggle() {
           data.note ?? (data.demographicsLayer1PositionsEnabled ? "Enabled." : "Disabled.")
         );
       } else {
-        setMessage(data.error ?? "Failed to update flag.");
+        setMessage(apiErrorText(data, "Failed to update flag."));
       }
     } catch {
       setMessage("Failed to update flag.");

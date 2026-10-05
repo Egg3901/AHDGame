@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import type { BillWhip, CabinetNomination, ElectedOfficial, StatePartyOrg } from "@/lib/db/types";
@@ -47,7 +47,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { code, id: stateId, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -57,7 +57,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const partyKey = getPartyIdString(party);
@@ -67,7 +67,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       .findOne({ _id: statePartyKey });
 
     if (!statePartyOrg) {
-      return NextResponse.json({ error: "State party organization not found" }, { status: 404 });
+      return errorResponse(404, "State party organization not found");
     }
 
     const characterId = authData.character._id;
@@ -76,9 +76,9 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const isAdmin = authData.isAdmin;
 
     if (!isChair && !isViceChair && !isAdmin) {
-      return NextResponse.json(
-        { error: "Only the State Party Chair or Vice Chair can view whippable targets" },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the State Party Chair or Vice Chair can view whippable targets"
       );
     }
 

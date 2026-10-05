@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { heldStakeValueAnchor, transferOwnedSharesToNatCorp } from "./heldEquityTransfer";
 import { ObjectId } from "mongodb";
 import { badRequest } from "@/lib/api/errors";
 import type {
@@ -90,7 +91,6 @@ import {
   reserveSectorsForTransition,
   unprotectedConstructionPropertyFilter,
 } from "@/lib/corporations/securedConstructionProperty";
-import { transferOwnedSharesToNatCorp, type HeldStake } from "./ownershipTransitionShareTransfer";
 import {
   settleFundedWholeCorpLiquidation,
   settleFundedWholeCorpShareholderPool,
@@ -1540,24 +1540,4 @@ function buyoutPayoutLeg(
     counterpartyName: target.name,
     meta: { kind: ledger.kind, ...(meta ?? {}) },
   };
-}
-
-/** Market value, in ₳, of the shares the seized corporation holds in other corporations. */
-function heldStakeValueAnchor(
-  stakes: HeldStake[],
-  seizedCorpId: ObjectId,
-  fxByCurrency: ReadonlyMap<CurrencyCode, number>
-): number {
-  let total = 0;
-  for (const stake of stakes) {
-    const shares =
-      stake.shareholders?.find((sh) => sh.corporationId?.equals(seizedCorpId))?.shares ?? 0;
-    if (!(shares > 0)) continue;
-    total += corpLiquidCapitalToAnchor(
-      shares * (stake.sharePrice ?? 0),
-      stake,
-      fxByCurrency.get(stake.liquidCurrencyCode as CurrencyCode) ?? 1
-    );
-  }
-  return total;
 }

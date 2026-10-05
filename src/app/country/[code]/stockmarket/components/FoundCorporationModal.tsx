@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useMemo, useState } from "react";
 import { getEraFoundingBounds, getEraFounderShares } from "@/lib/constants/sectorSeedEra";
 import {
@@ -293,7 +294,7 @@ export function FoundCorporationModal({
         onClose();
         onSuccess();
       } else {
-        setFoundError(data.error || "Failed to found corporation");
+        setFoundError(apiErrorText(data, "Failed to found corporation"));
       }
     } catch {
       setFoundError("Network error");
@@ -319,7 +320,7 @@ export function FoundCorporationModal({
       <div className="flex w-full max-w-md max-h-[85dvh] flex-col overflow-hidden rounded-xl border border-card-border bg-card shadow-modal animate-in zoom-in-95 duration-200">
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
           <h2 id="found-corporation-title" className="text-xl font-bold text-foreground mb-1">
-            Found a Corporation
+            Found a corporation
           </h2>
           <p className="text-sm text-muted mb-4">
             A flat <span className="text-foreground font-semibold">{fmt(foundingFeeLocal)}</span>{" "}
@@ -341,8 +342,8 @@ export function FoundCorporationModal({
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
-                Founding Type
+              <label className="block text-body-sm font-medium text-muted mb-1.5">
+                Founding type
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -376,8 +377,8 @@ export function FoundCorporationModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
-                Corporation Name
+              <label className="block text-body-sm font-medium text-muted mb-1.5">
+                Corporation name
               </label>
               <input
                 type="text"
@@ -390,8 +391,8 @@ export function FoundCorporationModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
-                Stock Ticker Symbol
+              <label className="block text-body-sm font-medium text-muted mb-1.5">
+                Stock ticker symbol
               </label>
               <input
                 type="text"
@@ -409,8 +410,8 @@ export function FoundCorporationModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
-                Primary Sector
+              <label className="block text-body-sm font-medium text-muted mb-1.5">
+                Primary sector
               </label>
               <div className="relative">
                 <select
@@ -449,8 +450,8 @@ export function FoundCorporationModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
-                Secondary Sector <span className="text-muted/60 normal-case">(optional)</span>
+              <label className="block text-body-sm font-medium text-muted mb-1.5">
+                Secondary sector <span className="text-muted/60 normal-case">(optional)</span>
               </label>
               <div className="relative">
                 <select
@@ -495,8 +496,8 @@ export function FoundCorporationModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
-                Starting Treasury
+              <label className="block text-body-sm font-medium text-muted mb-1.5">
+                Starting treasury
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-2 text-sm text-muted pointer-events-none">
@@ -590,7 +591,7 @@ export function FoundCorporationModal({
                   </label>
                   {dualClass && (
                     <div className="mt-3">
-                      <label className="block text-xs font-bold uppercase tracking-wider text-muted mb-1.5">
+                      <label className="block text-body-sm font-medium text-muted mb-1.5">
                         Votes per founder share ({superMultiplier}×)
                       </label>
                       <input
@@ -610,9 +611,7 @@ export function FoundCorporationModal({
                   )}
                 </div>
                 <div className="mb-1.5 flex items-end justify-between gap-3">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-muted">
-                    Public Float
-                  </label>
+                  <label className="block text-body-sm font-medium text-muted">Public float</label>
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
@@ -775,7 +774,7 @@ export function FoundCorporationModal({
             disabled={disabled}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50 shadow-sm"
           >
-            {founding ? "Founding..." : "Found Corporation"}
+            {founding ? "Founding..." : "Found corporation"}
           </button>
         </div>
       </div>

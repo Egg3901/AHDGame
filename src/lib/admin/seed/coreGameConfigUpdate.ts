@@ -2,6 +2,7 @@ import type { UpdateFilter } from "mongodb";
 import type { GameConfig } from "@/lib/db/types";
 import { gameConfig } from "@/lib/seeds/reference/gameConfig";
 import { playerInvestmentBankingSeedFlags } from "@/lib/banking/rules/charterAccess";
+import { splitFreshWorldGameConfigFlags } from "@/lib/seeds/reference/featureFlagDefaults";
 
 /**
  * Provenance stamps for `marketSystemMode`, cleared only when a reset re-adopts
@@ -15,25 +16,23 @@ export const STALE_MARKET_MODE_STAMP_UNSET: Readonly<Record<string, "">> = Objec
   marketSystemModeUpdatedTurn: "",
 });
 
-/** Configuration writes shared by core reset and non-destructive seed top-ups. */
+/**
+ * Configuration writes shared by core reset and non-destructive seed top-ups.
+ *
+ * A reset is a fresh world, so it writes the full fresh-world flag preset. A
+ * top-up writes flag and switch fields only on insertion: it must never flip a
+ * gate on a running world, in either direction.
+ */
 export function coreGameConfigUpdate(reset: boolean, seedYear: number): UpdateFilter<GameConfig> {
-  const { marketSystemMode, campaignEraPriceLevelEnabled, ...reference } = gameConfig;
+  const { settings, flags } = splitFreshWorldGameConfigFlags(gameConfig);
   const investmentBanking = playerInvestmentBankingSeedFlags(seedYear);
-  // These economy modes change only on a deliberate reset or first insertion.
-  // Existing absent campaign flags retain the legacy pricing contract.
   return reset
     ? {
-        $set: {
-          ...reference,
-          seedYear,
-          marketSystemMode,
-          campaignEraPriceLevelEnabled,
-          ...investmentBanking,
-        },
+        $set: { ...settings, ...flags, ...investmentBanking, seedYear },
         $unset: STALE_MARKET_MODE_STAMP_UNSET,
       }
     : {
-        $set: { ...reference, seedYear },
-        $setOnInsert: { marketSystemMode, campaignEraPriceLevelEnabled, ...investmentBanking },
+        $set: { ...settings, seedYear },
+        $setOnInsert: { ...flags, ...investmentBanking },
       };
 }

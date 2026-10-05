@@ -12,7 +12,7 @@ describe("reset 1991 treasury stress", () => {
     }
   });
 
-  it("reconciles every 240-turn run and retains US ceiling behavior", () => {
+  it("reconciles every 240-turn run and keeps ordinary openings below the ceiling", () => {
     for (const country of ["US", "UK", "JP"] as const) {
       for (const scenario of ["unchanged", "receipt_shock", "unfunded"] as const) {
         const result = runResetTreasury240(country, scenario);
@@ -25,9 +25,14 @@ describe("reset 1991 treasury stress", () => {
       }
     }
     const us = runResetTreasury240("US", "unchanged");
-    expect(us.firstDebtCeilingCrossing).not.toBeNull();
-    expect(us.firstUSCrisisRollover).not.toBeNull();
-    expect(us.firstUSCrisisRollover!).toBeGreaterThanOrEqual(us.firstDebtCeilingCrossing!);
+    expect(us.firstDebtCeilingCrossing).toBeNull();
+    expect(us.firstUSCrisisRollover).toBeNull();
+    const expanded = runResetTreasury240("US", "unchanged", 100_000_000_000);
+    expect(expanded.firstDebtCeilingCrossing).not.toBeNull();
+    expect(expanded.firstUSCrisisRollover).not.toBeNull();
+    expect(expanded.firstUSCrisisRollover!).toBeGreaterThanOrEqual(
+      expanded.firstDebtCeilingCrossing!
+    );
     expect(runResetTreasury240("US", "unfunded").finalNationalArrears).toBeGreaterThan(0);
   });
 

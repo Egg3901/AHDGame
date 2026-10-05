@@ -7,7 +7,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
@@ -58,15 +58,15 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (DEFENSE_POSITION_BY_COUNTRY[countryId] !== positionId) {
-      return NextResponse.json({ error: "Not a defense cabinet position" }, { status: 404 });
+      return errorResponse(404, "Not a defense cabinet position");
     }
 
     const parsed = await parseJsonBody(request, recruitSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     // Live year gates which branches/archetypes exist (e.g. Bundeswehr 1955,
@@ -77,25 +77,20 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const branch = getBranches(countryId, liveYear).find((b) => b.id === parsed.data.branchId);
     if (!branch) {
-      return NextResponse.json(
-        {
-          error: liveYear != null ? `Branch is not available in ${liveYear}` : "Invalid branch",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        liveYear != null ? `Branch is not available in ${liveYear}` : "Invalid branch"
       );
     }
     const archetype = getUnitTypesForYear(branch.domain, liveYear).find(
       (t) => t.type === parsed.data.type
     );
     if (!archetype) {
-      return NextResponse.json(
-        {
-          error:
-            liveYear != null
-              ? `Unit type is not available in ${liveYear}`
-              : "Invalid unit type for this branch",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        liveYear != null
+          ? `Unit type is not available in ${liveYear}`
+          : "Invalid unit type for this branch"
       );
     }
 
@@ -109,29 +104,23 @@ export async function POST(request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the defence minister may recruit units." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the defence minister may recruit units.");
     }
 
     // Shared UK pool: both offices of a dual holder spend one balance (issue #2049).
     const actions = await resolveMinisterialRemaining(db, countryId, member!);
     if (actions < 1) {
-      return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 400 });
+      return errorResponse(400, "No ministerial actions remaining");
     }
 
     const region = await db.collection("states").findOne({ countryId }, { projection: { _id: 1 } });
     if (!region) {
-      return NextResponse.json(
-        { error: "No region available to station the unit" },
-        { status: 400 }
-      );
+      return errorResponse(400, "No region available to station the unit");
     }
 
     const spend = await spendMinisterialAction(db, countryId, member!);
     if (!spend.ok) {
-      return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 409 });
+      return errorResponse(409, "No ministerial actions remaining");
     }
 
     const refundAction = () => refundMinisterialAction(db, countryId, member!);
@@ -159,9 +148,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // free unit this guard exists to prevent. Require the key both sides use.
     if (!healedBudget || healedBudget.countryId !== countryId) {
       await refundAction();
-      return NextResponse.json(
-        { error: "This country has no usable national budget — procurement is unavailable" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "This country has no usable national budget — procurement is unavailable"
       );
     }
 
@@ -174,22 +163,16 @@ export async function POST(request: Request, { params }: RouteParams) {
     // guard to a concurrent order, which is retryable rather than malformed.
     if (poolBefore < archetype.personnel) {
       await refundAction();
-      return NextResponse.json(
-        {
-          error:
-            `Insufficient manpower — ${archetype.personnel.toLocaleString("en-US")} required, ` +
-            `${poolBefore.toLocaleString("en-US")} available`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient manpower — ${archetype.personnel.toLocaleString("en-US")} required, ` +
+          `${poolBefore.toLocaleString("en-US")} available`
       );
     }
 
     if (!(await drawManpower(db, countryId, archetype.personnel))) {
       await refundAction();
-      return NextResponse.json(
-        { error: "Manpower was drawn by another order — try again" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Manpower was drawn by another order — try again");
     }
 
     // Price is a share of the healed budget's own gdp — ANCHORED, so a growing economy
@@ -208,9 +191,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (price == null) {
       await returnManpower(db, countryId, archetype.personnel);
       await refundAction();
-      return NextResponse.json(
-        { error: "This country has no usable GDP figure — procurement is unavailable" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "This country has no usable GDP figure — procurement is unavailable"
       );
     }
 
@@ -225,13 +208,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       await returnManpower(db, countryId, archetype.personnel);
       await refundAction();
       const { balance } = await getDefenseAppropriation(db, countryId);
-      return NextResponse.json(
-        {
-          error:
-            `Defence appropriation is short — ${price.toLocaleString("en-US")} required, ` +
-            `${Math.max(0, balance).toLocaleString("en-US")} available`,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `Defence appropriation is short — ${price.toLocaleString("en-US")} required, ` +
+          `${Math.max(0, balance).toLocaleString("en-US")} available`
       );
     }
 

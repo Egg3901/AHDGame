@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { createNotification } from "@/lib/notifications";
 import type { PlayerMail, PlayerMailReport } from "@/lib/db/types";
 import { withdrawAllCandidatesForUser } from "@/lib/elections/withdrawBannedCandidates";
@@ -29,13 +29,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid report id" }, { status: 400 });
+      return errorResponse(400, "Invalid report id");
     }
 
     const db = await getDb();
     const detail = await getMailReportDetail(db, new ObjectId(id));
     if (!detail) {
-      return NextResponse.json({ error: "Report not found" }, { status: 404 });
+      return errorResponse(404, "Report not found");
     }
 
     return NextResponse.json(detail);
@@ -56,8 +56,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const adminId = new ObjectId(auth.user.userId);
 
     const parsed = await parseJsonBody(request, mailReportActionSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const { action, adminNote } = parsed.data;
     const db = await getDb();
@@ -67,7 +66,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .findOne({ _id: reportId });
 
     if (!report) {
-      return NextResponse.json({ error: "Report not found" }, { status: 404 });
+      return errorResponse(404, "Report not found");
     }
 
     const now = new Date();

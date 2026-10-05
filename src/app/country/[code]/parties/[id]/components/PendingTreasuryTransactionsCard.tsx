@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
 
@@ -100,7 +102,7 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
       );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Approve failed");
+        setError(apiErrorText(data, "Approve failed"));
         return;
       }
       await fetchPending();
@@ -122,7 +124,7 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
       );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Cancel failed");
+        setError(apiErrorText(data, "Cancel failed"));
         return;
       }
       await fetchPending();
@@ -147,7 +149,7 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
         </button>
       </div>
 
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      <InlineError error={error} className="text-xs text-red-400" />
 
       {loading && items.length === 0 ? (
         <div className="min-h-[8rem] space-y-3">

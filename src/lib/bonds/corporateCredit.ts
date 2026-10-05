@@ -1,3 +1,8 @@
+/**
+ * Corporate credit ratings compare cash, operating income, assets and debt in one currency.
+ * computeCorporateCreditAtTurn includes cumulative near-term bond repayments and
+ * applies default, ownership and persisted-score adjustments through portable rules.
+ */
 import type { ObjectId } from "mongodb";
 import type { Bond } from "@/lib/db/types/bond";
 import type { CorporateSector } from "@/lib/db/types/corporation";
@@ -6,7 +11,11 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { NPV_ANNUAL_DISCOUNT_RATE, TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getCountryConfig } from "@/lib/constants/countries";
-import { calculateCreditScore } from "@/lib/constants/bonds";
+import {
+  calculateCreditScore,
+  CORPORATE_CREDIT_MATURITY_HORIZON_TURNS,
+} from "@/lib/constants/bonds";
+import { assessMaturityLiquidity } from "./rules/maturityLiquidity";
 import type { CorpCapitalCurrencyInfo } from "@/lib/currency/corporationCapital";
 import {
   fxRateForCorpFromMap,
@@ -232,6 +241,31 @@ export function corporateCashArrearsAnchor(input: {
   return operating + tax;
 }
 
+/** Reuse already loaded bonds and FX rates; there is no extra maturity lookup. */
+export function corporateBondMaturityLiquidity(input: {
+  bonds: readonly Bond[];
+  liquidCapitalAnchor: number;
+  incomePerTurn: number;
+  annualCouponObligations: number;
+  currentTurn: number;
+  fxByCurrency: ReadonlyMap<CurrencyCode, number>;
+}) {
+  return assessMaturityLiquidity({
+    liquidCapitalAnchor: input.liquidCapitalAnchor,
+    incomePerTurn: input.incomePerTurn,
+    annualCouponObligations: input.annualCouponObligations,
+    currentTurn: input.currentTurn,
+    obligations: input.bonds.filter(isCorporateIssuerBond).map((bond) => ({
+      principalAnchor: sumBondPrincipalAnchor([bond], input.fxByCurrency),
+      maturityTurn: bond.maturityTurn,
+      matured: bond.matured,
+      defaulted: bond.defaulted,
+    })),
+    horizonTurns: CORPORATE_CREDIT_MATURITY_HORIZON_TURNS,
+    turnsPerYear: TURNS_PER_YEAR,
+  });
+}
+
 export function computeCorporateCreditAtTurn(input: CorporateCreditComputationInput) {
   // Filter to this corp's non-matured corporate bonds (sovereign bonds live on
   // gov budgets, not corp balance sheets).
@@ -246,6 +280,14 @@ export function computeCorporateCreditAtTurn(input: CorporateCreditComputationIn
     sumBondPrincipalAnchor(corpBonds, input.fxByCurrency) +
     Math.max(0, input.otherLiabilitiesAnchor ?? 0);
   const annualCouponObligations = sumBondAnnualInterestAnchor(corpBonds, input.fxByCurrency);
+  const maturityLiquidity = corporateBondMaturityLiquidity({
+    bonds: corpBonds,
+    liquidCapitalAnchor: input.liquidCapitalAnchor,
+    incomePerTurn: input.incomePerTurn,
+    annualCouponObligations,
+    currentTurn: input.currentTurn,
+    fxByCurrency: input.fxByCurrency,
+  });
   const totalEquity =
     input.liquidCapitalAnchor +
     input.sectorNpv +
@@ -273,6 +315,7 @@ export function computeCorporateCreditAtTurn(input: CorporateCreditComputationIn
       persistedCompositeScore: input.persistedCompositeScore,
       insiderConcentrationPenalty: concentrationPenalty,
       indexInclusionUpgrade,
+      nearTermLiquidityScore: maturityLiquidity.liquidityScore ?? undefined,
     }
   );
 
@@ -283,6 +326,7 @@ export function computeCorporateCreditAtTurn(input: CorporateCreditComputationIn
     annualCouponObligations,
     totalEquity,
     annualIncome,
+    maturityLiquidity,
     debtToEquityRatio: totalEquity > 0 ? totalDebt / totalEquity : null,
     interestCoverageRatio:
       annualCouponObligations > 0 ? annualIncome / annualCouponObligations : null,

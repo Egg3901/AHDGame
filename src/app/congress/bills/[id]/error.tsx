@@ -16,7 +16,7 @@ export default function BillError({
       description="The bill page couldn't load. This may be a temporary issue."
       logPrefix="Bill page error"
       navigationLinks={[
-        { href: "/congress?chamber=senate&tab=bills", label: "Back to Senate Bills" },
+        { href: "/congress?chamber=senate&tab=bills", label: "Back to Senate bills" },
         { href: "/dashboard", label: "Dashboard" },
       ]}
       fullScreen

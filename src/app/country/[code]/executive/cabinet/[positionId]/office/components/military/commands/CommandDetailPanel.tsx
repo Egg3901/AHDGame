@@ -195,7 +195,7 @@ export function CommandDetailPanel({
                     // silently does nothing.
                     (state.commands.some((o) => o.id !== c.id && o.commandingGeneralId === id) ? (
                       <span
-                        className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted"
+                        className="shrink-0 text-body-sm font-medium text-muted"
                         title="A general can lead only one command"
                       >
                         Leads another

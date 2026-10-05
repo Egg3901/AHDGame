@@ -9,7 +9,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, badRequest, forbidden, notFound } from "@/lib/api/errors";
+import { handleRouteError, badRequest, forbidden, notFound, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveJurisdiction } from "@/lib/monetaryGovernance/jurisdiction";
@@ -37,8 +37,7 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json(notFound("Country not found").toJson(), { status: 404 });
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const { institutionId: bankId } = await resolveJurisdiction(db, countryId);

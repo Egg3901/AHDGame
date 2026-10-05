@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CountryId } from "@/lib/constants/countries";
 import { WhippedBadge } from "@/components/bills/WhippedBadge";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type Stage = "house" | "senate" | "convicted" | "acquitted" | "dismissed" | "cancelled";
 
@@ -108,7 +109,7 @@ export default function ImpeachmentPanel({
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      setMessage(res.ok ? "Articles of impeachment filed." : (data.error ?? "Failed to file."));
+      setMessage(res.ok ? "Articles of impeachment filed." : apiErrorText(data, "Failed to file."));
       if (res.ok) await load();
     } catch {
       setMessage("Network error.");
@@ -128,7 +129,7 @@ export default function ImpeachmentPanel({
         body: JSON.stringify({ vote: value }),
       });
       const data = await res.json();
-      setMessage(res.ok ? "Vote recorded." : (data.error ?? "Failed to vote."));
+      setMessage(res.ok ? "Vote recorded." : apiErrorText(data, "Failed to vote."));
       if (res.ok) await load();
     } catch {
       setMessage("Network error.");
@@ -187,7 +188,7 @@ export default function ImpeachmentPanel({
               disabled={busy}
               className="mt-3 rounded-lg border border-error/40 bg-error/10 px-3 py-1.5 text-xs font-semibold text-error hover:bg-error/20 disabled:opacity-50 transition-colors"
             >
-              File Articles of Impeachment
+              File articles of impeachment
             </button>
           )}
         </div>
@@ -273,7 +274,7 @@ function Tally({
   return (
     <div className="text-center">
       <div className={`text-base font-bold ${color}`}>{value}</div>
-      <div className="text-[10px] uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
     </div>
   );
 }

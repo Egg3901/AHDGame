@@ -26,6 +26,7 @@ export async function seedFIRegions(
   }
   const { fiRegions } = await import("@/lib/seeds/fi/fiRegions");
   const { fiRegions1953 } = await import("@/lib/seeds/fi/fiRegions1953");
+  const { fiRegions1991 } = await import("@/lib/countries/fi/data/fiRegions1991");
   const { selectPresetBundle } = await import("@/lib/seeds/presetSelector");
   const bundle = selectPresetBundle(
     preset,
@@ -33,6 +34,7 @@ export async function seedFIRegions(
       "2019-default": fiRegions,
       "1953-default": fiRegions1953,
       "1979-default": fiRegions,
+      "1991-default": fiRegions1991,
     },
     "seedFI:fiRegions"
   );

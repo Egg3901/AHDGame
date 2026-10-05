@@ -56,6 +56,35 @@ describe("FundTradePanel currency display (ticket #1072)", () => {
     expect(screen.queryByText("$79.00")).toBeNull();
   });
 
+  it("quotes the subscribe cost in the same face currency as the spendable balance", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        character: {
+          currencyBalances: { personal: { USD: 500 } },
+          homeCurrency: "USD",
+          autoConvertEnabled: true,
+        },
+      }),
+    }) as unknown as typeof fetch;
+    render(
+      <FundTradePanel
+        fundId="global_sector_defense"
+        quotedNav={79}
+        anchorCurrencyCode="USD"
+        status="active"
+        myUnits={0}
+        myLegacyUnits={0}
+        onSuccess={() => {}}
+      />
+    );
+
+    const spendable = await screen.findByText("Spendable in USD");
+    expect(spendable.nextElementSibling?.textContent).toBe("$500.00");
+    expect(screen.getByText("Estimated cost").nextElementSibling?.textContent).toBe("$79.00");
+    expect(screen.getByText("After purchase").nextElementSibling?.textContent).toBe("$421.00");
+  });
+
   it.each(["subscribe", "redeem"] as const)(
     "retries an acknowledged-lost %s once, then permits a new intentional command",
     async (mode) => {

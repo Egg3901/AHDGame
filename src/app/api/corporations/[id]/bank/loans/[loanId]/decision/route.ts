@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, notFound, badRequest } from "@/lib/api/errors";
+import { handleRouteError, notFound, badRequest, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
@@ -41,7 +41,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     const parsed = await parseJsonBody(request, decisionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -59,7 +59,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         : await rejectLoan(db, corporation._id, loanObjectId, parsed.data.reason);
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      return errorResponse(400, result.error);
     }
 
     return NextResponse.json({ success: true, status: result.loan.status });

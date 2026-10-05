@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { LocalTime } from "@/components/time/LocalTime";
 
@@ -47,7 +48,7 @@ export function SupporterRequestsTab() {
       const res = await fetch("/api/moderator/supporter-requests");
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to load supporter requests");
+        setError(apiErrorText(data, "Failed to load supporter requests"));
         return;
       }
       setPending(data.pending ?? []);
@@ -74,7 +75,7 @@ export function SupporterRequestsTab() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || `Failed to ${decision} request`);
+        setError(apiErrorText(data, `Failed to ${decision} request`));
         return;
       }
       setRejectingId(null);
@@ -101,7 +102,7 @@ export function SupporterRequestsTab() {
 
       <div>
         <h2 className="text-xl font-bold text-foreground mb-3">
-          Pending Supporter Requests ({pending.length})
+          Pending Supporter requests ({pending.length})
         </h2>
         {pending.length === 0 ? (
           <p className="text-muted text-sm py-6 text-center">No pending supporter requests</p>
@@ -157,7 +158,7 @@ export function SupporterRequestsTab() {
                       disabled={busyId === r._id}
                       className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
                     >
-                      Confirm Reject
+                      Confirm reject
                     </button>
                   </div>
                 )}
@@ -168,7 +169,7 @@ export function SupporterRequestsTab() {
       </div>
 
       <div>
-        <h3 className="text-lg font-semibold text-foreground mb-3">Recently Decided</h3>
+        <h3 className="text-lg font-semibold text-foreground mb-3">Recently decided</h3>
         {decided.length === 0 ? (
           <p className="text-muted text-sm">No decided requests yet</p>
         ) : (

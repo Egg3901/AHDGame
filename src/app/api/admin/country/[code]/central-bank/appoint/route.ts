@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
-import { handleRouteError, notFound, badRequest } from "@/lib/api/errors";
+import { handleRouteError, notFound, badRequest, errorResponse } from "@/lib/api/errors";
 import { createAdminLog } from "@/lib/adminLog";
 import { createNotification } from "@/lib/notifications";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -28,8 +28,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     if (!config) return NextResponse.json(notFound("Country not found").toJson(), { status: 404 });
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const centralBanks = db.collection<CentralBank>("centralBanks");

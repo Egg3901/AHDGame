@@ -36,7 +36,7 @@ export function BondMyHoldingsPanel({
         className="flex items-center justify-between w-full px-4 py-3 text-left group hover:bg-card-elevated/50 transition-colors"
       >
         <div className="flex items-center gap-3 min-w-0">
-          <span className="text-sm font-semibold text-foreground">Your Holdings</span>
+          <span className="text-sm font-semibold text-foreground">Your holdings</span>
           {userContext.myBondUnits > 0 && (
             <>
               <span className="text-sm text-muted tabular-nums">
@@ -65,13 +65,13 @@ export function BondMyHoldingsPanel({
             className={`grid divide-x divide-card-border ${userContext.myCorporation ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3"}`}
           >
             <div className="px-4 py-3">
-              <div className="text-xs text-muted mb-0.5">Units Held</div>
+              <div className="text-xs text-muted mb-0.5">Units held</div>
               <div className="text-sm font-semibold text-primary tabular-nums">
                 {userContext.myBondUnits.toLocaleString("en-US")}
               </div>
             </div>
             <div className="px-4 py-3">
-              <div className="text-xs text-muted mb-0.5">Portfolio Value</div>
+              <div className="text-xs text-muted mb-0.5">Portfolio value</div>
               <div className="text-sm font-semibold text-success tabular-nums">
                 {formatAmount(charValue)}
               </div>
@@ -98,7 +98,7 @@ export function BondMyHoldingsPanel({
           </div>
           <div className="px-4 py-2.5 border-t border-card-border">
             <div className="flex justify-between text-sm">
-              <span className="text-muted">Cash on Hand</span>
+              <span className="text-muted">Cash on hand</span>
               <span className="font-medium tabular-nums">{formatFull(personalCashAnchor)}</span>
             </div>
           </div>

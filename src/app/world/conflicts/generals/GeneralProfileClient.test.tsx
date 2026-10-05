@@ -48,7 +48,7 @@ describe("GeneralProfileClient (per-character)", () => {
 
   it("renders a commissioned general's trait tree", () => {
     renderClient({ general: commissioned() });
-    fireEvent.click(screen.getByText("Command Doctrine"));
+    fireEvent.click(screen.getByText("Command doctrine"));
     expect(screen.getByText("Command Style")).toBeTruthy();
   });
 
@@ -70,7 +70,7 @@ describe("GeneralProfileClient (per-character)", () => {
     expect(screen.getByText(/0% fit/)).toBeTruthy();
   });
 
-  // The Commanding General page is reachable from a CG's own profile Military tab.
+  // The Commanding general page is reachable from a CG's own profile Military tab.
   const cgSubject = { id: "char-1", name: "Jane Doe", chop: "JD", countryCode: "ru" };
 
   it("shows a Manage-your-command link when the viewer is a commanding general on their own profile", () => {
@@ -126,7 +126,7 @@ describe("GeneralProfileClient training refusals", () => {
   /** Open the trait tree, select a trainable node, and click its Train button. */
   function trainFirstNode() {
     renderClient({ general: { ...commissioned(), pts: 4 } });
-    fireEvent.click(screen.getByText("Command Doctrine"));
+    fireEvent.click(screen.getByText("Command doctrine"));
     // Selecting a node opens its detail panel; only then does Train appear.
     fireEvent.click(screen.getByRole("button", { name: /Offensive Spirit/ }));
     // Match the node button's exact label shape ("Train · N pt") — a loose
@@ -231,8 +231,8 @@ describe("GeneralProfileClient assignment tab", () => {
     });
     expect(screen.getByText("Manchurian Front")).toBeTruthy();
     // The starred badge specifically — the promotion help also names the role now,
-    // so a bare /Theater Commander/ matches two legitimate elements.
-    expect(screen.getByText("★ Theater Commander")).toBeTruthy();
+    // so a bare /Theater commander/ matches two legitimate elements.
+    expect(screen.getByText("★ Theater commander")).toBeTruthy();
   });
 });
 
@@ -241,7 +241,7 @@ describe("GeneralProfileClient locked traits", () => {
 
   it("names the trait that is blocking, not just 'earlier trait required'", () => {
     renderClient({ general: commissioned() });
-    fireEvent.click(screen.getByText("Command Doctrine"));
+    fireEvent.click(screen.getByText("Command doctrine"));
     // "High-Tempo Attacks" is locked behind "Offensive Spirit" in the same path.
     fireEvent.click(screen.getByRole("button", { name: /High-Tempo Attacks/ }));
     expect(screen.getByRole("button", { name: "Offensive Spirit" })).toBeTruthy();

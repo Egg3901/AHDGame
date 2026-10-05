@@ -12,18 +12,16 @@ interface ElectionFooterProps {
 export function ElectionFooter({ election }: ElectionFooterProps) {
   return (
     <footer className="mt-12 border-t border-card-border pt-6 pb-4">
-      <h3 className="mb-4 text-base font-semibold text-foreground">See Also</h3>
+      <h3 className="mb-4 text-base font-semibold text-foreground">See also</h3>
       <div className="space-y-3">
         <div>
-          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted/70">
-            Navigation
-          </p>
+          <p className="mb-2 text-body-sm font-medium text-muted">Navigation</p>
           <div className="flex flex-wrap gap-2">
             <Link
               href="/wiki/elections"
               className="rounded-lg border border-card-border bg-card/40 px-3 py-1.5 text-sm text-muted transition-colors hover:border-primary/40 hover:text-primary hover:bg-card/60"
             >
-              ← Election History
+              ← Election history
             </Link>
             <Link
               href={`/wiki/elections/browse/${election.year}/${election.electionType}`}
@@ -42,15 +40,13 @@ export function ElectionFooter({ election }: ElectionFooterProps) {
           </div>
         </div>
         <div>
-          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted/70">
-            Related Topics
-          </p>
+          <p className="mb-2 text-body-sm font-medium text-muted">Related topics</p>
           <div className="flex flex-wrap gap-2">
             <Link
               href="/wiki/election-mechanics"
               className="rounded-lg border border-card-border bg-card/40 px-3 py-1.5 text-sm text-muted transition-colors hover:border-primary/40 hover:text-primary hover:bg-card/60"
             >
-              Election Mechanics
+              Election mechanics
             </Link>
             {election.electionType !== "president" && (
               <Link
@@ -64,7 +60,7 @@ export function ElectionFooter({ election }: ElectionFooterProps) {
               href="/wiki/parties"
               className="rounded-lg border border-card-border bg-card/40 px-3 py-1.5 text-sm text-muted transition-colors hover:border-primary/40 hover:text-primary hover:bg-card/60"
             >
-              Political Parties
+              Political parties
             </Link>
           </div>
         </div>

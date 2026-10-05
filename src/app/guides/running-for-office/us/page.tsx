@@ -10,7 +10,7 @@ import {
 } from "@/app/guides/_components/GuideBlocks";
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "Running for Office (US) | A House Divided",
+  title: "Running for office (US) | A House Divided",
   description:
     "How to run for US office in A House Divided: eligibility, primaries, campaign strategy, vote mechanics, and what actually wins elections.",
   pathname: "/guides/running-for-office/us",
@@ -23,7 +23,7 @@ const TOC_ITEMS = [
   { id: "general", label: "The general phase" },
   { id: "vote-formula", label: "What wins elections" },
   { id: "upgrades", label: "Campaign upgrades" },
-  { id: "influence", label: "Political Influence" },
+  { id: "influence", label: "Political influence" },
   { id: "favorability", label: "Building favorability" },
   { id: "tips", label: "Quick tips" },
 ];
@@ -42,7 +42,7 @@ export default function RunningForOfficePage() {
             href="/guides/running-for-office"
             className="hover:text-foreground transition-colors"
           >
-            Running for Office
+            Running for office
           </Link>
           <span>/</span>
           <span className="text-foreground">United States</span>
@@ -50,7 +50,7 @@ export default function RunningForOfficePage() {
 
         {/* Page header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Running for Office: United States</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Running for office: United States</h1>
           <p className="mt-2 text-sm text-muted">
             A player&apos;s strategy guide, from declaring candidacy to winning your first seat
           </p>
@@ -163,7 +163,7 @@ export default function RunningForOfficePage() {
                 elections page
               </Link>{" "}
               to find open races and click{" "}
-              <strong className="text-foreground">Declare Candidacy</strong>.
+              <strong className="text-foreground">Declare candidacy</strong>.
             </p>
             <SubHeader>What to prioritize during the primary</SubHeader>
             <ul className="space-y-2 text-sm text-muted">

@@ -13,6 +13,7 @@ import type {
 } from "@/lib/nationalization/nationalCorporationView";
 import type { NatOfficialActions } from "../NationalCorporationView";
 import { natMoney as money } from "../natMoney";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Treasury privatization wizard: carve selected sectors out of this National
@@ -99,7 +100,7 @@ export function PrivatizeWizard({
       );
       const json = await res.json();
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Privatization failed." });
+        setFeedback({ type: "error", message: apiErrorText(json, "Privatization failed.") });
       } else if (method === "auction") {
         setFeedback({ type: "success", message: "Auction opened for the carved corporation." });
         official.onRefresh();

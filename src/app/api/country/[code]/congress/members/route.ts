@@ -10,7 +10,7 @@ import { getDb } from "@/lib/mongodb";
 import { getPartyHex } from "@/lib/utils/politics";
 import type { ElectedOfficial, PoliticalParty, Character, NPP } from "@/lib/db/types";
 import { TOTAL_HOUSE_SEATS, TOTAL_SENATE_SEATS } from "@/lib/constants";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { CongressMember, CongressMembersResponse } from "@/lib/congress/types";
 
@@ -23,7 +23,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const { code } = await params;
     const requestedCountry = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[requestedCountry]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const { searchParams } = new URL(request.url);

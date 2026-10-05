@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
@@ -29,13 +29,13 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const { code, positionId, estateId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (!resolveEstatePortfolio(countryId, positionId)) {
-      return NextResponse.json({ error: "Not an estates cabinet position" }, { status: 404 });
+      return errorResponse(404, "Not an estates cabinet position");
     }
     if (!ObjectId.isValid(estateId)) {
-      return NextResponse.json({ error: "Invalid estate id" }, { status: 400 });
+      return errorResponse(400, "Invalid estate id");
     }
 
     const db = await getDb();
@@ -48,10 +48,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the seat holder or admin can expand estates" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the seat holder or admin can expand estates");
     }
 
     // Expanding an estate raises the standing cost the successor inherits.
@@ -60,21 +57,21 @@ export async function POST(_request: Request, { params }: RouteParams) {
 
     const estate = await estatesCol.findOne({ _id: new ObjectId(estateId), countryId, positionId });
     if (!estate) {
-      return NextResponse.json({ error: "Estate not found" }, { status: 404 });
+      return errorResponse(404, "Estate not found");
     }
     if (estate.tier >= 3) {
-      return NextResponse.json({ error: "Estate is already at the highest tier" }, { status: 400 });
+      return errorResponse(400, "Estate is already at the highest tier");
     }
 
     // Shared UK pool: both offices of a dual holder spend one balance (issue #2049).
     const actions = await resolveMinisterialRemaining(db, countryId, member!);
     if (actions < 1) {
-      return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 400 });
+      return errorResponse(400, "No ministerial actions remaining");
     }
 
     const spend = await spendMinisterialAction(db, countryId, member!);
     if (!spend.ok) {
-      return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 409 });
+      return errorResponse(409, "No ministerial actions remaining");
     }
 
     try {

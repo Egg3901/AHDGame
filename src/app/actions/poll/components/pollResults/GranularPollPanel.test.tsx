@@ -1,6 +1,8 @@
 /** @vitest-environment happy-dom */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render as rtlRender, screen, fireEvent } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import type { ReactElement } from "react";
 import { GranularPollPanel } from "./GranularPollPanel";
 import {
   buildGranularPollPayload,
@@ -9,6 +11,15 @@ import {
 import { stateCensusData } from "@/lib/seeds/stateCensusData";
 import { DEMOGRAPHIC_TURNOUT_RATES } from "@/lib/seeds/demographicCategories";
 import type { PollData, StoredPoll } from "../../types";
+import enElections from "../../../../../../messages/en/elections.json";
+
+function render(ui: ReactElement) {
+  return rtlRender(
+    <NextIntlClientProvider locale="en" messages={enElections}>
+      {ui}
+    </NextIntlClientProvider>
+  );
+}
 
 const mockPollData: PollData = {
   pollType: "large",
@@ -196,7 +207,7 @@ describe("GranularPollPanel", () => {
     render(<GranularPollPanel poll={poll} pollData={mockPollData} />);
     const whiteChip = screen.getByRole("button", { name: /White/ });
     fireEvent.click(whiteChip);
-    expect(screen.getByText(/Widened margin of error/)).toBeTruthy();
+    expect(screen.getByText("Illustrative uncertainty band")).toBeTruthy();
   });
 
   it("renders non-US dimension labels for a DE payload", () => {

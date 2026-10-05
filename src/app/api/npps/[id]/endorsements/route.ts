@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getNppEndorsements } from "@/lib/npps/queries/endorsements";
 
@@ -15,13 +15,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid NPP ID" }, { status: 400 });
+      return errorResponse(400, "Invalid NPP ID");
     }
 
     const db = await getDb();
     const response = await getNppEndorsements(db, new ObjectId(id));
     if (!response) {
-      return NextResponse.json({ error: "NPP not found" }, { status: 404 });
+      return errorResponse(404, "NPP not found");
     }
 
     return NextResponse.json(response);

@@ -350,6 +350,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         plantsEnabled: marketAtLeast(mode, "plants"),
         isNatcorp: !!corporation.countryOwnerId,
         eraUnitScale: getEraUnitScale(worldPreset),
+        preset: worldPreset,
         stateResourcesByState,
         currentYear: gameState?.currentYear,
         commandEconomyEnabled: gameConfig?.commandEconomyEnabled === true,

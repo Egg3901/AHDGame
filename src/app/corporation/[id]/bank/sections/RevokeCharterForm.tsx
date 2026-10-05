@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ShowToast } from "../types";
 import { SmallButton } from "@/components/corporation/dense/DenseKit";
 import { BankPanel } from "../components/BankSection";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function RevokeCharterForm({
   corporationId,
@@ -32,7 +33,7 @@ export function RevokeCharterForm({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(json.error ?? "Could not revoke charter", "error");
+        showToast(apiErrorText(json, "Could not revoke charter"), "error");
         return;
       }
       showToast(

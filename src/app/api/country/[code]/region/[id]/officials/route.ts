@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import {
   COUNTRY_CONFIGS,
@@ -22,7 +22,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     // State ids are stored upper-case ("BEO", "SN"). The server-rendered region
     // page already uppercases before querying; this route did not, so a
@@ -35,7 +35,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // Verify state exists
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     // Get all elected officials for this state

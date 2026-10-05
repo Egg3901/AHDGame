@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -27,12 +27,12 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const sp = new URL(request.url).searchParams;
     const sectorType = sp.get("sectorType") as CorporationType | null;
     if (!sectorType || !CORPORATION_TYPES.includes(sectorType)) {
-      return NextResponse.json({ error: "Invalid sector type" }, { status: 400 });
+      return errorResponse(400, "Invalid sector type");
     }
     const carveFraction = Math.min(1, Math.max(0, Number(sp.get("carveFraction") ?? 1)));
     const scopeRaw = sp.get("scope") ?? "all";

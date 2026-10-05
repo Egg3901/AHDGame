@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, badRequest, notFound } from "@/lib/api/errors";
+import { handleRouteError, badRequest, notFound, errorResponse } from "@/lib/api/errors";
 import { schemas } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCurrentTurn } from "@/lib/currentTurn";
@@ -30,7 +30,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const db = await getDb();
     const settings = await loadContractIssuanceSettings(db);
     if (!settings.contractIssuanceEnabled) {
-      return NextResponse.json({ error: "Extraction contracts are not enabled." }, { status: 403 });
+      return errorResponse(403, "Extraction contracts are not enabled.");
     }
 
     const contractsCol = await getExtractionContractsCollection(db);
@@ -51,7 +51,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       new Date(),
       settings.treasuryCashLedgerEnabled
     );
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
 
     recordAudit({
       source: "api",

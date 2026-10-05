@@ -91,9 +91,7 @@ export function PositionBadges({
     <div className={`flex flex-col ${align} gap-1.5 ${className}`}>
       {showEcon && (
         <div className={POSITION_BADGE_ROW}>
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-            Economic
-          </span>
+          <span className="text-body-sm font-medium text-muted">Economic</span>
           <span className={`${badgeBase} ${econBadgeColor(economic!, mode, countryId)}`}>
             {getEconLabel(economic!, mode)}
           </span>
@@ -101,9 +99,7 @@ export function PositionBadges({
       )}
       {showSocial && (
         <div className={POSITION_BADGE_ROW}>
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-            Social
-          </span>
+          <span className="text-body-sm font-medium text-muted">Social</span>
           <span className={`${badgeBase} ${socialBadgeColor(social!, mode)}`}>
             {getSocialLabel(social!, mode)}
           </span>

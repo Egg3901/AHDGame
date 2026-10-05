@@ -22,7 +22,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withAdminAuth } from "@/lib/api/withAdminAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getGameState } from "@/lib/gameState";
@@ -61,7 +61,7 @@ export const POST = withAdminAuth(async (_auth, request: Request) => {
   try {
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { countryId, distribution: rawDistribution } = parsed.data;
@@ -85,10 +85,7 @@ export const POST = withAdminAuth(async (_auth, request: Request) => {
     });
 
     if (!result) {
-      return NextResponse.json(
-        { error: `No federal budget found for country ${countryId}.` },
-        { status: 400 }
-      );
+      return errorResponse(400, `No federal budget found for country ${countryId}.`);
     }
 
     if (result.totalIssued > 0) {

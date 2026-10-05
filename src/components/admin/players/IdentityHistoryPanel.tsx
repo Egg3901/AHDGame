@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useCallback, useEffect, useState } from "react";
 import { LocalTime } from "@/components/time/LocalTime";
 
@@ -104,7 +105,7 @@ function TrackSection({
       {open && (
         <div className="border-t border-card-border px-3 py-2">
           {loading && <p className="text-xs text-muted">Loading...</p>}
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          <InlineError error={error} className="text-xs text-red-400" />
           {data && !loading && data.rows.length === 0 && (
             <p className="text-xs text-muted">No recorded history.</p>
           )}

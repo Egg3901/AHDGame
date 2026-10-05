@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useCallback, useEffect, useState } from "react";
 import { PRIME_RATE_STEP, snapToPrimeRateGrid } from "@/lib/db/types/centralBank";
 import Link from "next/link";
@@ -13,6 +14,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import type { LocSnapshot } from "@/lib/lineOfCredit/buildSnapshot";
 import { CB_TH, CentralBankFigure, CentralBankSection } from "./CentralBankSection";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BorrowerRow {
   characterId: string;
@@ -190,7 +192,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
         `/api/admin/country/${countryId.toLowerCase()}/central-bank/loan-tracker`
       );
       const j = (await res.json()) as TrackerResponse & { error?: string };
-      if (!res.ok) throw new Error(j.error ?? "Failed to load loan tracker");
+      if (!res.ok) throw new Error(apiErrorText(j, "Failed to load loan tracker"));
       setTracker(j);
     } catch (e) {
       setTracker(null);
@@ -208,7 +210,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
         `/api/admin/country/${countryId.toLowerCase()}/central-bank/savings-tracker`
       );
       const j = (await res.json()) as SavingsTrackerResponse & { error?: string };
-      if (!res.ok) throw new Error(j.error ?? "Failed to load deposit accounts");
+      if (!res.ok) throw new Error(apiErrorText(j, "Failed to load deposit accounts"));
       setSavingsTracker(j);
     } catch (e) {
       setSavingsTracker(null);
@@ -279,7 +281,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
       });
       if (!res.ok) {
         const json = await res.json();
-        throw new Error(json.error || "Failed to update rate");
+        throw new Error(apiErrorText(json, "Failed to update rate"));
       }
       await loadCbMeta();
       setReason("");
@@ -305,7 +307,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
         }
       );
       const j = (await res.json()) as { error?: string; chairControlsLocked?: boolean };
-      if (!res.ok) throw new Error(j.error ?? "Failed to update lock");
+      if (!res.ok) throw new Error(apiErrorText(j, "Failed to update lock"));
       setChairLocked(j.chairControlsLocked === true);
       await loadCbMeta();
     } catch (e) {
@@ -343,7 +345,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
         }),
       });
       const j = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(j.error ?? "Action failed");
+      if (!res.ok) throw new Error(apiErrorText(j, "Action failed"));
       await loadAccountDetail(selection);
       void loadTracker();
     },
@@ -428,7 +430,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
                 >
                   {submitting ? "Updating..." : "Apply rate"}
                 </button>
-                {rateError && <p className="text-body-sm text-error">{rateError}</p>}
+                <InlineError error={rateError} className="text-body-sm text-error" />
               </div>
             </>
           )}
@@ -459,7 +461,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
                   : "Lock chair controls"}
             </Button>
           </div>
-          {lockError && <p className="mt-2 text-body-sm text-error">{lockError}</p>}
+          <InlineError error={lockError} className="mt-2 text-body-sm text-error" />
         </div>
       </div>
 
@@ -697,7 +699,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
             </div>
           )}
 
-          {detailError && <p className="text-body text-error">{detailError}</p>}
+          <InlineError error={detailError} className="text-body text-error" />
 
           {!detailLoading && depositDetail && selection.kind === "deposit" && (
             <DepositDetailPanel detail={depositDetail} formatNative={formatNative} />
@@ -907,7 +909,7 @@ function LoanDetailPanel({
               </Button>
             )}
           </div>
-          {actionError && <p className="text-body-sm text-error">{actionError}</p>}
+          <InlineError error={actionError} className="text-body-sm text-error" />
         </div>
       )}
 

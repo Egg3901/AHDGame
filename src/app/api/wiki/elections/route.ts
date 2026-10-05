@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkWikiDisabled } from "@/lib/api/wikiGuard";
 import { getDb } from "@/lib/mongodb";
 import { formatElectionTypeLabel, ELECTION_TYPE_LABEL_MAP } from "@/lib/utils/electionLabels";
@@ -58,7 +58,7 @@ export async function GET(request: Request) {
     if (yearParam && typeParam) {
       const year = parseInt(yearParam, 10);
       if (isNaN(year) || !isElectionType(typeParam)) {
-        return NextResponse.json({ error: "Invalid year or type" }, { status: 400 });
+        return errorResponse(400, "Invalid year or type");
       }
       filter = {
         ...filter,
@@ -67,7 +67,7 @@ export async function GET(request: Request) {
       };
     } else if (stateParam && typeParam) {
       if (!isElectionType(typeParam)) {
-        return NextResponse.json({ error: "Invalid type" }, { status: 400 });
+        return errorResponse(400, "Invalid type");
       }
       // National-scope elections ignore the state filter (single nationwide
       // constituency). Sub-national types filter by state as normal.

@@ -48,18 +48,14 @@ export function FiscalMechanicsNote({
       <div className="text-sm font-semibold text-foreground">How these fiscal figures work</div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
-            Raw debt-to-GDP
-          </div>
+          <div className="text-body-sm font-medium text-muted">Raw debt-to-GDP</div>
           <div className="mt-0.5 font-mono text-body-sm font-semibold text-foreground">
             {(figures.rawDebtToGdp * 100).toFixed(1)}%
           </div>
           <p className="mt-1 text-[11px] leading-snug text-muted">Debt divided by fiscal GDP.</p>
         </div>
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
-            Solvency debt-to-GDP (smoothed)
-          </div>
+          <div className="text-body-sm font-medium text-muted">Solvency debt-to-GDP (smoothed)</div>
           <div className="mt-0.5 font-mono text-body-sm font-semibold text-foreground">
             {(figures.solvencyDebtToGdp * 100).toFixed(1)}%
           </div>
@@ -68,9 +64,7 @@ export function FiscalMechanicsNote({
           </p>
         </div>
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
-            Primary balance
-          </div>
+          <div className="text-body-sm font-medium text-muted">Primary balance</div>
           <div className="mt-0.5 font-mono text-body-sm font-semibold text-foreground">
             {money(figures.primaryBalance)} {balanceLabel(figures.primaryBalance)}
           </div>
@@ -79,9 +73,7 @@ export function FiscalMechanicsNote({
           </p>
         </div>
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
-            Debt interest
-          </div>
+          <div className="text-body-sm font-medium text-muted">Debt interest</div>
           <div className="mt-0.5 font-mono text-body-sm font-semibold text-foreground">
             {money(debtInterest)}
           </div>

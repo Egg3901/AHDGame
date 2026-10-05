@@ -4,7 +4,16 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { ToastProvider } from "@/contexts/ToastContext";
-import WhiteHouseClient from "./WhiteHouseClient";
+import WhiteHouseClient, { deskDeadlineLabel } from "./WhiteHouseClient";
+import { formatRemainingTurns } from "@/lib/time/formatRemainingTurns";
+
+// Fixed game clock at turn 100 so desk deadlines render deterministically.
+vi.mock("@/contexts/useGameClock", () => ({
+  useGameClock: () => ({
+    formatRemainingTurns: (t: number | null | undefined) => formatRemainingTurns(t, 100),
+    formatRemaining: () => ({ text: "No timer", urgency: "normal" }),
+  }),
+}));
 
 // WhiteHouseClient renders NationalApprovalStat → ApprovalTooltip, which calls
 // useRouter(); without the App Router context that throws and crashes the tree.
@@ -35,10 +44,13 @@ function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   });
 }
 
-function mockWhiteHouseFetch(whitehouse: Record<string, unknown>): void {
+function mockWhiteHouseFetch(
+  whitehouse: Record<string, unknown>,
+  bills: Array<Record<string, unknown>> = []
+): void {
   global.fetch = vi.fn().mockImplementation((url: unknown) => {
     const u = String(url);
-    if (u.includes("/api/whitehouse/bills")) return Promise.resolve(jsonResponse({ bills: [] }));
+    if (u.includes("/api/whitehouse/bills")) return Promise.resolve(jsonResponse({ bills }));
     if (u.includes("/api/whitehouse/cabinet"))
       return Promise.resolve(jsonResponse({ positions: [] }));
     if (u.includes("/approval")) return Promise.resolve(jsonResponse({ governmentApproval: 50 }));
@@ -161,32 +173,71 @@ describe("WhiteHouseClient foreign affairs tab", () => {
 
   it("shows for the sitting president", async () => {
     renderWith({ isPresident: true, isAdmin: false });
-    expect(await screen.findByRole("button", { name: "Foreign Affairs" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Foreign affairs" })).toBeTruthy();
   });
 
   it("shows for an admin", async () => {
     renderWith({ isPresident: false, isAdmin: true });
-    expect(await screen.findByRole("button", { name: "Foreign Affairs" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Foreign affairs" })).toBeTruthy();
   });
 
   it("is hidden from a visitor", async () => {
     renderWith({ isPresident: false, isAdmin: false });
     await waitFor(() => expect(screen.getByText("Jed Bartlet")).toBeTruthy());
-    expect(screen.queryByRole("button", { name: "Foreign Affairs" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Foreign affairs" })).toBeNull();
   });
 
   it("is hidden when the conflicts subsystem is off", async () => {
     conflictsSpy.mockReturnValue(false);
     renderWith({ isPresident: true, isAdmin: false });
     await waitFor(() => expect(screen.getByText("Jed Bartlet")).toBeTruthy());
-    expect(screen.queryByRole("button", { name: "Foreign Affairs" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Foreign affairs" })).toBeNull();
   });
 
   it("mounts the tab body when the president opens it", async () => {
     renderWith({ isPresident: true, isAdmin: false });
-    (await screen.findByRole("button", { name: "Foreign Affairs" })).click();
+    (await screen.findByRole("button", { name: "Foreign affairs" })).click();
     await waitFor(() =>
       expect(screen.getByTestId("foreign-affairs-tab").textContent).toBe("canAct:true")
+    );
+  });
+});
+
+describe("WhiteHouseClient desk deadlines and explainers", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("shows each desk bill's deadline and what happens when it passes", async () => {
+    mockWhiteHouseFetch({ ...adminData, isAdmin: false, isPresident: true }, [
+      {
+        id: "b1",
+        title: "Highway Act",
+        summary: "Roads.",
+        sentToPresidentAt: null,
+        presidentActionDeadline: null,
+        presidentActionDeadlineOnTurn: 103,
+      },
+    ]);
+    render(
+      <ToastProvider>
+        <WhiteHouseClient />
+      </ToastProvider>
+    );
+    await waitFor(() => expect(screen.getByText("Highway Act")).toBeTruthy());
+    expect(screen.getByText(/Sign or veto within 3 turns/)).toBeTruthy();
+    expect(
+      screen.getByText(/becomes law without your signature when its deadline passes/)
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: /presidential powers/ }).getAttribute("href")).toBe(
+      "/wiki/reference-offices"
+    );
+    expect(screen.getByRole("link", { name: /how to run/ }).getAttribute("href")).toBe(
+      "/guides/running-for-office"
+    );
+  });
+
+  it("labels an expired desk deadline as becoming law unsigned", () => {
+    expect(deskDeadlineLabel({ text: "Ended", urgency: "ended" })).toMatch(
+      /becomes law without your signature/
     );
   });
 });

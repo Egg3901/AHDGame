@@ -3,6 +3,7 @@
 import type { Dispatch } from "react";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import type { CorporationsAdminAction, CorporationsAdminState } from "../useCorporationsAdminState";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function SpawnNppPanel({
   spawnNppForm,
@@ -19,7 +20,7 @@ export function SpawnNppPanel({
 }) {
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 space-y-4">
-      <h3 className="text-sm font-semibold">Spawn NPP Corporation</h3>
+      <h3 className="text-sm font-semibold">Spawn NPP corporation</h3>
       <p className="text-xs text-muted">
         Create a non-player-purchasable corporation. It will have no CEO, no user owner, and will
         participate in turn processing. Starting revenue is captured from the unowned market (20% of
@@ -72,7 +73,7 @@ export function SpawnNppPanel({
           </select>
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted">HQ State ID</label>
+          <label className="text-xs text-muted">HQ state ID</label>
           <input
             type="text"
             value={spawnNppForm.headquartersState}
@@ -87,7 +88,7 @@ export function SpawnNppPanel({
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted">Starting Capital</label>
+          <label className="text-xs text-muted">Starting capital</label>
           <input
             type="number"
             value={spawnNppForm.startingCapital}
@@ -117,7 +118,7 @@ export function SpawnNppPanel({
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted">Profit Margin %</label>
+          <label className="text-xs text-muted">Profit margin %</label>
           <input
             type="number"
             value={spawnNppForm.profitMargin}
@@ -199,7 +200,7 @@ export function SpawnNppPanel({
               if (!res.ok) {
                 dispatch({
                   type: "SET_SPAWN_NPP_RESULT",
-                  value: { success: false, error: json.error ?? `HTTP ${res.status}` },
+                  value: { success: false, error: apiErrorText(json, `HTTP ${res.status}`) },
                 });
               } else {
                 dispatch({
@@ -230,7 +231,7 @@ export function SpawnNppPanel({
           }
           className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-40"
         >
-          {spawnNppLoading ? "Spawning…" : "Spawn Corporation"}
+          {spawnNppLoading ? "Spawning…" : "Spawn corporation"}
         </button>
         <button
           onClick={async () => {
@@ -261,7 +262,7 @@ export function SpawnNppPanel({
               if (!res.ok) {
                 dispatch({
                   type: "SET_SPAWN_NPP_RESULT",
-                  value: { success: false, error: json.error ?? `HTTP ${res.status}` },
+                  value: { success: false, error: apiErrorText(json, `HTTP ${res.status}`) },
                 });
               } else {
                 dispatch({
@@ -289,7 +290,7 @@ export function SpawnNppPanel({
           disabled={spawnNppLoading || !spawnNppForm.countryId}
           className="text-xs px-3 py-1.5 rounded bg-secondary text-secondary-foreground hover:opacity-90 disabled:opacity-40"
         >
-          {spawnNppLoading ? "Spawning…" : "Batch Spawn All Sectors"}
+          {spawnNppLoading ? "Spawning…" : "Batch spawn all sectors"}
         </button>
         <button
           onClick={() => {

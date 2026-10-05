@@ -13,6 +13,7 @@ import {
   canRatifyMaastricht,
   decideBackgroundMaastricht,
   initialEuropeanIntegration,
+  isCarriedOverEuropeanIntegration,
   recordEuropeanRatification,
   reconcileEuropeanTreaty,
   type EuropeanIntegrationState,
@@ -28,15 +29,25 @@ export async function ensureEuropeanIntegrationState(
     { _id: "current" },
     { projection: { currentTurn: 1, europeanIntegration: 1 } }
   );
-  if (state?.europeanIntegration) return state.europeanIntegration;
+  const currentTurn = state ? (state.currentTurn ?? 2) : 0;
+  const stored = state?.europeanIntegration;
+  if (stored && !isCarriedOverEuropeanIntegration(stored, currentTurn)) return stored;
   const initial = initialEuropeanIntegration({
     startingYear: getStartingYearForPreset(preset),
-    currentTurn: state ? (state.currentTurn ?? 2) : 0,
+    currentTurn,
     hasEuropeanMembers,
   });
   if (!state) return initial;
+  // A record carried over from a previous world is replaced only if it is
+  // still the same record, so a concurrent initialization wins cleanly.
   const result = await states.updateOne(
-    { _id: "current", europeanIntegration: { $exists: false } },
+    stored
+      ? {
+          _id: "current",
+          "europeanIntegration.establishedTurn": stored.establishedTurn,
+          "europeanIntegration.revision": stored.revision ?? { $exists: false },
+        }
+      : { _id: "current", europeanIntegration: { $exists: false } },
     { $set: { europeanIntegration: initial } }
   );
   if (result.matchedCount === 1) return initial;
@@ -79,8 +90,10 @@ export async function loadEuropeanTreatyContext(db: Db, turn?: number) {
     ])
   );
   const state =
-    world.europeanIntegration ??
-    (await ensureEuropeanIntegrationState(db, preset, members.length > 0));
+    world.europeanIntegration &&
+    !isCarriedOverEuropeanIntegration(world.europeanIntegration, world.currentTurn ?? 2)
+      ? world.europeanIntegration
+      : await ensureEuropeanIntegrationState(db, preset, members.length > 0);
   const rawTurn = turn ?? world.currentTurn;
   const calendar = calendarTurn(rawTurn, {
     preIterationActive: world.preIteration?.active,

@@ -30,9 +30,10 @@ describe("listServiceableFunds", () => {
 
     await listServiceableFunds(db);
 
-    expect(find).toHaveBeenCalledWith({
-      $or: [{ status: "active" }, { status: "paused", pauseReason: "backing_ratio" }],
-    });
+    expect(find).toHaveBeenCalledWith(
+      { $or: [{ status: "active" }, { status: "paused", pauseReason: "backing_ratio" }] },
+      { projection: { floatSettlementPlan: 0 } }
+    );
     expect(toArray).toHaveBeenCalledOnce();
   });
 });

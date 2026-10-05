@@ -6,6 +6,7 @@ import { regionPartyApiUrl } from "@/lib/urls";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { parseMoneyAmountInput } from "@/lib/utils/parseMoneyAmountInput";
 import type { TreasuryPresetId } from "@/lib/treasury/partyTreasuryPresets";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface UseStatePartyTreasuryActionsOptions {
   countryCode: string;
@@ -75,7 +76,7 @@ export function useStatePartyTreasuryActions({
         body: JSON.stringify(body),
       });
       const d = await r.json();
-      setMsg(r.ok ? `✓ ${d.message}` : `✗ ${d.error}`);
+      setMsg(r.ok ? `✓ ${d.message}` : `✗ ${apiErrorText(d, "Request failed")}`);
       if (r.ok) {
         fetchStateParty();
         onOk?.();

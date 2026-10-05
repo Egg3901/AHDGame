@@ -1,12 +1,7 @@
 /**
- * Resolve an open NG presiding-officer election. Mirrors
- * {@link resolveCppccChairElection}: the top vote-getter wins, all other open
- * nominations fail, and the election document transitions to `closed`.
- *
- * Unlike the DE/CN resolvers (which write to `congressLeaders`), NG surfaces
- * its presiding officers through the executive resolver on `electedOfficials`
- * (officeType "speaker" / "senatePresident"). So the winner is written there,
- * which is exactly what the read-only presiding-officers route already reads.
+ * Close an NG leadership election with an immutable winner before writing its result.
+ * Pending results replay idempotently after failure; only completion publishes a card.
+ * The electedOfficials record remains the executive hub's presiding-officer source.
  */
 import { ObjectId } from "mongodb";
 import type { Db } from "@/lib/mongodb";
@@ -20,6 +15,7 @@ import type {
   NgChamberLeadershipElection,
   NgChamberLeadershipNomination,
   NgChamberLeadershipRole,
+  NgChamberLeadershipResolution,
   ElectedOfficial,
 } from "@/lib/db/types";
 import { NG_ROLE_CONFIG, NG_ELECTION_COLLECTION, NG_NOMINATION_COLLECTION } from "./config";
@@ -33,70 +29,115 @@ export async function resolveNgChamberLeadershipElection(
   const election = await db
     .collection<NgChamberLeadershipElection>(NG_ELECTION_COLLECTION)
     .findOne({ _id: role });
-  if (!election || election.status !== "voting") return false;
-  if (!force) {
+  if (!election || election.status === "cancelled") return false;
+  if (election.status === "closed" && (!election.resolution || election.resolution.completedAt)) {
+    return false;
+  }
+  if (election.status === "voting" && !force) {
     const gameTime = await getGameTime();
     if (!isLeadershipElectionClosed(election, gameTime.currentTurn, gameTime.effectiveNow))
       return false;
   }
 
-  const now = new Date();
-  const candidacies = await db
-    .collection<NgChamberLeadershipNomination>(NG_NOMINATION_COLLECTION)
-    .find({ role, status: { $in: ["open", "voting"] } })
-    .sort({ votesFor: -1 })
-    .toArray();
-
-  if (candidacies.length === 0) {
-    await db
-      .collection<NgChamberLeadershipElection>(NG_ELECTION_COLLECTION)
-      .updateOne({ _id: role }, { $set: { status: "closed", updatedAt: now } });
-    return true;
+  let resolution: NgChamberLeadershipResolution;
+  if (election.status === "voting") {
+    const candidacies = await db
+      .collection<NgChamberLeadershipNomination>(NG_NOMINATION_COLLECTION)
+      .find({ role, status: { $in: ["open", "voting"] } })
+      .sort({ votesFor: -1 })
+      .toArray();
+    const candidate = candidacies[0];
+    resolution = {
+      id: new ObjectId(),
+      resolvedAt: new Date(),
+      winner: candidate
+        ? {
+            _id: candidate._id,
+            nomineeId: candidate.nomineeId,
+            nomineeName: candidate.nomineeName,
+            nomineeParty: candidate.nomineeParty,
+            nomineeState: candidate.nomineeState,
+          }
+        : null,
+    };
+    // Include the cycle identity: a stale read must never close a newly opened ballot.
+    const claimed = await claimStatusTransition(
+      db,
+      NG_ELECTION_COLLECTION,
+      { _id: role, status: "voting", startedAt: election.startedAt },
+      { $set: { status: "closed", resolution, updatedAt: resolution.resolvedAt } }
+    );
+    if (!claimed) return true;
+  } else {
+    // Reuse the durable selection even if nominations changed after a partial write.
+    resolution = election.resolution!;
   }
 
-  const winner = candidacies[0];
-  await db
-    .collection<NgChamberLeadershipNomination>(NG_NOMINATION_COLLECTION)
-    .updateOne({ _id: winner._id }, { $set: { status: "confirmed", updatedAt: now } });
-  await db
-    .collection<NgChamberLeadershipNomination>(NG_NOMINATION_COLLECTION)
-    .updateMany(
-      { role, _id: { $ne: winner._id }, status: { $in: ["open", "voting"] } },
+  const now = resolution.resolvedAt;
+  const winner = resolution.winner;
+  if (winner) {
+    await db
+      .collection<NgChamberLeadershipNomination>(NG_NOMINATION_COLLECTION)
+      .updateOne({ _id: winner._id, role }, { $set: { status: "confirmed", updatedAt: now } });
+    await db.collection<NgChamberLeadershipNomination>(NG_NOMINATION_COLLECTION).updateMany(
+      {
+        role,
+        _id: { $ne: winner._id },
+        status: { $in: ["open", "voting"] },
+        createdAt: { $lte: now },
+      },
       { $set: { status: "failed", updatedAt: now } }
     );
 
-  // Write the winner into the presiding-officer electedOfficials record the
-  // presiding-officers route reads. Replace any prior holder of the office.
-  const officials = db.collection<ElectedOfficial>("electedOfficials");
-  await officials.updateOne(
-    { officeType: cfg.officerOfficeType, countryId: "NG" },
-    {
-      $set: {
-        officeType: cfg.officerOfficeType,
-        countryId: "NG",
-        characterId: winner.nomineeId,
-        characterName: winner.nomineeName,
-        party: winner.nomineeParty,
-        isNPP: false,
-        state: winner.nomineeState,
-        electedAt: now,
-        updatedAt: now,
-      },
-      $setOnInsert: { _id: new ObjectId(), createdAt: now },
-      $unset: { nppId: "" },
-    },
-    { upsert: true }
-  );
+    const officials = db.collection<ElectedOfficial>("electedOfficials");
+    const prior = await officials.findOne(
+      { officeType: cfg.officerOfficeType, countryId: "NG" },
+      { projection: { _id: 1, electedAt: 1 } }
+    );
+    // An overlapping replay must not replace a winner from a later cycle.
+    if (!prior || !prior.electedAt || prior.electedAt <= now) {
+      await officials.updateOne(
+        {
+          _id: prior?._id ?? resolution.id,
+          ...(prior
+            ? { $or: [{ electedAt: { $lte: now } }, { electedAt: { $exists: false } }] }
+            : {}),
+        },
+        {
+          $set: {
+            officeType: cfg.officerOfficeType,
+            countryId: "NG",
+            characterId: winner.nomineeId,
+            characterName: winner.nomineeName,
+            party: winner.nomineeParty,
+            isNPP: false,
+            state: winner.nomineeState,
+            electedAt: now,
+            updatedAt: now,
+          },
+          $setOnInsert: { _id: resolution.id, createdAt: now },
+          $unset: { nppId: "" },
+        },
+        { upsert: !prior }
+      );
+    }
+  }
 
-  // Atomically claim the close so a concurrent resolver cannot also announce.
-  const claimed = await claimStatusTransition(
+  // The completion claim follows all idempotent writes and gates publication.
+  const completed = await claimStatusTransition(
     db,
     NG_ELECTION_COLLECTION,
-    { _id: role, status: "voting" },
-    { $set: { status: "closed", updatedAt: now } }
+    {
+      _id: role,
+      status: "closed",
+      startedAt: election.startedAt,
+      "resolution.id": resolution.id,
+      "resolution.completedAt": { $exists: false },
+    },
+    { $set: { "resolution.completedAt": new Date(), updatedAt: now } }
   );
 
-  if (claimed) {
+  if (completed && winner) {
     const roleLabel = leadershipRoleLabel(role);
     const nomineeAvatarUrl = (
       await db
@@ -104,7 +145,7 @@ export async function resolveNgChamberLeadershipElection(
         .findOne({ _id: winner.nomineeId }, { projection: { avatarUrl: 1 } })
     )?.avatarUrl;
     sendCountryGameEvent("NG", {
-      title: `Leadership Election Result — ${roleLabel}`,
+      title: `Leadership Election Result: ${roleLabel}`,
       description: `**${winner.nomineeName}** has been elected as **${roleLabel}**.`,
       color: DISCORD_COLORS.leadership,
       footer: { text: "A House Divided" },

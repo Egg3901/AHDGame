@@ -1,4 +1,8 @@
-import { ObjectId, type Db } from "mongodb";
+/**
+ * Supporter benefits follow their granting provider. Reconciliation writes can
+ * require an unchanged provider, linked identity, tier and expiry before applying.
+ */
+import { ObjectId, type Db, type Filter } from "mongodb";
 import { awardAchievement } from "@/lib/achievements";
 import { createNotification } from "@/lib/notifications";
 import type { PatreonTier, SupporterProvider, User } from "@/lib/db/types";
@@ -24,6 +28,35 @@ export interface PatreonEventIdentity {
   tierId?: string;
 }
 
+export type SupporterStatusSnapshot = Pick<
+  User,
+  "supporterProvider" | "patreonUserId" | "patreonTier" | "patreonExpiresAt"
+>;
+
+export class PatreonReconcileWriteConflictError extends Error {
+  constructor() {
+    super("Supporter status changed during Patreon reconciliation");
+    this.name = "PatreonReconcileWriteConflictError";
+  }
+}
+
+function supporterStatusFilter(expected?: SupporterStatusSnapshot): Filter<User> {
+  if (!expected) return {};
+  return {
+    supporterProvider:
+      expected.supporterProvider === undefined ? { $exists: false } : expected.supporterProvider,
+    patreonUserId:
+      expected.patreonUserId === undefined ? { $exists: false } : expected.patreonUserId,
+    patreonTier: expected.patreonTier === undefined ? { $exists: false } : expected.patreonTier,
+    patreonExpiresAt:
+      expected.patreonExpiresAt === undefined ? { $exists: false } : expected.patreonExpiresAt,
+  };
+}
+
+function checkSupporterWrite(expected: SupporterStatusSnapshot | undefined, matchedCount: number) {
+  if (expected && matchedCount !== 1) throw new PatreonReconcileWriteConflictError();
+}
+
 export function mapPatreonTierId(tierId?: string | null): PatreonTier {
   if (!tierId) return null;
   return getPatreonTierMap()[tierId] ?? null;
@@ -39,7 +72,8 @@ export async function findUserByPatreonUserId(db: Db, patreonUserId: string): Pr
 
 export async function applyPatreonStatus(
   db: Db,
-  input: ApplyPatreonStatusInput
+  input: ApplyPatreonStatusInput,
+  expected?: SupporterStatusSnapshot
 ): Promise<{ supporterPlusAwarded: boolean }> {
   const existing = await db.collection<User>("users").findOne({ _id: input.userId });
   const nextAdsDisabled =
@@ -51,8 +85,8 @@ export async function applyPatreonStatus(
       ? "ad-free"
       : existing?.patreonAdPreference;
 
-  await db.collection<User>("users").updateOne(
-    { _id: input.userId },
+  const result = await db.collection<User>("users").updateOne(
+    { _id: input.userId, ...supporterStatusFilter(expected) },
     {
       $set: {
         patreonTier: input.tier,
@@ -68,6 +102,7 @@ export async function applyPatreonStatus(
       },
     }
   );
+  checkSupporterWrite(expected, result.matchedCount);
 
   let supporterPlusAwarded = false;
   if (isPlusOrBetter(input.tier)) {
@@ -112,26 +147,32 @@ export async function applyPatreonStatus(
 export async function startPatreonGracePeriod(
   db: Db,
   userId: ObjectId,
-  from = new Date()
+  from = new Date(),
+  expected?: SupporterStatusSnapshot
 ): Promise<void> {
-  await db.collection<User>("users").updateOne(
-    { _id: userId },
+  const result = await db.collection<User>("users").updateOne(
+    { _id: userId, ...supporterStatusFilter(expected) },
     {
       $set: {
         patreonExpiresAt: getGracePeriodEnd(from),
       },
     }
   );
+  checkSupporterWrite(expected, result.matchedCount);
 }
 
-export async function clearExpiredPatreonBenefits(db: Db, userId: ObjectId): Promise<void> {
+export async function clearExpiredPatreonBenefits(
+  db: Db,
+  userId: ObjectId,
+  expected?: SupporterStatusSnapshot
+): Promise<void> {
   const user = await db.collection<User>("users").findOne({ _id: userId });
   if (!user || isPatreonActive(user.patreonTier ?? null, user.patreonExpiresAt ?? null)) {
     return;
   }
 
-  await db.collection<User>("users").updateOne(
-    { _id: userId },
+  const result = await db.collection<User>("users").updateOne(
+    { _id: userId, ...supporterStatusFilter(expected) },
     {
       $set: {
         patreonTier: null,
@@ -143,4 +184,5 @@ export async function clearExpiredPatreonBenefits(db: Db, userId: ObjectId): Pro
       },
     }
   );
+  checkSupporterWrite(expected, result.matchedCount);
 }

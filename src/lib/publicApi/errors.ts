@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { errorResponse } from "@/lib/api/errors";
 
 export type PublicApiErrorCode =
   | "UNAUTHORIZED"
@@ -14,5 +15,5 @@ export function publicError(
   message: string,
   status: number
 ): NextResponse {
-  return NextResponse.json({ ok: false, error: message, code }, { status });
+  return errorResponse(status, message, { code: code, extra: { ok: false } });
 }

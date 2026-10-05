@@ -13,6 +13,7 @@ import { PartySearch } from "../components/PartySearch";
 import { StatCell } from "../components/StatCell";
 import { SmallButton, TableScroll, Td, Th } from "@/components/corporation/dense/DenseKit";
 import { BankPanel } from "../components/BankSection";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Both desks on this panel share one in-flight flag, and the lend form clears
@@ -92,7 +93,7 @@ export function InterbankPanel({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(json.error ?? "Could not lend interbank", "error");
+        showToast(apiErrorText(json, "Could not lend interbank"), "error");
         return;
       }
       showToast(
@@ -132,7 +133,7 @@ export function InterbankPanel({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(json.error ?? `Could not ${action} the credit line`, "error");
+        showToast(apiErrorText(json, `Could not ${action} the credit line`), "error");
         return;
       }
       if (action === "draw") {

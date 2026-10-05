@@ -74,6 +74,12 @@ export interface IterationStampFields {
 }
 
 export interface GameState {
+  /** Unique world identity for replay receipts; replaced on each reset. */
+  worldEpochId?: string;
+  /** Stable start timestamp for filtering retained event archives by world. */
+  worldEpochStartedAt?: Date;
+  /** Written before journal-enabled population planning, distinguishing legacy crash recovery. */
+  demographicFlowAttempt?: { worldEpochId: string; turn: number };
   /**
    * Snapshot of media regulation gates used by legislation endpoints that
    * already read this document. Admin market configuration keeps it current so
@@ -523,9 +529,8 @@ export interface GameState {
    * stamps it onto their `retiredCharacters` doc, the post-reset gate surfaces
    * it on next login, and it becomes re-viewable in character history. Voluntary
    * and admin retirements also build a recap while on. Fail-closed: absent/false
-   * = system inert (no recaps written, gate returns nothing). Default OFF (staged
-   * rollout — not in DEFAULT_GAME_STATE_FLAGS); an explicit enable survives
-   * future resets via missingGameStateFlagDefaults.
+   * = system inert (no recaps written, gate returns nothing). Fresh worlds seed
+   * it on (DEFAULT_GAME_STATE_FLAGS).
    */
   seasonRecapEnabled?: boolean;
   seasonRecapEnabledBy?: string;
@@ -536,9 +541,8 @@ export interface GameState {
    * committed, and neither the Cold War Ledger nor the Influence tab renders.
    * Seeding is the deliberate exception — opening values are written regardless
    * so flipping this on a live world shows a populated map, not blank rows.
-   * Fail-closed: only an explicit `true` enables. NOT in
-   * DEFAULT_GAME_STATE_FLAGS — staged rollout, default off; an explicit enable
-   * survives resets.
+   * Fail-closed: only an explicit `true` enables. Fresh worlds seed it on
+   * (DEFAULT_GAME_STATE_FLAGS).
    */
   intOrgAlignmentEnabled?: boolean;
   intOrgAlignmentEnabledBy?: string;
@@ -569,8 +573,8 @@ export interface GameState {
   canonicalPoliticalMetricsEnabledAt?: string;
   /**
    * Master gate for settlement crises (the German Question). Fail-closed: only
-   * an explicit `true` enables. NOT in DEFAULT_GAME_STATE_FLAGS — staged
-   * rollout, default off; an explicit enable survives resets.
+   * an explicit `true` enables. Fresh worlds seed it on
+   * (DEFAULT_GAME_STATE_FLAGS).
    */
   settlementCrisisEnabled?: boolean;
   settlementCrisisEnabledBy?: string;
@@ -720,6 +724,25 @@ export interface GameState {
 export interface CountryGameState {
   /** Country ID - acts as document _id */
   _id: CountryId;
+  /** JP 1991: approved 1994 Shugiin reform applies to later elections only. */
+  jpShugiinElectoralMandate?: {
+    law: "mixed-1994-v1";
+    passedTurn: number;
+    billId: string;
+  };
+  /** Latest successfully resolved Shugiin rule/capacity per region. */
+  jpShugiinResolvedRegionalRules?: Record<
+    string,
+    {
+      ruleVersion: "sntv-1991-v1" | "mixed-1994-v1";
+      totalSeats: number;
+      districtSeats: number;
+      listSeats: number;
+      electionId: string;
+      cycle: number;
+      resolvedAtTurn: number;
+    }
+  >;
   /** HU 1991: enacted 1994 electoral amendment, never inferred from the year. */
   huElectoralLaw1994SinceTurn?: number;
   /** A bound parliamentary decision authorizes the later Hungarian electoral system. */

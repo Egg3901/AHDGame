@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button, EmptyState } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export interface UnionBargainingEmployer {
   corporationId: string;
@@ -192,7 +193,7 @@ export function UnionBargainingPanel({
       const data = await response.json();
       setMessage({
         ok: response.ok,
-        text: response.ok ? success : (data.error ?? "Action failed."),
+        text: response.ok ? success : apiErrorText(data, "Action failed."),
       });
       if (response.ok) await onReload();
     } catch {

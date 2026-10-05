@@ -47,7 +47,7 @@ export function SeatProjectionBanner({ national, isLive }: SeatProjectionBannerP
         background: `linear-gradient(90deg, ${accent}1f, transparent 65%)`,
       }}
     >
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+      <div className="text-body-sm font-medium text-muted">
         {prefix} · {chamberLabel}
         {isLive ? ` · ${regionsDeclared}/${totalRegions} regions declared` : ""}
       </div>

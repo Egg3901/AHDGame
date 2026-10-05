@@ -108,7 +108,7 @@ describe("LogsTab", () => {
 
   it("renders the default account sub-tab without throwing", async () => {
     render(<LogsTab />);
-    await waitFor(() => expect(screen.getByText("Account Created")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Account created")).toBeTruthy());
   });
 
   // `action` is rendered as the label whenever it has no ACTION_CONFIG entry,
@@ -149,13 +149,13 @@ describe("LogsTab", () => {
 
   it("renders the hourly sub-tab and expands a turn without throwing", async () => {
     render(<LogsTab />);
-    fireEvent.click(screen.getByText("Hourly Logs"));
+    fireEvent.click(screen.getByText("Hourly logs"));
 
     await waitFor(() => expect(screen.getByText("Turn 457")).toBeTruthy());
 
     // Expanding is where Object.entries(log.phases) runs.
     fireEvent.click(screen.getByText("Turn 457"));
-    await waitFor(() => expect(screen.getByText("Phase Results")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Phase results")).toBeTruthy());
   });
 
   it("surfaces a server error as text instead of crashing the panel", async () => {

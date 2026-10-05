@@ -134,7 +134,7 @@ export function MetricDetailView({
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <div className="mb-2 text-body-sm font-bold uppercase tracking-wide text-success">
+              <div className="mb-2 text-body-sm font-medium text-success">
                 Positive contributors
               </div>
               <div className="flex flex-col gap-2">

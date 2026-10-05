@@ -9,6 +9,7 @@ import { resolveElectionYear } from "@/lib/utils/formatters";
 import { useGameTurnStatus } from "@/hooks/useGameEvents";
 import { DEFAULT_CYCLE_ANCHOR_CONTEXT } from "@/lib/elections/cycleAnchorContext";
 import { ElectionNavigation } from "./ElectionNavigation";
+import { JP_SHUGIIN_1994_CONSTITUENCIES } from "@/lib/countries/jp/data/jpShugiinConstituencies1994";
 import { ElectionHeader } from "./ElectionHeader";
 import { AdminSection } from "./AdminSection";
 import { ElectionScheduleCard } from "./ElectionScheduleCard";
@@ -33,6 +34,7 @@ import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning
 import { captureProductEvent } from "@/lib/analytics/capture";
 import { getStoredConsent } from "@/components/CookieConsent";
 import { huDistrictIds } from "@/lib/countries/hu/rules/constituencies2014";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ElectionDetailClientProps {
   id: string;
@@ -261,6 +263,8 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   const handleEnter = async () => {
     if (!election) return;
     let constituencyId: string | undefined;
+    let japanShugiinListOrder: number | undefined;
+    const japanMixed = election.japanShugiinRules?.ruleVersion === "mixed-1994-v1";
     if (
       election.countryId === "HU" &&
       election.electionType === "nationalAssembly" &&
@@ -276,25 +280,64 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       }
       constituencyId = districts[number - 1];
     }
+    if (japanMixed) {
+      const districts = JP_SHUGIIN_1994_CONSTITUENCIES.filter(
+        (district) => district.regionId === election.state
+      );
+      const districtAnswer = window.prompt(
+        `Choose a constituency number (1-${districts.length}; blank for party-list only). See the statutory map on this page.`
+      );
+      if (districtAnswer === null) return;
+      if (districtAnswer.trim()) {
+        const number = Number(districtAnswer.trim());
+        if (!Number.isInteger(number) || number < 1 || number > districts.length) {
+          showToast("Choose a valid Shugiin constituency number.", "error");
+          return;
+        }
+        constituencyId = districts[number - 1].id;
+      }
+      const listAnswer = window.prompt("Party-list position (1-300; blank for constituency only).");
+      if (listAnswer === null) return;
+      if (listAnswer.trim()) {
+        const rank = Number(listAnswer.trim());
+        if (!Number.isInteger(rank) || rank < 1 || rank > 300) {
+          showToast("Choose a valid party-list position.", "error");
+          return;
+        }
+        japanShugiinListOrder = rank;
+      }
+      if (!constituencyId && japanShugiinListOrder == null) {
+        showToast("Choose a constituency, a party-list position, or both.", "error");
+        return;
+      }
+    }
     if (!confirm("Enter this race? This will register your character as a candidate.")) return;
     setActionLoading(true);
     try {
       const res = await fetch(`/api/elections/${id}/enter`, {
         method: "POST",
-        ...(constituencyId
+        ...(japanMixed
           ? {
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ constituencyId }),
+              body: JSON.stringify({
+                ...(constituencyId ? { constituencyId } : {}),
+                ...(japanShugiinListOrder != null ? { japanShugiinListOrder } : {}),
+              }),
             }
-          : (election.hungarianAssemblyRound?.round === 1 ||
-                election.bulgarianFoundingRound?.round === 1 ||
-                Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) &&
-              huDistrictId
+          : constituencyId
             ? {
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ constituencyId: huDistrictId }),
+                body: JSON.stringify({ constituencyId }),
               }
-            : {}),
+            : (election.hungarianAssemblyRound?.round === 1 ||
+                  election.bulgarianFoundingRound?.round === 1 ||
+                  Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) &&
+                huDistrictId
+              ? {
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ constituencyId: huDistrictId }),
+                }
+              : {}),
       });
       const data = await res.json();
       if (res.ok) {
@@ -304,7 +347,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           .catch(() => {});
         await fetchElection();
       } else {
-        showToast(data.error ?? "Failed to enter race", "error");
+        showToast(apiErrorText(data, "Failed to enter race"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");
@@ -333,7 +376,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
         showToast(data.message ?? "Withdrawn from race", "success");
         await fetchElection();
       } else {
-        showToast(data.error ?? "Failed to withdraw", "error");
+        showToast(apiErrorText(data, "Failed to withdraw"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");

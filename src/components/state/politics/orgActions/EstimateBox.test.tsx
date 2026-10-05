@@ -12,7 +12,7 @@ describe("EstimateBox", () => {
         variant="projection"
         tone="build"
         cost={{ effectivePS: 7, basePS: 5, ladderPS: 2 }}
-        gain={{ label: "Estimated Gain", value: 1.25, sign: "+", unit: "Org" }}
+        gain={{ label: "Estimated share", value: 1.25, sign: "+", unit: "Org" }}
       />
     );
     expect(screen.getByText("This click")).toBeTruthy();
@@ -29,7 +29,7 @@ describe("EstimateBox", () => {
         variant="projection"
         tone="build"
         cost={{ effectivePS: 5, basePS: 5, ladderPS: 0 }}
-        gain={{ label: "Estimated Gain", value: 1, sign: "+", unit: "Org" }}
+        gain={{ label: "Estimated share", value: 1, sign: "+", unit: "Org" }}
       />
     );
     expect(screen.queryByText(/ladder \d/)).toBeNull();
@@ -69,19 +69,19 @@ describe("EstimateBox", () => {
         variant="projection"
         tone="build"
         cost={{ effectivePS: 5, basePS: 5, ladderPS: 0 }}
-        gain={{ label: "Estimated Gain", value: 1, sign: "+", unit: "Org" }}
+        gain={{ label: "Estimated share", value: 1, sign: "+", unit: "Org" }}
       />
     );
-    expect(screen.queryByText("Estimated Funds")).toBeNull();
+    expect(screen.queryByText("Estimated funds")).toBeNull();
     rerender(
       <EstimateBox
         variant="projection"
         tone="build"
         cost={{ effectivePS: 5, basePS: 5, ladderPS: 0 }}
         funds={{ amount: 1000, currencyCode: "USD" }}
-        gain={{ label: "Estimated Gain", value: 1, sign: "+", unit: "Org" }}
+        gain={{ label: "Estimated share", value: 1, sign: "+", unit: "Org" }}
       />
     );
-    expect(screen.getByText("Estimated Funds")).toBeTruthy();
+    expect(screen.getByText("Estimated funds")).toBeTruthy();
   });
 });

@@ -180,7 +180,7 @@ export function StatusBadge({
         }
         width={220}
       >
-        <p className="font-semibold text-foreground mb-1">Reversing Strategy</p>
+        <p className="font-semibold text-foreground mb-1">Reversing strategy</p>
         <p className="text-muted">
           Reverting back to <strong>{targetName}</strong>. {transitionTurnsRemaining} turns
           remaining.
@@ -207,7 +207,7 @@ export function StatusBadge({
           }
           width={240}
         >
-          <p className="font-semibold text-foreground mb-1">Strategy Transition</p>
+          <p className="font-semibold text-foreground mb-1">Strategy transition</p>
           <p className="text-muted">
             Switching from <strong>{fromName}</strong> to <strong>{toName}</strong>.{" "}
             {transitionTurnsRemaining} turns remaining.

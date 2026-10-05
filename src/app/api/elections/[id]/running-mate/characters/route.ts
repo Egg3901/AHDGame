@@ -6,7 +6,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import type {
   Character,
@@ -63,12 +63,12 @@ export async function GET(request: Request, { params }: RouteParams) {
       try {
         electionObjectId = new ObjectId(electionId);
       } catch {
-        return NextResponse.json({ error: "Invalid election ID" }, { status: 400 });
+        return errorResponse(400, "Invalid election ID");
       }
       election = await db.collection<Election>("elections").findOne({ _id: electionObjectId });
     }
     if (!election || election.electionType !== "president") {
-      return NextResponse.json({ error: "Not a presidential election" }, { status: 400 });
+      return errorResponse(400, "Not a presidential election");
     }
 
     const myCandidate = await db.collection<ElectionCandidate>("electionCandidates").findOne({
@@ -77,10 +77,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       status: "active",
     });
     if (!myCandidate) {
-      return NextResponse.json(
-        { error: "You are not a candidate in this election" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You are not a candidate in this election");
     }
 
     const electionCountry = (election.countryId ?? COUNTRY_CONFIGS.US.id) as CountryId;

@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { Modal, Button } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -75,7 +77,7 @@ export function CommissionSurveyModal({
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(json.error ?? "Failed to commission the survey.");
+        setError(apiErrorText(json, "Failed to commission the survey."));
         setSubmitting(false);
         return;
       }
@@ -91,7 +93,7 @@ export function CommissionSurveyModal({
   }
 
   return (
-    <Modal open title="Commission Geological Survey" onClose={onClose}>
+    <Modal open title="Commission geological survey" onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <p className="text-sm text-muted">
           Fund a state survey crew to search for new extraction capacity. Takes{" "}
@@ -146,11 +148,11 @@ export function CommissionSurveyModal({
           </p>
         </div>
 
-        {error && <p className="text-sm text-error">{error}</p>}
+        <InlineError error={error} className="text-sm text-error" />
 
         <div className="flex gap-3 pt-1">
           <Button type="submit" disabled={submitting} className="flex-1">
-            {submitting ? "Commissioning..." : "Commission Survey"}
+            {submitting ? "Commissioning..." : "Commission survey"}
           </Button>
           <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel

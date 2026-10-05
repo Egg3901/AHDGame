@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createAdminLog } from "@/lib/adminLog";
 import { getCurrentTurn } from "@/lib/currentTurn";
@@ -103,14 +103,14 @@ export async function POST(request: Request) {
     if (!auth.ok) return auth.response;
     const parsed = await parseJsonBody(request, changeSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const change = parsed.data as RolloutChange;
     if (
       (change.kind === "add_read_currency" || change.kind === "remove_read_currency") &&
       !(FOREX_ACTIVE_CURRENCIES as string[]).includes(change.currency)
     ) {
-      return NextResponse.json({ error: "Unknown currency." }, { status: 400 });
+      return errorResponse(400, "Unknown currency.");
     }
 
     const db = await getDb();
@@ -121,10 +121,9 @@ export async function POST(request: Request) {
       evidenceFrom(await buildBankingHealth(db), before.currentTurn)
     );
     if (!decision.allowed) {
-      return NextResponse.json(
-        { error: "Refused by the rollout rules.", reasons: decision.reasons },
-        { status: 409 }
-      );
+      return errorResponse(409, "Refused by the rollout rules.", {
+        extra: { reasons: decision.reasons },
+      });
     }
     if (decision.direction !== "none") {
       await db.collection<GameConfig>("gameConfig").updateOne(

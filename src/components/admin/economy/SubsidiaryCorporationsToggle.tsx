@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 
 /**
@@ -38,7 +39,7 @@ export function SubsidiaryCorporationsToggle() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setErr(data.error || "Toggle failed");
+        setErr(apiErrorText(data, "Toggle failed"));
         return;
       }
       setEnabled(data.subsidiaryCorporationsEnabled === true);

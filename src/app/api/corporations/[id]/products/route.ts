@@ -3,7 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -275,10 +275,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!limit.ok) return rateLimitResponse(limit.retryAfter);
     const parsed = await parseJsonBody(request, startProjectSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     if (!validateProductAllocations(parsed.data.allocations)) {
-      return NextResponse.json({ error: "Invalid plant allocations" }, { status: 400 });
+      return errorResponse(400, "Invalid plant allocations");
     }
 
     const { id } = await params;
@@ -289,14 +289,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     const ceoError = requireCeo(corporation, auth.user.userId);
     if (ceoError) return ceoError;
     if (!(await productLinesAvailable(db))) {
-      return NextResponse.json(
-        { error: "Manufacturing product lines are not enabled" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Manufacturing product lines are not enabled");
     }
 
     const kind = getManufacturingProductKind(parsed.data.kindId);
-    if (!kind) return NextResponse.json({ error: "Unknown product kind" }, { status: 400 });
+    if (!kind) return errorResponse(400, "Unknown product kind");
     const gameState = await getGameState(db);
     const sectors = await db
       .collection<CorporateSector>("corporateSectors")
@@ -331,10 +328,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       }).map((legalKind) => legalKind.id)
     );
     if (!legalKindIds.has(kind.id)) {
-      return NextResponse.json(
-        { error: "This product is not unlocked by any owned active plant" },
-        { status: 400 }
-      );
+      return errorResponse(400, "This product is not unlocked by any owned active plant");
     }
     const selectedPlants = parsed.data.allocations.map((allocation) =>
       plantById.get(allocation.sectorId)
@@ -351,12 +345,9 @@ export async function POST(request: Request, { params }: RouteParams) {
           })
       )
     ) {
-      return NextResponse.json(
-        {
-          error:
-            "Every allocated plant must have real capacity and a legal strategy for this product",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Every allocated plant must have real capacity and a legal strategy for this product"
       );
     }
     const allocatedCapacity = parsed.data.allocations.reduce((sum, allocation) => {
@@ -364,20 +355,14 @@ export async function POST(request: Request, { params }: RouteParams) {
       return sum + (plant ? plant.capitalStock * allocation.share : 0);
     }, 0);
     if (!(allocatedCapacity > 0) || !Number.isFinite(allocatedCapacity)) {
-      return NextResponse.json(
-        { error: "The project requires positive owned plant capacity" },
-        { status: 400 }
-      );
+      return errorResponse(400, "The project requires positive owned plant capacity");
     }
 
     const activeProject = await db
       .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
       .findOne({ activeCorporationId: corporation._id.toString() }, { projection: { _id: 1 } });
     if (activeProject) {
-      return NextResponse.json(
-        { error: "This corporation already has an active product project" },
-        { status: 409 }
-      );
+      return errorResponse(409, "This corporation already has an active product project");
     }
 
     const currentTurn = await getCurrentTurn(db);
@@ -408,10 +393,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         .insertOne(project);
     } catch (error) {
       if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
-        return NextResponse.json(
-          { error: "This corporation already has an active product project" },
-          { status: 409 }
-        );
+        return errorResponse(409, "This corporation already has an active product project");
       }
       throw error;
     }

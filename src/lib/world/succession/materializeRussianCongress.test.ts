@@ -6,7 +6,7 @@ import {
   FEDERATION_ARCHIVED_POLITICAL_ROWS_COLLECTION,
 } from "./materializeRussianCongress";
 import { loadRuntimeCountryOffices } from "@/lib/countries/runtimeOffices";
-import { getLiveLowerChamberSeats } from "@/lib/turn/lowerChamberSeats";
+import { getLiveLowerChamberSeats } from "@/lib/legislature/lowerChamberSeats";
 import { getCachedCountryState, setCachedCountryState } from "@/lib/countryState/cache";
 import type { CountryState } from "@/lib/db/types/countryState";
 

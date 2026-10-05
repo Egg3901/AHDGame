@@ -19,7 +19,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, isDuplicateKeyError, conflict } from "@/lib/api/errors";
+import { handleRouteError, isDuplicateKeyError, conflict, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { PoliticalParty } from "@/lib/db/types";
 import { processBanPartyEffects, processUnbanPartyEffects } from "@/lib/onePartyState/banFlow";
@@ -38,7 +38,7 @@ export async function POST(
     const countryId = code.toUpperCase() as CountryId;
     const config = COUNTRY_CONFIGS[countryId];
     if (!config) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+      return errorResponse(404, "Invalid country code");
     }
 
     const adminCheck = await requireAdmin();
@@ -46,15 +46,12 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, BODY_SCHEMA);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { newStatus, reason } = parsed.data;
 
     if (newStatus !== null && config.governmentType !== "onePartyState") {
-      return NextResponse.json(
-        { error: "Regime status can only be set in a one-party state" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Regime status can only be set in a one-party state");
     }
 
     const db = await getDb();
@@ -63,7 +60,7 @@ export async function POST(
       .collection<PoliticalParty>("politicalParties")
       .findOne({ countryId, sequentialId: partySeqId });
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const gameState = await db

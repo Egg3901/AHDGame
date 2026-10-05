@@ -39,7 +39,9 @@ describe("1991 opening department authority stress", () => {
       expect(run.departmentOutlay).toBe(run.departmentAuthority + run.workingCapitalDrawn);
       expect(run.workingCapitalDrawn).toBeGreaterThan(0);
       expect(run.workingCapitalDrawn).toBeLessThanOrEqual(run.openingWorkingCapital);
-      expect(run.closingWorkingCapital).toBeLessThan(100);
+      // Exhaust the buffer in every native currency while allowing integer
+      // allocation dust after 240 turns, rather than imposing one nominal sum.
+      expect(run.closingWorkingCapital / run.openingWorkingCapital).toBeLessThan(0.000001);
       expect(run.unmetProgramDemand).toBeGreaterThan(0);
       expect(run.newArrears).toBe(0);
       expect(run.overdraft).toBe(0);

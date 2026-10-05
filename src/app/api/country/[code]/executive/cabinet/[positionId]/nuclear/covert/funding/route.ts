@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import {
   getCovertNuclearProgram,
   putCovertNuclearProgram,
@@ -27,20 +27,17 @@ export async function POST(request: Request, { params }: NuclearRouteParams) {
 
     const gs = await loadGameStateSlice(db);
     if (!COVERT_CAPABLE.includes(countryId) || gs?.coldWarEnabled !== true) {
-      return NextResponse.json({ eligible: false }, { status: 404 });
+      return statusResponse(404, { eligible: false });
     }
 
     const parsed = await parseJsonBody(request, fundingSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const program = await getCovertNuclearProgram(db, countryId);
     if (program.completed) {
-      return NextResponse.json(
-        { error: "The device is assembled. There is nothing left to fund." },
-        { status: 409 }
-      );
+      return errorResponse(409, "The device is assembled. There is nothing left to fund.");
     }
 
     const funding = parsed.data.funding;

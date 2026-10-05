@@ -1,4 +1,5 @@
 import type { CountryGeography } from "../contract";
+import { modernRegionalPopulation2027 } from "@/lib/seeds/reference/modernRegionalPopulation2027";
 import { itMetricPresets1953 } from "./data/itMetricPresets1953";
 import { itRegionCensusData } from "./data/itRegionCensusData";
 import { itRegionCensusData1953 } from "./data/itRegionCensusData1953";
@@ -54,6 +55,7 @@ const regionBundles = {
   "1953-default": itRegions1953,
   "1979-default": itRegions,
   "2019-default": itRegions,
+  "2027-default": modernRegionalPopulation2027("IT", itRegions),
 };
 
 export const IT_GEOGRAPHY: CountryGeography = {

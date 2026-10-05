@@ -191,7 +191,7 @@ export function RecommendationCard({
               href={recommendation.link}
               className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
             >
-              Go to Page →
+              Go to page →
             </Link>
           )}
 

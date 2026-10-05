@@ -185,9 +185,7 @@ export function BondTable({
             : ""}
         </p>
         <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 w-full sm:w-auto">
-          <span className="text-xs font-semibold text-muted uppercase tracking-wider shrink-0">
-            Sort by:
-          </span>
+          <span className="text-body-sm font-medium text-muted shrink-0">Sort by:</span>
           {BOND_SORT_OPTIONS.map((opt) => (
             <button
               key={opt.field}
@@ -210,30 +208,28 @@ export function BondTable({
           <table className="w-full text-left text-sm">
             <thead className="bg-card-elevated border-b border-card-border">
               <tr>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider w-[40%]">
-                  Issuer
-                </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium w-[40%]">Issuer</th>
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">
                   Yield
                   <Tooltip content="Annualised return if held to maturity, based on current market price" />
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">
                   Coupon
                   <Tooltip content="Fixed annual interest rate paid on the bond's face value each turn" />
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden sm:table-cell">
                   Maturity
                   <Tooltip content="Turns remaining until the bond matures and principal is repaid" />
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden md:table-cell">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden md:table-cell">
                   Price
                   <Tooltip content="Current market price per bond unit" />
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden md:table-cell">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden md:table-cell">
                   Available
                   <Tooltip content="Bond units currently on offer for purchase" />
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden lg:table-cell">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden lg:table-cell">
                   Holders
                   <Tooltip content="Players and corporations currently holding this bond" />
                 </th>

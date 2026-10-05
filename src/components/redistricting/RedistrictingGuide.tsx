@@ -14,7 +14,7 @@ export function RedistrictingGuide() {
         <ol className="list-decimal space-y-2 pl-5">
           <li>
             In the state legislature, pass the{" "}
-            <strong className="text-foreground">State Redistricting Authority Act</strong> with the{" "}
+            <strong className="text-foreground">State redistricting authority act</strong> with the{" "}
             <strong className="text-foreground">Legislature-drawn</strong> option. This is a normal
             state bill. Independent and bipartisan commissions prevent a partisan redraw.
           </li>

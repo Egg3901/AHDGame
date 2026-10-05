@@ -26,7 +26,7 @@ export default function MatrixView({ ledger }: { ledger: WorldTradeLedger }) {
     <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
       <div className="mb-3 flex items-baseline justify-between gap-2">
         <h3 className="text-sm font-bold text-foreground">
-          Bilateral Net-Balance Matrix{" "}
+          Bilateral net-balance matrix{" "}
           <span className="font-normal text-muted">· row&rsquo;s balance vs. column</span>
         </h3>
         <span className="inline-flex items-center gap-3 text-[10px] text-muted">
@@ -45,7 +45,7 @@ export default function MatrixView({ ledger }: { ledger: WorldTradeLedger }) {
         <div className="flex min-w-[640px] flex-col gap-1">
           {/* Header */}
           <div className="flex items-center gap-1">
-            <div className="w-32 flex-shrink-0 pl-0.5 text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted">
+            <div className="w-32 flex-shrink-0 pl-0.5 text-body-sm font-medium text-muted">
               vs →
             </div>
             {countries.map((h) => (
@@ -58,7 +58,7 @@ export default function MatrixView({ ledger }: { ledger: WorldTradeLedger }) {
                 </div>
               </div>
             ))}
-            <div className="w-20 flex-shrink-0 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted">
+            <div className="w-20 flex-shrink-0 text-right text-body-sm font-medium text-muted">
               Net
             </div>
           </div>

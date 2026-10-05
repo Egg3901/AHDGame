@@ -71,7 +71,9 @@ export function buildWorldNavItems({
     },
     {
       id: "nations",
-      label: "Nations",
+      // The world map lives on the Nations page; say so, since "Country Map"
+      // below is the player's own country.
+      label: "Nations & World Map",
       labelKey: "menus.world.nations",
       href: "/world",
       section: "main",

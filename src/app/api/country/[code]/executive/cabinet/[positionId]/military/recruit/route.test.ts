@@ -192,7 +192,7 @@ describe("POST military/recruit", () => {
       { params: Promise.resolve({ code: "de", positionId: "defense_minister" }) }
     );
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: "Branch is not available in 1953" });
+    expect(await res.json()).toMatchObject({ error: "Branch is not available in 1953" });
     expect(db.collectionMocks.militaryUnits.insertOne).not.toHaveBeenCalled();
   });
 

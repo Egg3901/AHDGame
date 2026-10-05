@@ -15,7 +15,14 @@ function result(modifiedCount: number): UpdateResult {
 }
 
 describe("migrateStateScopedSupplyAgreements", () => {
-  it("withdraws legacy pending freight and gives legacy live freight the normal cancellation notice", async () => {
+  it("withdraws pending local-service contracts without a state and gives live ones cancellation notice", async () => {
+    const localCommodities = [
+      "construction_services",
+      "healthcare_services",
+      "real_estate_services",
+      "freight",
+      "entertainment_services",
+    ];
     const updateMany = vi
       .fn()
       .mockResolvedValueOnce(result(2))
@@ -29,13 +36,13 @@ describe("migrateStateScopedSupplyAgreements", () => {
     expect(updateMany).toHaveBeenNthCalledWith(
       1,
       // Only contracts with no state identity are legacy; a state-scoped
-      // freight contract names its state and is left alone.
-      { status: "pending", commodity: { $in: ["freight"] }, stateId: { $exists: false } },
+      // local-service contract names its state and is left alone.
+      { status: "pending", commodity: { $in: localCommodities }, stateId: { $exists: false } },
       { $set: { status: "cancelled", updatedAt: now } }
     );
     expect(updateMany).toHaveBeenNthCalledWith(
       2,
-      { status: "active", commodity: { $in: ["freight"] }, stateId: { $exists: false } },
+      { status: "active", commodity: { $in: localCommodities }, stateId: { $exists: false } },
       {
         $set: {
           status: "cancelling",

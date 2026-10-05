@@ -498,8 +498,9 @@ describe("POST /api/congress/house-leadership", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(403);
-    await expect(res.json()).resolves.toEqual({
+    await expect(res.json()).resolves.toMatchObject({
       error: "Only the majority party (MAJ) may run.",
+      code: "FORBIDDEN",
     });
   });
 });
@@ -599,8 +600,9 @@ describe("POST /api/congress/senate-leadership", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(403);
-    await expect(res.json()).resolves.toEqual({
+    await expect(res.json()).resolves.toMatchObject({
       error: "Only the majority party (MAJ) may run.",
+      code: "FORBIDDEN",
     });
   });
 });
@@ -690,8 +692,9 @@ describe("POST /api/congress/leaders", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(403);
-    await expect(res.json()).resolves.toEqual({
+    await expect(res.json()).resolves.toMatchObject({
       error: "Only the chamber's current majority party may hold this role.",
+      code: "FORBIDDEN",
     });
   });
 
@@ -738,8 +741,9 @@ describe("POST /api/congress/leaders", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(403);
-    await expect(res.json()).resolves.toEqual({
+    await expect(res.json()).resolves.toMatchObject({
       error: "Only current House members may hold this role.",
+      code: "FORBIDDEN",
     });
   });
 });

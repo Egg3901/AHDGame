@@ -185,7 +185,7 @@ function BillsTab({
             onClick={() => setShowModal(true)}
             className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
           >
-            Propose Bill
+            Propose bill
           </button>
         </div>
       )}
@@ -214,7 +214,7 @@ function BillsTab({
           proposalWarning={proposalWarnings?.sovietOfTheUnion ?? null}
           chambers={[
             { value: "sovietOfTheUnion", label: "Soviet of the Union" },
-            { value: "sovietOfNationalities", label: "Soviet of Nationalities" },
+            { value: "sovietOfNationalities", label: "Soviet of nationalities" },
           ]}
           domesticOnlyLabel="Soviet-headquartered enterprises only"
           onClose={() => setShowModal(false)}
@@ -241,7 +241,7 @@ function LeaderCard({
 }) {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
-      <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-2">{label}</p>
+      <p className="text-body-sm font-medium text-muted mb-2">{label}</p>
       {character ? (
         <div className="flex items-center gap-3">
           <Avatar
@@ -325,9 +325,7 @@ function LeadershipTab({
           character={leaders?.primeMinister ?? null}
         />
         <div className="rounded-xl border border-card-border bg-card p-5">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-2">
-            Chairman of the Presidium
-          </p>
+          <p className="text-body-sm font-medium text-muted mb-2">Chairman of the Presidium</p>
           {government?.hosName ? (
             <p className="font-semibold">{government.hosName}</p>
           ) : (

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
@@ -33,7 +34,7 @@ export function CentralBankInsuranceTab({ currency }: Props) {
       const res = await fetch(`/api/banking/currency/${currency.toLowerCase()}`);
       const json = (await res.json().catch(() => ({}))) as CurrencyPayload & { error?: string };
       if (!res.ok) {
-        setError(json.error ?? "Failed to load insurance fund");
+        setError(apiErrorText(json, "Failed to load insurance fund"));
         setData(null);
         return;
       }

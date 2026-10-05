@@ -16,8 +16,11 @@
  * rollover keeping surplus-country float stable).
  */
 import { ObjectId, type Db } from "mongodb";
+import { calculateBondMarketPrice } from "@/lib/constants/bonds";
+import { getOpeningPolicyRate } from "@/lib/centralBank/rules/openingPolicyRate";
 import type { Bond, CentralBank, Corporation, FederalBudget } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import { sovereignCreditSpreadPp } from "@/lib/bonds/rules/sovereignCreditSpread";
 import { COUNTRY_ORDER, getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
@@ -148,8 +151,11 @@ export async function seedSovereignBondInstruments(
     const countryCorporation =
       primaryCorporations.get(countryId) ?? (await findAnyNationalCorporation(db, countryId));
 
-    const primeRate =
-      centralBank?.primeRate ?? getCountryConfig(countryId).centralBank.defaultPrimeRate;
+    const primeRate = getOpeningPolicyRate(
+      countryId,
+      budget.fiscalYear,
+      centralBank?.primeRate ?? getCountryConfig(countryId).centralBank.defaultPrimeRate
+    );
     const corporationId = countryCorporation?._id ?? new ObjectId();
     const issuerName = countryCorporation?.name ?? getSovereignIssuerName(countryId);
     // The seeded budget row carries the preset-correct code (EUR for 2027
@@ -169,7 +175,24 @@ export async function seedSovereignBondInstruments(
       const maturityTurns = cohort.maturityTurns;
       const trancheAmount = cohort.amount;
       const totalUnits = Math.floor(trancheAmount / BOND_UNIT_FACE_VALUE);
-      const couponRate = getSovereignCouponRate(primeRate, maturityTurns);
+      // In the 1991 reset, instruments represent debt already outstanding, whose average
+      // coupon is authored by the fiscal seed. New issues use today's policy and
+      // risk spreads; resetting the old stock to those prices invents a different
+      // opening debt-service bill. Other presets and incomplete rows retain
+      // the existing policy-priced coupon and par instrument behavior.
+      const historicalAverageRate = budget.debt?.interestRate;
+      const couponRate =
+        budget.fiscalYear === 1991 &&
+        typeof historicalAverageRate === "number" &&
+        Number.isFinite(historicalAverageRate) &&
+        historicalAverageRate >= 0
+          ? historicalAverageRate * 100
+          : getSovereignCouponRate(
+              primeRate,
+              maturityTurns,
+              0,
+              sovereignCreditSpreadPp(budget.creditRating)
+            );
 
       bondDocs.push({
         issuerType: "sovereign",
@@ -184,7 +207,22 @@ export async function seedSovereignBondInstruments(
         // remaining maturity is distributed across quarterly cohorts.
         issuedAtTurn: turn + cohort.issuedAtOffset,
         maturityTurn: turn + cohort.maturityOffset,
-        marketPrice: 1.0,
+        // Historic coupons remain fixed. Price them at prevailing yields so
+        // cheap new borrowing cannot buy old high-coupon paper below fair value.
+        marketPrice:
+          budget.fiscalYear === 1991
+            ? calculateBondMarketPrice(
+                couponRate,
+                getSovereignCouponRate(
+                  primeRate,
+                  maturityTurns,
+                  0,
+                  sovereignCreditSpreadPp(budget.creditRating)
+                ),
+                cohort.maturityOffset,
+                false
+              )
+            : 1.0,
         totalIssued: trancheAmount,
         publicFloat: totalUnits,
         holders: [],

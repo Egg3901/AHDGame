@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { durableRateLimit } from "@/lib/api/rateLimit.mongo";
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, createUserApiKeySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const scope: UserApiScope = parsed.data.scope;
@@ -67,10 +67,7 @@ export async function POST(request: Request) {
       revokedAt: null,
     });
     if (activeCount >= 3) {
-      return NextResponse.json(
-        { error: `You can have at most 3 active ${scope} keys. Revoke one first.` },
-        { status: 400 }
-      );
+      return errorResponse(400, `You can have at most 3 active ${scope} keys. Revoke one first.`);
     }
 
     await db.collection("userApiKeys").insertOne({
@@ -103,7 +100,7 @@ export async function DELETE(request: Request) {
 
     const parsed = await parseJsonBody(request, revokeUserApiKeySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

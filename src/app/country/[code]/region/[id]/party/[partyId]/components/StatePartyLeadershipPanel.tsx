@@ -11,6 +11,7 @@ import { getMessageStyle } from "@/lib/utils/formatters";
 import { partyUrl } from "@/lib/urls";
 import type { StatePartyData, UserData, LeaderInfo, Position } from "./types";
 import { APPOINT_LABELS } from "./helpers";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 // ─── Admin Appointment Panel ──────────────────────────────────────────────────
 
@@ -59,7 +60,7 @@ function AdminAppointmentPanel({
         body: JSON.stringify({ position, characterId }),
       });
       const data = await res.json();
-      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${data.error}`);
+      setMessage(res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Request failed")}`);
       if (res.ok) onUpdate();
     } catch {
       setMessage("✗ Network error");
@@ -74,7 +75,7 @@ function AdminAppointmentPanel({
         <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-400 uppercase tracking-wide">
           Admin
         </span>
-        <span className="text-sm font-semibold">Direct Appointment</span>
+        <span className="text-sm font-semibold">Direct appointment</span>
       </div>
       <p className="text-xs text-muted/70">
         Directly appoint or vacate any leadership position. Active elections for the affected
@@ -138,7 +139,7 @@ export function StatePartyLeadershipPanel({
   return (
     <div className="rounded-xl border border-card-border bg-card p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold">State Party Leadership</h2>
+        <h2 className="font-semibold">State party leadership</h2>
         <Link
           href={partyUrl(stateParty.countryId ?? DEFAULT_LEGACY_COUNTRY_ID, stateParty.partyId)}
           className="text-xs text-primary hover:underline"
@@ -157,9 +158,7 @@ export function StatePartyLeadershipPanel({
           const leader = stateParty[field] as LeaderInfo | null;
           return (
             <div key={field} className="rounded-lg border border-card-border bg-background p-4">
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">
-                {label}
-              </div>
+              <div className="text-body-sm font-medium text-muted mb-3">{label}</div>
               <div className="flex items-center gap-3 min-h-[3rem]">
                 {leader ? (
                   <>
@@ -196,9 +195,7 @@ export function StatePartyLeadershipPanel({
       {/* State Campaigner — single slot, in-state members only */}
       <div className="rounded-lg border border-card-border bg-background p-4 space-y-2">
         <div className="flex items-baseline justify-between gap-2">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted">
-            Campaigner
-          </div>
+          <div className="text-body-sm font-medium text-muted">Campaigner</div>
           <span
             className="rounded-full border border-card-border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted"
             title="Chair-assigned. Spends state PS to Build Org on the state party's behalf."
@@ -228,7 +225,7 @@ export function StatePartyLeadershipPanel({
               }
             );
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error ?? "Save failed");
+            if (!res.ok) throw new Error(apiErrorText(data, "Save failed"));
             onUpdate();
           }}
         />

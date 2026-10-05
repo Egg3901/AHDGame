@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { updateWikiPageSchema } from "@/lib/api/schemas/wiki";
 import type { WikiPage } from "@/lib/db/types";
 import { ObjectId } from "mongodb";
@@ -24,7 +24,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const parsed = await parseJsonBody(request, updateWikiPageSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
