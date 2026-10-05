@@ -17,7 +17,7 @@ describe("resetStateRuntimeFields", () => {
         stateSenateSeats: 0,
         region: "Midlands",
         bannerImage: "england.webp",
-        sectorSpecializations: { primary: "manufacturing", secondary: "energy" },
+        sectorSpecializations: { primary: "manufacturing", secondary: "energy", legacyBonus: 99 },
         votingEligiblePopulation: 40_000_000,
         workingAgePopulation: 30_000_000,
         militaryServicePopulation: 500_000,
@@ -71,11 +71,11 @@ describe("resetStateRuntimeFields", () => {
       stateSenateSeats: 0,
       region: "Midlands",
       bannerImage: "england.webp",
-      sectorSpecializations: { primary: "manufacturing", secondary: "energy" },
     });
     expect(STATE_RUNTIME_UNSET_FIELDS).toContain("outputGap");
     expect(STATE_RUNTIME_UNSET_FIELDS).toContain("capitalStock");
     expect(STATE_RUNTIME_UNSET_FIELDS).toContain("topSectorsCache");
+    expect(STATE_RUNTIME_UNSET_FIELDS).toContain("sectorSpecializations");
   });
 });
 

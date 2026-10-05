@@ -18,6 +18,7 @@ export const STATE_RUNTIME_UNSET_FIELDS = [
   "corpGrowthInvestmentAnchor",
   "corpGrowthInvestmentTurn",
   "topSectorsCache",
+  "sectorSpecializations",
   "admittedYear",
   "votingSystem",
   "politicalLean",
@@ -43,12 +44,6 @@ export const STATE_PRESERVED_FIELD_REASONS: Readonly<Record<string, string>> = {
   stateSenateSeats: "Authored regional chamber apportionment baseline.",
   region: "Authored geographic grouping used by regional rules and displays.",
   bannerImage: "Authored static region artwork reference.",
-};
-
-/** Fields reconstructed from current source data later in every bootstrap. */
-export const STATE_BOOTSTRAP_RESEEDED_FIELD_REASONS: Readonly<Record<string, string>> = {
-  sectorSpecializations:
-    "runRegionDerivedStage recomputes this field for every seeded state in both reset modes.",
 };
 
 /** Clear world-specific state before reference region rows are upserted. */

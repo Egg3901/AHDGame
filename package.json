@@ -84,7 +84,7 @@
     "architecture:audit": "node scripts/architecture-audit.mjs && npm run architecture:contracts",
     "verify:build": "next build",
     "postinstall": "node scripts/install/patch-mongodb-transaction-cursors.mjs && node scripts/install/verify-braces-depth.mjs && node scripts/install/patch-lightweight-chart-gestures.mjs",
-    "architecture:contracts": "vitest run scripts/architecture/*.test.ts src/lib/admin/seed/seedManifest.test.ts src/lib/admin/seed/seedManifestDiscovery.test.ts src/lib/admin/resetGameWorld.test.ts src/lib/admin/seed/indexes/resetRuntimeCoverage.test.ts src/simulation/engine/turnReadProjections.test.ts --maxWorkers=1"
+    "architecture:contracts": "vitest run scripts/architecture/*.test.ts src/lib/admin/seed/seedManifest.test.ts src/lib/admin/seed/seedManifestDiscovery.test.ts src/lib/admin/resetGameWorld.test.ts src/lib/admin/bootstrapContract.test.ts src/lib/admin/resetAndBootstrapFailure.test.ts src/lib/admin/seed/indexes/resetRuntimeCoverage.test.ts src/simulation/engine/turnReadProjections.test.ts --maxWorkers=1"
   },
   "lint-staged": {
     "*.{ts,tsx,mts}": [

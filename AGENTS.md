@@ -83,8 +83,8 @@ findings your change introduces are yours to fix.
 Run `npm run architecture:contracts` when adding persisted state or turn work.
 Every production collection needs a lifecycle entry in the seed manifest.
 Every GameState field needs an actual reset write or a named preservation reason.
-Political and macro metric fields must be reseeded unconditionally or cleared by
-their reset helper; optional seed writes do not prove reset coverage.
+Region state and political or macro metric fields need explicit reset coverage;
+optional seed writes do not prove reset coverage.
 New world collections need indexes in the bootstrap seed plan or a reviewed
 primary-key policy; a migration marker alone cannot restore indexes after reset.
 The contracts discover generic calls and forwarded collection names, and flag

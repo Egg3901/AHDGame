@@ -6,7 +6,6 @@ import type { Db } from "mongodb";
 import { createMockDb, bulkOps } from "@/lib/test-utils/mockDb";
 import {
   resetStateRuntimeFields,
-  STATE_BOOTSTRAP_RESEEDED_FIELD_REASONS,
   STATE_PRESERVED_FIELD_REASONS,
 } from "@/lib/admin/seed/resetStateRuntimeFields";
 import { seedStateSectorSpecializations } from "@/lib/admin/seed/seedStateSectorSpecializations";
@@ -50,22 +49,16 @@ describe("states reset lifecycle contract", () => {
       )
     );
     const retained = new Set(Object.keys(STATE_PRESERVED_FIELD_REASONS));
-    const bootstrapReseeded = new Set(Object.keys(STATE_BOOTSTRAP_RESEEDED_FIELD_REASONS));
     const declared = declaredStateFields();
 
     expect(new Set(declared).size).toBe(declared.length);
     expect(
-      declared.filter(
-        (field) => !cleared.has(field) && !retained.has(field) && !bootstrapReseeded.has(field)
-      ),
+      declared.filter((field) => !cleared.has(field) && !retained.has(field)),
       "Give every new State field an actual reset unset, a real bootstrap seed write, or a specific baseline reason"
     ).toEqual([]);
     expect(Object.values(STATE_PRESERVED_FIELD_REASONS).every((reason) => reason.trim())).toBe(
       true
     );
-    expect(
-      Object.values(STATE_BOOTSTRAP_RESEEDED_FIELD_REASONS).every((reason) => reason.trim())
-    ).toBe(true);
     expect(sectorSeedFields).toEqual(
       new Set([
         "sectorSpecializations.primary",
