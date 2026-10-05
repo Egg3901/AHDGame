@@ -58,6 +58,7 @@ const db = {
   collection: () => ({
     findOne: async () => null,
     updateOne: async () => ({}),
+    updateMany: async () => ({ modifiedCount: 0 }),
     insertOne: async () => ({}),
     deleteMany: async () => ({ deletedCount: 0 }),
   }),

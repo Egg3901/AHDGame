@@ -245,4 +245,45 @@ export const PRESERVED: CollectionEntry[] = [
     notes:
       "Wiki office tenures from finished worlds. resetGameWorld writes each generated office page's tenure list here before the sweep drops the office tables it is computed from; the office pages read it back as earlier iterations.",
   },
+  // 2026-10 backfill: account, operations and security state
+  {
+    name: "authSourceOwnershipProofs",
+    category: "preserved",
+    notes: "Account ownership evidence survives world resets.",
+  },
+  {
+    name: "broadcastDms",
+    category: "preserved",
+    notes: "Operator broadcast delivery receipts are cross-world accountability records.",
+  },
+  {
+    name: "healBackups",
+    category: "preserved",
+    notes: "Remediation backup archive is operational data.",
+  },
+  {
+    name: "healRuns",
+    category: "preserved",
+    notes: "Remediation execution history is operational data.",
+  },
+  {
+    name: "healTokens",
+    category: "preserved",
+    notes: "Remediation authorization state has its own lifecycle.",
+  },
+  {
+    name: "passwordResets",
+    category: "preserved",
+    notes: "Account recovery records are independent of a game world.",
+  },
+  {
+    name: "sourceFenceConsumptions",
+    category: "preserved",
+    notes: "Security replay-consumption state survives world resets.",
+  },
+  {
+    name: "sourceFenceReceipts",
+    category: "preserved",
+    notes: "Security receipts survive world resets.",
+  },
 ];

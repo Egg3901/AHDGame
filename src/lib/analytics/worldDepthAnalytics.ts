@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
-import type { GameIteration } from "@/lib/db/types/gameState";
+import type { AdminLog } from "@/lib/db/types/adminLog";
+import type { GameIteration, GameState } from "@/lib/db/types/gameState";
 import type { PartyHistorySnapshot } from "@/lib/db/types/partyHistory";
 import type { PartyMembershipEvent } from "@/lib/db/types/partyMembershipEvent";
 import type { Corporation } from "@/lib/db/types/corporation";
@@ -34,6 +35,31 @@ export async function captureWorldDepthPosthog(input: {
   try {
     const { db, turn } = input;
     const actionWindow = { $gte: Math.max(0, turn - 1), $lte: turn };
+    const currentWorld = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { worldEpochStartedAt: 1, preset: 1 } });
+    let worldEpochStartedAt = currentWorld?.worldEpochStartedAt;
+    if (!worldEpochStartedAt && currentWorld?.preset) {
+      // Older gameState documents predate worldEpochStartedAt. The reset-run
+      // row is opened before teardown and retains its original startedAt across
+      // failed resets and build-only recovery, so it is the legacy boundary.
+      const latestReset = await db.collection<AdminLog>("adminLogs").findOne(
+        {
+          action: { $in: ["game_reset", "game_full_reset"] },
+          "resetRun.preset": currentWorld.preset,
+          "resetRun.startedAt": { $type: "date" },
+        } as never,
+        {
+          projection: { "resetRun.startedAt": 1 },
+          sort: { "resetRun.startedAt": -1 },
+        }
+      );
+      worldEpochStartedAt = latestReset?.resetRun?.startedAt;
+    }
+    const membershipFilter = {
+      turn: actionWindow,
+      ...(worldEpochStartedAt ? { createdAt: { $gte: worldEpochStartedAt } } : {}),
+    };
     const [
       proposalsCollection,
       legislationCollection,
@@ -77,19 +103,17 @@ export async function captureWorldDepthPosthog(input: {
         .toArray(),
       db
         .collection<PartyMembershipEvent>("partyMembershipEvents")
-        .find(
-          { turn: actionWindow },
-          {
-            projection: {
-              turn: 1,
-              countryId: 1,
-              oldPartyId: 1,
-              newPartyId: 1,
-              reason: 1,
-              actorRole: 1,
-            },
-          }
-        )
+        .find(membershipFilter, {
+          projection: {
+            turn: 1,
+            createdAt: 1,
+            countryId: 1,
+            oldPartyId: 1,
+            newPartyId: 1,
+            reason: 1,
+            actorRole: 1,
+          },
+        })
         .toArray(),
       db
         .collection<CorporationHistory>("corporationHistory")

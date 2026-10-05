@@ -76,7 +76,7 @@ const REFERENCE: CollectionEntry[] = [
     category: "reference",
     seededBy: "seedRegionMetrics",
     notes:
-      "The economy engine's working state (economic.* + population.* + independenceDesire + the objective fiscal pair + economicModel) for EVERY country's regions. Extracted from the legacy-shaped seed docs at each seeder's write site (writeSplitMetrics). This is the ONLY region-metrics store now — the political half lives on politicalMetrics.",
+      "The economy engine's working state (economic.* + population.* + independenceDesire + the objective fiscal pair + economicModel) for EVERY country's regions. Extracted from legacy-shaped seed docs at each seeder's write site (writeSplitMetrics). Full reset clears old-world optional/runtime fields with resetMacroMetricsRuntimeState before these $set upserts, and deletes derived national rollups. This is the ONLY region-metrics store now — the political half lives on politicalMetrics.",
   },
   {
     name: "stateMetrics",

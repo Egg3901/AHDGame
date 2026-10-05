@@ -10,8 +10,13 @@ function fakeDb(counts: Record<string, number>) {
   const handles = new Map<string, { deleteMany: ReturnType<typeof vi.fn> }>();
   const db = {
     collection: (name: string) => {
+      const existing = handles.get(name);
+      if (existing) return existing;
       const handle = {
         deleteMany: vi.fn(async (_filter: unknown) => ({ deletedCount: counts[name] ?? 0 })),
+        find: vi.fn(() => ({
+          project: vi.fn(() => ({ toArray: vi.fn(async () => [{ _id: "LIVE_REGION" }]) })),
+        })),
       };
       handles.set(name, handle);
       return handle;
@@ -55,5 +60,30 @@ describe("purgeAbsentCountryRegions", () => {
     const result = await purgeAbsentCountryRegions(db, "custom-preset");
     expect(result).toEqual({ countryIds: [], deleted: {} });
     expect(handles.size).toBe(0);
+  });
+
+  it("purges political metric documents whose region ids are absent from the seeded roster", async () => {
+    const calls: Array<{ collection: string; filter: unknown }> = [];
+    const db = {
+      collection: (name: string) => ({
+        find: () => ({
+          project: () => ({ toArray: async () => [{ _id: "RU_MSK" }, { _id: "RU_LEN" }] }),
+        }),
+        deleteMany: async (filter: unknown) => {
+          calls.push({ collection: name, filter });
+          return {
+            deletedCount: name === "politicalMetrics" && "_id" in (filter as object) ? 4 : 0,
+          };
+        },
+      }),
+    } as unknown as Db;
+
+    const result = await purgeAbsentCountryRegions(db, "1991-default");
+
+    expect(calls).toContainEqual({
+      collection: "politicalMetrics",
+      filter: { _id: { $nin: ["RU_MSK", "RU_LEN"] } },
+    });
+    expect(result.deleted.politicalMetrics).toBe(4);
   });
 });

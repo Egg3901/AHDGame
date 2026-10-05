@@ -91,5 +91,42 @@ export async function seedIndexFundIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  // Petition indices were historically created only by a migration. Runtime
+  // reset drops the collection, so bootstrap must restore both its open-petition
+  // race guard and the listing/deadline inbox paths.
+  await ensureIndex(
+    db,
+    "indexListingPetitions",
+    { corporationId: 1 },
+    {
+      name: "unique_pending_index_listing_petition_per_corp",
+      unique: true,
+      partialFilterExpression: { status: "pending" },
+      background: true,
+    },
+    log
+  );
+  await ensureIndex(
+    db,
+    "indexListingPetitions",
+    { status: 1, waiverUntilTurn: 1 },
+    { name: "index_listing_petitions_active_waivers", background: true },
+    log
+  );
+  await ensureIndex(
+    db,
+    "indexListingPetitions",
+    { status: 1, deadlineAtTurn: 1 },
+    { name: "index_listing_petitions_due", background: true },
+    log
+  );
+  await ensureIndex(
+    db,
+    "indexListingPetitions",
+    { countryId: 1, status: 1, deadlineAtTurn: 1 },
+    { name: "index_listing_petitions_country_inbox", background: true },
+    log
+  );
+
   log("Index fund indexes ensured");
 }
