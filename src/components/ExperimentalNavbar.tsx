@@ -724,7 +724,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   return (
     <>
       <nav
-        className="ahd-navbar-enter sticky top-0 z-50 border-b border-card-border/60 bg-card/50 shadow-panel backdrop-blur-xl"
+        className="ahd-navbar-enter sticky top-0 z-50 border-b pt-[env(safe-area-inset-top,0px)] border-card-border/60 bg-card/50 shadow-panel backdrop-blur-xl"
         aria-label={t("common.mainNavigation")}
         data-feedback-ignore="true"
       >
@@ -1191,7 +1191,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               className={
                 mobileProfileOpen
                   ? "absolute right-3 top-[calc(4rem+env(safe-area-inset-top,0px))] w-[min(19rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-card-border bg-card shadow-2xl"
-                  : "absolute inset-y-0 left-0 flex w-[min(21rem,calc(100vw-3rem))] flex-col border-r border-card-border bg-card shadow-2xl"
+                  : "absolute inset-y-0 left-0 flex w-[min(21rem,calc(100vw-3rem))] flex-col border-r pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] border-card-border bg-card shadow-2xl"
               }
             >
               {!mobileProfileOpen && (

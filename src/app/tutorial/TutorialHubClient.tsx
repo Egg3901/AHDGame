@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { TUTORIAL_CHAPTERS } from "@/lib/tutorial/chapters";
+import { TUTORIAL_CHAPTERS, chapterBlurb } from "@/lib/tutorial/chapters";
+import { tutorialWorldFromFlags } from "@/lib/tutorial/world";
+import { useWorldFlags } from "@/hooks/useWorldFlags";
 import {
   chapterIdsForPlan,
   isTutorialChapterId,
@@ -33,6 +35,7 @@ interface PlanResponse {
 
 export function TutorialHubClient() {
   const t = useTranslations("tutorial");
+  const world = tutorialWorldFromFlags(useWorldFlags());
   const [data, setData] = useState<PlanResponse | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
 
@@ -122,7 +125,7 @@ export function TutorialHubClient() {
                       </span>
                     )}
                   </h2>
-                  <p className="mt-1 text-sm text-muted">{t(chapter.blurb)}</p>
+                  <p className="mt-1 text-sm text-muted">{t(chapterBlurb(chapter, world))}</p>
                   <p className="mt-1 text-xs text-muted">
                     {t("hub.aboutMinutes", { minutes: chapter.estimatedMinutes })}
                   </p>

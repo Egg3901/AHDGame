@@ -23,6 +23,7 @@ savant-protocol
 /test-results
 /playwright-report
 /blob-report
+/.cache/
 
 # Environment Variables
 .env

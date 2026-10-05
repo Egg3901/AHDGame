@@ -43,7 +43,14 @@ const RESULT_KEYS: Record<string, { key: string; ok: boolean }> = {
   rate_limited: { key: "rateLimited", ok: false },
   test_mode: { key: "testMode", ok: false },
   not_configured: { key: "notConfigured", ok: false },
+  maintenance: { key: "maintenance", ok: false },
+  registration_blocked: { key: "registrationBlocked", ok: false },
 };
+
+/** Unknown codes fall back to the generic error rather than a misleading specific one. */
+export function resolveResultKey(status: string, reason: string | null) {
+  return (reason ? RESULT_KEYS[reason] : RESULT_KEYS[status]) ?? RESULT_KEYS.error;
+}
 
 const DEFAULT_NEXT = "/settings";
 
@@ -71,7 +78,7 @@ export function OAuthResultPage({ provider }: { provider: "Google" | "Discord" |
   const reason = searchParams.get("reason");
   const next = safeResultNext(searchParams.get("next"));
 
-  const resolved = (reason ? RESULT_KEYS[reason] : RESULT_KEYS[status]) ?? RESULT_KEYS.error;
+  const resolved = resolveResultKey(status, reason);
   const info = {
     ok: resolved.ok,
     title: t(`${resolved.key}.title`, { provider }),

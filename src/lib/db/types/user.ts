@@ -20,6 +20,8 @@ export interface ModNote {
 export interface User {
   _id: ObjectId;
   email: string;
+  /** When the current `email` was proven by a confirmation link (POST /api/auth/confirm-email). */
+  emailVerifiedAt?: Date;
   username: string;
   displayName: string;
   password: string;

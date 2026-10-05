@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { discoverCollectionCalls } from "../../../../scripts/architecture/collectionDiscovery";
 import { LEGACY_DYNAMIC_COLLECTION_SITES } from "../../../../scripts/architecture/collectionDiscoveryExceptions";
 import { getCollectionCategory, SEED_MANIFEST } from "./seedManifest";
@@ -53,7 +53,7 @@ export function discoveryArrowCallsite(db: { collection(name: string): unknown }
 describe("seed manifest source discovery", () => {
   const repositoryRoot = process.cwd();
   const discovery = discoverCollectionCalls(repositoryRoot, [fileURLToPath(import.meta.url)]);
-  const testFile = fileURLToPath(import.meta.url).replace(`${repositoryRoot}/`, "");
+  const testFile = relative(repositoryRoot, fileURLToPath(import.meta.url)).replaceAll("\\", "/");
   const productionCalls = discovery.calls.filter(
     (call) => call.file.startsWith("src/") && call.file !== testFile
   );

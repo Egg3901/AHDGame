@@ -3,7 +3,8 @@
     "chapters": {
       "whatsNew": {
         "title": "Was sich geändert hat",
-        "blurb": "Die fünf Änderungen, die dich am ehesten erwischen, wenn du die letzte Iteration gespielt hast."
+        "blurb": "Die fünf Änderungen, die dich am ehesten erwischen, wenn du die letzte Iteration gespielt hast.",
+        "blurb1991": "Was sich gegenüber der Welt von 1953 geändert hat: die Karte, der Start, die Parteien und das Geld."
       },
       "core": {
         "title": "Erste Schritte",
@@ -64,6 +65,45 @@
         "readMore": "Zu den Rennen",
         "next": "Verstanden"
       },
+      "whatsNew1991Intro": {
+        "title": "Was 1991 anders ist",
+        "body": "Wenn du die Welt von 1953 gespielt hast, sind das die Änderungen, die dich am ehesten überraschen. Die vollständige Liste steht jederzeit auf der Changelog-Seite.",
+        "next": "Zeig es mir"
+      },
+      "whatsNew1991FreshStart": {
+        "title": "Alle fangen neu an",
+        "body": "Die Charaktere aus der Welt von 1953 sind in den Ruhestand gegangen, jeder mit einem Saisonrückblick auf seine Laufbahn. Nichts wird übernommen: Ämter, Unternehmen, Beteiligungen und Guthaben beginnen für alle bei null. Du kannst in den Vereinigten Staaten, im Vereinigten Königreich oder in Japan spielen, das zum ersten Mal spielbar ist.",
+        "next": "Weiter"
+      },
+      "whatsNew1991World": {
+        "title": "Die Welt im Januar 1991",
+        "body": "Die Sowjetunion besteht noch, Deutschland ist bereits vereint, und die Europäische Gemeinschaft hat zwölf Mitglieder, darunter das Vereinigte Königreich. Über die Zukunft der Sowjetunion und Jugoslawiens wird dieses Jahr entschieden, über die der Tschechoslowakei 1992, und eine Auflösung gibt es nur über eine ausgehandelte Vereinbarung. Jugoslawien und Nordirland beginnen als laufende Krisen, und jede Volkswirtschaft startet mit Marktregeln.",
+        "readMore": "Zu den Krisen",
+        "next": "Weiter"
+      },
+      "whatsNew1991Parties": {
+        "title": "Parteien gibt es erst, wenn Spieler sie gründen",
+        "body": "Die spielbaren Länder starten ohne Parteien und ohne Amtsinhaber. Eine Partei entsteht erst, wenn drei Spieler sie gründen: Eine Satzung nennt drei Gründer aus demselben Land, die in benachbarten Gebieten wohnen, legt ein Programm fest, und die Partei entsteht, sobald alle drei unterschreiben. Zwei Mitgründer zu finden ist die erste Aufgabe, und auf dem Discord geht das am schnellsten.",
+        "readMore": "Zu den Parteien",
+        "next": "Weiter"
+      },
+      "whatsNew1991Founding": {
+        "title": "Eine Gründungsrunde, dann läuft der Kalender",
+        "body": "Jedes gewählte Amt wird in einer einzigen Gründungsrunde besetzt, während das Datum auf Januar 1991 stehen bleibt: 24 Runden Vorwahlen, dann 24 Runden Hauptwahlen. Danach folgt jedes Gremium seinem eigenen Zeitplan von 1991. Wird ein Unterhaussitz oder ein Gouverneursamt während der Amtszeit frei, gibt es jetzt eine Nachwahl, statt auf die nächste Hauptwahl zu warten.",
+        "readMore": "Zu den Wahlen",
+        "next": "Weiter"
+      },
+      "whatsNew1991Prices": {
+        "title": "Wahlkampfgeld in Preisen von 1991",
+        "body": "Aktionskosten und Wahlkampfeinnahmen sind auf das Preisniveau von 1991 gesetzt, die Zahlen passen also nicht zu dem, was du in Erinnerung hast. Kosten und Einnahmen bewegen sich gemeinsam, ein Wahlkampf kostet also weiterhin denselben Anteil an dem, was du einnimmst.",
+        "next": "Weiter"
+      },
+      "whatsNew1991Economy": {
+        "title": "Geld muss da sein, bevor es ausgegeben wird",
+        "body": "Regierungen zahlen Kupons, Hilfen und andere Rechnungen jetzt aus echtem Geld der Staatskasse, und Banken verdienen nur, was ihnen tatsächlich gezahlt wird. Hersteller und Medienunternehmen entwickeln benannte Produkte und Marken, die wachsen, reifen und auslaufen. Devisengeschäfte, die du selbst tätigst, kosten eine Gebühr, die mit dem Betrag steigt, also verteile große Umtausche über die Zeit.",
+        "readMore": "Zur Wirtschaft",
+        "next": "Verstanden"
+      },
       "welcome": {
         "title": "Willkommen bei A House Divided",
         "body": "Viele der anderen Politiker in {countryName} sind echte Spieler. Wer gut abschneidet, baut früh Verbündete und ein festes Einkommen auf. Diese Tour zeigt dir die wichtigsten Seiten und Aktionen. Du kannst jederzeit aufhören und auf der Tutorial-Seite weitermachen.",
@@ -72,6 +112,12 @@
       "howTurnsWork": {
         "title": "Das Spiel läuft in Runden",
         "body": "Die Welt rückt Runde für Runde vor. In jeder Runde aktualisiert sich die Wirtschaft, Wahlen und Gesetze kommen voran, und du bekommst mindestens 4 neue Aktionen, mehr, wenn du ein Amt hast. Geld, Einfluss und ungenutzte Aktionen bleiben erhalten, aber wenn du mehr als 100 Aktionen ansparst, verlierst du 4 pro Runde.",
+        "next": "Weiter"
+      },
+      "foundingRound": {
+        "title": "Die Gründungsrunde läuft",
+        "body": "Gerade werden alle gewählten Ämter gleichzeitig besetzt. Die Kandidatur ist offen, die Vorwahlen enden in Runde {primaryEndTurn}, und jede Hauptwahl wird in Runde {generalEndTurn} entschieden. Bis dahin bleibt das Datum am Anfang der Welt stehen, danach beginnt der reguläre Kalender. Wenn du früh einen Sitz willst, ist diese Runde der Zeitpunkt für deine Kandidatur.",
+        "readMore": "Zu den Wahlen in deiner Nähe",
         "next": "Weiter"
       },
       "joinDiscord": {
@@ -100,6 +146,12 @@
         "title": "Tritt zuerst einer Partei bei",
         "body": "Eine Partei gibt dir einen gemeinsamen Aktionspool, bessere Chancen in einer Vorwahl, Rückenwind von der Spitze der Liste und Geld aus der Parteikasse, wenn deins alle ist. Als Unabhängiger anzutreten ist deutlich schwerer. Wähl die Partei, die deinem Programm am nächsten ist, oder eine schwache, die du übernehmen kannst.",
         "hint": "Öffne die Parteienseite und tritt einer bei.",
+        "next": "Weiter"
+      },
+      "foundParty": {
+        "title": "Tritt einer Partei bei oder gründe eine",
+        "body": "{countryName} hat ohne Parteien begonnen, jede Partei hier wurde also von Spielern gegründet. Tritt einer bei, deren Programm zu dir passt, oder gründe deine eigene: Eine Satzung nennt drei Gründer aus {countryName}, die in deinem Heimatgebiet ({region}) oder einem angrenzenden Gebiet wohnen, und die Partei entsteht, sobald alle drei unterschreiben. Eine Partei gibt dir gemeinsame Aktionen, bessere Chancen in der Vorwahl und eine Kasse, auf die du zurückgreifen kannst.",
+        "hint": "Öffne die Parteienseite und tritt einer Partei bei oder starte eine Satzung.",
         "next": "Weiter"
       },
       "actionsWhat": {
@@ -260,7 +312,7 @@
       "goToChapter": "Zu {title} springen",
       "chapterProgress": "Kapitel {number} von {total}",
       "stepProgress": "Schritt {step} von {total}",
-      "skip": "Überspringen",
+      "close": "Schließen",
       "back": "Zurück",
       "next": "Weiter",
       "takeMeThere": "Bring mich hin"
@@ -285,8 +337,9 @@
       "interestsIntro": "Wähl so viele du willst. Die Tour behandelt sie nacheinander, und du kannst deine Meinung später ändern.",
       "experienceNewTitle": "Neu bei A House Divided",
       "experienceNewBlurb": "Fang von vorn an. Was eine Runde ist, wie Macht funktioniert und was du zuerst tun solltest.",
-      "experienceReturningTitle": "Neu in dieser Iteration",
-      "experienceReturningBlurb": "Du hast schon gespielt. Überspring die Grundlagen und sieh, was sich diesmal geändert hat.",
+      "experienceReturningTitle": "Schon gespielt",
+      "experienceReturningBlurb": "Du kennst die Grundlagen. Überspring sie und fang mit dem an, was sich in dieser Welt geändert hat.",
+      "experienceReturning1991Blurb": "Du kennst das Spiel aus der Welt von 1953. Fang mit dem an, was 1991 anders ist, und überspring die Grundlagen.",
       "experienceSkipTitle": "Tutorial überspringen",
       "experienceSkipBlurb": "Direkt rein. Du kannst jeden Teil später von der Tutorial-Seite aus starten.",
       "allOfIt": "Alles davon",

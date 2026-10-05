@@ -3,6 +3,7 @@ import { MAX_REGION_ID_LENGTH } from "@/lib/constants/states";
 import { WAGE_LEVEL_MIN, WAGE_LEVEL_MAX } from "@/lib/labour/laborCost";
 import {
   CORPORATION_TYPES,
+  FOUNDABLE_CORPORATION_TYPES,
   MAX_GROWTH_RATE,
   MIN_GROWTH_RATE,
   MAX_DIVIDEND_RATE,
@@ -58,6 +59,19 @@ const ipoTermsSchema = z
     message: `Floating more than ${IPO_MAX_FLOAT_PCT}% requires a dual-class supershare structure`,
   });
 
+/**
+ * Automobiles and entertainment were folded into manufacturing (vehicles
+ * model) and media (entertainment discriminator) in 1.12. Legacy rows keep the
+ * old types, but nothing new may be founded with them.
+ */
+const foundableTypeSchema = z.enum(FOUNDABLE_CORPORATION_TYPES, {
+  error: (issue) =>
+    typeof issue.input === "string" &&
+    (CORPORATION_TYPES as readonly string[]).includes(issue.input)
+      ? `"${issue.input}" is no longer a foundable sector. Found a manufacturing corporation (vehicles) or a media corporation (entertainment) instead.`
+      : "Invalid sector type",
+});
+
 export const foundCorporationSchema = z.object({
   name: moderatedNameSchema("Name", 2, 60),
   tickerSymbol: z
@@ -72,7 +86,7 @@ export const foundCorporationSchema = z.object({
           message: "Ticker contains prohibited language",
         })
     ),
-  type: z.enum(CORPORATION_TYPES),
+  type: foundableTypeSchema,
   /**
    * Shape only. The real bounds are era-scaled and therefore not knowable
    * here: a 1953 world's minimum is ~1/70th of the modern one, so validating
@@ -86,7 +100,7 @@ export const foundCorporationSchema = z.object({
     .int("Starting capital must be a whole number")
     .positive("Starting capital must be a positive amount")
     .optional(),
-  secondaryType: z.enum(CORPORATION_TYPES).optional(),
+  secondaryType: foundableTypeSchema.optional(),
   ipo: ipoTermsSchema.optional(),
 });
 

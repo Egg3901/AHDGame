@@ -25,6 +25,10 @@ export interface WorldFlags {
   incomeBandIndexByCountry: Partial<Record<string, number>> | null;
   /** Live election results page master gate; gates "Live Results" links. */
   liveElectionResultsEnabled: boolean;
+  /** Reset choice: "none" means the playable countries opened with no parties. */
+  startingPartiesMode: "default" | "none";
+  /** Set while the founding round runs: the turns its races close on. */
+  foundingRound: { primaryEndTurn: number; generalEndTurn: number } | null;
   /** Effective, seed-verified versions; admin selections for a future reset are excluded. */
   resetSystemVersions: Record<ResetSystem, ResetSystemVersion>;
   /** Only these countries may use a v2 selection; all others remain on v1. */
@@ -50,6 +54,8 @@ const DEFAULT_FLAGS: WorldFlags = {
   startingYear: null,
   incomeBandIndexByCountry: null,
   liveElectionResultsEnabled: false,
+  startingPartiesMode: "default",
+  foundingRound: null,
   resetSystemVersions: { metrics: "v1", legislation: "v1", cabinet: "v1" },
   resetV2Countries: [],
   failed: false,

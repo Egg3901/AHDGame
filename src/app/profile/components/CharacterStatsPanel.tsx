@@ -1,13 +1,37 @@
 import { useTranslations } from "next-intl";
-import { STAT_KEYS, STAT_MAX, type CharacterStats } from "@/lib/stats/statsConstants";
+import {
+  Sparkles,
+  Mic,
+  Zap,
+  Banknote,
+  Briefcase,
+  Landmark,
+  Brain,
+  type LucideIcon,
+} from "lucide-react";
+import { STAT_KEYS, STAT_MAX, type CharacterStats, type StatKey } from "@/lib/stats/statsConstants";
 import { STAT_META, statBonus } from "@/lib/stats/statMeta";
 import { deriveStatClass } from "@/lib/stats/statClass";
 import { StatReallocateControl } from "@/components/stats/StatReallocateControl";
 import { SectionHeader } from "./ProfileMeters";
 
 /**
- * Read-only stat readout for the profile page. Each stat shows its value out
- * of 10, its current bonus and a thin neutral bar, with a hover/focus tooltip
+ * Per-stat icon + accent. Class strings are written out in full (no
+ * interpolation) so Tailwind's scanner keeps them in the bundle.
+ */
+const STAT_STYLE: Record<StatKey, { Icon: LucideIcon; icon: string; bar: string }> = {
+  charisma: { Icon: Sparkles, icon: "text-amber-500", bar: "bg-amber-500" },
+  debate: { Icon: Mic, icon: "text-rose-500", bar: "bg-rose-500" },
+  energy: { Icon: Zap, icon: "text-lime-500", bar: "bg-lime-500" },
+  fundraising: { Icon: Banknote, icon: "text-emerald-500", bar: "bg-emerald-500" },
+  businessAcumen: { Icon: Briefcase, icon: "text-cyan-500", bar: "bg-cyan-500" },
+  statecraft: { Icon: Landmark, icon: "text-violet-500", bar: "bg-violet-500" },
+  intellect: { Icon: Brain, icon: "text-sky-500", bar: "bg-sky-500" },
+};
+
+/**
+ * Read-only stat readout for the profile page. Each stat shows an accent icon,
+ * its value out of 10, its current bonus and a colored bar, with a hover/focus tooltip
  * describing what the stat does. Render only when the RPG-stats feature is
  * enabled and the character has an allocated stat block.
  */
@@ -36,6 +60,7 @@ export function CharacterStatsPanel({
           const value = Math.round(stats[key] ?? 1);
           const pct = (value / STAT_MAX) * 100;
           const { label, blurb } = STAT_META[key];
+          const { Icon, icon, bar } = STAT_STYLE[key];
           const bonus = statBonus(key, value);
           return (
             <li
@@ -51,7 +76,10 @@ export function CharacterStatsPanel({
               className="group relative py-2 outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
             >
               <div className="flex items-baseline gap-3">
-                <span className="flex-1 text-body text-foreground">{label}</span>
+                <span className="flex flex-1 items-center gap-2 text-body text-foreground">
+                  <Icon className={`h-4 w-4 shrink-0 self-center ${icon}`} aria-hidden />
+                  {label}
+                </span>
                 <span className="text-body-sm tabular-nums text-muted">{bonus.label}</span>
                 <span className="text-body font-semibold tabular-nums text-foreground">
                   {value}
@@ -59,10 +87,7 @@ export function CharacterStatsPanel({
                 </span>
               </div>
               <div className="mt-2 h-1.5 w-full rounded-full bg-card-border" aria-hidden>
-                <div
-                  className="h-full rounded-full bg-foreground/70"
-                  style={{ width: `${pct}%` }}
-                />
+                <div className={`h-full rounded-full ${bar}`} style={{ width: `${pct}%` }} />
               </div>
 
               {/* Tooltip */}
@@ -71,6 +96,7 @@ export function CharacterStatsPanel({
                 className="pointer-events-none invisible absolute bottom-full left-0 z-20 mb-2 w-60 max-w-[16rem] rounded-md border border-card-border bg-card p-3 text-left shadow-lg group-hover:visible group-focus-visible:visible"
               >
                 <div className="mb-1 flex items-baseline gap-2">
+                  <Icon className={`h-4 w-4 shrink-0 self-center ${icon}`} aria-hidden />
                   <span className="text-body font-semibold text-foreground">{label}</span>
                   <span className="ml-auto text-body-sm font-semibold tabular-nums text-muted">
                     {value}/{STAT_MAX}
