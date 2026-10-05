@@ -15,7 +15,7 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { getDb, getMongoClient } from "@/lib/mongodb";
 import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import type { State, Corporation, CorporateSector } from "@/lib/db/types";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { performRelocation } from "@/lib/character/performRelocation";
@@ -83,9 +83,9 @@ export async function POST(request: Request) {
     const auth = authResult.user;
 
     if (auth.character.federationPendingResidenceId) {
-      return NextResponse.json(
-        { error: "Choose a playable residence through your federation settlement first." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Choose a playable residence through your federation settlement first."
       );
     }
 
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { targetStateId, targetCountryId, paymentMethod } = parsed.data;
     const normalizedTarget = targetStateId.trim();
@@ -108,19 +108,16 @@ export async function POST(request: Request) {
       .collection<State>("states")
       .findOne({ _id: normalizedTarget, countryId: resolvedTargetCountryId });
     if (!targetState) {
-      return NextResponse.json({ error: "Invalid target state or region" }, { status: 400 });
+      return errorResponse(400, "Invalid target state or region");
     }
     if (resolvedTargetCountryId === "US") {
       const { admittedIds, preset } = await loadUsPoliticalStateIds(db);
       if (!isUsResidentPoliticalRegion(normalizedTarget, preset, admittedIds)) {
-        return NextResponse.json(
-          { error: unplayableTerritoryHomeError(targetState.name) },
-          { status: 400 }
-        );
+        return errorResponse(400, unplayableTerritoryHomeError(targetState.name));
       }
     }
     if (auth.character.homeState === normalizedTarget) {
-      return NextResponse.json({ error: "Already in this state/region" }, { status: 400 });
+      return errorResponse(400, "Already in this state/region");
     }
     // Turn-first relocation cooldown (72 turns); legacy Date fallback in helper.
     const cooldownGameTime = await getGameTime();
@@ -131,12 +128,10 @@ export async function POST(request: Request) {
       Date.now()
     );
     if (cooldown.onCooldown) {
-      return NextResponse.json(
-        {
-          error: `Relocation cooldown active. You can relocate again in ${cooldown.cooldownRemainingDays} day(s).`,
-          cooldownRemainingDays: cooldown.cooldownRemainingDays,
-        },
-        { status: 429 }
+      return errorResponse(
+        429,
+        `Relocation cooldown active. You can relocate again in ${cooldown.cooldownRemainingDays} day(s).`,
+        { extra: { cooldownRemainingDays: cooldown.cooldownRemainingDays } }
       );
     }
     const currentCountryId = auth.character.countryId ?? "US";
@@ -144,10 +139,7 @@ export async function POST(request: Request) {
     if (isChangingCountry && auth.isAdmin !== true) {
       const { enabledForPlayers } = await getCountryAccess(targetState.countryId);
       if (!enabledForPlayers) {
-        return NextResponse.json(
-          { error: "Relocation to this country is not currently available." },
-          { status: 403 }
-        );
+        return errorResponse(403, "Relocation to this country is not currently available.");
       }
     }
 
@@ -157,15 +149,12 @@ export async function POST(request: Request) {
       auth.character.homeState
     );
     if (!corp) {
-      return NextResponse.json(
-        { error: "You are not a CEO — use /api/character/relocate instead." },
-        { status: 400 }
-      );
+      return errorResponse(400, "You are not a CEO — use /api/character/relocate instead.");
     }
     if (corp.primaryUnderwritingIncomingFunding || corp.bankUnderwritingFunding) {
-      return NextResponse.json(
-        { error: "Primary underwriting cash is settling; retry relocation after settlement" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Primary underwriting cash is settling; retry relocation after settlement"
       );
     }
     const propertySectors = await db
@@ -179,9 +168,9 @@ export async function POST(request: Request) {
         corp.headquartersRelocationBondFunding
       )
     ) {
-      return NextResponse.json(
-        { error: "Resolve secured construction before relocating corporate headquarters" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Resolve secured construction before relocating corporate headquarters"
       );
     }
 
@@ -194,15 +183,12 @@ export async function POST(request: Request) {
       targetState.countryId
     );
     if (commandEconomyBlock) {
-      return NextResponse.json({ error: commandEconomyBlock }, { status: 400 });
+      return errorResponse(400, commandEconomyBlock);
     }
 
     const isImperial = corp.ceoType === "imperial";
     if (paymentMethod === "imperial-free" && !isImperial) {
-      return NextResponse.json(
-        { error: "Imperial-free payment only valid for imperial CEOs." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Imperial-free payment only valid for imperial CEOs.");
     }
 
     const gameState = await getGameState();
@@ -212,17 +198,15 @@ export async function POST(request: Request) {
       (existingBondLease.targetStateId !== normalizedTarget ||
         existingBondLease.targetCountryId !== targetState.countryId)
     ) {
-      return NextResponse.json(
-        {
-          error: "A relocation bond is awaiting publication; retry its original headquarters move",
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "A relocation bond is awaiting publication; retry its original headquarters move"
       );
     }
     if (existingBondLease && paymentMethod !== "bond") {
-      return NextResponse.json(
-        { error: "A relocation bond is awaiting publication; retry its original payment method" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "A relocation bond is awaiting publication; retry its original payment method"
       );
     }
     const currentTurn = existingBondLease?.turn ?? gameState?.currentTurn ?? 1;
@@ -258,11 +242,9 @@ export async function POST(request: Request) {
     if (paymentMethod === "cash") {
       const capitalAnchor = corpLiquidCapitalToAnchor(corp.liquidCapital, corp, corpFxRate);
       if (capitalAnchor < effectiveCost) {
-        return NextResponse.json(
-          {
-            error: `Insufficient cash. Need ${effectiveCost.toLocaleString()}, have ${Math.round(corp.liquidCapital).toLocaleString()}.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Insufficient cash. Need ${effectiveCost.toLocaleString()}, have ${Math.round(corp.liquidCapital).toLocaleString()}.`
         );
       }
     }
@@ -279,19 +261,15 @@ export async function POST(request: Request) {
         fxByCurrency
       );
       if (bondPreflight.cooldownTurnsRemaining != null) {
-        return NextResponse.json(
-          {
-            error: `Bond issuance on cooldown. ${bondPreflight.cooldownTurnsRemaining} turns remaining.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Bond issuance on cooldown. ${bondPreflight.cooldownTurnsRemaining} turns remaining.`
         );
       }
       if (!bondPreflight.ok) {
-        return NextResponse.json(
-          {
-            error: `Bond issuance would exceed leverage limit. Current debt: ${Math.round(bondPreflight.existingDebt).toLocaleString()}, equity: ${Math.round(bondPreflight.totalEquity).toLocaleString()}.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Bond issuance would exceed leverage limit. Current debt: ${Math.round(bondPreflight.existingDebt).toLocaleString()}, equity: ${Math.round(bondPreflight.totalEquity).toLocaleString()}.`
         );
       }
     }
@@ -312,10 +290,7 @@ export async function POST(request: Request) {
         propertySectors
       );
       if (!convResult.ok) {
-        return NextResponse.json(
-          { error: convResult.error },
-          { status: convResult.rateUnavailable ? 503 : 400 }
-        );
+        return errorResponse(convResult.rateUnavailable ? 503 : 400, convResult.error);
       }
       currencyConversion = convResult;
       if (convResult.converted) {
@@ -323,10 +298,7 @@ export async function POST(request: Request) {
           .collection<Corporation>("corporations")
           .findOne({ _id: corp._id });
         if (!refreshed) {
-          return NextResponse.json(
-            { error: "Corporation not found after currency conversion" },
-            { status: 500 }
-          );
+          return errorResponse(500, "Corporation not found after currency conversion");
         }
         workingCorp = refreshed;
         workingFxRate = fxRateForCorpFromMap(workingCorp, fxByCurrency);
@@ -342,9 +314,9 @@ export async function POST(request: Request) {
         fxByCurrency
       );
       if (postConversionPreflight.cooldownTurnsRemaining != null || !postConversionPreflight.ok) {
-        return NextResponse.json(
-          { error: "Relocation bond capacity changed during currency conversion; retry" },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "Relocation bond capacity changed during currency conversion; retry"
         );
       }
       bondPreflight = postConversionPreflight;
@@ -360,9 +332,9 @@ export async function POST(request: Request) {
           true
         );
     if (!needsCurrencyConversion && !hqTransitionKeys) {
-      return NextResponse.json(
-        { error: "A sector changed or acquired secured construction during relocation" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "A sector changed or acquired secured construction during relocation"
       );
     }
 
@@ -379,14 +351,14 @@ export async function POST(request: Request) {
           { $set: baseCorpSet, $inc: { liquidCapital: -deltaInCorp } }
         );
         if (updateResult.matchedCount !== 1) {
-          return NextResponse.json(
-            { error: "Primary underwriting cash is settling; retry relocation after settlement" },
-            { status: 409 }
+          return errorResponse(
+            409,
+            "Primary underwriting cash is settling; retry relocation after settlement"
           );
         }
       } else if (paymentMethod === "bond") {
         if (!bondPreflight) {
-          return NextResponse.json({ error: "Internal bond-path error" }, { status: 500 });
+          return errorResponse(500, "Internal bond-path error");
         }
         if (!frozenBondLease) {
           const operationKey = `hq-bond:${workingCorp._id.toHexString()}:${targetState.countryId}:${normalizedTarget}:${currentTurn}`;
@@ -415,17 +387,17 @@ export async function POST(request: Request) {
             ...(workingCorp.ceoType ? { ceoType: workingCorp.ceoType } : {}),
           });
           if (!acquiredLease) {
-            return NextResponse.json(
-              { error: "Corporate funding changed during relocation; retry the move" },
-              { status: 409 }
+            return errorResponse(
+              409,
+              "Corporate funding changed during relocation; retry the move"
             );
           }
           frozenBondLease = acquiredLease;
         }
         if (frozenBondLease.currencyCode !== resolveCorpLiquidCurrencyCode(workingCorp)) {
-          return NextResponse.json(
-            { error: "The frozen relocation bond quote no longer matches corporate currency" },
-            { status: 409 }
+          return errorResponse(
+            409,
+            "The frozen relocation bond quote no longer matches corporate currency"
           );
         }
         const bondCommit = await runTransactionWithSessionRetry(getMongoClient, async (session) => {
@@ -487,15 +459,15 @@ export async function POST(request: Request) {
           throw error;
         });
         if (bondCommit.status === "transactions_unavailable") {
-          return NextResponse.json(
-            { error: "Bond relocation requires atomic database transactions; try again later" },
-            { status: 503 }
+          return errorResponse(
+            503,
+            "Bond relocation requires atomic database transactions; try again later"
           );
         }
         if (bondCommit.status === "underwriting_busy") {
-          return NextResponse.json(
-            { error: "Primary underwriting cash is settling; retry relocation after settlement" },
-            { status: 409 }
+          return errorResponse(
+            409,
+            "Primary underwriting cash is settling; retry relocation after settlement"
           );
         }
         if (bondCommit.status === "bond_refused") {
@@ -521,9 +493,9 @@ export async function POST(request: Request) {
           { $set: baseCorpSet }
         );
         if (updateResult.matchedCount !== 1) {
-          return NextResponse.json(
-            { error: "Primary underwriting cash is settling; retry relocation after settlement" },
-            { status: 409 }
+          return errorResponse(
+            409,
+            "Primary underwriting cash is settling; retry relocation after settlement"
           );
         }
       }

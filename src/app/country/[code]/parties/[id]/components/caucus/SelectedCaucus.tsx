@@ -10,6 +10,7 @@ import { OverviewSubtab } from "./OverviewSubtab";
 import { RosterSubtab } from "./RosterSubtab";
 import { CaucusWhipSubtab } from "./CaucusWhipSubtab";
 import { ChairSubtab } from "./ChairSubtab";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function SelectedCaucus({
   countryCode,
@@ -96,7 +97,7 @@ export function SelectedCaucus({
     });
     const data = (await res.json()) as { success?: boolean; error?: string };
     if (!res.ok || !data.success) {
-      setMsg(`Error: ${data.error ?? "Failed to join."}`);
+      setMsg(`Error: ${apiErrorText(data, "Failed to join.")}`);
     } else {
       setMsg("Success: Joined caucus.");
       await Promise.all([refreshDetail(), refreshRoster(), refreshList()]);
@@ -113,7 +114,7 @@ export function SelectedCaucus({
     );
     const data = (await res.json()) as { success?: boolean; error?: string };
     if (!res.ok || !data.success) {
-      setMsg(`Error: ${data.error ?? "Failed to leave."}`);
+      setMsg(`Error: ${apiErrorText(data, "Failed to leave.")}`);
     } else {
       setMsg("Success: Left caucus.");
       await Promise.all([refreshDetail(), refreshRoster(), refreshList()]);
@@ -134,7 +135,7 @@ export function SelectedCaucus({
     });
     const data = (await res.json()) as { success?: boolean; error?: string };
     if (!res.ok || !data.success) {
-      setMsg(`Error: ${data.error ?? "Failed to disband."}`);
+      setMsg(`Error: ${apiErrorText(data, "Failed to disband.")}`);
     } else {
       setMsg("Success: Caucus disbanded.");
       await refreshList();

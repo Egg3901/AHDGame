@@ -9,25 +9,25 @@ export interface Era1991ModifierPatch {
 
 /**
  * Per-modifier overrides for metrics that are intentionally anachronistic in
- * 1991-default seeds (broadband=0, halved COL index, clamped media metrics).
+ * 1991-default seeds (broadband=0 and clamped media metrics).
  */
 export const ERA1991_MODIFIER_PATCHES: Record<string, Era1991ModifierPatch> = {
   affordable_living: {
-    conditions: [{ category: "economic", metric: "costOfLiving", op: "<=", value: 50 }],
+    conditions: [{ category: "economic", metric: "costOfLiving", op: "<=", value: 90 }],
   },
   affordable_housing: {
     conditions: [{ category: "social", metric: "housingAffordability", op: "<=", value: 35 }],
   },
   cost_of_living_crisis: {
     conditions: [
-      { category: "economic", metric: "costOfLiving", op: ">=", value: 70 },
+      { category: "economic", metric: "costOfLiving", op: ">=", value: 140 },
       { category: "economic", metric: "povertyRate", op: ">=", value: 17 },
     ],
   },
   housing_crisis: {
     conditions: [
       { category: "social", metric: "homelessnessRate", op: ">=", value: 24 },
-      { category: "economic", metric: "costOfLiving", op: ">=", value: 65 },
+      { category: "economic", metric: "costOfLiving", op: ">=", value: 130 },
     ],
   },
   slow_growth: {

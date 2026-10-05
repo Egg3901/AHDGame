@@ -9,7 +9,7 @@ import {
 } from "@/app/guides/_components/GuideBlocks";
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "Planned / Command Economies Guide | A House Divided",
+  title: "Planned / Command economies guide | A House Divided",
   description:
     "How to play a planned economy in A House Divided: run state enterprises, hold the SOE Director / Gosplan / Gosbank seats, direct state credit and pay its shortage cost, and earn or lose marketization through black market, plan performance, and policy.",
   pathname: "/guides/planned-economies",
@@ -39,11 +39,11 @@ export default function PlannedEconomiesGuidePage() {
             Guides
           </Link>
           <span>/</span>
-          <span className="text-foreground">Planned / Command Economies</span>
+          <span className="text-foreground">Planned / Command economies</span>
         </nav>
 
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Planned / Command Economies</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Planned / Command economies</h1>
           <p className="mt-2 text-sm text-muted">
             Run the state industries, allocate the plan, direct state credit, and decide whether the
             country stays communist or reforms toward the market
@@ -228,7 +228,7 @@ export default function PlannedEconomiesGuidePage() {
                 </p>
               </div>
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
-                <SubHeader>Gosplan Central Planner (the macro)</SubHeader>
+                <SubHeader>Gosplan central planner (the macro)</SubHeader>
                 <p className="text-sm text-muted leading-relaxed">
                   The planner sets the <strong className="text-foreground">national plan</strong>:
                   the output quotas and the investment split across every sector. This is the
@@ -240,7 +240,7 @@ export default function PlannedEconomiesGuidePage() {
               <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
                 <SubHeader>Gosbank Chair (the kingmaker)</SubHeader>
                 <p className="text-sm text-muted leading-relaxed">
-                  The Gosbank Chair runs <strong className="text-foreground">state credit</strong>.
+                  The Gosbank chair runs <strong className="text-foreground">state credit</strong>.
                   Each turn the bank lends a credit budget across the SOEs. The chair decides{" "}
                   <strong className="text-foreground">which sectors get the money</strong> (an
                   explicit per-sector allocation, or let the bank steer credit to the enterprises

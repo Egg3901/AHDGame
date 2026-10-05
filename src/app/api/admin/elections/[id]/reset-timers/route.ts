@@ -19,7 +19,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import type { Election } from "@/lib/db/types";
 import { DEFAULT_DURATIONS } from "@/lib/turn/perpetualElections";
@@ -50,21 +50,18 @@ export async function POST(request: Request, { params }: RouteParams) {
     try {
       electionObjectId = new ObjectId(electionId);
     } catch {
-      return NextResponse.json({ error: "Invalid election ID" }, { status: 400 });
+      return errorResponse(400, "Invalid election ID");
     }
 
     const db = await getDb();
     const election = await db.collection<Election>("elections").findOne({ _id: electionObjectId });
 
     if (!election) {
-      return NextResponse.json({ error: "Election not found" }, { status: 404 });
+      return errorResponse(404, "Election not found");
     }
 
     if (election.electionType !== "president") {
-      return NextResponse.json(
-        { error: "Reset timers is only for presidential elections" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Reset timers is only for presidential elections");
     }
 
     const parsed = await parseJsonBody(request, resetTimersSchema);

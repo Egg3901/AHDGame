@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongodb";
 import { parseJsonBody } from "@/lib/api/validate";
 import { ELECTION_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { logRequest } from "@/lib/api/requestLog";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { statePartyVoteSchema } from "@/lib/api/schemas/elections";
 import { isStatePartyVoteDuplicateKey } from "@/lib/elections/duplicateKey";
 import { validateStatePartyElectionAccess } from "@/lib/utils/statePartyElectionValidation";
@@ -28,14 +28,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id, partyId: routePartyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const resolvedStateId = id;
 
     const parsed = await parseJsonBody(request, statePartyVoteSchema);
     if (!parsed.success) {
       logRequest("POST", path, parsed.status, Date.now() - start);
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { candidateId, position } = parsed.data;
     const candidateObjectId = new ObjectId(candidateId);
@@ -72,13 +72,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       });
       if (cooldown.blocked) {
         logRequest("POST", path, 403, Date.now() - start);
-        return NextResponse.json(
-          {
-            error:
-              "New characters can't vote in party leadership elections for 24 hours. Try again later.",
-            unblockAt: cooldown.unblockAt.toISOString(),
-          },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "New characters can't vote in party leadership elections for 24 hours. Try again later.",
+          { extra: { unblockAt: cooldown.unblockAt.toISOString() } }
         );
       }
     }
@@ -89,7 +86,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     if (!candidate) {
       logRequest("POST", path, 400, Date.now() - start);
-      return NextResponse.json({ error: "Candidate not found or has withdrawn" }, { status: 400 });
+      return errorResponse(400, "Candidate not found or has withdrawn");
     }
 
     const gameTime = await getGameTime();
@@ -102,12 +99,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       const tenure = getLeadershipEligibility(character, gameTime.currentTurn, partyId);
       if (!tenure.eligible) {
         logRequest("POST", path, 403, Date.now() - start);
-        return NextResponse.json(
-          {
-            error: `You must be a member of this party for ${tenure.turnsRemaining} more turn${tenure.turnsRemaining === 1 ? "" : "s"} before you can vote in leadership elections.`,
-            turnsRemaining: tenure.turnsRemaining,
-          },
-          { status: 403 }
+        return errorResponse(
+          403,
+          `You must be a member of this party for ${tenure.turnsRemaining} more turn${tenure.turnsRemaining === 1 ? "" : "s"} before you can vote in leadership elections.`,
+          { extra: { turnsRemaining: tenure.turnsRemaining } }
         );
       }
     }

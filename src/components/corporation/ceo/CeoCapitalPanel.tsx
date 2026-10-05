@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { scaleMoney } from "@/lib/constants/moneyTimescale";
 import type { CorporationDetail, Financials } from "../CorporationPageTypes";
 import ShareIssuanceModal from "../shares/ShareIssuanceModal";
@@ -122,12 +122,7 @@ export default function CeoCapitalPanel({
             {corporation.lastDividendChange && (
               <KVRow
                 label="Last changed"
-                value={
-                  <LocalTime
-                    value={corporation.lastDividendChange}
-                    options={{ dateStyle: "medium" }}
-                  />
-                }
+                value={<GameMonthTime value={corporation.lastDividendChange} />}
               />
             )}
           </KVList>

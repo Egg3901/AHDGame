@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -251,12 +252,20 @@ export function FundTradePanel({
       ? `Spendable in ${fundCurrency}`
       : `Available in ${selectedPayCurrency}`;
 
+  // With wallet payment controls the budget and after-purchase lines are in
+  // the fund's face currency, so the cost line must be too. Quoting the cost
+  // in the viewer's display preference beside a face-currency balance left the
+  // two numbers incomparable (ticket #2453).
+  const estimatedCostValue = showPaymentControls
+    ? formatCurrencyFaceAmount(totalCostNative, fundCurrency)
+    : formatFull(totalCostAnchor, fundCurrency);
+
   const budgetValue = !showPaymentControls
     ? formatFull(personalCashAnchor)
     : shouldUseImplicitAutoConvert
       ? implicitAutoConvertEstimate
         ? formatCurrencyFaceAmount(implicitAutoConvertEstimate.spendableInTarget, fundCurrency)
-        : formatFull(personalCashAnchor)
+        : formatCurrencyFaceAmount(personalBalances?.[fundCurrency] ?? 0, fundCurrency)
       : formatCurrencyFaceAmount(selectedPayBalance, selectedPayCurrency);
 
   const estimatedFxFeeAnchor = showPaymentControls
@@ -375,7 +384,7 @@ export function FundTradePanel({
           command.current = null;
           setPendingOrder(null);
         }
-        setError(data.error || "Request failed");
+        setError(apiErrorText(data, "Request failed"));
         return;
       }
 
@@ -528,10 +537,7 @@ export function FundTradePanel({
       )}
 
       <div>
-        <label
-          htmlFor={unitsInputId}
-          className="text-[10px] uppercase tracking-widest text-muted font-semibold"
-        >
+        <label htmlFor={unitsInputId} className="text-body-sm font-medium text-muted">
           Units (whole numbers)
         </label>
         <input
@@ -573,7 +579,7 @@ export function FundTradePanel({
               <span
                 className={`font-mono font-semibold tabular-nums ${fundsShort ? "text-error" : ""}`}
               >
-                {formatFull(subscribeEstimate.costAnchor, fundCurrency)}
+                {estimatedCostValue}
               </span>
             </div>
             <div className="flex justify-between gap-2">

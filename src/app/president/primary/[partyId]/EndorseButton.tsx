@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useTransition } from "react";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import { useRouter } from "next/navigation";
@@ -45,7 +46,7 @@ export function EndorseButton({
     if (!res.ok) {
       try {
         const d = await res.json();
-        setError(d.error ?? "Failed");
+        setError(apiErrorText(d, "Failed"));
       } catch {
         setError("Failed");
       }

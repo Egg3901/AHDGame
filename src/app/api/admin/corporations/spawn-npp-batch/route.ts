@@ -9,7 +9,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { batchSpawnNppCorporations } from "@/lib/admin/spawnNppCorporation";
 import type { CountryId } from "@/lib/constants/countries";
 import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
@@ -27,18 +27,14 @@ export async function POST(request: Request) {
     if (!auth.ok) return auth.response;
 
     const parsed = await parseJsonBody(request, batchSpawnSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
 
     // Validate countryId
     const validCountryIds: CountryId[] = ["US", "UK", "DE", "JP", "IE", "BR", "CN", "NG"];
     if (!validCountryIds.includes(parsed.data.countryId as CountryId)) {
-      return NextResponse.json(
-        { error: `Invalid countryId: ${parsed.data.countryId}` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Invalid countryId: ${parsed.data.countryId}`);
     }
 
     const results = await batchSpawnNppCorporations(db, parsed.data.countryId as CountryId, {

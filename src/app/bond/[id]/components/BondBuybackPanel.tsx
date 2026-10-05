@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import { Button } from "@/components/ui";
@@ -57,7 +59,7 @@ export function BondBuybackPanel({
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error || "Buyback failed");
+        setError(apiErrorText(json, "Buyback failed"));
         return;
       }
       setSuccess(`Retired ${json.unitsBoughtBack} units for ${fmtBondAmount(json.cost)}.`);
@@ -122,7 +124,7 @@ export function BondBuybackPanel({
           </div>
         </div>
       </div>
-      {error && <p className="mt-3 text-xs text-error">{error}</p>}
+      <InlineError error={error} className="mt-3 text-xs text-error" />
       {success && <p className="mt-3 text-xs text-success">{success}</p>}
       <Button
         variant="secondary"

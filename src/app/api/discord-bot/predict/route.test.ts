@@ -12,7 +12,7 @@ vi.mock("@/lib/api/rateLimit", () => ({
   rateLimitResponse: vi.fn(),
 }));
 vi.mock("@/lib/time/gameTime", () => ({ getGameTime: vi.fn(async () => ({ currentTurn: 1000 })) }));
-vi.mock("@/lib/turn/lowerChamberSeats", () => ({
+vi.mock("@/lib/legislature/lowerChamberSeats", () => ({
   getLiveLowerChamberSeats: vi.fn(
     async (_db, countryId: keyof typeof COUNTRY_CONFIGS) =>
       COUNTRY_CONFIGS[countryId].legislature.lowerChamber.seats

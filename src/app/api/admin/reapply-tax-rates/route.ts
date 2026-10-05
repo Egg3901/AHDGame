@@ -9,7 +9,7 @@
  */
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { Bill, LegislationType } from "@/lib/db/types";
 import { isPolicyProvision } from "@/lib/db/types/legislation";
@@ -36,12 +36,12 @@ export async function POST() {
     // Get current federal budget
     const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: "federal" });
     if (!budget) {
-      return NextResponse.json({ error: "Federal budget not found" }, { status: 404 });
+      return errorResponse(404, "Federal budget not found");
     }
 
     const normalizedTaxRates = normalizeFederalTaxRates(budget.taxRates);
     if (!normalizedTaxRates) {
-      return NextResponse.json({ error: "Federal budget tax rates are missing" }, { status: 409 });
+      return errorResponse(409, "Federal budget tax rates are missing");
     }
 
     const newTaxRates: FederalTaxRates = { ...normalizedTaxRates };

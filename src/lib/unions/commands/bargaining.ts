@@ -210,6 +210,56 @@ export function mandateFromLocals(args: {
  */
 export type BargainingReadCache = Map<string, Promise<unknown>>;
 
+/**
+ * Facts the NPP union phase already holds from its bulk loads, so the per-union
+ * opener does not re-read them (#2690). `lastEndedAtTurn` is keyed by
+ * `bargainingPairKey` and must cover every withdrawn or lapsed campaign of the
+ * unions in the phase; a missing key means "never ended".
+ */
+export interface BargainingPhasePreload {
+  employerKnownToExist: boolean;
+  noActiveAgreement: boolean;
+  lastEndedAtTurn: ReadonlyMap<string, number>;
+}
+
+export function bargainingPairKey(unionId: ObjectId, employerId: ObjectId): string {
+  return `${unionId.toHexString()}::${employerId.toHexString()}`;
+}
+
+/** One grouped read of the last end turn per (union, employer) pair. */
+export async function loadBargainingLastEnded(
+  db: Db,
+  unionIds: readonly ObjectId[]
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (unionIds.length === 0) return out;
+  const rows = await db
+    .collection<BargainingCampaign>("bargainingCampaigns")
+    .aggregate<{
+      _id: { unionId: ObjectId; employerCorporationId: ObjectId };
+      endedAtTurn: number;
+    }>([
+      {
+        $match: {
+          unionId: { $in: [...unionIds] },
+          status: { $in: ["withdrawn", "lapsed"] },
+          endedAtTurn: { $ne: null },
+        },
+      },
+      {
+        $group: {
+          _id: { unionId: "$unionId", employerCorporationId: "$employerCorporationId" },
+          endedAtTurn: { $max: "$endedAtTurn" },
+        },
+      },
+    ])
+    .toArray();
+  for (const row of rows) {
+    out.set(bargainingPairKey(row._id.unionId, row._id.employerCorporationId), row.endedAtTurn);
+  }
+  return out;
+}
+
 function memoRead<T>(
   cache: BargainingReadCache | undefined,
   key: string,
@@ -248,7 +298,8 @@ export async function openBargainingCampaignFromLiveConditions(
   employerCorporationId: string,
   terms: BargainingTerms,
   currentTurn: number,
-  readCache?: BargainingReadCache
+  readCache?: BargainingReadCache,
+  preloaded?: BargainingPhasePreload
 ): Promise<UnionActionResult> {
   if (!ObjectId.isValid(employerCorporationId)) {
     return { ok: false, status: 400, error: "Invalid employer corporation ID." };
@@ -257,10 +308,12 @@ export async function openBargainingCampaignFromLiveConditions(
   if (!termsValidation.ok) return { ...termsValidation, status: 400 };
 
   const employerId = new ObjectId(employerCorporationId);
-  const [employer, sectors, activeAgreement, macro, lastEnded] = await Promise.all([
-    db
-      .collection<Corporation>("corporations")
-      .findOne({ _id: employerId }, { projection: { _id: 1 } }),
+  const [employer, sectors, activeAgreement, macro, lastEndedAtTurn] = await Promise.all([
+    preloaded?.employerKnownToExist
+      ? Promise.resolve({ _id: employerId })
+      : db
+          .collection<Corporation>("corporations")
+          .findOne({ _id: employerId }, { projection: { _id: 1 } }),
     db
       .collection<CorporateSector>("corporateSectors")
       .find(
@@ -272,23 +325,32 @@ export async function openBargainingCampaignFromLiveConditions(
         { projection: MANDATE_LOCAL_PROJECTION }
       )
       .toArray(),
-    db.collection<CollectiveAgreement>("collectiveAgreements").findOne({
-      unionId: union._id,
-      employerCorporationId: employerId,
-      status: "active",
-      expiresAtTurn: { $gt: currentTurn },
-    }),
+    preloaded?.noActiveAgreement
+      ? Promise.resolve(null)
+      : db.collection<CollectiveAgreement>("collectiveAgreements").findOne({
+          unionId: union._id,
+          employerCorporationId: employerId,
+          status: "active",
+          expiresAtTurn: { $gt: currentTurn },
+        }),
     memoRead(readCache, `macro:${union.countryId}`, () =>
       bargainingMacroInputs(db, union.countryId)
     ),
-    db.collection<BargainingCampaign>("bargainingCampaigns").findOne(
-      {
-        unionId: union._id,
-        employerCorporationId: employerId,
-        status: { $in: ["withdrawn", "lapsed"] },
-      },
-      { projection: { endedAtTurn: 1 }, sort: { endedAtTurn: -1 } }
-    ),
+    preloaded
+      ? Promise.resolve(
+          preloaded.lastEndedAtTurn.get(bargainingPairKey(union._id, employerId)) ?? null
+        )
+      : db
+          .collection<BargainingCampaign>("bargainingCampaigns")
+          .findOne(
+            {
+              unionId: union._id,
+              employerCorporationId: employerId,
+              status: { $in: ["withdrawn", "lapsed"] },
+            },
+            { projection: { endedAtTurn: 1 }, sort: { endedAtTurn: -1 } }
+          )
+          .then((row) => row?.endedAtTurn ?? null),
   ]);
   if (!employer) return { ok: false, status: 404, error: "Employer corporation not found." };
   if (sectors.length === 0) {
@@ -310,9 +372,7 @@ export async function openBargainingCampaignFromLiveConditions(
   // cooling-off period, lapsing a deadlocked dispute would just hand the union
   // a fresh one and the industrial action would never actually stop.
   const reopenTurn =
-    lastEnded?.endedAtTurn != null
-      ? lastEnded.endedAtTurn + BARGAINING_REOPEN_COOLDOWN_TURNS
-      : null;
+    lastEndedAtTurn != null ? lastEndedAtTurn + BARGAINING_REOPEN_COOLDOWN_TURNS : null;
   if (reopenTurn != null && currentTurn < reopenTurn) {
     return {
       ok: false,

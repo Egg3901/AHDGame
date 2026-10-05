@@ -12,7 +12,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getAltLinksCollection } from "@/lib/db/collections";
 import { redactEvidenceForRole } from "../../_shared";
 
@@ -31,7 +31,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { pair } = await params;
     const match = PAIR_RE.exec(pair);
     if (!match) {
-      return NextResponse.json({ error: "Invalid pair (expected <idA>_<idB>)" }, { status: 400 });
+      return errorResponse(400, "Invalid pair (expected <idA>_<idB>)");
     }
 
     // `altLinks` is unique on the sorted `(userA, userB)` pair
@@ -48,7 +48,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const linksCol = await getAltLinksCollection(db);
     const link = await linksCol.findOne({ userA: new ObjectId(idA), userB: new ObjectId(idB) });
     if (!link) {
-      return NextResponse.json({ error: "Link not found" }, { status: 404 });
+      return errorResponse(404, "Link not found");
     }
 
     const isAdmin = auth.user.isAdmin === true;

@@ -14,6 +14,7 @@ import type {
 import type { SerializedMP } from "@/app/uk/region/[regionId]/UKRegionClient";
 import { PlayersList } from "@/components/state/politics/PlayersList";
 import { NPPsList } from "@/components/state/politics/NPPsList";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 interface StateLike {
   _id: string;
@@ -63,7 +64,7 @@ function MPCard({ mp, isVacant }: { mp: SerializedMP; isVacant: boolean }) {
         />
         {mp.isNPP && !isVacant && (
           <span className="absolute -bottom-1 -right-1 rounded-full border border-purple-500/60 bg-card px-1 py-px text-[8px] font-bold leading-none text-purple-400">
-            NPP
+            <NppAbbr />
           </span>
         )}
       </div>
@@ -82,7 +83,7 @@ function MPCard({ mp, isVacant }: { mp: SerializedMP; isVacant: boolean }) {
             {displayName}
           </span>
         )}
-        <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-muted">MP</p>
+        <p className="mt-0.5 text-body-sm font-medium text-muted">MP</p>
         <p className="text-[10px] text-muted/60">
           {seatsHeld} {seatsHeld === 1 ? "seat" : "seats"}
         </p>
@@ -145,7 +146,7 @@ export function UKRegionPageTabsPolitics({
       {commonsOfficials.length > 0 && (
         <div className="rounded-xl border border-card-border bg-card p-6">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Members of Parliament</h2>
+            <h2 className="text-xl font-semibold">Members of parliament</h2>
             <span className="text-sm text-muted">
               {commonsOfficials.length} MP{commonsOfficials.length !== 1 ? "s" : ""} ·{" "}
               {region.constituencies} constituencies
@@ -200,9 +201,7 @@ export function UKRegionPageTabsPolitics({
                 {/* Economic axis */}
                 <div className="space-y-3">
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1">
-                      Economic
-                    </p>
+                    <p className="text-body-sm font-medium text-muted mb-1">Economic</p>
                     <PositionLabel
                       value={econ}
                       axis="economic"
@@ -246,9 +245,7 @@ export function UKRegionPageTabsPolitics({
                 {/* Social axis */}
                 <div className="space-y-3">
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1">
-                      Social
-                    </p>
+                    <p className="text-body-sm font-medium text-muted mb-1">Social</p>
                     <PositionLabel value={soc} axis="social" className="text-xs font-semibold" />
                     <p className="text-[11px] font-mono text-muted">
                       {soc >= 0 ? `+${soc.toFixed(2)}` : soc.toFixed(2)}
@@ -305,7 +302,7 @@ export function UKRegionPageTabsPolitics({
                     d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
                   />
                 </svg>
-                <h2 className="text-lg font-semibold">Party Organization</h2>
+                <h2 className="text-lg font-semibold">Party organization</h2>
               </div>
             </div>
             <p className="text-[11px] text-muted/60 mb-4 leading-relaxed">

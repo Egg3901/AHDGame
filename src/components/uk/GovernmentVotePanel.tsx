@@ -1,10 +1,12 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { VoteTallyTable } from "@/app/congress/bills/[id]/components/VoteTallyTable";
 import { WhippedBadge } from "@/components/bills/WhippedBadge";
 import { useGameClock } from "@/contexts/useGameClock";
 import type { VoteByParty } from "@/lib/congress/governmentVoteBreakdown";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface PMAppointmentVoteData {
   type: "pmAppointment";
@@ -97,7 +99,7 @@ export default function GovernmentVotePanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        errorMsg = data.error ?? "Failed to cast vote.";
+        errorMsg = apiErrorText(data, "Failed to cast vote.");
       } else {
         onVoteCast?.();
       }
@@ -196,7 +198,7 @@ export default function GovernmentVotePanel({
                 : "border-error/30 bg-error/10 hover:bg-error/20"
             }`}
           >
-            {viewerVote === "nay" ? "✓ Nay" : "Vote Nay"}
+            {viewerVote === "nay" ? "✓ Nay" : "Vote nay"}
           </button>
         </div>
       )}
@@ -230,7 +232,7 @@ export default function GovernmentVotePanel({
         </div>
       )}
 
-      {error && <p className="mt-2 text-sm text-error">{error}</p>}
+      <InlineError error={error} className="mt-2 text-sm text-error" />
     </div>
   );
 }

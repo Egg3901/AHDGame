@@ -1,6 +1,7 @@
 "use client";
 
 import { Modal } from "@/components/ui";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 interface Position {
   id: string;
@@ -131,7 +132,7 @@ export function CabinetNominateModal({
                   : "border-card-border bg-card text-muted hover:bg-card-elevated"
               }`}
             >
-              Player Character
+              Player character
             </button>
             <button
               type="button"
@@ -143,7 +144,7 @@ export function CabinetNominateModal({
                   : "border-card-border bg-card text-muted hover:bg-card-elevated"
               }`}
             >
-              NPP
+              <NppAbbr />
             </button>
           </div>
         </fieldset>

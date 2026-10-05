@@ -9,7 +9,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
@@ -33,10 +33,10 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     const { code, positionId, characterId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (DEFENSE_POSITION_BY_COUNTRY[countryId] !== positionId) {
-      return NextResponse.json({ error: "Not a defense cabinet position" }, { status: 404 });
+      return errorResponse(404, "Not a defense cabinet position");
     }
 
     const db = await getDb();
@@ -44,7 +44,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       await getGameStateCollection(db)
     ).findOne({ _id: "current" }, { projection: { conflictsEnabled: 1, currentTurn: 1 } });
     if (!gs?.conflictsEnabled) {
-      return NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 });
+      return errorResponse(404, "Conflicts subsystem disabled");
     }
 
     const member = await getCabinetMembersCollection(db).findOne({ countryId, positionId });
@@ -53,10 +53,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the defence minister may dismiss generals." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the defence minister may dismiss generals.");
     }
 
     // A dismissal cascades through the chain of command and cannot be cleanly undone.
@@ -65,7 +62,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     const commission = await getCharacterCommission(db, characterId);
     if (!commission.commissioned) {
-      return NextResponse.json({ error: "Not a commissioned general" }, { status: 404 });
+      return errorResponse(404, "Not a commissioned general");
     }
 
     // Cascade first, commission last. These writes are not transactional, and the

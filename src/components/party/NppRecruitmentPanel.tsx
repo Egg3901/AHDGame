@@ -9,6 +9,7 @@ import { NppRecruitSegment } from "@/components/influence/NppRecruitSegment";
 import { NppSlotTierTable } from "@/components/influence/NppSlotTierTable";
 import { formatLocalFunds } from "@/lib/actions";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface NppRecruitmentPanelProps {
   partyId: string;
@@ -111,7 +112,7 @@ export function NppRecruitmentPanel({
           setLoading(false);
           return;
         }
-        throw new Error(body?.error ?? `Failed to load recruitment status (${res.status})`);
+        throw new Error(apiErrorText(body, `Failed to load recruitment status (${res.status})`));
       }
       const data: RecruitmentStatus = await res.json();
       setStatus(data);
@@ -162,7 +163,7 @@ export function NppRecruitmentPanel({
         showToast(`Successfully recruited ${data.npp?.name ?? "new NPP"}!`, "success");
         setSelectedStateId("");
       } else {
-        showToast(data.error ?? "Recruitment failed", "error");
+        showToast(apiErrorText(data, "Recruitment failed"), "error");
       }
       // Always refresh to show current state (funds, cooldown) regardless of outcome
       setRefreshKey((k) => k + 1);
@@ -185,7 +186,7 @@ export function NppRecruitmentPanel({
       showToast(
         res.ok
           ? `Successfully recruited ${d.npp?.name ?? "new NPP"}!`
-          : (d.error ?? "Recruitment failed"),
+          : apiErrorText(d, "Recruitment failed"),
         res.ok ? "success" : "error"
       );
       setRefreshKey((k) => k + 1);
@@ -256,7 +257,7 @@ export function NppRecruitmentPanel({
       {hasCooldown && status.cooldownUntil && (
         <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span className="font-medium">Recruitment on Cooldown</span>
+            <span className="font-medium">Recruitment on cooldown</span>
             <span className="text-muted">
               {cooldownHours} hour{cooldownHours !== 1 ? "s" : ""} remaining
             </span>
@@ -329,9 +330,9 @@ export function NppRecruitmentPanel({
       {/* Cost display (state panel only — national uses the recruit segment above) */}
       {!isNational && (
         <div className="rounded-xl border border-card-border bg-card p-4 space-y-1 text-sm">
-          <p className="font-medium mb-2">Recruitment Cost</p>
+          <p className="font-medium mb-2">Recruitment cost</p>
           <div className="flex justify-between">
-            <span className="text-muted">Action Points</span>
+            <span className="text-muted">Action points</span>
             <span>{stateActionCost}</span>
           </div>
           <div className="flex justify-between">
@@ -342,7 +343,7 @@ export function NppRecruitmentPanel({
           </div>
           <div className="border-t border-card-border pt-1 mt-1" />
           <div className="flex justify-between text-muted">
-            <span>State party Action Points</span>
+            <span>State party action points</span>
             <span>
               {status.nppActionPoints ?? 0}
               {status.nppActionPointCap != null && ` / ${status.nppActionPointCap}`}
@@ -369,7 +370,7 @@ export function NppRecruitmentPanel({
             ? "Recruiting..."
             : hasCooldown
               ? `On Cooldown (${cooldownHours}h remaining)`
-              : "Recruit NPP Candidate"}
+              : "Recruit NPP candidate"}
         </button>
       )}
 

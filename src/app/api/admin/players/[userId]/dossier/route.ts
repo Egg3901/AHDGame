@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { schemas } from "@/lib/api/validate";
 import { queryDossier } from "@/lib/audit/dossier";
 
@@ -21,7 +21,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { userId: userIdParam } = await params;
     const parsedId = schemas.objectId.safeParse(userIdParam);
     if (!parsedId.success) {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+      return errorResponse(400, "Invalid user ID");
     }
 
     const userId = new ObjectId(parsedId.data);
@@ -30,7 +30,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const db = await getDb();
     const dossier = await queryDossier(db, userId, isAdmin);
     if (!dossier) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     return NextResponse.json(dossier);

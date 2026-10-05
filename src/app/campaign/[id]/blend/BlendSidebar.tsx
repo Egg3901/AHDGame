@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BLEND, FONT } from "@/components/blend/tokens";
+import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import { BlendCharacterPicker, type PickerResult } from "./BlendCharacterPicker";
 import { BlendScopeInline } from "@/components/blend/BlendScope";
 import { StatePresencePanel } from "../components/StatePresencePanel";
@@ -30,19 +30,7 @@ export interface BlendSidebarProps {
 }
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        fontFamily: FONT.mono,
-        fontSize: 9.5,
-        letterSpacing: ".16em",
-        textTransform: "uppercase",
-        color: BLEND.mutedDimmer,
-      }}
-    >
-      {children}
-    </div>
-  );
+  return <div style={BLEND_LABEL}>{children}</div>;
 }
 
 function Block({ children, first }: { children: React.ReactNode; first?: boolean }) {
@@ -102,14 +90,10 @@ export function RunningMateBlock({
             type="button"
             onClick={() => setPickingMate((v) => !v)}
             style={{
+              ...BLEND_LABEL,
               border: 0,
               background: "transparent",
               padding: 0,
-              fontFamily: FONT.mono,
-              fontSize: 10,
-              letterSpacing: ".1em",
-              textTransform: "uppercase",
-              color: BLEND.muted,
               cursor: "pointer",
               flexShrink: 0,
             }}

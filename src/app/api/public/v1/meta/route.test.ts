@@ -3,7 +3,8 @@ import { join, relative, sep } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/publicApi/middleware", () => ({ publicApiGuard: vi.fn() }));
-vi.mock("@/lib/api/errors", () => ({ handleRouteError: vi.fn() }));
+vi.mock("@/lib/api/errors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/errors")>()), handleRouteError: vi.fn() }));
 
 import { ENDPOINTS } from "./route";
 import { GET } from "./route";

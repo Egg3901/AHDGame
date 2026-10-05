@@ -37,9 +37,7 @@ export function NppSlotTierTable({ currentOrg, className = "" }: NppSlotTierTabl
   return (
     <div className={`rounded-lg border border-card-border bg-card-elevated p-3 ${className}`}>
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[10px] font-medium uppercase tracking-wide text-muted">
-          Slots by state org
-        </span>
+        <span className="text-body-sm font-medium text-muted">Slots by state org</span>
         {hasOrg && <span className="text-[10px] text-muted">current {currentOrg.toFixed(0)}%</span>}
       </div>
       <div className="space-y-0.5">

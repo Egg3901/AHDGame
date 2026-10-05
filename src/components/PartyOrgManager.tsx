@@ -5,6 +5,7 @@ import { Skeleton, Slider } from "@/components/ui";
 import { getMessageStyle } from "@/lib/utils/formatters";
 import { US_STATES } from "@/lib/constants";
 import { getOrgLabel, getOrgBarColor } from "@/lib/utils/partyOrg";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Party {
   _id: string;
@@ -107,7 +108,7 @@ export function PartyOrgManager() {
         setMessage(`${data.message}`);
         await fetchPartyOrg(selectedState);
       } else {
-        setMessage(`Error: ${data.error}`);
+        setMessage(`Error: ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMessage("Error: Network error");
@@ -142,13 +143,13 @@ export function PartyOrgManager() {
 
         {/* State Selector */}
         <div className="mb-6">
-          <label className="mb-2 block text-sm font-medium">Select State</label>
+          <label className="mb-2 block text-sm font-medium">Select state</label>
           <select
             value={selectedState}
             onChange={(e) => setSelectedState(e.target.value)}
             className="rounded-lg border border-card-border bg-background px-3 py-2 text-sm w-48"
           >
-            <option value="">-- Select State --</option>
+            <option value="">-- Select state --</option>
             {US_STATES.map((s) => (
               <option key={s} value={s}>
                 {s}

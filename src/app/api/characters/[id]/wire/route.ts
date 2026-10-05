@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createNotification } from "@/lib/notifications";
@@ -57,13 +57,13 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, wireSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { amount, currency: requestedCurrency } = parsed.data;
 
     const { id: targetId } = await params;
     if (!ObjectId.isValid(targetId)) {
-      return NextResponse.json({ error: "Invalid character id" }, { status: 400 });
+      return errorResponse(400, "Invalid character id");
     }
     const targetObjectId = new ObjectId(targetId);
 
@@ -72,11 +72,11 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const sender = await getCharacterByUserId(db, user.userId);
     if (!sender) {
-      return NextResponse.json({ error: "You need a character to send funds" }, { status: 400 });
+      return errorResponse(400, "You need a character to send funds");
     }
 
     if (sender._id.equals(targetObjectId)) {
-      return NextResponse.json({ error: "You cannot wire funds to yourself" }, { status: 400 });
+      return errorResponse(400, "You cannot wire funds to yourself");
     }
 
     const [target, userDoc] = await Promise.all([
@@ -90,7 +90,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     ]);
 
     if (!target) {
-      return NextResponse.json({ error: "Recipient not found" }, { status: 404 });
+      return errorResponse(404, "Recipient not found");
     }
 
     // Personal cash may be wired internationally when forex is enabled: the currency
@@ -100,10 +100,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Pre-forex there is a single unitless cash pool with no currency semantics, so
     // cross-border wires stay blocked in that mode.
     if (!forexEnabled && !isSameCountry(sender, target)) {
-      return NextResponse.json(
-        { error: "You cannot wire funds to politicians from other countries" },
-        { status: 400 }
-      );
+      return errorResponse(400, "You cannot wire funds to politicians from other countries");
     }
 
     // New characters cannot send money for their first 24 turns (anti-abuse).
@@ -114,22 +111,17 @@ export async function POST(request: Request, { params }: RouteParams) {
       gameTime.effectiveNow.getTime()
     );
     if (barrier.blocked) {
-      return NextResponse.json(
-        {
-          error: `New characters cannot send funds for their first ${NEW_CHARACTER_TRANSFER_BARRIER_TURNS} turns. You can send funds in ${barrier.remainingTurns} turn(s).`,
-          remainingTurns: barrier.remainingTurns,
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        `New characters cannot send funds for their first ${NEW_CHARACTER_TRANSFER_BARRIER_TURNS} turns. You can send funds in ${barrier.remainingTurns} turn(s).`,
+        { extra: { remainingTurns: barrier.remainingTurns } }
       );
     }
 
     // Pre-forex: legacy single-pool cashOnHand. Reject explicit currency selection since
     // there are no per-currency buckets to draw from.
     if (!forexEnabled && requestedCurrency && requestedCurrency !== getHomeCurrency(sender)) {
-      return NextResponse.json(
-        { error: "Foreign-currency transfers are not available" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Foreign-currency transfers are not available");
     }
 
     // Transfer currency: default to sender's home. When forex is on, the sender may also
@@ -138,10 +130,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const senderBalance = getPersonalBalance(sender, transferCurrency, forexEnabled);
     if (senderBalance < amount) {
-      return NextResponse.json(
-        { error: `Insufficient ${transferCurrency} balance` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Insufficient ${transferCurrency} balance`);
     }
 
     // Convert the transfer amount to anchor units for a currency-neutral daily cap.
@@ -150,10 +139,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (forexEnabled) {
       const fxResult = await loadCharacterFxRate(db, getHomeCurrency(sender));
       if (!fxResult.ok) {
-        return NextResponse.json(
-          { error: "Exchange rate unavailable, try again shortly" },
-          { status: 503 }
-        );
+        return errorResponse(503, "Exchange rate unavailable, try again shortly");
       }
       charFxRate = fxResult.rate;
     }
@@ -170,11 +156,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     const quotaUsed = windowFresh ? (userDoc?.wireQuotaUsed ?? 0) : 0;
     if (quotaUsed + anchorAmount > DAILY_WIRE_CAP_ANCHORS) {
       const remaining = Math.max(0, DAILY_WIRE_CAP_ANCHORS - quotaUsed);
-      return NextResponse.json(
-        {
-          error: `Daily wire limit reached. ₳${Math.floor(remaining).toLocaleString()} remaining in your quota.`,
-        },
-        { status: 429 }
+      return errorResponse(
+        429,
+        `Daily wire limit reached. ₳${Math.floor(remaining).toLocaleString()} remaining in your quota.`
       );
     }
 
@@ -233,11 +217,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         now.getTime() - latestWindowStart.getTime() < WIRE_QUOTA_WINDOW_MS;
       const latestQuotaUsed = latestFresh ? (latestUserDoc?.wireQuotaUsed ?? 0) : 0;
       const remaining = Math.max(0, DAILY_WIRE_CAP_ANCHORS - latestQuotaUsed);
-      return NextResponse.json(
-        {
-          error: `Daily wire limit reached. ₳${Math.floor(remaining).toLocaleString()} remaining in your quota.`,
-        },
-        { status: 429 }
+      return errorResponse(
+        429,
+        `Daily wire limit reached. ₳${Math.floor(remaining).toLocaleString()} remaining in your quota.`
       );
     }
 
@@ -285,10 +267,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     if (senderUpdate.modifiedCount === 0) {
       await rollbackQuotaClaim();
-      return NextResponse.json(
-        { error: `Insufficient ${transferCurrency} balance` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Insufficient ${transferCurrency} balance`);
     }
 
     const senderRollbackInc = buildPersonalBalanceInc(amount, transferCurrency, forexEnabled);
@@ -307,7 +286,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           { $inc: senderRollbackInc, $set: { updatedAt: new Date() } }
         );
       await rollbackQuotaClaim();
-      return NextResponse.json({ error: "Recipient not found" }, { status: 404 });
+      return errorResponse(404, "Recipient not found");
     }
 
     // wire_transfer_out (sender) + wire_transfer_in (recipient). Pre-Phase-3

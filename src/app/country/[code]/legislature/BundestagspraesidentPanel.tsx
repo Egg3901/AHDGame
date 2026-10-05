@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import { useGameClock } from "@/contexts/useGameClock";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface NominationDisplay {
   _id: string;
@@ -85,7 +86,7 @@ export function BundestagspraesidentPanel() {
         showToast(body.message ?? "Done.", "success");
         await fetchData();
       } else {
-        showToast(body.error ?? "Action failed.", "error");
+        showToast(apiErrorText(body, "Action failed."), "error");
       }
     } catch {
       showToast("Network error.", "error");
@@ -117,7 +118,7 @@ export function BundestagspraesidentPanel() {
     <div className="rounded-xl border border-card-border/40 bg-card-muted/30 p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wider text-muted">Bundestagspräsident</p>
+          <p className="text-body-sm font-medium text-muted">Bundestagspräsident</p>
           <p className="text-base font-semibold text-foreground mt-0.5">
             {data.leader?.characterName ?? "Vacant"}
           </p>
@@ -131,7 +132,7 @@ export function BundestagspraesidentPanel() {
             disabled={busy}
             className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning hover:bg-warning/20 disabled:opacity-40 transition-colors"
           >
-            Admin · Open Election
+            Admin · open election
           </button>
         )}
       </div>
@@ -149,7 +150,7 @@ export function BundestagspraesidentPanel() {
               disabled={busy}
               className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 disabled:opacity-40 transition-colors"
             >
-              Declare for Bundestagspräsident
+              Declare for bundestagspräsident
             </button>
           )}
           {viewer.isSittingMdB && myNomination && myNomination.status !== "cancelled" && (

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import { useToast } from "@/contexts/ToastContext";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface PromptCandidate {
   id: string;
@@ -75,7 +76,7 @@ export default function EndorsePresidentCard() {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          showToast(data.error ?? "Failed to endorse candidate", "error");
+          showToast(apiErrorText(data, "Failed to endorse candidate"), "error");
           return;
         }
         setEndorsedName(candidate.name);

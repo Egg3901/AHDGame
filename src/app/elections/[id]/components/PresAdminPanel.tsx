@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { getMessageStyle } from "@/lib/utils/formatters";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Candidate {
   id: string;
@@ -107,7 +108,7 @@ export function PresAdminPanel({
           : {}),
       });
       const data = await res.json();
-      setMsg(section, res.ok ? `✓ ${data.message}` : `✗ ${data.error ?? "Error"}`);
+      setMsg(section, res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Error")}`);
       if (res.ok) {
         onSuccess();
         return true;
@@ -169,7 +170,10 @@ export function PresAdminPanel({
         body: JSON.stringify({ candidateId }),
       });
       const data = await res.json();
-      setMsg("candidates", res.ok ? `✓ ${data.message}` : `✗ ${data.error}`);
+      setMsg(
+        "candidates",
+        res.ok ? `✓ ${data.message}` : `✗ ${apiErrorText(data, "Request failed")}`
+      );
       if (res.ok) {
         onSuccess();
         setPlaceOpen(true);
@@ -237,7 +241,7 @@ export function PresAdminPanel({
               disabled={busy === "phase"}
               title="Set startTime = now, primaryEndTime = now + 72h"
             >
-              {busy === "phase" ? "…" : "↩ Open Primary"}
+              {busy === "phase" ? "…" : "↩ Open primary"}
             </AdminBtn>
           )}
 
@@ -255,7 +259,7 @@ export function PresAdminPanel({
               disabled={busy === "phase"}
               title="Sets primaryEndTime = now, eliminates primary losers, initialises vote tally"
             >
-              {busy === "phase" ? "…" : "▶ End Primary → General"}
+              {busy === "phase" ? "…" : "▶ End primary → general"}
             </AdminBtn>
           )}
 
@@ -278,7 +282,7 @@ export function PresAdminPanel({
               }
               variant={inPrimary ? "ghost" : "default"}
             >
-              {busy === "phase" ? "…" : "✓ Resolve Election"}
+              {busy === "phase" ? "…" : "✓ Resolve election"}
             </AdminBtn>
           )}
         </div>
@@ -331,9 +335,7 @@ export function PresAdminPanel({
                 style={{ opacity: placeOptionsLoading ? 0.4 : 1 }}
               >
                 <div>
-                  <label className="mb-1 block text-[10px] text-muted uppercase tracking-wide">
-                    Type
-                  </label>
+                  <label className="mb-1 block text-body-sm font-medium text-muted">Type</label>
                   <select
                     value={placeType}
                     onChange={(e) => {
@@ -347,7 +349,7 @@ export function PresAdminPanel({
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-[10px] text-muted uppercase tracking-wide">
+                  <label className="mb-1 block text-body-sm font-medium text-muted">
                     {placeType === "character" ? "Character" : "NPP"}
                   </label>
                   <select
@@ -364,9 +366,7 @@ export function PresAdminPanel({
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-[10px] text-muted uppercase tracking-wide">
-                    Party
-                  </label>
+                  <label className="mb-1 block text-body-sm font-medium text-muted">Party</label>
                   <select
                     value={placeParty}
                     onChange={(e) => setPlaceParty(e.target.value)}
@@ -406,7 +406,7 @@ export function PresAdminPanel({
             </div>
           ) : (
             <AdminBtn onClick={() => setPlaceOpen(true)} disabled={busy !== null}>
-              + Place Candidate
+              + Place candidate
             </AdminBtn>
           ))}
 
@@ -434,7 +434,7 @@ export function PresAdminPanel({
             disabled={busy === "timers"}
             title="Resets startTime/primaryEndTime/endTime from NOW. Candidates stay."
           >
-            {busy === "timers" ? "…" : "↺ Reset Timers"}
+            {busy === "timers" ? "…" : "↺ Reset timers"}
           </AdminBtn>
         </div>
         {msgs.timers && (
@@ -464,7 +464,7 @@ export function PresAdminPanel({
           disabled={busy === "danger"}
           title="Deletes candidates + tallies + campaigns. Resets timers and cycle to match current game year."
         >
-          {busy === "danger" ? "…" : "🗑 Full Reinitialize"}
+          {busy === "danger" ? "…" : "🗑 Full reinitialize"}
         </AdminBtn>
         {msgs.danger && (
           <p className={`rounded-md px-2.5 py-1.5 text-xs ${getMessageStyle(msgs.danger)}`}>

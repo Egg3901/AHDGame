@@ -70,7 +70,7 @@ export function CampaignsListPanel({ electionId }: CampaignsListPanelProps) {
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
-      <h3 className="mb-4 text-lg font-semibold">Campaign Operations</h3>
+      <h3 className="mb-4 text-lg font-semibold">Campaign operations</h3>
 
       <div className="space-y-3">
         {campaigns
@@ -96,7 +96,7 @@ export function CampaignsListPanel({ electionId }: CampaignsListPanelProps) {
                       }
                       className="truncate font-semibold text-foreground transition-colors hover:text-primary"
                     >
-                      {campaign.candidateName || "Unknown Candidate"}
+                      {campaign.candidateName || "Unknown candidate"}
                     </Link>
                     {campaign.isMine && (
                       <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
@@ -133,7 +133,7 @@ export function CampaignsListPanel({ electionId }: CampaignsListPanelProps) {
                   href={`/campaign/${campaign.id}`}
                   className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
                 >
-                  View Campaign
+                  View campaign
                 </Link>
               </div>
             );

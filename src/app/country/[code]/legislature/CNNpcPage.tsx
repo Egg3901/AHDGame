@@ -188,7 +188,7 @@ function BillsTab({
             onClick={() => setShowModal(true)}
             className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
           >
-            Propose Bill
+            Propose bill
           </button>
         </div>
       )}
@@ -241,7 +241,7 @@ function PremierLeaderCard({
 }) {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
-      <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-2">{label}</p>
+      <p className="text-body-sm font-medium text-muted mb-2">{label}</p>
       {character ? (
         <div className="flex items-center gap-3">
           <Avatar
@@ -325,7 +325,7 @@ function LeadershipTab({
           character={leaders?.primeMinister ?? null}
         />
         <PremierLeaderCard
-          label="Opposition Leader"
+          label="Opposition leader"
           emptyLabel="Vacant"
           character={leaders?.oppositionLeader ?? null}
         />
@@ -417,7 +417,7 @@ export function CNNpcPage({ countryId }: { countryId: CountryId }) {
       : null,
     minorityLeader: leaders?.oppositionLeader
       ? {
-          label: "Opposition Leader",
+          label: "Opposition leader",
           name: leaders.oppositionLeader.characterName,
           id: leaders.oppositionLeader.characterId,
           sequentialId: leaders.oppositionLeader.sequentialId,

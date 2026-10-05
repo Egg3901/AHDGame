@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
@@ -43,7 +44,7 @@ export function VoteButtons({ onVote, disabled, disabledReason, currentVote }: P
           disabled={disabled || pending !== null}
           isLoading={pending === "yes"}
         >
-          Vote Yes
+          Vote yes
         </Button>
         <Button
           size="sm"
@@ -52,7 +53,7 @@ export function VoteButtons({ onVote, disabled, disabledReason, currentVote }: P
           disabled={disabled || pending !== null}
           isLoading={pending === "no"}
         >
-          Vote No
+          Vote no
         </Button>
         <Button
           size="sm"
@@ -65,7 +66,7 @@ export function VoteButtons({ onVote, disabled, disabledReason, currentVote }: P
         </Button>
       </div>
       {disabled && disabledReason && <p className="text-xs text-muted">{disabledReason}</p>}
-      {error && <p className="text-xs text-error">{error}</p>}
+      <InlineError error={error} className="text-xs text-error" />
     </div>
   );
 }

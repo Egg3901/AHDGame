@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { MIL_COLOR, MIL_FONT } from "../military/theme";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const mono = MIL_FONT.mono;
 
@@ -94,7 +95,7 @@ export function ConflictActions({
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         setJoining(!next);
-        setRefusal(body?.error ?? "Could not save that order.");
+        setRefusal(apiErrorText(body, "Could not save that order."));
       }
     } catch {
       setJoining(!next);
@@ -253,7 +254,7 @@ export function ConflictActions({
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         setPending(previous);
-        setRefusal(body?.error ?? "The offensive was refused.");
+        setRefusal(apiErrorText(body, "The offensive was refused."));
       }
     } catch {
       setPending(previous);
@@ -272,7 +273,7 @@ export function ConflictActions({
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         setPending(previous);
-        setRefusal(body?.error ?? "The withdrawal was refused.");
+        setRefusal(apiErrorText(body, "The withdrawal was refused."));
       }
     } catch {
       setPending(previous);

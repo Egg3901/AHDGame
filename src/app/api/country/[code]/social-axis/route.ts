@@ -8,6 +8,7 @@
 // with a client-side economic lean aggregated from the law records it
 // already loads to render the National Outlook strip.
 
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
@@ -25,7 +26,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
   const { code } = await params;
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) {
-    return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+    return errorResponse(400, "Invalid country code");
   }
 
   const db = await getDb();

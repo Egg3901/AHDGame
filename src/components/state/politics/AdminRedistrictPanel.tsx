@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { regionRedistrictUrl } from "@/lib/urls";
@@ -50,7 +51,7 @@ export function AdminRedistrictPanel({
       );
       const data = (await res.json()) as { error?: string; redirectUrl?: string };
       if (!res.ok) {
-        setError(data.error ?? "Failed to trigger redistricting");
+        setError(apiErrorText(data, "Failed to trigger redistricting"));
         return;
       }
       router.push(data.redirectUrl ?? regionRedistrictUrl(countryCode, stateId));

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { adminLawTypesCreateSchema } from "@/lib/api/schemas/admin";
 import type { LegislationType } from "@/lib/db/types";
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, adminLawTypesCreateSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const {
@@ -84,10 +84,7 @@ export async function POST(request: Request) {
     const seedExists = seedLegislationTypes.some((t) => t._id === _id);
 
     if (existing || seedExists) {
-      return NextResponse.json(
-        { error: `Law type with ID "${_id}" already exists` },
-        { status: 409 }
-      );
+      return errorResponse(409, `Law type with ID "${_id}" already exists`);
     }
 
     const lawType: LegislationType = {

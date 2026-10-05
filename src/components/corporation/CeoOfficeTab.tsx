@@ -17,6 +17,7 @@ import CeoOperationsTable, {
 import IndustrialRelationsSection from "./IndustrialRelationsSection";
 import { useCeoOfficeState } from "./ceo/useCeoOfficeState";
 import { InlineStatus } from "./dense/DenseKit";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CeoOfficeTabProps {
   corporation: CorporationDetail;
@@ -102,7 +103,7 @@ export default function CeoOfficeTab({
         set({ actionSuccess: "Budgets saved." });
         onRefresh();
       } else {
-        set({ actionError: (data.error as string) || "Failed to save" });
+        set({ actionError: apiErrorText(data, "Failed to save") });
       }
     } catch {
       set({ actionError: "Network error" });
@@ -121,7 +122,7 @@ export default function CeoOfficeTab({
         set({ dividendSuccess: "Dividend updated." });
         onRefresh();
       } else {
-        set({ dividendError: (data.error as string) || "Failed to update the dividend" });
+        set({ dividendError: apiErrorText(data, "Failed to update the dividend") });
       }
     } catch {
       set({ dividendError: "Network error" });
@@ -141,7 +142,7 @@ export default function CeoOfficeTab({
           `/api/corporations/${corpId}/sectors/${sectorId}/${path}`,
           body
         );
-        if (!ok) return { ok: false, error: (data.error as string) ?? "Failed to save" };
+        if (!ok) return { ok: false, error: apiErrorText(data, "Failed to save") };
         onRefresh();
         return { ok: true };
       } catch {
@@ -164,7 +165,7 @@ export default function CeoOfficeTab({
           ...(body?.preview ? { preview: true } : {}),
         }
       );
-      if (!ok) return { ok: false, error: (data.error as string) ?? "Failed to apply" };
+      if (!ok) return { ok: false, error: apiErrorText(data, "Failed to apply") };
       if (!body?.preview) onRefresh();
       return {
         ok: true,
@@ -195,7 +196,7 @@ export default function CeoOfficeTab({
         ...(sectorType ? { sectorType } : {}),
         ...body,
       });
-      if (!ok) return { ok: false, error: (data.error as string) ?? "Failed to apply" };
+      if (!ok) return { ok: false, error: apiErrorText(data, "Failed to apply") };
       if (!body.preview) onRefresh();
       return {
         ok: true,

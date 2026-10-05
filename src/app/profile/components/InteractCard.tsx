@@ -1,9 +1,11 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { MailComposerModal } from "@/components/MailComposerModal";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -120,7 +122,7 @@ function ActionsTab({
         setFlash(data.attackFailed ? "failed" : action);
         setTimeout(() => setFlash(null), 1500);
       } else {
-        setActionError(data.error || t("actionFailed"));
+        setActionError(apiErrorText(data, t("actionFailed")));
       }
     } finally {
       setExecuting(false);
@@ -259,7 +261,7 @@ function ActionsTab({
       </button>
 
       {!canAction && <p className="text-center text-body-xs text-error">{t("notEnoughActions")}</p>}
-      {actionError && <p className="text-center text-body-xs text-error">{actionError}</p>}
+      <InlineError error={actionError} className="text-center text-body-xs text-error" />
     </div>
   );
 }
@@ -321,7 +323,7 @@ function FundsTab({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || t("transferFailed"));
+        setError(apiErrorText(data, t("transferFailed")));
         return;
       }
       // Both routes echo back the amount they applied, already in local units.
@@ -400,7 +402,7 @@ function FundsTab({
       </button>
 
       {message && <p className="text-body-sm text-foreground">{message}</p>}
-      {error && <p className="text-body-sm text-error">{error}</p>}
+      <InlineError error={error} className="text-body-sm text-error" />
     </div>
   );
 }

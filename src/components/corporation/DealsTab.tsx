@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import MergerReviewPanel from "@/components/corporation/MergerReviewPanel";
 import IndexCommitteePanel from "@/components/corporation/IndexCommitteePanel";
@@ -66,7 +67,7 @@ export default function DealsTab({
       const res = await fetch(`/api/corporations/${corpId}/deals`);
       const d = await res.json();
       if (!res.ok) {
-        setErr(d.error || "Failed to load deals");
+        setErr(apiErrorText(d, "Failed to load deals"));
         setData(null);
       } else {
         setData(d);
@@ -119,7 +120,7 @@ export default function DealsTab({
         body: JSON.stringify({ action, offerId }),
       });
       const d = await res.json();
-      if (!res.ok) setErr(d.error || "Action failed");
+      if (!res.ok) setErr(apiErrorText(d, "Action failed"));
       else await fetchDeals();
     } catch {
       setErr("Network error");
@@ -148,7 +149,7 @@ export default function DealsTab({
         }),
       });
       const d = await res.json();
-      if (!res.ok) setProposeErr(d.error || "Failed to send offer");
+      if (!res.ok) setProposeErr(apiErrorText(d, "Failed to send offer"));
       else if (d.autoAccepted) {
         setProposeMsg(`Acquired ${d.targetName ?? selectedTarget.name}.`);
         setSelectedTarget(null);

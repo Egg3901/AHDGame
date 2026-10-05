@@ -1014,12 +1014,19 @@ describe("processMergeProposal (transfer semantics — seats + coalition)", () =
 
     await processMergeProposal(db as unknown as Db, proposal, 120);
 
-    expect(db.collectionMocks.statePartyOrg!.insertOne).toHaveBeenCalledWith(
-      expect.objectContaining({
-        _id: "DUB_3",
-        organizationUnits: 40,
-        lastOrganizationBuildTurn: 120,
-      })
+    expect(db.collectionMocks.statePartyOrg!.bulkWrite).toHaveBeenCalledWith(
+      [
+        {
+          insertOne: {
+            document: expect.objectContaining({
+              _id: "DUB_3",
+              organizationUnits: 40,
+              lastOrganizationBuildTurn: 120,
+            }),
+          },
+        },
+      ],
+      { ordered: false }
     );
   });
 

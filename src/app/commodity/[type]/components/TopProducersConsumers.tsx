@@ -85,7 +85,7 @@ export default function TopProducersConsumers({
     <div className="grid sm:grid-cols-2 gap-6 mb-6">
       {topProducers.length > 0 && (
         <div className="rounded-xl border border-card-border bg-card p-6">
-          <h2 className="text-lg font-bold text-foreground mb-1">Top Producers</h2>
+          <h2 className="text-lg font-bold text-foreground mb-1">Top producers</h2>
           <p className="text-xs text-muted mb-3">
             Largest corporations by output volume
             {marketLabel ? ` in the ${marketLabel.toLowerCase()}` : ""}
@@ -131,7 +131,7 @@ export default function TopProducersConsumers({
 
       {topConsumers.length > 0 && (
         <div className="rounded-xl border border-card-border bg-card p-6">
-          <h2 className="text-lg font-bold text-foreground mb-1">Top Consumers</h2>
+          <h2 className="text-lg font-bold text-foreground mb-1">Top consumers</h2>
           <p className="text-xs text-muted mb-3">
             Largest corporations by input demand
             {commodity === "advertising" && " (excludes marketing spend, shown separately)"}

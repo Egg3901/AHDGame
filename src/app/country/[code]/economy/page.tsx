@@ -12,7 +12,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const id = code.toUpperCase() as CountryId;
   const config = COUNTRY_CONFIGS[id];
   if (!config) {
-    return { title: "Economic Outlook | A House Divided" };
+    return { title: "Economic outlook | A House Divided" };
   }
   return publicPageMetadata({
     title: `Economic Outlook | ${config.name} | A House Divided`,

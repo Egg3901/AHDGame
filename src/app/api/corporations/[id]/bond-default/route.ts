@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Bond, CentralBank, CorporateSector } from "@/lib/db/types";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getGameState } from "@/lib/gameState";
@@ -59,10 +59,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     if (corporation.countryOwnerId) {
-      return NextResponse.json(
-        { error: "National corporations cannot use bond default resolution here" },
-        { status: 400 }
-      );
+      return errorResponse(400, "National corporations cannot use bond default resolution here");
     }
 
     const bonds = await db

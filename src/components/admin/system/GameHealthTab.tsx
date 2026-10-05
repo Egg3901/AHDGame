@@ -70,7 +70,7 @@ export function GameHealthTab() {
 
       <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4 shadow-sm">
         <span className="text-sm font-medium text-foreground">
-          Data Integrity Check — Run every
+          Data integrity check — Run every
         </span>
         <select
           value={cadence}

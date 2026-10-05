@@ -8,7 +8,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { z } from "zod";
 import type { NPP } from "@/lib/db/types";
 import { loadCharacterFxRate } from "@/lib/currency/characterFunds";
@@ -22,12 +22,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
-    if (!schemas.objectId.safeParse(id).success)
-      return NextResponse.json({ error: "Invalid NPP ID" }, { status: 400 });
+    if (!schemas.objectId.safeParse(id).success) return errorResponse(400, "Invalid NPP ID");
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     // amount is in ANCHOR (₳) units (admin tool contract). npp.funds is in

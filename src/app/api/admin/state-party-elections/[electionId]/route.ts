@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type {
   StatePartyElection,
   NationalPartyElection,
@@ -29,7 +29,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     try {
       oid = new ObjectId(electionId);
     } catch {
-      return NextResponse.json({ error: "Invalid electionId" }, { status: 400 });
+      return errorResponse(400, "Invalid electionId");
     }
 
     const db = await getDb();
@@ -42,10 +42,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
 
     if (stateElection) {
       if (stateElection.status !== "voting") {
-        return NextResponse.json(
-          { error: "Only active (voting) elections can be cancelled" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Only active (voting) elections can be cancelled");
       }
       await db
         .collection<StatePartyElection>("statePartyElections")
@@ -63,10 +60,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
 
     if (nationalElection) {
       if (nationalElection.status !== "voting") {
-        return NextResponse.json(
-          { error: "Only active (voting) elections can be cancelled" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Only active (voting) elections can be cancelled");
       }
       await db
         .collection<NationalPartyElection>("nationalPartyElections")
@@ -84,10 +78,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
 
     if (committeeElection) {
       if (committeeElection.status !== "voting") {
-        return NextResponse.json(
-          { error: "Only active (voting) elections can be cancelled" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Only active (voting) elections can be cancelled");
       }
       await db
         .collection<NationalCommitteeElection>("nationalCommitteeElections")
@@ -98,7 +89,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       });
     }
 
-    return NextResponse.json({ error: "Election not found" }, { status: 404 });
+    return errorResponse(404, "Election not found");
   } catch (error) {
     return handleRouteError(error);
   }

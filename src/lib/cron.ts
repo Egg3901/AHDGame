@@ -17,6 +17,8 @@ import { runAltScoring } from "@/lib/altDetection/run";
 import { runAltDigest } from "@/lib/altDetection/digest";
 import { runShareFillRecoveryPass } from "@/lib/corporations/commands/shareTrading/shareFillAudit";
 import { captureServerProductEvent } from "@/lib/analytics/captureServer";
+import { isCronWorkerProcess, shouldStartHostedBackgroundServices } from "@/lib/startupMode";
+import { PatreonReconcileLockBusyError, runPatreonReconcile } from "@/lib/patreon/reconcile";
 
 /*
  * Sentry cron-monitor slug for the primary turn cron. Service-suffixed so
@@ -89,6 +91,8 @@ let retentionCron: ReturnType<typeof cron.schedule> | null = null;
 let altScoringCron: ReturnType<typeof cron.schedule> | null = null;
 let altDigestCron: ReturnType<typeof cron.schedule> | null = null;
 let shareFillRecoveryCron: ReturnType<typeof cron.schedule> | null = null;
+let patreonReconcileCron: ReturnType<typeof cron.schedule> | null = null;
+let patreonReconcileRunning = false;
 
 /**
  * Share-fill orphan recovery sweep (issue #1672). Staggered to :07/:22/:37/:52
@@ -97,6 +101,9 @@ let shareFillRecoveryCron: ReturnType<typeof cron.schedule> | null = null;
  * slots double as the test selector (see `findScheduledCallback` in cron.test.ts).
  */
 export const SHARE_FILL_RECOVERY_SCHEDULE = "7,22,37,52 * * * *";
+
+/** Patreon benefits and grace expiry are reconciled four times each UTC day. */
+export const PATREON_RECONCILIATION_SCHEDULE = "13 */6 * * *";
 
 /**
  * Get the cron schedule expression based on game state fastMode setting.
@@ -151,6 +158,10 @@ export async function initializeCronJobs() {
   }
   if (shareFillRecoveryCron) {
     shareFillRecoveryCron.stop();
+  }
+  if (patreonReconcileCron) {
+    patreonReconcileCron.stop();
+    patreonReconcileCron = null;
   }
 
   // Get current game state to determine schedule
@@ -658,6 +669,43 @@ export async function initializeCronJobs() {
     { timezone: "UTC" }
   );
 
+  // Patreon reconciliation writes supporter benefits, so only the dedicated
+  // hosted turn worker owns this schedule. The API endpoint remains available
+  // for authenticated dry-runs and explicit operator applies.
+  if (
+    process.env.NODE_ENV === "production" &&
+    isCronWorkerProcess(process.env) &&
+    shouldStartHostedBackgroundServices(process.env)
+  ) {
+    patreonReconcileCron = cron.schedule(
+      PATREON_RECONCILIATION_SCHEDULE,
+      async () => {
+        if (patreonReconcileRunning) return;
+        patreonReconcileRunning = true;
+        try {
+          const result = await runPatreonReconcile(await getDb(), true);
+          console.info("[Cron] Patreon reconciliation completed", result.counts);
+        } catch (error) {
+          if (!(error instanceof PatreonReconcileLockBusyError)) {
+            console.warn("[Cron] Patreon reconciliation failed; it will retry on the next pass");
+            Sentry.captureMessage("Patreon reconciliation cron failed", {
+              level: "error",
+              tags: {
+                component: "cron",
+                job: "patreonReconcile",
+                errorType: error instanceof Error ? error.name : "UnknownError",
+              },
+            });
+          }
+        } finally {
+          patreonReconcileRunning = false;
+        }
+      },
+      { timezone: "UTC" }
+    );
+    console.log("[Cron] Patreon reconciliation will run every six hours on the hosted worker.");
+  }
+
   console.log("[Cron] Alt-detection scoring will run every hour at :45 (flag-gated).");
   console.log("[Cron] Alt digest (new suspicious rings) will run daily at 13:00 UTC (flag-gated).");
   console.log("[Cron] Share-fill recovery sweep will run at :07/:22/:37/:52 UTC.");
@@ -706,6 +754,10 @@ export async function restartCronWithSchedule() {
   if (shareFillRecoveryCron) {
     shareFillRecoveryCron.stop();
     shareFillRecoveryCron = null;
+  }
+  if (patreonReconcileCron) {
+    patreonReconcileCron.stop();
+    patreonReconcileCron = null;
   }
   await initializeCronJobs();
 }
@@ -759,6 +811,10 @@ export function stopCronJobs() {
   if (shareFillRecoveryCron) {
     shareFillRecoveryCron.stop();
     shareFillRecoveryCron = null;
+  }
+  if (patreonReconcileCron) {
+    patreonReconcileCron.stop();
+    patreonReconcileCron = null;
   }
   console.log("[Cron] Cron jobs stopped");
 }

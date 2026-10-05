@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createAdminLog } from "@/lib/adminLog";
 import type { GameConfig } from "@/lib/db/types";
@@ -49,16 +49,15 @@ export async function PATCH(request: Request) {
     if (!auth.ok) return auth.response;
 
     const parsed = await parseJsonBody(request, patchSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const { enabled } = parsed.data;
 
     // Require TEST_SECRET env var to enable test mode
     if (enabled && !process.env.TEST_SECRET) {
-      return NextResponse.json(
-        { error: "Cannot enable test mode: TEST_SECRET environment variable is not set." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Cannot enable test mode: TEST_SECRET environment variable is not set."
       );
     }
 

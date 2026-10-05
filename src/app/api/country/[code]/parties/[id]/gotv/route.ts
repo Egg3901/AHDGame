@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { gotvBudgetSchema } from "@/lib/api/schemas/settings";
 import { getPartyBudgetCollection } from "@/lib/db/collections";
@@ -24,7 +24,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
@@ -36,7 +36,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, gotvBudgetSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { gotvBudgetPercent: percent, gotvTargetCategory, gotvTargetGroup } = parsed.data;
 
@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     // Authorization: admin, national chair, vice chair, or national treasurer
@@ -54,24 +54,18 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isTreasurer = party.treasurerId?.equals(authUser.character._id);
 
     if (!isAdmin && !isChair && !isViceChair && !isTreasurer) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the national party chair, vice chair, treasurer, or an admin can set the GOTV budget",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the national party chair, vice chair, treasurer, or an admin can set the GOTV budget"
       );
     }
 
     if (isPartyTreasuryNegative(party.treasury)) {
       await resetPartyBudgetSpending(db, { countryId, partyId, scope: "national" });
       if (percent > 0) {
-        return NextResponse.json(
-          {
-            error:
-              "Party spending is disabled while the national treasury is negative. All party budgets were reset to 0%.",
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "Party spending is disabled while the national treasury is negative. All party budgets were reset to 0%."
         );
       }
     }

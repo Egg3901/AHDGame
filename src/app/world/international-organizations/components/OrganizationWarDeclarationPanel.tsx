@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
@@ -14,6 +15,7 @@ import {
 import type { OrgSummary, OrgViewerInfo } from "../orgTypes";
 import { VoteButtons } from "../VoteButtons";
 import { VoteRoster } from "../VoteRoster";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -62,7 +64,7 @@ export function OrganizationWarDeclarationPanel({
       );
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? "Failed to propose a declaration of war");
+        throw new Error(apiErrorText(body, "Failed to propose a declaration of war"));
       }
       setShowForm(false);
       onChange();
@@ -89,7 +91,7 @@ export function OrganizationWarDeclarationPanel({
     );
     if (!response.ok) {
       const body = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(body.error ?? "Vote failed");
+      throw new Error(apiErrorText(body, "Vote failed"));
     }
     onChange();
   }
@@ -159,7 +161,7 @@ export function OrganizationWarDeclarationPanel({
               </select>
             </div>
           </div>
-          {error && <p className="mt-2 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-2 text-xs text-error" />
           <div className="mt-4 flex gap-2">
             <Button
               variant="primary"
@@ -178,9 +180,7 @@ export function OrganizationWarDeclarationPanel({
       )}
 
       <div className="space-y-3">
-        <h4 className="text-xs font-semibold uppercase tracking-widest text-muted">
-          Pending declarations
-        </h4>
+        <h4 className="text-body-sm font-medium text-muted">Pending declarations</h4>
         {pending.length === 0 ? (
           <div className="rounded-xl border border-card-border bg-card p-5">
             <p className="text-sm text-muted">No declaration resolutions are pending.</p>

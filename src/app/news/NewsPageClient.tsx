@@ -126,7 +126,7 @@ export function NewsPageClient({
                   data-coach="nav-news"
                   className="text-xl font-bold tracking-tight text-white drop-shadow-md sm:text-3xl"
                 >
-                  News & Events
+                  News & events
                 </h1>
               </div>
             </div>
@@ -201,7 +201,7 @@ export function NewsPageClient({
 
               {composerMode === "banner" ? (
                 <div className="rounded-xl border border-card-border bg-card p-4">
-                  <h2 className="text-sm font-semibold text-foreground mb-3">Upload Banner Ad</h2>
+                  <h2 className="text-sm font-semibold text-foreground mb-3">Upload banner ad</h2>
                   <BannerAdComposer onClose={() => setComposerFeedType(null)} />
                 </div>
               ) : (

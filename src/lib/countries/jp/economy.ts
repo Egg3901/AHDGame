@@ -66,7 +66,8 @@ const monetaryByEra: Record<string, EraMonetaryBaseline> = {
   },
   "1991": {
     targetInflation: 2.5,
-    neutralPrimeRate: 4.5,
+    // Affordable reset borrowing remains the neutral NPC-policy anchor.
+    neutralPrimeRate: 3,
   },
 };
 

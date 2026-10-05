@@ -150,6 +150,9 @@ function buildStandalone(root) {
     env: {
       ...process.env,
       SINGLEPLAYER: "1",
+      // Two static generation workers keep the build inside a 16 GB hosted
+      // runner (the default of three starved it); an explicit value wins.
+      SINGLEPLAYER_BUILD_CPUS: process.env.SINGLEPLAYER_BUILD_CPUS ?? "2",
       NEXT_PUBLIC_CDN_BASE: "/cdn",
       NEXT_TELEMETRY_DISABLED: "1",
     },

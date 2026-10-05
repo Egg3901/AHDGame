@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -20,12 +20,12 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const { code, id: partyId, txnId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
     if (authResult.user.isBanned) {
-      return NextResponse.json({ error: "Account is banned" }, { status: 403 });
+      return errorResponse(403, "Account is banned");
     }
     const { user } = authResult;
 
@@ -36,33 +36,27 @@ export async function POST(_request: Request, { params }: RouteParams) {
     try {
       txnOid = new ObjectId(txnId);
     } catch {
-      return NextResponse.json({ error: "Invalid transaction ID" }, { status: 400 });
+      return errorResponse(400, "Invalid transaction ID");
     }
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
 
     // Country + party scoping check before the proposer-only update.
     const pending = await db
       .collection<PendingTreasuryTransaction>("pendingTreasuryTransactions")
       .findOne({ _id: txnOid });
     if (!pending) {
-      return NextResponse.json({ error: "Pending transaction not found" }, { status: 404 });
+      return errorResponse(404, "Pending transaction not found");
     }
     if (!pending.partyId.equals(party._id) || pending.countryId !== countryId) {
-      return NextResponse.json(
-        { error: "Transaction does not belong to this party" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Transaction does not belong to this party");
     }
 
     const ok = await cancelPendingTransaction(db, txnOid, user.character._id);
     if (!ok) {
-      return NextResponse.json(
-        { error: "Only the proposer can cancel, and only while the row is open." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the proposer can cancel, and only while the row is open.");
     }
     return NextResponse.json({ success: true, status: "cancelled" });
   } catch (error) {

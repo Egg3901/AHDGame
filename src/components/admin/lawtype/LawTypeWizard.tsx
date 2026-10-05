@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import type { LegislationType } from "@/lib/db/types";
 import type { WizardState } from "./types";
@@ -93,7 +94,7 @@ export function LawTypeWizard({ initialData, onClose }: LawTypeWizardProps) {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Failed to save");
+        setError(apiErrorText(data, "Failed to save"));
         return;
       }
 
@@ -110,7 +111,7 @@ export function LawTypeWizard({ initialData, onClose }: LawTypeWizardProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">
-          {isEditing ? `Edit: ${initialData.name}` : "Create New Law Type"}
+          {isEditing ? `Edit: ${initialData.name}` : "Create new law type"}
         </h2>
         <button
           onClick={() => onClose(false)}
@@ -213,7 +214,7 @@ export function LawTypeWizard({ initialData, onClose }: LawTypeWizardProps) {
             disabled={saving || !canProceed(4)}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
-            {saving ? "Saving..." : isEditing ? "Save Changes" : "Create Law Type"}
+            {saving ? "Saving..." : isEditing ? "Save changes" : "Create law type"}
           </button>
         )}
       </div>

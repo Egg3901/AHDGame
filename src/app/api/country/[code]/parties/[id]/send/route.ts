@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseObjectId } from "@/lib/utils/objectId";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -52,7 +52,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
@@ -63,12 +63,12 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, sendFundsSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { characterId, amount: sendAmount } = parsed.data;
     const targetCharacterOid = parseObjectId(characterId);
     if (!targetCharacterOid) {
-      return NextResponse.json({ error: "Invalid character ID" }, { status: 400 });
+      return errorResponse(400, "Invalid character ID");
     }
 
     const db = await getDb();
@@ -79,7 +79,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Verify party exists
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const partyIdStr = String(party.sequentialId);
@@ -101,7 +101,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       party.treasurerId.toString() === authUser.character._id.toString();
 
     if (!isAdmin && !isChair && !isViceChair && !isTreasurer) {
-      return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+      return errorResponse(403, "Not authorized");
     }
 
     // Verify target character exists and is a party member in the same country
@@ -110,14 +110,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     if (!targetCharacter) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     if (targetCharacter.party !== partyIdStr || !isSameCountry(targetCharacter, { countryId })) {
-      return NextResponse.json(
-        { error: "Character is not a member of this party" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Character is not a member of this party");
     }
 
     // Check treasury balance (pre-check; the executor / pending row use
@@ -128,13 +125,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!isAdmin) {
       const { currentTurn: freezeTurn } = await getGameTime();
       if (await isLeadershipElectionFreezeActive(db, party, freezeTurn)) {
-        return NextResponse.json({ error: LEADERSHIP_FREEZE_MESSAGE }, { status: 400 });
+        return errorResponse(400, LEADERSHIP_FREEZE_MESSAGE);
       }
     }
 
     const treasury = party.treasury ?? 0;
     if (treasury < sendAmount) {
-      return NextResponse.json({ error: "Insufficient treasury funds" }, { status: 400 });
+      return errorResponse(400, "Insufficient treasury funds");
     }
     // Same ceiling the request route applies, for the same reason: a
     // send above the recipient's per-turn cap is refused by
@@ -156,11 +153,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         ])
       );
       if (sendAmount > sendPayoutCap) {
-        return NextResponse.json(
-          {
-            error: `A single payment cannot exceed the per-turn limit of ${formatPayoutCap(countryId, sendPayoutCap)} per member.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `A single payment cannot exceed the per-turn limit of ${formatPayoutCap(countryId, sendPayoutCap)} per member.`
         );
       }
     }
@@ -193,14 +188,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (isPlayerAction && mode === "double") {
       const eligibility = canProposePendingTransaction(party);
       if (!eligibility.ok) {
-        return NextResponse.json({ error: eligibility.reason }, { status: 400 });
+        return errorResponse(400, eligibility.reason);
       }
       // Proposer slot is decided by role. If the caller holds none of
       // the three approver roles the prior auth check would already have
       // rejected — getProposerSlot returning null here is defensive.
       const slot = getProposerSlot(party, authUser.character._id);
       if (slot == null) {
-        return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+        return errorResponse(403, "Not authorized");
       }
       const { currentTurn } = await getGameTime();
       const row = await createPendingTransaction(

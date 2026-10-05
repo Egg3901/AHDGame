@@ -12,7 +12,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const id = code.toUpperCase() as CountryId;
   const config = COUNTRY_CONFIGS[id];
   if (!config) {
-    return { title: "National Budget | A House Divided" };
+    return { title: "National budget | A House Divided" };
   }
   return publicPageMetadata({
     title: `National Budget | ${config.name} | A House Divided`,

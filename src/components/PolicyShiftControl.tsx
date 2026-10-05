@@ -110,7 +110,7 @@ export function PolicyShiftControl({
             ></div>
           </div>
 
-          <div className="mt-1 flex justify-between text-[10px] text-muted uppercase tracking-wider">
+          <div className="mt-1 flex justify-between text-body-sm font-medium text-muted">
             <span>{leftLabel}</span>
             <span>{rightLabel}</span>
           </div>
@@ -129,7 +129,7 @@ export function PolicyShiftControl({
 
       <Modal
         open={Boolean(showConfirm)}
-        title="Confirm Policy Shift"
+        title="Confirm policy shift"
         onClose={() => setShowConfirm(null)}
       >
         <p className="mb-4 text-sm text-muted">
@@ -139,7 +139,7 @@ export function PolicyShiftControl({
 
         <div className="mb-6 space-y-2 rounded-lg bg-background p-4 text-sm">
           <div className="flex justify-between">
-            <span className="text-muted">Action Cost:</span>
+            <span className="text-muted">Action cost:</span>
             <span className="font-medium text-red-400">-{ACTION_COST} Actions</span>
           </div>
           <div className="flex justify-between">
@@ -147,11 +147,11 @@ export function PolicyShiftControl({
             <span className="font-medium text-red-400">+5 Points</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted">Political Influence:</span>
+            <span className="text-muted">Political influence:</span>
             <span className="font-medium text-red-400">-5% Reduction</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted">National Influence:</span>
+            <span className="text-muted">National influence:</span>
             <span className="font-medium text-red-400">-5% Reduction</span>
           </div>
         </div>
@@ -169,7 +169,7 @@ export function PolicyShiftControl({
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
             disabled={loading}
           >
-            {loading ? "Shifting..." : "Confirm Shift"}
+            {loading ? "Shifting..." : "Confirm shift"}
           </button>
         </div>
       </Modal>

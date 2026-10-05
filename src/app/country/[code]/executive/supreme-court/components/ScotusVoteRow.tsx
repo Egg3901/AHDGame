@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 export interface ScotusNominationRow {
   id: string;
@@ -61,7 +62,7 @@ export function ScotusVoteRow({
           {nomination.nomineeName} → Seat #{nomination.seatNumber}
           {nomination.nomineeMode === "npp" && (
             <span className="ml-2 rounded-full border border-card-border bg-card-elevated px-2 py-0.5 text-[10px] font-medium text-muted align-middle">
-              NPP
+              <NppAbbr />
             </span>
           )}
         </p>

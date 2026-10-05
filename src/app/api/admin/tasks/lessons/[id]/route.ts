@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { requireAdminOrApiKey } from "@/lib/api/requireAdminOrApiKey";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getTaskLessonsCollection } from "@/lib/db/collections/taskLessons";
 import { getDb } from "@/lib/mongodb";
@@ -29,11 +29,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
-    if (!ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+    if (!ObjectId.isValid(id)) return errorResponse(400, "Invalid id");
 
     const parsed = await parseJsonBody(request, patchLessonSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const col = getTaskLessonsCollection(db);
@@ -42,8 +41,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (parsed.data.tags !== undefined) update.tags = parsed.data.tags;
     if (parsed.data.category !== undefined) update.category = parsed.data.category;
 
-    if (Object.keys(update).length === 0)
-      return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+    if (Object.keys(update).length === 0) return errorResponse(400, "Nothing to update");
 
     const result = await col.findOneAndUpdate(
       { _id: new ObjectId(id) },

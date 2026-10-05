@@ -195,7 +195,7 @@ export function CommandsBuilder({
             className="font-semibold text-foreground underline decoration-dotted underline-offset-2 hover:text-gov-soft"
             title="The Commanding General's own page, where postings are made"
           >
-            Commanding General
+            Commanding general
           </a>{" "}
           who posts generals to a conflict and names one of them Theater Commander. Assign a unit to
           a general here; it arrives at the front when that general does.

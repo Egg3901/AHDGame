@@ -14,9 +14,21 @@ export const INSURED_CAP_REFERENCE_USD = 5_000_000;
 /** Provisional annual premium rate on insured deposits (before risk weight). */
 export const BASE_PREMIUM_ANNUAL = 0.004;
 
-/** Required evidence before a fund replaces the provisional premium rate. */
+/**
+ * Evidence for full credibility: ten measured years and three paid claims.
+ * Below either threshold the measured rate is blended in proportionally, so a
+ * fund moves from the provisional rate toward its measured rate gradually
+ * instead of jumping on the turn the cohort crosses a threshold.
+ */
 export const PREMIUM_EVIDENCE_MIN_YEARS = 10;
 export const PREMIUM_EVIDENCE_MIN_PAID_CLAIMS = 3;
+/**
+ * Ceiling on the annual base rate (before the 0.5x to 3x risk weight). A
+ * single large failure in a thin cohort must not price surviving banks into a
+ * failure spiral; claims beyond what the ceiling funds fall to the funded
+ * Treasury backstop, which already covers any fund shortfall.
+ */
+export const PREMIUM_BASE_ANNUAL_CEILING = 0.02;
 /** Keep one year of observed net claims in the currency fund. */
 export const INSURANCE_RESERVE_TARGET_YEARS = 1;
 /** Refill a reserve shortfall over five years of the observed exposure base. */
@@ -70,20 +82,29 @@ export function computeInsurancePremium(
 }
 
 /**
- * Price from measured currency-fund claims only after ten years of exposure
- * and three paid resolutions. Legacy lifetime counters are deliberately not
- * inputs because they predate the new deposit-turn denominator and omit
- * recovery totals. Until the cohort is credible, preserve the 0.4% rate.
+ * Annual base premium rate for a currency fund.
+ *
+ *   lossRate   = netClaims * TURNS_PER_YEAR / insuredDepositTurns
+ *   target     = lossRate * avgInsuredDeposits * INSURANCE_RESERVE_TARGET_YEARS
+ *   refillRate = max(0, target - fundBalance) / (avgInsuredDeposits * INSURANCE_RESERVE_REFILL_YEARS)
+ *   measured   = lossRate + refillRate
+ *   z          = min(1, years / MIN_YEARS) * min(1, paidClaims / MIN_PAID_CLAIMS)
+ *   rate       = clamp(BASE + z * (measured - BASE), BASE, CEILING)
+ *
+ * Inputs are deterministic counters from the measured cohort only. Legacy
+ * lifetime counters are deliberately not inputs because they predate the
+ * deposit-turn denominator and omit recovery totals. With no measured paid
+ * claim the provisional 0.4% rate is returned unchanged.
  */
 export function computeEvidenceBasedPremiumAnnualRate(evidence: InsurancePremiumEvidence): number {
   const elapsedTurns = evidence.currentTurn - evidence.firstMeasuredTurn + 1;
   if (
     !Number.isFinite(elapsedTurns) ||
-    elapsedTurns < PREMIUM_EVIDENCE_MIN_YEARS * TURNS_PER_YEAR ||
+    elapsedTurns <= 0 ||
     !Number.isFinite(evidence.insuredDepositTurns) ||
     evidence.insuredDepositTurns <= 0 ||
     !Number.isFinite(evidence.paidClaims) ||
-    evidence.paidClaims < PREMIUM_EVIDENCE_MIN_PAID_CLAIMS
+    evidence.paidClaims <= 0
   ) {
     return BASE_PREMIUM_ANNUAL;
   }
@@ -99,10 +120,17 @@ export function computeEvidenceBasedPremiumAnnualRate(evidence: InsurancePremium
 
   const targetReserve =
     observedAnnualLossRate * averageAnnualInsuredDeposits * INSURANCE_RESERVE_TARGET_YEARS;
-  const reserveGap = Math.max(0, targetReserve - Math.max(0, evidence.fundBalance));
+  const fundBalance = Number.isFinite(evidence.fundBalance) ? Math.max(0, evidence.fundBalance) : 0;
+  const reserveGap = Math.max(0, targetReserve - fundBalance);
   const annualReserveRefillRate =
     reserveGap / (averageAnnualInsuredDeposits * INSURANCE_RESERVE_REFILL_YEARS);
-  return Math.max(BASE_PREMIUM_ANNUAL, observedAnnualLossRate + annualReserveRefillRate);
+  const measuredRate = observedAnnualLossRate + annualReserveRefillRate;
+
+  const credibility =
+    Math.min(1, elapsedTurns / (PREMIUM_EVIDENCE_MIN_YEARS * TURNS_PER_YEAR)) *
+    Math.min(1, evidence.paidClaims / PREMIUM_EVIDENCE_MIN_PAID_CLAIMS);
+  const blended = BASE_PREMIUM_ANNUAL + credibility * (measuredRate - BASE_PREMIUM_ANNUAL);
+  return clamp(blended, BASE_PREMIUM_ANNUAL, PREMIUM_BASE_ANNUAL_CEILING);
 }
 
 /** Sum of min(balance, cap) over player depositors. */

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -53,7 +53,7 @@ export async function GET(
     const db = await getDb();
     const resolved = await resolveScope(db, code, id, billId);
     if ("error" in resolved) {
-      return NextResponse.json({ error: resolved.error }, { status: resolved.status });
+      return errorResponse(resolved.status, resolved.error);
     }
 
     const page = Number(new URL(request.url).searchParams.get("page") ?? "1");
@@ -79,14 +79,13 @@ export async function POST(
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     const parsed = await parseJsonBody(request, createSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const { code, id, billId } = await params;
     const db = await getDb();
     const resolved = await resolveScope(db, code, id, billId);
     if ("error" in resolved) {
-      return NextResponse.json({ error: resolved.error }, { status: resolved.status });
+      return errorResponse(resolved.status, resolved.error);
     }
 
     return NextResponse.json(

@@ -2,6 +2,7 @@
 
 import { useReducer, useState, type Dispatch } from "react";
 import type { ProfileGeneral } from "@/lib/military/generalsTree";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export interface CharacterSubject {
   id: string;
@@ -68,7 +69,7 @@ export function useCharacterGeneral(
       });
       if (!res.ok) {
         const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(payload?.error ?? "Could not train that trait.");
+        setError(apiErrorText(payload, "Could not train that trait."));
         return;
       }
       const data = (await res.json()) as { general: ProfileGeneral };

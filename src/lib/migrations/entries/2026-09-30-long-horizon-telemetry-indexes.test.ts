@@ -15,6 +15,8 @@ describe("2026-09-30-long-horizon-telemetry-indexes migration", () => {
     expect(collection.mock.calls.map((call) => call[0])).toEqual([
       "approvalTelemetry",
       "macroTelemetry",
+      "countryTurnTelemetry",
+      "securityTelemetry",
     ]);
     expect(createIndex).toHaveBeenCalledWith(
       { worldId: 1, country: 1, region: 1, turn: 1 },
@@ -24,17 +26,17 @@ describe("2026-09-30-long-horizon-telemetry-indexes migration", () => {
       { worldId: 1, country: 1, region: 1, metric: 1, turn: 1 },
       { name: "macroTelemetry_world_country_region_metric_turn_unique", unique: true }
     );
-    expect(result.documentsUpdated).toBe(2);
+    expect(result.documentsUpdated).toBe(4);
   });
 
   it("reports a duplicate-key build instead of failing startup", async () => {
     const duplicate = Object.assign(new Error("E11000 duplicate key error"), { code: 11000 });
-    const createIndex = vi.fn().mockRejectedValueOnce(duplicate).mockResolvedValueOnce("ok");
+    const createIndex = vi.fn().mockRejectedValueOnce(duplicate).mockResolvedValue("ok");
     const { db } = mockDb(createIndex);
 
     const result = await migration.execute(db, { dryRun: false });
 
-    expect(result.documentsUpdated).toBe(1);
+    expect(result.documentsUpdated).toBe(3);
     expect(result.notes?.[0]).toMatch(/^not created approvalTelemetry\./);
     expect(result.notes?.[1]).toMatch(/^created\/verified macroTelemetry\./);
   });
@@ -51,7 +53,7 @@ describe("2026-09-30-long-horizon-telemetry-indexes migration", () => {
     const result = await migration.execute(db, { dryRun: true });
 
     expect(createIndex).not.toHaveBeenCalled();
-    expect(result.notes).toHaveLength(2);
+    expect(result.notes).toHaveLength(4);
   });
 
   it("is idempotent so it can run at startup", () => {

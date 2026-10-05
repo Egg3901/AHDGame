@@ -1,0 +1,102 @@
+{
+  "source": "Baseline 9461ef2e34abe44a91893615cef1b20074a21ae5 with candidate issuer-risk correction",
+  "model": "Deterministic coupon and auction-demand sensitivity; not a world simulation",
+  "assumptions": {
+    "primeRatePct": 5,
+    "faceValue": 1000000000,
+    "maturityTurns": 48,
+    "maturityTermPremiumPp": 0,
+    "chairSpreadPp": 0,
+    "democracySpreadPp": 0,
+    "householdOrGdpFeedback": "not modeled",
+    "debtStockAndRatingPath": "externally fixed scenario path; no endogenous compounding"
+  },
+  "ratingSchedule": ["AAA", "AA", "A", "BBB", "BB", "B", "CCC"],
+  "cases": [
+    {
+      "name": "healthy",
+      "debtToGdp": 0.5,
+      "rating": "AAA",
+      "spreadPp": 0,
+      "marketCouponRatePct": 5,
+      "newFortyEightTurnCouponRatePct": 5,
+      "annualCouponCostOnOneBillion": 50000000,
+      "marketDemandRatio": 1.25,
+      "couponDemandContribution": 0.05000000000000001
+    },
+    {
+      "name": "stressed",
+      "debtToGdp": 1.1,
+      "rating": "BBB",
+      "spreadPp": 3,
+      "marketCouponRatePct": 8,
+      "newFortyEightTurnCouponRatePct": 8,
+      "annualCouponCostOnOneBillion": 80000000,
+      "marketDemandRatio": 1.2499999999999998,
+      "couponDemandContribution": 0.2
+    },
+    {
+      "name": "post-default",
+      "debtToGdp": 2.6,
+      "rating": "CCC",
+      "spreadPp": 12,
+      "marketCouponRatePct": 17,
+      "newFortyEightTurnCouponRatePct": 17,
+      "annualCouponCostOnOneBillion": 170000000,
+      "marketDemandRatio": 0.009999999999999898,
+      "couponDemandContribution": 0.65
+    },
+    {
+      "name": "recovered",
+      "debtToGdp": 0.5,
+      "rating": "AAA",
+      "spreadPp": 0,
+      "marketCouponRatePct": 5,
+      "newFortyEightTurnCouponRatePct": 5,
+      "annualCouponCostOnOneBillion": 50000000,
+      "marketDemandRatio": 1.25,
+      "couponDemandContribution": 0.05000000000000001
+    }
+  ],
+  "refiPath": [
+    {
+      "turn": 0,
+      "rating": "AAA",
+      "newCouponRatePct": 5,
+      "annualCouponCostOnOneBillion": 50000000
+    },
+    {
+      "turn": 48,
+      "rating": "CCC",
+      "newCouponRatePct": 17,
+      "annualCouponCostOnOneBillion": 170000000
+    },
+    {
+      "turn": 96,
+      "rating": "AAA",
+      "newCouponRatePct": 5,
+      "annualCouponCostOnOneBillion": 50000000
+    },
+    {
+      "turn": 144,
+      "rating": "BBB",
+      "newCouponRatePct": 8,
+      "annualCouponCostOnOneBillion": 80000000
+    },
+    {
+      "turn": 192,
+      "rating": "CCC",
+      "newCouponRatePct": 17,
+      "annualCouponCostOnOneBillion": 170000000
+    },
+    {
+      "turn": 240,
+      "rating": "AAA",
+      "newCouponRatePct": 5,
+      "annualCouponCostOnOneBillion": 50000000
+    }
+  ],
+  "oldContractCouponAfterRatingChangePct": 5,
+  "legacyNewCouponAtAnyRatingPct": 5,
+  "limitation": "A pinned sandbox world is still required to assess macro debt-spiral consequences."
+}

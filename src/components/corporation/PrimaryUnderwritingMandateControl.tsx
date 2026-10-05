@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BankChoice {
   corporationId: string;
@@ -52,7 +53,7 @@ export function PrimaryUnderwritingMandateControl({ corpId }: { corpId: string }
         body: JSON.stringify({ bankCorporationId: selected || null }),
       });
       const body = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(body.error ?? "The mandate could not be saved.");
+      if (!response.ok) throw new Error(apiErrorText(body, "The mandate could not be saved."));
       setMessage(selected ? "Underwriting mandate saved." : "Underwriting mandate cleared.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The mandate could not be saved.");

@@ -1,8 +1,9 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { Modal } from "@/components/ui";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { BLEND, FONT } from "@/components/blend/tokens";
 import {
   blendButtonStyle,
@@ -53,7 +54,7 @@ export function SuspendEndorsePanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to suspend and endorse");
+        setError(apiErrorText(data, "Failed to suspend and endorse"));
         return;
       }
       setConfirmOpen(false);
@@ -107,7 +108,7 @@ export function SuspendEndorsePanel({
               color: BLEND.mutedDimmer,
             }}
           >
-            Suspended <LocalTime value={suspendedAt} />
+            Suspended <GameMonthTime value={suspendedAt} />
           </div>
         )}
       </div>

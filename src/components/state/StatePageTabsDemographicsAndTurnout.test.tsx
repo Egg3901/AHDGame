@@ -43,7 +43,7 @@ describe("DemographicsAndTurnoutTab empty-state", () => {
     );
     // Live cohort data is a separate layer from census/polling demographics —
     // it must still surface even when the latter is unconfigured.
-    await waitFor(() => expect(screen.getByText(/Live Population/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Live population/i)).toBeTruthy());
     // The empty-state note clarifies it is the census/polling layer that's absent.
     expect(screen.getByText("No census or polling data")).toBeTruthy();
   });
@@ -135,7 +135,7 @@ describe("DemographicsAndTurnoutTab electorate dossier", () => {
     expect(screen.getAllByText("Black voters").length).toBeGreaterThan(0);
     expect(screen.queryByText("Test Archetype")).toBeNull();
     // Real projection band + preferred-party tile render in the default Simple view.
-    expect(screen.getByText("State Projection")).toBeTruthy();
+    expect(screen.getByText("State projection")).toBeTruthy();
     expect(screen.getByText("Leaning toward")).toBeTruthy();
     // Analyst-only detail is hidden until the view toggles.
     expect(screen.queryByText("Economic lean")).toBeNull();

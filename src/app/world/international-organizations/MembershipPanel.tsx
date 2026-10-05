@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui";
@@ -17,6 +18,7 @@ import {
 import { useEntityName } from "./useEntityName";
 import type { MembershipDefenseWarning } from "@/lib/internationalOrganizations/membershipDefenseWarnings";
 import type { PactEntryWarning } from "@/lib/military/treatyDefence";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -112,7 +114,7 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to propose join");
+        throw new Error(apiErrorText(body, "Failed to propose join"));
       }
       onChange();
     } catch (err) {
@@ -134,7 +136,7 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error ?? "Vote failed");
+      throw new Error(apiErrorText(body, "Vote failed"));
     }
     onChange();
   }
@@ -191,7 +193,7 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to propose defensive entry");
+        throw new Error(apiErrorText(body, "Failed to propose defensive entry"));
       }
       onChange();
     } catch (err) {
@@ -231,7 +233,7 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
                   entityName={entityName}
                 />
               </div>
-              {error && <p className="text-xs text-error">{error}</p>}
+              <InlineError error={error} className="text-xs text-error" />
             </>
           )}
           {viewerFmCountry && viewerIsMember && (
@@ -256,7 +258,7 @@ export function MembershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
               {leaveSuccess && (
                 <p className="max-w-xs text-right text-xs text-success">{leaveSuccess}</p>
               )}
-              {leaveError && <p className="max-w-xs text-right text-xs text-error">{leaveError}</p>}
+              <InlineError error={leaveError} className="max-w-xs text-right text-xs text-error" />
             </>
           )}
         </div>

@@ -153,7 +153,9 @@ export const UK_GEOGRAPHY: CountryGeography = {
       twoAxis: {
         economicCenter: -1.7,
         economicCenterTol: 0.5,
-        minEconomicSpread: 0.7,
+        // Regional contrast is calibrated to the published 1987 and 1992 regional
+        // vote shares (rules/regionalContext1991.ts), not left at the census ceiling.
+        minEconomicSpread: 1.8,
         minSocialSpread: 0.05,
       },
       ordering: [

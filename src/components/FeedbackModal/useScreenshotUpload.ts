@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { dataUrlToBlob } from "@/lib/feedback/dataUrlToBlob";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface UseScreenshotUploadProps {
   isOpen: boolean;
@@ -53,7 +54,7 @@ export function useScreenshotUpload({
         const uploadRes = await fetch(uploadEndpoint, { method: "POST", body: form });
         const data = await uploadRes.json();
         if (!uploadRes.ok) {
-          setScreenshotError(data.error ?? "Screenshot upload failed");
+          setScreenshotError(apiErrorText(data, "Screenshot upload failed"));
           return null;
         }
         return data.url as string;

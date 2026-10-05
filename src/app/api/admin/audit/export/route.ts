@@ -11,7 +11,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getActionAuditLogCollection } from "@/lib/db/collections/actionAuditLog";
 import { buildAuditLogFilter, MAX_AUDIT_EXPORT_ROWS } from "@/lib/audit/queryAuditLog";
 
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     // category/projection stripping in buildAuditLogFilter is a no-op here;
     // pass it through anyway to keep one code path for filter parsing.
     const built = buildAuditLogFilter(searchParams, true);
-    if (!built.ok) return NextResponse.json({ error: built.error }, { status: 400 });
+    if (!built.ok) return errorResponse(400, built.error);
     // Cursor pagination doesn't apply to a full export — start from the
     // newest row within the rest of the filter every time.
     delete built.filter._id;

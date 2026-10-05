@@ -2,6 +2,7 @@
 // Auth: requireAuth
 // Errors: 400 (invalid country code), 401, 404 (no federal budget for country)
 
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
@@ -30,7 +31,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
   const upperCode = code.toUpperCase() as CountryId;
 
   if (!COUNTRY_CONFIGS[upperCode]) {
-    return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+    return errorResponse(400, "Invalid country code");
   }
 
   const db = await getDb();
@@ -38,7 +39,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
   const snapshot = await loadCountrySovereignSnapshot(db, upperCode, currentTurn);
 
   if (!snapshot) {
-    return NextResponse.json({ error: "Country budget not found" }, { status: 404 });
+    return errorResponse(404, "Country budget not found");
   }
 
   const demand = computeMarketDemand(snapshot);

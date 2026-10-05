@@ -165,9 +165,7 @@ export function GovernorOfficeClient(props: Props) {
                   </div>
                 )}
                 <div className="flex flex-col min-w-0">
-                  <span className="text-[10px] uppercase tracking-widest text-muted">
-                    {props.regionalTitle}
-                  </span>
+                  <span className="text-body-sm font-medium text-muted">{props.regionalTitle}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold truncate">{props.officeHolderName}</span>
                     {props.officeHolderPartyAbbreviation && (
@@ -186,14 +184,14 @@ export function GovernorOfficeClient(props: Props) {
               </div>
             )}
             <div className="flex flex-col px-5 py-3">
-              <span className="text-[10px] uppercase tracking-widest text-muted">Office AP</span>
+              <span className="text-body-sm font-medium text-muted">Office AP</span>
               <span className="text-base font-bold tabular-nums">
                 {props.gubernatorialActions}/{GUBERNATORIAL_ACTION_CAP}
               </span>
             </div>
             {props.viewerIsAdmin && !props.viewerIsHolder && (
               <div className="flex flex-col px-5 py-3">
-                <span className="text-[10px] uppercase tracking-widest text-muted">Mode</span>
+                <span className="text-body-sm font-medium text-muted">Mode</span>
                 <span className="text-base font-bold text-primary">Admin view</span>
               </div>
             )}

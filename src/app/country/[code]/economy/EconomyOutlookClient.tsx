@@ -122,7 +122,7 @@ export function EconomyOutlookClient() {
                 {data.stateOwnership.status.tier !== "none" && (
                   <div className="rounded-xl border border-card-border bg-card px-5 py-4 shadow-sm">
                     <div className="flex items-baseline justify-between gap-3">
-                      <h3 className="text-sm font-bold text-foreground">State Ownership</h3>
+                      <h3 className="text-sm font-bold text-foreground">State ownership</h3>
                       <span
                         className={`text-lg font-bold tabular-nums ${
                           data.stateOwnership.status.tier === "high"
@@ -147,7 +147,7 @@ export function EconomyOutlookClient() {
               <div className="rounded-xl border border-card-border bg-card px-5 py-4 shadow-sm lg:col-span-7">
                 <div className="flex items-baseline justify-between gap-3">
                   <h3 className="text-sm font-bold text-foreground">
-                    Sector Mix <span className="font-normal text-muted">· national</span>
+                    Sector mix <span className="font-normal text-muted">· national</span>
                   </h3>
                   <span className="text-[10px] text-muted">
                     aggregated across {config.regionLabelPlural.toLowerCase()} · tile links to

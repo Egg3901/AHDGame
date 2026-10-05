@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getIntelligenceNetworksCollection } from "@/lib/db/collections/intelligence";
 import {
   getOrCreateAgency,
@@ -32,7 +32,7 @@ export async function POST(request: Request, { params }: IntelligenceRouteParams
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const target = await requireRegisteredTarget(db, parsed.data.targetCountryId, countryId);
@@ -45,9 +45,9 @@ export async function POST(request: Request, { params }: IntelligenceRouteParams
     // A vacant seat may wind a network DOWN but not stand a new effort up.
     // Vacancy degrades a service; it does not freeze it.
     if (agency.directorCharacterId == null && parsed.data.funding !== "none") {
-      return NextResponse.json(
-        { error: "The service has no director. Appoint one before funding new work." },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "The service has no director. Appoint one before funding new work."
       );
     }
 

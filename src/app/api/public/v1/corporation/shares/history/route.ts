@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { publicApiGuard } from "@/lib/publicApi/middleware";
 import { queryShareHistory } from "@/lib/publicApi/corporation";
 
@@ -14,14 +14,7 @@ export async function GET(request: Request) {
     const name = url.searchParams.get("name");
     const id = url.searchParams.get("id");
     if (!name && !id) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "Missing required query param: name or id",
-          code: "BAD_REQUEST",
-        },
-        { status: 400 }
-      );
+      return errorResponse(400, "Missing required query param: name or id", { code: "BAD_REQUEST", extra: { ok: false } });
     }
 
     const db = await getDb();
@@ -35,10 +28,7 @@ export async function GET(request: Request) {
     });
 
     if (!result) {
-      return NextResponse.json(
-        { ok: false, error: "Corporation not found", code: "NOT_FOUND" },
-        { status: 404 }
-      );
+      return errorResponse(404, "Corporation not found", { code: "NOT_FOUND", extra: { ok: false } });
     }
 
     return NextResponse.json({ ok: true, ...result }, { headers: guard.headers });

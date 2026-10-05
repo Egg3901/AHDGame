@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 import type { DistrictSquares } from "@/lib/db/types/congressionalDistrict";
 import type { Pool } from "@/lib/redistricting/pools";
 import type { RedistrictCaps } from "@/lib/redistricting/caps";
@@ -170,7 +171,7 @@ export function DistrictMapEditor({
       setResult(
         res.ok
           ? { ok: true, text: "Map redrawn. It takes effect at the next House election." }
-          : { ok: false, text: data.violations?.join(" ") ?? data.error ?? "Failed." }
+          : { ok: false, text: data.violations?.join(" ") ?? apiErrorText(data, "Failed.") }
       );
     } catch {
       setResult({ ok: false, text: "Network error." });
@@ -183,7 +184,7 @@ export function DistrictMapEditor({
     <div className="space-y-4">
       {/* How it works */}
       <details className="rounded-lg border border-card-border bg-card px-4 py-3 text-sm">
-        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted">
+        <summary className="cursor-pointer text-body-sm font-medium text-muted">
           How redistricting works
         </summary>
         <div className="mt-2 space-y-2 text-xs text-muted">
@@ -220,9 +221,7 @@ export function DistrictMapEditor({
       {/* Auto-Map toolbar */}
       <div className="rounded-lg border border-card-border bg-card px-4 py-3 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-            Auto-Map presets
-          </span>
+          <span className="text-body-sm font-medium text-muted">Auto-Map presets</span>
           <div className="flex gap-2">
             <button
               type="button"
@@ -276,7 +275,7 @@ export function DistrictMapEditor({
       {/* Paint tool + budget meter */}
       <div className="rounded-lg border border-card-border bg-card px-4 py-3 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted">Paint</span>
+          <span className="text-body-sm font-medium text-muted">Paint</span>
           {(["left", "grey", "right"] as Pool[]).map((p) => (
             <button
               key={p}
@@ -385,7 +384,7 @@ export function DistrictMapEditor({
 
       {/* Legality panel + submit */}
       <div className="rounded-lg border border-card-border bg-card px-4 py-3 space-y-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted">Map check</span>
+        <span className="text-body-sm font-medium text-muted">Map check</span>
         {!conserved && (
           <p className="text-xs text-error">
             • Every voter block must be placed — see the &quot;still to place&quot; counts above.

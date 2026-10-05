@@ -50,6 +50,7 @@ const READ_ONLY_PHASES = new Set<string>([
   "approvalSnapshot",
   "interestRateSnapshot",
   "partyHistorySnapshot",
+  "researchTelemetry",
   "portfolioSnapshot",
   "corpPortfolioSnapshot",
   "stockExchangeSnapshot",

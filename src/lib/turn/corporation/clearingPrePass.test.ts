@@ -33,10 +33,10 @@ function makeInput(overrides: Partial<ClearingPrePassInput> = {}): ClearingPrePa
     producedByCorpCommodity: new Map(),
     achievableByCorpCommodity: new Map(),
     stateLocalClearingBlockedByLegacyAgreement: false,
-    treasuryCashLedgerEnabled: false,
     brandLoyaltyEnabled: false,
     brandLoyaltySliceEnabled: false,
     qualityPremiumPricingEnabled: false,
+    treasuryCashLedgerEnabled: false,
     ...overrides,
   };
 }

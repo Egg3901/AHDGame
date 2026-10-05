@@ -45,9 +45,7 @@ export function NotifDetail({ item, onArchive, onSnooze }: NotifDetailProps) {
                   {category.label}
                 </span>
                 <span className="text-muted/50">·</span>
-                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
-                  {item.label}
-                </span>
+                <span className="text-body-sm font-medium text-muted">{item.label}</span>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
                 <span>{item.time === "now" ? "Just now" : `${item.time} ago`}</span>
@@ -93,9 +91,7 @@ export function NotifDetail({ item, onArchive, onSnooze }: NotifDetailProps) {
                 key={label}
                 className="min-w-0 rounded-xl border border-card-border bg-card-elevated/65 px-3.5 py-3"
               >
-                <dt className="truncate text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
-                  {label}
-                </dt>
+                <dt className="truncate text-body-sm font-medium text-muted">{label}</dt>
                 <dd className="mt-1 truncate text-sm font-semibold text-foreground" title={value}>
                   {value}
                 </dd>

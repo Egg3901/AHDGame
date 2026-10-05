@@ -202,6 +202,39 @@ export async function processScotusNominationLifecycle(
     })
     .toArray();
 
+  const nomineeCharacterIds = [
+    ...new Map(
+      expired
+        .filter((nom) => nom.nomineeMode === "character" && nom.nomineeCharacterId)
+        .map((nom) => [nom.nomineeCharacterId!.toString(), nom.nomineeCharacterId!] as const)
+    ).values(),
+  ];
+  const nomineeNppIds = [
+    ...new Map(
+      expired
+        .filter((nom) => nom.nomineeMode !== "character" && nom.nomineeNppId)
+        .map((nom) => [nom.nomineeNppId!.toString(), nom.nomineeNppId!] as const)
+    ).values(),
+  ];
+  const [characterPortraits, nppPortraits] = await Promise.all([
+    nomineeCharacterIds.length
+      ? database
+          .collection<Character>("characters")
+          .find({ _id: { $in: nomineeCharacterIds } }, { projection: { avatarUrl: 1 } })
+          .toArray()
+      : Promise.resolve([]),
+    nomineeNppIds.length
+      ? database
+          .collection<NPP>("npps")
+          .find({ _id: { $in: nomineeNppIds } }, { projection: { avatarUrl: 1 } })
+          .toArray()
+      : Promise.resolve([]),
+  ]);
+  const characterAvatarById = new Map(
+    characterPortraits.map((character) => [character._id.toString(), character.avatarUrl])
+  );
+  const nppAvatarById = new Map(nppPortraits.map((npp) => [npp._id.toString(), npp.avatarUrl]));
+
   const notificationInputs: NotificationInput[] = [];
   let confirmed = 0;
   let rejected = 0;
@@ -210,20 +243,12 @@ export async function processScotusNominationLifecycle(
     const reTally = await computeCabinetNominationTally(database, nom.countryId, nom.votes);
     const passed = didPass(reTally.votesFor, reTally.votesAgainst);
 
-    // Portrait for the Discord card — character or generated-NPP nominee.
+    // Optional card portraits are preloaded in two projected reads above.
     const nomineeAvatarUrl =
       nom.nomineeMode === "character" && nom.nomineeCharacterId
-        ? (
-            await database
-              .collection<Character>("characters")
-              .findOne({ _id: nom.nomineeCharacterId }, { projection: { avatarUrl: 1 } })
-          )?.avatarUrl
+        ? characterAvatarById.get(nom.nomineeCharacterId.toString())
         : nom.nomineeNppId
-          ? (
-              await database
-                .collection<NPP>("npps")
-                .findOne({ _id: nom.nomineeNppId }, { projection: { avatarUrl: 1 } })
-            )?.avatarUrl
+          ? nppAvatarById.get(nom.nomineeNppId.toString())
           : undefined;
 
     const countryConfig = getCountryConfig(nom.countryId as CountryId);

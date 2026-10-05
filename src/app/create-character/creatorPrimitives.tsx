@@ -20,7 +20,7 @@ export function FieldCaption({
 }) {
   return (
     <div className="mb-2 flex items-baseline justify-between gap-3">
-      <span className="text-body-xs font-semibold uppercase tracking-[0.14em] text-muted">
+      <span className="text-body-sm font-medium text-muted">
         {children}
         {required && <span className="text-error"> *</span>}
       </span>

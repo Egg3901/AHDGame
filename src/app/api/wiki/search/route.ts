@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkWikiDisabled } from "@/lib/api/wikiGuard";
 import { escapeRegex } from "@/lib/utils/escapeRegex";
 import { rankWikiSearchCandidates, type WikiSearchCandidate } from "@/lib/wiki/wikiSearch";
@@ -26,7 +26,7 @@ async function handleGET(request: Request) {
     const query = searchParams.get("q") || "";
     // MongoDB regex patterns cannot contain null bytes.
     if (query.includes("\u0000")) {
-      return NextResponse.json({ error: "Query contains an invalid character" }, { status: 400 });
+      return errorResponse(400, "Query contains an invalid character");
     }
     const blocked = await checkWikiDisabled();
     if (blocked) return blocked;

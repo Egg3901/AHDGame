@@ -22,7 +22,7 @@ export function LeaderCard({
 }) {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">{title}</p>
+      <p className="text-body-sm font-medium text-muted">{title}</p>
       <p className="mb-3 text-xs text-muted">{subtitle}</p>
       {character ? (
         <div className="flex items-center gap-3">

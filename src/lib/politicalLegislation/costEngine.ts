@@ -37,12 +37,18 @@ export function computeLawCost(
   // catalogue country here is what pushed "DE" into `LawCountryId` and broke six
   // exhaustive tables that key off it.
   countryId: CostAnchorCountryId,
-  incomeBandIndex: number | null | undefined
+  incomeBandIndex: number | null | undefined,
+  /** Catalog-only callers apply the world's persisted founding expense scale. */
+  programCostScale = 1
 ): LawFiscal {
   const bandIndex = incomeBandIndex ?? 1.0;
   const cost =
-    (level.gdpCostFraction ?? 0) * base.gdp +
-    (level.incomeCostFraction ?? 0) * COST_INCOME_ANCHORS[countryId] * bandIndex * base.population;
+    ((level.gdpCostFraction ?? 0) * base.gdp +
+      (level.incomeCostFraction ?? 0) *
+        COST_INCOME_ANCHORS[countryId] *
+        bandIndex *
+        base.population) *
+    programCostScale;
   const revenue = (level.gdpRevenueFraction ?? 0) * base.gdp;
   return { cost, revenue, net: revenue - cost };
 }

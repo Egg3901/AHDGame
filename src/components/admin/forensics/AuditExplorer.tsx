@@ -284,7 +284,7 @@ export default function AuditExplorer({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">Forensic Explorer</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Forensic explorer</h2>
           <p className="mt-0.5 text-xs text-muted">
             Search the unified action-audit spine — follow any action to its full trace.
           </p>

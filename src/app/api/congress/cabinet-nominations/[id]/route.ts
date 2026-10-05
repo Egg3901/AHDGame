@@ -6,7 +6,7 @@ import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { CabinetNomination, ElectedOfficial, Character } from "@/lib/db/types";
 import { getCabinetPositionById } from "@/lib/constants";
 import { computeCabinetNominationTally } from "@/lib/congress/governmentVoteBreakdown";
@@ -24,7 +24,7 @@ export const GET = withNoStore(async function GET(
     try {
       nominationOid = new ObjectId(id);
     } catch {
-      return NextResponse.json({ error: "Invalid nomination ID" }, { status: 400 });
+      return errorResponse(400, "Invalid nomination ID");
     }
 
     const db = await getDb();
@@ -33,7 +33,7 @@ export const GET = withNoStore(async function GET(
       .findOne({ _id: nominationOid });
 
     if (!nomination) {
-      return NextResponse.json({ error: "Nomination not found" }, { status: 404 });
+      return errorResponse(404, "Nomination not found");
     }
 
     const authUser = await getAuthUser();

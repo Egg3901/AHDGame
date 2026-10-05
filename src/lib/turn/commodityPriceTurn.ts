@@ -542,29 +542,31 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   }
 
   // Compute raw supply/demand in units (retail demand scaled by GDP growth)
-  const { global, byState, supplyByCorporation, demandTruncated } = computeRawSupplyDemand(
-    sectorData,
-    gdpGrowthData,
-    stateGdpMap,
-    turn,
-    primeRateByState,
-    extractionMultipliers,
-    extractionOutputScaleEnabled,
-    sectorDemandModifierPct,
-    householdConsumptionEnabled,
-    plantsLedgerEnabled,
-    // Era plants worlds (ticket #1027 phase 2): express every dollars-derived
-    // ledger leg in the SAME era unit basis plants `producedUnits` uses. Below
-    // plants, and on modern worlds (eraUnitScale 1), this is a pure no-op.
-    plantsLedgerEnabled ? ledgerEraUnitScale : 1,
-    sectorOutputDemandModifierPct,
-    retailSelfLoopFactor,
-    // Issue #2054: the same era table the clearing offer splits on, so the
-    // measured-production mix split is weight-identical on both sides.
-    LEDGER_BASE_PRICES,
-    // Ticket 1370: the 1.5x cap bounds CALIBRATED demand. See the parameter.
-    demandCalibration
-  );
+  const { global, byState, supplyByCorporation, demandTruncated, productionInputDemandByState } =
+    computeRawSupplyDemand(
+      sectorData,
+      gdpGrowthData,
+      stateGdpMap,
+      turn,
+      primeRateByState,
+      extractionMultipliers,
+      extractionOutputScaleEnabled,
+      sectorDemandModifierPct,
+      householdConsumptionEnabled,
+      plantsLedgerEnabled,
+      // Era plants worlds (ticket #1027 phase 2): express every dollars-derived
+      // ledger leg in the SAME era unit basis plants `producedUnits` uses. Below
+      // plants, and on modern worlds (eraUnitScale 1), this is a pure no-op.
+      plantsLedgerEnabled ? ledgerEraUnitScale : 1,
+      sectorOutputDemandModifierPct,
+      retailSelfLoopFactor,
+      // Issue #2054: the same era table the clearing offer splits on, so the
+      // measured-production mix split is weight-identical on both sides.
+      LEDGER_BASE_PRICES,
+      // Ticket 1370: the 1.5x cap bounds CALIBRATED demand. See the parameter.
+      demandCalibration,
+      activePreset
+    );
 
   // Plants-tier produced/sold units for the inventory advance (see module).
   const plantsUnitsByCommodity = plantsLedgerEnabled
@@ -592,6 +594,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     applyDemographicsUplift(allStates, global, byState);
   }
 
+  let householdFinalDemandByState = new Map<string, Map<CommodityType, number>>();
   if (householdConsumptionEnabled) {
     // Optional per-world sizing override (sandbox tuning without a redeploy).
     const pcCfg = await db
@@ -606,7 +609,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       allStateMetrics,
       existingPrices,
     });
-    applyHouseholdDemand(
+    householdFinalDemandByState = applyHouseholdDemand(
       {
         eraUnitScale: ledgerEraUnitScale,
         // Plants worlds: re-anchor household demand onto the physical unit basis
@@ -723,7 +726,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // blockading anybody, which is the common case.
   const blockadeClosure = await loadBlockadeClosure(db);
 
-  const { affinityFor, capUnitsFor } = buildTradeAffinity({
+  const { affinityFor, capUnitsFor, importCostMultiplierFor } = buildTradeAffinity({
     ftaPairs,
     blocsByCountry,
     tariffs: tariffDocs,
@@ -737,6 +740,28 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const existingPriceMap = new Map<string, CommodityPrice>(
     existingPrices.map((p) => [p.commodity, p])
   );
+
+  // The market ledger merges buyers by state and commodity. Keep modeled
+  // household and sector-input intent alongside it so the sourcing seam can
+  // allocate accepted purchases proportionally; all remaining demand stays
+  // explicitly in the residual "other" cohort.
+  const demandUsesByState = new Map<
+    string,
+    Map<CommodityType, { householdFinal: number; productionInput: number }>
+  >();
+  for (const stateId of byState.keys()) {
+    const byCommodity = new Map<
+      CommodityType,
+      { householdFinal: number; productionInput: number }
+    >();
+    for (const commodity of COMMODITY_TYPES) {
+      byCommodity.set(commodity, {
+        householdFinal: householdFinalDemandByState.get(stateId)?.get(commodity) ?? 0,
+        productionInput: productionInputDemandByState.get(stateId)?.get(commodity) ?? 0,
+      });
+    }
+    demandUsesByState.set(stateId, byCommodity);
+  }
 
   // ── Landed-price freight settlement (shadow or active) ─────────────────
   const { freightSettlement, freightRampFraction, freightSettlementActive } =
@@ -753,6 +778,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         tariffDocs,
         ftaPairs,
         affinityFor,
+        demandUsesByState,
       },
       turn,
       now,
@@ -761,7 +787,13 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       byCountry
     );
 
-  const tradeClearing = clearAllCommodities(COUNTRY_ORDER, byCountry, affinityFor, capUnitsFor);
+  const tradeClearing = clearAllCommodities(
+    COUNTRY_ORDER,
+    byCountry,
+    affinityFor,
+    capUnitsFor,
+    importCostMultiplierFor
+  );
   // Reachable books, built from the SAME pre-convergence balances the clearing
   // ran on. `applyTradeConvergence` mutates `byCountry` in place on the next
   // line, so this cannot move below it: post-convergence an importer's demand

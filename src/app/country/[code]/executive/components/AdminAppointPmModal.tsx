@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useToast } from "@/contexts/ToastContext";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface AppointCharacter {
   _id: string;
@@ -45,7 +46,7 @@ export function AdminAppointPmButton({ countryId }: { countryId: string }) {
         // Reload to reflect server component changes
         window.location.reload();
       } else {
-        showToast(json.error ?? "Failed to update appointment", "error");
+        showToast(apiErrorText(json, "Failed to update appointment"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");
@@ -60,14 +61,14 @@ export function AdminAppointPmButton({ countryId }: { countryId: string }) {
         onClick={() => setOpen(true)}
         className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning hover:bg-warning/20 transition-colors"
       >
-        Appoint PM (Admin)
+        Appoint PM (admin)
       </button>
 
       {open &&
         createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="w-full max-w-md rounded-xl border border-card-border bg-card p-6 shadow-modal">
-              <h3 className="text-lg font-semibold mb-4">Appoint Prime Minister</h3>
+              <h3 className="text-lg font-semibold mb-4">Appoint prime minister</h3>
               <p className="text-sm text-muted mb-4">
                 Only player characters can serve. NPPs cannot be appointed.
               </p>

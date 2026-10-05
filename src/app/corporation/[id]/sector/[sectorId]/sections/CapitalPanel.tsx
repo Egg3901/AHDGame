@@ -39,7 +39,7 @@ export default function CapitalPanel({ capital }: CapitalPanelProps) {
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
       <div className="flex items-center justify-between gap-2 mb-1">
-        <h2 className="text-lg font-bold text-foreground">Capital &amp; Unit Economics</h2>
+        <h2 className="text-lg font-bold text-foreground">Capital &amp; unit economics</h2>
         {coverage != null && (
           <InfoTooltip
             trigger={
@@ -72,7 +72,7 @@ export default function CapitalPanel({ capital }: CapitalPanelProps) {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <div className="rounded-lg border border-card-border bg-background/40 p-3">
-          <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+          <div className="flex items-center gap-1 text-body-sm font-medium text-muted">
             Capacity
             <TileInfo>
               Productive capacity: the most output this sector&apos;s capital can produce per day.
@@ -83,7 +83,7 @@ export default function CapitalPanel({ capital }: CapitalPanelProps) {
           </div>
         </div>
         <div className="rounded-lg border border-card-border bg-background/40 p-3">
-          <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+          <div className="flex items-center gap-1 text-body-sm font-medium text-muted">
             Potential output
             <TileInfo>
               What your revenue base implies you&apos;d produce at full throughput today.
@@ -94,7 +94,7 @@ export default function CapitalPanel({ capital }: CapitalPanelProps) {
           </div>
         </div>
         <div className="rounded-lg border border-card-border bg-background/40 p-3">
-          <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+          <div className="flex items-center gap-1 text-body-sm font-medium text-muted">
             Capacity used
             <TileInfo>
               Productive capacity required by today&apos;s potential output. The remainder is spare.
@@ -105,7 +105,7 @@ export default function CapitalPanel({ capital }: CapitalPanelProps) {
           </div>
         </div>
         <div className="rounded-lg border border-card-border bg-background/40 p-3">
-          <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+          <div className="flex items-center gap-1 text-body-sm font-medium text-muted">
             Depreciation
             <TileInfo>
               Capacity lost per turn when you don&apos;t invest. Your growth budget must at least
@@ -119,9 +119,7 @@ export default function CapitalPanel({ capital }: CapitalPanelProps) {
         </div>
       </div>
 
-      <div className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">
-        Profit and loss on one unit
-      </div>
+      <div className="text-body-sm font-medium text-muted mb-2">Profit and loss on one unit</div>
       <div className="space-y-1 text-sm">
         <div className="flex justify-between tabular-nums">
           <span className="text-muted">Market price / unit</span>

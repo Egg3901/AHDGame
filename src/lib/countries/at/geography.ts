@@ -1,5 +1,7 @@
 import type { CountryGeography } from "../contract";
+import { modernRegionalPopulation2027 } from "@/lib/seeds/reference/modernRegionalPopulation2027";
 import { atMetricPresets1953 } from "./data/atMetricPresets1953";
+import { atMetricPresets1991 } from "./data/atMetricPresets1991";
 import { atRegions } from "./data/atRegions";
 import { atRegions1953 } from "./data/atRegions1953";
 import { atStateMetrics } from "./data/atStateMetrics";
@@ -41,6 +43,7 @@ const censusBundles = {};
 
 const metricPresetBundles = {
   "1953-default": atMetricPresets1953,
+  "1991-default": atMetricPresets1991,
 };
 
 const populationAnchors = {};
@@ -49,6 +52,7 @@ const regionBundles = {
   "1953-default": atRegions1953,
   "1979-default": atRegions,
   "2019-default": atRegions,
+  "2027-default": modernRegionalPopulation2027("AT", atRegions),
 };
 
 export const AT_GEOGRAPHY: CountryGeography = {

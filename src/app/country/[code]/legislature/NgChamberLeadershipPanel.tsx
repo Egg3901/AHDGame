@@ -5,6 +5,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useGameClock } from "@/contexts/useGameClock";
 import { LocalTime } from "@/components/time/LocalTime";
 import type { CountryId } from "@/lib/constants/countries";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface NominationDisplay {
   _id: string;
@@ -87,7 +88,7 @@ export function NgChamberLeadershipPanel({ countryId }: { countryId: CountryId }
         showToast(body.message ?? "Done.", "success");
         await fetchData();
       } else {
-        showToast(body.error ?? "Action failed.", "error");
+        showToast(apiErrorText(body, "Action failed."), "error");
       }
     } catch {
       showToast("Network error.", "error");
@@ -126,7 +127,7 @@ export function NgChamberLeadershipPanel({ countryId }: { countryId: CountryId }
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-wider text-muted">{r.label}</p>
+                <p className="text-body-sm font-medium text-muted">{r.label}</p>
                 <p className="text-base font-semibold text-foreground mt-0.5">
                   {r.leader?.characterName ?? "Vacant"}
                 </p>
@@ -140,7 +141,7 @@ export function NgChamberLeadershipPanel({ countryId }: { countryId: CountryId }
                   disabled={busy}
                   className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning hover:bg-warning/20 disabled:opacity-40 transition-colors"
                 >
-                  Admin · Open Election
+                  Admin · open election
                 </button>
               )}
             </div>

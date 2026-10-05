@@ -5,7 +5,7 @@ import {
   createNotifications,
   type NotificationInput,
 } from "@/lib/notifications";
-import { NATIONAL_ELECTION_DURATION_TURNS } from "@/lib/nationalPartyElections";
+import { NATIONAL_ELECTION_DURATION_TURNS } from "@/lib/nationalPartyElectionConstants";
 import { getBannedCharacterIds } from "@/lib/utils/bannedCharacters";
 import type {
   Caucus,

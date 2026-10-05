@@ -284,13 +284,10 @@ describe("seedExchangeRates", () => {
 
     db.collection("exchangeRates").bulkWrite.mockClear();
     await seedExchangeRates(db as unknown as Db, "1991-default");
+    const historicOps = db.collection("exchangeRates").bulkWrite.mock.calls[0][0] as typeof ops;
     expect(
-      db
-        .collection("exchangeRates")
-        .bulkWrite.mock.calls[0][0].some(
-          (op: { updateOne: { filter: { _id: string } } }) => op.updateOne.filter._id === "BG"
-        )
-    ).toBe(false);
+      historicOps.find((op) => op.updateOne.filter._id === "BG")?.updateOne.update.$setOnInsert
+    ).toMatchObject({ countryId: "BG", currencyCode: "BGL" });
   });
 
   it("inserts an exchange rate document for every forex-active country", async () => {

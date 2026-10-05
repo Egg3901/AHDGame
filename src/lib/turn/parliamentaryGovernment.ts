@@ -51,7 +51,7 @@ import {
 import {
   getLiveLowerChamberSeats,
   lowerChamberMajorityThreshold,
-} from "@/lib/turn/lowerChamberSeats";
+} from "@/lib/legislature/lowerChamberSeats";
 import { computeParliamentaryGovernmentTally } from "@/lib/congress/governmentVoteBreakdown";
 import { PM_VACANCY_DEADLINE_TURNS } from "@/lib/constants/turnTime";
 import { PM_VOTE_DURATION_HOURS } from "@/lib/constants/governmentFormation";

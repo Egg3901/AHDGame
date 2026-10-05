@@ -375,10 +375,7 @@ function WikiSearchBox() {
             // readers; the inner list is presentational so its options are still
             // exposed as belonging to the listbox.
             <li key={group.kind} role="group" aria-label={group.label}>
-              <p
-                aria-hidden="true"
-                className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted"
-              >
+              <p aria-hidden="true" className="px-3 pt-2 pb-1 text-body-sm font-medium text-muted">
                 {group.label}
               </p>
               <ul role="presentation">

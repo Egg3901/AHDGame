@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CandidateInfo {
   name: string;
@@ -41,7 +42,7 @@ export function HealMultiSeatElections() {
       if (res.ok) {
         setDiagnostic(data);
       } else {
-        setResult({ ok: false, message: data.error ?? "Diagnostic failed" });
+        setResult({ ok: false, message: apiErrorText(data, "Diagnostic failed") });
       }
     } catch {
       setResult({ ok: false, message: "Network error" });
@@ -64,7 +65,7 @@ export function HealMultiSeatElections() {
     try {
       const res = await fetch("/api/admin/heal/multi-seat-elections", { method: "POST" });
       const data = await res.json();
-      setResult({ ok: res.ok, message: data.message ?? data.error ?? "Unknown response" });
+      setResult({ ok: res.ok, message: data.message ?? apiErrorText(data, "Unknown response") });
     } catch {
       setResult({ ok: false, message: "Network error" });
     } finally {
@@ -81,7 +82,7 @@ export function HealMultiSeatElections() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal House & State Senate Elections</h3>
+        <h3 className="font-semibold text-sm">Heal House & state Senate elections</h3>
         <p className="mt-1 text-xs text-muted">
           Fixes multi-seat elections where seats were incorrectly allocated (e.g., all seats going
           to one candidate due to vote threshold issues). Recalculates seat distribution and updates
@@ -102,7 +103,7 @@ export function HealMultiSeatElections() {
           disabled={loading}
           className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
         >
-          {loading ? "Healing…" : "Heal All"}
+          {loading ? "Healing…" : "Heal all"}
         </button>
       </div>
 

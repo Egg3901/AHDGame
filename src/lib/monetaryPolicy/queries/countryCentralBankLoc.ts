@@ -1,8 +1,13 @@
+/**
+ * National borrowing views show a country's central bank and personal credit.
+ * loadCountryCentralBankLoc uses the active preset's currency and bank coverage.
+ */
+import { getPresetMonetaryScope } from "../presetMonetaryScope";
 import type { Db } from "mongodb";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import type { CentralBank } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { FOREX_ACTIVE_COUNTRIES, getSeedCurrencyCode } from "@/lib/constants/currencies";
+import { getSeedCurrencyCode } from "@/lib/constants/currencies";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildLocSnapshot } from "@/lib/lineOfCredit/buildSnapshot";
@@ -21,7 +26,8 @@ export async function loadCountryCentralBankLoc(params: {
   if (!COUNTRY_CONFIGS[countryId]) {
     return { ok: false as const, status: 404, error: "Country not found" };
   }
-  if (!FOREX_ACTIVE_COUNTRIES.includes(countryId)) {
+  const preset = await getGameStatePresetOrDefault(db);
+  if (!getPresetMonetaryScope(preset).forexCountries.includes(countryId)) {
     return {
       ok: false as const,
       status: 404,
@@ -44,7 +50,7 @@ export async function loadCountryCentralBankLoc(params: {
 
   // Preset-aware: 2027 euro members quote EUR. One route-path read; this
   // query serves a page route, never the turn loop.
-  const nationalCurrency = getSeedCurrencyCode(countryId, await getGameStatePresetOrDefault(db));
+  const nationalCurrency = getSeedCurrencyCode(countryId, preset);
   const primeRate = bank?.primeRate ?? DEFAULT_PRIME;
   const snapshot = await buildLocSnapshot(db, character);
   const ledger = snapshot ? await fetchLocLedgerForCharacter(db, character._id, 75) : [];

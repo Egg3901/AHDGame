@@ -124,7 +124,7 @@ export function ChangelogClient({ publicPosts }: ChangelogClientProps) {
             <div className="flex items-end justify-between">
               <div>
                 <h1 className="mb-1 text-3xl font-bold tracking-tight text-white">
-                  {adminView ? "Developer Changelog" : "What\u2019s New"}
+                  {adminView ? "Developer changelog" : "What’s new"}
                 </h1>
                 <p className="text-sm text-white/70">
                   {adminView
@@ -141,7 +141,7 @@ export function ChangelogClient({ publicPosts }: ChangelogClientProps) {
                       : "border-white/20 bg-white/10 text-white/80 hover:bg-white/20 hover:text-white"
                   }`}
                 >
-                  {adminView ? "\u25C8 Dev View" : "\u25C7 Dev View"}
+                  {adminView ? "◈ Dev view" : "◇ Dev view"}
                 </button>
               )}
             </div>
@@ -150,21 +150,21 @@ export function ChangelogClient({ publicPosts }: ChangelogClientProps) {
 
         <HeroStatsStrip>
           <div className="flex flex-col px-5 py-3 min-w-max">
-            <span className="text-[10px] uppercase tracking-widest text-muted">Latest</span>
+            <span className="text-body-sm font-medium text-muted">Latest</span>
             <span className="text-base font-bold tabular-nums text-primary">v{latestVersion}</span>
           </div>
           <div className="flex flex-col px-5 py-3 min-w-max">
-            <span className="text-[10px] uppercase tracking-widest text-muted">Releases</span>
+            <span className="text-body-sm font-medium text-muted">Releases</span>
             <span className="text-base font-bold tabular-nums text-foreground">
               {activePosts.length}
             </span>
           </div>
           <div className="flex flex-col px-5 py-3 min-w-max">
-            <span className="text-[10px] uppercase tracking-widest text-muted">Feed since</span>
+            <span className="text-body-sm font-medium text-muted">Feed since</span>
             <span className="text-base font-bold tabular-nums text-foreground">{sinceLabel}</span>
           </div>
           <div className="flex flex-col px-5 py-3 min-w-max">
-            <span className="text-[10px] uppercase tracking-widest text-muted">Archive</span>
+            <span className="text-body-sm font-medium text-muted">Archive</span>
             <Link
               href="/changelog/legacy"
               className="text-base font-bold text-foreground hover:text-primary"

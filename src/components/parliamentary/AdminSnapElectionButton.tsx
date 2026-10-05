@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import type { CountryId } from "@/lib/constants/countries";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   countryId: CountryId;
@@ -24,7 +25,7 @@ export function AdminSnapElectionButton({ countryId, onDone }: Props) {
         showToast(data.message ?? "Snap election triggered.", "success");
         onDone();
       } else {
-        showToast(data.error ?? "Failed to trigger snap election.", "error");
+        showToast(apiErrorText(data, "Failed to trigger snap election."), "error");
       }
     } catch {
       showToast("Network error.", "error");
@@ -61,7 +62,7 @@ export function AdminSnapElectionButton({ countryId, onDone }: Props) {
       onClick={() => setConfirming(true)}
       className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning hover:bg-warning/20 transition-colors"
     >
-      Trigger Snap Election
+      Trigger snap election
     </button>
   );
 }

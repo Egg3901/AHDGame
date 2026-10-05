@@ -23,6 +23,19 @@ function mongoOptions(options?: FundQueryOptions): { session: ClientSession } | 
   return options?.session ? { session: options.session } : undefined;
 }
 
+/**
+ * Whole-fund reads leave out the in-flight float settlement plan. The plan
+ * embeds the traded issuer's full shareholder book several times over, so on a
+ * fund that just traded it can dwarf the rest of the document, and the turn
+ * reads every fund several times. Settlement code reads the plan itself with
+ * its own projection; nothing else needs it.
+ */
+const FUND_READ_PROJECTION = { floatSettlementPlan: 0 } as const;
+
+function fundReadOptions(options?: FundQueryOptions) {
+  return { projection: FUND_READ_PROJECTION, ...mongoOptions(options) };
+}
+
 // ── Fund definition queries ───────────────────────────────────────────
 
 /** Load a single fund by _id. Returns null if not found. */
@@ -31,7 +44,9 @@ export async function getFundById(
   fundId: ObjectId,
   options?: FundQueryOptions
 ): Promise<IndexFund | null> {
-  return db.collection<IndexFund>(FUND_COLLECTION).findOne({ _id: fundId }, mongoOptions(options));
+  return db
+    .collection<IndexFund>(FUND_COLLECTION)
+    .findOne({ _id: fundId }, fundReadOptions(options));
 }
 
 /** Batch-load funds by _id. Preferred over per-element `getFundById` in loops. */
@@ -43,7 +58,7 @@ export async function listFundsByIds(
   if (fundIds.length === 0) return [];
   return db
     .collection<IndexFund>(FUND_COLLECTION)
-    .find({ _id: { $in: fundIds } }, mongoOptions(options))
+    .find({ _id: { $in: fundIds } }, fundReadOptions(options))
     .toArray();
 }
 
@@ -53,7 +68,7 @@ export async function getFundBySlug(
   slug: string,
   options?: FundQueryOptions
 ): Promise<IndexFund | null> {
-  return db.collection<IndexFund>(FUND_COLLECTION).findOne({ slug }, mongoOptions(options));
+  return db.collection<IndexFund>(FUND_COLLECTION).findOne({ slug }, fundReadOptions(options));
 }
 
 /** Resolve a fund from a URL segment (slug, or legacy Mongo _id). */
@@ -89,7 +104,7 @@ export async function listFunds(
   if (filter?.sectorType) query.sectorType = filter.sectorType;
   return db
     .collection<IndexFund>(FUND_COLLECTION)
-    .find(query)
+    .find(query, { projection: FUND_READ_PROJECTION })
     .sort({ scope: 1, kind: 1, countryId: 1, sectorType: 1 })
     .toArray();
 }
@@ -109,9 +124,10 @@ export async function listActiveFunds(db: Db): Promise<IndexFund[]> {
 export async function listServiceableFunds(db: Db): Promise<IndexFund[]> {
   return db
     .collection<IndexFund>(FUND_COLLECTION)
-    .find({
-      $or: [{ status: "active" }, { status: "paused", pauseReason: "backing_ratio" }],
-    })
+    .find(
+      { $or: [{ status: "active" }, { status: "paused", pauseReason: "backing_ratio" }] },
+      { projection: FUND_READ_PROJECTION }
+    )
     .sort({ scope: 1, kind: 1, countryId: 1, sectorType: 1 })
     .toArray();
 }
@@ -127,7 +143,10 @@ export async function listFundsBySponsor(
 ): Promise<IndexFund[]> {
   return db
     .collection<IndexFund>(FUND_COLLECTION)
-    .find({ sponsorCorporationId, status: { $ne: "delisted" } })
+    .find(
+      { sponsorCorporationId, status: { $ne: "delisted" } },
+      { projection: FUND_READ_PROJECTION }
+    )
     .sort({ createdAt: -1 })
     .toArray();
 }
@@ -746,6 +765,24 @@ export async function insertFundSnapshot(
       },
     },
     { upsert: true }
+  );
+}
+
+/** Upsert one snapshot per fund in a single write. Same keys and fields as `insertFundSnapshot`. */
+export async function insertFundSnapshotsBulk(
+  db: Db,
+  snapshots: Omit<IndexFundSnapshot, "_id">[]
+): Promise<void> {
+  if (snapshots.length === 0) return;
+  await db.collection<IndexFundSnapshot>(FUND_SNAPSHOT_COLLECTION).bulkWrite(
+    snapshots.map((snapshot) => ({
+      updateOne: {
+        filter: { fundId: snapshot.fundId, turn: snapshot.turn },
+        update: { $set: { ...snapshot, createdAt: snapshot.createdAt } },
+        upsert: true,
+      },
+    })),
+    { ordered: false }
   );
 }
 

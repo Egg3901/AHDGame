@@ -94,7 +94,7 @@ export function HeroStatsStrip({ stats, currency }: HeroStatsStripProps) {
     <div className="grid grid-cols-2 gap-px overflow-hidden bg-card-border sm:grid-cols-3 lg:grid-cols-6">
       {tiles.map((t) => (
         <div key={t.label} className="bg-card px-4 py-3">
-          <div className="text-body-xs uppercase tracking-wide text-muted">{t.label}</div>
+          <div className="text-body-sm font-medium text-muted">{t.label}</div>
           <div
             className={`mt-1 text-heading-sm font-semibold tabular-nums ${TONE[t.valueTone ?? "foreground"]}`}
           >

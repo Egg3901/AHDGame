@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getCharactersCollection } from "@/lib/db/collections/characters";
 import { runOperation } from "@/lib/intelligence/runOperation";
 import {
@@ -36,7 +36,7 @@ export async function POST(request: Request, { params }: IntelligenceRouteParams
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const target = await requireRegisteredTarget(db, parsed.data.targetCountryId, countryId);
@@ -67,7 +67,7 @@ export async function POST(request: Request, { params }: IntelligenceRouteParams
     });
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     // The acting service's own view. `rollDetail` never leaves the server.

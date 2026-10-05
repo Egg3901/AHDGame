@@ -526,7 +526,7 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
         )}
 
         <div className="mt-2 flex items-baseline justify-between gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-primary">
+          <span className="text-body-sm font-medium text-primary">
             {chapters.length > 1
               ? t("coach.chapterProgress", { number: chapterNumber, total: chapters.length })
               : t(current.chapterTitle)}

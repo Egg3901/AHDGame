@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type {
   PoliticalParty,
   StatePartyOrg,
@@ -33,16 +33,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ par
     const url = new URL(request.url);
     const countryRaw = url.searchParams.get("country")?.toUpperCase();
     if (!countryRaw || !COUNTRY_CONFIGS[countryRaw as CountryId]) {
-      return NextResponse.json(
-        { error: "country query param is required (US, UK, CA, DE, JP)" },
-        { status: 400 }
-      );
+      return errorResponse(400, "country query param is required (US, UK, CA, DE, JP)");
     }
     const countryId = countryRaw as CountryId;
 
     const partySeqId = Number(partyId);
     if (!Number.isFinite(partySeqId)) {
-      return NextResponse.json({ error: "Invalid party id" }, { status: 400 });
+      return errorResponse(400, "Invalid party id");
     }
 
     const db = await getDb();
@@ -52,12 +49,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ par
       .collection<PoliticalParty>("politicalParties")
       .findOne({ sequentialId: partySeqId, countryId });
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     // Don't allow deleting default/major parties
     if (party.isDefault) {
-      return NextResponse.json({ error: "Cannot delete a default (major) party" }, { status: 400 });
+      return errorResponse(400, "Cannot delete a default (major) party");
     }
 
     const partySeqIdStr = String(party.sequentialId);

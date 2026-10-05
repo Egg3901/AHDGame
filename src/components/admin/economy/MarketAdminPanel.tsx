@@ -257,7 +257,7 @@ export function MarketAdminPanel() {
             >
               {MODE_INFO[m].label}
               {!MODE_INFO[m].live ? (
-                <span className="ml-1.5 text-[10px] uppercase tracking-wider text-muted">soon</span>
+                <span className="ml-1.5 text-body-sm font-medium text-muted">soon</span>
               ) : null}
             </button>
           ))}

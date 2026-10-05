@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getAuthUser } from "@/lib/auth";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
 import type { CountryId } from "@/lib/constants/countries";
@@ -41,10 +41,7 @@ export async function GET(request: Request) {
       !VALID_TURNS.has(turns) ||
       (sector != null && (exchange !== "global" || !Object.hasOwn(CORPORATION_TYPE_LABELS, sector)))
     ) {
-      return NextResponse.json(
-        { error: "Invalid exchange, game-calendar range or global sector." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Invalid exchange, game-calendar range or global sector.");
     }
     const authUser = await getAuthUser();
     const venueCountry = getCountryForExchange(exchange);

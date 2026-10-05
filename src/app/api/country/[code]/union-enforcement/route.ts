@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { COUNTRY_CONFIGS, getOfficeTypeConfig, type CountryId } from "@/lib/constants/countries";
@@ -70,9 +70,9 @@ async function enforcementAccess(
     !member?.characterId ||
     String(member.characterId) !== String(character._id)
   ) {
-    return NextResponse.json(
-      { error: "Only the country's executive or delegated minister may enforce a union ban." },
-      { status: 403 }
+    return errorResponse(
+      403,
+      "Only the country's executive or delegated minister may enforce a union ban."
     );
   }
   return mutate ? requireConfirmedSecretary(member, "stance") : null;
@@ -85,13 +85,10 @@ export async function GET(_request: Request, { params }: Context) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (auth.user.character.countryId !== countryId) {
-      return NextResponse.json(
-        { error: "Only domestic officials may enforce a union ban." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only domestic officials may enforce a union ban.");
     }
     const db = await getDb();
     const denied = await enforcementAccess(db, countryId, auth.user.character, false);
@@ -108,10 +105,7 @@ export async function GET(_request: Request, { params }: Context) {
       }
     );
     if (!budget?.unionsBanned) {
-      return NextResponse.json(
-        { error: "Union enforcement is available only during an active ban." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Union enforcement is available only during an active ban.");
     }
     const turn = await getCurrentTurn(db);
     const exposed = await db
@@ -173,14 +167,11 @@ export async function POST(request: Request, { params }: Context) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     const character = auth.user.character;
     if (character.countryId !== countryId) {
-      return NextResponse.json(
-        { error: "Only domestic officials may enforce a union ban." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only domestic officials may enforce a union ban.");
     }
     const db = await getDb();
     const denied = await enforcementAccess(db, countryId, character, true);
@@ -188,17 +179,14 @@ export async function POST(request: Request, { params }: Context) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const budgetId = getNationalBudgetId(countryId);
     const budgets = db.collection<FederalBudget>("federalBudget");
     const budget = await budgets.findOne({ _id: budgetId }, { projection: { unionsBanned: 1 } });
     if (!budget?.unionsBanned) {
-      return NextResponse.json(
-        { error: "Union enforcement is available only during an active ban." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Union enforcement is available only during an active ban.");
     }
 
     const turn = await getCurrentTurn(db);
@@ -215,32 +203,26 @@ export async function POST(request: Request, { params }: Context) {
         }
       );
       if (!result.modifiedCount) {
-        return NextResponse.json(
-          { error: "The posture already changed this turn, or the ban ended." },
-          { status: 409 }
-        );
+        return errorResponse(409, "The posture already changed this turn, or the ban ended.");
       }
       return NextResponse.json({ posture: parsed.data.posture, changedTurn: turn });
     }
 
     if (!ObjectId.isValid(parsed.data.unionId)) {
-      return NextResponse.json({ error: "Invalid union ID" }, { status: 400 });
+      return errorResponse(400, "Invalid union ID");
     }
     const union = await db.collection<Union>("unions").findOne({
       _id: new ObjectId(parsed.data.unionId),
       countryId,
     });
-    if (!union) return NextResponse.json({ error: "Union not found" }, { status: 404 });
+    if (!union) return errorResponse(404, "Union not found");
 
     if (parsed.data.action === "prosecute") {
       if (!isUnionExposed(union, turn)) {
-        return NextResponse.json(
-          { error: "Only an exposed cell can be prosecuted." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Only an exposed cell can be prosecuted.");
       }
       if (!ObjectId.isValid(parsed.data.characterId)) {
-        return NextResponse.json({ error: "Invalid organizer ID" }, { status: 400 });
+        return errorResponse(400, "Invalid organizer ID");
       }
       const organizers = db.collection<UnionOrganizer>("unionOrganizers");
       const organizer = await organizers.findOne({
@@ -254,10 +236,7 @@ export async function POST(request: Request, { params }: Context) {
         (typeof organizer.barredUntilTurn === "number" && organizer.barredUntilTurn >= turn) ||
         organizer.lastProsecutedTurn === turn
       ) {
-        return NextResponse.json(
-          { error: "Organizer is not eligible for prosecution." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Organizer is not eligible for prosecution.");
       }
       const spent = await db
         .collection<Character>("characters")
@@ -266,10 +245,7 @@ export async function POST(request: Request, { params }: Context) {
           { $inc: { actions: -PROSECUTION_ACTION_COST }, $set: { updatedAt: now } }
         );
       if (!spent.modifiedCount) {
-        return NextResponse.json(
-          { error: "Prosecution requires three action points." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Prosecution requires three action points.");
       }
       const strengthLoss = prosecutionStrengthLoss(organizer.undergroundStrength);
       const barredUntilTurn = turn + PROSECUTION_BAR_TURNS - 1;
@@ -309,10 +285,7 @@ export async function POST(request: Request, { params }: Context) {
         await db
           .collection<Character>("characters")
           .updateOne({ _id: character._id }, { $inc: { actions: PROSECUTION_ACTION_COST } });
-        return NextResponse.json(
-          { error: "Organizer changed before prosecution." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Organizer changed before prosecution.");
       }
       return NextResponse.json({
         unionId: union._id.toString(),
@@ -329,10 +302,7 @@ export async function POST(request: Request, { params }: Context) {
         (typeof union.lastUndergroundRaidTurn === "number" &&
           turn < union.lastUndergroundRaidTurn + RAID_COOLDOWN_TURNS)
       ) {
-        return NextResponse.json(
-          { error: "This cell is not eligible for a raid." },
-          { status: 409 }
-        );
+        return errorResponse(409, "This cell is not eligible for a raid.");
       }
       const loss = Math.min(undergroundStrength(union), 10);
       const spent = await db
@@ -342,7 +312,7 @@ export async function POST(request: Request, { params }: Context) {
           { $inc: { actions: -RAID_ACTION_COST }, $set: { updatedAt: now } }
         );
       if (!spent.modifiedCount) {
-        return NextResponse.json({ error: "Raid requires two action points." }, { status: 409 });
+        return errorResponse(409, "Raid requires two action points.");
       }
       const outcome = resolveUndergroundRaid(
         undergroundStrength(union),
@@ -388,10 +358,7 @@ export async function POST(request: Request, { params }: Context) {
         await db
           .collection<Character>("characters")
           .updateOne({ _id: character._id }, { $inc: { actions: RAID_ACTION_COST } });
-        return NextResponse.json(
-          { error: "The cell changed before the raid could proceed." },
-          { status: 409 }
-        );
+        return errorResponse(409, "The cell changed before the raid could proceed.");
       }
       return NextResponse.json({
         unionId: union._id.toString(),
@@ -410,10 +377,7 @@ export async function POST(request: Request, { params }: Context) {
         { $inc: { actions: -1 }, $set: { updatedAt: now } }
       );
     if (!spent.modifiedCount) {
-      return NextResponse.json(
-        { error: "Investigation requires one action point." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Investigation requires one action point.");
     }
     return NextResponse.json({
       unionId: union._id.toString(),

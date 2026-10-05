@@ -1,0 +1,75 @@
+/** Input baskets qualified for the 1991 reset. Other presets keep the base recipes. */
+import type { CommodityType } from "./commodities";
+import type { CorporationType } from "./corporations";
+
+export const DEFAULT_DEMAND_1991: Partial<
+  Record<CorporationType, Partial<Record<CommodityType, number>>>
+> = {
+  manufacturing: {
+    energy: 0.16,
+    iron: 0.11,
+    coal: 0.1,
+    electronics: 0.08,
+    freight: 0.08,
+    real_estate_services: 0.03,
+    plastics: 0.055,
+  },
+  healthcare: {
+    pharmaceuticals: 0.095,
+    electronics: 0.09,
+    software: 0.1,
+    energy: 0.05,
+    real_estate_services: 0.04,
+    food: 0.05,
+    vehicles: 0.025,
+    plastics: 0.035,
+  },
+  automobiles: {
+    steel: 0.19,
+    iron: 0.08,
+    electronics: 0.11,
+    energy: 0.1,
+    freight: 0.08,
+    real_estate_services: 0.02,
+    plastics: 0.055,
+  },
+  defense: {
+    steel: 0.15,
+    iron: 0.07,
+    rare_earth: 0.035,
+    electronics: 0.14,
+    software: 0.07,
+    construction_services: 0.035,
+    vehicles: 0.025,
+  },
+  construction: {
+    building_materials: 0.1,
+    steel: 0.1,
+    energy: 0.085,
+    vehicles: 0.05,
+    financial_services: 0.035,
+    rare_earth: 0.03,
+    natural_gas: 0.015,
+    timber: 0.05,
+    plastics: 0.035,
+  },
+  retail: {
+    food: 0.09,
+    electronics: 0.05,
+    energy: 0.04,
+    vehicles: 0.03,
+    freight: 0.05,
+    advertising: 0.06,
+    software: 0.04,
+    chemicals: 0.02,
+    pharmaceuticals: 0.02,
+    financial_services: 0.03,
+    consulting_services: 0.02,
+    building_materials: 0.02,
+    steel: 0.02,
+    oil: 0.02,
+    healthcare_services: 0.02,
+    real_estate_services: 0.025,
+    plastics: 0.025,
+  },
+};

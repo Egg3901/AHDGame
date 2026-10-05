@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_FINANCIAL_LIMITS } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -26,7 +26,7 @@ const schema = z
 export async function POST(request: Request) {
   try {
     if (!requireBotToken(request, false)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const rateLimit = checkRateLimit(
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { discordId, name } = parsed.data;
 
@@ -63,25 +63,19 @@ export async function POST(request: Request) {
     }
 
     if (!user) {
-      return NextResponse.json(
-        {
-          found: false,
-          message: discordId
-            ? `No linked account found for Discord user ${discordId}.`
-            : `No character found matching "${name}".`,
-        },
-        { status: 404 }
-      );
+      return statusResponse(404, {
+        found: false,
+        message: discordId
+          ? `No linked account found for Discord user ${discordId}.`
+          : `No character found matching "${name}".`,
+      });
     }
 
     if (!character) {
-      return NextResponse.json(
-        {
-          found: false,
-          message: `User found but has no character.`,
-        },
-        { status: 404 }
-      );
+      return statusResponse(404, {
+        found: false,
+        message: `User found but has no character.`,
+      });
     }
 
     // Clear supporter status

@@ -7,6 +7,7 @@ import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { CHARACTER_GATE_COOKIE, isCharacterGatedPath } from "@/lib/auth/characterGate";
 import { isLoopbackOrigin, isSingleplayer, singleplayerSessionClaims } from "@/lib/singleplayer";
 import { getAuthUserFromToken, verifyAuthToken, type AuthUser } from "@/lib/auth";
+import { errorResponse } from "@/lib/api/errors";
 
 // Well-known root files that must never be rewritten under /wiki on the
 // subdomain — /robots.txt would otherwise hit the wiki [slug] route and serve
@@ -81,16 +82,14 @@ async function handleApiReadGate(request: NextRequest): Promise<NextResponse> {
     if (await getSessionUser(request)) return NextResponse.next();
   } catch {
     console.warn("[proxy] session lookup failed; failing closed");
-    return NextResponse.json(
-      { error: "Authentication service unavailable. Try again." },
-      { status: 503, headers: { "Cache-Control": "private, no-store" } }
-    );
+    return errorResponse(503, "Authentication service unavailable. Try again.", {
+      headers: { "Cache-Control": "private, no-store" },
+    });
   }
 
-  return NextResponse.json(
-    { error: "Public viewing is disabled. Sign in to view this content." },
-    { status: 401, headers: { "Cache-Control": "private, no-store" } }
-  );
+  return errorResponse(401, "Public viewing is disabled. Sign in to view this content.", {
+    headers: { "Cache-Control": "private, no-store" },
+  });
 }
 
 /**
@@ -261,10 +260,9 @@ export async function proxy(request: NextRequest) {
         isAdmin = await requestIsAdmin(request);
       } catch {
         console.warn("[proxy] session lookup failed during maintenance gate; failing closed");
-        return NextResponse.json(
-          { error: "Authentication service unavailable. Try again." },
-          { status: 503, headers: { "Cache-Control": "private, no-store" } }
-        );
+        return errorResponse(503, "Authentication service unavailable. Try again.", {
+          headers: { "Cache-Control": "private, no-store" },
+        });
       }
       if (!isAdmin) {
         const response = NextResponse.redirect(new URL("/maintenance", request.url));

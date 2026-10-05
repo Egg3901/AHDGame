@@ -7,7 +7,7 @@ import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { buildLocSnapshot } from "@/lib/lineOfCredit/buildSnapshot";
 import { fetchLocLedgerForCharacter } from "@/lib/lineOfCredit/ledger";
 
@@ -19,12 +19,12 @@ async function handleGET() {
     const db = await getDb();
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const snapshot = await buildLocSnapshot(db, character);
     if (!snapshot) {
-      return NextResponse.json({ error: "Line of credit is not available" }, { status: 404 });
+      return errorResponse(404, "Line of credit is not available");
     }
 
     const ledger = await fetchLocLedgerForCharacter(db, character._id, 50);

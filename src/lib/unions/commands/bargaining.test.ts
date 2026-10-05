@@ -770,6 +770,54 @@ describe("openBargainingCampaignFromLiveConditions read cache (#2690)", () => {
   });
 });
 
+describe("openBargainingCampaignFromLiveConditions phase preload (#2690)", () => {
+  it("skips the employer, agreement and cooldown reads and honours the preloaded cooldown", async () => {
+    const { openBargainingCampaignFromLiveConditions, bargainingPairKey } =
+      await import("./bargaining");
+    const reads: string[] = [];
+    const chain = (docs: unknown[]) => ({ toArray: async () => docs });
+    const db = {
+      collection: (name: string) => ({
+        findOne: async () => {
+          reads.push(`${name}.findOne`);
+          return null;
+        },
+        find: () => {
+          reads.push(`${name}.find`);
+          return chain([]);
+        },
+      }),
+    } as unknown as Db;
+    const union = {
+      _id: new ObjectId(),
+      countryId: "US",
+      sectorType: "manufacturing",
+      treasury: 0,
+    } as never as Parameters<typeof openBargainingCampaignFromLiveConditions>[1];
+    const employerId = new ObjectId();
+    const terms = { wageLevel: 1.1, agreementDurationTurns: 48, noStrikeTurns: 24 };
+    const result = await openBargainingCampaignFromLiveConditions(
+      db,
+      union,
+      employerId.toHexString(),
+      terms,
+      10,
+      undefined,
+      {
+        employerKnownToExist: true,
+        noActiveAgreement: true,
+        lastEndedAtTurn: new Map([[bargainingPairKey(union._id, employerId), 9]]),
+      }
+    );
+    // No locals in this fake world, so it stops at the sector check, never at a
+    // per-union employer, agreement or cooldown read.
+    expect(result.ok).toBe(false);
+    expect(reads).not.toContain("corporations.findOne");
+    expect(reads).not.toContain("collectiveAgreements.findOne");
+    expect(reads).not.toContain("bargainingCampaigns.findOne");
+  });
+});
+
 describe("persistUnionBargainingEscalation read cache (#2690)", () => {
   it("reuses country macro and cost-of-living reads across escalations that share a cache", async () => {
     const { persistUnionBargainingEscalation } = await import("./bargaining");

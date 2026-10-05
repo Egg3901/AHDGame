@@ -7,7 +7,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, badRequest } from "@/lib/api/errors";
+import { handleRouteError, badRequest, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse, SAVINGS_WALLET_LIMITS } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { currency, mode } = parsed.data;
     const c = currency as CurrencyCode;
@@ -51,12 +51,12 @@ export async function POST(request: Request) {
       isLineOfCreditEnabled(),
     ]);
     if (!locEnabled || !forexEnabled) {
-      return NextResponse.json({ error: "Line of credit is not available" }, { status: 404 });
+      return errorResponse(404, "Line of credit is not available");
     }
 
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const loc = character.lineOfCredit;
@@ -86,12 +86,10 @@ export async function POST(request: Request) {
       currentTurn - lastChangedTurn < LOC_PAYMENT_MODE_COOLDOWN_TURNS
     ) {
       const nextEligibleTurn = lastChangedTurn + LOC_PAYMENT_MODE_COOLDOWN_TURNS;
-      return NextResponse.json(
-        {
-          error: `Payment mode can only change every ${LOC_PAYMENT_MODE_COOLDOWN_TURNS} turns. Next eligible at turn ${nextEligibleTurn}.`,
-          nextEligibleTurn,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `Payment mode can only change every ${LOC_PAYMENT_MODE_COOLDOWN_TURNS} turns. Next eligible at turn ${nextEligibleTurn}.`,
+        { extra: { nextEligibleTurn } }
       );
     }
 

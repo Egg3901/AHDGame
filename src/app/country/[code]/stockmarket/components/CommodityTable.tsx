@@ -134,11 +134,9 @@ export function CommodityTable({ commodities, exchangeFilter = "global" }: Commo
           <table className="w-full text-left text-sm">
             <thead className="bg-card-elevated border-b border-card-border">
               <tr>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider w-[36%]">
-                  Commodity
-                </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
-                  {isNational ? "National Price" : "Global Price"}
+                <th className="px-4 py-3 text-muted text-body-sm font-medium w-[36%]">Commodity</th>
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">
+                  {isNational ? "National price" : "Global price"}
                   <Tooltip
                     content={
                       isNational
@@ -147,7 +145,7 @@ export function CommodityTable({ commodities, exchangeFilter = "global" }: Commo
                     }
                   />
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">
                   {isNational ? "vs Base" : "Rolling 1Y"}
                   <Tooltip
                     content={
@@ -159,11 +157,11 @@ export function CommodityTable({ commodities, exchangeFilter = "global" }: Commo
                 </th>
                 {isNational && (
                   <>
-                    <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">
+                    <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden sm:table-cell">
                       Supply
                       <Tooltip content="Total units produced nationally this turn" />
                     </th>
-                    <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden md:table-cell">
+                    <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden md:table-cell">
                       Demand
                       <Tooltip content="Total units consumed nationally this turn" />
                     </th>
@@ -171,15 +169,15 @@ export function CommodityTable({ commodities, exchangeFilter = "global" }: Commo
                 )}
                 {!isNational && (
                   <>
-                    <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
+                    <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">
                       24h Δ
                       <Tooltip content="Price change over the last 24 turns (one game day)" />
                     </th>
-                    <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">
+                    <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden sm:table-cell">
                       Supply
                       <Tooltip content="Total units produced globally this turn" />
                     </th>
-                    <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden md:table-cell">
+                    <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden md:table-cell">
                       Demand
                       <Tooltip content="Total units consumed globally this turn" />
                     </th>

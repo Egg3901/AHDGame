@@ -32,5 +32,22 @@ export async function seedWriteGuardIndexes(db: Db, log: (msg: string) => void) 
     await ensureIndex(db, collection, keys, options, log);
   }
 
+  // NG nominations are queried by role/status and ranked by votes at close,
+  // and declaration checks whether this nominee already has an active row.
+  await ensureIndex(
+    db,
+    "ngChamberLeadershipNominations",
+    { role: 1, status: 1, votesFor: -1 },
+    { name: "ng_leadership_nominations_role_status_votes" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "ngChamberLeadershipNominations",
+    { role: 1, nomineeId: 1, status: 1 },
+    { name: "ng_leadership_nominations_role_nominee_status" },
+    log
+  );
+
   log("Write-guard indexes ensured");
 }

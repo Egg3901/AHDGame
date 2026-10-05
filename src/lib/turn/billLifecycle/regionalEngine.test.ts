@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { BillVoteSnapshot } from "@/lib/db/types/voteSnapshot";
+import { processStateBillTimers } from "./regionalEngine";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({
@@ -140,7 +141,6 @@ describe("processStateBillTimers — passage threshold", () => {
       .stateBills!.findOneAndUpdate.mockResolvedValueOnce(makeBill(WON_43_28))
       .mockResolvedValue(null);
 
-    const { processStateBillTimers } = await import("./regionalEngine");
     await processStateBillTimers(new Date("2026-07-13T15:00:00.000Z"));
 
     expect(statusSetForBill()).toBe("passed");
@@ -205,6 +205,19 @@ describe("processStateBillTimers — passage threshold", () => {
     expect(statusSetForBill()).toBe("enacted");
     const { applyLegislationEffect } = await import("@/lib/legislationEffects");
     expect(vi.mocked(applyLegislationEffect)).toHaveBeenCalledTimes(1);
+    const { onBillEnacted } = await import("@/lib/billEnactment");
+    expect(vi.mocked(onBillEnacted)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        status: "enacted",
+        stateId: "NIR",
+        voteSnapshot: expect.objectContaining({
+          totals: { for: 43, against: 28, abstain: 0 },
+          weights: expect.objectContaining({ [`npp_${NPP.a}`]: 42 }),
+        }),
+      }),
+      expect.any(Number)
+    );
   });
 
   it("auto-signs a passed bill once the governor deadline lapses", async () => {
@@ -259,7 +272,17 @@ describe("processStateBillTimers — passage threshold", () => {
     expect(statusSetForBill()).toBe("enacted");
     const { applyLegislationEffect } = await import("@/lib/legislationEffects");
     expect(vi.mocked(applyLegislationEffect)).toHaveBeenCalledTimes(1);
-  });
+    const { onBillEnacted } = await import("@/lib/billEnactment");
+    expect(vi.mocked(onBillEnacted)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        voteSnapshot: expect.objectContaining({
+          totals: { for: 60, against: 0, abstain: 0 },
+        }),
+      }),
+      expect.any(Number)
+    );
+  }, 60000);
 
   it("reverts the transient vote_closing claim when the resolver throws (#2991)", async () => {
     db.collectionMocks

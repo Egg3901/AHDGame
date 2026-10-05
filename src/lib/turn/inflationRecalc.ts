@@ -37,6 +37,12 @@ import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { advanceHouseholdPriceIndex } from "@/lib/economy/householdPriceIndex";
+import { calculateFxInflationPressure } from "@/lib/turn/rules/fxInflationPressure";
+import {
+  countryTurnTariffInflationExposure,
+  loadTurnTariffInflationExposure,
+  measuredTariffInflationRate,
+} from "@/lib/tariffs/tariffInflationExposure";
 
 /**
  * Lookback for the commodity cost-push signal: half a game year, annualized.
@@ -131,6 +137,7 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
     exchangeRateDocs,
     moneyRows,
     savingsFlowAgg,
+    tariffExposureSnapshot,
   ] = await Promise.all([
     db
       .collection<CommodityPrice>("commodityPrices")
@@ -179,6 +186,7 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
         },
       ])
       .toArray(),
+    loadTurnTariffInflationExposure(db, turn),
   ]);
   // `annualizedM2GrowthPct` is null until the lookback window reaches a
   // game-quarter (see MIN_MONEY_GROWTH_BASE_TURNS) — annualizing a stock jump
@@ -331,18 +339,18 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
           const commodityPressureRaw = pressures.length > 0 ? median(pressures) : 0.0;
           const commodityPressure = finiteOr(commodityPressureRaw, 0);
 
-          // Forex depreciation cost-push: rate / baseRate - 1.
-          // Positive = local currency weaker than calibration (imported goods more expensive).
-          // Uses previous turn's settled rate; forexTurn runs after inflationRecalc.
+          // Forex depreciation cost-push: annualized FX movement across the recent
+          // finite pass-through window. A currency held at a new rate produces no
+          // further pressure after the old endpoint leaves the window. The initial
+          // seeded rate is a baseline, not an inflation signal. Uses prior settled
+          // snapshots because forexTurn runs after inflationRecalc.
           // Members without their own doc (eurozone: only the EUR anchor DE carries
           // one) inherit the currency anchor's rate so they feel the same FX signal.
           const currencyCode = COUNTRY_CURRENCY_MAP[countryId];
           const currencyAnchorId = currencyCode ? getCountryIdForCurrency(currencyCode) : countryId;
           const fxDoc =
             exchangeRateByCountry.get(countryId) ?? exchangeRateByCountry.get(currencyAnchorId);
-          const fxRate = finiteOr(fxDoc?.rateHistory?.at(-1)?.rate, finiteOr(fxDoc?.rate, NaN));
-          const fxBase = finiteOr(fxDoc?.baseRate, 0);
-          const forexPressure = Number.isFinite(fxRate) && fxBase > 0 ? fxRate / fxBase - 1.0 : 0.0;
+          const forexPressure = calculateFxInflationPressure(fxDoc?.rateHistory ?? [], turn);
 
           const budget = await ensureFederalBudget(db, countryId, preset);
           if (!budget) return;
@@ -376,7 +384,10 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
             savingsPressure,
             policyStancePressure,
             moneySupplyGrowthPct,
-            bwMoneyGrowthCoeff
+            bwMoneyGrowthCoeff,
+            measuredTariffInflationRate(
+              countryTurnTariffInflationExposure(tariffExposureSnapshot, countryId)
+            )
           );
           // Household prices trail the newly settled CPI, but never feed back
           // into its calculation. This gives inflation a visible purchasing-
@@ -440,7 +451,21 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
     unbanked.map(async (budget) => {
       const countryId = budget.countryId as CountryId | undefined;
       if (!countryId || !COUNTRY_CONFIGS[countryId]) return;
-      const newInflation = await calculateCountryInflation(db, countryId, budget);
+      const tariffRate = measuredTariffInflationRate(
+        countryTurnTariffInflationExposure(tariffExposureSnapshot, countryId)
+      );
+      const newInflation = await calculateCountryInflation(
+        db,
+        countryId,
+        budget,
+        0,
+        0,
+        0,
+        0,
+        undefined,
+        undefined,
+        tariffRate
+      );
       const householdPriceIndex = advanceHouseholdPriceIndex(
         budget.economicFactors?.householdPriceIndex,
         newInflation

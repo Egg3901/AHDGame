@@ -6,6 +6,7 @@ import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import { TECH_TREE } from "@/lib/constants/techTree/nodes";
 import { sectorCapacityBookAnchor } from "@/lib/corporations/sectorProfitBasis";
+import { efficacyAdjustedAdvertising } from "@/lib/advertising/rules/coverage";
 import { getMediaProductKind } from "./mediaProductCatalog";
 import { MEDIA_PRODUCT_PROJECTS, type MediaProductProject } from "./mediaProduct";
 import {
@@ -39,6 +40,8 @@ export async function processMediaProductProjectsV1(input: {
   projectsByCorporationId: Map<string, MediaProductProject[]>;
   currentTurn: number;
   sectorQualityBySectorId: ReadonlyMap<string, number>;
+  /** Coverage efficacy from advertising agreements, by buyer; absent is neutral. */
+  advertisingEfficacyByCorporationId?: ReadonlyMap<string, { turn: number; factor: number }>;
 }): Promise<void> {
   const corporationsById = new Map(
     input.corporations.map((corporation) => [corporation._id.toString(), corporation])
@@ -105,9 +108,17 @@ export async function processMediaProductProjectsV1(input: {
             : completedTurn,
         amountAnchor: receiptMatches ? receipt.amountAnchor : 0,
         deliveredAdvertisingAnchor: advertisingReceiptMatches
-          ? advertisingReceipt.amountAnchor
+          ? efficacyAdjustedAdvertising(
+              advertisingReceipt.amountAnchor,
+              advertisingReceipt.turn,
+              input.advertisingEfficacyByCorporationId?.get(corporationId)
+            )
           : receiptMatches
-            ? receipt.deliveredAdvertisingAnchor
+            ? efficacyAdjustedAdvertising(
+                receipt.deliveredAdvertisingAnchor,
+                receipt.turn,
+                input.advertisingEfficacyByCorporationId?.get(corporationId)
+              )
             : 0,
       };
       const progressed = advanceMediaProduct({

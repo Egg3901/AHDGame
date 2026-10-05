@@ -14,6 +14,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { listCountryOffices } from "@/lib/elections/officeResolution";
 import { ELECTION_STATE_NAMES } from "@/app/elections/electionsHelpers";
 import type { ContestFilter, PrimaryFilter, RaceFilter } from "../electionsUrlState";
+import { CLOSE_RACE_RULE_TEXT } from "@/lib/elections/rules/closeRace";
 
 const CLASS_ROMAN = ["I", "II", "III"];
 
@@ -155,7 +156,7 @@ export function ElectionsControls({
       <ToggleButton
         active={competitive}
         onClick={onToggleCompetitive}
-        title="Show only races where the top two are within 15 points"
+        title={`Show only close races: ${CLOSE_RACE_RULE_TEXT.toLowerCase()}. The national race stays pinned.`}
         activeClass="border-warning/60 bg-warning/15 text-warning"
       >
         Close races

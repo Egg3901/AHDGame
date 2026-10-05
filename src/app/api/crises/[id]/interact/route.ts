@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import {
   submitCrisisDecision,
   resolveCharacterRoles,
@@ -32,16 +32,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     // Feature gate: reject if crisis interaction system is disabled
     const enabled = await isCrisisInteractionEnabled();
     if (!enabled) {
-      return NextResponse.json({ error: "Crisis interactions are not enabled" }, { status: 403 });
+      return errorResponse(403, "Crisis interactions are not enabled");
     }
 
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid crisis interaction ID" }, { status: 400 });
+      return errorResponse(400, "Invalid crisis interaction ID");
     }
 
     const parsed = await parseJsonBody(_req, interactSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { optionId, decline } = parsed.data;
 
@@ -49,10 +49,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const character = user.character;
 
     if (!character.countryId) {
-      return NextResponse.json(
-        { error: "Character has no country and cannot interact with crises" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Character has no country and cannot interact with crises");
     }
 
     const characterRoles = await resolveCharacterRoles(db, character);
@@ -60,7 +57,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     // The route param is the crisis ID; resolve its interaction document.
     const interaction = await getCrisisInteraction(db, new ObjectId(id));
     if (!interaction) {
-      return NextResponse.json({ error: "No active interaction for this crisis" }, { status: 404 });
+      return errorResponse(404, "No active interaction for this crisis");
     }
 
     // Aid nodes: route to the pledge command (pctGdp) or decline (decline: true).
@@ -70,12 +67,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     );
     if (currentNode?.type === "aid") {
       if (!(await isCrisisAidBillsEnabled())) {
-        return NextResponse.json({ error: "Aid bills are not enabled" }, { status: 403 });
+        return errorResponse(403, "Aid bills are not enabled");
       }
       // Decline: advance via the normal engine path using the provided optionId.
       if (decline === true) {
         if (!optionId) {
-          return NextResponse.json({ error: "optionId required to decline aid" }, { status: 400 });
+          return errorResponse(400, "optionId required to decline aid");
         }
         const declined = await submitCrisisDecision(
           db,
@@ -103,7 +100,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       // positive finite number).
       const pctGdp = parsed.data.pctGdp;
       if (pctGdp == null) {
-        return NextResponse.json({ error: "pctGdp required for aid pledge" }, { status: 400 });
+        return errorResponse(400, "pctGdp required for aid pledge");
       }
       const pledge = await submitCrisisAidPledge(db, {
         interactionId: interaction._id,
@@ -125,7 +122,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     // Standard decision node: optionId is required.
     if (!optionId) {
-      return NextResponse.json({ error: "optionId required" }, { status: 400 });
+      return errorResponse(400, "optionId required");
     }
 
     const result = await submitCrisisDecision(

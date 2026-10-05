@@ -300,7 +300,7 @@ describe("CommandsBuilder", () => {
     render(<CommandsBuilder commands={[command()]} {...base} />);
     expect(screen.getByText(/How your troops reach a front/i)).toBeTruthy();
     expect(screen.getByText(/wherever the general it is assigned to is posted/i)).toBeTruthy();
-    expect(screen.getAllByText(/Commanding General/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Commanding general/i).length).toBeGreaterThan(0);
   });
 });
 
@@ -364,12 +364,12 @@ describe("command type bonuses", () => {
   });
 });
 
-describe("finding the Commanding General's page", () => {
-  it("links the callout's 'Commanding General' to that page", () => {
+describe("finding the Commanding general's page", () => {
+  it("links the callout's 'Commanding general' to that page", () => {
     // The callout already explains that the CG does the posting; making the phrase
     // a link is what closes the loop, since nothing else on this page points there.
     render(<CommandsBuilder commands={[command()]} {...base} />);
-    const link = screen.getByRole("link", { name: "Commanding General" });
+    const link = screen.getByRole("link", { name: "Commanding general" });
     expect(link.getAttribute("href")).toBe("/country/us/general/commands");
   });
 
@@ -397,7 +397,7 @@ describe("finding the Commanding General's page", () => {
 
   it("uses the viewing country, not a hardcoded one", () => {
     render(<CommandsBuilder commands={[command()]} {...base} countryCode="de" />);
-    expect(screen.getByRole("link", { name: "Commanding General" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Commanding general" }).getAttribute("href")).toBe(
       "/country/de/general/commands"
     );
   });

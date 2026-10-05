@@ -93,7 +93,7 @@ export function NationalMoodGauge({ data }: { data?: NationalMoodData | null }) 
       </div>
       <p className="mb-3 text-xs leading-snug text-muted">{t("nationalMood.subtitle")}</p>
 
-      <div className="mb-1 flex items-baseline justify-between text-[10px] uppercase tracking-wider text-muted">
+      <div className="mb-1 flex items-baseline justify-between text-body-sm font-medium text-muted">
         <span>{t("nationalMood.againstIncumbent", { party: partyLabel })}</span>
         <span>{t("nationalMood.towardIncumbent", { party: partyLabel })}</span>
       </div>
@@ -122,7 +122,7 @@ export function NationalMoodGauge({ data }: { data?: NationalMoodData | null }) 
 
       {data.components.length > 0 ? (
         <div className="mt-3 flex flex-col gap-1.5">
-          <div className="text-[10px] uppercase tracking-wider text-muted">
+          <div className="text-body-sm font-medium text-muted">
             {t("nationalMood.componentsGroup")}
           </div>
           {data.components.map((c) => (
@@ -162,7 +162,7 @@ export function NationalMoodGauge({ data }: { data?: NationalMoodData | null }) 
         </p>
       ) : null}
 
-      <p className="mt-2 text-[10px] uppercase tracking-wider text-muted">
+      <p className="mt-2 text-body-sm font-medium text-muted">
         {t("nationalMood.recordedTurn", { turn: data.recordedTurn })}
       </p>
     </div>

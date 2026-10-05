@@ -1,3 +1,14 @@
+import type {
+  RefugeeReceptionSpec,
+  RefugeeReceptionOrder,
+  RefugeeReceptionResult,
+} from "@/lib/livingConflict/rules/refugeeReception";
+import type {
+  ConflictCivilianLossSpec,
+  ConflictCivilianLossOrder,
+  ConflictCivilianLossResult,
+} from "@/lib/livingConflict/rules/civilianLoss";
+import type { CapacityDestructionSpec, CapacityDestructionSummary } from "./conflictCapacity";
 import { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
@@ -227,6 +238,8 @@ export interface CrisisDecisionOption {
   responseScores?: Record<string, number>;
   /** Spend this share of the responding country's GDP from its treasury. */
   treasuryCostPctGdp?: number;
+  /** Conserved civilian admissions and recurring services, authorized by this choice. */
+  refugeeReception?: RefugeeReceptionSpec;
   /** Live national capacity and campaign-stage requirements, enforced server-side. */
   campaignRequirement?: CampaignRequirement;
   /** Persistent contribution to the campaign, beyond this option's immediate effects. */
@@ -308,6 +321,8 @@ export interface CrisisLeaderResponse {
   visibility?: CampaignResponseVisibility;
   revealedAt?: Date;
   respondedAt: Date;
+  refugeeReceptionOrder?: RefugeeReceptionOrder;
+  refugeeReceptionResult?: RefugeeReceptionResult;
 }
 
 export interface GlobalResponseOutcomeCondition {
@@ -348,6 +363,10 @@ export interface GlobalResponseOutcome {
   tensionDelta?: number;
   /** Enforceable trade restriction for governments that explicitly participated. */
   tradeSanction?: CrisisTradeSanction;
+  /** Explicit resident deaths, independent of campaign risk scores. */
+  civilianLoss?: ConflictCivilianLossSpec;
+  /** Physical destruction of named regions' capital stock, repaired through the sovereign's budget. */
+  capacityDestruction?: CapacityDestructionSpec;
   wireMessage: string;
 }
 
@@ -372,6 +391,10 @@ export interface ResolvedGlobalResponse {
   eligibleCountries: number;
   campaignStageBefore?: CampaignStage;
   campaignStageAfter?: CampaignStage;
+  civilianLossOrder?: ConflictCivilianLossOrder;
+  civilianLossResult?: ConflictCivilianLossResult;
+  /** Regions whose capital stock this outcome destroyed, and what was skipped. */
+  capacityDestruction?: CapacityDestructionSummary;
   resolvedAt: Date;
 }
 
@@ -397,6 +420,12 @@ export interface CrisisInteraction {
    */
   leaderResponses?: CrisisLeaderResponse[];
   globalResponseOutcome?: ResolvedGlobalResponse;
+  /** Durable response outbox; claiming a leader's choice writes these atomically. */
+  populationOrderEpochId?: string;
+  populationOrdersPending?: boolean;
+  /** Outcome CAS owns this separate outbox so response completion cannot clear it. */
+  civilianLossEpochId?: string;
+  civilianLossPending?: boolean;
   decisionDeadline: Date | null;
   autoResolveOnExpiry: boolean;
   resolvedAt: Date | null;

@@ -13,7 +13,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
 import { creditShares } from "@/lib/corporations/shareholderOps";
@@ -45,12 +45,12 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, actionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { action } = parsed.data;
 
     if (!ObjectId.isValid(inviteId)) {
-      return NextResponse.json({ error: "Invalid inviteId" }, { status: 400 });
+      return errorResponse(400, "Invalid inviteId");
     }
     const inviteOid = new ObjectId(inviteId);
 
@@ -63,10 +63,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       .collection<CorporationShareInvite>("corporationShareInvites")
       .findOne({ _id: inviteOid, corporationId: corporation._id });
     if (!invite) {
-      return NextResponse.json({ error: "Invite not found" }, { status: 404 });
+      return errorResponse(404, "Invite not found");
     }
     if (invite.status !== "pending") {
-      return NextResponse.json({ error: `Invite is already ${invite.status}` }, { status: 409 });
+      return errorResponse(409, `Invite is already ${invite.status}`);
     }
     const now = new Date();
     if (invite.expiresAt <= now) {
@@ -74,7 +74,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       await db
         .collection<CorporationShareInvite>("corporationShareInvites")
         .updateOne({ _id: inviteOid }, { $set: { status: "expired", updatedAt: now } });
-      return NextResponse.json({ error: "Invite has expired" }, { status: 410 });
+      return errorResponse(410, "Invite has expired");
     }
 
     if (action === "cancel") {
@@ -107,10 +107,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .findOne({ _id: new ObjectId(auth.user.userId) });
     const callerCharacterId = userDoc?.activeCharacterId;
     if (!callerCharacterId || !callerCharacterId.equals(invite.invitedCharacterId)) {
-      return NextResponse.json(
-        { error: "Only the invitee can accept or decline" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the invitee can accept or decline");
     }
 
     if (action === "decline") {
@@ -145,7 +142,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .collection<Character>("characters")
       .findOne({ _id: invite.invitedCharacterId });
     if (!invitee) {
-      return NextResponse.json({ error: "Invitee character not found" }, { status: 404 });
+      return errorResponse(404, "Invitee character not found");
     }
 
     const legalStructure = getLegalStructureForCorp(corporation);
@@ -154,22 +151,18 @@ export async function POST(request: Request, { params }: RouteParams) {
       (sh) => (sh.shares ?? 0) > 0
     ).length;
     if (currentShareholders + 1 > maxShareholders) {
-      return NextResponse.json(
-        {
-          error: `Shareholder cap of ${maxShareholders} has been reached since the invite was sent.`,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `Shareholder cap of ${maxShareholders} has been reached since the invite was sent.`
       );
     }
 
     const homeCurrency = getHomeCurrency(invitee) as CurrencyCode;
     const corpCurrency = (corporation.liquidCurrencyCode ?? "USD") as CurrencyCode;
     if (homeCurrency !== corpCurrency) {
-      return NextResponse.json(
-        {
-          error: `Cross-currency private placements aren't supported yet. Your wallet is ${homeCurrency} but the offer is denominated in ${corpCurrency}.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Cross-currency private placements aren't supported yet. Your wallet is ${homeCurrency} but the offer is denominated in ${corpCurrency}.`
       );
     }
 
@@ -182,11 +175,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       forexEnabled
     );
     if (!debitResult.ok) {
-      return NextResponse.json(
-        {
-          error: `Insufficient funds. Need ${invite.totalCost.toLocaleString()} ${homeCurrency}.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient funds. Need ${invite.totalCost.toLocaleString()} ${homeCurrency}.`
       );
     }
 
@@ -205,10 +196,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
       if (!credited) {
         await refundCharacterCash(db, invitee._id, homeCurrency, invite.totalCost, forexEnabled);
-        return NextResponse.json(
-          { error: "Failed to credit shares — please retry" },
-          { status: 500 }
-        );
+        return errorResponse(500, "Failed to credit shares — please retry");
       }
       sharesCredited = true;
 

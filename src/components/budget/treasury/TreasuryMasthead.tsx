@@ -108,7 +108,7 @@ export function TreasuryMasthead({
                   background: hexToRgba(id.accent, 0.16),
                 }}
               >
-                Fiscal Year {fiscalYear}
+                Fiscal year {fiscalYear}
               </span>
               <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-white/15 bg-black px-2.5 py-0.5 text-xs font-medium text-white/80">
                 {executiveLabel}
@@ -162,7 +162,7 @@ export function TreasuryMasthead({
                 <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
                   <path d="M10 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4L10 14.3 5.2 16.7l.9-5.4L2.2 7.7l5.4-.8z" />
                 </svg>
-                Finance Minister
+                Finance minister
               </button>
             </div>
           </div>

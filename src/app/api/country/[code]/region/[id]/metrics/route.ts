@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { findMergedRegionMetrics, findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import type { State, StateApprovalHistory, GameState } from "@/lib/db/types";
@@ -39,7 +39,7 @@ export async function GET(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
 
@@ -66,10 +66,10 @@ export async function GET(
     ]);
 
     if (!isNational && !state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
     if (!metrics) {
-      return NextResponse.json({ error: "Metrics not found for this state" }, { status: 404 });
+      return errorResponse(404, "Metrics not found for this state");
     }
 
     // Determine countryId: from params for real states, from NATIONAL_SCOPE for national IDs

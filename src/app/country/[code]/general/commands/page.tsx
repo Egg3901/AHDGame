@@ -62,7 +62,7 @@ export default async function CommandingGeneralPage({
     return (
       <div className="mx-auto max-w-2xl p-6">
         <div className="rounded-xl border border-card-border bg-card p-6">
-          <h1 className="mb-2 text-lg font-semibold text-foreground">Commanding General</h1>
+          <h1 className="mb-2 text-lg font-semibold text-foreground">Commanding general</h1>
           <p className="text-[13px] text-muted">
             You do not lead a command in {countryName}. The Secretary of Defense appoints a
             commanding general for each theater command.

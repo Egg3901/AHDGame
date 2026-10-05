@@ -20,7 +20,7 @@ const BASE = {
   taxLevers: [
     {
       id: "uk.tax.incomeTax",
-      label: "Income Tax and Surtax Act",
+      label: "Income tax and Surtax Act",
       taxType: "incomeTax",
       minRate: 0,
       maxRate: 60,
@@ -58,10 +58,10 @@ describe("BudgetAuthoringPanel", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => BASE }));
     render(<BudgetAuthoringPanel countryCode="uk" />);
 
-    await waitFor(() => expect(screen.getByText("Income Tax and Surtax Act")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Income tax and Surtax Act")).toBeTruthy());
     expect(screen.getByDisplayValue("45")).toBeTruthy();
     expect(screen.getByDisplayValue("National Service")).toBeTruthy();
-    const table = screen.getByText("Table Budget") as HTMLButtonElement;
+    const table = screen.getByText("Table budget") as HTMLButtonElement;
     expect(table.disabled).toBe(true);
 
     fireEvent.change(screen.getByLabelText("Armed Forces and National Service Act"), {
@@ -86,11 +86,11 @@ describe("BudgetAuthoringPanel", () => {
       });
     vi.stubGlobal("fetch", fetchMock);
     render(<BudgetAuthoringPanel countryCode="uk" />);
-    await waitFor(() => screen.getByText("Income Tax and Surtax Act"));
-    fireEvent.change(screen.getByLabelText("Income Tax and Surtax Act"), {
+    await waitFor(() => screen.getByText("Income tax and Surtax Act"));
+    fireEvent.change(screen.getByLabelText("Income tax and Surtax Act"), {
       target: { value: "55" },
     });
-    fireEvent.click(screen.getByText("Preview Budget"));
+    fireEvent.click(screen.getByText("Preview budget"));
 
     await waitFor(() => expect(screen.getByText(/Projected surplus/)).toBeTruthy());
     expect(screen.getByText("defense spending")).toBeTruthy();
@@ -100,13 +100,13 @@ describe("BudgetAuthoringPanel", () => {
       expect.objectContaining({ method: "POST" })
     );
 
-    fireEvent.change(screen.getByLabelText("Income Tax and Surtax Act"), {
+    fireEvent.change(screen.getByLabelText("Income tax and Surtax Act"), {
       target: { value: "54" },
     });
     expect(screen.queryByText(/Projected surplus/)).toBeNull();
   });
 
-  it("lets the Prime Minister act while the Chancellorship is vacant", async () => {
+  it("lets the Prime minister act while the Chancellorship is vacant", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({

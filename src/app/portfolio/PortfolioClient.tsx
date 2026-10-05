@@ -400,7 +400,7 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
   const ownerSwitcher = ceoCorporation ? (
     <OwnerToggle
       options={[
-        { key: "character", label: "My Assets", subtitle: "Personal" },
+        { key: "character", label: "My assets", subtitle: "Personal" },
         { key: "corporation", label: ceoCorporation.name, subtitle: "Corporation" },
       ]}
       active={showCorpPortfolio ? "corporation" : "character"}
@@ -540,7 +540,7 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
     },
     {
       key: "cash",
-      label: "Cash on Hand",
+      label: "Cash on hand",
       value: formatAmount(cashOnHand),
       delta: deltas?.cash ?? null,
       icon: <IconCash />,
@@ -562,14 +562,14 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
     },
     {
       key: "orders",
-      label: "My Orders",
+      label: "My orders",
       value: "",
       delta: null,
       icon: <IconStocks />,
     },
     {
       key: "trades",
-      label: "Trade History",
+      label: "Trade history",
       value: "",
       delta: null,
       icon: <IconStocks />,
@@ -595,7 +595,7 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
     },
     {
       key: "transfers",
-      label: "Wire Transfer",
+      label: "Wire transfer",
       value: formatAmount(cashOnHand),
       delta: null,
       icon: <IconTransfers />,
@@ -626,7 +626,7 @@ function PortfolioPageInner({ initialPortfolio }: PortfolioClientProps) {
         <BackButton fallbackHref="/dashboard" fallbackLabel="Dashboard" />
 
         <PortfolioShell
-          title="Portfolio & Wallet"
+          title="Portfolio & wallet"
           subtitle="Stocks, bonds, currency, and transfers"
           netWorthLabel="Net Worth"
           netWorth={formatAmount(combinedTotal)}
@@ -738,10 +738,10 @@ function OverviewPane({
   return (
     <>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <StatCard label="Stock Holdings" value={formatAmount(totalValue)} />
-        <StatCard label="Bond Holdings" value={formatAmount(totalBondValue)} />
+        <StatCard label="Stock holdings" value={formatAmount(totalValue)} />
+        <StatCard label="Bond holdings" value={formatAmount(totalBondValue)} />
         <StatCard
-          label="Bond Income"
+          label="Bond income"
           value={`+${formatAmount(totalBondIncomePerTurn)}/turn`}
           accent="success"
         />
@@ -763,7 +763,7 @@ function OverviewPane({
         <div className="rounded-xl border border-card-border bg-card p-4 sm:p-6 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
             <div>
-              <h2 className="text-sm font-semibold text-foreground">Portfolio Value Over Time</h2>
+              <h2 className="text-sm font-semibold text-foreground">Portfolio value over time</h2>
               <p className="text-xs text-muted">
                 {chartView === "total"
                   ? seriesView === "total"

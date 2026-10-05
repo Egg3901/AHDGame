@@ -5,6 +5,7 @@ import {
   NEW_CHARACTER_TRANSFER_BARRIER_TURNS,
   type NewCharacterTransferBarrierInput,
 } from "@/lib/character/newCharacterTransferBarrier";
+import { errorResponse } from "@/lib/api/errors";
 
 /**
  * 403 response while the character is inside its post-creation transfer
@@ -28,11 +29,9 @@ export async function newCharacterTransferBarrierResponse(
     gameTime.effectiveNow.getTime()
   );
   if (!barrier.blocked) return null;
-  return NextResponse.json(
-    {
-      error: `New characters cannot send funds for their first ${NEW_CHARACTER_TRANSFER_BARRIER_TURNS} turns. You can send in ${barrier.remainingTurns} turn(s).`,
-      remainingTurns: barrier.remainingTurns,
-    },
-    { status: 403 }
+  return errorResponse(
+    403,
+    `New characters cannot send funds for their first ${NEW_CHARACTER_TRANSFER_BARRIER_TURNS} turns. You can send in ${barrier.remainingTurns} turn(s).`,
+    { extra: { remainingTurns: barrier.remainingTurns } }
   );
 }

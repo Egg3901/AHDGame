@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
-import { handleRouteError, badRequest, notFound } from "@/lib/api/errors";
+import { handleRouteError, badRequest, notFound, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { Character } from "@/lib/db/types";
@@ -44,8 +44,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (!config) return NextResponse.json(notFound("Country not found").toJson(), { status: 404 });
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const { targetCharacterId: targetIdStr, amount } = parsed.data;
     const targetId = new ObjectId(targetIdStr);

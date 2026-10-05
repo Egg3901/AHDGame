@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import type { Character, CentralBank } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, FOREX_ACTIVE_COUNTRIES } from "@/lib/constants/currencies";
@@ -47,20 +47,17 @@ export async function GET(request: Request, context: RouteContext) {
       return NextResponse.json(notFound("Country not found").toJson(), { status: 404 });
 
     if (!FOREX_ACTIVE_COUNTRIES.includes(countryId)) {
-      return NextResponse.json(
-        { error: "This central bank page does not support forex accounts." },
-        { status: 404 }
-      );
+      return errorResponse(404, "This central bank page does not support forex accounts.");
     }
 
     const { searchParams } = new URL(request.url);
     const characterId = searchParams.get("characterId");
     const type = searchParams.get("type");
     if (!characterId || !ObjectId.isValid(characterId)) {
-      return NextResponse.json({ error: "characterId is required" }, { status: 400 });
+      return errorResponse(400, "characterId is required");
     }
     if (type !== "deposit" && type !== "loan") {
-      return NextResponse.json({ error: "type must be deposit or loan" }, { status: 400 });
+      return errorResponse(400, "type must be deposit or loan");
     }
 
     const db = await getDb();
@@ -70,7 +67,7 @@ export async function GET(request: Request, context: RouteContext) {
       _id: new ObjectId(characterId),
     });
     if (!character || !character.userId) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const bankId = getBankId(countryId);
@@ -90,7 +87,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     const forexEnabled = await isForexEnabled();
     if (!forexEnabled) {
-      return NextResponse.json({ error: "Forex is not enabled." }, { status: 404 });
+      return errorResponse(404, "Forex is not enabled.");
     }
 
     const charSummary = {
@@ -139,17 +136,14 @@ export async function GET(request: Request, context: RouteContext) {
 
     const locEnabled = await isLineOfCreditEnabled();
     if (!locEnabled) {
-      return NextResponse.json({ error: "Line of credit is not enabled." }, { status: 404 });
+      return errorResponse(404, "Line of credit is not enabled.");
     }
 
     const loc = character.lineOfCredit;
     const principalFace = loc?.balances?.[nationalCurrency] ?? 0;
     const arrearsFace = loc?.arrears?.[nationalCurrency] ?? 0;
     if (principalFace <= 0 && arrearsFace <= 0) {
-      return NextResponse.json(
-        { error: "No line-of-credit balance in this currency for this character." },
-        { status: 404 }
-      );
+      return errorResponse(404, "No line-of-credit balance in this currency for this character.");
     }
 
     const snapshot = await buildLocSnapshot(db, character);

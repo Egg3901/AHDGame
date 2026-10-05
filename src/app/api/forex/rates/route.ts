@@ -3,7 +3,7 @@ import { loadEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { clampForexSpreadStrength } from "@/lib/constants/currencies";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import type { ExchangeRate } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -16,7 +16,7 @@ export async function GET() {
   try {
     const [db, forexActive] = await Promise.all([getDb(), isForexEnabled()]);
     if (!forexActive) {
-      return NextResponse.json({ error: "Forex not enabled" }, { status: 403 });
+      return errorResponse(403, "Forex not enabled");
     }
 
     const [rateRows, union] = await Promise.all([

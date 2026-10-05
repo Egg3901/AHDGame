@@ -13,7 +13,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getActionAuditLogCollection } from "@/lib/db/collections/actionAuditLog";
 import {
   auditProjectionFor,
@@ -33,7 +33,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     if (!/^[0-9a-f]{24}$/i.test(id)) {
-      return NextResponse.json({ error: "Invalid audit record id" }, { status: 400 });
+      return errorResponse(400, "Invalid audit record id");
     }
 
     const isAdmin = auth.user.isAdmin === true;
@@ -50,7 +50,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     if (!record) {
       // Also covers "exists but is an admin-category row a moderator asked
       // for by id" — we do not reveal that it exists.
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return errorResponse(404, "Not found");
     }
 
     const excludeSelf = { _id: { $ne: record._id } };

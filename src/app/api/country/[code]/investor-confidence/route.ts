@@ -3,7 +3,7 @@
 // preview and the budget page. Public read. Errors: 400
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { readInvestorConfidence } from "@/lib/nationalization/investorConfidence";
 
@@ -16,7 +16,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const db = await getDb();
     const investorConfidence = await readInvestorConfidence(db, countryId);

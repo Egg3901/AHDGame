@@ -57,7 +57,7 @@ export default function WikiElectionDetailPage({ params }: { params: Promise<{ i
           href="/wiki/elections"
           className="mt-4 block text-sm text-muted hover:text-foreground"
         >
-          ← Back to Elections
+          ← Back to elections
         </Link>
       </div>
     );
@@ -187,7 +187,7 @@ export default function WikiElectionDetailPage({ params }: { params: Promise<{ i
         {primaryNarrative && (
           <section className="mb-8">
             <h2 className="mb-4 scroll-mt-24 border-b border-card-border pb-2 text-2xl font-semibold text-foreground">
-              Primary Elections
+              Primary elections
             </h2>
             <p className="mb-4 leading-relaxed text-muted">
               Prior to the general election, candidates competed within their respective parties to
@@ -257,7 +257,7 @@ export default function WikiElectionDetailPage({ params }: { params: Promise<{ i
         {election.generalResults && (
           <section className="mb-8">
             <h2 className="mb-4 scroll-mt-24 border-b border-card-border pb-2 text-2xl font-semibold text-foreground">
-              Historical Significance
+              Historical significance
             </h2>
             <p className="mb-4 leading-relaxed text-muted">
               {election.electionType === "president"
@@ -284,7 +284,7 @@ export default function WikiElectionDetailPage({ params }: { params: Promise<{ i
         {/* Detailed Results heading */}
         <section className="mb-6 mt-12">
           <h2 className="mb-4 scroll-mt-24 border-b border-card-border pb-2 text-2xl font-semibold text-foreground">
-            Detailed Results and Data
+            Detailed results and data
           </h2>
           <p className="mb-3 leading-relaxed text-muted">
             The following tables provide comprehensive statistical data from the {election.year}{" "}
@@ -323,7 +323,7 @@ export default function WikiElectionDetailPage({ params }: { params: Promise<{ i
       {!election.generalResults && election.primaryResults.length === 0 && (
         <div className="rounded-xl border border-card-border bg-card/40 p-8 text-center">
           <div className="mb-4 text-4xl opacity-30">📊</div>
-          <p className="text-base text-foreground mb-2 font-medium">Election Data Pending</p>
+          <p className="text-base text-foreground mb-2 font-medium">Election data pending</p>
           <p className="text-sm text-muted">
             Detailed results for this election are not yet available. Complete vote tallies,
             candidate information, and analysis will be added once the election concludes and

@@ -607,7 +607,13 @@ async function resolveOverrideVoting(
     }
     const overrideOutcome = await finalizeStateBillEnactment(
       db,
-      { ...bill, status: override.onPassStatus },
+      {
+        ...bill,
+        status: override.onPassStatus,
+        // The enactment card describes the vote that actually overrode the
+        // veto, not the stale original chamber vote on the pre-claim bill.
+        voteSnapshot: overrideVoteSnapshot,
+      },
       currentTurnOverride
     );
     // Notify sponsor of override success (skipped when the budget gate blocked

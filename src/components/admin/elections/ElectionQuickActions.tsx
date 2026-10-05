@@ -20,7 +20,7 @@ const actions = [
   },
   {
     key: "snap",
-    label: "Snap to Turn Bounds",
+    label: "Snap to turn bounds",
     desc: "Align to hour boundaries",
     color: "border-blue-500/30",
     textColor: "text-blue-500",
@@ -28,7 +28,7 @@ const actions = [
   },
   {
     key: "primaries",
-    label: "Trigger All Primaries",
+    label: "Trigger all primaries",
     desc: "End primaries immediately",
     color: "border-yellow-500/30",
     textColor: "text-yellow-500",
@@ -36,7 +36,7 @@ const actions = [
   },
   {
     key: "resolve",
-    label: "Remove Primary Losers",
+    label: "Remove primary losers",
     desc: "Withdraw losing candidates",
     color: "border-red-500/30",
     textColor: "text-red-500",
@@ -44,7 +44,7 @@ const actions = [
   },
   {
     key: "npps",
-    label: "Fill NPP Races",
+    label: "Fill NPP races",
     desc: "Run NPP entry pass",
     color: "border-primary/30",
     textColor: "text-primary",

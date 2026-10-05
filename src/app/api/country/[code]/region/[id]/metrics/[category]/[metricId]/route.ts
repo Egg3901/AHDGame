@@ -3,7 +3,7 @@ import {
   findMergedRegionMetricsForDisplay,
   findMergedRegionMetricsManyForDisplay,
 } from "@/lib/macroMetrics/displayMerge";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { LegislationType } from "@/lib/db/types";
@@ -139,14 +139,14 @@ export async function GET(
         ]);
 
       if (!nationalMetrics) {
-        return NextResponse.json({ error: "No metrics data for country" }, { status: 404 });
+        return errorResponse(404, "No metrics data for country");
       }
 
       const catData = nationalMetrics[category as MetricCategoryId] as
         Record<string, { value: number }> | undefined;
       const metricVal = catData?.[metricId];
       if (!metricVal || typeof metricVal.value !== "number") {
-        return NextResponse.json({ error: "Metric not found" }, { status: 404 });
+        return errorResponse(404, "Metric not found");
       }
 
       // Global average across all states/regions (for cross-country comparison)
@@ -255,7 +255,7 @@ export async function GET(
     ]);
 
     if (!metrics || !stateDoc) {
-      return NextResponse.json({ error: "State or metrics not found" }, { status: 404 });
+      return errorResponse(404, "State or metrics not found");
     }
 
     const catData = metrics[category as MetricCategoryId] as
@@ -274,7 +274,7 @@ export async function GET(
       metricVal = { value: 50, trend: 0 };
     }
     if (metricVal === undefined) {
-      return NextResponse.json({ error: "Metric not found" }, { status: 404 });
+      return errorResponse(404, "Metric not found");
     }
 
     // National average for this metric within the same country

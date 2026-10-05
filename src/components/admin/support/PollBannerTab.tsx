@@ -11,6 +11,7 @@
  *
  * Copy rules: the message goes straight to players, so no em or en dashes.
  */
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { LocalTime } from "@/components/time/LocalTime";
 import { PollBannerStrip } from "@/components/PollBannerNotice";
@@ -117,7 +118,7 @@ export function PollBannerTab() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error || "Could not save the banner");
+        setError(apiErrorText(data, "Could not save the banner"));
         return;
       }
       setSaved(true);
@@ -145,7 +146,7 @@ export function PollBannerTab() {
       <div className="rounded-xl border border-card-border bg-card p-6 shadow-card">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-sm font-semibold">Poll Banner</h3>
+            <h3 className="text-sm font-semibold">Poll banner</h3>
             <p className="text-xs text-muted">
               A strip under the navbar, shown to everyone including signed-out visitors. Players
               cannot dismiss it, so it stays up until you switch it off. It stays off the sign in,
@@ -303,7 +304,7 @@ export function PollBannerTab() {
       </div>
 
       <div className="rounded-xl border border-card-border bg-card p-6 shadow-card">
-        <h4 className="mb-1 text-xs font-semibold tracking-wider text-muted uppercase">Preview</h4>
+        <h4 className="mb-1 text-body-sm font-medium text-muted">Preview</h4>
         <p className="mb-3 text-[11px] text-muted/70">
           Exactly what players see, rendered by the same component. Shown here whether or not the
           banner is currently switched on.

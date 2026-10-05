@@ -816,6 +816,21 @@ export async function snapshotApprovalHistory(
       $set: {
         countryId,
         approvalRating: approval,
+        approvalBase: politicalBases?.national ?? BASE_APPROVAL,
+        activeRegionalModifiers: [
+          {
+            id: "regional_conditions",
+            label: "Regional conditions (population weighted)",
+            effect:
+              Math.round(
+                (calculateNationalApproval(dampedStateApprovals) -
+                  (politicalBases?.national ?? BASE_APPROVAL)) *
+                  10
+              ) / 10,
+            source: "metric" as const,
+            marginEffect: 0,
+          },
+        ],
         disapprovalRating: 100 - approval,
         netApproval: approval - (100 - approval),
         source: "aggregate" as const,

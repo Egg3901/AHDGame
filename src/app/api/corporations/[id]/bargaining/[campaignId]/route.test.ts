@@ -121,7 +121,7 @@ describe("PATCH /api/corporations/[id]/bargaining/[campaignId]", () => {
     });
 
     expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       error: "Only the employer's CEO can answer this campaign.",
     });
   });

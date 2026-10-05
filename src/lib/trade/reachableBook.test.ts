@@ -13,6 +13,34 @@ const OIL: CommodityType[] = ["oil"];
 describe("buildReachableBooks", () => {
   const countries = ["US", "RU"] as CountryId[];
 
+  it("does not advertise foreign healthcare shortages as room for domestic hospitals", () => {
+    const balances = new Map([
+      ["US", bal([["healthcare_services", { supply: 100, demand: 20 }]])],
+      ["RU", bal([["healthcare_services", { supply: 0, demand: 200 }]])],
+      ["CN", bal([["healthcare_services", { supply: 300, demand: 0 }]])],
+    ]);
+    const books = buildReachableBooks({
+      countries,
+      balances,
+      clearing: clearAllCommodities(countries, balances, () => 1),
+      commodities: ["healthcare_services"],
+      affinity: () => 1,
+    });
+    const us = books.get("US")!.get("healthcare_services")!;
+    expect(us).toEqual({
+      supply: 100,
+      demand: 20,
+      domesticDemand: 20,
+      imports: 0,
+      exports: 0,
+      blockedSupply: 0,
+      untradedSupply: 0,
+      unmetForeignDemand: 0,
+    });
+    expect(reachableDemandGap(us)).toBe(0);
+    expect(reachableDemandGap(books.get("RU")!.get("healthcare_services"))).toBe(200);
+  });
+
   it("keeps an embargoed glut out of the importer's book and discloses it", () => {
     const balances = new Map([
       ["US" as CountryId, bal([["oil", { supply: 100, demand: 180 }]])],

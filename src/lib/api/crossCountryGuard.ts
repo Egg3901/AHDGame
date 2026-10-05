@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isSameCountry } from "./sameCountry";
+import { errorResponse } from "@/lib/api/errors";
 
 /** Player-facing message when an actor tries to act on another country's party. */
 export const CROSS_COUNTRY_ACTION_MESSAGE = "You cannot perform party actions in another country.";
@@ -20,5 +21,5 @@ export function crossCountryActionGuard(
   regionCountryId: string
 ): NextResponse | null {
   if (isSameCountry(actor, { countryId: regionCountryId })) return null;
-  return NextResponse.json({ error: CROSS_COUNTRY_ACTION_MESSAGE }, { status: 403 });
+  return errorResponse(403, CROSS_COUNTRY_ACTION_MESSAGE);
 }

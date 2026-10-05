@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { syncSuggestionToGitHub } from "@/lib/github";
 import { parseObjectId } from "@/lib/utils/objectId";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -42,7 +42,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const suggestion = await findSuggestionByAdminId(db, id);
 
     if (!suggestion) {
-      return NextResponse.json({ error: "Suggestion not found" }, { status: 404 });
+      return errorResponse(404, "Suggestion not found");
     }
 
     let reporterUsername: string | null = null;
@@ -105,7 +105,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { id } = await params;
     const parsed = await parseJsonBody(request, adminSuggestionPatchSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { status, adminNotes } = parsed.data;
 
@@ -125,7 +125,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     if (!suggestion) {
-      return NextResponse.json({ error: "Suggestion not found" }, { status: 404 });
+      return errorResponse(404, "Suggestion not found");
     }
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -216,7 +216,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     const db = await getDb();
     const suggestion = await findSuggestionByAdminId(db, id);
     if (!suggestion) {
-      return NextResponse.json({ error: "Suggestion not found" }, { status: 404 });
+      return errorResponse(404, "Suggestion not found");
     }
 
     const coll = getSuggestionsCollection(db);

@@ -38,7 +38,8 @@ vi.mock("@/lib/api/rateLimit", () => ({
   checkRateLimit: () => ({ ok: true }),
   rateLimitResponse: () => new Response(null, { status: 429 }),
 }));
-vi.mock("@/lib/api/errors", () => ({
+vi.mock("@/lib/api/errors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/errors")>()),
   handleRouteError: () => new Response(null, { status: 500 }),
 }));
 

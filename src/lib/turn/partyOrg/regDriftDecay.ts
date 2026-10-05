@@ -37,7 +37,7 @@ import {
   sourceFromSurplus,
   type SurplusPartyDelta,
   type SurplusPartyView,
-} from "./surplusSourcing";
+} from "@/lib/parties/surplusSourcing";
 
 // Re-exported so existing importers (and tests) keep their entry point while
 // the implementation lives in the DB-free `surplusSourcing` module.

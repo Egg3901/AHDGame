@@ -73,7 +73,7 @@ export function ElectionsHero({
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex min-w-max flex-col px-5 py-3">
-      <span className="text-[10px] font-medium uppercase tracking-widest text-muted">{label}</span>
+      <span className="text-body-sm font-medium text-muted">{label}</span>
       <span className="mt-0.5 text-base font-bold tabular-nums">{value}</span>
     </div>
   );

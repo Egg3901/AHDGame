@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkWikiDisabled } from "@/lib/api/wikiGuard";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -61,7 +61,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     try {
       electionId = new ObjectId(id);
     } catch {
-      return NextResponse.json({ error: "Invalid election ID" }, { status: 400 });
+      return errorResponse(400, "Invalid election ID");
     }
 
     const db = await getDb();
@@ -71,7 +71,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       .findOne({ _id: electionId, status: { $in: ["completed", "resolved"] } });
 
     if (!election) {
-      return NextResponse.json({ error: "Election not found" }, { status: 404 });
+      return errorResponse(404, "Election not found");
     }
 
     // For completed elections, fetch ALL candidates (active + withdrawn) to show who ran

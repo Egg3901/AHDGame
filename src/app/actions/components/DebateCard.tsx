@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface StrategyOption {
   id: string;
@@ -104,7 +105,7 @@ export default function DebateCard() {
         body: JSON.stringify({ strategies: selected }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Failed to submit strategies.");
+      if (!res.ok) throw new Error(apiErrorText(data, "Failed to submit strategies."));
       if (data.resolved && data.outcome) setOutcome(data.outcome);
       // Either resolved now, or waiting on the opponent — clear the input either way.
       setDebate(null);

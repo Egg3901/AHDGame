@@ -44,7 +44,7 @@ export default function WageLevelPanel({
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
-      <h2 className="mb-1 text-lg font-bold text-foreground">Wage Level</h2>
+      <h2 className="mb-1 text-lg font-bold text-foreground">Wage level</h2>
       <p className="text-xs text-muted mb-4">
         What this sector pays its workers, as a multiple of the market baseline for this industry.
         {floorBinds
@@ -135,7 +135,7 @@ export default function WageLevelPanel({
               disabled={wageSaving}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
-              {wageSaving ? "Saving..." : "Set Wage"}
+              {wageSaving ? "Saving..." : "Set wage"}
             </button>
           </div>
           {wageMessage && (

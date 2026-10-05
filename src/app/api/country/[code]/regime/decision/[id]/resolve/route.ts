@@ -24,7 +24,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -47,13 +47,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     let decisionObjectId: ObjectId;
     try {
       decisionObjectId = new ObjectId(id);
     } catch {
-      return NextResponse.json({ error: "Invalid decision id" }, { status: 400 });
+      return errorResponse(400, "Invalid decision id");
     }
 
     const auth = await requireHumanSessionWithCharacter(request);
@@ -61,16 +61,13 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     const leader = await isSittingLeader(db, countryId, auth.user.character._id);
     if (!leader) {
-      return NextResponse.json(
-        { error: "Only the sitting leader can resolve regime decisions" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the sitting leader can resolve regime decisions");
     }
 
     // Stale-UI guard: confirm the supplied decision-id matches the
@@ -80,14 +77,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     const coll = getRegimeEscalationCollection(db);
     const state = await coll.findOne({ _id: countryId });
     if (!state?.activeDecision) {
-      return NextResponse.json({ error: "No active decision to resolve" }, { status: 404 });
+      return errorResponse(404, "No active decision to resolve");
     }
     if (!state.activeDecision.id.equals(decisionObjectId)) {
-      return NextResponse.json(
-        {
-          error: "Decision id mismatch — the active decision has changed since you loaded the page",
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Decision id mismatch — the active decision has changed since you loaded the page"
       );
     }
 
@@ -116,7 +111,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (/unknown option|no handler/i.test(msg)) {
-        return NextResponse.json({ error: msg }, { status: 409 });
+        return errorResponse(409, msg);
       }
       throw err;
     }

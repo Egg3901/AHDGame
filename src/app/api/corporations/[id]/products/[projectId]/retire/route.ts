@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
@@ -38,10 +38,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       config?.productLinesV2Enabled !== true ||
       !marketAtLeast(await getMarketSystemMode(config), "plants")
     ) {
-      return NextResponse.json(
-        { error: "Manufacturing product lines are not enabled" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Manufacturing product lines are not enabled");
     }
     const result = await db
       .collection<ManufacturingProductProject>(MANUFACTURING_PRODUCT_PROJECTS_V2)
@@ -57,7 +54,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
         }
       );
     if (result.matchedCount === 0) {
-      return NextResponse.json({ error: "Active product project not found" }, { status: 404 });
+      return errorResponse(404, "Active product project not found");
     }
     return NextResponse.json({ retired: true });
   } catch (error) {

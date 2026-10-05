@@ -8,7 +8,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getGameStateCollection } from "@/lib/db/collections/gameState";
@@ -49,25 +49,22 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const { code, positionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (DEFENSE_POSITION_BY_COUNTRY[countryId] !== positionId) {
-      return NextResponse.json(
-        { error: "Formations are managed from the defence minister’s office." },
-        { status: 404 }
-      );
+      return errorResponse(404, "Formations are managed from the defence minister’s office.");
     }
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     const gsCol = await getGameStateCollection(db);
     const gs = await gsCol.findOne({ _id: "current" }, { projection: { conflictsEnabled: 1 } });
     if (!gs?.conflictsEnabled) {
-      return NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 });
+      return errorResponse(404, "Conflicts subsystem disabled");
     }
 
     const member = await getCabinetMembersCollection(db).findOne({ countryId, positionId });
@@ -76,10 +73,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the defence minister may edit formations." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the defence minister may edit formations.");
     }
 
     // Referential integrity: own units only, valid roles, and every assignment
@@ -93,16 +87,13 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const validRoles = new Set(ROLES.map((r) => r.id));
     for (const [uid, role] of Object.entries(positions ?? {})) {
       if (!ownUnits.has(uid)) {
-        return NextResponse.json(
-          { error: "That layout references a unit that does not belong to this country." },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "That layout references a unit that does not belong to this country."
         );
       }
       if (!validRoles.has(role)) {
-        return NextResponse.json(
-          { error: "That unit was given a role that does not exist." },
-          { status: 400 }
-        );
+        return errorResponse(400, "That unit was given a role that does not exist.");
       }
     }
 
@@ -111,24 +102,21 @@ export async function PUT(request: Request, { params }: RouteParams) {
       for (const a of conflictAssignments) {
         const verdict = await verifyPosting(db, countryId, a.theaterId);
         if (verdict === "unknown-theatre") {
-          return NextResponse.json(
-            { error: "That conflict is no longer live — a general cannot be posted to it." },
-            { status: 400 }
+          return errorResponse(
+            400,
+            "That conflict is no longer live — a general cannot be posted to it."
           );
         }
         if (verdict === "not-a-belligerent") {
-          return NextResponse.json(
-            {
-              error:
-                "Your nation is not a belligerent in that conflict. Entry is decided by a bloc resolution and a vote of your legislature.",
-            },
-            { status: 400 }
+          return errorResponse(
+            400,
+            "Your nation is not a belligerent in that conflict. Entry is decided by a bloc resolution and a vote of your legislature."
           );
         }
       }
       const validGenerals = new Set((await listCountryGenerals(db, countryId)).map((g) => g.id));
       const error = validateAssignments(conflictAssignments, { validGenerals });
-      if (error) return NextResponse.json({ error }, { status: 400 });
+      if (error) return errorResponse(400, error);
     }
 
     // Patch only what was sent, so one page's save never erases the other's half.
@@ -136,7 +124,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     if (positions) $set.positions = positions;
     if (conflictAssignments) $set.conflictAssignments = conflictAssignments;
     if (Object.keys($set).length === 0) {
-      return NextResponse.json({ error: "Nothing was sent to save." }, { status: 400 });
+      return errorResponse(400, "Nothing was sent to save.");
     }
 
     await getMilitaryFormationsCollection(db).updateOne(

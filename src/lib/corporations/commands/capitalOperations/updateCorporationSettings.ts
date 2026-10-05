@@ -4,7 +4,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { updateCorporationSettingsSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getGameState } from "@/lib/gameState";
 import {
@@ -38,7 +38,7 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
     const { id } = await params;
     const parsed = await parseJsonBody(request, updateCorporationSettingsSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -56,10 +56,7 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
       parsed.data.ceoSalary !== undefined &&
       parsed.data.ceoSalary > 0
     ) {
-      return NextResponse.json(
-        { error: "CEO salary is suspended while IMF restructuring is active." },
-        { status: 400 }
-      );
+      return errorResponse(400, "CEO salary is suspended while IMF restructuring is active.");
     }
 
     const {
@@ -108,11 +105,9 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
       if (ceoSalary !== undefined) {
         const maxCeoSalary = totalDailyRevenue * CEO_SALARY_MAX_REVENUE_MULTIPLE;
         if (ceoSalary > maxCeoSalary) {
-          return NextResponse.json(
-            {
-              error: `CEO salary cannot exceed 1.25× daily gross revenue ($${Math.round(maxCeoSalary).toLocaleString()}/day). Increase revenue first.`,
-            },
-            { status: 400 }
+          return errorResponse(
+            400,
+            `CEO salary cannot exceed 1.25× daily gross revenue ($${Math.round(maxCeoSalary).toLocaleString()}/day). Increase revenue first.`
           );
         }
       }
@@ -128,16 +123,13 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
         (corporation.ceoSalary ?? 0);
       const overheadCeiling = totalDailyRevenue * CORP_OVERHEAD_MAX_REVENUE_MULTIPLE;
       if (combined > overheadCeiling && combined > storedCombined) {
-        return NextResponse.json(
-          {
-            error:
-              `Combined operating budgets cannot exceed 150% of daily gross revenue ` +
-              `($${Math.round(overheadCeiling).toLocaleString()}/day).` +
-              (totalDailyRevenue <= 0
-                ? ` A corporation with no gross revenue cannot set positive operating budgets.`
-                : ``),
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Combined operating budgets cannot exceed 150% of daily gross revenue ` +
+            `($${Math.round(overheadCeiling).toLocaleString()}/day).` +
+            (totalDailyRevenue <= 0
+              ? ` A corporation with no gross revenue cannot set positive operating budgets.`
+              : ``)
         );
       }
     }
@@ -186,10 +178,7 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
       const cooldownUntil = corporation.typeSwitchCooldownUntilTurn ?? 0;
       if (currentTurn < cooldownUntil) {
         const remaining = cooldownUntil - currentTurn;
-        return NextResponse.json(
-          { error: `Type switch on cooldown. ${remaining} turns remaining.` },
-          { status: 400 }
-        );
+        return errorResponse(400, `Type switch on cooldown. ${remaining} turns remaining.`);
       }
 
       if (primaryType !== undefined) {
@@ -198,10 +187,7 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
         const effectiveSecondary =
           secondaryType !== undefined ? secondaryType : (corporation.secondaryType ?? null);
         if (effectiveSecondary !== null && primaryType === effectiveSecondary) {
-          return NextResponse.json(
-            { error: "Primary type cannot be the same as secondary type" },
-            { status: 400 }
-          );
+          return errorResponse(400, "Primary type cannot be the same as secondary type");
         }
         updates.type = primaryType;
         if (primaryType !== "manufacturing" && corporation.industryModel) {
@@ -253,10 +239,7 @@ export async function updateCorporationSettings(request: Request, { params }: Ro
       if (secondaryType !== undefined) {
         const effectivePrimary = (primaryType ?? corporation.type) as string;
         if (secondaryType === effectivePrimary) {
-          return NextResponse.json(
-            { error: "Secondary type cannot be the same as primary type" },
-            { status: 400 }
-          );
+          return errorResponse(400, "Secondary type cannot be the same as primary type");
         }
         updates.secondaryType = secondaryType;
       }

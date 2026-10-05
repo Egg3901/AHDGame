@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const INPUT_CLASS =
   "w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-primary";
@@ -48,24 +49,24 @@ interface ConfigPayload {
 const GENERAL_SECTIONS: { key: GeneralKey; label: string; description: string }[] = [
   {
     key: "game",
-    label: "Game Events Webhook",
+    label: "Game events webhook",
     description:
       "Receives: election results, bill passages, government formation/collapse, leadership elections, new primaries opening. Also the catch-all feed for countries with no webhook of their own.",
   },
   {
     key: "news",
-    label: "News Channel Webhook",
+    label: "News channel webhook",
     description: "Receives: player news posts from the in-game news feed.",
   },
   {
     key: "suggestions",
-    label: "Player Suggestions Webhook",
+    label: "Player suggestions webhook",
     description:
       "Receives: new posts to the player suggestion forum, including from the in-game submit flow. Use Backfill to Discord to post rich embeds for older rows that were never synced.",
   },
   {
     key: "changelog",
-    label: "Changelog Webhook",
+    label: "Changelog webhook",
     description:
       "Receives: patch notes from content/changelog/public/ posts, categorised with colour-coded embeds per section. Updates to previously posted versions only send the new items.",
   },
@@ -175,7 +176,7 @@ export function DiscordIntegrations() {
       const data = (await res.json().catch(() => null)) as { error?: string } | null;
       if (!res.ok) {
         if (res.status === 409) setOwnershipConflict(true);
-        throw new Error(data?.error ?? "Save failed");
+        throw new Error(apiErrorText(data, "Save failed"));
       }
       setMessage({ type: "success", text: "Webhook URLs saved." });
     } catch (err) {
@@ -201,7 +202,7 @@ export function DiscordIntegrations() {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Test failed");
+      if (!res.ok) throw new Error(apiErrorText(data, "Test failed"));
       setMessage({ type: "success", text: `Test embed sent to ${key} webhook.` });
     } catch (e) {
       setMessage({ type: "error", text: e instanceof Error ? e.message : "Test failed." });
@@ -221,7 +222,7 @@ export function DiscordIntegrations() {
         body: JSON.stringify({ electionType, countryId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Test failed");
+      if (!res.ok) throw new Error(apiErrorText(data, "Test failed"));
       setMessage({
         type: "success",
         text: `Test ${electionType} results sent (${data.resultsShown} results).`,
@@ -243,7 +244,7 @@ export function DiscordIntegrations() {
         body: JSON.stringify({ mode }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Test failed");
+      if (!res.ok) throw new Error(apiErrorText(data, "Test failed"));
       if (mode === "latest") {
         setMessage({
           type: "success",
@@ -277,7 +278,7 @@ export function DiscordIntegrations() {
         remaining?: number;
         message?: string;
       };
-      if (!res.ok) throw new Error(data.error ?? "Backfill failed");
+      if (!res.ok) throw new Error(apiErrorText(data, "Backfill failed"));
 
       const remaining = data.remaining ?? 0;
       if ((data.processed ?? 0) === 0 && remaining === 0) {
@@ -302,7 +303,7 @@ export function DiscordIntegrations() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold text-white mb-1">Discord Webhooks</h3>
+        <h3 className="text-lg font-semibold text-white mb-1">Discord webhooks</h3>
         <p className="text-sm text-muted">
           Configure Discord webhook URLs to broadcast game events and player news posts. Leave blank
           to disable. Country channels are listed for every country enabled for players.
@@ -334,10 +335,10 @@ export function DiscordIntegrations() {
               {section.key === "changelog"
                 ? testingChangelog === "latest"
                   ? "Sending…"
-                  : "Post Latest Version"
+                  : "Post latest version"
                 : testing === section.key
                   ? "Sending…"
-                  : "Send Test"}
+                  : "Send test"}
             </button>
 
             {section.key === "changelog" ? (
@@ -346,7 +347,7 @@ export function DiscordIntegrations() {
                 disabled={!general.changelog || testingChangelog === "updates"}
                 className={BUTTON_CLASS}
               >
-                {testingChangelog === "updates" ? "Syncing…" : "Sync All Updates"}
+                {testingChangelog === "updates" ? "Syncing…" : "Sync all updates"}
               </button>
             ) : null}
 
@@ -366,7 +367,7 @@ export function DiscordIntegrations() {
         ))}
 
         <div className="pt-2">
-          <h4 className="text-sm font-semibold text-white mb-1">Country Events</h4>
+          <h4 className="text-sm font-semibold text-white mb-1">Country events</h4>
           <p className="text-xs text-muted mb-3">
             One channel per player-enabled country. Enable or disable countries in Admin Panel &gt;
             Countries — a disabled country&apos;s URL is retained but its channel stops receiving
@@ -389,7 +390,7 @@ export function DiscordIntegrations() {
                     disabled={(!country.url && !general.game) || testing === country.countryId}
                     className={BUTTON_CLASS}
                   >
-                    {testing === country.countryId ? "Sending…" : "Send Test"}
+                    {testing === country.countryId ? "Sending…" : "Send test"}
                   </button>
                 </WebhookField>
               ))
@@ -400,7 +401,7 @@ export function DiscordIntegrations() {
         <div className="rounded-lg border border-white/10 bg-white/5 p-4 space-y-3">
           <div>
             <label className="block text-sm font-medium text-white mb-1">
-              Test Election Results
+              Test election results
             </label>
             <p className="text-xs text-muted mb-3">
               Send test election result embeds using the most recent election data. Each
@@ -464,7 +465,7 @@ export function DiscordIntegrations() {
           disabled={saving || !loaded}
           className="px-4 py-2 rounded-md bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
-          {saving ? "Saving…" : "Save Webhooks"}
+          {saving ? "Saving…" : "Save webhooks"}
         </button>
 
         {ownershipConflict && (

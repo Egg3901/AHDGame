@@ -75,7 +75,8 @@ export interface StrategySwitchDecision {
   bestScore: number;
 }
 
-type ScorableStrategy = Pick<SectorStrategy, "id" | "supply">;
+type ScorableStrategy = Pick<SectorStrategy, "id" | "supply"> &
+  Partial<Pick<SectorStrategy, "demand">>;
 
 // ─── Scoring ────────────────────────────────────────────────────────────────
 
@@ -143,17 +144,21 @@ export function decideExtractionStrategySwitch(params: {
   headroomOf: CapacityHeadroomFn;
   /** Lagged soldFraction from the sector doc (clearing mode); null/undefined when absent. */
   soldFraction?: number | null;
+  /** Optional mode-aware forecast. Omission preserves legacy raw-price scoring. */
+  scoreOf?: (strategy: ScorableStrategy) => number;
 }): StrategySwitchDecision | null {
-  const { currentStrategyId, strategies, priceRatioOf, headroomOf, soldFraction } = params;
+  const { currentStrategyId, strategies, priceRatioOf, headroomOf, soldFraction, scoreOf } = params;
   if (strategies.length === 0) return null;
+  const score =
+    scoreOf ??
+    ((strategy: ScorableStrategy) =>
+      scoreStrategyExpectedRevenue(strategy.supply, priceRatioOf, headroomOf));
 
   const current =
     strategies.find((s) => s.id === currentStrategyId) ??
     strategies.find((s) => s.id === "standard") ??
     strategies[0];
-  const currentScore = strategies.some((s) => s.id === currentStrategyId)
-    ? scoreStrategyExpectedRevenue(current.supply, priceRatioOf, headroomOf)
-    : 0; // unknown/legacy strategy id → treat as yielding nothing
+  const currentScore = strategies.some((s) => s.id === currentStrategyId) ? score(current) : 0; // unknown/legacy strategy id → treat as yielding nothing
 
   let best: { strategy: ScorableStrategy; score: number } | null = null;
   for (const strategy of strategies) {
@@ -161,9 +166,9 @@ export function decideExtractionStrategySwitch(params: {
     // Never switch INTO a strategy whose primary resource has no local headroom.
     const primary = primaryExtractionResource(strategy);
     if (primary && headroomOf(primary) <= MIN_PRIMARY_HEADROOM_FRACTION) continue;
-    const score = scoreStrategyExpectedRevenue(strategy.supply, priceRatioOf, headroomOf);
-    if (score <= SCORE_EPSILON) continue;
-    if (!best || score > best.score) best = { strategy, score };
+    const candidateScore = score(strategy);
+    if (!Number.isFinite(candidateScore) || candidateScore <= SCORE_EPSILON) continue;
+    if (!best || candidateScore > best.score) best = { strategy, score: candidateScore };
   }
   if (!best) return null;
 

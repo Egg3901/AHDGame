@@ -27,21 +27,21 @@ export function GameHealthPopulationEconomy({ snapshot }: Props) {
       <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
         <h3 className="mb-3 text-sm font-semibold text-foreground">Population</h3>
         <div className="space-y-1 text-sm">
-          <Row label="Active Players" value={population.activePlayers} />
+          <Row label="Active players" value={population.activePlayers} />
           <Row label="Characters" value={population.totalCharacters} />
           <Row label="NPPs" value={population.totalNPPs.toLocaleString("en-US")} />
           <Row
             label="Seats"
             value={`${population.totalSeats - population.emptySeats} / ${population.totalSeats}`}
           />
-          <Row label="Empty Seats" value={population.emptySeats} />
+          <Row label="Empty seats" value={population.emptySeats} />
           <Row label="Parties" value={population.partiesCount} />
-          <Row label="Active Elections" value={population.activeElections} />
-          <Row label="Avg Party Size" value={population.averagePartySize.toFixed(1)} />
+          <Row label="Active elections" value={population.activeElections} />
+          <Row label="Avg party size" value={population.averagePartySize.toFixed(1)} />
         </div>
         {Object.entries(population.byCountry).length > 0 && (
           <details className="mt-3">
-            <summary className="cursor-pointer text-xs text-muted">By Country</summary>
+            <summary className="cursor-pointer text-xs text-muted">By country</summary>
             <div className="mt-2 space-y-2">
               {Object.entries(population.byCountry).map(([id, stats]) =>
                 stats ? (
@@ -81,7 +81,7 @@ export function GameHealthPopulationEconomy({ snapshot }: Props) {
                       neither row can render a pre-migration doc's numbers under
                       the new labels — show a dash instead of NaN%/bogus money. */}
                   <Row
-                    label="GDP Growth"
+                    label="GDP growth"
                     value={
                       Number.isFinite(stats.gdpGrowth)
                         ? `${(stats.gdpGrowth * 100).toFixed(1)}%`
@@ -95,9 +95,9 @@ export function GameHealthPopulationEconomy({ snapshot }: Props) {
                     value={Number.isFinite(stats.gdpGrowth) ? money(stats.gdp) : "—"}
                   />
                   <Row label="Inflation" value={`${(stats.inflation * 100).toFixed(1)}%`} />
-                  <Row label="Interest Rate" value={`${(stats.interestRate * 100).toFixed(1)}%`} />
+                  <Row label="Interest rate" value={`${(stats.interestRate * 100).toFixed(1)}%`} />
                   <Row
-                    label="Bond Default Rate"
+                    label="Bond default rate"
                     value={`${(stats.bondDefaultRate * 100).toFixed(1)}%`}
                   />
                   {/* Snapshot builder normalises corp revenue to the ₳ anchor

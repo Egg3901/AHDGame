@@ -57,6 +57,19 @@ import {
 import { fiscalMirrorFields, FISCAL_MIRROR_METRICS } from "./fiscalMirror";
 import { isMacroMetricPath, MACRO_CATEGORIES } from "@/lib/macroMetrics/paths";
 import { spendingProvider } from "./spendingProvider";
+import {
+  loadRepairingCapacityObligations,
+  settleCapacityObligations,
+} from "@/lib/livingConflict/capacityDestruction";
+import {
+  foldCapacityLedger,
+  repairProgress,
+  repairedCapitalAt,
+} from "@/lib/livingConflict/rules/capacityDestruction";
+import type {
+  ConflictCapacityApplied,
+  ConflictCapacityObligation,
+} from "@/lib/db/types/conflictCapacity";
 import { METRIC_REGISTRY_SORTED } from "./registry";
 import type { SectorRevenueTaxPayload } from "./registry/economic";
 import type { NodeId } from "./types";
@@ -253,6 +266,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
               tracks: 1,
               representedActors: 1,
               arabRegional: 1,
+              realizedInfrastructureDamage: 1,
             },
           }
         )
@@ -298,6 +312,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     politicalInputs,
     countryGameStates,
     warDamageByCountryId,
+    capacityObligations,
   ] = await Promise.all([
     db.collection<State>("states").find({}).toArray(),
     db
@@ -349,7 +364,16 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     // A war is fought on somebody's ground, and that ground's roads should show it.
     // One small read of the live conflicts; countries at peace are absent from the map.
     warDamageProvider(db),
+    // Destroyed conflict capital and its funded repair, folded into the stock below.
+    loadRepairingCapacityObligations(db, turn),
   ]);
+  const capacityByRegion = new Map<string, ConflictCapacityObligation[]>();
+  for (const obligation of capacityObligations) {
+    const list = capacityByRegion.get(obligation.regionId) ?? [];
+    list.push(obligation);
+    capacityByRegion.set(obligation.regionId, list);
+  }
+  const settledCapacityIds: string[] = [];
 
   const bankFailureEffects = await loadBankFailureEffects(
     db,
@@ -467,7 +491,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     updateOne: {
       filter: { _id: string };
       update: {
-        $set: Record<string, number | string | RevenueSnapshot[]>;
+        $set: Record<string, number | string | RevenueSnapshot[] | ConflictCapacityApplied>;
         $unset?: Record<string, "">;
       };
     };
@@ -1029,14 +1053,44 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
 
     // Compound the region's GDP LEVEL by the INTEGRATED gdpGrowth this turn (exact
     // per-turn form). state.gdp is the SSOT (millions); national GDP = Σ state.gdp.
-    const newGdp = compoundGdpLevel(state.gdp ?? 0, integratedGdp, TURNS_PER_YEAR);
+    const compoundedGdp = compoundGdpLevel(state.gdp ?? 0, integratedGdp, TURNS_PER_YEAR);
+    // Conflict destruction and its budget-funded repair move the stock once; the
+    // applied ledger is written with the stock so a replayed turn changes nothing.
+    const capacityEntries = capacityByRegion.get(state._id) ?? [];
+    const capacityFold =
+      capacityEntries.length > 0
+        ? foldCapacityLedger({
+            capitalStock: capStep.capital,
+            gdp: compoundedGdp,
+            entries: capacityEntries.map((obligation) => ({
+              id: obligation._id,
+              destroyedCapital: obligation.destroyedCapital,
+              fundedCapital: repairedCapitalAt(obligation, turn),
+            })),
+            applied: state.conflictCapacityApplied,
+          })
+        : null;
+    if (capacityFold) {
+      // The last installment turn is still charged to the budget, so an
+      // obligation is retired only on the turn after its repair completes.
+      for (const obligation of capacityEntries) {
+        if (
+          capacityFold.settledIds.includes(obligation._id) &&
+          repairProgress(obligation, turn) >= 1 &&
+          turn > obligation.createdTurn + obligation.repairTurns
+        )
+          settledCapacityIds.push(obligation._id);
+      }
+    }
+    const newGdp = capacityFold?.gdp ?? compoundedGdp;
     stateOps.push({
       updateOne: {
         filter: { _id: state._id },
         update: {
           $set: {
             gdp: newGdp,
-            capitalStock: capStep.capital,
+            capitalStock: capacityFold?.capitalStock ?? capStep.capital,
+            ...(capacityFold ? { conflictCapacityApplied: capacityFold.applied } : {}),
             outputGap: gapStep.gap,
             // P2/D7: snapshot THIS turn's realized owned-sector revenue as the
             // next turn's baseline. Written in every mode (not just plants) so a
@@ -1088,5 +1142,6 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
   if (stateOps.length > 0) {
     await db.collection<State>("states").bulkWrite(stateOps);
   }
+  await settleCapacityObligations(db, settledCapacityIds);
   return realStates.length;
 }

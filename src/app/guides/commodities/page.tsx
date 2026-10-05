@@ -11,7 +11,7 @@ import {
 } from "@/app/guides/_components/GuideBlocks";
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "Commodities Guide | A House Divided",
+  title: "Commodities guide | A House Divided",
   description:
     "How commodities work in A House Divided: supply and demand, sector input and output chains, margin effects, operating strategies, and how to read the market.",
   pathname: "/guides/commodities",
@@ -68,7 +68,7 @@ export default function CommoditiesGuidePage() {
               Planned economies work differently: national prices can be administered by the plan
               instead of tracking market S/D. See{" "}
               <Link href="/guides/planned-economies" className="text-primary hover:underline">
-                Planned / Command Economies
+                Planned / Command economies
               </Link>
               .
             </Callout>
@@ -116,7 +116,7 @@ export default function CommoditiesGuidePage() {
               country-aggregate (national) and state-level conditions. (In planned economies the
               national leg may be administered rather than S/D-cleared; see{" "}
               <Link href="/guides/planned-economies" className="text-primary hover:underline">
-                Planned Economies
+                Planned economies
               </Link>
               .)
             </p>

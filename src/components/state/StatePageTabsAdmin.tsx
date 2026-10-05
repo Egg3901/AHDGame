@@ -8,6 +8,7 @@ import {
   type CountryId,
 } from "@/lib/constants/countries";
 import type { SerializedPlayer, NPPDisplaySimple } from "./StatePageTabsTypes";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /** One region seat group from the vacant-seats route (config-driven). */
 interface SeatGroup {
@@ -128,7 +129,7 @@ export function AdminTab({
       } else {
         setMessage({
           type: "error",
-          text: data.error || "Failed to assign seat",
+          text: apiErrorText(data, "Failed to assign seat"),
         });
       }
     } catch {
@@ -170,7 +171,7 @@ export function AdminTab({
       } else {
         setMessage({
           type: "error",
-          text: data.error || "Failed to remove official",
+          text: apiErrorText(data, "Failed to remove official"),
         });
       }
     } catch {
@@ -261,7 +262,7 @@ export function AdminTab({
             />
           </svg>
           <div>
-            <h3 className="font-semibold text-red-400">Admin Controls</h3>
+            <h3 className="font-semibold text-red-400">Admin controls</h3>
             <p className="text-sm text-red-300/80 mt-1">
               These controls allow you to manually assign or remove players and NPPs from elected
               positions. Use with caution - changes take effect immediately.
@@ -284,7 +285,7 @@ export function AdminTab({
 
       {/* Assign Seats Section */}
       <div className="rounded-xl border border-card-border bg-card p-6">
-        <h3 className="text-lg font-semibold mb-4">Vacant Seats in {state.name}</h3>
+        <h3 className="text-lg font-semibold mb-4">Vacant seats in {state.name}</h3>
 
         {vacantSeats ? (
           <div className="grid gap-4 md:grid-cols-2">
@@ -390,7 +391,7 @@ export function AdminTab({
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-muted mb-2">Politician Type</label>
+              <label className="block text-sm font-medium text-muted mb-2">Politician type</label>
               <div className="flex rounded-lg border border-card-border overflow-hidden">
                 <button
                   onClick={() => {
@@ -474,7 +475,7 @@ export function AdminTab({
                 disabled={loading || !selectedEntityId}
                 className="flex-1 rounded-lg bg-primary py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
               >
-                {loading ? "Assigning..." : "Assign Seat"}
+                {loading ? "Assigning..." : "Assign seat"}
               </button>
             </div>
           </div>
@@ -484,7 +485,7 @@ export function AdminTab({
       {/* Remove Officials Section */}
       {vacantSeats && vacantSeats.filledOfficials.length > 0 && (
         <div className="rounded-xl border border-card-border bg-card p-6">
-          <h3 className="text-lg font-semibold mb-4">Current Officials</h3>
+          <h3 className="text-lg font-semibold mb-4">Current officials</h3>
           <p className="text-sm text-muted mb-4">
             Click the remove button to vacate a position. This will clear the official&apos;s
             currentOffice field.

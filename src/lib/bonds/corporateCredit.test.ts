@@ -11,6 +11,7 @@ import {
   sumCorporateSectorPerTurnIncome,
 } from "./corporateCredit";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
+import { calculateCreditScore } from "@/lib/constants/bonds";
 
 const corpId = new ObjectId();
 
@@ -125,6 +126,86 @@ describe("sumCorporateSectorPerTurnIncome", () => {
 });
 
 describe("corporateCredit", () => {
+  const cliff = {
+    liquidCapitalAnchor: 20,
+    incomePerTurn: 10 / 48,
+    sectorNpv: 100,
+    corporationId: corpId,
+    currentTurn: 100,
+    bondDefaultCreditPenaltyUntilTurn: null,
+    fxByCurrency: new Map<CurrencyCode, number>(),
+  };
+
+  it("lowers the source-derived A69 rating before an uncovered principal cliff", () => {
+    const baseline = calculateCreditScore(20, 100, 10, 5, 120);
+    const result = computeCorporateCreditAtTurn({
+      ...cliff,
+      bonds: [baseBond({ totalIssued: 100, maturityTurn: 101 })],
+    });
+    expect(baseline).toMatchObject({ rating: "A", compositeScore: 69 });
+    expect(result.creditRating).toMatchObject({ rating: "BBB", compositeScore: 53 });
+    expect(result.creditRating.components.liquidity).toBe(20);
+    expect(result.maturityLiquidity.principalDueAnchor).toBe(100);
+  });
+
+  it("preserves legacy scoring outside the maturity horizon", () => {
+    const result = computeCorporateCreditAtTurn({
+      ...cliff,
+      bonds: [baseBond({ totalIssued: 100, maturityTurn: 125 })],
+    });
+    expect(result.creditRating).toEqual(calculateCreditScore(20, 100, 10, 5, 120));
+    expect(result.maturityLiquidity.liquidityScore).toBeNull();
+  });
+
+  it("keeps covered near maturities neutral to the legacy score", () => {
+    const result = computeCorporateCreditAtTurn({
+      ...cliff,
+      liquidCapitalAnchor: 200,
+      bonds: [baseBond({ totalIssued: 100, maturityTurn: 101 })],
+    });
+    expect(result.creditRating).toEqual(calculateCreditScore(200, 100, 10, 5, 300));
+    expect(result.maturityLiquidity.liquidityScore).toBe(100);
+  });
+
+  it("anchor-normalizes imminent principal before comparing cash coverage", () => {
+    const anchor = computeCorporateCreditAtTurn({
+      ...cliff,
+      bonds: [baseBond({ totalIssued: 100, maturityTurn: 101 })],
+    });
+    const foreign = computeCorporateCreditAtTurn({
+      ...cliff,
+      fxByCurrency: new Map<CurrencyCode, number>([["JPY", 100]]),
+      bonds: [baseBond({ totalIssued: 10_000, currencyCode: "JPY", maturityTurn: 101 })],
+    });
+    expect(foreign.creditRating).toEqual(anchor.creditRating);
+    expect(foreign.maturityLiquidity).toEqual(anchor.maturityLiquidity);
+  });
+
+  it("smooths only the turn score and displays a persisted score verbatim", () => {
+    const bonds = [baseBond({ totalIssued: 100, maturityTurn: 101 })];
+    const turn = computeCorporateCreditAtTurn({ ...cliff, bonds, previousCompositeScore: 69 });
+    expect(turn.creditRating.compositeScore).toBe(Math.round(0.75 * 53 + 0.25 * 69));
+    const display = computeCorporateCreditAtTurn({
+      ...cliff,
+      bonds,
+      persistedCompositeScore: turn.creditRating.compositeScore,
+    });
+    expect(display.creditRating.compositeScore).toBe(turn.creditRating.compositeScore);
+  });
+
+  it("retains the default floor despite passive inclusion or a maturity calculation", () => {
+    const result = computeCorporateCreditAtTurn({
+      ...cliff,
+      bonds: [baseBond({ totalIssued: 100, maturityTurn: 101, defaulted: true })],
+      bondDefaultCreditPenaltyUntilTurn: 120,
+      indexFundOwnershipFraction: 0.75,
+    });
+    expect(result.creditRating.rating).toBe("CCC");
+    expect(result.creditRating.compositeScore).toBeLessThanOrEqual(12);
+    expect(result.maturityLiquidity.principalDueAnchor).toBe(0);
+    expect(result.totalDebt).toBe(100);
+  });
+
   it("isCorporateIssuerBond excludes sovereign", () => {
     expect(isCorporateIssuerBond(baseBond({ issuerType: "sovereign" }))).toBe(false);
   });

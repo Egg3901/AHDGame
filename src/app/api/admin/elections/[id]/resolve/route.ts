@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getGameTime } from "@/lib/time/gameTime";
 import { resolveGeneralElections } from "@/lib/turn/electionResolution";
 import { initElectionVoteTally } from "@/lib/electionEngine";
@@ -32,7 +32,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     try {
       electionObjectId = new ObjectId(electionId);
     } catch {
-      return NextResponse.json({ error: "Invalid election ID" }, { status: 400 });
+      return errorResponse(400, "Invalid election ID");
     }
 
     const db = await getDb();
@@ -47,18 +47,18 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     if (!election) {
-      return NextResponse.json({ error: "Election not found" }, { status: 404 });
+      return errorResponse(404, "Election not found");
     }
 
     if (election.status === "completed") {
-      return NextResponse.json({ error: "Election is already completed" }, { status: 400 });
+      return errorResponse(400, "Election is already completed");
     }
 
     // Must be past primary (in general phase) — turn-first with Date fallback.
     if (!isPrimaryEnded(election, currentTurn, gameTime)) {
-      return NextResponse.json(
-        { error: "Cannot resolve: election is still in primary phase. End primary first." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Cannot resolve: election is still in primary phase. End primary first."
       );
     }
 

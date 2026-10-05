@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const ENDPOINT = "/api/admin/conflicts/npp-offensives/toggle";
 
@@ -17,13 +18,13 @@ type FlagsResponse = Record<FlagKey, FlagState>;
 
 const COPY: Record<FlagKey, { title: string; body: string; on: string; off: string }> = {
   initiation: {
-    title: "Initiate Offensives",
+    title: "Initiate offensives",
     body: "Let NPP countries in a conflict declare offensives of their own. While off, an NPP government never queues a battle declaration and spends its foreign policy slot on diplomacy instead.",
     on: "NPP governments may now declare their own offensives.",
     off: "NPP governments will no longer declare offensives.",
   },
   join: {
-    title: "Join Offensives",
+    title: "Join offensives",
     body: "Let NPP countries join an ally's offensive at a front where they already have troops posted, the way a player government does with a standing auto join order. While off, NPP allies only ever defend.",
     on: "NPP allies will now join offensives at fronts where they are deployed.",
     off: "NPP allies will no longer join offensives.",
@@ -71,7 +72,7 @@ export function NppOffensivesToggles() {
         );
         load();
       } else {
-        setMessage(data.error ?? "Failed to update the switch.");
+        setMessage(apiErrorText(data, "Failed to update the switch."));
       }
     } catch {
       setMessage("Failed to update the switch.");
@@ -82,7 +83,7 @@ export function NppOffensivesToggles() {
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
-      <h3 className="text-lg text-foreground">NPP Offensives</h3>
+      <h3 className="text-lg text-foreground">NPP offensives</h3>
       <p className="mt-0.5 max-w-xl text-sm text-muted">
         Whether countries run by the NPP engine fight offensively in a conflict. Defence is
         automatic for any country with troops at a front and is not affected by either switch.

@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
@@ -62,6 +64,7 @@ import { BankConsoleTab } from "./bank/BankConsoleTab";
 import { EditorialStancePanel } from "@/components/corporation/EditorialStancePanel";
 import { ManufacturingProductStudio } from "@/components/corporation/ManufacturingProductStudio";
 import { MediaProductStudio } from "@/components/corporation/MediaProductStudio";
+import AdvertisingAgreementsPanel from "@/components/corporation/AdvertisingAgreementsPanel";
 import type {
   CorporationDetail,
   CEO,
@@ -212,10 +215,10 @@ export default function CorporationDetailPage() {
       } else if (!hasLoaded.current) {
         // Only set page-level error on initial load — refresh failures should not
         // destroy the entire page when we already have valid data displayed.
-        setError(data.error || "Corporation not found");
+        setError(apiErrorText(data, "Corporation not found"));
         setErrorRef(typeof data.eventId === "string" ? data.eventId : null);
       } else {
-        showToast(data.error || "Failed to refresh corporation data", "error");
+        showToast(apiErrorText(data, "Failed to refresh corporation data"), "error");
       }
     } catch {
       if (!hasLoaded.current) {
@@ -337,7 +340,7 @@ export default function CorporationDetailPage() {
       });
       const payload = await res.json().catch(() => null);
       if (!res.ok) {
-        setError(payload?.error || "Failed to enable Mod View");
+        setError(apiErrorText(payload, "Failed to enable Mod View"));
         return;
       }
       setModViewEnabled(true);
@@ -463,7 +466,7 @@ export default function CorporationDetailPage() {
         void fetchCorporation();
         void fetchViewerContext();
       } else {
-        setError(data.error || "Failed to accept CEO position");
+        setError(apiErrorText(data, "Failed to accept CEO position"));
       }
     } catch {
       setError("Network error");
@@ -479,7 +482,7 @@ export default function CorporationDetailPage() {
         void fetchCorporation();
         void fetchViewerContext();
       } else {
-        setError(data.error || "Failed to decline CEO position");
+        setError(apiErrorText(data, "Failed to decline CEO position"));
       }
     } catch {
       setError("Network error");
@@ -507,7 +510,7 @@ export default function CorporationDetailPage() {
         });
         fetchCorporation();
       } else {
-        setSectorsMessage({ type: "error", text: data.error || "Failed to change strategy" });
+        setSectorsMessage({ type: "error", text: apiErrorText(data, "Failed to change strategy") });
       }
     } catch {
       setSectorsMessage({ type: "error", text: "Network error" });
@@ -530,7 +533,10 @@ export default function CorporationDetailPage() {
         setSectorsMessage({ type: "success", text: "Transition cancelled, reversing now." });
         fetchCorporation();
       } else {
-        setSectorsMessage({ type: "error", text: data.error || "Failed to cancel transition" });
+        setSectorsMessage({
+          type: "error",
+          text: apiErrorText(data, "Failed to cancel transition"),
+        });
       }
     } catch {
       setSectorsMessage({ type: "error", text: "Network error" });
@@ -564,7 +570,10 @@ export default function CorporationDetailPage() {
         if (res.ok) {
           fetchCorporation();
         } else {
-          setSectorsMessage({ type: "error", text: data.error || "Failed to update growth rate" });
+          setSectorsMessage({
+            type: "error",
+            text: apiErrorText(data, "Failed to update growth rate"),
+          });
         }
       } catch {
         setSectorsMessage({ type: "error", text: "Network error" });
@@ -593,7 +602,7 @@ export default function CorporationDetailPage() {
         setSectorsMessage({ type: "success", text: data.message });
         fetchCorporation();
       } else {
-        setSectorsMessage({ type: "error", text: data.error || "Failed to abandon sector" });
+        setSectorsMessage({ type: "error", text: apiErrorText(data, "Failed to abandon sector") });
       }
     } catch {
       setSectorsMessage({ type: "error", text: "Network error" });
@@ -676,7 +685,7 @@ export default function CorporationDetailPage() {
                   onClick={handleAcceptCeo}
                   className="rounded-lg bg-success px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-success/90"
                 >
-                  Accept Position
+                  Accept position
                 </button>
                 <button
                   onClick={handleDeclineCeo}
@@ -685,7 +694,7 @@ export default function CorporationDetailPage() {
                   Decline
                 </button>
               </div>
-              {error && <p className="mt-3 text-xs text-error">{error}</p>}
+              <InlineError error={error} className="mt-3 text-xs text-error" />
             </div>
           )}
           <NationalCorporationView corpId={id} />
@@ -1125,6 +1134,9 @@ export default function CorporationDetailPage() {
                       sectors.some((sector) => sector.sectorType === "media") && (
                         <MediaProductStudio corporationId={id} onUpdate={fetchCorporation} />
                       )}
+                    {isCeo && corporation.mediaOperatingModelsEnabled === true && (
+                      <AdvertisingAgreementsPanel corpId={id} />
+                    )}
                     {corporation.productLinesV2Enabled &&
                       sectors.some((sector) =>
                         ["manufacturing", "automobiles"].includes(sector.sectorType)

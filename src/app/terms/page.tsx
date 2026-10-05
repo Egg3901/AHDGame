@@ -3,7 +3,7 @@ import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "Terms of Service | A House Divided",
+  title: "Terms of service | A House Divided",
   description:
     "Terms of Service and community rules for A House Divided, including acceptable use, accounts, and conduct in the multiplayer simulation.",
   pathname: "/terms",
@@ -16,7 +16,7 @@ export default function TermsOfServicePage() {
     <div className="min-h-screen bg-background pb-16">
       <div className="mx-auto max-w-4xl px-4 sm:px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Terms of Service</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Terms of service</h1>
           <p className="mt-2 text-sm text-muted">Effective date: {EFFECTIVE_DATE}</p>
         </div>
 
@@ -207,7 +207,7 @@ export default function TermsOfServicePage() {
         <p className="mt-6 text-center text-xs text-muted">
           By using A House Divided, you agree to these Terms of Service and our{" "}
           <Link href="/privacy" className="text-primary hover:underline">
-            Privacy Policy
+            Privacy policy
           </Link>
           .
         </p>

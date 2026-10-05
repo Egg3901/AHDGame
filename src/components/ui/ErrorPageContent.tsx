@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
 import Link from "next/link";
 import { ErrorRef } from "@/components/ui/ErrorRef";
-import { captureClientException } from "@/lib/observability/sentryClientLazy";
+import { useReportedError } from "@/lib/errors/useReportedError";
 
 interface NavigationLink {
   href: string;
@@ -55,10 +54,10 @@ export function ErrorPageContent({
   navigationLinks = [{ href: "/dashboard", label: "Dashboard" }],
   fullScreen = false,
 }: ErrorPageContentProps) {
-  useEffect(() => {
-    console.error(`${logPrefix}:`, error);
-    captureClientException(error, { extra: { logPrefix } });
-  }, [error, logPrefix]);
+  const reported = useReportedError(error, { logPrefix });
+  const links = navigationLinks.some((l) => l.href === "/")
+    ? navigationLinks
+    : [...navigationLinks, { href: "/", label: "Home" }];
 
   const heightClass = fullScreen ? "min-h-screen" : "min-h-[50vh]";
 
@@ -69,7 +68,10 @@ export function ErrorPageContent({
       <div className="rounded-xl border border-card-border bg-card p-8 max-w-md text-center space-y-4">
         <h1 className="text-lg font-semibold text-foreground">{title}</h1>
         <p className="text-sm text-muted">{description}</p>
-        <ErrorRef error={error} />
+        <p className="font-mono text-xs text-muted" data-testid="error-code">
+          {reported.code}
+        </p>
+        <ErrorRef code={reported.ref} label="Ref" />
         <div className="flex flex-wrap gap-3 justify-center">
           <button
             onClick={reset}
@@ -77,7 +79,7 @@ export function ErrorPageContent({
           >
             Try again
           </button>
-          {navigationLinks.map((link) => (
+          {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}

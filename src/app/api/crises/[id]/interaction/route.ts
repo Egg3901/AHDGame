@@ -1,9 +1,8 @@
 import { crisisDecisionRegion, canRespondToCrisis } from "@/lib/crises/rules/authorization";
-import { NextResponse } from "next/server";
 import { conditionalJson } from "@/lib/api/conditionalJson";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import {
   getCrisisInteraction,
   canCharacterInteract,
@@ -36,13 +35,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid crisis ID" }, { status: 400 });
+      return errorResponse(400, "Invalid crisis ID");
     }
 
     const db = await getDb();
     const crisis = await db.collection<Crisis>("crises").findOne({ _id: new ObjectId(id) });
     if (!crisis) {
-      return NextResponse.json({ error: "Crisis not found" }, { status: 404 });
+      return errorResponse(404, "Crisis not found");
     }
 
     const characterRoles = await resolveCharacterRoles(db, character);

@@ -109,7 +109,7 @@ export function EconomyMasthead({
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black px-2.5 py-0.5 text-xs font-medium text-white/80">
                 <span className="h-2 w-2 shrink-0 rounded-full bg-success" aria-hidden />
-                Live · Turn {currentTurn}
+                Live · turn {currentTurn}
               </span>
               <span className="inline-flex items-center whitespace-nowrap rounded-full border border-white/10 bg-black px-2.5 py-0.5 text-xs font-medium text-white/60">
                 Public record
@@ -130,7 +130,7 @@ export function EconomyMasthead({
                 href={budgetUrl(countryId)}
                 className="inline-flex items-center whitespace-nowrap rounded-full border border-white/25 bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-white hover:bg-white/20"
               >
-                National Budget &rarr;
+                National budget &rarr;
               </Link>
             </div>
           </div>

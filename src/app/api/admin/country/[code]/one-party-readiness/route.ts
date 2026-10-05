@@ -11,7 +11,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 
 interface ReadinessCheck {
@@ -27,10 +27,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const countryId = code.toUpperCase() as CountryId;
     const config = COUNTRY_CONFIGS[countryId];
     if (!config) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+      return errorResponse(404, "Invalid country code");
     }
     if (config.governmentType !== "onePartyState") {
-      return NextResponse.json({ error: "Country is not a one-party state" }, { status: 400 });
+      return errorResponse(400, "Country is not a one-party state");
     }
 
     const adminCheck = await requireAdmin();

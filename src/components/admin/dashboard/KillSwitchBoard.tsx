@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { useGameTurnStatus } from "@/hooks/useGameEvents";
 import { Skeleton } from "@/components/ui";
@@ -262,7 +263,7 @@ export function KillSwitchBoard() {
             : await fetch(def.url, { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setError(data?.error || `Failed to toggle ${def.label}`);
+        setError(apiErrorText(data, `Failed to toggle ${def.label}`));
         return;
       }
       if (def.kind === "patch") {
@@ -299,7 +300,7 @@ export function KillSwitchBoard() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setError(data?.error || "Failed to update maintenance mode");
+        setError(apiErrorText(data, "Failed to update maintenance mode"));
         return;
       }
       setMaintenance(target);

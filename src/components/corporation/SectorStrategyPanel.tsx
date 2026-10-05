@@ -15,6 +15,7 @@
  * processor read. Counts and site chips come from the sectors themselves.
  */
 
+import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -108,6 +109,7 @@ export function SectorStrategyPanel({
   corpId,
   mediaOperatingModelsEnabled,
 }: SectorStrategyPanelProps) {
+  const { preset } = useWorldFlags();
   const vehicleModel = sectors.some(
     (sector) => sector.sectorType === "manufacturing" && sector.industryModel === "vehicles"
   );
@@ -117,7 +119,9 @@ export function SectorStrategyPanel({
     : (CORPORATION_TYPE_LABELS[sectorType] ?? sectorType);
   const strategies: SectorStrategy[] = getSectorStrategies(
     strategyType,
-    mediaOperatingModelsEnabled
+    mediaOperatingModelsEnabled,
+    null,
+    preset
   );
 
   const [open, setOpen] = useState(true);

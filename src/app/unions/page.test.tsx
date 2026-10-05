@@ -30,7 +30,7 @@ describe('UnionsPage — labourSystemMode below "full"', () => {
 
     // The old bug: a stats bar claiming real numbers, and copy asserting
     // unions already exist everywhere, rendered directly above an error.
-    expect(screen.queryByText("Led Unions")).toBeNull();
+    expect(screen.queryByText("Led unions")).toBeNull();
     expect(screen.queryByText(/Every industry already has a union/)).toBeNull();
     expect(screen.queryByText("Couldn't load unions")).toBeNull();
   });
@@ -47,7 +47,7 @@ describe('UnionsPage — labourSystemMode at "full"', () => {
 
     render(<UnionsPage />);
 
-    await waitFor(() => expect(screen.getByText("Led Unions")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Led unions")).toBeTruthy());
     expect(screen.getByText(/Every industry already has a union/)).toBeTruthy();
     expect(screen.queryByText("Unions aren't live in this world yet")).toBeNull();
   });

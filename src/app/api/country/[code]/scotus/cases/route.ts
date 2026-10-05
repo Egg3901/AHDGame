@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getScotusCaseHistory } from "@/lib/scotus/queries";
 
@@ -20,7 +20,7 @@ export async function GET(request: Request, context: RouteContext) {
     const { code } = await context.params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Country not found" }, { status: 404 });
+      return errorResponse(404, "Country not found");
     }
     if (countryId !== "US") {
       return NextResponse.json({ cases: [] });

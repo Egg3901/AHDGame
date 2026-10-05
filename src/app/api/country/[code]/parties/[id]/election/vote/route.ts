@@ -5,7 +5,7 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { checkRateLimit, ELECTION_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
 import { logRequest } from "@/lib/api/requestLog";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { isInNewCharacterCooldown } from "@/lib/auth/newCharacterCooldown";
 import { nationalPartyVoteSchema } from "@/lib/api/schemas/elections";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
@@ -47,7 +47,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     if (authResult.user.isBanned) {
       logRequest("POST", path, 403, Date.now() - start);
-      return NextResponse.json({ error: "Account is banned" }, { status: 403 });
+      return errorResponse(403, "Account is banned");
     }
     const authUser = authResult.user;
 
@@ -64,7 +64,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const parsed = await parseJsonBody(request, nationalPartyVoteSchema);
     if (!parsed.success) {
       logRequest("POST", path, parsed.status, Date.now() - start);
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { candidateId, position } = parsed.data;
     const candidateObjectId = new ObjectId(candidateId);
@@ -75,17 +75,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
       logRequest("POST", path, 404, Date.now() - start);
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     // Verify membership: must match both party sequential ID AND country
     const partyCountryId = party.countryId ?? "US";
     if (authUser.character.party !== partyId || !isSameCountry(authUser.character, party)) {
       logRequest("POST", path, 403, Date.now() - start);
-      return NextResponse.json(
-        { error: "You must be a member of this party to vote" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You must be a member of this party to vote");
     }
 
     // Committee-only elections: only committee members and national leadership may vote
@@ -93,12 +90,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       const eligible = getEligibleVoterSet(party);
       if (!eligible.has(authUser.character._id.toString())) {
         logRequest("POST", path, 403, Date.now() - start);
-        return NextResponse.json(
-          {
-            error:
-              "Leadership elections for this party are restricted to committee members and national leadership",
-          },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "Leadership elections for this party are restricted to committee members and national leadership"
         );
       }
     }
@@ -113,19 +107,13 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     if (!election) {
       logRequest("POST", path, 400, Date.now() - start);
-      return NextResponse.json(
-        { error: `No active ${position} election for this party` },
-        { status: 400 }
-      );
+      return errorResponse(400, `No active ${position} election for this party`);
     }
 
     const gameTime = await getGameTime();
     if (hasTurnBackedWindowClosed(election, gameTime.currentTurn, gameTime.effectiveNow)) {
       logRequest("POST", path, 400, Date.now() - start);
-      return NextResponse.json(
-        { error: `${position} election voting has already closed` },
-        { status: 400 }
-      );
+      return errorResponse(400, `${position} election voting has already closed`);
     }
 
     // 24h new-character cooldown on leadership actions. Waived for founding
@@ -143,13 +131,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       });
       if (cooldown.blocked) {
         logRequest("POST", path, 403, Date.now() - start);
-        return NextResponse.json(
-          {
-            error:
-              "New characters can't vote in party leadership elections for 24 hours. Try again later.",
-            unblockAt: cooldown.unblockAt.toISOString(),
-          },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "New characters can't vote in party leadership elections for 24 hours. Try again later.",
+          { extra: { unblockAt: cooldown.unblockAt.toISOString() } }
         );
       }
     }
@@ -167,12 +152,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
       if (!tenure.eligible) {
         logRequest("POST", path, 403, Date.now() - start);
-        return NextResponse.json(
-          {
-            error: `You must be a member of this party for ${tenure.turnsRemaining} more turn${tenure.turnsRemaining === 1 ? "" : "s"} before you can vote in leadership elections.`,
-            turnsRemaining: tenure.turnsRemaining,
-          },
-          { status: 403 }
+        return errorResponse(
+          403,
+          `You must be a member of this party for ${tenure.turnsRemaining} more turn${tenure.turnsRemaining === 1 ? "" : "s"} before you can vote in leadership elections.`,
+          { extra: { turnsRemaining: tenure.turnsRemaining } }
         );
       }
     }
@@ -183,7 +166,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     if (!candidate) {
       logRequest("POST", path, 400, Date.now() - start);
-      return NextResponse.json({ error: "Candidate not found or has withdrawn" }, { status: 400 });
+      return errorResponse(400, "Candidate not found or has withdrawn");
     }
 
     const now = new Date(gameTime.effectiveNow);

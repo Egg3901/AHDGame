@@ -1,5 +1,7 @@
 import type { CountryGeography } from "../contract";
+import { modernRegionalPopulation2027 } from "@/lib/seeds/reference/modernRegionalPopulation2027";
 import { fiMetricPresets1953 } from "./data/fiMetricPresets1953";
+import { fiMetricPresets1991 } from "./data/fiMetricPresets1991";
 import { fiRegions } from "./data/fiRegions";
 import { fiRegions1953 } from "./data/fiRegions1953";
 import { fiStateMetrics } from "./data/fiStateMetrics";
@@ -41,6 +43,7 @@ const censusBundles = {};
 
 const metricPresetBundles = {
   "1953-default": fiMetricPresets1953,
+  "1991-default": fiMetricPresets1991,
 };
 
 const populationAnchors = {};
@@ -49,6 +52,7 @@ const regionBundles = {
   "1953-default": fiRegions1953,
   "1979-default": fiRegions,
   "2019-default": fiRegions,
+  "2027-default": modernRegionalPopulation2027("FI", fiRegions),
 };
 
 export const FI_GEOGRAPHY: CountryGeography = {

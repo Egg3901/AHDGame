@@ -77,9 +77,7 @@ export function NextResolving({
 
   return (
     <div className="rounded-lg border border-card-border bg-card p-3">
-      <div className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted">
-        Next Resolving
-      </div>
+      <div className="mb-2 text-body-sm font-medium text-muted">Next resolving</div>
       <div className="text-[11px]">
         {visible.map(({ election: e, isPrimaryNext, unitsLeft, unit }) => {
           const flagCountry =

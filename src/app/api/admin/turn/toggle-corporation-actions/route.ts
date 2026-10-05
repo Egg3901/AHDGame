@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getGameStateCollection } from "@/lib/db/collections";
 import { createAdminLog } from "@/lib/adminLog";
@@ -18,7 +18,7 @@ export async function POST() {
     const gameState = await col.findOne({ _id: "current" });
 
     if (!gameState) {
-      return NextResponse.json({ error: "Game state not initialized" }, { status: 404 });
+      return errorResponse(404, "Game state not initialized");
     }
 
     const newValue = !(gameState.corporationActionsPaused ?? false);

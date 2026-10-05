@@ -13,13 +13,16 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getPartyHex } from "@/lib/utils/politics";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getGameTime } from "@/lib/time/gameTime";
 import { isPrimaryEnded } from "@/lib/elections/phases";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { resolveOfficeKeyForElectionType } from "@/lib/elections/officeResolution";
 import { COUNTRY_CONFIGS, type ChamberConfig, type CountryId } from "@/lib/constants/countries";
-import { getLiveLowerChamberSeats, getLiveUpperChamberSeats } from "@/lib/turn/lowerChamberSeats";
+import {
+  getLiveLowerChamberSeats,
+  getLiveUpperChamberSeats,
+} from "@/lib/legislature/lowerChamberSeats";
 import type {
   Election,
   ElectedOfficial,
@@ -62,7 +65,7 @@ export async function GET(request: Request) {
     const requested = new URL(request.url).searchParams.get("country");
     const countryId = (requested?.toUpperCase() as CountryId) || DEFAULT_COUNTRY;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const db = await getDb();

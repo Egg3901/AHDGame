@@ -18,7 +18,7 @@ export default function NationsView({ ledger }: { ledger: WorldTradeLedger }) {
     <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
       <div className="mb-2 flex items-baseline justify-between gap-2">
         <h3 className="text-sm font-bold text-foreground">
-          Trade Balance League <span className="font-normal text-muted">· net exports, ranked</span>
+          Trade balance league <span className="font-normal text-muted">· net exports, ranked</span>
         </h3>
         <span className="text-[10px] text-muted">◀ deficit · surplus ▶</span>
       </div>

@@ -123,7 +123,7 @@ describe("FomcCommitteeTab — understaffed board (ticket #1238)", () => {
 
     render(<FomcCommitteeTab countryId={"US" as CountryId} />);
 
-    await waitFor(() => expect(screen.getByText("Board of Governors")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Board of governors")).toBeTruthy());
     expect(screen.queryByText("Board understaffed")).toBeNull();
   });
 });

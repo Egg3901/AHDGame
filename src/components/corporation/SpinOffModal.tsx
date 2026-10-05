@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
@@ -56,7 +57,7 @@ export function SpinOffModal({
       });
       const data = await res.json();
       if (!res.ok) {
-        setErr(data.error || "Spin-off failed");
+        setErr(apiErrorText(data, "Spin-off failed"));
         return;
       }
       onSpunOff(data.newCorporationId);

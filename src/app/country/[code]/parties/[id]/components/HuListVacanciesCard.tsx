@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Vacancy {
   receiptId: string;
@@ -60,7 +61,7 @@ export function HuListVacanciesCard({
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? t("error"));
+      if (!response.ok) throw new Error(apiErrorText(data, t("error")));
       setVacancies(await refresh());
       setMessage(t("success"));
       onUpdate();

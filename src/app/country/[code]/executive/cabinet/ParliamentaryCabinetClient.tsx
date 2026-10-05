@@ -16,6 +16,7 @@ import { CabinetTabNav, type CabinetTabKey } from "./CabinetTabNav";
 import { ReshufflePanel } from "./ReshufflePanel";
 import { WhipPanel } from "./WhipPanel";
 import type { ParliamentaryCabinetConfig } from "./parliamentaryCabinetConfig";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Position {
   id: string;
@@ -223,7 +224,7 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
         handleCloseAppointModal();
         await fetchData();
       } else {
-        showToast(data.error || "Failed to appoint minister", "error");
+        showToast(apiErrorText(data, "Failed to appoint minister"), "error");
       }
     } catch {
       showToast("An unexpected error occurred", "error");
@@ -249,9 +250,9 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
         showToast(data.message, "success");
         await fetchData();
       } else if (res.status === 404) {
-        showToast(data.error || "You do not hold this cabinet seat", "error");
+        showToast(apiErrorText(data, "You do not hold this cabinet seat"), "error");
       } else {
-        showToast(data.error || "Failed to resign", "error");
+        showToast(apiErrorText(data, "Failed to resign"), "error");
       }
     } catch {
       showToast("An unexpected error occurred", "error");
@@ -277,7 +278,7 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
         showToast(data.message, "success");
         await fetchData();
       } else {
-        showToast(data.error || "Failed to remove minister", "error");
+        showToast(apiErrorText(data, "Failed to remove minister"), "error");
       }
     } catch {
       showToast("An unexpected error occurred", "error");
@@ -351,9 +352,7 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
             </div>
             <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
               <div className="flex flex-col px-5 py-3 min-w-[110px]">
-                <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                  Positions
-                </span>
+                <span className="text-body-sm font-medium text-muted">Positions</span>
                 <span className="text-base font-bold tabular-nums">
                   {filledCount}
                   <span className="text-xs font-normal text-muted">
@@ -506,7 +505,7 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
                             href={`${governmentLinkPath}/cabinet/${pos.id}/office`}
                             className="mt-2 block text-xs text-primary hover:underline"
                           >
-                            View Office →
+                            View office →
                           </Link>
                         )}
                       </div>

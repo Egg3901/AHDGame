@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { Fragment, useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CorporationDefenceView } from "./CorporationPageTypes";
@@ -82,7 +83,7 @@ export default function DefenceContractsTab({
       );
       if (!res.ok) {
         const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(payload?.error ?? "Those production lines could not be assigned.");
+        setError(apiErrorText(payload, "Those production lines could not be assigned."));
         return;
       }
       onUpdate?.();
@@ -106,7 +107,7 @@ export default function DefenceContractsTab({
         // The offer can be withdrawn by the minister between render and click; say so rather
         // than leaving a button that appears to do nothing.
         const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(payload?.error ?? "That offer could not be answered.");
+        setError(apiErrorText(payload, "That offer could not be answered."));
         return;
       }
       onUpdate?.();

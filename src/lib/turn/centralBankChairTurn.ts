@@ -133,6 +133,7 @@ export async function processCentralBankChairTurn(
         | "fomcBoard"
         | "governmentControlled"
         | "chairNppId"
+        | "chairAlignment"
         | "monetaryAuthorityId"
       >
     >({
@@ -153,6 +154,8 @@ export async function processCentralBankChairTurn(
       // history; unprojected it reads as undefined and every automated move
       // would be recorded against the anonymous system actor instead.
       chairNppId: 1,
+      // The NPP chair's alignment is a scoring input for its resolve stance.
+      chairAlignment: 1,
       monetaryAuthorityId: 1,
     })
     .toArray();
@@ -272,6 +275,7 @@ export async function processCentralBankChairTurn(
     const budgetId = getNationalBudgetId(countryId);
     const budget = budgetById.get(budgetId);
     const area = union?.authorityId === bank._id ? commonIndicators : undefined;
+    const sharedPolicyInputsMissing = union?.authorityId === bank._id && !commonIndicators;
     const delegated = union != null && euroPolicyBankId(countryId, union) !== bank._id;
     const targetInflation = area?.targetInflation ?? getInflationTarget(countryId, currentYear);
     const inflationRate =
@@ -281,10 +285,20 @@ export async function processCentralBankChairTurn(
     const nationalMetricsDoc = nationalDocId ? metricsById.get(nationalDocId) : null;
     const gdpGrowth =
       area?.gdpGrowth ?? finiteOr(nationalMetricsDoc?.economic?.gdpGrowth?.value, TARGET_GROWTH);
+    const neutralRate =
+      area?.neutralRate ??
+      getEraMonetaryBaseline(countryId, currentYear)?.neutralPrimeRate ??
+      config.centralBank.defaultPrimeRate;
 
     const currentInfamy = Math.min(100, Math.max(0, finiteOr(bank.chairInfamy, 0)));
 
-    const rawDelta = computeScrutinyDelta(inflationRate, gdpGrowth, currentInfamy, targetInflation);
+    // A shared authority cannot be scored from its anchor country's fallback
+    // values when any member's common-policy indicators are unavailable. Hold
+    // scrutiny and its recovery streak until the complete shared input returns.
+    const previousResolveStreak = finiteOr(bank.resolveStreak, 0);
+    const rawDelta = sharedPolicyInputsMissing
+      ? 0
+      : computeScrutinyDelta(inflationRate, gdpGrowth, currentInfamy, targetInflation);
     // One bad print must not ruin a bank outright: ruin is earned over turns and
     // can be seen coming. Improvements (negative delta) are never capped.
     const totalDelta = capScrutinyGain(rawDelta);
@@ -295,20 +309,27 @@ export async function processCentralBankChairTurn(
     // outcome that drives the penalty. Exempt from the high-scrutiny dampener in
     // computeScrutinyDelta on purpose: dampening it would narrow the way out
     // exactly when it is needed most.
-    const correctStance = stanceIsCorrect(
-      finiteOr(bank.primeRate, targetInflation),
-      inflationRate,
-      targetInflation
-    );
-    const resolve = resolveRecoveryDelta({
-      correctStance,
-      previousStreak: finiteOr(bank.resolveStreak, 0),
-    });
+    const resolve = sharedPolicyInputsMissing
+      ? { resolveStreak: previousResolveStreak, relief: 0 }
+      : resolveRecoveryDelta({
+          correctStance: stanceIsCorrect(
+            finiteOr(bank.primeRate, targetInflation),
+            inflationRate,
+            targetInflation,
+            neutralRate,
+            gdpGrowth,
+            bank.chairMode === "npp" ? bank.chairAlignment : undefined
+          ),
+          previousStreak: previousResolveStreak,
+        });
 
     const decayedInfamy = currentInfamy * INFAMY_DECAY;
-    const newInfamy = Math.min(100, Math.max(0, decayedInfamy + totalDelta - resolve.relief));
+    const newInfamy = sharedPolicyInputsMissing
+      ? currentInfamy
+      : Math.min(100, Math.max(0, decayedInfamy + totalDelta - resolve.relief));
 
     if (
+      !sharedPolicyInputsMissing &&
       currentInfamy >= HIGH_SCRUTINY_DIAGNOSTIC_THRESHOLD &&
       highScrutinyDiagnostics.length < MAX_SCRUTINY_DIAGNOSTICS
     ) {
@@ -347,7 +368,7 @@ export async function processCentralBankChairTurn(
       if (delegated || (bank.monetaryAuthorityId && bank.monetaryAuthorityId !== bank._id))
         continue;
       // Missing member data must not silently reduce common policy to the anchor economy.
-      if (union?.authorityId === bank._id && !commonIndicators) continue;
+      if (sharedPolicyInputsMissing) continue;
       // A functional FOMC committee (one that can still carry a motion) owns
       // the rate. Skip the single-chair autonomous setter to avoid two systems
       // moving primeRate on the same turn. When the board has decayed below the

@@ -21,6 +21,30 @@ interface DocketCaseRow {
  * "Docket History" tab is actually opened, matching the Admin-tab lazy-fetch
  * convention on the cabinet page.
  */
+/**
+ * What the outcome badges mean and how cases reach the Court. Shown with the
+ * list and with the empty state, so a player never meets "Affirmed history" or
+ * "Diverged" without a definition.
+ */
+export function DocketExplainer() {
+  return (
+    <div className="space-y-1 text-xs text-muted">
+      <p>
+        <span className="font-semibold text-foreground">Affirmed history:</span> the seated
+        justices&apos; majority on the case&apos;s axis matched the real ruling, so history plays
+        out as it did. <span className="font-semibold text-warning">Diverged:</span> the majority
+        leaned the other way, so the Court ruled differently and the alternate outcome changes
+        policy, national and state metrics, and regional lean.
+      </p>
+      <p>
+        Players cannot file cases. Landmark cases reach the docket on their historical dates, and
+        rare unscripted cases can appear on their own. You shape rulings through who sits on the
+        bench: the President nominates and the Senate confirms.
+      </p>
+    </div>
+  );
+}
+
 export function DocketHistoryTab({ countryCode }: { countryCode: string }) {
   const [cases, setCases] = useState<DocketCaseRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,15 +84,19 @@ export function DocketHistoryTab({ countryCode }: { countryCode: string }) {
 
   if (cases.length === 0) {
     return (
-      <div className="rounded-xl border border-card-border bg-card p-6 text-center text-sm text-muted">
-        No cases have been decided yet. Landmark cases fire near their real historical dates as the
-        game clock advances.
+      <div className="space-y-3">
+        <div className="rounded-xl border border-card-border bg-card p-6 text-center text-sm text-muted">
+          No cases have been decided yet. Landmark cases fire near their real historical dates as
+          the game clock advances.
+        </div>
+        <DocketExplainer />
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
+      <DocketExplainer />
       {cases.map((c) => {
         const diverged = c.outcome === "diverged";
         return (

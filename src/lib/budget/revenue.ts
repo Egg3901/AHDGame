@@ -30,6 +30,8 @@ import {
   type PlantsBudgetContext,
 } from "./publicEnterpriseRevenue";
 import { calculateFederalSpending } from "./spending";
+import { loadRefugeeServiceCosts } from "@/lib/livingConflict/refugeeReception";
+import { loadCapacityRepairSpending } from "@/lib/livingConflict/capacityDestruction";
 import { keepLatestActiveLawPerType } from "./keepLatestActiveLawPerType";
 import { countryFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
 import { COST_INCOME_ANCHORS } from "@/lib/politicalLegislation/costAnchors";
@@ -38,6 +40,8 @@ import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { SourcingNetworkDoc } from "@/lib/logistics/sourcingLedger";
 import { getCurrentTurn } from "@/lib/currentTurn";
+import { loadSovereignCouponBooks } from "@/lib/bonds/sovereignCouponBook";
+import { sovereignStockAnnualService } from "@/lib/budget/rules/sovereignDebtService";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 
 /**
@@ -550,13 +554,26 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
   // otherwise re-read them per budget. Money wiring (phase B): same hoist -
   // one gameConfig flag check and one sourcingNetworkLoad read for the whole
   // pass, never one per country.
-  const [plantsContext, eraContext, fxByCurrency, moneyWiringConfig] = await Promise.all([
+  const [
+    plantsContext,
+    eraContext,
+    fxByCurrency,
+    moneyWiringConfig,
+    refugeeServiceCosts,
+    capacityRepairSpending,
+    couponBooks,
+  ] = await Promise.all([
     loadPlantsBudgetContext(db),
     getEraContext(db).catch(() => null),
     loadFxRatesByCurrency(db),
     db
       .collection<GameConfig>("gameConfig")
       .findOne({ _id: "default" }, { projection: { interstateMoneyWiringEnabled: 1 } }),
+    // All countries share this projected obligation load; never one per budget.
+    loadRefugeeServiceCosts(db),
+    loadCapacityRepairSpending(db),
+    // Debt interest on the coupons the stock carries (#2089), one read per pass.
+    loadSovereignCouponBooks(db),
   ]);
   const moneyWiringEnabled = moneyWiringConfig?.interstateMoneyWiringEnabled === true;
   const sourcedImportsByCountry = moneyWiringEnabled
@@ -585,8 +602,15 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
       const spending = await calculateFederalSpending(
         db,
         { ...budget, revenue },
-        budget.debt.principal * budget.debt.interestRate,
-        eraContext ?? undefined
+        sovereignStockAnnualService({
+          principal: budget.debt.principal,
+          book: couponBooks.get(String(countryId)) ?? null,
+          marginalRate: budget.debt.interestRate,
+          imfBailoutActive: budget.imfSovereignBailoutActive,
+        }),
+        eraContext ?? undefined,
+        refugeeServiceCosts,
+        capacityRepairSpending
       );
       const surplus = revenue.total - spending.total;
       return {

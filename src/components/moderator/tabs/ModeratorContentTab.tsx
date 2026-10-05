@@ -47,13 +47,13 @@ const PlayerReportsTab = dynamic(
 );
 
 const CONTENT_SUB_TABS: { id: ModContentSubTab; label: string }[] = [
-  { id: "news", label: "News Posts" },
-  { id: "banner-ads", label: "Banner Ads" },
-  { id: "wiki", label: "Wiki Pages" },
-  { id: "wiki-review", label: "Wiki Review" },
-  { id: "supporter-requests", label: "Supporter Requests" },
-  { id: "mail-reports", label: "Mail Reports" },
-  { id: "player-reports", label: "Player Reports" },
+  { id: "news", label: "News posts" },
+  { id: "banner-ads", label: "Banner ads" },
+  { id: "wiki", label: "Wiki pages" },
+  { id: "wiki-review", label: "Wiki review" },
+  { id: "supporter-requests", label: "Supporter requests" },
+  { id: "mail-reports", label: "Mail reports" },
+  { id: "player-reports", label: "Player reports" },
 ];
 
 interface ModeratorContentTabProps {
@@ -65,7 +65,7 @@ export function ModeratorContentTab({ activeSub, onSubChange }: ModeratorContent
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
-        <h2 className="text-base font-semibold">Content Moderation</h2>
+        <h2 className="text-base font-semibold">Content moderation</h2>
         <p className="mt-1 text-sm text-muted">
           Review player-authored news posts and banner ads, manage wiki pages, review wiki
           submissions, and investigate reported player mail and profiles. System wire posts and wiki

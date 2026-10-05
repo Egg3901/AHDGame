@@ -1,6 +1,7 @@
 import type { CountryModifierPatch } from "@/lib/states/conditions/countryPatches";
 import { condition as c } from "@/lib/states/conditions/condition";
 import type { CountryGeography } from "../contract";
+import { modernRegionalPopulation2027 } from "@/lib/seeds/reference/modernRegionalPopulation2027";
 import { cnMetricPresets1953 } from "./data/cnMetricPresets1953";
 import { cnMetricPresets1979 } from "./data/cnMetricPresets1979";
 import { cnMetricPresets1991, cnMetricPresets2019 } from "./data/cnMetricPresets";
@@ -17,6 +18,7 @@ import { cnRegions1991 } from "./data/cnRegions1991";
 import { cnRegions1999 } from "./data/cnRegions1999";
 import { cnRegions2007 } from "./data/cnRegions2007";
 import { cnRegions2023 } from "./data/cnRegions2023";
+import { cnRegions2027 } from "./data/cnRegions2027";
 import { cnStateMetrics } from "./data/cnStateMetrics";
 import {
   CN_ADJACENCY_MAP,
@@ -83,6 +85,7 @@ const regionBundles = {
   "2007-default": cnRegions2007,
   "2019-default": cnRegions,
   "2023-default": cnRegions2023,
+  "2027-default": modernRegionalPopulation2027("CN", cnRegions2027),
 };
 
 /** Base-era per-modifier threshold overrides and suppressions. */

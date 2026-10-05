@@ -91,7 +91,7 @@ describe("NG map config", () => {
       expect.arrayContaining(["partyOrg", "house", "senate", "governor", "approval", "lean"])
     );
     const labels = COUNTRY_MAP_CONFIGS.NG!.modes.map((m) => m.label);
-    expect(labels).toContain("House of Reps");
+    expect(labels).toContain("House of reps");
     expect(labels).toContain("Senate");
     expect(labels).not.toContain("Shugiin");
   });

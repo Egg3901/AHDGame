@@ -1,0 +1,528 @@
+{
+  "baseline": "ad4089c995be12873da90a3941ece949b8e1c873",
+  "model": "Controlled production scoring and refinancing quotes, not a world simulation",
+  "assumptions": {
+    "currentTurn": 100,
+    "turnsPerGameYear": 48,
+    "maturityHorizonTurns": 24,
+    "horizonCalibration": "Provisional authored half-year horizon; requires pinned-world qualification",
+    "primeRatePct": 5,
+    "sectorNpvAnchor": 100000000,
+    "smoothing": "Disabled for the matrix; turn smoothing and persisted displays have focused regressions",
+    "income": "Fixed per-turn operating estimate, before corporate overhead and taxes",
+    "coupons": "Current annual coupon run rate reserved through each cumulative maturity date",
+    "refinancing": "Forced roll is cashless; optional future borrowing contributes no forecast cash"
+  },
+  "cases": [
+    {
+      "name": "distant",
+      "cashAnchor": 20000000,
+      "annualIncomeAnchor": 10000000,
+      "totalDebtAnchor": 100000000,
+      "legacy": {
+        "rating": "A",
+        "compositeScore": 69,
+        "components": {
+          "debtToEquity": 72,
+          "interestCoverage": 40,
+          "profitability": 69,
+          "liquidity": 100
+        }
+      },
+      "candidate": {
+        "rating": "A",
+        "compositeScore": 69,
+        "components": {
+          "debtToEquity": 72,
+          "interestCoverage": 40,
+          "profitability": 69,
+          "liquidity": 100
+        }
+      },
+      "legacyNewBorrowingCouponPct": 7.5,
+      "candidateNewBorrowingCouponPct": 7.5,
+      "maturityLiquidity": {
+        "principalDueAnchor": 0,
+        "liquidityScore": null,
+        "buckets": []
+      }
+    },
+    {
+      "name": "next-turn-cliff",
+      "cashAnchor": 20000000,
+      "annualIncomeAnchor": 10000000,
+      "totalDebtAnchor": 100000000,
+      "legacy": {
+        "rating": "A",
+        "compositeScore": 69,
+        "components": {
+          "debtToEquity": 72,
+          "interestCoverage": 40,
+          "profitability": 69,
+          "liquidity": 100
+        }
+      },
+      "candidate": {
+        "rating": "BBB",
+        "compositeScore": 53,
+        "components": {
+          "debtToEquity": 72,
+          "interestCoverage": 40,
+          "profitability": 69,
+          "liquidity": 20
+        }
+      },
+      "legacyNewBorrowingCouponPct": 7.5,
+      "candidateNewBorrowingCouponPct": 9,
+      "maturityLiquidity": {
+        "principalDueAnchor": 100000000,
+        "liquidityScore": 20.18730489073881,
+        "buckets": [
+          {
+            "maturityTurn": 101,
+            "turnsRemaining": 1,
+            "cumulativePrincipalAnchor": 100000000,
+            "couponReserveAnchor": 104166.66666666667,
+            "forecastCashAnchor": 20208333.333333332,
+            "coverageRatio": 0.2018730489073881
+          }
+        ]
+      }
+    },
+    {
+      "name": "due-now-cliff",
+      "cashAnchor": 20000000,
+      "annualIncomeAnchor": 10000000,
+      "totalDebtAnchor": 100000000,
+      "legacy": {
+        "rating": "A",
+        "compositeScore": 69,
+        "components": {
+          "debtToEquity": 72,
+          "interestCoverage": 40,
+          "profitability": 69,
+          "liquidity": 100
+        }
+      },
+      "candidate": {
+        "rating": "BBB",
+        "compositeScore": 53,
+        "components": {
+          "debtToEquity": 72,
+          "interestCoverage": 40,
+          "profitability": 69,
+          "liquidity": 20
+        }
+      },
+      "legacyNewBorrowingCouponPct": 7.5,
+      "candidateNewBorrowingCouponPct": 9,
+      "maturityLiquidity": {
+        "principalDueAnchor": 100000000,
+        "liquidityScore": 19.979188345473464,
+        "buckets": [
+          {
+            "maturityTurn": 100,
+            "turnsRemaining": 0,
+            "cumulativePrincipalAnchor": 100000000,
+            "couponReserveAnchor": 104166.66666666667,
+            "forecastCashAnchor": 20000000,
+            "coverageRatio": 0.19979188345473464
+          }
+        ]
+      }
+    },
+    {
+      "name": "overdue-cliff",
+      "cashAnchor": 20000000,
+      "annualIncomeAnchor": 10000000,
+      "totalDebtAnchor": 100000000,
+      "legacy": {
+        "rating": "A",
+        "compositeScore": 69,
+        "components": {
+          "debtToEquity": 72,
+          "interestCoverage": 40,
+          "profitability": 69,
+          "liquidity": 100
+        }
+      },
+      "candidate": {
+        "rating": "BBB",
+        "compositeScore": 53,
+        "components": {
+          "debtToEquity": 72,
+          "interestCoverage": 40,
+          "profitability": 69,
+          "liquidity": 20
+        }
+      },
+      "legacyNewBorrowingCouponPct": 7.5,
+      "candidateNewBorrowingCouponPct": 9,
+      "maturityLiquidity": {
+        "principalDueAnchor": 100000000,
+        "liquidityScore": 19.979188345473464,
+        "buckets": [
+          {
+            "maturityTurn": 100,
+            "turnsRemaining": 0,
+            "cumulativePrincipalAnchor": 100000000,
+            "couponReserveAnchor": 104166.66666666667,
+            "forecastCashAnchor": 20000000,
+            "coverageRatio": 0.19979188345473464
+          }
+        ]
+      }
+    },
+    {
+      "name": "cumulative-cliffs",
+      "cashAnchor": 70000000,
+      "annualIncomeAnchor": 10000000,
+      "totalDebtAnchor": 120000000,
+      "legacy": {
+        "rating": "A",
+        "compositeScore": 66,
+        "components": {
+          "debtToEquity": 76,
+          "interestCoverage": 33,
+          "profitability": 61,
+          "liquidity": 100
+        }
+      },
+      "candidate": {
+        "rating": "A",
+        "compositeScore": 58,
+        "components": {
+          "debtToEquity": 76,
+          "interestCoverage": 33,
+          "profitability": 61,
+          "liquidity": 59
+        }
+      },
+      "legacyNewBorrowingCouponPct": 7.5,
+      "candidateNewBorrowingCouponPct": 7.5,
+      "maturityLiquidity": {
+        "principalDueAnchor": 120000000,
+        "liquidityScore": 58.55855855855856,
+        "buckets": [
+          {
+            "maturityTurn": 101,
+            "turnsRemaining": 1,
+            "cumulativePrincipalAnchor": 60000000,
+            "couponReserveAnchor": 125000,
+            "forecastCashAnchor": 70208333.33333333,
+            "coverageRatio": 1.1677061677061675
+          },
+          {
+            "maturityTurn": 102,
+            "turnsRemaining": 2,
+            "cumulativePrincipalAnchor": 120000000,
+            "couponReserveAnchor": 250000,
+            "forecastCashAnchor": 70416666.66666667,
+            "coverageRatio": 0.5855855855855856
+          }
+        ]
+      }
+    },
+    {
+      "name": "covered",
+      "cashAnchor": 200000000,
+      "annualIncomeAnchor": 10000000,
+      "totalDebtAnchor": 100000000,
+      "legacy": {
+        "rating": "AA",
+        "compositeScore": 70,
+        "components": {
+          "debtToEquity": 89,
+          "interestCoverage": 40,
+          "profitability": 52,
+          "liquidity": 100
+        }
+      },
+      "candidate": {
+        "rating": "AA",
+        "compositeScore": 70,
+        "components": {
+          "debtToEquity": 89,
+          "interestCoverage": 40,
+          "profitability": 52,
+          "liquidity": 100
+        }
+      },
+      "legacyNewBorrowingCouponPct": 6.5,
+      "candidateNewBorrowingCouponPct": 6.5,
+      "maturityLiquidity": {
+        "principalDueAnchor": 100000000,
+        "liquidityScore": 100,
+        "buckets": [
+          {
+            "maturityTurn": 101,
+            "turnsRemaining": 1,
+            "cumulativePrincipalAnchor": 100000000,
+            "couponReserveAnchor": 104166.66666666667,
+            "forecastCashAnchor": 200208333.33333334,
+            "coverageRatio": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "operating-loss",
+      "cashAnchor": 20000000,
+      "annualIncomeAnchor": -10000000,
+      "totalDebtAnchor": 100000000,
+      "legacy": {
+        "rating": "BBB",
+        "compositeScore": 48,
+        "components": {
+          "debtToEquity": 72,
+          "interestCoverage": 0,
+          "profitability": 26,
+          "liquidity": 100
+        }
+      },
+      "candidate": {
+        "rating": "BB",
+        "compositeScore": 31,
+        "components": {
+          "debtToEquity": 72,
+          "interestCoverage": 0,
+          "profitability": 26,
+          "liquidity": 15
+        }
+      },
+      "legacyNewBorrowingCouponPct": 9,
+      "candidateNewBorrowingCouponPct": 11,
+      "maturityLiquidity": {
+        "principalDueAnchor": 100000000,
+        "liquidityScore": 14.634146341463413,
+        "buckets": [
+          {
+            "maturityTurn": 124,
+            "turnsRemaining": 24,
+            "cumulativePrincipalAnchor": 100000000,
+            "couponReserveAnchor": 2500000,
+            "forecastCashAnchor": 15000000,
+            "coverageRatio": 0.14634146341463414
+          }
+        ]
+      }
+    },
+    {
+      "name": "live-default-floor",
+      "cashAnchor": 20000000,
+      "annualIncomeAnchor": 10000000,
+      "totalDebtAnchor": 100000000,
+      "legacy": {
+        "rating": "CCC",
+        "compositeScore": 12,
+        "components": {
+          "debtToEquity": 72,
+          "interestCoverage": 40,
+          "profitability": 69,
+          "liquidity": 100
+        }
+      },
+      "candidate": {
+        "rating": "CCC",
+        "compositeScore": 12,
+        "components": {
+          "debtToEquity": 72,
+          "interestCoverage": 40,
+          "profitability": 69,
+          "liquidity": 100
+        }
+      },
+      "legacyNewBorrowingCouponPct": 18,
+      "candidateNewBorrowingCouponPct": 18,
+      "maturityLiquidity": {
+        "principalDueAnchor": 0,
+        "liquidityScore": null,
+        "buckets": []
+      }
+    },
+    {
+      "name": "recovered",
+      "cashAnchor": 200000000,
+      "annualIncomeAnchor": 10000000,
+      "totalDebtAnchor": 100000000,
+      "legacy": {
+        "rating": "AA",
+        "compositeScore": 70,
+        "components": {
+          "debtToEquity": 89,
+          "interestCoverage": 40,
+          "profitability": 52,
+          "liquidity": 100
+        }
+      },
+      "candidate": {
+        "rating": "AA",
+        "compositeScore": 70,
+        "components": {
+          "debtToEquity": 89,
+          "interestCoverage": 40,
+          "profitability": 52,
+          "liquidity": 100
+        }
+      },
+      "legacyNewBorrowingCouponPct": 6.5,
+      "candidateNewBorrowingCouponPct": 6.5,
+      "maturityLiquidity": {
+        "principalDueAnchor": 100000000,
+        "liquidityScore": 100,
+        "buckets": [
+          {
+            "maturityTurn": 101,
+            "turnsRemaining": 1,
+            "cumulativePrincipalAnchor": 100000000,
+            "couponReserveAnchor": 104166.66666666667,
+            "forecastCashAnchor": 200208333.33333334,
+            "coverageRatio": 2
+          }
+        ]
+      }
+    }
+  ],
+  "refinancing": [
+    {
+      "name": "healthy-cashless-roll",
+      "replacementFaceAnchor": 100000000,
+      "proceedsAnchor": 0,
+      "otherNearMaturityPrincipalAnchor": 0,
+      "legacyRating": {
+        "rating": "AAA",
+        "compositeScore": 97,
+        "components": {
+          "debtToEquity": 89,
+          "interestCoverage": 100,
+          "profitability": 100,
+          "liquidity": 100
+        }
+      },
+      "legacyCouponPct": 6,
+      "candidateQuote": {
+        "creditRating": {
+          "rating": "AAA",
+          "compositeScore": 97,
+          "components": {
+            "debtToEquity": 89,
+            "interestCoverage": 100,
+            "profitability": 100,
+            "liquidity": 100
+          }
+        },
+        "couponRate": 6
+      }
+    },
+    {
+      "name": "unfunded-cashless-roll",
+      "replacementFaceAnchor": 100000000,
+      "proceedsAnchor": 0,
+      "otherNearMaturityPrincipalAnchor": 0,
+      "legacyRating": {
+        "rating": "A",
+        "compositeScore": 69,
+        "components": {
+          "debtToEquity": 72,
+          "interestCoverage": 40,
+          "profitability": 69,
+          "liquidity": 100
+        }
+      },
+      "legacyCouponPct": 7.5,
+      "candidateQuote": {
+        "creditRating": {
+          "rating": "A",
+          "compositeScore": 69,
+          "components": {
+            "debtToEquity": 72,
+            "interestCoverage": 40,
+            "profitability": 69,
+            "liquidity": 100
+          }
+        },
+        "couponRate": 7.5
+      }
+    },
+    {
+      "name": "cashless-roll-with-other-near-maturity",
+      "replacementFaceAnchor": 100000000,
+      "proceedsAnchor": 0,
+      "otherNearMaturityPrincipalAnchor": 50000000,
+      "legacyRating": {
+        "rating": "A",
+        "compositeScore": 61,
+        "components": {
+          "debtToEquity": 58,
+          "interestCoverage": 27,
+          "profitability": 69,
+          "liquidity": 100
+        }
+      },
+      "legacyCouponPct": 7.5,
+      "candidateQuote": {
+        "creditRating": {
+          "rating": "BBB",
+          "compositeScore": 50,
+          "components": {
+            "debtToEquity": 58,
+            "interestCoverage": 27,
+            "profitability": 69,
+            "liquidity": 40
+          }
+        },
+        "couponRate": 9
+      }
+    }
+  ],
+  "horizonSensitivity": [
+    {
+      "horizonTurns": 12,
+      "forecast": {
+        "principalDueAnchor": 0,
+        "liquidityScore": null,
+        "buckets": []
+      }
+    },
+    {
+      "horizonTurns": 24,
+      "forecast": {
+        "principalDueAnchor": 100000000,
+        "liquidityScore": 24.390243902439025,
+        "buckets": [
+          {
+            "maturityTurn": 124,
+            "turnsRemaining": 24,
+            "cumulativePrincipalAnchor": 100000000,
+            "couponReserveAnchor": 2500000,
+            "forecastCashAnchor": 25000000,
+            "coverageRatio": 0.24390243902439024
+          }
+        ]
+      }
+    },
+    {
+      "horizonTurns": 48,
+      "forecast": {
+        "principalDueAnchor": 100000000,
+        "liquidityScore": 24.390243902439025,
+        "buckets": [
+          {
+            "maturityTurn": 124,
+            "turnsRemaining": 24,
+            "cumulativePrincipalAnchor": 100000000,
+            "couponReserveAnchor": 2500000,
+            "forecastCashAnchor": 25000000,
+            "coverageRatio": 0.24390243902439024
+          }
+        ]
+      }
+    }
+  ],
+  "limitations": [
+    "Scenario counts are not an observed rating distribution or default prevalence.",
+    "A forecast cash gap does not by itself trigger the actual insolvency/default detector.",
+    "No endogenous revenue, asset sales, optional investor funding or repayment decisions are simulated.",
+    "Pinned sandbox worlds are still required for rating distributions, refinancing capacity and default incidence."
+  ]
+}

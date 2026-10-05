@@ -56,7 +56,7 @@ describe("GET /api/search/universal query length limits", () => {
     const res = await GET(req(`q=${"a".repeat(201)}`));
 
     expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({ error: expect.any(String) });
+    await expect(res.json()).resolves.toMatchObject({ error: expect.any(String) });
   });
 
   it("rejects an overlong query before touching the database", async () => {

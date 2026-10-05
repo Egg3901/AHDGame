@@ -1,6 +1,7 @@
 import type { CountryModifierPatch } from "@/lib/states/conditions/countryPatches";
 import { condition as c } from "@/lib/states/conditions/condition";
 import type { CountryGeography } from "../contract";
+import { modernRegionalPopulation2027 } from "@/lib/seeds/reference/modernRegionalPopulation2027";
 import { ngMetricPresets1953 } from "./data/ngMetricPresets1953";
 import { ngMetricPresets1991, ngMetricPresets2019 } from "./data/ngMetricPresets";
 import { ngRegionCensusData } from "@/lib/seeds/ng/ngRegionCensusData";
@@ -73,6 +74,7 @@ const regionBundles = {
   "2007-default": ngRegions2007,
   "2019-default": ngRegions,
   "2023-default": ngRegions2023,
+  "2027-default": modernRegionalPopulation2027("NG", ngRegions2023),
 };
 
 /** Base-era per-modifier threshold overrides and suppressions. */

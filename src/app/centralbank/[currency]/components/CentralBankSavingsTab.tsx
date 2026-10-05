@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { PortfolioChart } from "@/components/charts/PortfolioChart";
@@ -84,7 +85,7 @@ export function CentralBankSavingsTab({ countryId }: Props) {
       .then(async (r) => {
         const j = (await r.json()) as SavingsApiResponse;
         if (!r.ok) {
-          setError(j.error ?? "Failed to load");
+          setError(apiErrorText(j, "Failed to load"));
           setData(null);
           return;
         }
@@ -112,7 +113,7 @@ export function CentralBankSavingsTab({ countryId }: Props) {
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(j.error ?? "Request failed", "error");
+        showToast(apiErrorText(j, "Request failed"), "error");
         return;
       }
       showToast("Updated", "success");

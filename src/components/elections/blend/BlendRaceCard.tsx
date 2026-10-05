@@ -143,7 +143,7 @@ export function BlendRaceCard({
         >
           {card.callTag}
         </span>
-        <span className="min-w-0 flex-1 truncate text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
+        <span className="min-w-0 flex-1 truncate text-body-sm font-medium text-muted">
           {card.title}
         </span>
         {card.seatLine && (
@@ -155,9 +155,7 @@ export function BlendRaceCard({
 
       <div className="px-4 pb-4 pt-[18px]">
         {/* ── Editorial count: kicker, verdict, standfirst ── */}
-        <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-muted">
-          {card.kicker}
-        </div>
+        <div className="text-body-sm font-medium text-muted">{card.kicker}</div>
         <h3 className="mt-1.5 text-2xl font-bold leading-[1.18] tracking-tight text-foreground">
           {card.verdict}
         </h3>
@@ -167,7 +165,7 @@ export function BlendRaceCard({
           <div className="mt-4 flex flex-wrap items-baseline gap-x-[18px] gap-y-1.5 border-b border-card-border/80 pb-2.5">
             {card.meta.map((chip) => (
               <div key={chip.key} className="flex min-w-0 items-baseline gap-[7px]">
-                <span className="whitespace-nowrap text-[9px] font-black uppercase tracking-[0.14em] text-muted">
+                <span className="whitespace-nowrap text-body-sm font-medium font-black text-muted">
                   {chip.key}
                 </span>
                 <span className="text-sm font-black tabular-nums text-foreground">
@@ -239,7 +237,7 @@ export function BlendRaceCard({
         {/* ── Before any ballots: the declared field ── */}
         {card.showSlate && (
           <div className="mt-4 flex flex-col gap-2.5">
-            <div className="text-[9px] font-black uppercase tracking-[0.16em] text-muted">
+            <div className="text-body-sm font-medium font-black text-muted">
               Declared candidates
             </div>
             {card.slate.length > 0 ? (
@@ -289,7 +287,7 @@ export function BlendRaceCard({
               </div>
             )}
 
-            <div className="mt-0.5 flex items-baseline gap-2 border-b border-card-border px-0 pb-1.5 pt-3.5 text-[9px] uppercase tracking-[0.14em] text-muted">
+            <div className="mt-0.5 flex items-baseline gap-2 border-b border-card-border px-0 pb-1.5 pt-3.5 text-sm font-semibold text-foreground">
               <span className="w-2 shrink-0" aria-hidden />
               <span className="min-w-0 flex-1">Candidate</span>
               <span className="w-9 shrink-0 text-right">Party</span>
@@ -332,9 +330,7 @@ export function BlendRaceCard({
 
       {/* ── Footer: the clock, and the way through to the full count ── */}
       <div className="mt-auto flex items-center gap-2.5 border-t border-card-border bg-card-muted px-4 py-2.5">
-        <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-muted">
-          {closed ? "Closed" : "Closes"}
-        </span>
+        <span className="text-body-sm font-medium text-muted">{closed ? "Closed" : "Closes"}</span>
         <span className={`text-xs font-semibold ${closed ? "text-success" : "text-warning"}`}>
           {closed ? "Result certified" : (closesIn ?? "—")}
         </span>

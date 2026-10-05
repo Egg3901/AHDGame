@@ -11,7 +11,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { submitOfferSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { newCharacterTransferBarrierResponse } from "@/lib/api/newCharacterTransferBarrier";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
@@ -70,8 +70,7 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
 
     const { id, listingId } = await params;
     const parsed = await parseJsonBody(request, submitOfferSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const { shares, pricePerShare, offerAsCorporation } = parsed.data;
     const db = await getDb();
@@ -85,19 +84,18 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
     const { corporation } = resolved;
 
     if (!ObjectId.isValid(listingId)) {
-      return NextResponse.json({ error: "Invalid listing ID" }, { status: 400 });
+      return errorResponse(400, "Invalid listing ID");
     }
 
     const listing = await db
       .collection<ShareListing>("shareListings")
       .findOne({ _id: new ObjectId(listingId) });
 
-    if (!listing) return NextResponse.json({ error: "Listing not found" }, { status: 404 });
+    if (!listing) return errorResponse(404, "Listing not found");
     if (!listing.corporationId.equals(corporation._id)) {
-      return NextResponse.json({ error: "Listing not found" }, { status: 404 });
+      return errorResponse(404, "Listing not found");
     }
-    if (listing.status !== "open")
-      return NextResponse.json({ error: "Listing is not open" }, { status: 400 });
+    if (listing.status !== "open") return errorResponse(400, "Listing is not open");
     // Turn-first expiry guard (matches the turn processor) with a Date fallback
     // for legacy listings — so offers can't be submitted to a turn-expired
     // listing during a cron lag before the processor closes it.
@@ -105,7 +103,7 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
       typeof listing.expiresAtTurn === "number"
         ? (await getCurrentTurn(db)) >= listing.expiresAtTurn
         : new Date() >= listing.expiresAt;
-    if (listingExpired) return NextResponse.json({ error: "Listing has expired" }, { status: 400 });
+    if (listingExpired) return errorResponse(400, "Listing has expired");
 
     // Fetch listing corp early so price-bound error messages use the correct currency symbol.
     // pricePerShare and marketPriceAtCreation are stored in the corp's liquidCurrencyCode (v0.2.6).
@@ -119,16 +117,14 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
     const priceFloor = listing.marketPriceAtCreation * 0.5;
     const priceCeiling = listing.marketPriceAtCreation * 2.0;
     if (pricePerShare < priceFloor || pricePerShare > priceCeiling) {
-      return NextResponse.json(
-        {
-          error: `Offer must be between ${listingCorpSym}${priceFloor.toFixed(4)} and ${listingCorpSym}${priceCeiling.toFixed(4)} per share`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Offer must be between ${listingCorpSym}${priceFloor.toFixed(4)} and ${listingCorpSym}${priceCeiling.toFixed(4)} per share`
       );
     }
 
     const character = await getCharacterByUserId(db, auth.user.userId);
-    if (!character) return NextResponse.json({ error: "Character not found" }, { status: 404 });
+    if (!character) return errorResponse(404, "Character not found");
 
     // The offer escrows cash that pays the seller on accept — a disguised
     // transfer for a fresh account buying a confederate's listing.
@@ -137,12 +133,12 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
 
     const tradeLock = await assertCeoTradeNotBlocked(db, corporation, character._id);
     if (tradeLock.blocked) {
-      return NextResponse.json({ error: tradeLock.error }, { status: tradeLock.status });
+      return errorResponse(tradeLock.status, tradeLock.error);
     }
 
     // Cannot offer on your own listing
     if (listing.sellerCharacterId.toString() === character._id.toString()) {
-      return NextResponse.json({ error: "Cannot offer on your own listing" }, { status: 400 });
+      return errorResponse(400, "Cannot offer on your own listing");
     }
 
     // One pending offer per buyer per listing
@@ -150,10 +146,7 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
       .collection<ShareOffer>("shareOffers")
       .findOne({ listingId: listing._id, buyerCharacterId: character._id, status: "pending" });
     if (existingOffer) {
-      return NextResponse.json(
-        { error: "You already have a pending offer on this listing" },
-        { status: 400 }
-      );
+      return errorResponse(400, "You already have a pending offer on this listing");
     }
 
     const now = new Date();
@@ -170,7 +163,7 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
         shares,
         currentTurn
       );
-      if (ceoCap) return NextResponse.json({ error: ceoCap.error }, { status: ceoCap.status });
+      if (ceoCap) return errorResponse(ceoCap.status, ceoCap.error);
     }
     // pricePerShare and listing.marketPriceAtCreation are in the target corp's
     // liquidCurrencyCode (v0.2.6). Store escrowAmount in the same local unit
@@ -196,23 +189,14 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
         .collection<Corporation>("corporations")
         .findOne({ ceoId: character._id, ceoVacant: { $ne: true } });
       if (!placerCorp) {
-        return NextResponse.json(
-          { error: "You must be an active CEO to offer on behalf of a corporation" },
-          { status: 403 }
-        );
+        return errorResponse(403, "You must be an active CEO to offer on behalf of a corporation");
       }
       if (placerCorp.countryOwnerId) {
-        return NextResponse.json(
-          { error: "National corporations cannot hold equity" },
-          { status: 400 }
-        );
+        return errorResponse(400, "National corporations cannot hold equity");
       }
       // Cannot offer on a listing created by the same corporation
       if (listing.sellerCorporationId && placerCorp._id.equals(listing.sellerCorporationId)) {
-        return NextResponse.json(
-          { error: "Cannot offer on your own corporation's listing" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Cannot offer on your own corporation's listing");
       }
       const placerCurrency = (resolveCorpLiquidCurrencyCode(placerCorp) ?? "USD") as CurrencyCode;
       const targetCurrency = (resolveCorpLiquidCurrencyCode(listingCorp) ?? "USD") as CurrencyCode;
@@ -228,10 +212,7 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
         rates: fxRates,
       });
       if (!escrowEstimate) {
-        return NextResponse.json(
-          { error: "Exchange rate unavailable, try again shortly" },
-          { status: 503 }
-        );
+        return errorResponse(503, "Exchange rate unavailable, try again shortly");
       }
       const escrowInPlacerCapital =
         placerCurrency !== targetCurrency
@@ -261,11 +242,9 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
           placerCurrency !== targetCurrency
             ? ` (${placerSym}${adjustedStr} ${placerCurrency} incl. FX, corp has ${placerSym}${haveStr} ${placerCurrency})`
             : `, corp has ${placerSym}${haveStr} ${placerCurrency}`;
-        return NextResponse.json(
-          {
-            error: `Insufficient corporation funds for escrow. Need ${targetSym}${needStr}${currencyNote}`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Insufficient corporation funds for escrow. Need ${targetSym}${needStr}${currencyNote}`
         );
       }
 
@@ -286,10 +265,7 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
       } catch (err) {
         await refundCorpLiquidCapital(db, placerCorp._id, escrowInPlacerCapital);
         if (isPendingShareOfferDuplicateKey(err)) {
-          return NextResponse.json(
-            { error: "You already have a pending offer on this listing" },
-            { status: 400 }
-          );
+          return errorResponse(400, "You already have a pending offer on this listing");
         }
         throw err;
       }
@@ -326,10 +302,7 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
       if (forexEnabled) {
         const fxResult = await loadCharacterFxRate(db, homeCurrency);
         if (!fxResult.ok) {
-          return NextResponse.json(
-            { error: "Exchange rate unavailable, try again shortly" },
-            { status: 503 }
-          );
+          return errorResponse(503, "Exchange rate unavailable, try again shortly");
         }
         charFxRate = fxResult.rate;
       }
@@ -345,7 +318,7 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
         forexEnabled
       );
       if (!debitResult.ok) {
-        return NextResponse.json({ error: "Insufficient funds for escrow" }, { status: 400 });
+        return errorResponse(400, "Insufficient funds for escrow");
       }
 
       let offerId: ObjectId;
@@ -364,10 +337,7 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
       } catch (err) {
         await refundCharacterCash(db, character._id, homeCurrency, escrowInHome, forexEnabled);
         if (isPendingShareOfferDuplicateKey(err)) {
-          return NextResponse.json(
-            { error: "You already have a pending offer on this listing" },
-            { status: 400 }
-          );
+          return errorResponse(400, "You already have a pending offer on this listing");
         }
         throw err;
       }

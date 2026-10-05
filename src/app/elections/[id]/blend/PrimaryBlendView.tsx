@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BLEND, FONT } from "@/components/blend/tokens";
+import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import { BlendShell, BlendHeader, BlendSection } from "@/components/blend/BlendShell";
 import { BlendRail, BlendChipRail } from "@/components/blend/BlendRail";
 import { BlendTicker } from "@/components/blend/BlendTicker";
@@ -381,14 +381,10 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
           primary, so it says so. */}
       <div
         style={{
+          ...BLEND_LABEL,
           ...fieldGrid,
           padding: "0 0 8px",
           borderBottom: `1px solid ${BLEND.hairlineStrong}`,
-          fontFamily: FONT.mono,
-          fontSize: 9.5,
-          letterSpacing: ".14em",
-          textTransform: "uppercase",
-          color: BLEND.mutedDimmer,
         }}
       >
         <span />
@@ -531,7 +527,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
               color: BLEND.muted,
             }}
           >
-            <span>Primary Season</span>
+            <span>Primary season</span>
             <span style={{ fontFamily: FONT.mono, letterSpacing: ".06em" }}>
               {vm.closesIn != null ? `${vm.closesIn} TURNS` : ""}
             </span>
@@ -718,18 +714,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
               status={{ text: vm.closesText, color: BLEND.caution }}
             >
               <div style={{ padding: "14px 10px" }}>
-                <div
-                  style={{
-                    padding: "0 8px 9px",
-                    fontFamily: FONT.mono,
-                    fontSize: 9.5,
-                    letterSpacing: ".16em",
-                    textTransform: "uppercase",
-                    color: BLEND.mutedDimmer,
-                  }}
-                >
-                  Parties
-                </div>
+                <div style={{ ...BLEND_LABEL, padding: "0 8px 9px" }}>Parties</div>
                 {vm.parties.map((p) => (
                   <PartyButton key={p.id} p={p} onSelect={() => setPartyId(p.id)} />
                 ))}
@@ -749,17 +734,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
               }}
             >
               <div>
-                <div
-                  style={{
-                    fontFamily: FONT.mono,
-                    fontSize: 9.5,
-                    letterSpacing: ".16em",
-                    textTransform: "uppercase",
-                    color: BLEND.mutedDimmer,
-                  }}
-                >
-                  Your standing
-                </div>
+                <div style={BLEND_LABEL}>Your standing</div>
 
                 {vm.you ? (
                   <>
@@ -841,35 +816,14 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
 
               {vm.calendar.length > 0 ? (
                 <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
-                  <div
-                    style={{
-                      fontFamily: FONT.mono,
-                      fontSize: 9.5,
-                      letterSpacing: ".16em",
-                      textTransform: "uppercase",
-                      color: BLEND.mutedDimmer,
-                    }}
-                  >
-                    Calendar
-                  </div>
+                  <div style={BLEND_LABEL}>Calendar</div>
                   <CalendarWaves vm={vm} onSelect={selectState} />
                 </div>
               ) : null}
 
               {vm.campaign ? (
                 <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
-                  <div
-                    style={{
-                      paddingBottom: 10,
-                      fontFamily: FONT.mono,
-                      fontSize: 9.5,
-                      letterSpacing: ".16em",
-                      textTransform: "uppercase",
-                      color: BLEND.mutedDimmer,
-                    }}
-                  >
-                    Your primary campaign
-                  </div>
+                  <div style={{ ...BLEND_LABEL, paddingBottom: 10 }}>Your primary campaign</div>
                   <CampaignBlock
                     vm={vm}
                     electionId={electionId}
@@ -881,7 +835,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
           }
         >
           <BlendHeader
-            kicker="Primary Season"
+            kicker="Primary season"
             readout={vm.turnReadout}
             headline={vm.headline}
             standfirst={vm.standfirst}

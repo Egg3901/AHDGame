@@ -16,6 +16,41 @@ const balances = (supply: number, demand: number) =>
   new Map<CommodityType, { supply: number; demand: number }>([["steel", { supply, demand }]]);
 
 describe("computeClearingFactors market partition", () => {
+  it.each([
+    "construction_services",
+    "healthcare_services",
+    "real_estate_services",
+    "entertainment_services",
+  ] as const)("does not fill %s from a shortage in another state", (commodity) => {
+    const base = COMMODITY_BASE_PRICES[commodity];
+    const localBalance = (demand: number) =>
+      new Map<CommodityType, { supply: number; demand: number }>([
+        [commodity, { supply: 100, demand }],
+      ]);
+    const results = computeClearingFactors({
+      sectors: [
+        { sectorId: "nj", revenue: 100 * base, supplyRates: { [commodity]: 1 }, posture: 0 },
+        { sectorId: "az", revenue: 100 * base, supplyRates: { [commodity]: 1 }, posture: 0 },
+      ],
+      balances: new Map([[commodity, { supply: 200, demand: 200 }]]),
+      basePrices: COMMODITY_BASE_PRICES,
+      priceRatioByCommodity: new Map(),
+      stateMarkets: {
+        stateBySector: new Map([
+          ["nj", "NJ"],
+          ["az", "AZ"],
+        ]),
+        balances: new Map([
+          ["NJ", localBalance(0)],
+          ["AZ", localBalance(200)],
+        ]),
+        priceRatios: new Map(),
+      },
+    });
+    expect(results.get("nj")!.soldFraction).toBe(0);
+    expect(results.get("az")!.soldFraction).toBe(1);
+  });
+
   it("without partition args, glut sellers drag every seller's fill (the old world book)", () => {
     // 100 units US, 900 units RU, worldwide demand 300: everyone fills 0.30.
     const res = computeClearingFactors({

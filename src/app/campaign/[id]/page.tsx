@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback, use } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -12,7 +13,7 @@ import { SuspendEndorsePanel } from "./components/SuspendEndorsePanel";
 import { RunningMateSurrogatePanel } from "./components/RunningMateSurrogatePanel";
 import { CampaignRoomBriefing } from "./components/CampaignRoomBriefing";
 import { CampaignBlendClient } from "./blend/CampaignBlendClient";
-import { BLEND, BLEND_CONTAINER, FONT } from "@/components/blend/tokens";
+import { BLEND, BLEND_CONTAINER, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import { BlendScope } from "@/components/blend/BlendScope";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
@@ -44,7 +45,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       const res = await fetch(`/api/campaigns/${id}`);
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Failed to load campaign");
+        setError(apiErrorText(data, "Failed to load campaign"));
         return;
       }
       const data = await res.json();
@@ -133,7 +134,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        alert(data.error || "Retarget failed");
+        alert(apiErrorText(data, "Retarget failed"));
         return;
       }
       await fetchCampaign();
@@ -157,7 +158,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setResetOppoError(data.error || "Reset failed");
+        setResetOppoError(apiErrorText(data, "Reset failed"));
         return;
       }
       setResetOppoOpen(false);
@@ -244,15 +245,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           </div>
           <Link
             href="/elections"
-            style={{
-              display: "inline-block",
-              marginTop: 16,
-              fontFamily: FONT.mono,
-              fontSize: 11,
-              letterSpacing: ".08em",
-              textTransform: "uppercase",
-              color: BLEND.muted,
-            }}
+            style={{ ...BLEND_LABEL, display: "inline-block", marginTop: 16 }}
           >
             &lsaquo; Back to elections
           </Link>
@@ -292,14 +285,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       {!isEmbedded && campaign.electionInfo && (
         <div
           className={BLEND_CONTAINER}
-          style={{
-            paddingTop: 14,
-            paddingBottom: 14,
-            fontFamily: FONT.mono,
-            fontSize: 11,
-            letterSpacing: ".06em",
-            textTransform: "uppercase",
-          }}
+          style={{ ...BLEND_LABEL, paddingTop: 14, paddingBottom: 14 }}
         >
           <Link href={`/elections/${campaign.electionId}`} style={{ color: BLEND.muted }}>
             &lsaquo; {campaign.electionInfo.state}{" "}

@@ -2,6 +2,7 @@
  * Persistence for the v2 manufacturing product project slot. The unique partial index protects
  * one active project per corporation on standalone Mongo without a transaction.
  */
+import { efficacyAdjustedAdvertising } from "@/lib/advertising/rules/coverage";
 import type { AnyBulkWriteOperation, Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import { tickManufacturingProject } from "./rules/manufacturingRules";
@@ -58,6 +59,8 @@ export async function consumeManufacturingDevelopmentReceiptsV2(input: {
   corporations: Corporation[];
   projectsByCorporationId: Map<string, ManufacturingProductProject>;
   completedTurn?: number;
+  /** Coverage efficacy from advertising agreements, by buyer; absent is neutral. */
+  advertisingEfficacyByCorporationId?: ReadonlyMap<string, { turn: number; factor: number }>;
 }): Promise<void> {
   const projectOps: AnyBulkWriteOperation<ManufacturingProductProject>[] = [];
   const nextByCorporationId = new Map<string, ManufacturingProductProject>();
@@ -95,7 +98,19 @@ export async function consumeManufacturingDevelopmentReceiptsV2(input: {
     const progress = tickManufacturingProject({
       project,
       receipt: completedReceipt,
-      advertisingReceipt: corporation.manufacturingProductAdvertisingReceiptV2,
+      advertisingReceipt: (() => {
+        const paid = corporation.manufacturingProductAdvertisingReceiptV2;
+        return paid
+          ? {
+              ...paid,
+              amountAnchor: efficacyAdjustedAdvertising(
+                paid.amountAnchor,
+                paid.turn,
+                input.advertisingEfficacyByCorporationId?.get(corporationId)
+              ),
+            }
+          : undefined;
+      })(),
       completedTurn,
     });
     if (!progress) continue;

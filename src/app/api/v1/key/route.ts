@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitHeaders, rateLimitResponse } from "@/lib/api/rateLimit";
 import { requireUserApiKey, type UserApiScope } from "@/lib/api/userApiAuth";
 import { withNoStore } from "@/lib/api/withNoStore";
@@ -27,10 +27,7 @@ async function handleGET(request: Request) {
     const apiAuth = await requireUserApiKey(request, "public");
     if (!apiAuth.ok) {
       const status = apiAuth.reason === "insufficient_scope" ? 403 : 401;
-      return NextResponse.json(
-        { error: `API key ${apiAuth.reason.replace("_", " ")}` },
-        { status }
-      );
+      return errorResponse(status, `API key ${apiAuth.reason.replace("_", " ")}`);
     }
 
     // Keep introspection separate from the owner's transfer and forex quotas.
@@ -54,7 +51,7 @@ async function handleGET(request: Request) {
       }
     );
     if (!keyDoc) {
-      return NextResponse.json({ error: "API key invalid" }, { status: 401 });
+      return errorResponse(401, "API key invalid");
     }
 
     return NextResponse.json(

@@ -13,7 +13,7 @@ export function DebtCoverageCard({
   const gap = Math.max(0, debtPrincipal - sovereignBondsOutstanding);
   return (
     <MonetaryCard
-      title="Debt Coverage"
+      title="Debt coverage"
       hint="National debt principal vs sovereign bonds outstanding"
     >
       <div className="grid grid-cols-3 gap-3">

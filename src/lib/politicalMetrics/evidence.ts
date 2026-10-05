@@ -104,7 +104,7 @@ export async function loadEvidence(
   >;
   const nationalId = getNationalDocId(countryId) ?? "federal";
   const [macro, regionDocs, states, bank, budget] = await Promise.all([
-    db.collection<MacroDoc>("macroMetrics").findOne({ _id: nationalId }),
+    db.collection<MacroDoc>("macroMetrics").findOne({ _id: nationalId, countryId } as never),
     // Fallback source: the national rollup doc only exists after the first
     // turn; a fresh world aggregates the regional docs population-weighted.
     db
@@ -131,10 +131,8 @@ export async function loadEvidence(
       if (typeof own?.value !== "number") return null;
       return { value: own.value, trend: typeof own.trend === "number" ? own.trend : null };
     }
-    const rec = macro?.[category]?.[metricId];
-    if (typeof rec?.value === "number") {
-      return { value: rec.value, trend: typeof rec.trend === "number" ? rec.trend : null };
-    }
+    // Regional state is authoritative. Retained national rollups can predate
+    // a world reset; prefer a covered regional aggregate whenever available.
     let valueSum = 0;
     let trendSum = 0;
     let weight = 0;
@@ -146,7 +144,12 @@ export async function loadEvidence(
       trendSum += (typeof r.trend === "number" ? r.trend : 0) * pop;
       weight += pop;
     }
-    if (weight <= 0) return null;
+    if (weight <= 0) {
+      const rec = macro?.[category]?.[metricId];
+      return typeof rec?.value === "number" && Number.isFinite(rec.value)
+        ? { value: rec.value, trend: typeof rec.trend === "number" ? rec.trend : null }
+        : null;
+    }
     return {
       value: Math.round((valueSum / weight) * 100) / 100,
       trend: Math.round((trendSum / weight) * 100) / 100,

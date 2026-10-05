@@ -12,7 +12,7 @@ import { getPartyMap } from "@/lib/db/partyMap";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getAuthUser } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { speakerActionSchema } from "@/lib/api/schemas/congress";
 import { getHouseComposition } from "@/lib/congress/houseComposition";
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, speakerActionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { action, nominationId, vacateVote } = parsed.data;
 
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
     if (result.success) {
       return NextResponse.json({ message: result.message }, { status: result.status ?? 200 });
     }
-    return NextResponse.json({ error: result.error }, { status: result.status });
+    return errorResponse(result.status, result.error);
   } catch (error) {
     return handleRouteError(error);
   }

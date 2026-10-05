@@ -150,7 +150,7 @@ function BudgetFlowStrip({
         {nodes.map((n, i) => (
           <div key={n.title} className="flex flex-1 items-center gap-2">
             <div className="flex-1 rounded-lg border border-card-border bg-card-muted px-3 py-2.5 text-center">
-              <div className="text-body-xs uppercase tracking-wide text-muted">{n.title}</div>
+              <div className="text-body-sm font-medium text-muted">{n.title}</div>
               <div
                 className={`mt-0.5 text-body-lg font-bold tabular-nums ${TONE[n.tone ?? "foreground"]}`}
               >

@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -47,7 +49,7 @@ export function ForexSpreadStrengthControl({
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "Failed to set spread strength.");
+        setError(apiErrorText(json, "Failed to set spread strength."));
         return;
       }
       setSuccess(`Spread strength set to ${Math.round(json.strength * 100)}%.`);
@@ -132,7 +134,7 @@ export function ForexSpreadStrengthControl({
         </Button>
       </div>
       {success && <p className="mt-2 text-body-sm text-success">{success}</p>}
-      {error && <p className="mt-2 text-body-sm text-error">{error}</p>}
+      <InlineError error={error} className="mt-2 text-body-sm text-error" />
     </div>
   );
 }

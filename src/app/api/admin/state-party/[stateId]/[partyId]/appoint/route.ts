@@ -13,7 +13,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
 import { adminStatePartyAppointSchema } from "@/lib/api/schemas/admin";
@@ -56,7 +56,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, adminStatePartyAppointSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { position, characterId } = parsed.data;
 
@@ -74,18 +74,15 @@ export async function POST(request: Request, { params }: RouteParams) {
       try {
         charOid = new ObjectId(characterId);
       } catch {
-        return NextResponse.json({ error: "Invalid characterId" }, { status: 400 });
+        return errorResponse(400, "Invalid characterId");
       }
 
       const char = await db.collection<Character>("characters").findOne({ _id: charOid });
 
-      if (!char) return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      if (!char) return errorResponse(404, "Character not found");
 
       if (char.homeState !== stateId || char.party !== partyId) {
-        return NextResponse.json(
-          { error: "Character is not a member of this state party" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Character is not a member of this state party");
       }
 
       newHolderId = charOid;

@@ -23,6 +23,7 @@ import {
 } from "@/lib/corporations/commands/shareTrading/shareFillMoney";
 import { computeAccountedShares } from "@/lib/corporations/shareInvariant";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { errorResponse } from "@/lib/api/errors";
 
 export const resolveCharName = async (
   db: Db,
@@ -247,10 +248,7 @@ export async function settleBuyOrderFill(args: {
     const code = err instanceof Error ? err.message.split(":")[0] : "";
     if (code === SHARE_FILL_MONEY_SELLER_SHARES) {
       await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
-      return NextResponse.json(
-        { error: "You no longer have enough shares to fill this order" },
-        { status: 409 }
-      );
+      return errorResponse(409, "You no longer have enough shares to fill this order");
     }
     await settleShareFillAttempt(
       db,

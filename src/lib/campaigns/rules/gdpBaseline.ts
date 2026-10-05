@@ -144,7 +144,7 @@ const GDP_BASELINE_TABLE: Record<GdpBaselineCountry, Record<EraId, number>> = {
     // No 2027 region bundle: seeder falls back to 2019, mirrored here.
     "1953": 115,
     "1979": 2_810,
-    "1991": 6_809,
+    "1991": 8_775,
     "1999": 25_401,
     "2007": 43_379,
     "2019": 90_928,

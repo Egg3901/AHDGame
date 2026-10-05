@@ -68,20 +68,20 @@ describe("StatePartyMetricsPanel", () => {
   it("explains Org effects with blurbs and tooltips instead of bare icon tiles", () => {
     render(<StatePartyMetricsPanel stateParty={baseParty()} />);
 
-    expect(screen.getByText("Party Organization")).toBeTruthy();
-    expect(screen.getByLabelText("About Party Organization")).toBeTruthy();
+    expect(screen.getByText("Party organization")).toBeTruthy();
+    expect(screen.getByLabelText("About party organization")).toBeTruthy();
     expect(screen.getByText("What Org does here")).toBeTruthy();
 
-    expect(screen.getByText("Vote Power")).toBeTruthy();
+    expect(screen.getByText("Vote power")).toBeTruthy();
     expect(screen.getByText("0.67×")).toBeTruthy();
     expect(screen.getByText("General-election vote scalar")).toBeTruthy();
-    expect(screen.getByLabelText("About Vote Power")).toBeTruthy();
+    expect(screen.getByLabelText("About Vote power")).toBeTruthy();
 
     expect(screen.getByText("Pres. Primary")).toBeTruthy();
     expect(screen.getByText("8 pts")).toBeTruthy();
     expect(screen.getByText("Home-state primary scoring")).toBeTruthy();
 
-    expect(screen.getByText("NPP Quality")).toBeTruthy();
+    expect(screen.getByText("NPP quality")).toBeTruthy();
     expect(screen.getByText("Mid")).toBeTruthy();
     expect(screen.getByText("Recruitment capacity from Org")).toBeTruthy();
 

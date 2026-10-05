@@ -39,8 +39,8 @@
         "counterpartyHelp": "Any player-run corporation, including foreign ones, can be a counterparty.",
         "statePlaceholder": "e.g. TX",
         "selectState": "Select a state",
-        "noFreightPlants": "No plants producing freight",
-        "freightHelp": "Freight is haulage capacity based in one state. The contract reserves the supplier's plants there for the buyer's plants in the same state.",
+        "noLocalServicePlants": "No plants producing this service",
+        "localServiceHelp": "This service is supplied within one state. The contract reserves the supplier's plants there for the buyer's plants in the same state.",
         "buyerFreightHelp": "The supplier's capacity is checked when they review the offer.",
         "volumeLabel": "Volume cap (per turn)",
         "volumePlaceholder": "e.g. 5000",
@@ -78,7 +78,7 @@
         "positiveVolume": "Volume cap must be a positive number",
         "priceBand": "Price must be within ±{band}% of market",
         "termRange": "Term must be {min} to {max} turns",
-        "freightState": "Select the state this freight contract is fulfilled from"
+        "localServiceState": "Select the state this service contract is fulfilled from"
       }
     },
     "sectorInvestment": {

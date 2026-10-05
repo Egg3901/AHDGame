@@ -1,72 +1,52 @@
 /**
- * crisisIntake — translate active crises into governing-agenda pressure (V1.8).
- *
- * When a crisis is damaging a country, an NPP government should drop everything
- * and respond. This maps the metric effects of active crises to agenda domains
- * (via the shared METRIC_TO_DOMAIN vocabulary) so `computeGoverningAgenda` can
- * inject dominant "raise" items — which then cascade automatically into the
- * government's ministerial orders (V1.4) and emergency bill sponsorship (V1.5),
- * since both already read the agenda.
- *
- * The effect→domain mapping is pure and unit-tested; the loader is a thin DB read.
+ * crisisIntake — bounded database shell for portable NPP agenda crisis rules.
+ * The projection contains only the fields needed for country scope, start time,
+ * metric-domain mapping, and current effect/rung change detection.
  */
 
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { Crisis, CrisisEffect } from "@/lib/db/types/crisis";
-import { METRIC_TO_DOMAIN } from "./selectNppBill";
+import { METRIC_TO_DOMAIN } from "@/lib/nppAutonomy/selectNppBill";
+import {
+  crisisAgendaSignalsFromCrises,
+  crisisSignalsFromEffects as mapCrisisSignalsFromEffects,
+  type MetricDomainMap,
+  type CrisisAgendaIntake,
+} from "./rules/crisisAgendaSignals";
 
-/** Crisis-affected domains register at full emergency severity. */
-const CRISIS_DOMAIN_SEVERITY = 1;
+export type { CrisisAgendaIntake };
 
-/**
- * Map a crisis's metric effects to agenda domains. A metric-targeting effect
- * whose `metricCategory.metricField` resolves through METRIC_TO_DOMAIN marks
- * that domain as under emergency pressure. Pure and deterministic.
- */
-export function crisisSignalsFromEffects(effects: CrisisEffect[]): Record<string, number> {
-  const signals: Record<string, number> = {};
-  for (const effect of effects) {
-    if (effect.targetType !== "metric") continue;
-    if (!effect.metricCategory || !effect.metricField) continue;
-    const domain = METRIC_TO_DOMAIN[effect.metricCategory]?.[effect.metricField];
-    if (!domain) continue;
-    signals[domain] = CRISIS_DOMAIN_SEVERITY;
-  }
-  return signals;
+/** Preserve the existing convenience API while the rules accept their vocabulary as data. */
+export function crisisSignalsFromEffects(
+  effects: readonly CrisisEffect[],
+  metricToDomain: MetricDomainMap = METRIC_TO_DOMAIN
+): Record<string, number> {
+  return mapCrisisSignalsFromEffects(effects, metricToDomain);
 }
 
-export interface CrisisAgendaIntake {
-  /** Domain → severity in [0, 1] for `computeGoverningAgenda`'s `crises` input. */
-  signals: Record<string, number>;
-  /** Latest start turn among the contributing crises; drives immediate recompute. */
-  latestStartTurn: number;
-}
-
-/**
- * Load active-crisis agenda pressure for a country. Includes country-scoped and
- * region-scoped crises naming the country, plus global crises. Returns the
- * merged domain signals and the most recent crisis start turn (so a brand-new
- * crisis can force an agenda recompute even when the agenda is otherwise fresh).
- */
+/** Load the active crisis subset once and pass plain data into the rules core. */
 export async function loadCrisisAgendaSignals(
   db: Db,
   countryId: CountryId
 ): Promise<CrisisAgendaIntake> {
   const crises = await db
     .collection<Crisis>("crises")
-    .find({ status: "active", $or: [{ countryIds: countryId }, { scope: "global" }] })
+    .find(
+      { status: "active", $or: [{ countryIds: countryId }, { scope: "global" }] },
+      {
+        projection: {
+          status: 1,
+          scope: 1,
+          countryIds: 1,
+          startTurn: 1,
+          effects: 1,
+          "chain.family": 1,
+          "chain.rung": 1,
+        },
+      }
+    )
     .toArray();
 
-  const signals: Record<string, number> = {};
-  let latestStartTurn = 0;
-  for (const crisis of crises) {
-    const crisisSignals = crisisSignalsFromEffects(crisis.effects ?? []);
-    if (Object.keys(crisisSignals).length === 0) continue;
-    for (const [domain, severity] of Object.entries(crisisSignals)) {
-      signals[domain] = Math.max(signals[domain] ?? 0, severity);
-    }
-    if (crisis.startTurn > latestStartTurn) latestStartTurn = crisis.startTurn;
-  }
-  return { signals, latestStartTurn };
+  return crisisAgendaSignalsFromCrises(crises, countryId, METRIC_TO_DOMAIN);
 }

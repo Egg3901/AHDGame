@@ -42,11 +42,9 @@ export default function IntorgIndexClient() {
           </Link>
           <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-                Diplomacy
-              </p>
+              <p className="text-body-sm font-medium text-muted">Diplomacy</p>
               <h1 className="text-3xl font-bold text-foreground sm:text-4xl">
-                International Organizations
+                International organizations
               </h1>
               <p className="mt-1 max-w-2xl text-sm text-muted">
                 Multilateral institutions, free-trade agreements, and elected leadership. Foreign
@@ -58,7 +56,7 @@ export default function IntorgIndexClient() {
               (viewer.foreignMinisterCountryName || viewer.headOfGovernmentCountryName) && (
                 <div className="rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-2 text-xs">
                   <p className="font-semibold uppercase tracking-widest text-secondary">
-                    Diplomatic Role
+                    Diplomatic role
                   </p>
                   <p className="mt-0.5 text-foreground">
                     {viewer.foreignMinisterCountryName

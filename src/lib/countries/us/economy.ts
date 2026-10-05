@@ -105,7 +105,8 @@ export const US_ECONOMY: CountryEconomy = {
       },
       "1991": {
         targetInflation: 4,
-        neutralPrimeRate: 6,
+        // Affordable reset borrowing remains the neutral NPC-policy anchor.
+        neutralPrimeRate: 4,
       },
     },
   },

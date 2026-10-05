@@ -103,3 +103,28 @@ describe("Layer-1 index routing for the transition countries", () => {
     expect(getCountryLayer1Model("RO", "1991")).not.toBeNull();
   });
 });
+
+describe("BG 2027 modern Layer-1 model", () => {
+  const BG_REGION_IDS = ["BG31", "BG32", "BG33", "BG34", "BG41", "BG42"];
+
+  it("uses democratic voter groups over the six NUTS II region keys", () => {
+    const model = getCountryLayer1Model("BG", "2027")!;
+    expect(model.categoryId).toBe("bg_voterGroups");
+    expect(model.groupIds).toEqual([
+      "social_conservative",
+      "urban_reformist",
+      "centre_right",
+      "turkish_minority",
+      "nationalist",
+    ]);
+    for (const blocId of EASTERN_BLOC_GROUP_IDS) expect(model.groupIds).not.toContain(blocId);
+    expect(Object.keys(model.census).sort()).toEqual(BG_REGION_IDS);
+    for (const [gid, entry] of Object.entries(model.composition))
+      for (const w of entry.weights)
+        expect(model.turnoutRates[w.dim]?.[w.key], `${gid} ${w.dim}.${w.key}`).toBeDefined();
+  });
+
+  it("preserves the Cold War archetype model", () => {
+    expect(getCountryLayer1Model("BG", "1979")!.groupIds).toEqual([...EASTERN_BLOC_GROUP_IDS]);
+  });
+});

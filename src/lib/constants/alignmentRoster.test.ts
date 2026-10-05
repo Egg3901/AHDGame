@@ -4,6 +4,8 @@ import {
   ALIGNMENT_ROSTER,
   ROSTER_BY_KEY,
   existsAt,
+  nameAt,
+  rosterNameAt,
   isLiveCountryKey,
   statusAt,
   type AlignmentCountryKey,
@@ -90,6 +92,13 @@ describe("existsAt", () => {
     expect(existsAt("DZ", 1962)).toBe(true);
   });
 
+  it("ends the colonial rows whose successors are simulated under their own ids", () => {
+    expect(existsAt("SRH", 1979)).toBe(true);
+    expect(existsAt("SRH", 1980)).toBe(false);
+    expect(existsAt("BHN", 1981)).toBe(true);
+    expect(existsAt("BHN", 1982)).toBe(false);
+  });
+
   it("keeps a never-bounded entity present in every start", () => {
     for (const y of [1953, 1979, 1991, 2019, 2023]) expect(existsAt("US", y)).toBe(true);
   });
@@ -98,9 +107,11 @@ describe("existsAt", () => {
     const count = (y: number) => ALIGNMENT_ROSTER.filter((r) => existsAt(r.key, y)).length;
     expect(count(1953)).toBe(192);
     expect(count(1979)).toBe(176);
-    expect(count(1991)).toBe(173);
-    expect(count(2019)).toBe(173);
-    expect(count(2023)).toBe(173);
+    // 173 less the two colonial rows (Southern Rhodesia, British Honduras) that
+    // end before 1991 because Zimbabwe and Belize are modelled under their own ids.
+    expect(count(1991)).toBe(171);
+    expect(count(2019)).toBe(171);
+    expect(count(2023)).toBe(171);
   });
 });
 
@@ -196,5 +207,23 @@ describe("roster provenance", () => {
       // where both speak they must say the same thing.
       expect([...mine.iso].sort(), `${entry.entityId} geometry`).toEqual([...theirs].sort());
     }
+  });
+});
+
+describe("nameAt", () => {
+  it("uses the name in force in the given year", () => {
+    expect(nameAt("UV", 1953, "Upper Volta")).toBe("Upper Volta");
+    expect(nameAt("UV", 1991, "Upper Volta")).toBe("Burkina Faso");
+    expect(nameAt("CD", 1979, "Congo")).toBe("Zaire");
+    expect(nameAt("CD", 2019, "Congo")).toBe("Democratic Republic of the Congo");
+  });
+
+  it("falls back for an entity with no rename", () => {
+    expect(nameAt("US", 1991, "United States")).toBe("United States");
+  });
+
+  it("resolves a rostered display name by year", () => {
+    expect(rosterNameAt("UV", 1991)).toBe("Burkina Faso");
+    expect(rosterNameAt("NOT_AN_ENTITY", 1991)).toBeUndefined();
   });
 });

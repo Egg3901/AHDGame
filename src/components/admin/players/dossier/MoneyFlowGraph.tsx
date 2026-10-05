@@ -27,6 +27,7 @@ import {
   type MoneyGraphNode,
   type MoneyGraphResponse,
 } from "./dossierTypes";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface MoneyFlowGraphProps {
   userId: string;
@@ -76,7 +77,7 @@ export function MoneyFlowGraph({ userId, centerIds }: MoneyFlowGraphProps) {
         const res = await fetch(`/api/admin/players/money-graph?userId=${userId}&depth=${depth}`);
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
-          throw new Error(body.error ?? `Request failed (${res.status})`);
+          throw new Error(apiErrorText(body, `Request failed (${res.status})`));
         }
         const body: MoneyGraphResponse = await res.json();
         if (!cancelled) {

@@ -49,6 +49,8 @@ export interface ClearingInput {
    * for no cap. Applied during allocation.
    */
   capUnits?: (exporter: CountryId, importer: CountryId) => number | undefined;
+  /** Optional tariff-inclusive cost multiplier; malformed or missing data is neutral. */
+  importCostMultiplier?: (exporter: CountryId, importer: CountryId) => number | undefined;
 }
 
 /** Per-country clearing outcome for one commodity, in units. */
@@ -72,6 +74,6 @@ export interface ClearingResult {
   flow: Record<string, Record<string, number>>;
   /** Per-country exports/imports/net/uncleared. */
   perCountry: Record<string, CountryClearing>;
-  /** Total units that changed hands = min(Σ surplus, Σ deficit) minus any cap loss. */
+  /** Total units that changed hands after route caps and importer cost budgets. */
   clearedVolume: number;
 }

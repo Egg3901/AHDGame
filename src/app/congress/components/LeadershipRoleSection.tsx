@@ -323,7 +323,7 @@ export function SenateLeadershipRoleSection({
               onClick={onStartElection}
               className="rounded-xl border border-amber-500/40 bg-amber-500/10 py-2 px-4 text-sm font-medium text-amber-400 hover:bg-amber-500/20"
             >
-              Start 24h {title === "President Pro Tempore" ? "Pro Tempore" : title} election
+              Start 24h {title === "President Pro Tempore" ? "Pro tempore" : title} election
             </button>
           )}
           {isVoting && (
@@ -331,14 +331,14 @@ export function SenateLeadershipRoleSection({
               onClick={onForceEnd}
               className="rounded-xl border border-green-500/40 bg-green-500/10 py-2 px-4 text-sm font-medium text-green-400 hover:bg-green-500/20"
             >
-              Force end {title === "President Pro Tempore" ? "Pro Tempore" : title} election
+              Force end {title === "President Pro Tempore" ? "Pro tempore" : title} election
             </button>
           )}
           <button
             onClick={onReset}
             className="rounded-xl border border-red-500/30 bg-red-500/10 py-2 px-4 text-sm font-medium text-red-400 hover:bg-red-500/20"
           >
-            Reset {title === "President Pro Tempore" ? "Pro Tempore" : title} election
+            Reset {title === "President Pro Tempore" ? "Pro tempore" : title} election
           </button>
         </div>
       )}

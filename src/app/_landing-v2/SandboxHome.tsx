@@ -526,9 +526,7 @@ export function SandboxHome({
             showcaseActive ? "opacity-0" : "opacity-100"
           }`}
         >
-          <span className="text-body-xs uppercase tracking-widest text-muted">
-            {t("landing.scrollCue")}
-          </span>
+          <span className="text-body-sm font-medium text-muted">{t("landing.scrollCue")}</span>
           <span className="block h-5 w-[1px] bg-muted/60" aria-hidden />
         </div>
 

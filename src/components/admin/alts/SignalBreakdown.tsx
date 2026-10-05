@@ -56,9 +56,7 @@ export function SignalBreakdown({ confidence, contributions, guards = [] }: Sign
     <div className="space-y-5">
       <div>
         <div className="mb-2 flex items-baseline justify-between gap-3">
-          <h4 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
-            Why this score
-          </h4>
+          <h4 className="text-body-sm font-medium text-muted">Why this score</h4>
           <span className="text-xs text-muted">
             {positive.length} signal{positive.length === 1 ? "" : "s"} · aggregated by noisy-OR
           </span>

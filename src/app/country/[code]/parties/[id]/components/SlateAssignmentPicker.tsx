@@ -6,11 +6,13 @@
  * Split out of SlateTab so the tab stays within the architecture audit's file
  * size limit; the two are otherwise unchanged.
  */
+import { InlineError } from "@/components/ui/InlineError";
 import { useMemo, useState } from "react";
 import { formatSlateCapNote, type SlateAssignmentUsage } from "@/lib/slateAssignmentCap";
 import { getStateMap } from "./slate/stateMapData";
 import { formatSlateLabel } from "./slateFormatting";
 import type { PartyMember as PartyRosterMember } from "./types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function AssignmentPicker({
   countryCode,
@@ -99,7 +101,7 @@ export function AssignmentPicker({
       );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `Assignment failed (${res.status})`);
+        throw new Error(apiErrorText(body, `Assignment failed (${res.status})`));
       }
       await onDone();
     } catch (err) {
@@ -111,7 +113,7 @@ export function AssignmentPicker({
 
   return (
     <div className="rounded-lg border border-card-border bg-background p-3 space-y-2">
-      {error && <p className="text-xs text-error">{error}</p>}
+      <InlineError error={error} className="text-xs text-error" />
       <textarea
         rows={2}
         placeholder="Optional note shown on the slate row"

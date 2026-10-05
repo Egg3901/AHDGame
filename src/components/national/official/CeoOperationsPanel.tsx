@@ -34,6 +34,7 @@ import {
   formatUnits,
   sectorBuildUrl,
 } from "@/components/corporation/plantsPresentation";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type Feedback = { type: "success" | "error"; message: string } | null;
 type PostFn = (url: string, body: Record<string, unknown>, ok: string) => Promise<boolean>;
@@ -80,7 +81,7 @@ export function CeoOperationsPanel({
       });
       const json = await res.json();
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Action failed." });
+        setFeedback({ type: "error", message: apiErrorText(json, "Action failed.") });
         return false;
       }
       setFeedback({ type: "success", message: ok });

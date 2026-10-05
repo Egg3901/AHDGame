@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import type { FundDetail } from "@/components/indexFunds/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -40,7 +42,7 @@ export function SponsorshipCard({
       const res = await fetch(`/api/index-funds/${fund.slug}/wind-up`, { method: "POST" });
       const body = (await res.json()) as { error?: string; message?: string };
       if (!res.ok) {
-        setError(body.error || "Wind-up failed");
+        setError(apiErrorText(body, "Wind-up failed"));
       } else {
         setMessage(body.message || "Wind-up has begun.");
         setConfirming(false);
@@ -106,7 +108,7 @@ export function SponsorshipCard({
           {message}
         </p>
       )}
-      {error && <p className="mt-3 text-[11px] text-error">{error}</p>}
+      <InlineError error={error} className="mt-3 text-[11px] text-error" />
 
       {canWindUp && !message && (
         <div className="mt-4 border-t border-card-border pt-3">

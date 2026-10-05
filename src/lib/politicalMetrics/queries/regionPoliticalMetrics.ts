@@ -40,6 +40,7 @@ import {
   loadDepartmentDeliveryMultipliersByCountry,
   loadRegionalDeliveryMultipliersByRegion,
 } from "@/lib/governmentFinance/deliveryMultipliers";
+import { loadProgramCostScale } from "@/lib/politicalLegislation/programCostScale";
 import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefaults";
 import { aggregateNationalPoliticalMetrics, categoryScore, overallScore } from "../aggregate";
 import { HISTORY_CADENCE_TURNS } from "../historyCadence";
@@ -278,7 +279,8 @@ export async function loadRegionPoliticalMetrics(
     countryId,
     effectiveLevels,
     nationalBase,
-    (law) => law.baselineLevel ?? 0
+    (law) => law.baselineLevel ?? 0,
+    await loadProgramCostScale(db, countryId)
   );
 
   const year = (gameState ? resolveGameYear(gameState) : null) ?? 1953;

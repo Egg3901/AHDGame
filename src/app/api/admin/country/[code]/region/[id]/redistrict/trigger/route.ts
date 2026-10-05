@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { getGameState } from "@/lib/gameState";
 import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
@@ -25,27 +25,24 @@ export async function POST(
     const countryId = code.toUpperCase() as CountryId;
     const stateId = id.toUpperCase();
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     if (countryId !== "US") {
-      return NextResponse.json(
-        { error: "Redistricting is only available for US states" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Redistricting is only available for US states");
     }
 
     const gs = await getGameState();
     if (!isRedistrictingEnabled(gs)) {
-      return NextResponse.json(
-        { error: "Redistricting is not enabled — turn it on in the admin dashboard first" },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Redistricting is not enabled — turn it on in the admin dashboard first"
       );
     }
 
     const db = await getDb();
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     const now = new Date();
@@ -55,10 +52,7 @@ export async function POST(
       now,
     });
     if (regenerated === 0) {
-      return NextResponse.json(
-        { error: "No districts were generated for this state" },
-        { status: 400 }
-      );
+      return errorResponse(400, "No districts were generated for this state");
     }
 
     console.log(

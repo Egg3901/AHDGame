@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { fetchJson } from "@/lib/observability/fetchJson";
@@ -233,7 +235,7 @@ export function QueueBillModal({
     if (res.ok) onSuccess();
     else {
       const data = await res.json().catch(() => ({}));
-      setError(data?.error ?? "Failed to queue.");
+      setError(apiErrorText(data, "Failed to queue."));
       setSubmitting(false);
     }
   }
@@ -324,7 +326,7 @@ export function QueueBillModal({
                   disabled={submitting}
                 >
                   <option value="subsidy">Grant Subsidy (+7.5% margin)</option>
-                  <option value="end_subsidy">End Subsidy</option>
+                  <option value="end_subsidy">End subsidy</option>
                 </select>
                 <select
                   value={sp.scopeType}
@@ -343,7 +345,7 @@ export function QueueBillModal({
                   disabled={submitting}
                 >
                   <option value="economy_wide">Economy-Wide</option>
-                  <option value="sector">Specific Sector</option>
+                  <option value="sector">Specific sector</option>
                 </select>
                 {sp.scopeType === "sector" && (
                   <SubsidySectorSelect
@@ -543,7 +545,7 @@ export function QueueBillModal({
           )}
         </div>
 
-        {error && <p className="text-sm text-error mb-3">{error}</p>}
+        <InlineError error={error} className="text-sm text-error mb-3" />
         <div className="flex justify-end gap-2">
           <button
             onClick={onClose}

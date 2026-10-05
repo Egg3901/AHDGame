@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import React, { useState, useEffect, useCallback } from "react";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { COMMODITY_LABELS } from "@/lib/constants/commodities";
@@ -436,7 +437,7 @@ export function CommoditiesAdminPanel() {
             { label: "Balanced", value: String(summary.balancedCount) },
             { label: "Surplus", value: String(summary.surplusCount) },
             {
-              label: "Worst Raw Shortage",
+              label: "Worst raw shortage",
               value: summary.worstShortage
                 ? `${commodityLabel(summary.worstShortage.commodity)} (${summary.worstShortage.dsRatio.toFixed(2)})`
                 : "None",
@@ -447,7 +448,7 @@ export function CommoditiesAdminPanel() {
               key={card.label}
               className="rounded-xl border border-card-border bg-card p-4 space-y-1"
             >
-              <p className="text-xs text-muted uppercase tracking-wider">{card.label}</p>
+              <p className="text-body-sm font-medium text-muted">{card.label}</p>
               <p
                 className={`text-lg font-semibold ${card.highlight ? "text-error" : "text-foreground"}`}
               >
@@ -464,7 +465,7 @@ export function CommoditiesAdminPanel() {
         </p>
       )}
 
-      {error && <p className="text-sm text-error bg-error/10 rounded-lg px-4 py-3">{error}</p>}
+      <InlineError error={error} className="text-sm text-error bg-error/10 rounded-lg px-4 py-3" />
       {actionError && (
         <p className="text-sm text-error bg-error/10 rounded-lg px-4 py-3">{actionError}</p>
       )}
@@ -477,7 +478,7 @@ export function CommoditiesAdminPanel() {
               onClick={() => setSortAlpha((v) => !v)}
               className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-background/60 transition-colors"
             >
-              {sortAlpha ? "Sort: Alphabetical" : "Sort: Worst Shortage First"}
+              {sortAlpha ? "Sort: Alphabetical" : "Sort: Worst shortage first"}
             </button>
           </div>
 
@@ -502,7 +503,7 @@ export function CommoditiesAdminPanel() {
                       ].map((h) => (
                         <th
                           key={h}
-                          className="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider"
+                          className="px-4 py-3 text-left text-body-sm font-medium text-muted"
                         >
                           {h}
                         </th>
@@ -756,7 +757,7 @@ export function CommoditiesAdminPanel() {
                                         disabled={actionLoading === row.commodity}
                                         className="text-xs px-3 py-1 rounded bg-warning text-warning-foreground font-medium hover:opacity-90"
                                       >
-                                        Confirm Peg
+                                        Confirm peg
                                       </button>
                                       <button
                                         onClick={() =>
@@ -856,7 +857,7 @@ export function CommoditiesAdminPanel() {
                   onClick={() => setCountryPeg({ commodity: "", price: "", step: "input" })}
                   className="text-xs px-3 py-1.5 rounded border border-warning/40 text-warning hover:bg-warning/10 transition-colors"
                 >
-                  Peg All in {regionCountry}
+                  Peg all in {regionCountry}
                 </button>
               ) : countryPeg.step === "input" ? (
                 <div className="flex items-center gap-3 flex-wrap rounded-lg bg-warning/5 border border-warning/20 px-4 py-3">
@@ -954,7 +955,7 @@ export function CommoditiesAdminPanel() {
                       ].map((h) => (
                         <th
                           key={h}
-                          className="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider"
+                          className="px-4 py-3 text-left text-body-sm font-medium text-muted"
                         >
                           {h}
                         </th>
@@ -1075,7 +1076,7 @@ function RegionalCommodityRow({
             )}
             {!isPegged && hasGlobalPeg && (
               <span className="text-[10px] font-semibold uppercase bg-primary/20 text-primary px-1.5 py-0.5 rounded">
-                Global Peg
+                Global peg
               </span>
             )}
           </div>

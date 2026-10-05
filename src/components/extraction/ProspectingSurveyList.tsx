@@ -40,9 +40,7 @@ export function ProspectingSurveyList({
     <div className="space-y-3">
       {active.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-            Active surveys
-          </p>
+          <p className="text-body-sm font-medium text-muted">Active surveys</p>
           {active.map((s) => {
             const turnsLeft = Math.max(0, s.completesTurn - currentTurn);
             return (
@@ -66,9 +64,7 @@ export function ProspectingSurveyList({
 
       {resolved.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-            Recent outcomes
-          </p>
+          <p className="text-body-sm font-medium text-muted">Recent outcomes</p>
           {resolved.map((s) => (
             <div
               key={s._id}

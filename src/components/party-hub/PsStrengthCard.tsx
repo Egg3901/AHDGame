@@ -46,7 +46,7 @@ export function PsStrengthCard({
     <div>
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm text-muted flex items-center gap-1.5">
-          Political Strength
+          Political strength
           <PsHelpTooltip />
         </span>
         <span className="text-lg font-bold tabular-nums">

@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { clientAvatarUrl } from "@/lib/client/avatarUrl";
 import { NextResponse } from "next/server";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
@@ -37,7 +38,7 @@ export async function GET() {
       },
     }
   );
-  if (!user) return NextResponse.json({ error: "User not found" }, { status: 401 });
+  if (!user) return errorResponse(401, "User not found");
   const character = user.activeCharacterId
     ? await db.collection("characters").findOne(
         {

@@ -51,6 +51,7 @@ import { StatePartyHubBody } from "../../region/[id]/party/[partyId]/components/
 import { getOrgLabel, fmt as stateFmt } from "../../region/[id]/party/[partyId]/components/helpers";
 import type { MainTab as StateMainTab } from "../../region/[id]/party/[partyId]/components/types";
 import type { StatePartyAnalyticsPayload } from "@/lib/partyAnalytics";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export type PartyHubScope =
   | { kind: "national"; countryCode: string; partyId: string }
@@ -667,7 +668,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        setMsg(`✗ ${payload?.error ?? "Failed to enable Mod View"}`);
+        setMsg(`✗ ${apiErrorText(payload, "Failed to enable Mod View")}`);
         return;
       }
       setModViewEnabled(true);
@@ -692,7 +693,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
         body: JSON.stringify(body),
       });
       const d = await r.json();
-      setMsg(r.ok ? `✓ ${d.message}` : `✗ ${d.error}`);
+      setMsg(r.ok ? `✓ ${d.message}` : `✗ ${apiErrorText(d, "Request failed")}`);
       if (r.ok) {
         fetchParty();
         onOk?.(d);
@@ -929,7 +930,10 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       }
       statsStrip={
         <PartyStatsRow>
-          <PartyStat label="Political strength">
+          <PartyStat
+            label="Political strength"
+            detail="Spent on party actions such as building organization; capped"
+          >
             <span className={PARTY_VALUE_CLASS}>{(party.politicalStrength ?? 0).toFixed(1)}</span>
             <span className="ml-1 text-body-sm text-muted">of {party.effectivePsCap}</span>
           </PartyStat>
@@ -955,7 +959,10 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
               className="text-body-lg font-semibold text-foreground"
             />
           </PartyStat>
-          <PartyStat label="Bonus actions">
+          <PartyStat
+            label="Bonus actions"
+            detail="Extra actions for members, from their influence and how close they are to the party"
+          >
             <span className={PARTY_VALUE_CLASS}>+{party.totalBonusActions}</span>
             <span className="ml-1 text-body-sm text-muted">per turn</span>
           </PartyStat>

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { normalizeMarketFormationSnapshot } from "@/lib/economy/marketFormationSnapshot";
 import { computeMarketAccessVisibility } from "@/lib/economy/marketAccessVisibility";
 import type { EconomicVitalSigns } from "@/lib/db/types";
@@ -53,16 +53,13 @@ export async function GET(request: Request) {
       Object.fromEntries(new URL(request.url).searchParams.entries())
     );
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Invalid query", details: parsed.error.flatten() },
-        { status: 400 }
-      );
+      return errorResponse(400, "Invalid query", { extra: { details: parsed.error.flatten() } });
     }
 
     const db = await getDb();
     const turn = parsed.data.turn ?? (await resolveLatestTurn(db));
     if (turn == null) {
-      return NextResponse.json({ error: "No economic snapshot available" }, { status: 404 });
+      return errorResponse(404, "No economic snapshot available");
     }
 
     const [network, commodityDocs, vitalSigns, prices] = await Promise.all([
@@ -76,10 +73,7 @@ export async function GET(request: Request) {
     ]);
 
     if (!network && !vitalSigns) {
-      return NextResponse.json(
-        { error: `Market-access inputs not found for turn ${turn}` },
-        { status: 404 }
-      );
+      return errorResponse(404, `Market-access inputs not found for turn ${turn}`);
     }
 
     const globalPrices: Partial<Record<CommodityType, number>> = {};

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -142,7 +143,7 @@ export function BankingHubClient() {
       const res = await fetch("/api/banking/hub");
       const json = (await res.json().catch(() => ({}))) as HubPayload & { error?: string };
       if (!res.ok) {
-        setError(json.error ?? "Failed to load banking hub");
+        setError(apiErrorText(json, "Failed to load banking hub"));
         setData(null);
         return;
       }
@@ -424,7 +425,7 @@ function BankingHero({
           className={`grid gap-6 ${hasCharacter ? "xl:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]" : ""}`}
         >
           <div className="max-w-2xl">
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
+            <div className="flex items-center gap-2 text-body-sm font-medium text-primary">
               <span className="h-px w-7 bg-primary/70" aria-hidden />
               World financial system
             </div>
@@ -480,9 +481,7 @@ function BankingHero({
                   />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
-                    Your primary central bank
-                  </p>
+                  <p className="text-body-sm font-medium text-primary">Your primary central bank</p>
                   <p className="mt-1 truncate text-base font-bold text-foreground sm:text-lg">
                     {primary.bankName}
                   </p>
@@ -534,7 +533,7 @@ function HeroRate({
     <div
       className={`min-w-[125px] px-4 py-4 sm:px-6 ${divided ? "border-l border-card-border" : ""}`}
     >
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">{label}</p>
+      <p className="text-body-sm font-medium text-muted">{label}</p>
       <p className="mt-1 font-mono text-xl font-bold tabular-nums text-foreground">
         {formatRatePercent(value)}
       </p>
@@ -586,7 +585,7 @@ function YourFundsPanel({
       aria-label="Your balances"
       className="self-start overflow-hidden rounded-2xl border border-primary/25 bg-background"
     >
-      <p className="border-b border-card-border px-4 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-primary">
+      <p className="border-b border-card-border px-4 py-3 text-body-sm font-medium text-primary">
         Your balances
       </p>
       <div className="grid divide-y divide-card-border sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-1 xl:divide-x-0 xl:divide-y">
@@ -627,7 +626,7 @@ function FundsStat({
 }) {
   return (
     <div className="px-4 py-4">
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+      <div className="flex items-center gap-1.5 text-body-sm font-medium text-muted">
         <Icon className="h-3.5 w-3.5" aria-hidden />
         {label}
       </div>
@@ -762,7 +761,7 @@ function CentralBanksTable({ banks }: { banks: HubCentralBank[] }) {
     <div className="overflow-x-auto rounded-2xl border border-card-border bg-card shadow-card">
       <table className="w-full min-w-[640px] text-sm">
         <thead>
-          <tr className="border-b border-card-border bg-card-elevated/45 text-[10px] uppercase tracking-widest text-muted">
+          <tr className="border-b border-card-border bg-card-elevated/45 text-sm font-semibold text-foreground">
             <SortableTh
               label="Bank"
               column="name"
@@ -904,7 +903,7 @@ function PrivateBanksTable({
     <div className="overflow-x-auto rounded-2xl border border-card-border bg-card shadow-card">
       <table className="w-full min-w-[960px] text-sm">
         <thead>
-          <tr className="border-b border-card-border bg-card-elevated/45 text-[10px] uppercase tracking-widest text-muted">
+          <tr className="border-b border-card-border bg-card-elevated/45 text-sm font-semibold text-foreground">
             <SortableTh
               label="Bank"
               column="name"
@@ -1157,7 +1156,7 @@ function YourSavingsSection({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(json.error ?? "Could not move savings", "error");
+        showToast(apiErrorText(json, "Could not move savings"), "error");
         return;
       }
       showToast("Savings holder updated", "success");
@@ -1185,7 +1184,7 @@ function YourSavingsSection({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(json.error ?? "Withdrawal failed", "error");
+        showToast(apiErrorText(json, "Withdrawal failed"), "error");
         return;
       }
       showToast(`Withdrew ${formatBankMoney(amount, currency)} from savings`, "success");
@@ -1232,16 +1231,14 @@ function YourSavingsSection({
                 {row.currency}
               </span>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
-                  Balance
-                </p>
+                <p className="text-body-sm font-medium text-muted">Balance</p>
                 <p className="mt-0.5 font-mono text-sm font-bold tabular-nums text-foreground">
                   {formatBankMoney(row.balance, row.currency)}
                 </p>
               </div>
             </div>
             <div className="min-w-0">
-              <label className="flex min-w-0 flex-col gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+              <label className="flex min-w-0 flex-col gap-1 text-body-sm font-medium text-muted">
                 Held at
                 <select
                   className="h-10 w-full rounded-lg border border-card-border bg-background px-3 text-sm font-normal normal-case tracking-normal text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60"
@@ -1396,7 +1393,7 @@ function YourLoansSection({ loans }: { loans: HubLoan[] }) {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
             <thead>
-              <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-widest text-muted">
+              <tr className="border-b border-card-border text-left text-sm font-semibold text-foreground">
                 <th className="px-5 py-3 font-semibold">Bank</th>
                 <th className="px-4 py-3 font-semibold">Borrower</th>
                 <th className="px-4 py-3 font-semibold">Credited to</th>
@@ -1522,7 +1519,7 @@ function AdminUnwindPanel({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        showToast(json.error ?? "Unwind failed", "error");
+        showToast(apiErrorText(json, "Unwind failed"), "error");
         return;
       }
       showToast("Bank unwound", "success");

@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 
@@ -14,6 +15,7 @@ import {
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
 import { useEntityName } from "./useEntityName";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -91,7 +93,7 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to nominate");
+        throw new Error(apiErrorText(body, "Failed to nominate"));
       }
       setShowForm(false);
       setPickedId(null);
@@ -115,7 +117,7 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error ?? "Vote failed");
+      throw new Error(apiErrorText(body, "Vote failed"));
     }
     onChange();
   }
@@ -143,9 +145,7 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
               {leader.holderCountryId && <CountryFlag country={leader.holderCountryId} size="lg" />}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold uppercase tracking-widest text-muted">
-                Currently held by
-              </p>
+              <p className="text-body-sm font-medium text-muted">Currently held by</p>
               <p className="text-base font-semibold text-foreground">
                 {leader.holderCharacterName}
               </p>
@@ -229,7 +229,7 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
               ))}
             </div>
           )}
-          {error && <p className="mt-2 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-2 text-xs text-error" />
           <div className="mt-3 flex gap-2">
             <Button
               variant="primary"

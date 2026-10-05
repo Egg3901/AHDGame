@@ -45,9 +45,7 @@ export default function SupplyDemandBar({
     <div className="rounded-xl border border-card-border bg-card px-5 py-4 mb-6">
       <div className="flex items-center justify-between mb-2">
         <div>
-          <span className="text-xs font-semibold text-muted uppercase tracking-wider">
-            Supply / Demand Balance
-          </span>
+          <span className="text-body-sm font-medium text-muted">Supply / Demand balance</span>
           {marketLabel && <div className="text-[10px] text-muted mt-0.5">{marketLabel}</div>}
         </div>
         <span className={`text-xs font-semibold ${balanceColor}`}>{balanceText}</span>

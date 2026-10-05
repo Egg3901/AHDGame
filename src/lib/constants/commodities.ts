@@ -1,3 +1,5 @@
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { eraForPreset } from "@/lib/seeds/presetSelector";
 /**
  * Why a sector's production (supply) or demand reads zero, and how commodity prices
  * form. Only OWNED sectors supply or demand anything: units = sector daily revenue
@@ -2136,12 +2138,15 @@ export function computeRawSupplyDemand(
    * a permanent glut of 1/(1.5 x m) no matter how short it really is, and its
    * producers can never sell out. Absent means 1 for every commodity.
    */
-  demandCalibration?: (commodity: CommodityType) => number
+  demandCalibration?: (commodity: CommodityType) => number,
+  preset?: string
 ): {
   global: Map<CommodityType, { supply: number; demand: number }>;
   byState: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
   /** Corporation id -> commodity -> realized units contributed to global supply. */
   supplyByCorporation: Map<string, Map<CommodityType, number>>;
+  /** Sector intermediate-input demand by state and commodity, before calibration. */
+  productionInputDemandByState: Map<string, Map<CommodityType, number>>;
   /**
    * commodity → demand units removed by the PLANTS_LEDGER_DEMAND_SUPPLY_CAP
    * pass this turn (#1460). Recorded, never applied. A capped commodity reports
@@ -2153,6 +2158,7 @@ export function computeRawSupplyDemand(
   const global = new Map<CommodityType, { supply: number; demand: number }>();
   const byState = new Map<string, Map<CommodityType, { supply: number; demand: number }>>();
   const supplyByCorporation = new Map<string, Map<CommodityType, number>>();
+  const productionInputDemandByState = new Map<string, Map<CommodityType, number>>();
   const demandTruncated = new Map<CommodityType, number>();
   const recordCorporationSupply = (
     corporationId: string | { toString(): string } | undefined,
@@ -2245,7 +2251,8 @@ export function computeRawSupplyDemand(
             sector.transitionStartTurn,
             currentTurn ?? 0,
             sector.industryModel,
-            sector.mediaDiscriminator
+            sector.mediaDiscriminator,
+            preset
           )
         : null;
 
@@ -2410,8 +2417,22 @@ export function computeRawSupplyDemand(
       recordOutputDemandDelta(sector, st, commodity, units);
     }
 
-    const demandEntries = strategyRates
-      ? (Object.entries(strategyRates.demand) as [CommodityType, number][])
+    const demandRates =
+      strategyRates ??
+      (eraForPreset(preset ?? DEFAULT_SEED_PRESET) === "1991"
+        ? getEffectiveStrategyRatesForOperatingModel(
+            st,
+            "standard",
+            null,
+            null,
+            currentTurn ?? 0,
+            sector.industryModel,
+            sector.mediaDiscriminator,
+            preset
+          )
+        : null);
+    const demandEntries = demandRates
+      ? (Object.entries(demandRates.demand) as [CommodityType, number][])
       : (SECTOR_DEMAND[st] ?? []).map((f) => [f.commodity, f.rate] as [CommodityType, number]);
 
     // For retail sectors, scale demand by GDP growth multiplier
@@ -2452,6 +2473,12 @@ export function computeRawSupplyDemand(
         addUnscaledDemand(commodity, units / luScale);
         const s = stateMap.get(commodity)!;
         s.demand += units;
+        let stateInput = productionInputDemandByState.get(sector.stateId);
+        if (!stateInput) {
+          stateInput = new Map();
+          productionInputDemandByState.set(sector.stateId, stateInput);
+        }
+        stateInput.set(commodity, (stateInput.get(commodity) ?? 0) + units);
       }
     }
   }
@@ -2645,5 +2672,5 @@ export function computeRawSupplyDemand(
 
   applyUnownedCommodityDrift(global, currentTurn);
 
-  return { global, byState, supplyByCorporation, demandTruncated };
+  return { global, byState, supplyByCorporation, productionInputDemandByState, demandTruncated };
 }

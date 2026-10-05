@@ -5,6 +5,7 @@ import { getMessageStyle } from "@/lib/utils/formatters";
 import { Skeleton } from "@/components/ui";
 import { US_STATES } from "@/lib/constants";
 import { useDemographicsState } from "./demographics/useDemographicsState";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Reseed targets. Countries are those with a Layer-1 model plus US; eras match
@@ -188,7 +189,10 @@ export function DemographicsManager() {
         await fetchCategories();
         if (selectedState) await fetchDemographics(selectedState);
       } else {
-        dispatch({ type: "SET_RESEED_MESSAGE", payload: `✗ ${data.error ?? "Reseed failed"}` });
+        dispatch({
+          type: "SET_RESEED_MESSAGE",
+          payload: `✗ ${apiErrorText(data, "Reseed failed")}`,
+        });
       }
     } catch {
       dispatch({ type: "SET_RESEED_MESSAGE", payload: "✗ Network error" });
@@ -218,7 +222,10 @@ export function DemographicsManager() {
         dispatch({ type: "SET_OVERWRITE_MESSAGE", payload: `✓ ${data.message}` });
         dispatch({ type: "CLOSE_OVERWRITE" });
       } else {
-        dispatch({ type: "SET_OVERWRITE_MESSAGE", payload: `✗ ${data.error}` });
+        dispatch({
+          type: "SET_OVERWRITE_MESSAGE",
+          payload: `✗ ${apiErrorText(data, "Request failed")}`,
+        });
       }
     } catch {
       dispatch({ type: "SET_OVERWRITE_MESSAGE", payload: "✗ Network error" });
@@ -233,13 +240,13 @@ export function DemographicsManager() {
         {/* Reseed + State Selector */}
         <div className="mb-6 flex flex-wrap items-end gap-4">
           <div>
-            <label className="mb-2 block text-sm font-medium">Select State</label>
+            <label className="mb-2 block text-sm font-medium">Select state</label>
             <select
               value={selectedState}
               onChange={(e) => dispatch({ type: "SET_SELECTED_STATE", payload: e.target.value })}
               className="rounded-lg border border-card-border bg-background px-3 py-2 text-sm w-48"
             >
-              <option value="">-- Select State --</option>
+              <option value="">-- Select state --</option>
               {US_STATES.map((s) => (
                 <option key={s} value={s}>
                   {s}
@@ -337,7 +344,7 @@ export function DemographicsManager() {
             {/* Category Weights */}
             <div className="mb-6 rounded-lg border border-primary/30 bg-primary/10 p-4">
               <h3 className="mb-3 font-medium flex items-center justify-between">
-                <span>Category Weights</span>
+                <span>Category weights</span>
                 <span className={weightsSum === 100 ? "text-green-400" : "text-red-400"}>
                   Sum: {weightsSum}/100
                 </span>
@@ -384,8 +391,8 @@ export function DemographicsManager() {
                             <tr className="text-left text-xs text-muted">
                               <th className="pb-2 w-1/4">Group</th>
                               <th className="pb-2 text-center w-1/4">Population %</th>
-                              <th className="pb-2 text-center w-1/4">Economic Lean</th>
-                              <th className="pb-2 text-center w-1/4">Social Lean</th>
+                              <th className="pb-2 text-center w-1/4">Economic lean</th>
+                              <th className="pb-2 text-center w-1/4">Social lean</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -415,7 +422,7 @@ export function DemographicsManager() {
             {/* Calculated Preview */}
             {previewLean && (
               <div className="mb-6 rounded-lg bg-background p-4">
-                <h3 className="mb-3 font-medium">Calculated State Lean</h3>
+                <h3 className="mb-3 font-medium">Calculated state lean</h3>
                 <div className="flex gap-8">
                   <div>
                     <span className="text-sm text-muted">Economic: </span>
@@ -452,8 +459,8 @@ export function DemographicsManager() {
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   <div>
                     <div className="mb-1 flex justify-between text-xs text-muted">
-                      <span>Economic Left</span>
-                      <span>Economic Right</span>
+                      <span>Economic left</span>
+                      <span>Economic right</span>
                     </div>
                     <div className="relative h-3 rounded-full bg-gradient-to-r from-blue-600 via-purple-500 to-red-600">
                       <div
@@ -467,8 +474,8 @@ export function DemographicsManager() {
                   </div>
                   <div>
                     <div className="mb-1 flex justify-between text-xs text-muted">
-                      <span>Social Left</span>
-                      <span>Social Right</span>
+                      <span>Social left</span>
+                      <span>Social right</span>
                     </div>
                     <div className="relative h-3 rounded-full bg-gradient-to-r from-blue-600 via-purple-500 to-red-600">
                       <div
@@ -515,11 +522,11 @@ export function DemographicsManager() {
                   d="M9 5l7 7-7 7"
                 />
               </svg>
-              Danger Zone
+              Danger zone
             </summary>
             <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/5 p-4">
               <p className="text-sm font-medium text-red-400 mb-1">
-                Overwrite Default Demographics
+                Overwrite default demographics
               </p>
               <p className="text-sm text-muted mb-4">
                 Save current demographics as the new defaults. When the game is reset, demographics
@@ -531,7 +538,7 @@ export function DemographicsManager() {
                   onClick={() => dispatch({ type: "SET_OVERWRITE_CONFIRM", payload: true })}
                   className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-700"
                 >
-                  Overwrite Default Demographics
+                  Overwrite default demographics
                 </button>
               ) : (
                 <div className="space-y-4">
@@ -562,7 +569,7 @@ export function DemographicsManager() {
                         disabled={overwriteLoading || overwriteConfirmText !== "OVERWRITE"}
                         className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-700 disabled:opacity-50"
                       >
-                        {overwriteLoading ? "Saving..." : "Confirm Overwrite"}
+                        {overwriteLoading ? "Saving..." : "Confirm overwrite"}
                       </button>
                       <button
                         onClick={() => dispatch({ type: "CLOSE_OVERWRITE" })}

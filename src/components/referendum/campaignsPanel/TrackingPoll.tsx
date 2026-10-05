@@ -21,7 +21,7 @@ export function TrackingPoll({ history }: { history: PollPoint[] }) {
   const midY = H / 2;
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-muted">
+      <div className="mb-2 flex items-center justify-between text-body-sm font-medium text-muted">
         <span>Tracking poll · Yes %</span>
         <span>0–100 scale</span>
       </div>

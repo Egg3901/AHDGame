@@ -51,6 +51,11 @@ const REGISTRY: Record<string, { count: number; expect: Expectation; why: string
     expect: "sector",
     why: "The list-price fallback for a sector's owned capacity must read the same strategy its nameplate revenue does.",
   },
+  "src/lib/corporations/investment/rules/openingBalance.ts": {
+    count: 1,
+    expect: "sector",
+    why: "The reset scenario prices the exact standard recipe used for its capacity and operating outputs.",
+  },
   "src/lib/corporations/capacityCapture.ts": {
     count: 3,
     expect: "sector",

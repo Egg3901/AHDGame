@@ -180,9 +180,10 @@ export function resetUnmappedArchetypeDrops(): void {
  * projection land on real voters. Omitting it (or passing US) uses the US table,
  * which is the historical behaviour.
  */
-export function archetypeValuesToBuckets(
+function mapArchetypeValuesToBuckets(
   valuesByArchetype: Record<string, number>,
-  countryId?: string
+  countryId?: string,
+  onUnmapped?: (archetypeId: string, value: number) => void
 ): Record<string, number> {
   const countryTable =
     countryId && countryId.toUpperCase() !== "US" ? getCountryArchetypeBuckets(countryId) : null;
@@ -203,11 +204,7 @@ export function archetypeValuesToBuckets(
     const weights =
       countryTable?.[archetypeId] ?? (countryTable ? undefined : ARCHETYPE_BUCKET_MAP[archetypeId]);
     if (!weights) {
-      const prev = unmappedArchetypeDrops.get(archetypeId) ?? { count: 0, magnitude: 0 };
-      unmappedArchetypeDrops.set(archetypeId, {
-        count: prev.count + 1,
-        magnitude: prev.magnitude + Math.abs(value),
-      });
+      onUnmapped?.(archetypeId, value);
       continue;
     }
     for (const { dim, key, w } of weights) {
@@ -216,4 +213,26 @@ export function archetypeValuesToBuckets(
     }
   }
   return bucketValues;
+}
+
+/** Pure Layer-1 projection for rules code that must not update diagnostics. */
+export function projectArchetypeValuesToBuckets(
+  valuesByArchetype: Record<string, number>,
+  countryId?: string
+): Record<string, number> {
+  return mapArchetypeValuesToBuckets(valuesByArchetype, countryId);
+}
+
+/** Instrumented Layer-1 projection used by runtime diagnostics and migrations. */
+export function archetypeValuesToBuckets(
+  valuesByArchetype: Record<string, number>,
+  countryId?: string
+): Record<string, number> {
+  return mapArchetypeValuesToBuckets(valuesByArchetype, countryId, (archetypeId, value) => {
+    const prev = unmappedArchetypeDrops.get(archetypeId) ?? { count: 0, magnitude: 0 };
+    unmappedArchetypeDrops.set(archetypeId, {
+      count: prev.count + 1,
+      magnitude: prev.magnitude + Math.abs(value),
+    });
+  });
 }

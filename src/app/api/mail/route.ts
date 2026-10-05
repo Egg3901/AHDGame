@@ -5,7 +5,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { sendPlayerMail } from "@/lib/mail/commands/playerMail";
 import { getInboxMailPage } from "@/lib/mail/queries/playerMail";
@@ -48,8 +48,7 @@ export async function POST(request: Request) {
     if (!auth.ok) return auth.response;
 
     const parsed = await parseJsonBody(request, sendMailSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const { character } = auth.user;
 

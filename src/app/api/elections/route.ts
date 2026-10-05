@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth"; // Optional auth — intentionally uses getAuthUser()
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
 import { ObjectId } from "mongodb";
@@ -33,10 +33,7 @@ async function handleGet(request: Request) {
     // Validate: at least one of id or country must be provided (unless myElection fast-path)
     const myElectionOnly = myElectionParam === "1";
     if (!idParam && !countryParam && !myElectionOnly) {
-      return NextResponse.json(
-        { error: "Either id or country query parameter is required" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Either id or country query parameter is required");
     }
 
     const db = await getDb();
@@ -87,7 +84,7 @@ async function handleGet(request: Request) {
       if (cycleParam) {
         const parsed = parseInt(cycleParam, 10);
         if (isNaN(parsed)) {
-          return NextResponse.json({ error: "Invalid cycle parameter" }, { status: 400 });
+          return errorResponse(400, "Invalid cycle parameter");
         }
         cycle = parsed;
       }
@@ -99,7 +96,7 @@ async function handleGet(request: Request) {
         cycle
       );
       if (!result) {
-        return NextResponse.json({ error: "Election not found" }, { status: 404 });
+        return errorResponse(404, "Election not found");
       }
 
       // Polled every 60s on the election detail page. Per-user (resolveElection
@@ -111,7 +108,7 @@ async function handleGet(request: Request) {
     // ── List mode (?country=X) ────────────────────────────────────────────────
     const countryId = countryParam!.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const view = (viewParam === "full" ? "full" : "summary") as "full" | "summary";

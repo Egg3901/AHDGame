@@ -10,7 +10,7 @@ import {
   hu1991FilingMessages,
 } from "@/lib/countries/hu/playerFiling1991";
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { recordAudit } from "@/lib/audit/recordAudit";
@@ -36,15 +36,28 @@ import {
   isElectionTypeEntryBlocked,
   isNationwideDirectExecutiveElection,
 } from "@/lib/elections/nationwideExecutive";
-import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
+import {
+  isActiveElectionCandidateDuplicateKey,
+  isActiveJapanShugiinNominationDuplicateKey,
+} from "@/lib/elections/duplicateKey";
 import { isHuDistrictInRegion } from "@/lib/countries/hu/rules/constituencies2014";
 import { validateRussianDumaPlayerFiling } from "@/lib/countries/ru/dumaPlayerFiling";
 import {
   validateRussianCouncilPlayerFiling,
   registerRussianCouncilPlayerCandidate,
 } from "@/lib/countries/ru/councilPlayerFiling";
+import { JP_SHUGIIN_1994_CONSTITUENCIES } from "@/lib/countries/jp/data/jpShugiinConstituencies1994";
+import {
+  ensureJapanShugiinFilingIndexes,
+  japanShugiinDistrictPartyKey,
+} from "@/lib/countries/jp/elections/shugiinFilingIndexes";
 
-const hu1991EntryBody = z.object({ constituencyId: z.string().min(1).max(80).optional() }).strict();
+const hu1991EntryBody = z
+  .object({
+    constituencyId: z.string().min(1).max(80).optional(),
+    japanShugiinListOrder: z.number().int().min(1).max(300).optional(),
+  })
+  .strict();
 const councilFilingErrors = {
   "already-filed": "You are already entered in this Council race.",
   "association-full": "Your association already has two player nominees in this subject.",
@@ -80,10 +93,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const character = user.character;
     if (character.federationPendingResidenceId !== undefined) {
       logRequest("POST", path, 403, Date.now() - start);
-      return NextResponse.json(
-        { error: "Choose a playable residence before entering an election." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Choose a playable residence before entering an election.");
     }
 
     const limit = checkRateLimit(
@@ -104,10 +114,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!resolved.ok) {
       if (resolved.reason === "invalid_id") {
         logRequest("POST", path, 400, Date.now() - start);
-        return NextResponse.json({ error: "Invalid election ID" }, { status: 400 });
+        return errorResponse(400, "Invalid election ID");
       }
       logRequest("POST", path, 404, Date.now() - start);
-      return NextResponse.json({ error: "Election not found" }, { status: 404 });
+      return errorResponse(404, "Election not found");
     }
 
     const election = resolved.election;
@@ -118,52 +128,112 @@ export async function POST(request: Request, { params }: RouteParams) {
       election.countryId === "HU" &&
       election.electionType === "nationalAssembly" &&
       election.hungarianModernAssembly?.ruleVersion === "mixed-2011-v1";
+    const japanMixed =
+      election.countryId === "JP" &&
+      (election.electionType === "shugiin" || election.electionType === "snap_shugiin") &&
+      election.japanShugiinRules?.ruleVersion === "mixed-1994-v1";
     const bgFounding = isBgFoundingCampaign(election);
     let huDistrictId: string | undefined;
-    if (hu1991 || bgFounding || hu2014) {
+    let japanDistrictId: string | undefined;
+    let japanShugiinListOrder: number | undefined;
+    if (hu1991 || bgFounding || hu2014 || japanMixed) {
       if (
         bgFounding &&
         election.bulgarianFoundingRound?.round !== 1 &&
         !election.bulgarianFoundingRound?.newNominationDistrictIds?.length
       )
-        return NextResponse.json(
-          { error: bgFoundingFilingMessages["filing-closed"] },
-          { status: 403 }
-        );
+        return errorResponse(403, bgFoundingFilingMessages["filing-closed"]);
       if (
         hu1991 &&
         !election.hungarianModernByElection &&
         election.hungarianAssemblyRound?.round !== 1
       )
-        return NextResponse.json({ error: hu1991FilingMessages["filing-closed"] }, { status: 403 });
+        return errorResponse(403, hu1991FilingMessages["filing-closed"]);
       const text = await request.text();
       let body: unknown = {};
       try {
         if (text.trim()) body = JSON.parse(text);
       } catch {
-        return NextResponse.json(
-          { error: "Invalid constituency filing request." },
-          { status: 400 }
-        );
+        return errorResponse(400, "Invalid constituency filing request.");
       }
       const parsed = hu1991EntryBody.safeParse(body);
-      if (!parsed.success)
-        return NextResponse.json(
-          { error: "Invalid constituency filing request." },
-          { status: 400 }
-        );
+      if (!parsed.success) return errorResponse(400, "Invalid constituency filing request.");
       huDistrictId = parsed.data.constituencyId;
+      if (japanMixed) {
+        japanDistrictId = parsed.data.constituencyId;
+        japanShugiinListOrder = parsed.data.japanShugiinListOrder;
+        if (
+          (!japanDistrictId && japanShugiinListOrder == null) ||
+          (japanDistrictId &&
+            !JP_SHUGIIN_1994_CONSTITUENCIES.some(
+              (district) => district.id === japanDistrictId && district.regionId === election.state
+            ))
+        ) {
+          return errorResponse(
+            400,
+            "Choose a valid 1994 Shugiin constituency or party-list nomination."
+          );
+        }
+        if (japanShugiinListOrder != null) {
+          const partySequentialId = Number.parseInt(character.party ?? "", 10);
+          const registeredParty =
+            Number.isSafeInteger(partySequentialId) && partySequentialId > 0
+              ? await db.collection<PoliticalParty>("politicalParties").findOne({
+                  countryId: "JP",
+                  sequentialId: partySequentialId,
+                })
+              : null;
+          if (!registeredParty || registeredParty.regimeStatus === "banned") {
+            return errorResponse(
+              403,
+              "Join a registered, unbanned Japanese party before filing a Shugiin list nomination."
+            );
+          }
+        }
+        try {
+          await ensureJapanShugiinFilingIndexes(db);
+        } catch {
+          logRequest("POST", path, 503, Date.now() - start);
+          return errorResponse(
+            503,
+            "Japanese Shugiin filing guards are unavailable; try again later."
+          );
+        }
+        if (japanDistrictId && character.party !== "independent") {
+          const occupied = await db.collection<ElectionCandidate>("electionCandidates").findOne({
+            electionId: electionObjectId,
+            party: character.party,
+            constituencyId: japanDistrictId,
+            status: "active",
+          });
+          if (occupied)
+            return errorResponse(
+              409,
+              "Your party already has a nominee in this Shugiin constituency."
+            );
+        }
+        if (japanShugiinListOrder != null) {
+          const occupied = await db.collection<ElectionCandidate>("electionCandidates").findOne({
+            electionId: electionObjectId,
+            party: character.party,
+            japanShugiinListOrder,
+            status: "active",
+          });
+          if (occupied)
+            return errorResponse(
+              409,
+              "Your party already has a nominee at this Shugiin list rank."
+            );
+        }
+      }
       if (hu2014 && (!huDistrictId || !isHuDistrictInRegion(huDistrictId, election.state))) {
-        return NextResponse.json(
-          { error: "Choose a valid Hungarian constituency in this region." },
-          { status: 400 }
-        );
+        return errorResponse(400, "Choose a valid Hungarian constituency in this region.");
       }
     }
     // Check if election is open for entry
     if (election.status !== "upcoming" && election.status !== "active") {
       logRequest("POST", path, 400, Date.now() - start);
-      return NextResponse.json({ error: "This election is not open for entry" }, { status: 400 });
+      return errorResponse(400, "This election is not open for entry");
     }
 
     // Hard block any future race type whose resolver is not production-ready.
@@ -171,12 +241,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // from exposing a filing path before its resolver ships.
     if (isElectionTypeEntryBlocked(election.electionType)) {
       logRequest("POST", path, 403, Date.now() - start);
-      return NextResponse.json(
-        {
-          error:
-            "Candidate filing is temporarily disabled for this race while its resolution mechanic is being implemented.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Candidate filing is temporarily disabled for this race while its resolution mechanic is being implemented."
       );
     }
 
@@ -210,21 +277,16 @@ export async function POST(request: Request, { params }: RouteParams) {
     // All candidates must declare during the primary phase
     if (election.primaryEndTime && primaryEnded) {
       logRequest("POST", path, 400, Date.now() - start);
-      return NextResponse.json(
-        { error: "The primary entry period has ended. You cannot join the race." },
-        { status: 400 }
-      );
+      return errorResponse(400, "The primary entry period has ended. You cannot join the race.");
     }
 
     // Block cross-country election entry
     const characterCountry = character.countryId ?? COUNTRY_CONFIGS.US.id;
     if (electionCountry !== characterCountry) {
       logRequest("POST", path, 403, Date.now() - start);
-      return NextResponse.json(
-        {
-          error: `This election is for ${electionCountry} characters only. Your character belongs to ${characterCountry}.`,
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        `This election is for ${electionCountry} characters only. Your character belongs to ${characterCountry}.`
       );
     }
 
@@ -248,10 +310,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       : null;
     if (councilFiling && !councilFiling.allowed) {
       logRequest("POST", path, 403, Date.now() - start);
-      return NextResponse.json(
-        { error: councilFilingErrors[councilFiling.reason] },
-        { status: 403 }
-      );
+      return errorResponse(403, councilFilingErrors[councilFiling.reason]);
     }
     const dumaFiling = election.russianDumaRound
       ? await validateRussianDumaPlayerFiling({
@@ -281,7 +340,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           "Join an existing unbanned Russian party before contesting the national list.",
       };
       logRequest("POST", path, 403, Date.now() - start);
-      return NextResponse.json({ error: errors[dumaFiling.reason] }, { status: 403 });
+      return errorResponse(403, errors[dumaFiling.reason]);
     }
     const electionRuntimeConfig = { governmentType: electionRuntime.governmentType };
     if (electionRuntime.governmentType === "onePartyState") {
@@ -299,18 +358,16 @@ export async function POST(request: Request, { params }: RouteParams) {
             ? "Banned parties may not field candidates in this country."
             : "Independents cannot run in this country — join a recognised party first.";
         logRequest("POST", path, 403, Date.now() - start);
-        return NextResponse.json({ error: message }, { status: 403 });
+        return errorResponse(403, message);
       }
 
       if (
         !canFieldExecutiveCandidate(electionRuntimeConfig, characterParty, election.electionType)
       ) {
         logRequest("POST", path, 403, Date.now() - start);
-        return NextResponse.json(
-          {
-            error: "Only the ruling party may field a candidate for this office in this country.",
-          },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "Only the ruling party may field a candidate for this office in this country."
         );
       }
     }
@@ -329,11 +386,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       const officeLabel =
         COUNTRY_CONFIGS[electionCountry]?.officeTypes.find((o) => o.key === election.electionType)
           ?.label ?? "executive";
-      return NextResponse.json(
-        {
-          error: `This character has already served the maximum number of ${officeLabel} terms.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `This character has already served the maximum number of ${officeLabel} terms.`
       );
     }
 
@@ -347,11 +402,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       character.homeState !== election.state
     ) {
       logRequest("POST", path, 403, Date.now() - start);
-      return NextResponse.json(
-        {
-          error: `You can only run for office in your home state (${character.homeState}). This election is in ${election.state}.`,
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        `You can only run for office in your home state (${character.homeState}). This election is in ${election.state}.`
       );
     }
 
@@ -370,11 +423,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       heldSenateClass !== election.senateClass
     ) {
       logRequest("POST", path, 403, Date.now() - start);
-      return NextResponse.json(
-        {
-          error: `You hold the Class ${heldSenateClass} Senate seat and may only run for re-election to that seat, not Class ${election.senateClass}.`,
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        `You hold the Class ${heldSenateClass} Senate seat and may only run for re-election to that seat, not Class ${election.senateClass}.`
       );
     }
 
@@ -389,12 +440,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       heldOffice.state === election.state
     ) {
       logRequest("POST", path, 403, Date.now() - start);
-      return NextResponse.json(
-        {
-          error:
-            "You already hold a Commons seat in this region, which is not on the ballot in a by-election. Resign your seat first to stand as a challenger.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "You already hold a Commons seat in this region, which is not on the ballot in a by-election. Resign your seat first to stand as a challenger."
       );
     }
 
@@ -410,9 +458,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       existingCandidate?.party !== undefined &&
       existingCandidate.party !== character.party
     )
-      return NextResponse.json(
-        { error: (bgFounding ? bgFoundingFilingMessages : hu1991FilingMessages)["party-changed"] },
-        { status: 403 }
+      return errorResponse(
+        403,
+        (bgFounding ? bgFoundingFilingMessages : hu1991FilingMessages)["party-changed"]
       );
     if (existingCandidate) {
       // If they have an active candidacy under a different party, withdraw it first
@@ -441,10 +489,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         );
       } else if (existingCandidate.party === character.party) {
         logRequest("POST", path, 400, Date.now() - start);
-        return NextResponse.json(
-          { error: "You are already entered in this race" },
-          { status: 400 }
-        );
+        return errorResponse(400, "You are already entered in this race");
       }
     }
 
@@ -455,11 +500,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       const { election: conflictElection } = blocking;
       const desc = `${conflictElection.electionType} race in ${conflictElection.state}`;
       logRequest("POST", path, 400, Date.now() - start);
-      return NextResponse.json(
-        {
-          error: `You are already running in the ${desc}. Withdraw first before entering a new race.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `You are already running in the ${desc}. Withdraw first before entering a new race.`
       );
     }
 
@@ -492,6 +535,16 @@ export async function POST(request: Request, { params }: RouteParams) {
       ...(dumaFiling?.allowed ? { russianDumaNomination: dumaFiling.nomination } : {}),
       ...(councilFiling?.allowed ? { russianCouncilNomination: councilFiling.nomination } : {}),
       ...(hu2014 && huDistrictId ? { constituencyId: huDistrictId } : {}),
+      ...(japanDistrictId ? { constituencyId: japanDistrictId } : {}),
+      ...(japanShugiinListOrder != null ? { japanShugiinListOrder } : {}),
+      ...(japanMixed && japanDistrictId && character.party !== "independent"
+        ? {
+            japanShugiinDistrictPartyKey: japanShugiinDistrictPartyKey(
+              character.party,
+              japanDistrictId
+            ),
+          }
+        : {}),
       ...(priorCandidacy?.lastRallyTurn !== undefined
         ? { lastRallyTurn: priorCandidacy.lastRallyTurn }
         : {}),
@@ -515,7 +568,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         });
         if (!filed.allowed) {
           logRequest("POST", path, 403, Date.now() - start);
-          return NextResponse.json({ error: councilFilingErrors[filed.reason] }, { status: 403 });
+          return errorResponse(403, councilFilingErrors[filed.reason]);
         }
         result = { insertedId: filed.insertedId };
       } else if (bgFounding) {
@@ -527,11 +580,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           turn: currentTurn,
           now,
         });
-        if (!filed.allowed)
-          return NextResponse.json(
-            { error: bgFoundingFilingMessages[filed.reason] },
-            { status: 403 }
-          );
+        if (!filed.allowed) return errorResponse(403, bgFoundingFilingMessages[filed.reason]);
         result = { insertedId: filed.insertedId };
       } else if (hu1991) {
         const filed = await registerHu1991PlayerFiling({
@@ -543,14 +592,11 @@ export async function POST(request: Request, { params }: RouteParams) {
           now,
         });
         if (!filed.allowed)
-          return NextResponse.json(
-            {
-              error:
-                election.hungarianModernByElection && filed.reason === "filing-closed"
-                  ? "Filing has closed for this constituency by-election."
-                  : hu1991FilingMessages[filed.reason],
-            },
-            { status: 403 }
+          return errorResponse(
+            403,
+            election.hungarianModernByElection && filed.reason === "filing-closed"
+              ? "Filing has closed for this constituency by-election."
+              : hu1991FilingMessages[filed.reason]
           );
         result = { insertedId: filed.insertedId };
       } else if (hu2014) {
@@ -565,16 +611,20 @@ export async function POST(request: Request, { params }: RouteParams) {
           });
         if (existingNominee) {
           logRequest("POST", path, 409, Date.now() - start);
-          return NextResponse.json(
-            { error: "Your party already has a candidate in this constituency." },
-            { status: 409 }
-          );
+          return errorResponse(409, "Your party already has a candidate in this constituency.");
         }
         result = await db.collection("electionCandidates").insertOne(candidateDoc);
       } else {
         result = await db.collection("electionCandidates").insertOne(candidateDoc);
       }
     } catch (error) {
+      if (isActiveJapanShugiinNominationDuplicateKey(error)) {
+        logRequest("POST", path, 409, Date.now() - start);
+        return errorResponse(
+          409,
+          "Your party already has a candidate in that Shugiin ballot position."
+        );
+      }
       if (isActiveElectionCandidateDuplicateKey(error)) {
         const activeCandidate = await db
           .collection<ElectionCandidate>("electionCandidates")
@@ -582,10 +632,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
         if (activeCandidate?.electionId.equals(electionObjectId)) {
           logRequest("POST", path, 400, Date.now() - start);
-          return NextResponse.json(
-            { error: "You are already entered in this race" },
-            { status: 400 }
-          );
+          return errorResponse(400, "You are already entered in this race");
         }
 
         const blockingAfterRace = await findBlockingActiveCandidacy(
@@ -597,11 +644,9 @@ export async function POST(request: Request, { params }: RouteParams) {
           const { election: conflictElection } = blockingAfterRace;
           const desc = `${conflictElection.electionType} race in ${conflictElection.state}`;
           logRequest("POST", path, 400, Date.now() - start);
-          return NextResponse.json(
-            {
-              error: `You are already running in the ${desc}. Withdraw first before entering a new race.`,
-            },
-            { status: 400 }
+          return errorResponse(
+            400,
+            `You are already running in the ${desc}. Withdraw first before entering a new race.`
           );
         }
       }

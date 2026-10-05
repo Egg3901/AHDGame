@@ -98,6 +98,9 @@ export function InfoTooltip({ trigger, children, width = 256, className }: InfoT
   let left: number | undefined;
   let arrowOnBottom = false;
   let arrowLeftPx: number | undefined;
+  // Room left in the viewport on the chosen side. Long explainers scroll inside
+  // the tooltip instead of running off-screen and reading as truncated.
+  let maxBodyHeight: number | undefined;
 
   if (anchor) {
     const spaceBelow = viewportH - anchor.bottom;
@@ -105,9 +108,11 @@ export function InfoTooltip({ trigger, children, width = 256, className }: InfoT
     if (spaceBelow >= 200 || spaceBelow >= spaceAbove) {
       top = anchor.bottom + 8;
       arrowOnBottom = false;
+      maxBodyHeight = Math.max(120, viewportH - top - 8 - 24);
     } else {
       bottom = viewportH - anchor.top + 8;
       arrowOnBottom = true;
+      maxBodyHeight = Math.max(120, anchor.top - 8 - 8 - 24);
     }
     // Center under/over trigger, clamp to viewport
     const idealLeft = anchor.left + anchor.width / 2 - width / 2;
@@ -152,7 +157,9 @@ export function InfoTooltip({ trigger, children, width = 256, className }: InfoT
           />
         </>
       )}
-      {children}
+      <div style={{ maxHeight: maxBodyHeight }} className="overflow-y-auto">
+        {children}
+      </div>
     </div>
   );
 

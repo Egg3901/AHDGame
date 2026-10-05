@@ -477,9 +477,7 @@ function TransactionTimeline({ apiBase, prefilterSubjectId, prefilterSubjectName
                           {/* Meta */}
                           {entry.meta && Object.keys(entry.meta).length > 0 && (
                             <div>
-                              <div className="mb-1 text-xs font-semibold text-muted uppercase tracking-wider">
-                                Meta
-                              </div>
+                              <div className="mb-1 text-body-sm font-medium text-muted">Meta</div>
                               <dl className="space-y-0.5">
                                 {Object.entries(entry.meta).map(([k, v]) => (
                                   <div key={k} className="flex gap-2 text-xs">
@@ -496,8 +494,8 @@ function TransactionTimeline({ apiBase, prefilterSubjectId, prefilterSubjectName
                           {/* Flags */}
                           {getSuspectFlags(entry.suspectFlags).length > 0 && (
                             <div>
-                              <div className="mb-1 text-xs font-semibold text-muted uppercase tracking-wider">
-                                Suspect Flags
+                              <div className="mb-1 text-body-sm font-medium text-muted">
+                                Suspect flags
                               </div>
                               <div className="space-y-2">
                                 {getSuspectFlags(entry.suspectFlags).map((flag, idx) => (
@@ -819,7 +817,7 @@ export function FinancialLedgerAdminPanel({
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-base font-semibold">Financial Ledger</h2>
+        <h2 className="text-base font-semibold">Financial ledger</h2>
         <p className="mt-0.5 text-xs text-muted">
           96-hour rolling audit log — all financial transactions across characters, corporations,
           parties, and government.
@@ -841,7 +839,7 @@ export function FinancialLedgerAdminPanel({
                 : "text-muted hover:text-foreground"
             }`}
           >
-            {tab === "timeline" ? "Transaction Timeline" : "Suspect Alerts"}
+            {tab === "timeline" ? "Transaction timeline" : "Suspect alerts"}
           </button>
         ))}
       </div>

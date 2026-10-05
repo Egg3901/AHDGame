@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { partyInfluenceQueueSchema, partyInfluenceSchema } from "@/lib/api/schemas/influence";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -30,7 +30,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -39,14 +39,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     if (!canUseNationalPartyInfluence(party, auth.user)) {
-      return NextResponse.json(
-        {
-          error: `Only the ${getPartyRoleLabel(countryId, "chair")}, ${getPartyRoleLabel(countryId, "viceChair")}, or a confirmed campaigner can use party influence`,
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        `Only the ${getPartyRoleLabel(countryId, "chair")}, ${getPartyRoleLabel(countryId, "viceChair")}, or a confirmed campaigner can use party influence`
       );
     }
 
@@ -64,7 +62,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -76,20 +74,18 @@ export async function POST(request: Request, { params }: RouteParams) {
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     if (!canUseNationalPartyInfluence(party, auth.user)) {
-      return NextResponse.json(
-        {
-          error: `Only the ${getPartyRoleLabel(countryId, "chair")}, ${getPartyRoleLabel(countryId, "viceChair")}, or a confirmed campaigner can use party influence`,
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        `Only the ${getPartyRoleLabel(countryId, "chair")}, ${getPartyRoleLabel(countryId, "viceChair")}, or a confirmed campaigner can use party influence`
       );
     }
 
     const parsed = await parseJsonBody(request, partyInfluenceRequestSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     let queueItems: NationalPartyInfluenceQueueItem[];
@@ -104,8 +100,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       actor: auth.user,
       queueItems,
     });
-    if ("error" in result) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+    if (result.error !== undefined) {
+      return errorResponse(result.status, result.error);
     }
 
     if (!("queue" in parsed.data)) {

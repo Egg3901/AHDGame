@@ -4,7 +4,7 @@ import { generateStockExchangeSnapshots } from "@/lib/turn/stockExchangeSnapshot
 import { applyPriceMultipliers } from "@/lib/corporations/applyPriceMultipliers";
 import { logRequest } from "@/lib/api/requestLog";
 import { requireCron } from "@/lib/api/requireCron";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getProcessingLockState } from "@/lib/turn/processingLock";
 
 // GET /api/cron/stock-exchange-refresh — Applies price multipliers then rebuilds stock exchange snapshots.
@@ -21,7 +21,7 @@ export async function GET(req: Request) {
     if (!requireCron(req)) {
       logRequest("GET", "/api/cron/stock-exchange-refresh", 401, Date.now() - start);
       console.warn("[cron/stock-exchange-refresh] Unauthorized cron attempt");
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const gameState = await getGameState();

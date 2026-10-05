@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, forbidden, notFound } from "@/lib/api/errors";
+import { handleRouteError, forbidden, notFound, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { CentralBank } from "@/lib/db/types";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -34,7 +34,7 @@ export async function POST(request: Request, context: RouteContext) {
     const db = await getDb();
 
     const myChar = auth.user.character;
-    if (!myChar) return NextResponse.json({ error: "No character found" }, { status: 400 });
+    if (!myChar) return errorResponse(400, "No character found");
 
     const bank = await db
       .collection<CentralBank>("centralBanks")

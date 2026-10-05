@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useRef, useState } from "react";
 
 interface CostInfo {
@@ -43,7 +45,7 @@ export function BannerAdComposer({ onClose }: BannerAdComposerProps) {
     fetch("/api/player-ads")
       .then((r) => r.json())
       .then((data) => {
-        if (data.error) setInfoError(data.error);
+        if (data.error) setInfoError(apiErrorText(data, "Request failed. Try again."));
         else setInfo(data as CostInfo);
       })
       .catch(() => setInfoError("Failed to load pricing info."));
@@ -72,7 +74,7 @@ export function BannerAdComposer({ onClose }: BannerAdComposerProps) {
       const res = await fetch("/api/player-ads", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) {
-        setSubmitError(data.error ?? "Submission failed.");
+        setSubmitError(apiErrorText(data, "Submission failed."));
       } else {
         setSubmitted(true);
       }
@@ -232,7 +234,7 @@ export function BannerAdComposer({ onClose }: BannerAdComposerProps) {
         </span>
       </label>
 
-      {submitError && <p className="text-xs text-error">{submitError}</p>}
+      <InlineError error={submitError} className="text-xs text-error" />
 
       {info && !info.affordable && (
         <p className="text-xs text-error">

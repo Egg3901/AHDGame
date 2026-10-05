@@ -1,3 +1,4 @@
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 import { requireSingleplayer } from "@/lib/api/requireSingleplayer";
 import { getDb } from "@/lib/mongodb";
@@ -11,6 +12,6 @@ export async function GET(request: Request) {
   if (denied) return denied;
   const db = await getDb();
   const payload = await collectLocalStatistics(db);
-  if (!payload) return NextResponse.json({ error: "No local world" }, { status: 409 });
+  if (!payload) return errorResponse(409, "No local world");
   return NextResponse.json(payload, { headers: { "Cache-Control": "no-store" } });
 }

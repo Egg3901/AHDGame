@@ -65,6 +65,111 @@ describe("freight classes", () => {
 });
 
 describe("runSourcingPass", () => {
+  it.each([
+    ["coal", 0.5],
+    ["energy", 100],
+  ] as const)(
+    "preserves %s import exposure through itemization and route loss",
+    (commodity, demand) => {
+      const r = runSourcingPass(
+        makeInputs({
+          states: [{ stateId: "A1", countryId: "US" }],
+          byState: new Map([["A1", new Map([[commodity, { supply: 0, demand }]])]]),
+          byCountry: new Map([
+            ["US", new Map([[commodity, { supply: 0, demand }]])],
+            ["UK", new Map([[commodity, { supply: 500, demand: 0 }]])],
+          ]),
+          statePricesFor: () => ({ A1: 100 }),
+          nationalPricesFor: () => ({ US: 100, UK: 100 }),
+          freightPrice: 0,
+          tariffRatePct: () => 20,
+          demandUsesByState: new Map([
+            [
+              "A1",
+              new Map([
+                [commodity, { householdFinal: demand * 0.6, productionInput: demand * 0.4 }],
+              ]),
+            ],
+          ]),
+        })
+      );
+      const exposure = r.purchaseExposureByCountry?.get("US")?.get(commodity);
+      expect(exposure).toBeDefined();
+      const uses = Object.values(exposure!);
+      const total = (field: keyof (typeof uses)[number]) =>
+        uses.reduce((sum, use) => sum + use[field], 0);
+      const factor = commodity === "energy" ? (1 - GRID_LOSS_PER_HOP) ** SEA_FREIGHT_HOP_EQUIV : 1;
+      expect(total("importUnits")).toBeCloseTo(demand);
+      expect(total("importPreDutyValue")).toBeCloseTo(demand * 100);
+      expect(total("tariffPaid")).toBeCloseTo((demand * 20) / factor);
+      expect(total("deliveredTariffPaid")).toBeCloseTo(demand * 20);
+      expect(exposure!.householdFinal.importUnits).toBeCloseTo(demand * 0.6);
+      expect(exposure!.productionInput.importUnits).toBeCloseTo(demand * 0.4);
+      if (commodity === "coal") expect(coalFlow(r)).toHaveLength(0);
+      else expect(total("tariffPaid")).toBeGreaterThan(total("deliveredTariffPaid"));
+    }
+  );
+
+  it("allocates actual mixed domestic and import purchases across demand uses without creating value", () => {
+    const r = runSourcingPass(
+      makeInputs({
+        states: [{ stateId: "A1", countryId: "US" as CountryId }],
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 20, demand: 100 }]]) as Map<CommodityType, Balance>],
+        ]),
+        byCountry: new Map([
+          ["US", new Map([["coal", { supply: 20, demand: 100 }]]) as Map<CommodityType, Balance>],
+          ["UK", new Map([["coal", { supply: 80, demand: 0 }]]) as Map<CommodityType, Balance>],
+        ]),
+        statePricesFor: () => ({ A1: 100 }),
+        nationalPricesFor: () => ({ US: 100, UK: 100 }),
+        basePriceFor: () => 100,
+        freightPrice: 0,
+        hops: () => null,
+        tariffRatePct: () => 20,
+        demandUsesByState: new Map([
+          ["A1", new Map([["coal", { householdFinal: 50, productionInput: 50 }]])],
+        ]),
+      })
+    );
+
+    const exposure = r.purchaseExposureByCountry?.get("US")?.get("coal");
+    expect(exposure?.householdFinal).toEqual({
+      domesticUnits: 10,
+      domesticPreDutyValue: 1000,
+      importUnits: 40,
+      importPreDutyValue: 4000,
+      tariffPaid: 800,
+      deliveredTariffPaid: 800,
+    });
+    expect(exposure?.productionInput).toEqual(exposure?.householdFinal);
+  });
+
+  it("reports domestic absorption but no tariff exposure when no import is delivered", () => {
+    const r = runSourcingPass(
+      makeInputs({
+        states: [{ stateId: "A1", countryId: "US" as CountryId }],
+        byState: new Map([
+          ["A1", new Map([["coal", { supply: 100, demand: 100 }]]) as Map<CommodityType, Balance>],
+        ]),
+        byCountry: new Map([
+          ["US", new Map([["coal", { supply: 100, demand: 100 }]]) as Map<CommodityType, Balance>],
+        ]),
+        statePricesFor: () => ({ A1: 100 }),
+        tariffRatePct: () => 40,
+        demandUsesByState: new Map([
+          ["A1", new Map([["coal", { householdFinal: 50, productionInput: 50 }]])],
+        ]),
+      })
+    );
+
+    const exposure = r.purchaseExposureByCountry?.get("US")?.get("coal");
+    expect(exposure?.householdFinal.importPreDutyValue).toBe(0);
+    expect(exposure?.householdFinal.tariffPaid).toBe(0);
+    expect(exposure?.householdFinal.deliveredTariffPaid).toBe(0);
+    expect(exposure?.householdFinal.domesticPreDutyValue).toBe(5000);
+  });
+
   it("widens willingness to pay only for severe local shortage", () => {
     expect(
       shortageResponsiveToleranceSlack({ localSupply: 0, localDemand: 100, enabled: false })
@@ -262,6 +367,60 @@ describe("runSourcingPass", () => {
     expect(flow.tariffPaid).toBeCloseTo(100 * 60 * 0.1);
     const coal = r.summaries.find((s) => s.commodity === "coal")!;
     expect(coal.tariffPaid).toBeCloseTo(600);
+  });
+
+  it("aggregates exact country-pair trade and destination outcomes (#2333)", () => {
+    const r = runSourcingPass(
+      makeInputs({
+        freightPrice: 100,
+        nationalPricesFor: () => ({ US: 95, UK: 60 }),
+        tariffRatePct: () => 10,
+      })
+    );
+    const flow = coalFlow(r)[0];
+    const pairs = r.pairAggregates.filter((p) => p.commodity === "coal");
+    expect(pairs).toHaveLength(1);
+    const pair = pairs[0];
+    expect(pair.exporter).toBe("UK");
+    expect(pair.importer).toBe("US");
+    expect(pair.deliveredUnits).toBeCloseTo(flow.units);
+    expect(pair.tariffPaid).toBeCloseTo(flow.tariffPaid);
+    expect(pair.tariffRateUnits / pair.deliveredUnits).toBeCloseTo(10);
+    expect(pair.landedValue / pair.deliveredUnits).toBeCloseTo(flow.landedPrice);
+    expect(pair.legs).toBe(1);
+
+    const us = r.destinationAggregates.find((d) => d.commodity === "coal" && d.country === "US")!;
+    expect(us.demandUnits).toBe(100);
+    expect(us.supplyUnits).toBe(200);
+    expect(us.importUnits).toBeCloseTo(100);
+    expect(us.interStateUnits).toBe(0);
+    expect(us.unmetUnits).toBe(0);
+    const uk = r.destinationAggregates.find((d) => d.commodity === "coal" && d.country === "UK")!;
+    expect(uk.foreignOfferUnits).toBe(500);
+
+    // Every delivered unit is attributed once: local + interstate + imports
+    // across destinations equals the commodity summary.
+    const coal = r.summaries.find((s) => s.commodity === "coal")!;
+    const dests = r.destinationAggregates.filter((d) => d.commodity === "coal");
+    const sum = (f: (d: (typeof dests)[number]) => number) => dests.reduce((t, d) => t + f(d), 0);
+    expect(sum((d) => d.localUnits)).toBeCloseTo(coal.intraStateUnits);
+    expect(sum((d) => d.interStateUnits)).toBeCloseTo(coal.interStateUnits);
+    expect(sum((d) => d.importUnits)).toBeCloseTo(coal.importUnits);
+    expect(sum((d) => d.unmetUnits)).toBeCloseTo(coal.unmetUnits);
+  });
+
+  it("splits unmet demand by reason per destination (#2333)", () => {
+    const r = runSourcingPass(
+      makeInputs({
+        statePricesFor: () => ({ A1: 100, A2: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
+        nationalPricesFor: () => ({ UK: 100 * (1 + BUYER_TOLERANCE_SLACK) + 50 }),
+      })
+    );
+    expect(r.pairAggregates.filter((p) => p.commodity === "coal")).toHaveLength(0);
+    const us = r.destinationAggregates.find((d) => d.commodity === "coal" && d.country === "US")!;
+    expect(us.unmetUnits).toBeCloseTo(100);
+    expect(us.toleranceBoundUnits).toBeCloseTo(100);
+    expect(us.capacityBoundUnits).toBe(0);
   });
 
   it("excludes embargoed exporters entirely", () => {

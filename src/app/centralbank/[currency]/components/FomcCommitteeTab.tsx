@@ -1,10 +1,12 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import type { CountryId } from "@/lib/constants/countries";
 import { PlayerSelector } from "@/components/PlayerSelector";
 import { CentralBankSection } from "./CentralBankSection";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BoardSeat {
   seatId: string;
@@ -149,7 +151,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
         });
         if (!res.ok) {
           const body = (await res.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(body?.error ?? "Vote failed");
+          throw new Error(apiErrorText(body, "Vote failed"));
         }
         await load();
       } catch (e) {
@@ -173,7 +175,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
         });
         if (!res.ok) {
           const body = (await res.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(body?.error ?? "Vote failed");
+          throw new Error(apiErrorText(body, "Vote failed"));
         }
         await load();
       } catch (e) {
@@ -204,7 +206,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
         });
         if (!res.ok) {
           const body = (await res.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(body?.error ?? "Nomination failed");
+          throw new Error(apiErrorText(body, "Nomination failed"));
         }
         setNomStatus("Nomination sent to the Senate for confirmation.");
         await load();
@@ -451,7 +453,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
         </CentralBankSection>
       )}
 
-      {error && <p className="text-body-sm text-danger">{error}</p>}
+      <InlineError error={error} className="text-body-sm text-danger" />
 
       {/* Nominate (executive only) */}
       {state.canNominate && (
@@ -516,7 +518,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
       )}
 
       {/* Board roster */}
-      <CentralBankSection title="Board of Governors">
+      <CentralBankSection title="Board of governors">
         <ul className="max-w-2xl divide-y divide-card-border/60">
           {board.map((seat) => (
             <li key={seat.seatId} className="flex items-center gap-3 py-2.5">
