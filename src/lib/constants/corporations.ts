@@ -50,6 +50,24 @@ export const CORPORATION_TYPES = [
 
 export type CorporationType = (typeof CORPORATION_TYPES)[number];
 
+/**
+ * Types folded into another sector by the 1.12 taxonomy: automobiles is the
+ * manufacturing "vehicles" model, entertainment is the media "entertainment"
+ * discriminator. They stay in CORPORATION_TYPES for legacy rows and readers
+ * but can no longer be chosen for a new corporation or a new sector.
+ */
+export const RETIRED_CORPORATION_TYPES = ["automobiles", "entertainment"] as const;
+
+export type RetiredCorporationType = (typeof RETIRED_CORPORATION_TYPES)[number];
+
+export function isRetiredCorporationType(type: string): type is RetiredCorporationType {
+  return (RETIRED_CORPORATION_TYPES as readonly string[]).includes(type);
+}
+
+export const FOUNDABLE_CORPORATION_TYPES = CORPORATION_TYPES.filter(
+  (t): t is Exclude<CorporationType, RetiredCorporationType> => !isRetiredCorporationType(t)
+) as readonly Exclude<CorporationType, RetiredCorporationType>[];
+
 /** Specialized production models that belong to the manufacturing taxonomy. */
 export type ManufacturingIndustryModel = "vehicles";
 
