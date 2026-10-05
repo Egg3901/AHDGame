@@ -168,6 +168,7 @@ export function editorConfigFromCountryModel(
 ): EditorStateConfig {
   const layer1 = {} as EditorLayer1Config;
   const regionCensus = model.census[regionId] ?? {};
+  const context = model.regionalContext?.[regionId];
   for (const dim of model.dims) {
     const out: Record<
       string,
@@ -176,7 +177,12 @@ export function editorConfigFromCountryModel(
     for (const [key, share] of Object.entries(regionCensus[dim] ?? {})) {
       const turnout = model.turnoutRates[dim]?.[key] ?? 55;
       const pos = model.positions[dim]?.[key] ?? { economicLean: 0, socialLean: 0 };
-      out[key] = { share, turnout, economicLean: pos.economicLean, socialLean: pos.socialLean };
+      out[key] = {
+        share,
+        turnout,
+        economicLean: pos.economicLean + (context?.economicLean ?? 0),
+        socialLean: pos.socialLean + (context?.socialLean ?? 0),
+      };
     }
     layer1[dim] = out;
   }

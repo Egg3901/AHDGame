@@ -26,6 +26,7 @@ import { ukRegionCensusData2023 } from "@/lib/seeds/uk/ukRegionCensusData2023";
 import { ukRegionCensusData2027 } from "@/lib/seeds/uk/ukRegionCensusData2027";
 import type { UKRegionLayer1 } from "@/lib/seeds/uk/ukRegionCensusData";
 import type { EraId } from "@/lib/seeds/presetSelector";
+import { ukRegionalContext1991 } from "./rules/regionalContext1991";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -601,6 +602,7 @@ export function getUkModel(era: EraId): CountryLayer1Model {
     composition: COMPOSITION as Record<string, CountryLayer1Model["composition"][string]>,
     defaultLeans: DEFAULT_LEANS as Record<string, { economicLean: number; socialLean: number }>,
     census,
+    ...(era === "1991" ? { regionalContext: ukRegionalContext1991() } : {}),
   };
 }
 
