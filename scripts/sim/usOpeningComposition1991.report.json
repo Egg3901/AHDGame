@@ -1,0 +1,296 @@
+{
+  "issue": 3327,
+  "sourceCommit": "eb04ede3257660c27b9c0860c2df3ad1986353cd",
+  "baselineReport": {
+    "path": "scripts/sim/ukOpeningFiscal1991.report.json",
+    "sourceCommit": "ef1833a1607c6632547c3e06634d63e9fcf6eab1"
+  },
+  "preset": "1991-default",
+  "fixture": "in-memory bootstrapGameWorld, resetReference",
+  "usAuthoredProgramShare": {
+    "healthcare": 0.1814,
+    "defense": 0.2977,
+    "socialSecurity": 0.2512,
+    "education": 0.0419,
+    "infrastructure": 0.0326,
+    "other": 0.1953
+  },
+  "usProgramCostScaleBaseline": 0.6255861448207882,
+  "usProgramCostScaleByCategoryBaseline": {
+    "other": 0.9868925633098475,
+    "education": 1.393345393457478,
+    "healthcare": 4.997380682196024,
+    "socialSecurity": 4.439775593277801,
+    "infrastructure": 0.44663840735565696,
+    "defense": 0.24708412604029747
+  },
+  "usBeforeAfterRefresh": {
+    "country": "US",
+    "revenue": 946653600000,
+    "spending": 977653600000.0001,
+    "balanceGdpPercent": -0.500000000000002,
+    "spendingGdpPercent": 15.768606451612905,
+    "categoryGdpPercent": {
+      "other": 1.4,
+      "education": 0.21,
+      "healthcare": 0.26,
+      "socialSecurity": 0.4,
+      "infrastructure": 0.52,
+      "defense": 8.54,
+      "sectorSubsidies": 0
+    }
+  },
+  "seeded": [
+    {
+      "country": "JP",
+      "revenue": 123714000000000,
+      "spending": 126063999999993,
+      "balanceGdpPercent": -0.49999999999851064,
+      "categoryGdpPercent": {
+        "healthcare": 9.7,
+        "education": 2.38,
+        "defense": 1.5,
+        "economic": 2.01,
+        "infrastructure": 1.7,
+        "environment": 1.08,
+        "social": 1.33,
+        "immigration": 0.04,
+        "agriculture": 0.49,
+        "governance": 0.13,
+        "foreign_policy": 0.37,
+        "technology": 0.36,
+        "publicSafety": 0.42
+      }
+    },
+    {
+      "country": "UK",
+      "revenue": 236316050000,
+      "spending": 239316049999.99997,
+      "balanceGdpPercent": -0.4999999999999949,
+      "categoryGdpPercent": {
+        "other": 11.77,
+        "education": 3.72,
+        "health": 4.47,
+        "statePensions": 4.47,
+        "transport": 1.04,
+        "welfare": 7.45,
+        "defense": 3.57,
+        "sectorSubsidies": 0
+      }
+    },
+    {
+      "country": "US",
+      "revenue": 946653600000,
+      "spending": 977653600000,
+      "balanceGdpPercent": -0.5,
+      "categoryGdpPercent": {
+        "other": 2.21,
+        "education": 0.47,
+        "healthcare": 2.06,
+        "socialSecurity": 2.85,
+        "infrastructure": 0.37,
+        "defense": 3.37,
+        "sectorSubsidies": 0
+      },
+      "programShare": {
+        "other": 0.1953,
+        "education": 0.0419,
+        "healthcare": 0.1814,
+        "socialSecurity": 0.2512,
+        "infrastructure": 0.0326,
+        "defense": 0.2977
+      }
+    }
+  ],
+  "afterRefresh": [
+    [
+      {
+        "country": "JP",
+        "revenue": 123714000000000,
+        "spending": 126063999999993,
+        "balanceGdpPercent": -0.49999999999851064,
+        "categoryGdpPercent": {
+          "healthcare": 9.7,
+          "education": 2.38,
+          "defense": 1.5,
+          "economic": 2.01,
+          "infrastructure": 1.7,
+          "environment": 1.08,
+          "social": 1.33,
+          "immigration": 0.04,
+          "agriculture": 0.49,
+          "governance": 0.13,
+          "foreign_policy": 0.37,
+          "technology": 0.36,
+          "publicSafety": 0.42,
+          "sectorSubsidies": 0
+        }
+      },
+      {
+        "country": "UK",
+        "revenue": 236316050000,
+        "spending": 239316049999.99997,
+        "balanceGdpPercent": -0.4999999999999949,
+        "categoryGdpPercent": {
+          "other": 11.77,
+          "education": 3.72,
+          "health": 4.47,
+          "statePensions": 4.47,
+          "transport": 1.04,
+          "welfare": 7.45,
+          "defense": 3.57,
+          "sectorSubsidies": 0
+        }
+      },
+      {
+        "country": "US",
+        "revenue": 946653600000,
+        "spending": 977653600000,
+        "balanceGdpPercent": -0.5,
+        "categoryGdpPercent": {
+          "other": 2.21,
+          "education": 0.47,
+          "healthcare": 2.06,
+          "socialSecurity": 2.85,
+          "infrastructure": 0.37,
+          "defense": 3.37,
+          "sectorSubsidies": 0
+        },
+        "programShare": {
+          "other": 0.1953,
+          "education": 0.0419,
+          "healthcare": 0.1814,
+          "socialSecurity": 0.2512,
+          "infrastructure": 0.0326,
+          "defense": 0.2977
+        }
+      }
+    ],
+    [
+      {
+        "country": "JP",
+        "revenue": 123714000000000,
+        "spending": 126063999999993,
+        "balanceGdpPercent": -0.49999999999851064,
+        "categoryGdpPercent": {
+          "healthcare": 9.7,
+          "education": 2.38,
+          "defense": 1.5,
+          "economic": 2.01,
+          "infrastructure": 1.7,
+          "environment": 1.08,
+          "social": 1.33,
+          "immigration": 0.04,
+          "agriculture": 0.49,
+          "governance": 0.13,
+          "foreign_policy": 0.37,
+          "technology": 0.36,
+          "publicSafety": 0.42,
+          "sectorSubsidies": 0
+        }
+      },
+      {
+        "country": "UK",
+        "revenue": 236316050000,
+        "spending": 239316049999.99997,
+        "balanceGdpPercent": -0.4999999999999949,
+        "categoryGdpPercent": {
+          "other": 11.77,
+          "education": 3.72,
+          "health": 4.47,
+          "statePensions": 4.47,
+          "transport": 1.04,
+          "welfare": 7.45,
+          "defense": 3.57,
+          "sectorSubsidies": 0
+        }
+      },
+      {
+        "country": "US",
+        "revenue": 946653600000,
+        "spending": 977653600000,
+        "balanceGdpPercent": -0.5,
+        "categoryGdpPercent": {
+          "other": 2.21,
+          "education": 0.47,
+          "healthcare": 2.06,
+          "socialSecurity": 2.85,
+          "infrastructure": 0.37,
+          "defense": 3.37,
+          "sectorSubsidies": 0
+        },
+        "programShare": {
+          "other": 0.1953,
+          "education": 0.0419,
+          "healthcare": 0.1814,
+          "socialSecurity": 0.2512,
+          "infrastructure": 0.0326,
+          "defense": 0.2977
+        }
+      }
+    ],
+    [
+      {
+        "country": "JP",
+        "revenue": 123714000000000,
+        "spending": 126063999999993,
+        "balanceGdpPercent": -0.49999999999851064,
+        "categoryGdpPercent": {
+          "healthcare": 9.7,
+          "education": 2.38,
+          "defense": 1.5,
+          "economic": 2.01,
+          "infrastructure": 1.7,
+          "environment": 1.08,
+          "social": 1.33,
+          "immigration": 0.04,
+          "agriculture": 0.49,
+          "governance": 0.13,
+          "foreign_policy": 0.37,
+          "technology": 0.36,
+          "publicSafety": 0.42,
+          "sectorSubsidies": 0
+        }
+      },
+      {
+        "country": "UK",
+        "revenue": 236316050000,
+        "spending": 239316049999.99997,
+        "balanceGdpPercent": -0.4999999999999949,
+        "categoryGdpPercent": {
+          "other": 11.77,
+          "education": 3.72,
+          "health": 4.47,
+          "statePensions": 4.47,
+          "transport": 1.04,
+          "welfare": 7.45,
+          "defense": 3.57,
+          "sectorSubsidies": 0
+        }
+      },
+      {
+        "country": "US",
+        "revenue": 946653600000,
+        "spending": 977653600000,
+        "balanceGdpPercent": -0.5,
+        "categoryGdpPercent": {
+          "other": 2.21,
+          "education": 0.47,
+          "healthcare": 2.06,
+          "socialSecurity": 2.85,
+          "infrastructure": 0.37,
+          "defense": 3.37,
+          "sectorSubsidies": 0
+        },
+        "programShare": {
+          "other": 0.1953,
+          "education": 0.0419,
+          "healthcare": 0.1814,
+          "socialSecurity": 0.2512,
+          "infrastructure": 0.0326,
+          "defense": 0.2977
+        }
+      }
+    ]
+  ]
+}
