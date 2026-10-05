@@ -15,3 +15,4 @@ docs/design-handoffs/
 # Design-handoff prototypes (Claude Design exports) — reference-only mockups,
 # kept verbatim alongside the spec; not formatted to project style.
 docs/superpowers/specs/**/prototype/
+src/lib/turn/npp/__fixtures__/strategyCadence.golden.json

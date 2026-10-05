@@ -510,7 +510,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         countryId
       );
       if (!validated.ok) {
-        return NextResponse.json({ error: validated.error }, { status: validated.status });
+        return errorResponse(validated.status, validated.error);
       }
       if (validated.resetLawProvisions.length === 0) {
         return NextResponse.json(badRequest("No v2 law provision was selected.").toJson(), {
@@ -540,14 +540,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       const now = new Date();
       const proposalWarning = await getBillProposalAutoFailWarning(db, countryId, "cabinet", now);
       if (proposalWarning && !confirmElectionRisk) {
-        return NextResponse.json(
-          {
-            error: getBillProposalAutoFailWarningError(proposalWarning),
-            autoFailWarning: proposalWarning,
-            requiresElectionRiskConfirmation: true,
-          },
-          { status: 409 }
-        );
+        return errorResponse(409, getBillProposalAutoFailWarningError(proposalWarning), {
+          extra: { autoFailWarning: proposalWarning, requiresElectionRiskConfirmation: true },
+        });
       }
       const npiCost = getProvisionCostTotal(validated.resetLawProvisions.length);
       const actionCost = BILL_PROPOSE_ACTION_COST;
@@ -567,9 +562,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
           }
         );
         if (spendResult.modifiedCount === 0) {
-          return NextResponse.json(
-            { error: "Your actions or national influence changed. Please try again." },
-            { status: 409 }
+          return errorResponse(
+            409,
+            "Your actions or national influence changed. Please try again."
           );
         }
       }
@@ -764,11 +759,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     if (administrationEnabled) {
       const conflict = await findAdministrationConflict(db, countryId, [selectedLegislationType]);
       if (conflict) {
-        return NextResponse.json(
-          {
-            error: `This bill conflicts with active law ${conflict.existingLegislationTypeId} through ${conflict.conflictSetId}. Repeal or replace that regime first.`,
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          `This bill conflicts with active law ${conflict.existingLegislationTypeId} through ${conflict.conflictSetId}. Repeal or replace that regime first.`
         );
       }
     }
