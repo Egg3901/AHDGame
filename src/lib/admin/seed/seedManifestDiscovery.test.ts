@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { discoverCollectionCalls } from "../../../../scripts/architecture/collectionDiscovery";
 import { LEGACY_DYNAMIC_COLLECTION_SITES } from "../../../../scripts/architecture/collectionDiscoveryExceptions";
 import { getCollectionCategory, SEED_MANIFEST } from "./seedManifest";
@@ -30,6 +31,17 @@ function discoveryForwarderCallsites(
 ): void {
   discoveryForwarder(db, "fixtureForwardedLiteral");
   discoveryForwarder(db, dynamicCollectionName);
+}
+
+const discoveryArrowForwarder = (
+  db: { collection(name: string): unknown },
+  collectionName: string
+): void => {
+  db.collection(collectionName);
+};
+
+function discoveryArrowCallsite(db: { collection(name: string): unknown }): void {
+  discoveryArrowForwarder(db, "fixtureArrowLiteral");
 }
 
 describe("seed manifest source discovery", () => {
@@ -129,10 +141,21 @@ describe("seed manifest source discovery", () => {
       "fixtureUnionA",
       "fixtureUnionB",
       "fixtureForwardedLiteral",
+      "fixtureArrowLiteral",
     ]);
     expect(
       fixtureCalls.flatMap((call) => call.names).every((name) => !getCollectionCategory(name))
     ).toBe(true);
     expect(SEED_MANIFEST.some((entry) => entry.name === "fixtureLiteral")).toBe(false);
+  });
+
+  it("scans files whose only collection call has explicit type arguments", () => {
+    const fixtureRoot = join(repositoryRoot, "scripts/architecture/fixtures/genericCollectionOnly");
+    const fixtureCallsite = join(fixtureRoot, "src/callsite.ts");
+    const genericOnlyDiscovery = discoverCollectionCalls(fixtureRoot, [fixtureCallsite]);
+    expect(genericOnlyDiscovery.calls.flatMap((call) => call.names)).toContain(
+      "fixtureImportedAlias"
+    );
+    expect(genericOnlyDiscovery.unresolved).toEqual([]);
   });
 });

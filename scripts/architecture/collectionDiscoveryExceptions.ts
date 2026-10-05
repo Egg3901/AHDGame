@@ -364,15 +364,6 @@ export const LEGACY_DYNAMIC_COLLECTION_SITES: readonly LegacyDynamicCollectionSi
     reason: "The persisted transaction or recovery record carries its destination collection.",
   },
   {
-    file: "src/lib/metricHistory.ts",
-    owner: "snapshotStore",
-    argument: "historyCollection",
-    scopeHash: "46c35a54e73b8dfab4968c6fde1d36cce45fadbced66bca846584b17ea27c35d",
-    count: 2,
-    reason:
-      "The named persistence operation receives its collection from a repository-owned caller.",
-  },
-  {
     file: "src/lib/migrations/entries/2026-06-01-index-fund-foundation.ts",
     owner: "reconcileIndex",
     argument: "plan.collection",

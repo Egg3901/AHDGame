@@ -52,7 +52,7 @@ function collectSourceFiles(directory: string): string[] {
 }
 
 function hasCollectionCall(source: string): boolean {
-  return /\.collection\s*\(/.test(source);
+  return /\.collection\b/.test(source);
 }
 
 function literalStrings(type: ts.Type, checker: ts.TypeChecker): string[] | undefined {
@@ -92,6 +92,40 @@ function isCollectionCall(node: ts.Node): node is ts.CallExpression {
   );
 }
 
+function callTargetDeclarations(
+  expression: ts.LeftHandSideExpression,
+  checker: ts.TypeChecker
+): ts.SignatureDeclaration[] {
+  const lookup = ts.isPropertyAccessExpression(expression) ? expression.name : expression;
+  let symbol = checker.getSymbolAtLocation(lookup);
+  if (symbol && (symbol.flags & ts.SymbolFlags.Alias) !== 0) {
+    try {
+      symbol = checker.getAliasedSymbol(symbol);
+    } catch {
+      return [];
+    }
+  }
+  const declarations: ts.SignatureDeclaration[] = [];
+  for (const declaration of symbol?.declarations ?? []) {
+    if (
+      ts.isFunctionDeclaration(declaration) ||
+      ts.isMethodDeclaration(declaration) ||
+      ts.isFunctionExpression(declaration) ||
+      ts.isArrowFunction(declaration)
+    ) {
+      declarations.push(declaration);
+    } else if (
+      (ts.isVariableDeclaration(declaration) || ts.isPropertyDeclaration(declaration)) &&
+      declaration.initializer &&
+      (ts.isFunctionExpression(declaration.initializer) ||
+        ts.isArrowFunction(declaration.initializer))
+    ) {
+      declarations.push(declaration.initializer);
+    }
+  }
+  return declarations;
+}
+
 function enclosingOwner(node: ts.Node): string {
   for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
     if (ts.isFunctionDeclaration(current) || ts.isMethodDeclaration(current)) {
@@ -125,6 +159,7 @@ function parameterCallValues(
   parameter: ts.ParameterDeclaration,
   checker: ts.TypeChecker,
   callsByName: ReadonlyMap<string, ts.CallExpression[]>,
+  callsByDeclaration: ReadonlyMap<ts.SignatureDeclaration, ts.CallExpression[]>,
   resolvedParameters: Map<ts.ParameterDeclaration, string[] | undefined>,
   incompleteParameters: Set<ts.ParameterDeclaration>,
   seen: Set<ts.Node>
@@ -134,11 +169,19 @@ function parameterCallValues(
   if (!ts.isFunctionLike(fn) || seen.has(parameter)) return undefined;
   seen.add(parameter);
   const index = fn.parameters.indexOf(parameter);
-  const functionName = fn.name?.getText();
-  if (!functionName) return undefined;
+  const functionName =
+    fn.name?.getText() ??
+    (ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)
+      ? ts.isVariableDeclaration(fn.parent)
+        ? fn.parent.name.getText()
+        : undefined
+      : undefined);
 
   const values: string[] = [];
-  const calls = callsByName.get(functionName) ?? [];
+  const calls = [
+    ...(callsByDeclaration.get(fn) ?? []),
+    ...(functionName ? (callsByName.get(functionName) ?? []) : []),
+  ];
   let matched = false;
   for (const call of calls) {
     const signature = checker.getResolvedSignature(call);
@@ -150,6 +193,7 @@ function parameterCallValues(
       actual,
       checker,
       callsByName,
+      callsByDeclaration,
       resolvedParameters,
       incompleteParameters,
       seen
@@ -171,6 +215,7 @@ function finiteNamesAt(
   node: ts.Expression,
   checker: ts.TypeChecker,
   callsByName: ReadonlyMap<string, ts.CallExpression[]>,
+  callsByDeclaration: ReadonlyMap<ts.SignatureDeclaration, ts.CallExpression[]>,
   resolvedParameters: Map<ts.ParameterDeclaration, string[] | undefined>,
   incompleteParameters: Set<ts.ParameterDeclaration>,
   seen = new Set<ts.Node>()
@@ -186,6 +231,7 @@ function finiteNamesAt(
           declaration.initializer,
           checker,
           callsByName,
+          callsByDeclaration,
           resolvedParameters,
           incompleteParameters,
           seen
@@ -197,6 +243,7 @@ function finiteNamesAt(
           declaration,
           checker,
           callsByName,
+          callsByDeclaration,
           resolvedParameters,
           incompleteParameters,
           seen
@@ -251,8 +298,18 @@ export function discoverCollectionCalls(
   const calls: CollectionCallSite[] = [];
   const unresolved: UnresolvedCollectionCallSite[] = [];
   const callsByName = new Map<string, ts.CallExpression[]>();
+  const callsByDeclaration = new Map<ts.SignatureDeclaration, ts.CallExpression[]>();
   const resolvedParameters = new Map<ts.ParameterDeclaration, string[] | undefined>();
   const incompleteParameters = new Set<ts.ParameterDeclaration>();
+  const importedAliases = new Set<string>();
+
+  for (const sourceFile of program.getSourceFiles()) {
+    const findAliases = (node: ts.Node): void => {
+      if (ts.isImportSpecifier(node) && node.propertyName) importedAliases.add(node.name.text);
+      ts.forEachChild(node, findAliases);
+    };
+    findAliases(sourceFile);
+  }
 
   for (const sourceFile of program.getSourceFiles()) {
     const indexCalls = (node: ts.Node): void => {
@@ -267,6 +324,13 @@ export function discoverCollectionCalls(
           const entries = callsByName.get(name) ?? [];
           entries.push(node);
           callsByName.set(name, entries);
+        }
+        if (name && importedAliases.has(name)) {
+          for (const declaration of callTargetDeclarations(expression, checker)) {
+            const entries = callsByDeclaration.get(declaration) ?? [];
+            entries.push(node);
+            callsByDeclaration.set(declaration, entries);
+          }
         }
       }
       ts.forEachChild(node, indexCalls);
@@ -289,6 +353,7 @@ export function discoverCollectionCalls(
           argumentNode,
           checker,
           callsByName,
+          callsByDeclaration,
           resolvedParameters,
           incompleteParameters
         );
