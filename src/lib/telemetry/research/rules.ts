@@ -1146,8 +1146,6 @@ export const RESEARCH_TELEMETRY_RETENTION_TURNS = RESEARCH_MAX_TURN_SPAN + 24;
 export const RESEARCH_MAX_SECURITIES_PER_ROW = 20_000;
 export const RESEARCH_DEFAULT_LIMIT = 500;
 export const RESEARCH_MAX_LIMIT = 2000;
-/** Securities rows are whole-market documents, so a page holds few turns. */
-export const RESEARCH_SECURITY_MAX_TURNS_PER_PAGE = 12;
 
 export interface ResearchQuery {
   panel: ResearchPanel;
@@ -1223,6 +1221,152 @@ export function parseResearchQuery(
       after,
     },
   };
+}
+
+// ── Row-level paging, byte ceiling and retention boundary ───────────────────
+
+/** Hard ceiling on the serialized size of one export page (rows only). */
+export const RESEARCH_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+
+/** Approximate serialized size of a row; the page ceiling is enforced on this. */
+export function estimateRowBytes(row: unknown): number {
+  return JSON.stringify(row)?.length ?? 0;
+}
+
+/**
+ * Take rows in order until `limit` rows or the byte ceiling is reached. At least
+ * one row is always returned so a single oversized row cannot stall paging.
+ * `more` is true when rows remain past the page, so the caller issues a cursor.
+ */
+export function takeResearchPage<T>(
+  rows: readonly T[],
+  limit: number,
+  maxBytes: number = RESEARCH_MAX_RESPONSE_BYTES
+): { rows: T[]; more: boolean } {
+  const out: T[] = [];
+  let bytes = 0;
+  for (const row of rows) {
+    if (out.length >= limit) break;
+    const size = estimateRowBytes(row);
+    if (out.length > 0 && bytes + size > maxBytes) break;
+    out.push(row);
+    bytes += size;
+  }
+  return { rows: out, more: out.length < rows.length };
+}
+
+/** Annual rows are ordered by country then first turn; this is the cursor for one. */
+export function annualRowCursor(row: Pick<AnnualFiscalRow, "country" | "firstTurn">): string {
+  return `${row.firstTurn}:${row.country}`;
+}
+
+/** Annual rows strictly after the cursor, in the panel's (country, firstTurn) order. */
+export function annualRowsAfter(
+  rows: readonly AnnualFiscalRow[],
+  after: ResearchQuery["after"]
+): AnnualFiscalRow[] {
+  if (!after) return [...rows];
+  return rows.filter((r) => {
+    const c = r.country.localeCompare(after.key);
+    return c > 0 || (c === 0 && r.firstTurn > after.turn);
+  });
+}
+
+/** One security (or pool) observation of one turn, the securities panel's row unit. */
+export type SecurityPanelRow = (
+  ({ kind: "security" } & SecurityTurnRow) | ({ kind: "pool" } & MarketPoolRow)
+) &
+  ResearchProvenance;
+
+/** Cursor key inside a turn: securities (`0|security|<class>|<id>`) then pools (`1|pool|<pool>`). */
+export function securityPanelRowKey(row: SecurityPanelRow): string {
+  return row.kind === "security"
+    ? `0|security|${row.assetClass}|${row.securityId}`
+    : `1|pool|${row.pool}`;
+}
+
+/**
+ * Expand one whole-market turn document into per-security rows (then pools),
+ * in a total order that the cursor resumes from. Rows after `afterKey` only.
+ */
+export function flattenSecurityTurn(
+  doc: SecurityTelemetryRow,
+  afterKey: string | null
+): SecurityPanelRow[] {
+  const { securities, pools, ...base } = doc;
+  const all: SecurityPanelRow[] = [
+    ...securities.map((s) => ({ kind: "security" as const, ...base, ...s })),
+    ...pools.map((p) => ({ kind: "pool" as const, ...base, ...p })),
+  ].sort((a, b) => {
+    const ka = securityPanelRowKey(a);
+    const kb = securityPanelRowKey(b);
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
+  return afterKey === null ? all : all.filter((r) => securityPanelRowKey(r) > afterKey);
+}
+
+/** Trade rows order within a turn by commodity, then exporter, then importer. */
+export function tradePanelRowKey(row: Pick<TradePanelRow, "commodity" | "exporter" | "importer">) {
+  return `${row.commodity}|${row.exporter}|${row.importer}`;
+}
+
+/** Split a trade cursor key; a bare commodity (document-level cursor) has no pair part. */
+export function parseTradeCursorKey(key: string): { commodity: string; pairKey: string | null } {
+  const i = key.indexOf("|");
+  return i < 0 ? { commodity: key, pairKey: null } : { commodity: key.slice(0, i), pairKey: key };
+}
+
+/** True when a (turn, commodity) document position sorts strictly after the cursor document. */
+export function tradeDocAfter(
+  doc: { turn: number; commodity: string },
+  after: { turn: number; commodity: string }
+): boolean {
+  return doc.turn > after.turn || (doc.turn === after.turn && doc.commodity > after.commodity);
+}
+
+export interface ResearchRetentionBoundary {
+  /** Oldest turn still live for the panel; earlier turns are archived and deleted. */
+  availableFromTurn: number;
+  retentionTurns: number;
+}
+
+/** Turns the live export can serve for a panel, ending at the current turn. */
+export function researchRetentionTurns(panel: ResearchPanel, tradeRetentionTurns: number): number {
+  return panel === "trade" ? tradeRetentionTurns : RESEARCH_TELEMETRY_RETENTION_TURNS;
+}
+
+/**
+ * Live data older than the retention window is archived and deleted, so a window
+ * that reaches before the boundary would silently come back incomplete. Reject it
+ * and name the boundary instead.
+ */
+export function checkResearchRetention(
+  query: Pick<ResearchQuery, "panel" | "fromTurn">,
+  currentTurn: number,
+  tradeRetentionTurns: number
+): { ok: true } | ({ ok: false; error: string } & ResearchRetentionBoundary) {
+  const retentionTurns = researchRetentionTurns(query.panel, tradeRetentionTurns);
+  const availableFromTurn = Math.max(0, currentTurn - retentionTurns);
+  if (query.fromTurn >= availableFromTurn) return { ok: true };
+  return {
+    ok: false,
+    error: `fromTurn ${query.fromTurn} is before the live ${query.panel} retention boundary: turns older than ${availableFromTurn} are archived and not served by this export`,
+    availableFromTurn,
+    retentionTurns,
+  };
+}
+
+/** Real retention of each panel's live rows, for the export envelope. */
+export function researchRetentionLabel(panel: ResearchPanel, tradeRetentionTurns: number): string {
+  switch (panel) {
+    case "country-turn":
+    case "securities":
+      return `live for the most recent ${RESEARCH_TELEMETRY_RETENTION_TURNS} turns; older rows are archived and deleted`;
+    case "annual-fiscal":
+      return `derived from country-turn rows, live for the most recent ${RESEARCH_TELEMETRY_RETENTION_TURNS} turns`;
+    case "trade":
+      return `sourcing ledger window of the most recent ${tradeRetentionTurns} turns`;
+  }
 }
 
 /** Field units and conventions shipped with every export so rows are self-describing. */

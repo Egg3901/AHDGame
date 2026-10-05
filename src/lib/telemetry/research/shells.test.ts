@@ -302,7 +302,7 @@ describe("runResearchExport", () => {
       seed: "seed-9",
       codeVersion: "deadbeef",
     });
-    expect(out.retention).toContain("world-raw-full");
+    expect(out.retention).toContain("archived and deleted");
     const filter = db.collectionMocks.countryTurnTelemetry.find.mock.calls.at(-1)?.[0];
     expect(filter.worldId).toBe("1991:iteration-1");
   });

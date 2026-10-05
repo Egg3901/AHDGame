@@ -90,7 +90,7 @@ export const RETENTION_POLICIES: RetentionPolicy[] = [
     timeKey: "turn",
     windowTurns: RESEARCH_TELEMETRY_RETENTION_TURNS,
     mode: RetentionMode.ARCHIVE_DELETE,
-    note: "Research country-turn panel. Export span cap is 480 turns; nothing live reads older rows.",
+    note: "Research country-turn panel. Export span cap is 480 turns; the export rejects windows older than this live boundary.",
   },
   {
     collection: "securityTelemetry",

@@ -58,4 +58,32 @@ describe("GET /api/admin/telemetry/research", () => {
     });
     expect(body.units.missing).toBeDefined();
   });
+
+  it("rejects a window before the live retention boundary with the boundary", async () => {
+    await asAdmin();
+    db.collection("gameState").findOne.mockResolvedValue({ currentTurn: 2000 });
+    const { GET } = await import("./route");
+    const res = await GET(
+      new Request(
+        "http://x/api/admin/telemetry/research?panel=country-turn&fromTurn=1000&toTurn=1100"
+      )
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.code).toBe("RESEARCH_WINDOW_BEFORE_RETENTION");
+    expect(body.availableFromTurn).toBe(2000 - 504);
+    expect(body.retentionTurns).toBe(504);
+  });
+
+  it("serves a window inside the live retention", async () => {
+    await asAdmin();
+    db.collection("gameState").findOne.mockResolvedValue({ currentTurn: 2000 });
+    const { GET } = await import("./route");
+    const res = await GET(
+      new Request(
+        "http://x/api/admin/telemetry/research?panel=country-turn&fromTurn=1600&toTurn=1700"
+      )
+    );
+    expect(res.status).toBe(200);
+  });
 });
