@@ -105,7 +105,7 @@ export function ElectionComparisonPanel({
       {lead != null && topRival && (
         <p className="mt-4 text-body-lg font-semibold">
           <span className={lead >= 0 ? "text-success" : "text-error"}>
-            {lead >= 0 ? "Leading" : "Trailing"} {topRival.name}
+            {lead >= 0 ? "You lead" : "You trail"} {topRival.name}
           </span>
           <span className="tabular-nums text-foreground">
             {" "}

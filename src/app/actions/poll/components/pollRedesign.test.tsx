@@ -46,7 +46,7 @@ describe("ElectionComparisonPanel", () => {
         partyColors={{ "3": "#112233", "7": "#aabbcc" }}
       />
     );
-    expect(screen.getByText(/Leading Rival One/)).toBeTruthy();
+    expect(screen.getByText(/You lead Rival One/)).toBeTruthy();
     expect(screen.getByText(/by 20K votes/)).toBeTruthy();
     const pool = screen.getByRole("img", { name: /Combined pool/ });
     const widths = Array.from(pool.children).map((c) => (c as HTMLElement).style.backgroundColor);
@@ -62,7 +62,7 @@ describe("ElectionComparisonPanel", () => {
         myParty="3"
       />
     );
-    expect(screen.getByText(/Trailing Rival One/)).toBeTruthy();
+    expect(screen.getByText(/You trail Rival One/)).toBeTruthy();
   });
 });
 
