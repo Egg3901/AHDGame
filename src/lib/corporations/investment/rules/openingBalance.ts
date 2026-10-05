@@ -8,7 +8,7 @@ import {
   computeBuildCost,
   revenuePerCapacityUnitForStrategy,
 } from "@/lib/constants/capacityEconomy";
-import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
+import { getStrategy } from "@/lib/constants/sectorStrategies";
 import { COMMODITY_BASE_PRICES, COMMODITY_TYPES } from "@/lib/constants/commodities";
 import { getSectorLaborShare, computeSectorLaborCost } from "@/lib/labour/laborCost";
 import { computeInputsCost, assemblePhysicalPnl } from "@/lib/corporations/physicalPnl";
@@ -18,9 +18,7 @@ import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 
 export function openingPlantScenario(type: CorporationType, primeRate: number, stress = false) {
-  const strategy =
-    SECTOR_STRATEGIES[type].find((recipe) => recipe.id === "standard") ??
-    SECTOR_STRATEGIES[type][0]!;
+  const strategy = getStrategy(type, "standard", "1991-default");
   const units = foundingStarterUnits(type);
   const dailyRevenue = units * revenuePerCapacityUnitForStrategy(type, strategy.id, 1);
   const build = computeBuildCost({

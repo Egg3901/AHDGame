@@ -175,12 +175,14 @@ export async function seedSovereignBondInstruments(
       const maturityTurns = cohort.maturityTurns;
       const trancheAmount = cohort.amount;
       const totalUnits = Math.floor(trancheAmount / BOND_UNIT_FACE_VALUE);
-      // Reconcile instruments represent debt already outstanding, whose average
+      // In the 1991 reset, instruments represent debt already outstanding, whose average
       // coupon is authored by the fiscal seed. New issues use today's policy and
       // risk spreads; resetting the old stock to those prices invents a different
-      // opening debt-service bill. Keep the fallback for legacy incomplete rows.
+      // opening debt-service bill. Other presets and incomplete rows retain
+      // the existing policy-priced coupon and par instrument behavior.
       const historicalAverageRate = budget.debt?.interestRate;
       const couponRate =
+        budget.fiscalYear === 1991 &&
         typeof historicalAverageRate === "number" &&
         Number.isFinite(historicalAverageRate) &&
         historicalAverageRate >= 0

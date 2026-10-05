@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { SECTOR_STRATEGIES } from "./sectorStrategies";
+import { SECTOR_STRATEGIES, getStrategy } from "./sectorStrategies";
 
 const demandRate = (sector: keyof typeof SECTOR_STRATEGIES, strategy: string) =>
-  Object.values(SECTOR_STRATEGIES[sector].find((item) => item.id === strategy)!.demand).reduce(
+  Object.values(getStrategy(sector, strategy, "1991-default").demand).reduce(
     (sum, rate) => sum + (rate ?? 0),
     0
   );

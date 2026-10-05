@@ -564,7 +564,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // measured-production mix split is weight-identical on both sides.
       LEDGER_BASE_PRICES,
       // Ticket 1370: the 1.5x cap bounds CALIBRATED demand. See the parameter.
-      demandCalibration
+      demandCalibration,
+      activePreset
     );
 
   // Plants-tier produced/sold units for the inventory advance (see module).

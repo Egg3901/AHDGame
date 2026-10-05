@@ -206,6 +206,7 @@ export async function executeNppSectorAttack(
     plantsEnabled?: boolean;
     /** World year, for the plants build-price floor on the attack cost. */
     year?: number;
+    preset?: string;
     /** Attacker capital in ₳ — checked again under plants, where the price is higher. */
     capitalAnchor?: number;
   }
@@ -300,6 +301,7 @@ export async function executeNppSectorAttack(
         // them at the defender's strategy too.
         strategyId: targetSector.strategyId ?? null,
         year: resolveWorldYear(year, currentTurn),
+        preset: args.preset,
         eraUnitScale,
       })
     : calculateAttackCostAnchor(targetRevenueAnchor);
@@ -357,6 +359,7 @@ export async function executeNppSectorAttack(
         unitsTaken,
         unitsReceived: unitsReceivedAtDefenderMix,
         year: resolveWorldYear(year, currentTurn),
+        preset: args.preset,
         eraUnitScale,
       })
     : null;
@@ -680,7 +683,9 @@ export async function runNppCorporateAttacks(
   const eraUnitScale = await loadWorldEraUnitScale(db);
   const gameStateDoc = await db
     .collection("gameState")
-    .findOne({ _id: "current" } as Record<string, unknown>, { projection: { currentYear: 1 } });
+    .findOne({ _id: "current" } as Record<string, unknown>, {
+      projection: { currentYear: 1, preset: 1 },
+    });
   const worldYear = resolveWorldYear(
     (gameStateDoc as { currentYear?: number } | null)?.currentYear,
     currentTurn
@@ -856,6 +861,7 @@ export async function runNppCorporateAttacks(
       now,
       plantsEnabled,
       year: worldYear,
+      preset: typeof gameStateDoc?.preset === "string" ? gameStateDoc.preset : undefined,
       capitalAnchor,
     });
     if (result) {

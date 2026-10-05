@@ -259,6 +259,7 @@ export async function expandSector(request: Request, { params }: RouteParams) {
         // sector-type default; quote it at the same price it will be charged.
         strategyId: null,
         year: currentYear,
+        preset: worldPreset,
         eraUnitScale,
         // No local sector here yet, but an incumbent can still dominate this
         // industry nationally. Greenfield entry must not bypass that toll.

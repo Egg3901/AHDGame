@@ -8,10 +8,10 @@ import { calculateBondYieldToMaturityPercent } from "@/lib/constants/bonds";
 
 export const COLD_CAPACITY_UPKEEP_FRACTION = 0.05;
 
-/** Undiscounted construction costs one day of the capacity's nominal output. */
+/** Qualified 1991 construction costs one day of nominal output. */
 export const CAPACITY_INVESTMENT_REVENUE_DAYS = 1;
 
-/** The output basket already carries era money; do not inflate it a second time. */
+/** The 1991 output basket already carries era money. The caller gates this basis. */
 export function constructionPriceForDailyRevenue(dailyRevenue: number): number {
   return dailyRevenue * CAPACITY_INVESTMENT_REVENUE_DAYS;
 }

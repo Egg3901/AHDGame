@@ -609,7 +609,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       sector.transitionStartTurn,
       currentTurn,
       sector.industryModel,
-      sector.mediaDiscriminator
+      sector.mediaDiscriminator,
+      sectorDetailPreset
     );
 
     // Extraction-only: resource capacity and per-resource multipliers ,
@@ -902,7 +903,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         strategies: getSectorStrategies(
           sectorType,
           governorConfig?.mediaOperatingModelsEnabled === true,
-          sector.mediaDiscriminator
+          sector.mediaDiscriminator,
+          sectorDetailPreset
         ),
         isAvailable: (candidate) =>
           !getStrategyAvailability(techCorpView, candidate, techCurrentYear, techTreesEnabled)
@@ -950,6 +952,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         hostCostOfLivingIndex: metrics.costOfLiving,
         techGrowthCostMultiplier: techBuildCostMultiplier,
         eraUnitScale: sectorDetailUnitScale,
+        preset: sectorDetailPreset,
         corpCapitalAnchor: corpLiquidCapitalToAnchor(
           corporation.liquidCapital,
           corporation,
@@ -1315,6 +1318,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         viewerCorpFxRate,
       }),
       strategy: buildSectorStrategySection({
+        preset: sectorDetailPreset,
         sector,
         sectorType,
         effectiveRates,

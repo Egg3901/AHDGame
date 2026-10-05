@@ -1,4 +1,3 @@
-import { CAPACITY_INVESTMENT_REVENUE_DAYS } from "@/lib/corporations/investment/rules";
 import { describe, it, expect } from "vitest";
 import {
   CAPACITY_ANCHOR_YEAR,
@@ -10,6 +9,7 @@ import {
   revenuePerCapacityUnit,
 } from "./capacityEconomy";
 import {
+  GROWTH_COST_MULTIPLIER,
   acumenRateSensitivity,
   getDominanceGrowthCostMultiplier,
   getNationalDominanceGrowthCostMultiplier,
@@ -44,7 +44,7 @@ describe("computeBuildCost", () => {
 
   it("is units × era price × dominance × rate, hand-computed", () => {
     // At the anchor year the era index is exactly 1, so the unit price is
-    // CAPACITY_INVESTMENT_REVENUE_DAYS × RPU (identity B).
+    // GROWTH_COST_MULTIPLIER × RPU (identity B).
     const units = 1_000;
     const cost = computeBuildCost({
       eraUnitScale: 1,
@@ -60,12 +60,9 @@ describe("computeBuildCost", () => {
     expect(acumenRateSensitivity(NEUTRAL_STAT)).toBeCloseTo(1, 10);
     expect(cost.rateMultiplier).toBeCloseTo(1.5, 10);
     expect(cost.dominanceMultiplier).toBeCloseTo(1, 10);
-    expect(cost.unitPriceAnchor).toBeCloseTo(
-      CAPACITY_INVESTMENT_REVENUE_DAYS * RPU_MANUFACTURING,
-      8
-    );
+    expect(cost.unitPriceAnchor).toBeCloseTo(GROWTH_COST_MULTIPLIER * RPU_MANUFACTURING, 8);
     expect(cost.totalAnchor).toBeCloseTo(
-      units * CAPACITY_INVESTMENT_REVENUE_DAYS * RPU_MANUFACTURING * 1.5 * 0.8,
+      units * GROWTH_COST_MULTIPLIER * RPU_MANUFACTURING * 1.5 * 0.8,
       6
     );
   });
@@ -164,7 +161,7 @@ describe("computeBuildCost", () => {
     expect(zero.totalAnchor).toBe(0);
   });
 
-  it("does not apply era inflation twice to nominal capacity prices", () => {
+  it("prices later eras above the 1953 anchor", () => {
     const anchor = computeBuildCost({
       eraUnitScale: 1,
       sectorType: "manufacturing",
@@ -179,7 +176,7 @@ describe("computeBuildCost", () => {
       units: 1,
       year: 2020,
     });
-    expect(modern.totalAnchor).toBeCloseTo(anchor.totalAnchor, 6);
+    expect(modern.totalAnchor).toBeGreaterThan(anchor.totalAnchor);
   });
 });
 
@@ -239,7 +236,7 @@ describe("founding calibration gate — one facility", () => {
     }
   });
 
-  it("charges full capacity price at founding and discounts later expansion", async () => {
+  it("still needs the founding discount — standing one-facility price is dearer", async () => {
     const { plantSizeUnits } = await import("@/lib/constants/facilityQuantum");
     const units = plantSizeUnits("manufacturing");
     const standing = computeBuildCost({
@@ -257,7 +254,7 @@ describe("founding calibration gate — one facility", () => {
       year: CAPACITY_ANCHOR_YEAR,
       founding: true,
     });
-    expect(standing.totalAnchor).toBeLessThan(founding.totalAnchor);
+    expect(standing.totalAnchor).toBeGreaterThan(founding.totalAnchor);
     expect(founding.totalAnchor).toBeCloseTo(
       (standing.totalAnchor / standing.expansionMultiplier) * CAPACITY_FOUNDING_DISCOUNT,
       2

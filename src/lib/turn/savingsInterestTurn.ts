@@ -219,21 +219,21 @@ export async function processSavingsInterestTurn(
     // Always refresh every forex country (including 0) so the stock never stays stale
     // after the last account in that currency is closed.
     // Use getBankId so shared-bank countries (e.g. IE → ECB) write to the correct doc.
-    await db.collection<CentralBank>("centralBanks").bulkWrite(
-      getPresetMonetaryScope(await getGameStatePresetOrDefault(db)).centralBankCountries.map(
-        (cid) => ({
-          updateOne: {
-            filter: { _id: getBankId(cid) },
-            update: {
-              $set: {
-                nationalSavingsBalance:
-                  Math.round((nationalSavingsBalance.get(cid) ?? 0) * 100) / 100,
-              },
-            },
+    const nationalSavingsOps = getPresetMonetaryScope(
+      await getGameStatePresetOrDefault(db)
+    ).centralBankCountries.map((cid) => ({
+      updateOne: {
+        filter: { _id: getBankId(cid) },
+        update: {
+          $set: {
+            nationalSavingsBalance: Math.round((nationalSavingsBalance.get(cid) ?? 0) * 100) / 100,
           },
-        })
-      )
-    );
+        },
+      },
+    }));
+    if (nationalSavingsOps.length > 0) {
+      await db.collection<CentralBank>("centralBanks").bulkWrite(nationalSavingsOps);
+    }
 
     // Phase 2 (quarterly): flush pending → savings balance, log ledger transaction
     let totalInterest = 0;

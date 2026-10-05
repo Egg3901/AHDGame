@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import type { BondMaturityTurns } from "@/lib/db/types/bond";
 import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { getSovereignCouponRate } from "@/lib/bonds/sovereign";
 import { seedSovereignBondInstruments } from "./seedSovereignBondInstruments";
 
 function makeCursor<T>(rows: T[]) {
@@ -16,6 +18,44 @@ function makeCursor<T>(rows: T[]) {
 }
 
 describe("seedSovereignBondInstruments", () => {
+  it.each([1953, 2019])(
+    "preserves %i policy-priced coupons and par instruments",
+    async (fiscalYear) => {
+      const db = createMockDb();
+      const inserted: Array<{
+        maturityTurns: BondMaturityTurns;
+        couponRate: number;
+        marketPrice: number;
+      }> = [];
+      db.collection("federalBudget").find.mockReturnValue(
+        makeCursor([
+          {
+            _id: "UK",
+            countryId: "UK",
+            fiscalYear,
+            creditRating: "AAA",
+            debt: { principal: 20_000_000, interestRate: 0.105 },
+          },
+        ])
+      );
+      db.collection("centralBanks").find.mockReturnValue(
+        makeCursor([{ _id: getBankId("UK"), primeRate: 2.5 }])
+      );
+      db.collection("corporations").find.mockReturnValue(makeCursor([]));
+      db.collectionMocks.corporations.findOne.mockResolvedValue(null);
+      db.collection("bonds").find.mockReturnValue(makeCursor([]));
+      db.collectionMocks.bonds.insertMany.mockImplementation(async (docs: typeof inserted) => {
+        inserted.push(...docs);
+        return { insertedCount: docs.length };
+      });
+      await seedSovereignBondInstruments(db as unknown as Db, () => {});
+      expect(inserted).toHaveLength(32);
+      for (const bond of inserted) {
+        expect(bond.couponRate).toBe(getSovereignCouponRate(2.5, bond.maturityTurns, 0, 0));
+        expect(bond.marketPrice).toBe(1);
+      }
+    }
+  );
   it("instruments historic debt at its average coupon independently of the opening policy rate", async () => {
     const db = createMockDb();
     const inserted: Array<{ couponRate: number; totalIssued: number; marketPrice: number }> = [];
@@ -142,7 +182,7 @@ describe("seedSovereignBondInstruments", () => {
         reconcile: boolean;
         matured: boolean;
         holders: unknown[];
-        maturityTurns: number;
+        maturityTurns: BondMaturityTurns;
       };
       expect(b.issuerType).toBe("sovereign");
       expect(b.reconcile).toBe(true);

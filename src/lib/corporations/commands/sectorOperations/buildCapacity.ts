@@ -613,6 +613,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       // the sector-type default price, which is the 326.9x rare-earth subsidy.
       strategyId: sector.strategyId ?? null,
       year: currentYear,
+      preset: resolvePresetIdFromGameState(gameState),
       eraUnitScale,
       marketSharePercent: marketSharePct,
       nationalMarketSharePercent: nationalMarketSharePct,

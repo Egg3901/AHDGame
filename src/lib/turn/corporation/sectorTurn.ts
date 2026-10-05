@@ -266,7 +266,8 @@ export function processSector(
     sector.transitionStartTurn,
     turn ?? 0,
     sector.industryModel,
-    sector.mediaDiscriminator
+    sector.mediaDiscriminator,
+    lookups.preset
   );
   const { capacityUtil, capacityHaircutStartTurn, capacityHaircut } = resolveSectorCapacityHaircut(
     sector,
@@ -334,6 +335,7 @@ export function processSector(
     sectorCurrencyCode,
     sectorFxRate,
     eraUnitScale: lookups.eraUnitScale,
+    preset: lookups.preset,
   });
   // C4: the turn's queue write is a delta, never a whole-array $set.
   // `nextBuildQueue` is a snapshot; `$set`-ing it would erase an order a CEO

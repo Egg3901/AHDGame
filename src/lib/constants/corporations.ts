@@ -158,7 +158,7 @@ export const CORPORATION_RENAME_MS_PENALTY = 0.25;
 export const CORPORATION_RENAME_COOLDOWN_TURNS = 48;
 
 /** Cost to expand into a new state (deducted from corporation liquid capital) */
-export const SECTOR_EXPANSION_BASE_COST = 2_500;
+export const SECTOR_EXPANSION_BASE_COST = 100_000;
 
 /** Number of shares issued to CEO when founding a corporation */
 export const CEO_INITIAL_SHARES = 10_000_000;

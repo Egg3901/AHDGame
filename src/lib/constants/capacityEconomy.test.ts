@@ -1,4 +1,3 @@
-import { CAPACITY_INVESTMENT_REVENUE_DAYS } from "@/lib/corporations/investment/rules";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -14,7 +13,12 @@ import {
   laborIntensity,
   revenuePerCapacityUnit,
 } from "./capacityEconomy";
-import { CORPORATION_TYPES, calculateWorkers, type CorporationType } from "./corporations";
+import {
+  CORPORATION_TYPES,
+  GROWTH_COST_MULTIPLIER,
+  calculateWorkers,
+  type CorporationType,
+} from "./corporations";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "./commodities";
 import { impliedOutputUnits } from "@/lib/market/capital";
 import { eraLaborMultiplier } from "@/lib/labour/laborCost";
@@ -22,7 +26,7 @@ import { eraLaborMultiplier } from "@/lib/labour/laborCost";
 /**
  * Expected values are recomputed here FROM THE SAME SOURCE TABLES the live
  * economy uses (`impliedOutputUnits` over `COMMODITY_BASE_PRICES`,
- * `calculateWorkers`, `CAPACITY_INVESTMENT_REVENUE_DAYS`), so a
+ * `calculateWorkers`, `GROWTH_COST_MULTIPLIER`) — never copied literals — so a
  * drift in the base tables moves test and implementation together and only a
  * genuine break in the identity fails.
  */
@@ -127,13 +131,13 @@ describe("identity B (price): ₳ per unit/day of capacity", () => {
   });
 
   it.each(ANCHOR_SECTORS)(
-    "%s at the anchor year equals the daily output value ÷ the capacity it buys",
+    "%s at the anchor year equals the legacy growth charge ÷ the capacity it buys",
     (type) => {
       // Legacy growth path: over one game year, growing at g% costs
-      // CAPACITY_INVESTMENT_REVENUE_DAYS × the revenue it adds (post-#3934 clock fix).
+      // GROWTH_COST_MULTIPLIER × the revenue it adds (post-#3934 clock fix).
       const growthPercent = 5;
       const deltaRevenue = REF_REVENUE * (growthPercent / 100);
-      const outputValue = CAPACITY_INVESTMENT_REVENUE_DAYS * deltaRevenue;
+      const legacyCash = GROWTH_COST_MULTIPLIER * deltaRevenue;
 
       // That extra revenue implies this much extra capacity in the same map
       // capital.ts uses.
@@ -145,27 +149,27 @@ describe("identity B (price): ₳ per unit/day of capacity", () => {
       );
 
       expect(capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1, null)).toBeCloseTo(
-        outputValue / deltaUnits,
+        legacyCash / deltaUnits,
         6
       );
     }
   );
 
-  it("equals CAPACITY_INVESTMENT_REVENUE_DAYS × RPU at the anchor year for every sector", () => {
+  it("equals GROWTH_COST_MULTIPLIER × RPU at the anchor year for every sector", () => {
     for (const type of CORPORATION_TYPES) {
       expect(capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1, null)).toBeCloseTo(
-        CAPACITY_INVESTMENT_REVENUE_DAYS * revenuePerCapacityUnit(type, 1),
+        GROWTH_COST_MULTIPLIER * revenuePerCapacityUnit(type, 1),
         6
       );
     }
   });
 
-  it("A and B stay mutually consistent: price ÷ labour = CAPACITY_INVESTMENT_REVENUE_DAYS × CAPACITY_REVENUE_PER_WORKER at the anchor", () => {
+  it("A and B stay mutually consistent: price ÷ labour = GROWTH_COST_MULTIPLIER × CAPACITY_REVENUE_PER_WORKER at the anchor", () => {
     for (const type of CORPORATION_TYPES) {
       const ratio =
         capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1, null) /
         laborIntensity(type, CAPACITY_ANCHOR_YEAR, 1);
-      expect(ratio).toBeCloseTo(CAPACITY_INVESTMENT_REVENUE_DAYS * CAPACITY_REVENUE_PER_WORKER, 3);
+      expect(ratio).toBeCloseTo(GROWTH_COST_MULTIPLIER * CAPACITY_REVENUE_PER_WORKER, 3);
     }
   });
 });
@@ -248,11 +252,11 @@ describe("era lookup", () => {
     }
   });
 
-  it("prices nominal revenue once and scales labor by era", () => {
+  it("scales both anchors by their era column", () => {
     for (const type of ANCHOR_SECTORS) {
       for (const year of [1953, 1975, 1985, 1995, 2050]) {
         expect(capacityPricePerUnit(type, year, 1, null)).toBeCloseTo(
-          capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1, null),
+          capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1, null) * capacityEraPriceIndex(year),
           6
         );
         expect(laborIntensity(type, year, 1)).toBeCloseTo(

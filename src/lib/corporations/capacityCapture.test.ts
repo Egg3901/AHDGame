@@ -121,8 +121,10 @@ describe("attack price vs build price, per unit acquired", () => {
     }
   );
 
-  it("keeps legacy attack prices above the newly affordable construction benchmark", () => {
-    // The legacy charge remains expensive enough after the construction reset.
+  it("documents WHY the floor exists: the legacy price alone is far too cheap", () => {
+    // Modern era, neutral everything. Without the floor an attacker acquires
+    // capacity for a small fraction of its build price — this assertion pins
+    // the defect the floor fixes, so removing the floor fails loudly.
     const sectorType: CorporationType = "manufacturing";
     const year = 2019;
     const targetRevenueAnchor = 1_000_000;
@@ -131,7 +133,7 @@ describe("attack price vs build price, per unit acquired", () => {
 
     const legacyPerUnit = (targetRevenueAnchor * ATTACK_OWNED_COST_FRACTION) / unitsReceived;
     const buildPerUnit = capacityPricePerUnit(sectorType, year, 1, null);
-    expect(legacyPerUnit).toBeGreaterThan(buildPerUnit);
+    expect(legacyPerUnit).toBeLessThan(buildPerUnit);
   });
 
   it("never prices an attack below the legacy cost", () => {

@@ -1325,6 +1325,7 @@ export async function buildCorporationLookups(
   }
 
   return {
+    preset: marketSharePreset,
     eraYear,
     eraUnitScale,
     corporations,

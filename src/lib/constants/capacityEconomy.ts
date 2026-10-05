@@ -1,9 +1,9 @@
 /**
- * Plant investment prices capacity at one day of its nominal output, through
- * capacityPricePerUnit. computeBuildCost applies host costs, borrowing rates,
+ * In 1991 presets, plant investment prices capacity at one day of its nominal
+ * output. Other presets retain the growth multiplier and era price column.
+ * capacityPricePerUnit selects this basis. computeBuildCost applies host costs, borrowing rates,
  * CEO skill, technology and dominance; expanding existing plants gets a 20%
- * discount. The output basket already carries era money, so construction does
- * not apply another nominal price index. Idle capacity pays 30% upkeep and
+ * discount. Only the 1991 calibration omits the additional nominal price index. Idle capacity pays 30% upkeep and
  * mothballed capacity pays 5%.
  *
  * Capacity is output units per day. capacityUnitYield maps the commodity mix
@@ -11,6 +11,8 @@
  * conversions carry the same eraUnitScale. Prices follow the actual strategy,
  * preserving the value of cheap and expensive output baskets across retools.
  */
+
+import { eraForPreset } from "@/lib/seeds/presetSelector";
 
 import {
   COLD_CAPACITY_UPKEEP_FRACTION,
@@ -20,6 +22,7 @@ import {
 } from "@/lib/corporations/investment/rules";
 import {
   CORPORATION_TYPES,
+  GROWTH_COST_MULTIPLIER,
   acumenGrowthCostMultiplier,
   acumenRateSensitivity,
   dominanceDensityFactor,
@@ -425,27 +428,30 @@ export function capacityEraLaborIndex(year: number | null | undefined): number {
 // ─── Public anchors ─────────────────────────────────────────────────────────
 
 /**
- * Undiscounted construction price per unit of daily capacity. The year argument
- * remains for existing callers; the nominal output basket is the price basis.
- * Strategy pricing and era unit scaling use the same conversion as revenue.
+ * Undiscounted construction price per unit of daily capacity. The 1991 preset
+ * uses one day of nominal output; all other presets retain the legacy growth
+ * multiplier and price column. Without a preset, the year selects the basis.
+ * Passing the originating preset keeps a 1991 world's price stable as it ages.
  */
 export function capacityPricePerUnit(
   sectorType: CorporationType,
-  _year: number,
+  year: number,
   unitScale: number,
   strategyId: string | null | undefined,
   industryModel?: string | null,
-  mediaDiscriminator?: MediaDiscriminator | null
+  mediaDiscriminator?: MediaDiscriminator | null,
+  preset?: string
 ): number {
-  return constructionPriceForDailyRevenue(
-    revenuePerCapacityUnitForStrategy(
-      sectorType,
-      strategyId,
-      unitScale,
-      industryModel,
-      mediaDiscriminator
-    )
+  const dailyRevenue = revenuePerCapacityUnitForStrategy(
+    sectorType,
+    strategyId,
+    unitScale,
+    industryModel,
+    mediaDiscriminator
   );
+  return uses1991Construction(year, preset)
+    ? constructionPriceForDailyRevenue(dailyRevenue)
+    : dailyRevenue * GROWTH_COST_MULTIPLIER * capacityEraPriceIndex(year);
 }
 
 /**
@@ -562,8 +568,12 @@ export const MOTHBALL_UPKEEP_FRACTION = COLD_CAPACITY_UPKEEP_FRACTION;
  */
 export const IDLE_UPKEEP_FRACTION = 0.3;
 
-/** First plants pay the same productive-capacity basis as later construction. */
-export const CAPACITY_FOUNDING_DISCOUNT = 1;
+/** Legacy first-plant discount. The qualified 1991 preset pays the full basis. */
+export const CAPACITY_FOUNDING_DISCOUNT = 0.1;
+
+function uses1991Construction(year: number, preset?: string): boolean {
+  return preset == null ? year === 1991 : eraForPreset(preset) === "1991";
+}
 
 /**
  * Share of the capacity taken off a defender that actually arrives at the
@@ -593,7 +603,7 @@ export const ATTACK_CAPTURE_EFFICIENCY = 0.6;
  * capacity costs. Priced against the build table it is far too cheap: the
  * legacy cost per unit received works out at roughly
  * `RPU / (efficiency × captureMultipliers × msShare)` ≈ 1.7-3.3 × RPU, while
- * building one unit costs its nominal RPU plus the same construction modifiers.
+ * building one unit uses the preset's capacity-price basis and construction modifiers.
  * Any gap between the two prices can make cheap takeovers bypass construction.
  *
  * So under plants the attack price is floored at the build price of the
@@ -699,8 +709,10 @@ export interface BuildCostInputs {
    * type's default mix. See {@link capacityPricePerUnit} for why.
    */
   strategyId: string | null;
-  /** World year, retained for callers alongside the explicit nominal unit scale. */
+  /** World year for the legacy era price column. */
   year: number;
+  /** Originating reset preset, so the calibration survives clock advancement. */
+  preset?: string;
   /**
    * The world's era unit-basis scale (`getEraUnitScale(preset)`). REQUIRED so
    * the compiler enumerates every pricing site: 1 for modern worlds, ~70 for
@@ -815,8 +827,8 @@ export interface BuildCostBreakdown {
  * line is itself vestigial under plants and gating it would move the flip-turn
  * numbers for a dominant sector, which the flip identity forbids.)
  *
- * `capacityPricePerUnit` carries the nominal daily output price once. The
- * legacy growth slider retains its separate pricing outside plants mode.
+ * `capacityPricePerUnit` selects the preset-qualified basis. The legacy growth
+ * slider retains its separate pricing outside plants mode.
  */
 export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
   const {
@@ -826,6 +838,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
     units,
     strategyId,
     year,
+    preset,
     eraUnitScale,
     marketSharePercent = 0,
     nationalMarketSharePercent = 0,
@@ -843,7 +856,8 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
     eraUnitScale,
     strategyId,
     industryModel,
-    mediaDiscriminator
+    mediaDiscriminator,
+    preset
   );
   // Dominance is scaled by how contested the cell is. The factor multiplies the
   // toll's EXCESS over 1.0, so a market with no rivals still pays a monopoly
@@ -884,7 +898,11 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
       ? techGrowthCostMultiplier
       : 1;
   const hostPriceMultiplier = hostBuildPriceIndex(hostCostOfLivingIndex);
-  const foundingMultiplier = founding ? CAPACITY_FOUNDING_DISCOUNT : 1;
+  const foundingMultiplier = founding
+    ? uses1991Construction(year, preset)
+      ? 1
+      : CAPACITY_FOUNDING_DISCOUNT
+    : 1;
   const expansionMultiplier = expansionCostMultiplier(founding);
   return {
     unitPriceAnchor,

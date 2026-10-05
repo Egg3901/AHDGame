@@ -339,7 +339,7 @@ export async function getCommodityDetailData(
             .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
             .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
           db
-            .collection<{ _id: string; currentYear?: number }>("gameState")
+            .collection<{ _id: string; currentYear?: number; preset?: string }>("gameState")
             .findOne({ _id: "current" }, { projection: { currentYear: 1 } }),
           (await getStateResourceCapacityCollection(db))
             .find({}, { projection: { stateId: 1, resources: 1 } })
@@ -497,6 +497,7 @@ export async function getCommodityDetailData(
           plantsEnabled: marketAtLeast(mode, "plants"),
           eraUnitScale,
           currentYear: gameStateDoc?.currentYear ?? null,
+          preset: gameStateDoc?.preset,
           commandEconomyEnabled: gameConfigDoc?.commandEconomyEnabled === true,
           stateResourcesByState,
         },

@@ -10,7 +10,7 @@ credit providers and NPP competitors. It then checked every materialized fiscal
 country and every background-macro entity for currency-unit errors and broken
 opening documents.
 
-Confirmed defects were double inflation in construction, a large flat entry
+Confirmed 1991 defects were double inflation in construction, a large flat entry
 fee, six default recipes with little payroll or input-price headroom, inaccurate
 UK/JP debt anchors, disagreement between budget coupons and seeded bonds,
 fiscal targets overwritten by authoritative US/UK political laws, double-counted
@@ -24,7 +24,7 @@ configuration collection, preventing opt-in vehicle/media conversion.
 
 The plan was to preserve fiscal receipts and debt scopes, calibrate real expense
 models instead of adding artificial income, price construction from nominal
-output once, retain the output baskets while reducing excessive default inputs,
+output once for 1991 presets, retain the output baskets while reducing excessive default inputs,
 seed funded competitors within actual market/deposit capacity, and add reset
 acceptance checks that inspect values and accounting identities.
 
@@ -36,7 +36,7 @@ Reproduce the portable component report:
 npx tsx scripts/sim/resetEconomicBalance.ts
 ```
 
-The production rules price one first facility per standard recipe, including the
+The 1991 production rules price one first facility per standard recipe, including the
 entry fee, affordable country prime rate and neutral CEO. Operations use the
 production input, payroll, price-realization, and positive plant-overhead rules.
 No subsidy or policy credit is assumed. Full utilization and sales are assumed;
@@ -55,6 +55,28 @@ All 51 country/sector combinations have positive operating profit. The stress
 case raises input prices and wages by 10% and lowers output prices by 10%
 through the engine's actual price-realization rule. The manufacturing/vehicles
 and media/entertainment reset identities reuse the tested operating recipes.
+
+## Era scope and foreign-host regression evidence
+
+The construction basis, first-plant multiplier, smaller entry fee, six input
+baskets and inherited bond coupons are limited to the 1991 reset. Production
+pricing, recipes, previews and private-delivery ceilings carry the originating
+preset, so advancing its clock to 1992 does not discard the calibration. Tests
+pin the original 1953 and 2019 recipes, entry fees, founding discount, build and
+capture prices, and tenor-dependent coupons with par market prices. The default
+recipe tables and original NPC cadence fixture are preserved.
+
+Foreign-host tests compare the real suggestion route with the real founding
+command for a US corporation building in the UK and Japan. Different wallet and
+host FX rates, prime rates and host construction costs exercise conversion and
+host selection. These tests exposed and fix an omitted currency spread and
+premature quote rounding. The quoted total now equals the debited amount.
+
+Monetary-scope repairs deliberately also cover 2019 and 2027: PL, HU, RO and BG
+participate in forex and trade turns, and savings totals use active central-bank
+countries. A regression emulates MongoDB's rejection of an empty bulk operation
+and confirms an empty scope completes without issuing that write. Ireland's
+corrected 1991 FX anchor also changes its interpolated 1999 and 2007 openings.
 
 ## Fiscal and currency evidence
 
@@ -163,9 +185,8 @@ budget, UK forecast, operating-balance and grant regressions passed 87 tests.
 Earlier focused suites also qualified construction, founding, extraction,
 competitor spawning, law enactment, fiscal read models and monetary scope.
 The follow-up treasury/current-law/metric qualification passed 114 tests across
-29 files. The recalibrated NPC cadence replay passed all 15 tests, preserving
-strategy choices and equivalent persistence while recording the intended
-construction budget changes. Scoped strict TypeScript passed. ESLint and formatting passed across all changed
+29 files. The original NPC cadence replay passed all 15 tests with its unchanged release
+fixture, preserving the non-1991 construction budgets and persistence behavior. Scoped strict TypeScript passed. ESLint and formatting passed across all changed
 files; the architecture audit has zero blocking findings. Full release gates
 are tracked by the PR's CI checks.
 

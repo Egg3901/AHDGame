@@ -330,6 +330,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           // the default strategy too. Both legs must read the same mix.
           strategyId: null,
           year: resolveWorldYear(gameState?.currentYear, gameState?.currentTurn),
+          preset: gameState?.preset,
           eraUnitScale,
         })
       : legacySplitCostAnchor;

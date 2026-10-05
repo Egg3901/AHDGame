@@ -1,3 +1,5 @@
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { eraForPreset } from "@/lib/seeds/presetSelector";
 /**
  * Why a sector's production (supply) or demand reads zero, and how commodity prices
  * form. Only OWNED sectors supply or demand anything: units = sector daily revenue
@@ -2136,7 +2138,8 @@ export function computeRawSupplyDemand(
    * a permanent glut of 1/(1.5 x m) no matter how short it really is, and its
    * producers can never sell out. Absent means 1 for every commodity.
    */
-  demandCalibration?: (commodity: CommodityType) => number
+  demandCalibration?: (commodity: CommodityType) => number,
+  preset?: string
 ): {
   global: Map<CommodityType, { supply: number; demand: number }>;
   byState: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
@@ -2248,7 +2251,8 @@ export function computeRawSupplyDemand(
             sector.transitionStartTurn,
             currentTurn ?? 0,
             sector.industryModel,
-            sector.mediaDiscriminator
+            sector.mediaDiscriminator,
+            preset
           )
         : null;
 
@@ -2413,8 +2417,22 @@ export function computeRawSupplyDemand(
       recordOutputDemandDelta(sector, st, commodity, units);
     }
 
-    const demandEntries = strategyRates
-      ? (Object.entries(strategyRates.demand) as [CommodityType, number][])
+    const demandRates =
+      strategyRates ??
+      (eraForPreset(preset ?? DEFAULT_SEED_PRESET) === "1991"
+        ? getEffectiveStrategyRatesForOperatingModel(
+            st,
+            "standard",
+            null,
+            null,
+            currentTurn ?? 0,
+            sector.industryModel,
+            sector.mediaDiscriminator,
+            preset
+          )
+        : null);
+    const demandEntries = demandRates
+      ? (Object.entries(demandRates.demand) as [CommodityType, number][])
       : (SECTOR_DEMAND[st] ?? []).map((f) => [f.commodity, f.rate] as [CommodityType, number]);
 
     // For retail sectors, scale demand by GDP growth multiplier

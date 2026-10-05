@@ -22,6 +22,8 @@ import type { MediaProductProject } from "@/lib/products/mediaProduct";
  * and other phases — avoids redundant DB reads.
  */
 export interface CorporationLookups {
+  /** Originating reset preset selects the qualified input baskets. */
+  preset?: string;
   corporations: Corporation[];
   sectorsByCorp: Map<string, CorporateSector[]>;
   productLinesV2Enabled?: boolean;
