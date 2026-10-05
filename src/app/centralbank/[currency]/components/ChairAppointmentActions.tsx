@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 
 /**
@@ -28,7 +30,7 @@ export function ChairAppointmentActions({ countryCode }: { countryCode: string }
       );
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        setError(body?.error ?? "That did not go through. Try again in a moment.");
+        setError(apiErrorText(body, "That did not go through. Try again in a moment."));
         setResponding(null);
         return;
       }
@@ -59,7 +61,7 @@ export function ChairAppointmentActions({ countryCode }: { countryCode: string }
           {responding === "decline" ? "Declining..." : "Decline"}
         </button>
       </div>
-      {error && <p className="mt-2 text-body-sm text-error">{error}</p>}
+      <InlineError error={error} className="mt-2 text-body-sm text-error" />
     </div>
   );
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import Link from "next/link";
 import { SectionLabel } from "@/components/ui";
@@ -72,7 +74,7 @@ export function ShadowCabinetSection({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error ?? "Something went wrong. Please try again.");
+        setError(apiErrorText(data, "Something went wrong. Please try again."));
         setBusyPositionId(null);
         return;
       }
@@ -100,7 +102,7 @@ export function ShadowCabinetSection({
         effect.
       </p>
 
-      {error && <p className="mb-3 text-body-sm text-error">{error}</p>}
+      <InlineError error={error} className="mb-3 text-body-sm text-error" />
 
       <ul className="space-y-2">
         {positions.map((position) => {

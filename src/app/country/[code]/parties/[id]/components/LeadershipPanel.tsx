@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { getMessageStyle } from "@/lib/utils/formatters";
 
@@ -82,7 +83,7 @@ export function LeadershipPanel({
       const res = await fetch(baseUrl, { credentials: "same-origin" });
       if (!res.ok) {
         const payload = await res.json().catch(() => null);
-        setError(payload?.error ?? "Failed to load leadership state");
+        setError(apiErrorText(payload, "Failed to load leadership state"));
         return;
       }
       const state = (await res.json()) as LeadershipState;

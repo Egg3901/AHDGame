@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
@@ -114,7 +115,7 @@ export default function CreateImperialCharacterPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to create imperial character.");
+        setError(apiErrorText(data, "Failed to create imperial character."));
         setIsLoading(false);
         return;
       }

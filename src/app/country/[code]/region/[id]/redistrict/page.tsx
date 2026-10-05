@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { canonicalRegionId } from "@/lib/constants/countries";
@@ -48,7 +49,7 @@ export default function RedistrictPage({
           <h1 className="text-3xl font-bold mt-2">Redistrict {id.toUpperCase()}</h1>
         </div>
         <RedistrictingGuide />
-        {error && <p className="text-error">{error}</p>}
+        <InlineError error={error} className="text-error" />
         {data?.isAdminOverride ? (
           <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
             Admin override — normal redistricting gates are bypassed for this session.

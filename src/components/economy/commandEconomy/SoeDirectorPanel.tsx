@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import Link from "next/link";
 import { Badge, Button, Slider } from "@/components/ui";
@@ -148,7 +149,7 @@ export function SoeDirectorPanel({ dashboard, soe, onSaved }: Props) {
         </div>
       </div>
 
-      {error && <p className="mt-3 text-xs text-error">{error}</p>}
+      <InlineError error={error} className="mt-3 text-xs text-error" />
       <div className="mt-4">
         <Button size="sm" onClick={save} disabled={saving}>
           {saving ? "Saving..." : "Update enterprise"}

@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
@@ -54,7 +56,7 @@ export function StateOrganizationPanel({ stateId }: { stateId: string }) {
       });
       const body = await res.json();
       if (!res.ok) {
-        setError(body.error ?? "Build failed");
+        setError(apiErrorText(body, "Build failed"));
         return;
       }
       await reload();
@@ -106,7 +108,7 @@ export function StateOrganizationPanel({ stateId }: { stateId: string }) {
           })}
         </ul>
       )}
-      {error && <p className="mb-2 text-xs text-danger">{error}</p>}
+      <InlineError error={error} className="mb-2 text-xs text-danger" />
       <button
         type="button"
         disabled={busy}

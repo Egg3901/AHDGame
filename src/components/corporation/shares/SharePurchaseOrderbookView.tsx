@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { requestCharacterStatsRefetch } from "@/lib/characterStatsSync";
@@ -64,7 +66,7 @@ export function SharePurchaseOrderbookView({
       });
       const data = (await res.json()) as { error?: string; sharesFilled: number; total: number };
       if (!res.ok) {
-        setError(data.error ?? "Fill failed");
+        setError(apiErrorText(data, "Fill failed"));
         return;
       }
       const verb = orderType === "sell" ? "Bought" : "Sold";
@@ -296,7 +298,7 @@ export function SharePurchaseOrderbookView({
           {successMsg}
         </div>
       )}
-      {error && <p className="text-xs text-error">{error}</p>}
+      <InlineError error={error} className="text-xs text-error" />
     </div>
   );
 }

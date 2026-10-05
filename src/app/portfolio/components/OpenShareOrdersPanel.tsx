@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
@@ -83,7 +84,7 @@ export function OpenShareOrdersPanel() {
         setOrders((prev) => prev.filter((o) => o._id !== order._id));
       } else {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Failed to cancel order.");
+        setError(apiErrorText(data, "Failed to cancel order."));
       }
     } catch {
       setError("Network error. Please try again.");

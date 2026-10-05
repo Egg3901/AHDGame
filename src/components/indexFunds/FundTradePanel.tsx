@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -383,7 +384,7 @@ export function FundTradePanel({
           command.current = null;
           setPendingOrder(null);
         }
-        setError(data.error || "Request failed");
+        setError(apiErrorText(data, "Request failed"));
         return;
       }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -84,7 +85,7 @@ function StateBillDetailContent() {
       });
       const d = (await res.json()) as { error?: string; message?: string };
       if (!res.ok) {
-        setError(d.error ?? "Action failed");
+        setError(apiErrorText(d, "Action failed"));
         return;
       }
       const msg = d.message ?? okMessage;

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { HUNDREDTHS, SETTLEMENT_RULE_KEYS } from "@/lib/constants/settlementCrisis";
 
@@ -114,7 +115,7 @@ export function GermanQuestionManager() {
         warning?: string;
       } | null;
       if (!res.ok) {
-        setError(data?.error ?? "The action was refused.");
+        setError(apiErrorText(data, "The action was refused."));
         return;
       }
       setMessage(data?.note ? `${ok} ${data.note}` : ok);

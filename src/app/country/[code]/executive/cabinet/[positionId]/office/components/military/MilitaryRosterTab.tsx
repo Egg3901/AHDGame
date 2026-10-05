@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useMemo, useState } from "react";
 import type { MilitaryUnitView } from "../../useCabinetOffice";
 import type { CommanderRef } from "@/lib/military/types";
@@ -83,7 +84,7 @@ export function MilitaryRosterTab({
         // budget, manpower, branch caps, a lost seat. Silence would read as a
         // dead button.
         const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-        setActionError(payload?.error ?? "That order was refused.");
+        setActionError(apiErrorText(payload, "That order was refused."));
         return;
       }
       onUpdate();

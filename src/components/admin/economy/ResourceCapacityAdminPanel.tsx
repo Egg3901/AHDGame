@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   COMMODITY_LABELS,
@@ -207,7 +208,10 @@ export function ResourceCapacityAdminPanel() {
           {seedMsg}
         </pre>
       )}
-      {error && <p className="text-body-sm text-error bg-error/10 rounded-lg px-4 py-3">{error}</p>}
+      <InlineError
+        error={error}
+        className="text-body-sm text-error bg-error/10 rounded-lg px-4 py-3"
+      />
       {actionError && (
         <p className="text-body-sm text-error bg-error/10 rounded-lg px-4 py-3">{actionError}</p>
       )}

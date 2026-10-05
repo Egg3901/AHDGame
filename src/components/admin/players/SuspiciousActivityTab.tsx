@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { ActivityLogTab } from "./ActivityLogTab";
 import {
@@ -104,7 +105,7 @@ function BanModal({ entry, onClose, onBanned, apiBase }: BanModalProps) {
           rows={3}
           className="w-full rounded border border-card-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary resize-none"
         />
-        {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+        <InlineError error={error} className="mt-2 text-sm text-red-500" />
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onClose}
@@ -184,7 +185,7 @@ function DismissModal({ entry, onClose, onDismissed, apiBase, isMod = false }: D
           />
           Permanent — resolved, never re-flagged
         </label>
-        {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+        <InlineError error={error} className="mt-2 text-sm text-red-500" />
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onClose}
@@ -409,7 +410,7 @@ export function SuspiciousActivityTab({ context = "admin" }: SuspiciousActivityT
         </label>
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      <InlineError error={error} className="text-sm text-red-500" />
 
       {/* Entry list */}
       <div className="space-y-3">

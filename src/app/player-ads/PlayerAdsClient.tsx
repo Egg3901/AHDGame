@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useRef, useState } from "react";
 import { Skeleton } from "@/components/ui";
 
@@ -86,7 +88,7 @@ export function PlayerAdsClient() {
       const res = await fetch("/api/player-ads", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) {
-        setSubmitError(data.error ?? "Submission failed.");
+        setSubmitError(apiErrorText(data, "Submission failed."));
       } else {
         setSubmitted(true);
       }
@@ -308,7 +310,7 @@ export function PlayerAdsClient() {
               </span>
             </label>
 
-            {submitError && <p className="text-sm text-error">{submitError}</p>}
+            <InlineError error={submitError} className="text-sm text-error" />
 
             {info && !info.affordable && (
               <p className="text-sm text-error">

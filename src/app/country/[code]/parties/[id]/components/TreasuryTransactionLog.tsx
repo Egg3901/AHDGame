@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useCallback, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
 import { GameMonthTime } from "@/components/time/GameMonthTime";
@@ -191,7 +192,7 @@ export function TreasuryTransactionLog({ countryCode, partyId }: Props) {
           ))}
         </div>
       )}
-      {error && <p className="text-xs text-error">{error}</p>}
+      <InlineError error={error} className="text-xs text-error" />
 
       {!loading && !error && items.length === 0 && (
         <p className="text-xs text-muted">

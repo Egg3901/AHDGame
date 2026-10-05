@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
 import { UNION_STRENGTH_DECAY_PER_TURN } from "@/lib/unions/unionEconomy";
@@ -236,7 +237,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
       } else if (unionRes.status === 404) {
         setNotFound(true);
       } else {
-        setLoadError(unionData.error ?? "Failed to load union.");
+        setLoadError(apiErrorText(unionData, "Failed to load union."));
       }
       // A failed /me or vote fetch used to render silently as "you are not the
       // leader and have no banked strength", which is indistinguishable from

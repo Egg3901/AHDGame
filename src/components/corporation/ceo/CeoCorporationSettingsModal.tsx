@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Modal } from "@/components/ui/Modal";
@@ -393,7 +394,7 @@ function useStandaloneIdentitySettings({
         onFeedback?.({ success: "Logo updated" });
         onRefresh();
       } else {
-        setUploadError(data.error || "Upload failed");
+        setUploadError(apiErrorText(data, "Upload failed"));
       }
     } catch {
       setUploadError("Upload failed");
@@ -421,7 +422,7 @@ function useStandaloneIdentitySettings({
         onFeedback?.({ success: "Page banner updated" });
         onRefresh();
       } else {
-        setUploadError(data.error || "Upload failed");
+        setUploadError(apiErrorText(data, "Upload failed"));
       }
     } catch {
       setUploadError("Upload failed");
@@ -445,7 +446,7 @@ function useStandaloneIdentitySettings({
         onFeedback?.({ success: "Banner removed" });
         onRefresh();
       } else {
-        setUploadError(data.error || "Failed to remove banner");
+        setUploadError(apiErrorText(data, "Failed to remove banner"));
       }
     } catch {
       setUploadError("Network error");
@@ -526,7 +527,7 @@ function RenameCorporationSection({
       });
       const data = await res.json();
       if (!res.ok) {
-        setRenameError(data.error || "Failed to rename corporation");
+        setRenameError(apiErrorText(data, "Failed to rename corporation"));
       } else {
         setRenameSuccess(`Corporation renamed to "${newName.trim()}"`);
         setNewName("");

@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
 
@@ -137,7 +138,7 @@ export function PlayerAdsModTab() {
         </div>
       </div>
 
-      {actionError && <p className="text-sm text-error">{actionError}</p>}
+      <InlineError error={actionError} className="text-sm text-error" />
 
       {ads.length === 0 ? (
         <p className="text-sm text-muted py-4">No player ads have been submitted yet.</p>

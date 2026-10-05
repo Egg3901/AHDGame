@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { Button, EmptyState, Input, Skeleton } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
@@ -36,7 +37,7 @@ export function CentralBankReserveTab({ currency }: Props) {
       const res = await fetch(`/api/banking/currency/${currency.toLowerCase()}`);
       const json = (await res.json().catch(() => ({}))) as CurrencyPayload & { error?: string };
       if (!res.ok) {
-        setError(json.error ?? "Failed to load reserve requirement");
+        setError(apiErrorText(json, "Failed to load reserve requirement"));
         setData(null);
         return;
       }

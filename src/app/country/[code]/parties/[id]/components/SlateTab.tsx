@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -799,7 +800,7 @@ function RaceSlatePanel({
       )}
 
       {loading && <p className="text-xs text-muted">Loading Slate...</p>}
-      {error && <p className="text-xs text-error">{error}</p>}
+      <InlineError error={error} className="text-xs text-error" />
 
       {detail && detail.candidates.length === 0 && (
         <p className="text-xs text-muted">

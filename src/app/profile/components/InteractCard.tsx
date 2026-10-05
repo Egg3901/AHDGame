@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -259,7 +260,7 @@ function ActionsTab({
       </button>
 
       {!canAction && <p className="text-center text-body-xs text-error">{t("notEnoughActions")}</p>}
-      {actionError && <p className="text-center text-body-xs text-error">{actionError}</p>}
+      <InlineError error={actionError} className="text-center text-body-xs text-error" />
     </div>
   );
 }
@@ -400,7 +401,7 @@ function FundsTab({
       </button>
 
       {message && <p className="text-body-sm text-foreground">{message}</p>}
-      {error && <p className="text-body-sm text-error">{error}</p>}
+      <InlineError error={error} className="text-body-sm text-error" />
     </div>
   );
 }

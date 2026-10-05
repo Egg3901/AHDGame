@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState, useEffect } from "react";
 import type { SeedPreviewResponse, SeedPreviewRow } from "@/lib/api/types/sectorSeed";
 
@@ -287,7 +288,7 @@ export function SectorSeedAdminPanel() {
         </div>
       )}
 
-      {error && <p className="text-sm text-error bg-error/10 rounded-lg px-4 py-3">{error}</p>}
+      <InlineError error={error} className="text-sm text-error bg-error/10 rounded-lg px-4 py-3" />
 
       {result && (
         <div className="rounded-xl border border-success/30 bg-success/5 px-4 py-3 space-y-2">

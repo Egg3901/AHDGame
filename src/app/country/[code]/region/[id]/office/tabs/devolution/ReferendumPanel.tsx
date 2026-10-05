@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CountryId } from "@/lib/constants/countries";
@@ -109,7 +110,7 @@ export function ReferendumPanel({ countryId, stateId, currentTurn, viewerCanMana
       );
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(body?.error ?? "Failed to request a referendum.");
+        setError(apiErrorText(body, "Failed to request a referendum."));
         setSubmitting(false);
         return;
       }

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { getMessageStyle } from "@/lib/utils/formatters";
 
@@ -86,7 +87,7 @@ export function ConferencePanel({
       const res = await fetch(baseUrl, { credentials: "same-origin" });
       if (!res.ok) {
         const payload = await res.json().catch(() => null);
-        setError(payload?.error ?? "Failed to load conference state");
+        setError(apiErrorText(payload, "Failed to load conference state"));
         return;
       }
       const state = (await res.json()) as ConferenceState;

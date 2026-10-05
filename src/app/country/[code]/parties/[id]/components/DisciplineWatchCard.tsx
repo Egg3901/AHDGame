@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui";
@@ -100,7 +101,7 @@ export function DisciplineWatchCard({ countryCode, partyId }: Props) {
           ))}
         </div>
       )}
-      {error && <p className="text-body-sm text-error">{error}</p>}
+      <InlineError error={error} className="text-body-sm text-error" />
 
       {items && items.length === 0 && (
         <p className="text-body text-muted">

@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { RussianPresidentialResultPanel } from "./RussianPresidentialResultPanel";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -326,7 +328,7 @@ export function GeneralElectionPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setSupportError(data.error ?? "Failed to contribute");
+        setSupportError(apiErrorText(data, "Failed to contribute"));
         return;
       }
       if (supportingCampaignId != null && data.campaignStrength != null) {
@@ -484,7 +486,7 @@ export function GeneralElectionPanel({
                 You can afford {supportContext?.maxClicks ?? 0} of these right now.
               </p>
             )}
-            {supportError && <p className="text-error text-xs">{supportError}</p>}
+            <InlineError error={supportError} className="text-error text-xs" />
             <div className="flex gap-2">
               <button
                 onClick={handleSupportConfirm}

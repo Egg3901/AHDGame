@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { Button, useDialogA11y } from "@/components/ui";
 import type { CorporationDetail, MarketOrder, MyShareOrder } from "../CorporationPageTypes";
@@ -634,7 +636,7 @@ export default function SharePurchaseModal({
         });
         const data = (await res.json()) as { cost?: number; error?: string };
         if (!res.ok) {
-          setError(data.error ?? "Could not open investment-bank position");
+          setError(apiErrorText(data, "Could not open investment-bank position"));
           return;
         }
         setSuccessMsg(
@@ -656,7 +658,7 @@ export default function SharePurchaseModal({
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setError(data.error ?? "Purchase failed");
+        setError(apiErrorText(data, "Purchase failed"));
         return;
       }
       onSuccess();
@@ -682,7 +684,7 @@ export default function SharePurchaseModal({
         });
         const data = (await res.json()) as { error?: string };
         if (!res.ok) {
-          setError(data.error ?? "Could not close investment-bank position");
+          setError(apiErrorText(data, "Could not close investment-bank position"));
           return;
         }
         onSuccess();
@@ -707,7 +709,7 @@ export default function SharePurchaseModal({
           });
           return;
         }
-        setError(data.error ?? "Sell failed");
+        setError(apiErrorText(data, "Sell failed"));
         return;
       }
       setCeoVacateConfirm(null);
@@ -749,7 +751,7 @@ export default function SharePurchaseModal({
         escrowAmount?: number;
       };
       if (!res.ok) {
-        setError(data.error ?? "Failed to place order");
+        setError(apiErrorText(data, "Failed to place order"));
         return;
       }
       if (data.filled) {
@@ -1048,7 +1050,7 @@ export default function SharePurchaseModal({
               </p>
             )}
 
-            {error && <p className="text-xs text-error">{error}</p>}
+            <InlineError error={error} className="text-xs text-error" />
           </div>
 
           {/* ─── Footer ──────────────────────────────────────────────────────── */}

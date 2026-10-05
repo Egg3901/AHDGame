@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 import { COMMODITY_LABELS, COMMODITY_UNITS } from "@/lib/constants/commodities";
 import { GrantContractModal } from "@/components/congress/GrantContractModal";
@@ -89,7 +90,7 @@ export function ResourcesTab({ stateId, countryId, isAdmin = false }: Props) {
     setRevoking(null);
     if (!res.ok) {
       const json = await res.json().catch(() => ({}));
-      setRevokeError(json.error ?? "Failed to revoke contract");
+      setRevokeError(apiErrorText(json, "Failed to revoke contract"));
       return;
     }
     setRefreshKey((k) => k + 1);

@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
 import { GameMonthTime } from "@/components/time/GameMonthTime";
@@ -91,7 +92,7 @@ export function RecentActivityCard({ countryCode, partyId }: Props) {
           ))}
         </div>
       )}
-      {error && <p className="text-body-sm text-error">{error}</p>}
+      <InlineError error={error} className="text-body-sm text-error" />
 
       {!loading && !error && items.length === 0 && (
         <p className="text-body text-muted">No activity in the last few turns.</p>

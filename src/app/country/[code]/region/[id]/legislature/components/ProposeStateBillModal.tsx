@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect } from "react";
 import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { fetchJson } from "@/lib/observability/fetchJson";
@@ -253,7 +254,7 @@ export function ProposeStateBillModal({
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to propose bill");
+        setError(apiErrorText(data, "Failed to propose bill"));
         return;
       }
 

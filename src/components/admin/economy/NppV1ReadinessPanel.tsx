@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { Fragment, useEffect, useState } from "react";
 
 interface ReadinessCheck {
@@ -52,7 +53,7 @@ export function NppV1ReadinessPanel() {
         </p>
       </div>
 
-      {error && <p className="px-4 py-3 text-sm text-error">{error}</p>}
+      <InlineError error={error} className="px-4 py-3 text-sm text-error" />
       {!countries && !error && <p className="px-4 py-6 text-center text-sm text-muted">Loading…</p>}
 
       {countries && (

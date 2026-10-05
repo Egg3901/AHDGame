@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PATREON_BORDER_OPTIONS, PATREON_HIGHLIGHT_COLORS } from "@/lib/db/types";
@@ -214,7 +215,7 @@ export function PatreonBenefitsSection() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to save Patreon settings");
+        setError(apiErrorText(data, "Failed to save Patreon settings"));
         setState(state);
         return;
       }

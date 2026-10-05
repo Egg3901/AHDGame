@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import {
   EXEC_ORDER_SLOT_CAP,
@@ -89,7 +91,7 @@ export function WhiteHouseOrdersTab({ countryId }: Props) {
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError(body?.error ?? "Failed to rescind.");
+        setError(apiErrorText(body, "Failed to rescind."));
       } else {
         await refresh();
       }
@@ -160,7 +162,7 @@ export function WhiteHouseOrdersTab({ countryId }: Props) {
           </button>
         </section>
       )}
-      {error && <p className="text-sm text-error">{error}</p>}
+      <InlineError error={error} className="text-sm text-error" />
       {data.active.length === 0 ? (
         <div className="rounded-xl border border-card-border bg-card p-8 text-sm text-muted text-center">
           No active {orderNamePlural}.

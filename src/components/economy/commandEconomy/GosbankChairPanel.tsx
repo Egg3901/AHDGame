@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Badge, Button, Slider, Tooltip } from "@/components/ui";
 import { formatCompactNumber, formatIndex100 } from "@/lib/utils/formatters";
@@ -219,7 +220,7 @@ export function GosbankChairPanel({ dashboard, onSaved }: Props) {
         </p>
       )}
 
-      {error && <p className="mt-3 text-xs text-error">{error}</p>}
+      <InlineError error={error} className="mt-3 text-xs text-error" />
       <div className="mt-4 flex items-center gap-2">
         <Button size="sm" onClick={save} disabled={saving}>
           {saving ? "Saving..." : "Set credit policy"}
@@ -275,7 +276,7 @@ export function GosbankChairPanel({ dashboard, onSaved }: Props) {
           </div>
           <p className="mt-2 text-[11px] leading-snug text-warning">{rep.costLabel}</p>
 
-          {repError && <p className="mt-3 text-xs text-error">{repError}</p>}
+          <InlineError error={repError} className="mt-3 text-xs text-error" />
           <div className="mt-3 flex items-center gap-2">
             <Button size="sm" variant="secondary" onClick={saveRepression} disabled={savingRep}>
               {savingRep ? "Saving..." : "Set repression"}

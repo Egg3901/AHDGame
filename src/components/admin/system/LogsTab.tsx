@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import React, { useState, useEffect } from "react";
 import { formatDate } from "@/lib/utils/formatters";
 import { SubTabBar } from "@/components/admin/tabs/SubTabBar";
@@ -223,7 +224,7 @@ export function LogsTab() {
       const res = await fetch("/api/admin/logs");
       const data = await res.json();
       if (res.ok) setLogs(data.logs);
-      else setError(data.error || "Failed to fetch logs");
+      else setError(apiErrorText(data, "Failed to fetch logs"));
     } catch {
       setError("Network error");
     } finally {
@@ -238,7 +239,7 @@ export function LogsTab() {
       const res = await fetch("/api/admin/logs/hourly");
       const data = await res.json();
       if (res.ok) setHourlyLogs(data.logs);
-      else setError(data.error || "Failed to fetch hourly logs");
+      else setError(apiErrorText(data, "Failed to fetch hourly logs"));
     } catch {
       setError("Network error");
     } finally {

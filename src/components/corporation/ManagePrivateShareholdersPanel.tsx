@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
 import { PlayerSelector } from "@/components/PlayerSelector";
@@ -69,7 +70,7 @@ export function ManagePrivateShareholdersPanel({
       const res = await fetch(`/api/corporation/${corporationId}/private-invites`);
       const data = await res.json();
       if (!res.ok) {
-        setError(data?.error ?? "Failed to load invites");
+        setError(apiErrorText(data, "Failed to load invites"));
         setInvites([]);
       } else {
         setInvites(Array.isArray(data.invites) ? data.invites : []);
@@ -109,7 +110,7 @@ export function ManagePrivateShareholdersPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data?.error ?? "Failed to send invite");
+        setError(apiErrorText(data, "Failed to send invite"));
         return;
       }
       setMessage(`Invitation sent.`);
@@ -136,7 +137,7 @@ export function ManagePrivateShareholdersPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data?.error ?? `Failed to ${action}`);
+        setError(apiErrorText(data, `Failed to ${action}`));
         return;
       }
       if (action === "accept") setMessage("Shares acquired.");

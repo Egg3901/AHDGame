@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CampaignData } from "@/lib/campaigns/dto/campaignView";
 import type { UpgradeCategory } from "@/lib/campaigns/upgradeCosts";
@@ -169,7 +170,7 @@ export function CampaignBlendClient({
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          setError(data.error || "That did not work. Try again.");
+          setError(apiErrorText(data, "That did not work. Try again."));
           return false;
         }
         onRefresh();

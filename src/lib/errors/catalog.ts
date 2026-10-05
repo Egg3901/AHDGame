@@ -168,3 +168,18 @@ export function parseErrorBody(body: unknown): ParsedErrorBody {
     ref: str(b.ref) ?? str(b.eventId),
   };
 }
+
+/**
+ * Inline text for a failed response body: the message plus the trackable code
+ * (and the ref for server-side faults, where a player is most likely to report
+ * it). Use where an error state is a plain string, e.g.
+ * `setError(apiErrorText(data, "Failed to save"))`.
+ */
+export function apiErrorText(body: unknown, fallback: string): string {
+  const { message, code, ref } = parseErrorBody(body);
+  const text = message ?? fallback;
+  if (!code) return text;
+  const serverFault = isErrorCode(code) && ERROR_CATALOG[code].status >= 500;
+  const shortRef = ref && ref.length > 12 ? ref.slice(0, 8) : ref;
+  return serverFault && shortRef ? `${text} (${code}, ref ${shortRef})` : `${text} (${code})`;
+}

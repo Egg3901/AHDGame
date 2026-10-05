@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -238,7 +239,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
         setSplitMsg(result.message);
         fetchEconomy();
       } else {
-        setSplitError(result.error || "Split failed");
+        setSplitError(apiErrorText(result, "Split failed"));
       }
     } catch {
       setSplitError("Network error");
@@ -263,7 +264,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
         setPlannedSplitTarget(null);
         fetchEconomy();
       } else {
-        setAttackError(result.error || "Attack failed");
+        setAttackError(apiErrorText(result, "Attack failed"));
       }
     } catch {
       setAttackError("Network error");
@@ -287,7 +288,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
         setAdjustMsg(result.message);
         fetchEconomy();
       } else {
-        setAdjustError(result.error || "Failed to adjust growth");
+        setAdjustError(apiErrorText(result, "Failed to adjust growth"));
       }
     } catch {
       setAdjustError("Network error");

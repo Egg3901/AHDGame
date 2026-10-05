@@ -4,6 +4,7 @@
 // (Economy tab → NPP Economy sub-tab).
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback } from "react";
 
 interface NppEconomyStats {
@@ -36,7 +37,7 @@ export function NppEconomyPanel() {
       const res = await fetch("/api/admin/npp/economy");
       if (!res.ok) {
         const json = await res.json();
-        setError(json.error ?? "Failed to load NPP economy stats");
+        setError(apiErrorText(json, "Failed to load NPP economy stats"));
         return;
       }
       const json = await res.json();
@@ -64,7 +65,7 @@ export function NppEconomyPanel() {
       });
       if (!res.ok) {
         const json = await res.json();
-        setError(json.error ?? "Failed to update NPP economy status");
+        setError(apiErrorText(json, "Failed to update NPP economy status"));
         return;
       }
       await fetchData();

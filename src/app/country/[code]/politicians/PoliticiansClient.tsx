@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import Link from "next/link";
@@ -139,7 +140,7 @@ export default function PoliticiansClient({ initialPoliticians, initialStats }: 
           setPoliticians(data.politicians);
           setStats({ playerCount: data.playerCount, nppCount: data.nppCount });
         } else {
-          setError(data.error || "Failed to fetch politicians");
+          setError(apiErrorText(data, "Failed to fetch politicians"));
         }
       } catch {
         setError("Network error - please try again");

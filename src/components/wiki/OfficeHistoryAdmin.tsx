@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { GameIteration } from "@/lib/db/types/gameState";
@@ -152,7 +154,7 @@ export function OfficeHistoryAdmin({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Failed to add entry.");
+        setError(apiErrorText(data, "Failed to add entry."));
         return;
       }
       setForm(EMPTY_FORM);
@@ -176,7 +178,7 @@ export function OfficeHistoryAdmin({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Failed to update entry.");
+        setError(apiErrorText(data, "Failed to update entry."));
         return;
       }
       setEditingId(null);
@@ -195,7 +197,7 @@ export function OfficeHistoryAdmin({
       const res = await fetch(`/api/wiki/office-history/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Failed to delete entry.");
+        setError(apiErrorText(data, "Failed to delete entry."));
         return;
       }
       router.refresh();
@@ -372,7 +374,7 @@ export function OfficeHistoryAdmin({
         </div>
       )}
 
-      {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+      <InlineError error={error} className="mt-2 text-xs text-red-400" />
     </div>
   );
 }

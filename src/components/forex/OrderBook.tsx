@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useMemo } from "react";
 import type { OrderDisplay } from "@/app/country/[code]/forex/types";
 
@@ -47,7 +48,7 @@ export function OrderBook({ orders, onFilled }: Props) {
       });
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error ?? "Failed to fill order");
+        setError(apiErrorText(data, "Failed to fill order"));
       } else {
         onFilled?.();
       }

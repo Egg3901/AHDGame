@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback } from "react";
 import { PlayerSelector } from "@/components/PlayerSelector";
 import { LocalTime } from "@/components/time/LocalTime";
@@ -51,7 +53,7 @@ export function ModeratorsManagementTab() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to assign moderator");
+        setError(apiErrorText(data, "Failed to assign moderator"));
       } else {
         setSelectedUser(null);
         setError("");
@@ -75,7 +77,7 @@ export function ModeratorsManagementTab() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to remove moderator");
+        setError(apiErrorText(data, "Failed to remove moderator"));
       } else {
         fetchModerators();
       }
@@ -128,7 +130,7 @@ export function ModeratorsManagementTab() {
             />
           )}
         </div>
-        {error && <p className="mt-2 text-sm text-error">{error}</p>}
+        <InlineError error={error} className="mt-2 text-sm text-error" />
       </div>
 
       <div className="rounded-lg border border-card-border bg-card">

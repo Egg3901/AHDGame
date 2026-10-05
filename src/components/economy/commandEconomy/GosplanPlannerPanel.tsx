@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Badge, Button, Tooltip } from "@/components/ui";
 import { formatCompactNumber } from "@/lib/utils/formatters";
@@ -171,7 +172,7 @@ export function GosplanPlannerPanel({ dashboard, onSaved }: Props) {
         </table>
       </div>
 
-      {error && <p className="mt-3 text-xs text-error">{error}</p>}
+      <InlineError error={error} className="mt-3 text-xs text-error" />
       <div className="mt-4">
         <Button size="sm" onClick={save} disabled={saving}>
           {saving ? "Saving..." : "Set plan quotas"}

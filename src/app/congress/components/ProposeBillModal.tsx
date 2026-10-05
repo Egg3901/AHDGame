@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { EuropeanTreatyProvisionEditor } from "@/components/bills/EuropeanTreatyProvisionEditor";
 
@@ -656,7 +657,7 @@ export function ProposeBillModal({
         return;
       }
       if (!res.ok) {
-        setError(data.error ?? "Failed to propose bill");
+        setError(apiErrorText(data, "Failed to propose bill"));
         return;
       }
       showToast("Bill proposed — voting is now open.");

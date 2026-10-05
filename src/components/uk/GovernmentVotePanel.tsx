@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { VoteTallyTable } from "@/app/congress/bills/[id]/components/VoteTallyTable";
 import { WhippedBadge } from "@/components/bills/WhippedBadge";
@@ -230,7 +231,7 @@ export default function GovernmentVotePanel({
         </div>
       )}
 
-      {error && <p className="mt-2 text-sm text-error">{error}</p>}
+      <InlineError error={error} className="mt-2 text-sm text-error" />
     </div>
   );
 }

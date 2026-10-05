@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/ui/ResponsiveTable";
 import { fetchJson } from "@/lib/observability/fetchJson";
@@ -112,7 +113,7 @@ export function IndexFundsAdminPanel() {
       const res = await fetch("/api/admin/investment-funds");
       if (!res.ok) {
         const body = (await res.json()) as { error?: string };
-        setError(body.error || "Failed to load funds");
+        setError(apiErrorText(body, "Failed to load funds"));
         return;
       }
       const data = (await res.json()) as { funds: AdminFundRow[] };

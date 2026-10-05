@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTranslations, useLocale } from "next-intl";
@@ -178,7 +179,7 @@ export function OnboardingChecklist({
             <Button size="sm" onClick={handleClaim} isLoading={claiming}>
               {t("claim", { reward: rewardLabel })}
             </Button>
-            {claimError && <p className="text-body-xs text-error">{claimError}</p>}
+            <InlineError error={claimError} className="text-body-xs text-error" />
           </div>
         ) : (
           <p className="text-body-xs text-muted">

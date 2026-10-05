@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Button, LoadingSpinner } from "@/components/ui";
@@ -109,7 +110,7 @@ export default function IndustrialRelationsSection({ corpId }: { corpId: string 
           return;
         }
         const data = (await response.json().catch(() => null)) as { error?: string } | null;
-        setLoadError(data?.error ?? "Industrial relations could not be loaded.");
+        setLoadError(apiErrorText(data, "Industrial relations could not be loaded."));
         return;
       }
       const data = (await response.json()) as {

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useMemo, useState } from "react";
 import { PartyLogo } from "@/components/PartyLogo";
 import { Button, Input, Modal } from "@/components/ui";
@@ -141,7 +142,7 @@ export function RunningMateSelector({
         setOpen(false);
         onSuccess();
       } else {
-        setErrorMessage(data.error ?? "Unable to update your running mate.");
+        setErrorMessage(apiErrorText(data, "Unable to update your running mate."));
       }
     } catch {
       setErrorMessage("Network error while saving your running mate.");

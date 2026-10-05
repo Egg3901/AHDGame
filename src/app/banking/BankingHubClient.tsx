@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -142,7 +143,7 @@ export function BankingHubClient() {
       const res = await fetch("/api/banking/hub");
       const json = (await res.json().catch(() => ({}))) as HubPayload & { error?: string };
       if (!res.ok) {
-        setError(json.error ?? "Failed to load banking hub");
+        setError(apiErrorText(json, "Failed to load banking hub"));
         setData(null);
         return;
       }

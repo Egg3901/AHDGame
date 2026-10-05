@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { AgendaBanner } from "./AgendaBanner";
 import { useAgenda } from "./useAgenda";
@@ -49,7 +50,7 @@ export function AgendaBannerWithEdit({
         );
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          setError(data?.error ?? `HTTP ${res.status}`);
+          setError(apiErrorText(data, `HTTP ${res.status}`));
           return;
         }
         setEditing(false);

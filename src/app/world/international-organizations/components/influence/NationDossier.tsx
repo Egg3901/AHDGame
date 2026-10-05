@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { previewEffectivePlay } from "@/lib/alignment/rules/previewEffectivePlay";
@@ -350,7 +351,7 @@ function CommitPlayForm({
 
       <p className="text-body-xs text-muted">{t("settlement")}</p>
 
-      {error && <p className="text-body-sm text-error">{error}</p>}
+      <InlineError error={error} className="text-body-sm text-error" />
     </form>
   );
 }

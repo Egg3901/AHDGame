@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useId } from "react";
 import type { ExchangeRateDisplay, WalletBalances } from "@/app/country/[code]/forex/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -160,7 +162,7 @@ export function CurrencyTradeModal({
 
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error ?? "Trade failed");
+        setError(apiErrorText(data, "Trade failed"));
         setSubmitting(false);
         return;
       }
@@ -382,7 +384,7 @@ export function CurrencyTradeModal({
             </div>
           )}
 
-          {error && <p className="text-xs text-error">{error}</p>}
+          <InlineError error={error} className="text-xs text-error" />
           {success && <p className="text-xs text-success">Trade executed!</p>}
 
           <button

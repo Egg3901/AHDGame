@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { use, useCallback, useEffect, useState, Suspense } from "react";
 import BackButton from "@/components/BackButton";
 import { Skeleton } from "@/components/ui";
@@ -72,7 +73,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ country: string; sl
       }
       if (!fundRes.ok) {
         const body = (await fundRes.json()) as { error?: string };
-        setError(body.error || "Fund not found");
+        setError(apiErrorText(body, "Fund not found"));
         return;
       }
       setData(await fundRes.json());

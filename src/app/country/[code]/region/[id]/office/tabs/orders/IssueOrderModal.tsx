@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 import type { LegislationTypeOption } from "@/lib/legislature/dto/stateLegislature";
 import { PolicyEffectIndicators } from "@/components/legislation/PolicyEffectIndicators";
@@ -191,7 +193,7 @@ export function IssueOrderModal({
       onSuccess();
     } else {
       const data = await res.json().catch(() => ({}));
-      setError(data?.error ?? "Failed to issue order.");
+      setError(apiErrorText(data, "Failed to issue order."));
       setSubmitting(false);
     }
   }
@@ -369,7 +371,7 @@ export function IssueOrderModal({
           )}
         </div>
 
-        {error && <p className="mb-3 text-sm text-error">{error}</p>}
+        <InlineError error={error} className="mb-3 text-sm text-error" />
         <div className="flex justify-end gap-2">
           <button
             onClick={onClose}

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { SpinnerIcon, MessageBanner } from "@/app/settings/components/shared";
@@ -34,7 +35,7 @@ export function CharacterDangerZone({ characterName }: Props) {
         window.location.href = "/settings";
       } else {
         const data = await res.json();
-        setError(data.error || "Failed to retire character");
+        setError(apiErrorText(data, "Failed to retire character"));
       }
     } catch {
       setError("Network error - please try again");

@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 
@@ -229,7 +230,7 @@ export function LeadershipPanel({ org, viewer, currentTurn, votingWindowTurns, o
               ))}
             </div>
           )}
-          {error && <p className="mt-2 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-2 text-xs text-error" />
           <div className="mt-3 flex gap-2">
             <Button
               variant="primary"

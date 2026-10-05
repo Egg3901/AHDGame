@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Input, useDialogA11y } from "@/components/ui";
@@ -245,7 +246,7 @@ export function PrivateLoanModal({
         };
       };
       if (!response.ok) {
-        setError(json.error ?? "Loan request failed.");
+        setError(apiErrorText(json, "Loan request failed."));
         return;
       }
 

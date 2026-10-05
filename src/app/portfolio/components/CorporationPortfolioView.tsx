@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
@@ -126,7 +127,7 @@ export default function CorporationPortfolioView({
       const res = await fetch(`/api/corporations/${corpRouteId}/portfolio`);
       const json = (await res.json()) as CorpPortfolioApiResponse;
       if (!res.ok) {
-        setError(json.error ?? "Failed to load portfolio");
+        setError(apiErrorText(json, "Failed to load portfolio"));
         setData(null);
         return;
       }

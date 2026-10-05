@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { GROUND_GAME_PRESETS } from "@/lib/constants/groundGamePresets";
 
@@ -49,7 +50,7 @@ export function GroundGameControl({
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data?.error ?? "Action failed.");
+        setError(apiErrorText(data, "Action failed."));
         setBusy(false);
         return;
       }

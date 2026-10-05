@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { requestCharacterStatsRefetch } from "@/lib/characterStatsSync";
@@ -34,7 +36,7 @@ export function SharePurchaseOrdersView({
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setError(data.error ?? "Failed to cancel order");
+        setError(apiErrorText(data, "Failed to cancel order"));
         return;
       }
       onSuccess();
@@ -152,7 +154,7 @@ export function SharePurchaseOrdersView({
           )}
         </>
       )}
-      {error && <p className="text-xs text-error">{error}</p>}
+      <InlineError error={error} className="text-xs text-error" />
     </div>
   );
 }

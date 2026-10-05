@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 
 type Choice = "bailout" | "repudiate" | "restructure" | "monetize";
@@ -141,7 +142,7 @@ export function SovereignCrisisDecisionPanel({ countryCode }: Props) {
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(body.error ?? `Submission failed (${res.status})`);
+        setError(apiErrorText(body, `Submission failed (${res.status})`));
         setSubmitting(null);
         return;
       }
@@ -285,7 +286,7 @@ function LegislativeVotingPanel({
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(body.error ?? `Submission failed (${res.status})`);
+        setError(apiErrorText(body, `Submission failed (${res.status})`));
         return;
       }
       window.location.reload();

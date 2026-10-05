@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
 import { gameConfig as gameConfigDefaults } from "@/lib/seeds/reference/gameConfig";
@@ -414,7 +415,7 @@ export function FeatureGatesPanel() {
       });
       const data = (await res.json()) as Partial<GatesState> & { error?: string };
       if (!res.ok) {
-        setError(data.error || "Failed to update gate");
+        setError(apiErrorText(data, "Failed to update gate"));
         return;
       }
       if (
@@ -450,7 +451,7 @@ export function FeatureGatesPanel() {
       });
       const data = (await res.json()) as { mode?: string; error?: string };
       if (!res.ok) {
-        setError(data.error || `Failed to update ${mode.label}`);
+        setError(apiErrorText(data, `Failed to update ${mode.label}`));
         return;
       }
       setModes((prev) => ({ ...(prev ?? {}), [mode.key]: data.mode ?? value }));
@@ -475,7 +476,7 @@ export function FeatureGatesPanel() {
         });
         const data = (await res.json()) as { error?: string };
         if (!res.ok) {
-          setError(data.error || "Failed to update command economy");
+          setError(apiErrorText(data, "Failed to update command economy"));
           return;
         }
         if (typeof body.commandEconomyEnabled === "boolean") {

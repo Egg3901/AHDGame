@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useCallback } from "react";
 import { SubsidiaryCorporationsToggle } from "@/components/admin/economy/SubsidiaryCorporationsToggle";
 import {
@@ -482,7 +483,7 @@ export function CorporationsAdminPanel() {
       {/* Summary cards */}
       {summary && <CorpSummaryCards summary={summary} />}
 
-      {error && <p className="text-sm text-error bg-error/10 rounded-lg px-4 py-3">{error}</p>}
+      <InlineError error={error} className="text-sm text-error bg-error/10 rounded-lg px-4 py-3" />
       {actionError && (
         <p className="text-sm text-error bg-error/10 rounded-lg px-4 py-3">{actionError}</p>
       )}

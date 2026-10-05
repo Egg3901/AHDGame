@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -92,7 +93,7 @@ export function SingleplayerHome({ status }: Props) {
       setLogs(body?.logs ?? []);
       if (!res.ok) {
         setPhase("error");
-        setError(body?.error ?? `New game failed (${res.status})`);
+        setError(apiErrorText(body, `New game failed (${res.status})`));
         return;
       }
       setPhase("done");

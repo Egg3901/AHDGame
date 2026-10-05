@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useTranslations } from "next-intl";
 import { currentMoneyGrowth } from "@/lib/moneySupply/rules/growthSignal";
 import { MONEY_ACCOUNTING_VERSION } from "@/lib/moneySupply/calculate";
@@ -273,7 +274,7 @@ export function CentralBankMoneySupplyTab({
                 {busy ? "Executing…" : "Execute operation"}
               </Button>
               {message && <p className="text-body-sm text-success">{message}</p>}
-              {error && <p className="text-body-sm text-error">{error}</p>}
+              <InlineError error={error} className="text-body-sm text-error" />
             </div>
           </CentralBankSection>
         </form>

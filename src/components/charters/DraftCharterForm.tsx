@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Input, Label } from "@/components/ui";
@@ -115,7 +116,7 @@ export function DraftCharterForm({ countryCode, proposer, stateNames }: DraftCha
       });
       const data = (await res.json()) as { ok?: boolean; redirectTo?: string; error?: string };
       if (!res.ok || !data.ok) {
-        setError(data.error ?? "Failed to create charter draft");
+        setError(apiErrorText(data, "Failed to create charter draft"));
         setSubmitting(false);
         return;
       }

@@ -1,4 +1,5 @@
 "use client";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { MARKET_TIMEFRAMES } from "@/lib/stockExchange/rules/calendar";
 
 import { use, useCallback, useEffect, useState, Suspense } from "react";
@@ -76,7 +77,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
       }
       if (!fundRes.ok) {
         const body = (await fundRes.json()) as { error?: string };
-        setError(body.error || "Fund not found");
+        setError(apiErrorText(body, "Fund not found"));
         return;
       }
       setData(await fundRes.json());

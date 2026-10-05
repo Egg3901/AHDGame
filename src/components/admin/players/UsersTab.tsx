@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback } from "react";
 import { getLatestNoteText, type RetiredCharacterEntry, type UserData } from "./types";
 import { getDuplicateGroups } from "./duplicateGroups";
@@ -59,7 +60,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
       const res = await fetch(`${apiBase}/users`);
       const data = await res.json();
       if (res.ok) setUsers(data.users);
-      else setError(data.error || "Failed to fetch users");
+      else setError(apiErrorText(data, "Failed to fetch users"));
     } catch {
       setError("Network error - please try again");
     } finally {

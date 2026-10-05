@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useGameClock } from "@/contexts/useGameClock";
@@ -204,7 +205,7 @@ export function StateOrganizationTab({
       });
       const body = await res.json();
       if (!res.ok) {
-        setError(body.error ?? "Build failed");
+        setError(apiErrorText(body, "Build failed"));
       } else {
         setRows((prev) =>
           prev.map((r) =>

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -114,7 +115,7 @@ export function CorporationMasthead({
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) setWikiCreateError(data.error || "Could not create page");
+      if (!res.ok) setWikiCreateError(apiErrorText(data, "Could not create page"));
       else if (typeof data.slug === "string") {
         // The request names this corporation; still verify the returned slug
         // so a malformed or stale response cannot navigate to another page.

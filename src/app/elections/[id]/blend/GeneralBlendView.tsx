@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
@@ -586,7 +587,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
         return;
       }
       const body = (await res.json().catch(() => ({}))) as { error?: string };
-      setEndorseError(body.error || "That endorsement did not go through.");
+      setEndorseError(apiErrorText(body, "That endorsement did not go through."));
     } catch {
       setEndorseError("Network error. Try again.");
     } finally {

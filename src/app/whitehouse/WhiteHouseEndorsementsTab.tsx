@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import {
   RaceList,
@@ -90,7 +92,7 @@ export function WhiteHouseEndorsementsTab({ countryId }: Props) {
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError(body?.error ?? "Withdraw failed.");
+        setError(apiErrorText(body, "Withdraw failed."));
       } else {
         await fetchData(selectedState);
       }
@@ -148,7 +150,7 @@ export function WhiteHouseEndorsementsTab({ countryId }: Props) {
 
       <section>
         <h2 className="text-sm font-semibold mb-2">Active endorsements</h2>
-        {error && <p className="text-sm text-error mb-2">{error}</p>}
+        <InlineError error={error} className="text-sm text-error mb-2" />
         {data.activeEndorsements.length === 0 ? (
           <p className="text-sm text-muted">No active endorsements.</p>
         ) : (

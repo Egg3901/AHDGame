@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -201,7 +202,7 @@ export default function SupremeCourtClient({ countryId }: { countryId: CountryId
       });
       const json = (await response.json()) as { message?: string; error?: string };
       if (!response.ok) {
-        setNominateError(json.error ?? "Failed to submit nomination");
+        setNominateError(apiErrorText(json, "Failed to submit nomination"));
         return;
       }
       showToast(json.message ?? "Nomination submitted", "success");

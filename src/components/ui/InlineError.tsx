@@ -21,23 +21,32 @@ function isDisplayError(v: unknown): v is DisplayError {
  * trackable code and ref, with an optional retry. Renders nothing for a
  * null/undefined error so callers can pass their error state directly.
  */
-export function InlineError({ error, fallbackMessage, onRetry, className = "" }: InlineErrorProps) {
+export function InlineError({
+  error,
+  fallbackMessage,
+  onRetry,
+  className = "text-sm text-error",
+}: InlineErrorProps) {
   if (error === null || error === undefined || error === false || error === "") return null;
-  const d: DisplayError =
+  // A plain string is a message that already carries its own code (see
+  // `apiErrorText`), so it is shown as is.
+  const d: Omit<DisplayError, "code"> & { code?: string } =
     typeof error === "string"
-      ? { message: error, code: "CLIENT_ERROR" }
+      ? { message: error }
       : isDisplayError(error)
         ? error
         : toDisplayError(error, fallbackMessage);
-  const retryable = isErrorCode(d.code) ? ERROR_CATALOG[d.code].retryable : true;
+  const retryable = d.code && isErrorCode(d.code) ? ERROR_CATALOG[d.code].retryable : true;
 
   return (
-    <div role="alert" className={`text-sm text-error ${className}`.trim()}>
+    <div role="alert" className={className}>
       <span>{d.message}</span>{" "}
-      <span className="font-mono text-xs text-muted" data-testid="inline-error-code">
-        {d.code}
-        {d.ref ? ` / ${d.ref.length > 12 ? d.ref.slice(0, 8) : d.ref}` : ""}
-      </span>
+      {d.code && (
+        <span className="font-mono text-xs text-muted" data-testid="inline-error-code">
+          {d.code}
+          {d.ref ? ` / ${d.ref.length > 12 ? d.ref.slice(0, 8) : d.ref}` : ""}
+        </span>
+      )}
       {onRetry && retryable && (
         <button
           type="button"

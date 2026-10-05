@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -66,7 +67,7 @@ export function NationalCorporationView({ corpId }: { corpId: string }) {
         setVm(data as NationalCorporationViewModel);
         setError("");
       } else {
-        setError(data.error || "National Corporation not found");
+        setError(apiErrorText(data, "National Corporation not found"));
       }
     } catch {
       setError("Network error");

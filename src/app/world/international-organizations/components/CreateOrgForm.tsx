@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Button, Input, Label } from "@/components/ui";
 
@@ -339,10 +340,10 @@ export function CreateOrgForm({
               <p className="mt-1 text-[11px] text-muted">
                 {logoUploading ? "Uploading…" : "Square works best. PNG/JPEG/WebP/GIF, up to 2 MB."}
               </p>
-              {logoError && <p className="mt-1 text-[11px] text-error">{logoError}</p>}
+              <InlineError error={logoError} className="mt-1 text-[11px] text-error" />
             </div>
           </div>
-          {error && <p className="mt-3 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-3 text-xs text-error" />
           <div className="mt-4 flex gap-2">
             <Button variant="primary" size="md" onClick={submit} isLoading={submitting}>
               Found organization

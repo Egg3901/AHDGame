@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
@@ -32,7 +33,7 @@ export function CharterActions({ charterId, alreadySigned, alreadyRejected }: Ch
       const res = await fetch(`/api/charters/${charterId}/sign`, { method: "POST" });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) {
-        setError(data.error ?? "Failed to sign");
+        setError(apiErrorText(data, "Failed to sign"));
         setPending(null);
         return;
       }
@@ -54,7 +55,7 @@ export function CharterActions({ charterId, alreadySigned, alreadyRejected }: Ch
       });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) {
-        setError(data.error ?? "Failed to reject");
+        setError(apiErrorText(data, "Failed to reject"));
         setPending(null);
         return;
       }

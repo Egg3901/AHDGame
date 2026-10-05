@@ -11,6 +11,7 @@
  *
  * Copy rules: the message goes straight to players, so no em or en dashes.
  */
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { LocalTime } from "@/components/time/LocalTime";
 import { PollBannerStrip } from "@/components/PollBannerNotice";
@@ -117,7 +118,7 @@ export function PollBannerTab() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error || "Could not save the banner");
+        setError(apiErrorText(data, "Could not save the banner"));
         return;
       }
       setSaved(true);

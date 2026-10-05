@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback } from "react";
 import { LocalTime } from "@/components/time/LocalTime";
 
@@ -95,7 +96,7 @@ export function MaintenanceModePanel() {
 
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Failed to update maintenance mode");
+        setError(apiErrorText(data, "Failed to update maintenance mode"));
         return;
       }
 

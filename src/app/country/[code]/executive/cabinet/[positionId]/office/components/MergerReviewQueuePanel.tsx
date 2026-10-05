@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { MergerReviewCard, type MergerDecision } from "@/components/mergerReview/MergerReviewCard";
 import type { MergerReviewQueueData } from "../useMergerReviewQueue";
@@ -38,7 +39,7 @@ export function MergerReviewQueuePanel({ data, onDecided, canAct }: Props) {
         body: JSON.stringify({ decision, note }),
       });
       const d = await res.json();
-      if (!res.ok) setErr(d.error || "Decision failed");
+      if (!res.ok) setErr(apiErrorText(d, "Decision failed"));
       else onDecided();
     } catch {
       setErr("Network error");

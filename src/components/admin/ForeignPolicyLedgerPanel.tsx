@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 
 interface CountRow {
@@ -90,7 +91,7 @@ export function ForeignPolicyLedgerPanel() {
       const response = await fetch("/api/admin/npp/foreign-policy", { cache: "no-store" });
       const body = (await response.json()) as LedgerResponse & { error?: string };
       if (!response.ok) {
-        setError(body.error || "Failed to load foreign policy ledger.");
+        setError(apiErrorText(body, "Failed to load foreign policy ledger."));
         return;
       }
       setData(body);

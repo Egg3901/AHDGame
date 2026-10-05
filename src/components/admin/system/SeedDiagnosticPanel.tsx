@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { LocalTime } from "@/components/time/LocalTime";
 
@@ -73,7 +75,7 @@ export function SeedDiagnosticPanel() {
       const res = await fetch("/api/admin/seed-diagnostic?limit=1");
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to load latest report");
+        setError(apiErrorText(data, "Failed to load latest report"));
         return;
       }
       setReport((data.latest as SeedDiagnosticReport | null) ?? null);
@@ -99,7 +101,7 @@ export function SeedDiagnosticPanel() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Diagnostic failed");
+        setError(apiErrorText(data, "Diagnostic failed"));
         return;
       }
       setReport(data.report as SeedDiagnosticReport);
@@ -171,7 +173,7 @@ export function SeedDiagnosticPanel() {
         </button>
       </div>
 
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      <InlineError error={error} className="text-xs text-red-400" />
 
       {loadingLatest && !report && <p className="text-xs text-muted">Loading latest report…</p>}
 

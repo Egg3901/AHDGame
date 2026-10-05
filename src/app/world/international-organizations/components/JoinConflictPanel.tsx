@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 import { mutualDefenceBasis } from "@/lib/constants/mutualDefence";
@@ -213,7 +214,7 @@ export function JoinConflictPanel({
               {selected.name}: {selected.sideALabel} against {selected.sideBLabel}.
             </p>
           )}
-          {error && <p className="mt-2 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-2 text-xs text-error" />
           <div className="mt-4 flex gap-2">
             <Button
               variant="primary"

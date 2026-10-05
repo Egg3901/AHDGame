@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
@@ -77,7 +79,7 @@ export function GeneralCorps({
       const res = await fn();
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(body?.error ?? "That did not work.");
+        setError(apiErrorText(body, "That did not work."));
         return;
       }
       router.refresh();
@@ -143,7 +145,7 @@ export function GeneralCorps({
           </button>
         </div>
       )}
-      {error && <p className="mb-2 text-[11px] text-error">{error}</p>}
+      <InlineError error={error} className="mb-2 text-[11px] text-error" />
 
       {corps.length === 0 ? (
         <p className="text-[12px] text-muted">

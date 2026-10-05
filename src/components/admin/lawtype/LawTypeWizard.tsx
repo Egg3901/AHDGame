@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import type { LegislationType } from "@/lib/db/types";
 import type { WizardState } from "./types";
@@ -93,7 +94,7 @@ export function LawTypeWizard({ initialData, onClose }: LawTypeWizardProps) {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Failed to save");
+        setError(apiErrorText(data, "Failed to save"));
         return;
       }
 

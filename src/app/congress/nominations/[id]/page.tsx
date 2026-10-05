@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -78,7 +79,7 @@ function NominationDetailContent() {
       });
       const d = await res.json();
       if (!res.ok) {
-        setError(d.error ?? "Failed to vote");
+        setError(apiErrorText(d, "Failed to vote"));
         return;
       }
       fetchNom();

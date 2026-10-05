@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useCallback, useEffect, useState } from "react";
 import { PRIME_RATE_STEP, snapToPrimeRateGrid } from "@/lib/db/types/centralBank";
 import Link from "next/link";
@@ -428,7 +429,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
                 >
                   {submitting ? "Updating..." : "Apply rate"}
                 </button>
-                {rateError && <p className="text-body-sm text-error">{rateError}</p>}
+                <InlineError error={rateError} className="text-body-sm text-error" />
               </div>
             </>
           )}
@@ -459,7 +460,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
                   : "Lock chair controls"}
             </Button>
           </div>
-          {lockError && <p className="mt-2 text-body-sm text-error">{lockError}</p>}
+          <InlineError error={lockError} className="mt-2 text-body-sm text-error" />
         </div>
       </div>
 
@@ -697,7 +698,7 @@ export function CentralBankAdminTab({ countryId }: Props) {
             </div>
           )}
 
-          {detailError && <p className="text-body text-error">{detailError}</p>}
+          <InlineError error={detailError} className="text-body text-error" />
 
           {!detailLoading && depositDetail && selection.kind === "deposit" && (
             <DepositDetailPanel detail={depositDetail} formatNative={formatNative} />
@@ -907,7 +908,7 @@ function LoanDetailPanel({
               </Button>
             )}
           </div>
-          {actionError && <p className="text-body-sm text-error">{actionError}</p>}
+          <InlineError error={actionError} className="text-body-sm text-error" />
         </div>
       )}
 

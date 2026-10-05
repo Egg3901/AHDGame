@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useMemo, useState } from "react";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -98,7 +100,7 @@ export function WireTransferCard({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Transfer failed.");
+        setError(apiErrorText(data, "Transfer failed."));
       } else {
         const sentCurrency: CurrencyCode =
           data.currency ?? activeCurrency ?? ("USD" as CurrencyCode);
@@ -229,7 +231,7 @@ export function WireTransferCard({
           </div>
         </div>
 
-        {error && <p className="text-xs text-error">{error}</p>}
+        <InlineError error={error} className="text-xs text-error" />
 
         <button
           onClick={handleSend}

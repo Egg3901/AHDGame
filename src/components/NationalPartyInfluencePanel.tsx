@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useSearchParams } from "next/navigation";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -154,7 +155,7 @@ export function NationalPartyInfluencePanel({
           setData(null);
         } else {
           const json = await res.json();
-          setError(json.error || "Failed to load influence options");
+          setError(apiErrorText(json, "Failed to load influence options"));
         }
       } catch {
         setError("Network error");
@@ -274,7 +275,7 @@ export function NationalPartyInfluencePanel({
         await fetchData({ background: true });
         await onPartyRefresh?.();
       } else {
-        setError(json.error || "Failed to execute influence");
+        setError(apiErrorText(json, "Failed to execute influence"));
       }
     } catch {
       setError("Network error");
@@ -309,7 +310,7 @@ export function NationalPartyInfluencePanel({
         await fetchData({ background: true });
         await onPartyRefresh?.();
       } else {
-        setError(json.error || "Failed to execute queue");
+        setError(apiErrorText(json, "Failed to execute queue"));
       }
     } catch {
       setError("Network error");
@@ -332,7 +333,7 @@ export function NationalPartyInfluencePanel({
         await onPartyRefresh?.();
         return { ok: true };
       }
-      setError(json.error || "Failed to execute influence");
+      setError(apiErrorText(json, "Failed to execute influence"));
       return { ok: false };
     } catch {
       setError("Network error");

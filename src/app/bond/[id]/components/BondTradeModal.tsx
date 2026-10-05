@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useId, useState } from "react";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import { Button, useDialogA11y } from "@/components/ui";
@@ -486,7 +488,7 @@ export function BondTradeModal({
         });
         const json = await res.json();
         if (!res.ok) {
-          setError(json.error ?? `Failed to ${side} bond`);
+          setError(apiErrorText(json, `Failed to ${side} bond`));
           return;
         }
         onSuccess();
@@ -507,7 +509,7 @@ export function BondTradeModal({
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? `Failed to ${side} bond`);
+        setError(apiErrorText(json, `Failed to ${side} bond`));
         return;
       }
       onSuccess();
@@ -926,7 +928,7 @@ export function BondTradeModal({
             )}
           </div>
 
-          {error && <p className="text-xs text-error">{error}</p>}
+          <InlineError error={error} className="text-xs text-error" />
         </div>
 
         {/* Footer */}

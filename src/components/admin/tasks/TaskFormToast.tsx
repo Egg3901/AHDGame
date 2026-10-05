@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import type { Task, TaskType, TaskPriority } from "@/lib/db/types";
 
@@ -129,7 +130,7 @@ export function TaskFormToast({ onCreated, onClose }: TaskFormToastProps) {
               />
             </div>
 
-            {error && <p className="text-xs text-red-500">{error}</p>}
+            <InlineError error={error} className="text-xs text-red-500" />
 
             {/* Actions */}
             <div className="flex justify-end gap-2 pt-1">

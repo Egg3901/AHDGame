@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 
 /**
@@ -42,7 +44,7 @@ export function CreateColdWarConflictForm() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Creation failed.");
+        setError(apiErrorText(data, "Creation failed."));
         return;
       }
       setCreated(data.conflictId);
@@ -103,7 +105,7 @@ export function CreateColdWarConflictForm() {
         {busy ? "Creating…" : "Create conflict"}
       </button>
 
-      {error && <p className="mt-3 text-sm text-error">{error}</p>}
+      <InlineError error={error} className="mt-3 text-sm text-error" />
       {created != null && (
         <p className="mt-3 text-sm text-success">
           Created conflict #{created}. View it at /world/conflicts/{created}.

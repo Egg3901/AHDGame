@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -168,7 +170,7 @@ export default function ExpandMarketModal({
       );
       const data = await res.json();
       if (!res.ok) {
-        setSuggestionError(data.error ?? "Failed to load suggestions");
+        setSuggestionError(apiErrorText(data, "Failed to load suggestions"));
         return;
       }
       setSuggestions(data.suggestions ?? []);
@@ -284,7 +286,7 @@ export default function ExpandMarketModal({
       });
       const data = (await res.json()) as { error?: string; sectorId?: string };
       if (!res.ok) {
-        setFoundingError(data.error ?? "Could not start this plant");
+        setFoundingError(apiErrorText(data, "Could not start this plant"));
         return;
       }
       onClose();
@@ -396,7 +398,7 @@ export default function ExpandMarketModal({
                 })}
               </div>
 
-              {suggestionError && <p className="text-sm text-error">{suggestionError}</p>}
+              <InlineError error={suggestionError} className="text-sm text-error" />
 
               <button
                 type="button"

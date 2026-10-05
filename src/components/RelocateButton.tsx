@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
@@ -192,7 +193,7 @@ export function RelocateButton({
         });
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error ?? "Residence choice failed");
+          setError(apiErrorText(data, "Residence choice failed"));
           return;
         }
       } else if (mode === "character-only") {
@@ -208,7 +209,7 @@ export function RelocateButton({
         });
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error ?? "Relocation failed");
+          setError(apiErrorText(data, "Relocation failed"));
           return;
         }
       } else {
@@ -223,7 +224,7 @@ export function RelocateButton({
         });
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error ?? "Relocation failed");
+          setError(apiErrorText(data, "Relocation failed"));
           return;
         }
       }

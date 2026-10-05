@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect } from "react";
 import { Modal } from "@/components/ui";
 
@@ -85,7 +86,7 @@ export default function AppointPMModal({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to nominate candidate.");
+        setError(apiErrorText(data, "Failed to nominate candidate."));
       } else {
         onSuccess?.(data.voteId ?? "");
         onClose();

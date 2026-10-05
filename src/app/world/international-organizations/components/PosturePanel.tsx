@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import {
@@ -145,7 +146,7 @@ export function PosturePanel({ org, viewer, currentTurn, votingWindowTurns, onCh
             </select>
             <p className="mt-2 text-xs text-muted">{POSTURE_META[posture].blurb}</p>
           </div>
-          {error && <p className="mt-2 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-2 text-xs text-error" />
           <div className="mt-4 flex gap-2">
             <Button variant="primary" size="md" onClick={submit} isLoading={submitting}>
               Submit for a vote

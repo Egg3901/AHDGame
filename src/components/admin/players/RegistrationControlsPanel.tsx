@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { LocalTime } from "@/components/time/LocalTime";
 
@@ -52,7 +53,7 @@ export function RegistrationControlsPanel() {
       });
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Failed to toggle registration");
+        setError(apiErrorText(data, "Failed to toggle registration"));
         return;
       }
       await fetchAll();
@@ -73,7 +74,7 @@ export function RegistrationControlsPanel() {
       });
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Failed to toggle collision check");
+        setError(apiErrorText(data, "Failed to toggle collision check"));
         return;
       }
       await fetchAll();

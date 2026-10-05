@@ -3,6 +3,7 @@ import {
   ERROR_CATALOG,
   defaultMessageFor,
   errorCodeForStatus,
+  apiErrorText,
   isErrorCode,
   newRequestRef,
   parseErrorBody,
@@ -55,5 +56,21 @@ describe("error catalog", () => {
   it("tolerates junk", () => {
     expect(parseErrorBody(null)).toEqual({});
     expect(parseErrorBody("x")).toEqual({});
+  });
+});
+
+describe("apiErrorText", () => {
+  it("appends the code, and the ref only for server faults", () => {
+    expect(apiErrorText({ error: "Not enough cash", code: "BAD_REQUEST", ref: "r1" }, "x")).toBe(
+      "Not enough cash (BAD_REQUEST)"
+    );
+    expect(
+      apiErrorText({ error: "Oops", code: "INTERNAL_ERROR", ref: "0123456789abcdef" }, "x")
+    ).toBe("Oops (INTERNAL_ERROR, ref 01234567)");
+  });
+  it("uses the fallback when the body has no message and tolerates codeless bodies", () => {
+    expect(apiErrorText({}, "Failed to save")).toBe("Failed to save");
+    expect(apiErrorText({ error: "plain" }, "x")).toBe("plain");
+    expect(apiErrorText(null, "fb")).toBe("fb");
   });
 });

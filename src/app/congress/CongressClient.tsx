@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { HeroImage } from "@/components/HeroImage";
@@ -118,7 +119,7 @@ function ContractsTab({ countryId }: { countryId: string }) {
       // Defensive parse of the error body after we've already detected !res.ok
       // and are surfacing the failure via setRevokeError.
       const json = await res.json().catch(() => ({}));
-      setRevokeError(json.error ?? "Failed to revoke contract");
+      setRevokeError(apiErrorText(json, "Failed to revoke contract"));
       return;
     }
     setRefreshKey((k) => k + 1);

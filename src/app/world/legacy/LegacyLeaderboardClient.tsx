@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Crown, Trophy, Info } from "lucide-react";
@@ -443,7 +444,7 @@ export default function LegacyLeaderboardClient({
                       {saving ? "Saving…" : "Save"}
                     </button>
                   </div>
-                  {saveError && <p className="mt-2 text-xs text-error">{saveError}</p>}
+                  <InlineError error={saveError} className="mt-2 text-xs text-error" />
                 </div>
               )}
             </div>

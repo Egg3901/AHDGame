@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import type { OrderDisplay } from "@/app/country/[code]/forex/types";
 import { formatStableUtc } from "@/lib/time/localTime";
@@ -49,7 +50,7 @@ export function MyOrders({ orders, onOrderCancelled }: Props) {
       if (res.ok) onOrderCancelled();
       else {
         const data = await res.json();
-        setError(data.error ?? "Failed to cancel order");
+        setError(apiErrorText(data, "Failed to cancel order"));
       }
     } catch {
       setError("Network error");

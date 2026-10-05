@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback } from "react";
 import { SpeakerSection } from "./SpeakerSection";
 import { AssignLeaderModal } from "./AssignLeaderModal";
@@ -138,7 +139,7 @@ export function CongressLeadershipTab({
     if (vacateVote) body.vacateVote = vacateVote;
     const result = await apiPost("/api/congress/speaker", body);
     if (result.ok) setMessage(result.message ?? "");
-    else setError(result.error ?? "Error");
+    else setError(apiErrorText(result, "Error"));
     fetchData();
   }
 
@@ -153,7 +154,7 @@ export function CongressLeadershipTab({
     if (nominationId) body.nominationId = nominationId;
     const result = await apiPost("/api/congress/senate-leadership", body);
     if (result.ok) setMessage(result.message ?? "");
-    else setError(result.error ?? "Error");
+    else setError(apiErrorText(result, "Error"));
     fetchData();
   }
 
@@ -168,7 +169,7 @@ export function CongressLeadershipTab({
     if (nominationId) body.nominationId = nominationId;
     const result = await apiPost("/api/congress/house-leadership", body);
     if (result.ok) setMessage(result.message ?? "");
-    else setError(result.error ?? "Error");
+    else setError(apiErrorText(result, "Error"));
     fetchData();
   }
 
@@ -229,7 +230,7 @@ export function CongressLeadershipTab({
         setAssigningRole(null);
         fetchData();
       } else {
-        setError(result.error ?? "Error");
+        setError(apiErrorText(result, "Error"));
       }
     } finally {
       setAssignLoading(false);
@@ -244,7 +245,7 @@ export function CongressLeadershipTab({
       characterId: null,
     });
     if (result.ok) setMessage(result.message ?? "");
-    else setError(result.error ?? "Error");
+    else setError(apiErrorText(result, "Error"));
     fetchData();
   }
 
@@ -296,7 +297,7 @@ export function CongressLeadershipTab({
                 action: "start_election",
               });
               if (result.ok) setMessage(result.message ?? "");
-              else setError(result.error ?? "Error");
+              else setError(apiErrorText(result, "Error"));
               fetchData();
             }}
             onForceEnd={() => handleSpeakerAction("force_end")}

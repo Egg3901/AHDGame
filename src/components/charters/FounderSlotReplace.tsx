@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
@@ -77,7 +78,7 @@ export function FounderSlotReplace({
       });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) {
-        setError(data.error ?? "Failed to replace founder");
+        setError(apiErrorText(data, "Failed to replace founder"));
         setSubmitting(false);
         return;
       }

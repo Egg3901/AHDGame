@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { Modal } from "@/components/ui";
 import { GameMonthTime } from "@/components/time/GameMonthTime";
@@ -53,7 +54,7 @@ export function SuspendEndorsePanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to suspend and endorse");
+        setError(apiErrorText(data, "Failed to suspend and endorse"));
         return;
       }
       setConfirmOpen(false);

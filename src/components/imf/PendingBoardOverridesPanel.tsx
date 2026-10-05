@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { Slider } from "@/components/ui";
 import {
@@ -95,7 +96,7 @@ function OverrideRow({
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(body.error ?? `Submission failed (${res.status})`);
+        setError(apiErrorText(body, `Submission failed (${res.status})`));
         return;
       }
       onActioned();

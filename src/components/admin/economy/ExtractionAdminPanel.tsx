@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { LocalTime } from "@/components/time/LocalTime";
 
@@ -102,7 +103,7 @@ export function ExtractionAdminPanel() {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        setError(json.error ?? "Failed to update settings");
+        setError(apiErrorText(json, "Failed to update settings"));
         return;
       }
       await fetchStatus();

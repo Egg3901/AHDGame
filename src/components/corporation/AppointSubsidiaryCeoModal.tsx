@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { PlayerSelector } from "@/components/PlayerSelector";
 import { useDialogA11y } from "@/components/ui";
@@ -42,7 +43,7 @@ export function AppointSubsidiaryCeoModal({
       });
       const data = await res.json();
       if (!res.ok) {
-        setErr(data.error || "Failed to appoint CEO");
+        setErr(apiErrorText(data, "Failed to appoint CEO"));
         return;
       }
       onAppointed();

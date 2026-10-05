@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import React, { useState, useEffect, useCallback } from "react";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { COMMODITY_LABELS } from "@/lib/constants/commodities";
@@ -464,7 +465,7 @@ export function CommoditiesAdminPanel() {
         </p>
       )}
 
-      {error && <p className="text-sm text-error bg-error/10 rounded-lg px-4 py-3">{error}</p>}
+      <InlineError error={error} className="text-sm text-error bg-error/10 rounded-lg px-4 py-3" />
       {actionError && (
         <p className="text-sm text-error bg-error/10 rounded-lg px-4 py-3">{actionError}</p>
       )}

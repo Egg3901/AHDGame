@@ -21,6 +21,7 @@
 // server module's doc comment for the exact logic). This component only
 // renders that computed state; it does not itself decide what counts as new.
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { ConfidenceBar } from "../alts/ConfidenceMeter";
@@ -379,7 +380,7 @@ export default function WatchlistPanel({ onOpenDossier, onOpenAltLink }: Watchli
         >
           {adding ? "Adding…" : "Add to watchlist"}
         </button>
-        {addError && <p className="w-full text-xs text-red-400">{addError}</p>}
+        <InlineError error={addError} className="w-full text-xs text-red-400" />
       </form>
 
       {flash && (

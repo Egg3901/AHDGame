@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
@@ -213,7 +215,7 @@ export default function CorporationDetailPage() {
       } else if (!hasLoaded.current) {
         // Only set page-level error on initial load — refresh failures should not
         // destroy the entire page when we already have valid data displayed.
-        setError(data.error || "Corporation not found");
+        setError(apiErrorText(data, "Corporation not found"));
         setErrorRef(typeof data.eventId === "string" ? data.eventId : null);
       } else {
         showToast(data.error || "Failed to refresh corporation data", "error");
@@ -338,7 +340,7 @@ export default function CorporationDetailPage() {
       });
       const payload = await res.json().catch(() => null);
       if (!res.ok) {
-        setError(payload?.error || "Failed to enable Mod View");
+        setError(apiErrorText(payload, "Failed to enable Mod View"));
         return;
       }
       setModViewEnabled(true);
@@ -464,7 +466,7 @@ export default function CorporationDetailPage() {
         void fetchCorporation();
         void fetchViewerContext();
       } else {
-        setError(data.error || "Failed to accept CEO position");
+        setError(apiErrorText(data, "Failed to accept CEO position"));
       }
     } catch {
       setError("Network error");
@@ -480,7 +482,7 @@ export default function CorporationDetailPage() {
         void fetchCorporation();
         void fetchViewerContext();
       } else {
-        setError(data.error || "Failed to decline CEO position");
+        setError(apiErrorText(data, "Failed to decline CEO position"));
       }
     } catch {
       setError("Network error");
@@ -686,7 +688,7 @@ export default function CorporationDetailPage() {
                   Decline
                 </button>
               </div>
-              {error && <p className="mt-3 text-xs text-error">{error}</p>}
+              <InlineError error={error} className="mt-3 text-xs text-error" />
             </div>
           )}
           <NationalCorporationView corpId={id} />

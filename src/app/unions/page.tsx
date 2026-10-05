@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { HeroImage } from "@/components/HeroImage";
@@ -80,7 +81,7 @@ export default function UnionsPage() {
         if (res.status === 403) {
           setNotEnabled(true);
         } else {
-          setLoadError(data.error ?? "Failed to load unions.");
+          setLoadError(apiErrorText(data, "Failed to load unions."));
         }
         return;
       }

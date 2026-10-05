@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
@@ -122,7 +123,7 @@ export function CentralBankLoanTab({ countryId }: Props) {
       .then(async (r) => {
         const j = (await r.json()) as LocApiResponse & { error?: string };
         if (!r.ok) {
-          setError(j.error ?? "Failed to load");
+          setError(apiErrorText(j, "Failed to load"));
           setData(null);
           return;
         }

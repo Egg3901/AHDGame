@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import GovernmentVotePanel from "@/components/uk/GovernmentVotePanel";
 import AppointPMModal from "@/components/uk/AppointPMModal";
@@ -81,7 +82,7 @@ export function ParliamentaryGovernmentActions({
       const res = await fetch(`/api/country/${countryCode}/pm/no-confidence`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
-        setProposeError(data.error ?? "Failed to propose no-confidence motion.");
+        setProposeError(apiErrorText(data, "Failed to propose no-confidence motion."));
       } else {
         window.location.reload();
       }

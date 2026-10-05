@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -145,7 +146,7 @@ export default function SuggestedActionsPage() {
           handleDismiss(recommendation.id);
           setTimeout(() => setExecuteSuccess(null), 3000);
         } else {
-          setExecuteError(result.error ?? "Failed to execute action");
+          setExecuteError(apiErrorText(result, "Failed to execute action"));
           setTimeout(() => setExecuteError(null), 5000);
         }
       } catch {

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { LocalTime } from "@/components/time/LocalTime";
 
@@ -47,7 +48,7 @@ export function SupporterRequestsTab() {
       const res = await fetch("/api/moderator/supporter-requests");
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to load supporter requests");
+        setError(apiErrorText(data, "Failed to load supporter requests"));
         return;
       }
       setPending(data.pending ?? []);
@@ -74,7 +75,7 @@ export function SupporterRequestsTab() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || `Failed to ${decision} request`);
+        setError(apiErrorText(data, `Failed to ${decision} request`));
         return;
       }
       setRejectingId(null);

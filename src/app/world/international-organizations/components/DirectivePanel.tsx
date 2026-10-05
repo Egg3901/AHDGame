@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import { canTableResolutionType } from "@/lib/constants/orgCategory";
@@ -140,7 +141,7 @@ export function DirectivePanel({ org, viewer, currentTurn, votingWindowTurns, on
             </select>
             {selectedDef && <p className="mt-2 text-xs text-muted">{selectedDef.blurb}</p>}
           </div>
-          {error && <p className="mt-2 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-2 text-xs text-error" />
           <div className="mt-4 flex gap-2">
             <Button variant="primary" size="md" onClick={submit} isLoading={submitting}>
               Submit for a vote

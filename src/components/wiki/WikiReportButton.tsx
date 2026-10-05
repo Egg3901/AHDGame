@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, type FormEvent } from "react";
 import { Button, Modal } from "@/components/ui";
 import { WIKI_REPORT_REASONS, type WikiReportReason } from "@/lib/db/types/wikiReport";
@@ -48,7 +50,7 @@ export function WikiReportButton({ slug }: WikiReportButtonProps) {
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         setStatus("error");
-        setError(body?.error ?? "Could not send the report.");
+        setError(apiErrorText(body, "Could not send the report."));
         return;
       }
       setStatus("done");
@@ -106,7 +108,7 @@ export function WikiReportButton({ slug }: WikiReportButtonProps) {
                 placeholder="What should change?"
               />
             </label>
-            {error && <p className="text-sm text-error">{error}</p>}
+            <InlineError error={error} className="text-sm text-error" />
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" size="sm" onClick={close}>
                 Cancel

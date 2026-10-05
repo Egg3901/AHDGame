@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useId } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { PortfolioStockHolding, PortfolioBondHolding } from "./CorporationPageTypes";
@@ -64,7 +65,7 @@ export default function PortfolioSellModal(props: PortfolioSellModalProps) {
         );
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error ?? "Failed to sell bond");
+          setError(apiErrorText(data, "Failed to sell bond"));
           setSubmitting(false);
           return;
         }
@@ -87,7 +88,7 @@ export default function PortfolioSellModal(props: PortfolioSellModalProps) {
         });
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error ?? "Failed to sell");
+          setError(apiErrorText(data, "Failed to sell"));
           setSubmitting(false);
           return;
         }
@@ -110,7 +111,7 @@ export default function PortfolioSellModal(props: PortfolioSellModalProps) {
         });
         const data = await res.json();
         if (!res.ok) {
-          setError(data.error ?? "Failed to place order");
+          setError(apiErrorText(data, "Failed to place order"));
           setSubmitting(false);
           return;
         }

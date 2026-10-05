@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -51,7 +52,7 @@ export function ClaimButton({ kind }: ClaimButtonProps) {
       >
         {busy ? "Creating…" : label}
       </button>
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      <InlineError error={error} className="text-sm text-red-500" />
     </div>
   );
 }

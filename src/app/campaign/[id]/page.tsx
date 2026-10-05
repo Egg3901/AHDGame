@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback, use } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -44,7 +45,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       const res = await fetch(`/api/campaigns/${id}`);
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Failed to load campaign");
+        setError(apiErrorText(data, "Failed to load campaign"));
         return;
       }
       const data = await res.json();
@@ -157,7 +158,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setResetOppoError(data.error || "Reset failed");
+        setResetOppoError(apiErrorText(data, "Reset failed"));
         return;
       }
       setResetOppoOpen(false);

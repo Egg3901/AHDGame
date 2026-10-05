@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -95,7 +96,7 @@ export function PrivatizationVotePanel({
       });
       if (!res.ok) {
         const d = await res.json();
-        setError(d.error || "Failed to vote");
+        setError(apiErrorText(d, "Failed to vote"));
         return;
       }
       const data = await res.json();
@@ -115,7 +116,7 @@ export function PrivatizationVotePanel({
       });
       if (!res.ok) {
         const d = await res.json();
-        setError(d.error || "Failed to cancel");
+        setError(apiErrorText(d, "Failed to cancel"));
         return;
       }
       onResolved?.();

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useMemo, useState } from "react";
 import type { MilitaryCommand, CommanderRef } from "@/lib/military/types";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
@@ -93,7 +94,7 @@ export function CommandingGeneralClient({
         });
         if (!res.ok) {
           const body = (await res.json().catch(() => null)) as { error?: string } | null;
-          setError(body?.error ?? "Could not save postings.");
+          setError(apiErrorText(body, "Could not save postings."));
           return;
         }
         setSaved(true);

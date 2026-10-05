@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui";
@@ -41,7 +42,7 @@ export default function BondDetailPage({ params }: { params: Promise<{ id: strin
         setHistory(json.priceHistory || []);
         setHolders(json.holders || []);
       } else {
-        setError(json.error || "Failed to load bond");
+        setError(apiErrorText(json, "Failed to load bond"));
       }
     } catch {
       setError("Network error");

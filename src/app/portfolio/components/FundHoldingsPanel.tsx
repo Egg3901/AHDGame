@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -82,7 +83,7 @@ export function FundHoldingsPanel({
       }
       if (!res.ok) {
         const body = (await res.json()) as { error?: string };
-        setError(body.error || "Failed to load fund portfolio");
+        setError(apiErrorText(body, "Failed to load fund portfolio"));
         return;
       }
       const data = (await res.json()) as {

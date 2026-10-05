@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
@@ -494,7 +496,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         setVpNomineeCharId("");
         await fetchData();
       } else {
-        setVpNominateError(json.error ?? "Failed to submit nomination");
+        setVpNominateError(apiErrorText(json, "Failed to submit nomination"));
       }
     } catch {
       setVpNominateError("Network error — please try again");
@@ -1151,7 +1153,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                 </option>
               ))}
             </select>
-            {vpNominateError && <p className="text-xs text-error mb-3">{vpNominateError}</p>}
+            <InlineError error={vpNominateError} className="text-xs text-error mb-3" />
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => {

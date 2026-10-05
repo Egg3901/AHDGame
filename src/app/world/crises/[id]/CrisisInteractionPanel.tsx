@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/contexts/ToastContext";
 import type { CrisisDecisionNode, CrisisEffect } from "@/lib/db/types/crisis";
@@ -423,7 +424,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to submit decision");
+        setError(apiErrorText(data, "Failed to submit decision"));
         return;
       }
       if (data.appliedEffects?.length) {
@@ -453,7 +454,7 @@ export default function CrisisInteractionPanel({ crisisId }: { crisisId: string 
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to pledge aid");
+        setError(apiErrorText(data, "Failed to pledge aid"));
         return;
       }
       showToast("Aid pledged — bill sent to your legislature", "success");

@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import type { CountryId } from "@/lib/constants/countries";
@@ -451,7 +452,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
         </CentralBankSection>
       )}
 
-      {error && <p className="text-body-sm text-danger">{error}</p>}
+      <InlineError error={error} className="text-body-sm text-danger" />
 
       {/* Nominate (executive only) */}
       {state.canNominate && (

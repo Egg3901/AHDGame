@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 import { STATE_BILL_CATEGORIES, BILL_CATEGORIES } from "@shared/constants/legislation";
 import { turnoutTargetLabel } from "@/lib/demographics/turnoutTarget";
@@ -144,7 +146,7 @@ export function DeliverAddressModal({
     if (res.ok) onSuccess();
     else {
       const data = await res.json().catch(() => ({}));
-      setError(data?.error ?? "Failed to deliver.");
+      setError(apiErrorText(data, "Failed to deliver."));
       setSubmitting(false);
     }
   }
@@ -318,7 +320,7 @@ export function DeliverAddressModal({
           )}
         </div>
 
-        {error && <p className="mb-3 text-sm text-error">{error}</p>}
+        <InlineError error={error} className="mb-3 text-sm text-error" />
         <div className="flex justify-end gap-2">
           <button
             onClick={onClose}

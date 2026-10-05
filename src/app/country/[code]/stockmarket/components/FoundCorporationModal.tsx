@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useMemo, useState } from "react";
 import { getEraFoundingBounds, getEraFounderShares } from "@/lib/constants/sectorSeedEra";
 import {
@@ -293,7 +294,7 @@ export function FoundCorporationModal({
         onClose();
         onSuccess();
       } else {
-        setFoundError(data.error || "Failed to found corporation");
+        setFoundError(apiErrorText(data, "Failed to found corporation"));
       }
     } catch {
       setFoundError("Network error");

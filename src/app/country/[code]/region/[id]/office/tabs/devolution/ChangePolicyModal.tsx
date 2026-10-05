@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import type { CountryId } from "@/lib/constants/countries";
 import {
@@ -62,7 +63,7 @@ export function ChangePolicyModal({
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data?.error ?? "Failed to change policy.");
+        setError(apiErrorText(data, "Failed to change policy."));
         setSubmitting(false);
         return;
       }

@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
@@ -159,7 +160,7 @@ export function OrganizationWarDeclarationPanel({
               </select>
             </div>
           </div>
-          {error && <p className="mt-2 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-2 text-xs text-error" />
           <div className="mt-4 flex gap-2">
             <Button
               variant="primary"

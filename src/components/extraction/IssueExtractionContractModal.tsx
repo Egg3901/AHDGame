@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { Modal, Button } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -127,7 +129,7 @@ export function IssueExtractionContractModal({
         return;
       }
       if (!res.ok) {
-        setError(json.error ?? "Failed to issue the offer.");
+        setError(apiErrorText(json, "Failed to issue the offer."));
         setSubmitting(false);
         return;
       }
@@ -281,7 +283,7 @@ export function IssueExtractionContractModal({
           </p>
         )}
 
-        {error && <p className="text-sm text-error">{error}</p>}
+        <InlineError error={error} className="text-sm text-error" />
 
         <div className="flex gap-3 pt-1">
           <Button type="submit" disabled={submitting || !authorityAllowed} className="flex-1">

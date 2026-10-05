@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState, useEffect, useCallback } from "react";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 import { LocalTime } from "@/components/time/LocalTime";
@@ -440,7 +441,7 @@ export function ActivityLogTab({
         </button>
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      <InlineError error={error} className="text-sm text-red-500" />
 
       {/* Table */}
       <div className="rounded-xl border border-card-border bg-card overflow-x-auto">

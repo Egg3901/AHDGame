@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { PlayerSelector } from "@/components/PlayerSelector";
 
@@ -34,7 +35,7 @@ export function PatreonManagementTab({ context = "admin" }: PatreonManagementTab
       const res = await fetch(`${apiBase}/patreon/search?q=${encodeURIComponent(query)}`);
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Search failed");
+        setError(apiErrorText(data, "Search failed"));
         setSelected(null);
         return;
       }
@@ -78,7 +79,7 @@ export function PatreonManagementTab({ context = "admin" }: PatreonManagementTab
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to update Patreon status");
+        setError(apiErrorText(data, "Failed to update Patreon status"));
         return;
       }
       setMessage(nextTier ? `Set Patreon tier to ${nextTier}.` : "Cleared Patreon status.");

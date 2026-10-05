@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { Modal } from "@/components/ui";
 import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
@@ -80,7 +82,7 @@ export function FoundUnionModal({
         handleClose();
         onFounded();
       } else {
-        setError(data.error ?? "Failed to found union.");
+        setError(apiErrorText(data, "Failed to found union."));
       }
     } catch {
       setError("Network error. Nothing was founded.");
@@ -147,7 +149,7 @@ export function FoundUnionModal({
                 maxLength={MAX_UNION_NAME_LENGTH}
                 className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none focus:ring-1 focus:ring-primary/20"
               />
-              {nameError && <p className="mt-1.5 text-xs text-error">{nameError}</p>}
+              <InlineError error={nameError} className="mt-1.5 text-xs text-error" />
             </div>
 
             <div>

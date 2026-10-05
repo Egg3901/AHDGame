@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
@@ -37,9 +38,9 @@ export function WhipPanel({ countryId }: { countryId: string }) {
       if (res.ok) {
         setWithdrawn(Array.isArray(data.withdrawn) ? data.withdrawn : []);
       } else if (res.status === 403) {
-        setError(data.error ?? "Only the Prime Minister can view whip suspensions.");
+        setError(apiErrorText(data, "Only the Prime Minister can view whip suspensions."));
       } else {
-        setError(data.error ?? "Failed to load whip suspensions.");
+        setError(apiErrorText(data, "Failed to load whip suspensions."));
       }
     } catch {
       setError("Network error - could not reach the server.");

@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
@@ -38,7 +40,7 @@ export function CountryReadinessPanel() {
       const res = await fetch(`/api/admin/country/${countryId.toLowerCase()}/readiness`);
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to diagnose");
+        setError(apiErrorText(data, "Failed to diagnose"));
       } else {
         setReport(data as ReadinessReport);
       }
@@ -82,7 +84,7 @@ export function CountryReadinessPanel() {
           {loading ? "Checking…" : "Diagnose"}
         </button>
       </div>
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      <InlineError error={error} className="text-xs text-red-400" />
       {report && (
         <div className="text-xs space-y-2">
           <p>

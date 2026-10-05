@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { HeroImage } from "@/components/HeroImage";
@@ -180,7 +181,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
       });
       const json = (await response.json()) as { message?: string; error?: string };
       if (!response.ok) {
-        setNominateError(json.error ?? "Failed to submit nomination");
+        setNominateError(apiErrorText(json, "Failed to submit nomination"));
         return;
       }
       showToast(json.message ?? "Nomination submitted", "success");
@@ -220,7 +221,7 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
       });
       const json = (await response.json()) as { message?: string; error?: string };
       if (!response.ok) {
-        setNominateError(json.error ?? "Failed to appoint an acting secretary");
+        setNominateError(apiErrorText(json, "Failed to appoint an acting secretary"));
         return;
       }
       showToast(json.message ?? "Acting secretary appointed", "success");
