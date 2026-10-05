@@ -35,7 +35,7 @@ export async function generateMetadata({ params }: WikiPageProps): Promise<Metad
   const page = await getWikiPageData(slug);
   const generatedDefinition = await getGeneratedOfficeDefinition(slug);
   if (!page && !generatedDefinition)
-    return { title: "Not Found", robots: { index: false, follow: false } };
+    return { title: "Not found", robots: { index: false, follow: false } };
   if (!page && generatedDefinition) {
     const title = `${generatedDefinition.title} | Game Wiki | A House Divided`;
     const description = generatedDefinition.description;
@@ -58,7 +58,7 @@ export async function generateMetadata({ params }: WikiPageProps): Promise<Metad
       },
     };
   }
-  if (!page) return { title: "Not Found", robots: { index: false, follow: false } };
+  if (!page) return { title: "Not found", robots: { index: false, follow: false } };
   const title = `${page.title} | Game Wiki | A House Divided`;
   const description = page.description;
   const canonical = getWikiCanonicalUrl(`/wiki/${slug}`);
@@ -295,7 +295,7 @@ function GeneratedOfficeWikiPage({
       </article>
 
       <section className="mt-8 rounded-xl border border-card-border bg-card/60 p-6">
-        <h2 className="mb-4 text-xl font-semibold text-foreground">Current Holder</h2>
+        <h2 className="mb-4 text-xl font-semibold text-foreground">Current holder</h2>
         {current ? (
           <div className="rounded-lg border border-card-border bg-card/40 p-4">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -329,7 +329,7 @@ function GeneratedOfficeWikiPage({
       </section>
 
       <section className="mt-8 rounded-xl border border-card-border bg-card/60 p-6">
-        <h2 className="mb-4 text-xl font-semibold text-foreground">Office Holder History</h2>
+        <h2 className="mb-4 text-xl font-semibold text-foreground">Office holder history</h2>
         <div className="space-y-8">
           {page.tenureGroups.map((group) => (
             <div key={`${group.iteration.type}-${group.iteration.number}`}>
@@ -338,7 +338,7 @@ function GeneratedOfficeWikiPage({
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[680px] text-sm">
                     <thead>
-                      <tr className="border-b border-card-border text-left text-xs uppercase tracking-wider text-muted">
+                      <tr className="border-b border-card-border text-left text-sm font-semibold text-foreground">
                         <th className="pb-2 pr-4 font-semibold">Holder</th>
                         <th className="pb-2 pr-4 font-semibold">Party</th>
                         <th className="pb-2 pr-4 font-semibold">Tenure</th>

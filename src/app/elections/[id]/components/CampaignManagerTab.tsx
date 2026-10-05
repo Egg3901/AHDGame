@@ -77,7 +77,7 @@ export function CampaignManagerTab({ electionId }: CampaignManagerTabProps) {
     <div className="rounded-xl border border-primary/20 bg-card p-5">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h3 className="text-lg font-semibold">Your Campaign</h3>
+          <h3 className="text-lg font-semibold">Your campaign</h3>
           <p className="truncate text-sm text-muted">
             {campaign.candidateName}
             {partyLabel ? ` - ${partyLabel}` : ""}
@@ -88,13 +88,13 @@ export function CampaignManagerTab({ electionId }: CampaignManagerTabProps) {
             href="#state-org"
             className="inline-flex items-center justify-center rounded-lg border border-primary/40 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
           >
-            Campaign Presence
+            Campaign presence
           </Link>
           <Link
             href={`/campaign/${campaign.id}`}
             className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
           >
-            Manage Campaign
+            Manage campaign
           </Link>
         </div>
       </div>
@@ -124,7 +124,7 @@ export function CampaignManagerTab({ electionId }: CampaignManagerTabProps) {
           </div>
         </div>
         <div className="rounded-lg border border-card-border bg-background p-3 text-center">
-          <div className="text-xs text-muted mb-1">Total Levels</div>
+          <div className="text-xs text-muted mb-1">Total levels</div>
           <div className="font-mono font-bold text-purple-400 tabular-nums">{totalLevels}</div>
         </div>
       </div>

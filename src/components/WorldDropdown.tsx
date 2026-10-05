@@ -84,7 +84,7 @@ export function WorldDropdown({
           <div className="py-1">
             {corporate.length > 0 && (
               <div className="mb-1 border-b border-card-border pb-1">
-                <p className="px-4 pt-2 pb-1 text-xs font-medium uppercase tracking-wider text-muted">
+                <p className="px-4 pt-2 pb-1 text-body-sm font-medium text-muted">
                   {t("menus.world.headers.corporate")}
                 </p>
                 {corporate.map((item) => (
@@ -104,7 +104,7 @@ export function WorldDropdown({
             {leaderboard.length > 0 && (
               <div className="mb-1 border-b border-card-border pb-1">
                 <div className="flex items-center gap-2 px-4 pt-2 pb-1">
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted">
+                  <p className="text-body-sm font-medium text-muted">
                     {t("menus.world.headers.leaderboard")}
                   </p>
                   <span className="rounded-full bg-warning/15 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-warning">

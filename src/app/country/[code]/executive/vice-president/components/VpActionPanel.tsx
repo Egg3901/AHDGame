@@ -71,7 +71,7 @@ export function VpActionPanel({
     <div className="rounded-xl border border-card-border bg-card p-6">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Vice-Presidential Actions</h2>
+          <h2 className="text-lg font-semibold text-foreground">Vice-presidential actions</h2>
           <p className="mt-0.5 text-sm text-muted">
             Use the office to steady the administration and build your own standing.
           </p>
@@ -121,7 +121,7 @@ export function VpActionPanel({
                     isLoading={isActingThis}
                     onClick={() => handleAct(action.id)}
                   >
-                    Take Action
+                    Take action
                   </Button>
                 </div>
               </div>

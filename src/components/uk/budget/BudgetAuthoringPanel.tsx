@@ -378,7 +378,7 @@ export function BudgetAuthoringPanel({ countryCode }: { countryCode: string }) {
             onClick={() => submit("preview")}
             className="rounded border border-card-border px-3 py-1.5 text-body-sm text-muted disabled:opacity-50"
           >
-            Preview Budget
+            Preview budget
           </button>
           <button
             type="button"
@@ -394,7 +394,7 @@ export function BudgetAuthoringPanel({ countryCode }: { countryCode: string }) {
             onClick={() => submit("table")}
             className="rounded border border-foreground bg-foreground px-3 py-1.5 text-body-sm text-background disabled:opacity-50"
           >
-            Table Budget
+            Table budget
           </button>
         </div>
       )}

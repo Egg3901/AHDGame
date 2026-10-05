@@ -89,25 +89,19 @@ export function YourPositionCard({
       </div>
       <div className="mt-3 grid grid-cols-3 gap-6 border-t border-card-border pt-3">
         <div>
-          <div className="text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-            Units
-          </div>
+          <div className="text-body-sm font-medium text-muted">Units</div>
           <div className="mt-0.5 font-mono tabular-nums text-[13px] font-semibold">
             {units.toLocaleString("en-US")}
           </div>
         </div>
         <div>
-          <div className="text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-            Avg NAV paid
-          </div>
+          <div className="text-body-sm font-medium text-muted">Avg NAV paid</div>
           <div className="mt-0.5 font-mono tabular-nums text-[13px] font-semibold">
             {formatPrice(avgNavDisplay, ccy)}
           </div>
         </div>
         <div>
-          <div className="text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-            Cost basis
-          </div>
+          <div className="text-body-sm font-medium text-muted">Cost basis</div>
           <div className="mt-0.5 font-mono tabular-nums text-[13px] font-semibold">
             {formatAmount(costBasis, ccy)}
           </div>

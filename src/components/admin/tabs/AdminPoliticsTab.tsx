@@ -71,8 +71,8 @@ function ElectionsSubContent() {
       <SubTabBar
         options={[
           { id: "manage" as const, label: "Manage" },
-          { id: "primary-debug" as const, label: "Primary Projection" },
-          { id: "log" as const, label: "Election Log" },
+          { id: "primary-debug" as const, label: "Primary projection" },
+          { id: "log" as const, label: "Election log" },
         ]}
         active={innerSub}
         onChange={setInnerSub}
@@ -119,7 +119,7 @@ function PartiesSubContent() {
       <SubTabBar
         options={[
           { id: "org" as const, label: "Organization" },
-          { id: "elections" as const, label: "Leadership Elections" },
+          { id: "elections" as const, label: "Leadership elections" },
         ]}
         active={innerSub}
         onChange={setInnerSub}

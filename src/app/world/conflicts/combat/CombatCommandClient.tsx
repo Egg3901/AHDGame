@@ -16,11 +16,11 @@ import { TheaterWarRoom } from "./components/TheaterWarRoom";
 const mono = MIL_FONT.mono;
 
 const NAV = [
-  { id: "oob", label: "Order of Battle" },
-  { id: "dossier", label: "Unit Dossier" },
-  { id: "doctrine", label: "Doctrine & Command" },
-  { id: "theater", label: "Theater Map" },
-  { id: "war", label: "War Room" },
+  { id: "oob", label: "Order of battle" },
+  { id: "dossier", label: "Unit dossier" },
+  { id: "doctrine", label: "Doctrine & command" },
+  { id: "theater", label: "Theater map" },
+  { id: "war", label: "War room" },
 ];
 
 export function CombatCommandClient({
@@ -161,7 +161,7 @@ export function CombatCommandClient({
               color: MIL_COLOR.textStrong,
             }}
           >
-            Combat Command
+            Combat command
           </h1>
         </div>
 

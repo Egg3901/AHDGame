@@ -38,7 +38,7 @@ export interface NatOfficialActions {
 
 const READONLY_TABS: { id: NatTabId; label: string }[] = [
   { id: "overview", label: "Overview" },
-  { id: "mandates", label: "Public Mandates" },
+  { id: "mandates", label: "Public mandates" },
   { id: "holdings", label: "Holdings" },
   { id: "register", label: "Register" },
 ];
@@ -153,7 +153,7 @@ export function NationalCorporationView({ corpId }: { corpId: string }) {
                 isOfficial ? "bg-gold text-background" : "text-gold/80 hover:text-gold"
               }`}
             >
-              State Official
+              State official
             </button>
           </div>
         </div>

@@ -59,11 +59,11 @@ export default function ResourceAvailabilityPanel({
   if (byCountry.length === 0) {
     return (
       <section className="mb-6 rounded-xl border border-warning/30 bg-warning/10 p-4">
-        <h3 className="text-heading-sm font-semibold text-warning mb-1">Resource Availability</h3>
+        <h3 className="text-heading-sm font-semibold text-warning mb-1">Resource availability</h3>
         <p className="text-body-sm text-muted">
           No state extraction capacity configured for this commodity. Current supply is uncapped,
           which skews margin math. An admin can seed capacity from{" "}
-          <strong>Admin → Economy → Resource Capacity</strong>.
+          <strong>Admin → economy → resource capacity</strong>.
         </p>
       </section>
     );
@@ -73,13 +73,13 @@ export default function ResourceAvailabilityPanel({
     <section className="mb-6 rounded-xl border border-card-border bg-card p-4 shadow-card">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="text-heading-sm font-semibold">Resource Availability</h3>
+          <h3 className="text-heading-sm font-semibold">Resource availability</h3>
           <p className="text-body-sm text-muted">
             Per-state extraction ceilings (units/turn). Supply cannot exceed these caps.
           </p>
         </div>
         <div className="text-right">
-          <div className="text-body-xs uppercase tracking-widest text-muted">{capacityLabel}</div>
+          <div className="text-body-sm font-medium text-muted">{capacityLabel}</div>
           <div className="text-body-lg font-bold tabular-nums">
             {totalCapacity.toLocaleString("en-US")}
           </div>
@@ -113,9 +113,7 @@ export default function ResourceAvailabilityPanel({
                 className="w-full flex items-center justify-between px-3 py-2 bg-card-elevated hover:bg-card-border/20 transition-colors text-left"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-foreground uppercase tracking-wider">
-                    {countryId}
-                  </span>
+                  <span className="text-body-sm font-medium text-foreground">{countryId}</span>
                   <span className="text-[10px] text-muted">
                     {rows.length} state{rows.length !== 1 ? "s" : ""}
                   </span>

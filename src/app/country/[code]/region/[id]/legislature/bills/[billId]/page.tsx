@@ -154,7 +154,7 @@ function StateBillDetailContent() {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-6">
         <p className="text-error text-sm">{error}</p>
         <Link href={backHref} className="text-sm text-primary hover:underline">
-          ← Back to Legislature
+          ← Back to legislature
         </Link>
       </div>
     );
@@ -200,7 +200,7 @@ function StateBillDetailContent() {
           href={backHref}
           className="text-sm text-muted hover:text-foreground transition-colors"
         >
-          ← Back to Legislature
+          ← Back to legislature
         </Link>
 
         <div className="rounded-xl border border-card-border bg-card shadow-panel p-6 space-y-4">
@@ -212,7 +212,7 @@ function StateBillDetailContent() {
                 </span>
                 {bill.adminProposed && (
                   <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
-                    Admin Proposed
+                    Admin proposed
                   </span>
                 )}
                 {bill.legislationTypeName && (

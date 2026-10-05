@@ -114,7 +114,7 @@ export function VoteListTable({ billId, chamber, showSeats }: VoteListTableProps
         {/* Party filter */}
         <div className="flex flex-wrap gap-1.5">
           <FilterPill active={partyFilter === "all"} onClick={() => setPartyFilter("all")}>
-            All Parties
+            All parties
           </FilterPill>
           {uniqueParties.map((p) => (
             <FilterPill

@@ -382,8 +382,8 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
         {/* Total Market — sum across all sectors */}
         <div className="flex min-w-max flex-1 flex-col justify-center px-4 py-2.5">
           <Tooltip content={marketCurrencyNote}>
-            <span className="block w-fit cursor-help border-b border-dashed border-card-border/70 text-[10px] font-medium uppercase tracking-widest text-muted">
-              Total Market
+            <span className="block w-fit cursor-help border-b border-dashed border-card-border/70 text-sm font-semibold text-foreground">
+              Total market
             </span>
           </Tooltip>
           <span className="mt-0.5 text-sm font-bold text-foreground tabular-nums">
@@ -393,9 +393,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
         </div>
         {/* Top Sector — label + market size */}
         <div className="flex min-w-max flex-1 flex-col justify-center px-4 py-2.5">
-          <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
-            Top Sector
-          </span>
+          <span className="block text-body-sm font-medium text-muted">Top sector</span>
           <span className="mt-0.5 truncate text-sm font-bold text-primary">
             {topSector?.label ?? "—"}
           </span>
@@ -407,9 +405,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
         </div>
         {/* Corporations — count of all player-owned corps across all sectors */}
         <div className="flex min-w-max flex-1 flex-col justify-center px-4 py-2.5">
-          <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
-            Corporations
-          </span>
+          <span className="block text-body-sm font-medium text-muted">Corporations</span>
           <span className="mt-0.5 text-sm font-bold text-foreground tabular-nums">
             {data.sectors.reduce(
               (count, s) => count + s.owners.filter((o) => !o.isNpp && !o.isNatcorp).length,
@@ -423,9 +419,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
             included (ticket #1162). An average of per-sector leading shares
             would be no more meaningful, so this reports occupancy instead. */}
         <div className="flex min-w-max flex-1 flex-col justify-center px-4 py-2.5">
-          <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
-            Active Sectors
-          </span>
+          <span className="block text-body-sm font-medium text-muted">Active sectors</span>
           <span className="mt-0.5 text-sm font-bold text-foreground tabular-nums">
             {data.sectors.filter((s) => s.owners.length > 0).length}
             <span className="text-[10px] font-normal text-muted"> of {data.sectors.length}</span>
@@ -438,9 +432,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
           (both selectors drive `selectedType`, so they stay in sync). */}
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[220px] flex-1">
-          <span className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-muted">
-            Sector
-          </span>
+          <span className="mb-1 block text-body-sm font-medium text-muted">Sector</span>
           <select
             aria-label="Select sector"
             value={selectedType}
@@ -460,7 +452,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
           href={`${stockmarketUrl(countryId)}?tab=commodities`}
           className="pb-2 text-xs text-primary hover:underline"
         >
-          View Commodity Prices &rarr;
+          View commodity prices &rarr;
         </Link>
       </div>
 
@@ -581,7 +573,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
             <div className="flex justify-between text-muted">
               <Tooltip content={marketCurrencyNote}>
                 <span className="cursor-help border-b border-dashed border-card-border/70">
-                  Total Market
+                  Total market
                 </span>
               </Tooltip>
               <span className="font-medium text-foreground">
@@ -629,8 +621,8 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div>
             <Tooltip content={marketCurrencyNote}>
-              <span className="block w-fit cursor-help border-b border-dashed border-card-border/70 text-[10px] uppercase tracking-widest text-muted font-medium">
-                Owned Revenue
+              <span className="block w-fit cursor-help border-b border-dashed border-card-border/70 text-sm font-semibold text-foreground">
+                Owned revenue
               </span>
             </Tooltip>
             <span className="text-sm font-bold text-success tabular-nums">
@@ -640,8 +632,8 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
           </div>
           <div>
             <Tooltip content={marketCurrencyNote}>
-              <span className="block w-fit cursor-help border-b border-dashed border-card-border/70 text-[10px] uppercase tracking-widest text-muted font-medium">
-                Unowned Revenue
+              <span className="block w-fit cursor-help border-b border-dashed border-card-border/70 text-sm font-semibold text-foreground">
+                Unowned revenue
               </span>
             </Tooltip>
             <span className="text-sm font-bold text-foreground tabular-nums">
@@ -650,15 +642,11 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
             </span>
           </div>
           <div>
-            <span className="block text-[10px] uppercase tracking-widest text-muted font-medium">
-              Corporations
-            </span>
+            <span className="block text-body-sm font-medium text-muted">Corporations</span>
             <span className="text-sm font-bold text-foreground">{playerOwners.length}</span>
           </div>
           <div>
-            <span className="block text-[10px] uppercase tracking-widest text-muted font-medium">
-              Largest Share
-            </span>
+            <span className="block text-body-sm font-medium text-muted">Largest share</span>
             <span className="text-sm font-bold text-primary tabular-nums">
               {ownedPercent === null ? "Empty" : `${ownedPercent.toFixed(1)}%`}
             </span>
@@ -691,7 +679,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
 
       {/* Sector cards */}
       <div className="space-y-3">
-        <h4 className="text-sm font-bold text-foreground">Market Participants</h4>
+        <h4 className="text-sm font-bold text-foreground">Market participants</h4>
 
         {/* Owned sector cards — NPP corps hidden (aggregated into the pie, t834) */}
         {(() => {
@@ -751,7 +739,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
                                 className="inline-flex items-center rounded-md border border-success/40 bg-success/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-success"
                                 title={`For sale at ${formatAmount(owner.forSale.priceAnchor)}`}
                               >
-                                For Sale · {formatAmount(owner.forSale.priceAnchor)}
+                                For sale · {formatAmount(owner.forSale.priceAnchor)}
                               </span>
                             )}
                           </div>
@@ -777,18 +765,14 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
                         <div className="text-xl font-bold tabular-nums leading-none text-foreground">
                           {owner.marketShare}%
                         </div>
-                        <div className="text-[10px] text-muted uppercase tracking-wide mt-0.5">
-                          share
-                        </div>
+                        <div className="text-body-sm font-medium text-muted mt-0.5">share</div>
                       </div>
                     </div>
 
                     {/* Stats row */}
                     <div className="flex border-t border-card-border/40 divide-x divide-card-border/40">
                       <div className="flex flex-col px-4 py-2.5">
-                        <span className="text-[10px] uppercase tracking-wide text-muted mb-1">
-                          CEO
-                        </span>
+                        <span className="text-body-sm font-medium text-muted mb-1">CEO</span>
                         <div className="flex items-center gap-1.5">
                           {owner.ceoCountryId && (
                             <Image
@@ -810,9 +794,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
                         </div>
                       </div>
                       <div className="flex flex-col px-4 py-2.5">
-                        <span className="text-[10px] uppercase tracking-wide text-muted mb-1">
-                          Revenue
-                        </span>
+                        <span className="text-body-sm font-medium text-muted mb-1">Revenue</span>
                         <span className="text-xs font-semibold text-success tabular-nums leading-tight">
                           {revenueDisclosed ? `${fmtMarket(revenue)}/day` : "Not disclosed"}
                         </span>
@@ -821,9 +803,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
                         className="flex flex-col px-4 py-2.5"
                         title={`Growth targets revenue change over ${GROWTH_RATE_TURNS_PER_YEAR} turns (one game year)`}
                       >
-                        <span className="text-[10px] uppercase tracking-wide text-muted mb-1">
-                          Growth
-                        </span>
+                        <span className="text-body-sm font-medium text-muted mb-1">Growth</span>
                         <span className="text-xs font-medium leading-tight">
                           <span className="text-foreground">{owner.targetGrowthRate}%</span>
                           <span className="text-muted"> /yr</span>
@@ -833,9 +813,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
                         className="flex flex-col px-4 py-2.5"
                         title="CEO-set output level (−25% to +25%); the active level trends toward the target at 1 point per turn. Sustained negative production erodes profit margins over time."
                       >
-                        <span className="text-[10px] uppercase tracking-wide text-muted mb-1">
-                          Production
-                        </span>
+                        <span className="text-body-sm font-medium text-muted mb-1">Production</span>
                         <span className="inline-flex items-center gap-1.5 leading-tight">
                           <span
                             className={`text-xs font-medium tabular-nums ${
@@ -1034,7 +1012,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
               <span
                 className={`font-semibold text-sm ${data.plantsMode ? "text-foreground" : "text-muted"}`}
               >
-                {data.plantsMode ? "Untapped Market" : "Unowned Market"}
+                {data.plantsMode ? "Untapped market" : "Unowned market"}
               </span>
               <div className="text-right">
                 <div
@@ -1044,7 +1022,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
                     ? formatUnits(sector.headroomUnits)
                     : `${sector.unownedPercent.toFixed(1)}%`}
                 </div>
-                <div className="text-[10px] text-muted uppercase tracking-wide mt-0.5">
+                <div className="text-body-sm font-medium text-muted mt-0.5">
                   {data.plantsMode ? CAPACITY_UNIT_LABEL : "share"}
                 </div>
               </div>
@@ -1061,7 +1039,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
             {/* Stats row */}
             <div className="flex border-t border-card-border/40">
               <div className="flex flex-col px-4 py-2.5">
-                <span className="text-[10px] uppercase tracking-wide text-muted mb-1">
+                <span className="text-body-sm font-medium text-muted mb-1">
                   {data.plantsMode ? "Worth" : "Revenue"}
                 </span>
                 <span className="text-xs font-semibold text-muted tabular-nums leading-tight">
@@ -1101,9 +1079,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
 
                 {/* Strength selector */}
                 <div className="px-4 pt-2">
-                  <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">
-                    Split strength
-                  </div>
+                  <div className="mb-1 text-body-sm font-medium text-muted">Split strength</div>
                   <div className="flex gap-1 max-w-[200px]">
                     <button
                       onClick={() => setSplitStrength("full")}

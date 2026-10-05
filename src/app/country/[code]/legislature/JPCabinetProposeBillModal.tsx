@@ -213,7 +213,7 @@ function LegacyJPCabinetProposeBillModal({
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-foreground">Propose Legislation</h2>
+              <h2 className="text-lg font-semibold text-foreground">Propose legislation</h2>
               {adminOverride ? (
                 <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">
                   Admin
@@ -239,7 +239,7 @@ function LegacyJPCabinetProposeBillModal({
           {proposalWarning ? <BillAutoFailWarningBanner warning={proposalWarning} /> : null}
 
           <div>
-            <label className="mb-1 block text-xs text-muted">Bill Title</label>
+            <label className="mb-1 block text-xs text-muted">Bill title</label>
             <input
               className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               value={title}
@@ -286,7 +286,7 @@ function LegacyJPCabinetProposeBillModal({
             </div>
 
             <div>
-              <label className="mb-1 block text-xs text-muted">Originating Chamber</label>
+              <label className="mb-1 block text-xs text-muted">Originating chamber</label>
               <select
                 disabled
                 value="cabinet"
@@ -422,7 +422,7 @@ function LegacyJPCabinetProposeBillModal({
               disabled={submitDisabled}
               className="flex-1 rounded-lg bg-primary py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
-              {submitting ? "Proposing..." : "Propose Bill"}
+              {submitting ? "Proposing..." : "Propose bill"}
             </button>
           </div>
         </form>

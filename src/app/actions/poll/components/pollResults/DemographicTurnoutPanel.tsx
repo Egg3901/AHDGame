@@ -17,7 +17,7 @@ const DEMOGRAPHIC_SECTIONS: Array<{
   },
   {
     key: "age",
-    label: "Age Group",
+    label: "Age group",
     tooltip:
       "Older voters consistently turn out at higher rates. This affects which groups are larger in your state's modeled electorate.",
   },

@@ -392,9 +392,7 @@ export function GlobalMonetaryPolicyChart({ countries, defaultCountryIds }: Prop
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:items-end sm:min-w-[220px]">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-muted">
-            Countries on chart
-          </span>
+          <span className="text-body-sm font-medium text-muted">Countries on chart</span>
           <div className="flex flex-wrap gap-2 justify-end">
             {primaryCountries.map((c) => {
               const cfg = COUNTRY_CONFIGS[c.countryId];

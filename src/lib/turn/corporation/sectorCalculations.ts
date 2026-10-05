@@ -57,6 +57,7 @@ import { makeLabourDemandByState } from "@/lib/labour/labourMarket";
 import { computeTechAssetValueAnchor } from "@/lib/corporations/techAssetValue";
 import { bankEquity } from "@/lib/banking/balanceSheet";
 import { bankNpvFromPerTurnIncome } from "@/lib/banking/valuation";
+import { bankIncomeIncludingUnbookedSovereignAssets } from "@/lib/banking/rules/sovereignClaims";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { indexFundOwnershipFraction } from "@/lib/corporations/indexOwnership";
 // getCountryConfig is needed for the prime rate fallback:
@@ -1512,7 +1513,7 @@ export function processSectors(
     const charter = corp.bankCharter?.status === "active" ? corp.bankCharter : null;
     if (!charter) continue;
     const bankFxRate = lookups.exchangeRatesByCurrency.get(charter.currency) ?? 1;
-    const bankIncomeAnchor = (charter.lastBankingIncome ?? 0) / bankFxRate;
+    const bankIncomeAnchor = bankIncomeIncludingUnbookedSovereignAssets(charter) / bankFxRate;
     const id = corp._id.toString();
     baseEarningsMap.set(id, (baseEarningsMap.get(id) ?? 0) + bankIncomeAnchor * TURNS_PER_YEAR);
   }
@@ -1556,7 +1557,7 @@ export function processSectors(
       : 0;
     const bankNpvAnchor = activeBankCharter
       ? bankNpvFromPerTurnIncome(
-          (activeBankCharter.lastBankingIncome ?? 0) / bankFxRate,
+          bankIncomeIncludingUnbookedSovereignAssets(activeBankCharter) / bankFxRate,
           bankNpvBoostMultiplier(currentTurn)
         )
       : 0;

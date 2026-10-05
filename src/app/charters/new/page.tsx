@@ -42,7 +42,7 @@ export default async function NewCharterPage() {
         <Link href="/charters" className="text-xs text-muted hover:underline">
           ← All charters
         </Link>
-        <h1 className="mt-2 text-2xl font-bold">Draft a Party Charter</h1>
+        <h1 className="mt-2 text-2xl font-bold">Draft a party charter</h1>
         <p className="mt-1 text-sm text-muted">
           A charter is the founding agreement for a new party. You name the three founders and set
           the platform; once all three sign, the party is ratified and goes live in {countryName}.

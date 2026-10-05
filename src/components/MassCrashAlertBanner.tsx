@@ -73,7 +73,7 @@ export function MassCrashAlertBanner() {
             !
           </span>
           <p className="text-sm">
-            <span className="font-semibold">Systemic Crisis Alert — {top.countryCode}:</span>{" "}
+            <span className="font-semibold">Systemic crisis alert — {top.countryCode}:</span>{" "}
             {top.insolventCorpCount} corporations insolvent in a single sovereign-default cascade.{" "}
             <Link href="/international/imf" className="underline hover:no-underline">
               View IMF response

@@ -46,7 +46,7 @@ describe("FlagshipRouter — monetary", () => {
         monetary={monetary}
       />
     );
-    expect(screen.getByText("Central Bank Prime Rate")).toBeTruthy();
-    expect(screen.getByText("Debt Management Operation")).toBeTruthy();
+    expect(screen.getByText("Central bank prime rate")).toBeTruthy();
+    expect(screen.getByText("Debt management operation")).toBeTruthy();
   });
 });

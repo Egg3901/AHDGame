@@ -158,7 +158,7 @@ export function WhipPanel({ countryId }: { countryId: string }) {
         id="cabinet-whip-heading"
         className="text-sm font-semibold uppercase tracking-widest text-muted"
       >
-        Party Whip
+        Party whip
       </h2>
 
       {error && (
@@ -189,7 +189,7 @@ export function WhipPanel({ countryId }: { countryId: string }) {
           disabled={acting["withdraw"] === true}
           aria-label="Withdraw the whip from this MP"
         >
-          {acting["withdraw"] ? "Withdrawing..." : "Withdraw Whip"}
+          {acting["withdraw"] ? "Withdrawing..." : "Withdraw whip"}
         </Button>
       </div>
 
@@ -227,7 +227,7 @@ export function WhipPanel({ countryId }: { countryId: string }) {
                 >
                   {mp.characterId && acting[`restore-${mp.characterId}`]
                     ? "Restoring..."
-                    : "Restore Whip"}
+                    : "Restore whip"}
                 </Button>
               </li>
             ))}

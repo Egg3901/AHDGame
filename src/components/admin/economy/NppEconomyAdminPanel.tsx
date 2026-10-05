@@ -219,7 +219,7 @@ export function NppEconomyAdminPanel() {
             <p
               className={`text-sm font-semibold ${status.enabled ? "text-success" : "text-error"}`}
             >
-              NPP Economy: {status.enabled ? "ON" : "OFF"}
+              NPP economy: {status.enabled ? "ON" : "OFF"}
             </p>
             <p className="text-xs text-muted mt-0.5">
               {status.enabled
@@ -246,10 +246,10 @@ export function NppEconomyAdminPanel() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
             { label: "Active NPPs", value: String(status.stats.totalNpps) },
-            { label: "NPPs With Funds", value: String(status.stats.nppsWithFunds) },
-            { label: "Total Funds", value: fmt(status.stats.totalFunds) },
+            { label: "NPPs with funds", value: String(status.stats.nppsWithFunds) },
+            { label: "Total funds", value: fmt(status.stats.totalFunds) },
             {
-              label: "Avg Donor Level",
+              label: "Avg donor level",
               value: status.stats.avgDonorBaseLevel.toFixed(1),
             },
           ].map((card) => (
@@ -257,7 +257,7 @@ export function NppEconomyAdminPanel() {
               key={card.label}
               className="rounded-xl border border-card-border bg-card p-4 space-y-1"
             >
-              <p className="text-xs text-muted uppercase tracking-wider">{card.label}</p>
+              <p className="text-body-sm font-medium text-muted">{card.label}</p>
               <p className="text-lg font-semibold">{card.value}</p>
             </div>
           ))}
@@ -282,10 +282,7 @@ export function NppEconomyAdminPanel() {
               <thead className="bg-background/50">
                 <tr>
                   {["Country", "NPP Count", "Total Funds", "Avg Action Points"].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider"
-                    >
+                    <th key={h} className="px-4 py-3 text-left text-body-sm font-medium text-muted">
                       {h}
                     </th>
                   ))}
@@ -306,7 +303,7 @@ export function NppEconomyAdminPanel() {
 
           {/* AP histogram */}
           <div className="rounded-xl border border-card-border bg-card p-4 space-y-3">
-            <p className="text-sm font-medium">Action Points Distribution</p>
+            <p className="text-sm font-medium">Action points distribution</p>
             <div className="space-y-2">
               {apBuckets.map((b) => (
                 <div key={b.label} className="flex items-center gap-3 text-xs">
@@ -388,7 +385,7 @@ export function NppEconomyAdminPanel() {
                     ].map((h) => (
                       <th
                         key={h}
-                        className="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider whitespace-nowrap"
+                        className="px-4 py-3 text-left text-body-sm font-medium text-muted whitespace-nowrap"
                       >
                         {h}
                       </th>

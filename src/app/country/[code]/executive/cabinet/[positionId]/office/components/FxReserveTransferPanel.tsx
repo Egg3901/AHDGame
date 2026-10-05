@@ -76,7 +76,7 @@ export function FxReserveTransferPanel({ countryCode, canAct, onUpdate }: Props)
 
   return (
     <section className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
-      <h2 className="mb-2 text-lg font-semibold">FX Reserve Transfer</h2>
+      <h2 className="mb-2 text-lg font-semibold">FX reserve transfer</h2>
       <p className="mb-4 text-sm text-muted">
         Move treasury cash to the Central Bank&apos;s FX reserve pool. This is a one-time transfer,
         not a change to annual spending. Capped at 0.5% of annual revenue per turn. One transfer per
@@ -110,7 +110,7 @@ export function FxReserveTransferPanel({ countryCode, canAct, onUpdate }: Props)
 
       <div className="mt-4">
         <Button onClick={submit} disabled={!valid || !canAct || submitting}>
-          {submitting ? "Transferring…" : "Transfer to FX Reserve"}
+          {submitting ? "Transferring…" : "Transfer to FX reserve"}
         </Button>
       </div>
 

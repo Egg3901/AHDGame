@@ -267,7 +267,7 @@ export function CreateProposalForm({
         onClick={() => setOpen(true)}
         className="text-xs px-3 py-1.5 rounded-lg border border-card-border bg-card hover:bg-card-hover text-muted hover:text-foreground transition-colors"
       >
-        + New Proposal
+        + New proposal
       </button>
     );
   }
@@ -306,15 +306,15 @@ export function CreateProposalForm({
             {t === "rename"
               ? "Rename"
               : t === "positionShift"
-                ? "Position Shift"
+                ? "Position shift"
                 : t === "electionMethod"
-                  ? "Election Method"
+                  ? "Election method"
                   : t === "electionDuration"
-                    ? "Election Duration"
+                    ? "Election duration"
                     : t === "removeOfficeHolder"
-                      ? "Remove Officer"
+                      ? "Remove officer"
                       : t === "transactionApprovalMode"
-                        ? "Approval Mode"
+                        ? "Approval mode"
                         : "Merge"}
           </button>
         ))}
@@ -555,7 +555,7 @@ export function CreateProposalForm({
         disabled={submitting}
         className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
       >
-        {submitting ? "Submitting…" : "Submit Proposal"}
+        {submitting ? "Submitting…" : "Submit proposal"}
       </button>
     </div>
   );

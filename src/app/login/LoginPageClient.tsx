@@ -305,9 +305,7 @@ export default function LoginPageClient({
           </Link>
           {/* Era copy */}
           <div className="relative z-10 max-w-lg">
-            <p className="mb-3 text-body-xs font-semibold uppercase tracking-widest text-primary">
-              {eraLabel}
-            </p>
+            <p className="mb-3 text-body-sm font-medium text-primary">{eraLabel}</p>
             <p className="text-heading-lg font-semibold leading-snug tracking-tight text-foreground xl:text-display">
               {eraTagline}
             </p>

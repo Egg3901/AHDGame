@@ -167,7 +167,7 @@ export function PoliticianPagesTab() {
           disabled={generating}
           className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
-          {generating ? "Generating…" : "Generate All Pages"}
+          {generating ? "Generating…" : "Generate all pages"}
         </button>
       </div>
 
@@ -197,7 +197,7 @@ export function PoliticianPagesTab() {
           </div>
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <label className="text-sm font-medium">Custom Sections</label>
+              <label className="text-sm font-medium">Custom sections</label>
               <button
                 type="button"
                 onClick={addSection}

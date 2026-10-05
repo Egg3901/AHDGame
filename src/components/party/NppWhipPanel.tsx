@@ -674,7 +674,7 @@ export function NppWhipPanel({
                         >
                           {whippingId === `cv_${election.id}_for`
                             ? "Issuing..."
-                            : "Whip FOR (Remove PM)"}
+                            : "Whip FOR (remove PM)"}
                         </button>
                         <button
                           onClick={() =>
@@ -685,7 +685,7 @@ export function NppWhipPanel({
                         >
                           {whippingId === `cv_${election.id}_against`
                             ? "Issuing..."
-                            : "Whip AGAINST (Keep PM)"}
+                            : "Whip AGAINST (keep PM)"}
                         </button>
                       </div>
                     ) : isVacate ? (
@@ -699,7 +699,7 @@ export function NppWhipPanel({
                         >
                           {whippingId === `cv_${election.id}_for`
                             ? "Issuing..."
-                            : "Whip FOR (Vacate)"}
+                            : "Whip FOR (vacate)"}
                         </button>
                         <button
                           onClick={() =>
@@ -710,7 +710,7 @@ export function NppWhipPanel({
                         >
                           {whippingId === `cv_${election.id}_against`
                             ? "Issuing..."
-                            : "Whip AGAINST (Keep Speaker)"}
+                            : "Whip AGAINST (keep speaker)"}
                         </button>
                       </div>
                     ) : isImpeachment ? (
@@ -729,7 +729,7 @@ export function NppWhipPanel({
                         >
                           {whippingId === `cv_${election.id}_for`
                             ? "Issuing..."
-                            : "Whip FOR (Remove)"}
+                            : "Whip FOR (remove)"}
                         </button>
                         <button
                           onClick={() =>
@@ -745,7 +745,7 @@ export function NppWhipPanel({
                         >
                           {whippingId === `cv_${election.id}_against`
                             ? "Issuing..."
-                            : "Whip AGAINST (Acquit)"}
+                            : "Whip AGAINST (acquit)"}
                         </button>
                       </div>
                     ) : (
@@ -805,7 +805,7 @@ export function NppWhipPanel({
                         href={`/congress/nominations/${item.id}`}
                         className="hover:text-primary transition-colors"
                       >
-                        {item.type ?? "Cabinet Nomination"}
+                        {item.type ?? "Cabinet nomination"}
                       </Link>
                     </h4>
                     {whip.existingWhips.length > 0 && (

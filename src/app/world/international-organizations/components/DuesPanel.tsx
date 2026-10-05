@@ -162,9 +162,7 @@ export function DuesPanel({ org, viewer, currentTurn, votingWindowTurns, onChang
       )}
 
       <div className="space-y-3">
-        <h4 className="text-xs font-semibold uppercase tracking-widest text-muted">
-          Pending dues votes
-        </h4>
+        <h4 className="text-body-sm font-medium text-muted">Pending dues votes</h4>
         {pending.length === 0 ? (
           <div className="rounded-xl border border-card-border bg-card p-5">
             <p className="text-sm text-muted">No pending dues changes.</p>

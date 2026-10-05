@@ -39,7 +39,7 @@ export function AuctionTable({
   return (
     <div className="overflow-x-auto rounded-xl border border-card-border bg-card">
       <div className="min-w-[720px]">
-        <div className="flex items-center gap-4 border-b border-card-border bg-card-elevated px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-muted">
+        <div className="flex items-center gap-4 border-b border-card-border bg-card-elevated px-4 py-3 text-sm font-semibold text-foreground">
           <span className="flex-1">Corporation</span>
           <span className="w-28 shrink-0 text-right">Revenue/turn</span>
           <span className="w-28 shrink-0 text-right">Reserve</span>

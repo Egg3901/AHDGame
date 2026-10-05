@@ -77,7 +77,7 @@ export function ModNewsTab() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-card-border bg-card p-4">
-        <h3 className="font-semibold text-foreground mb-2">News Moderation</h3>
+        <h3 className="font-semibold text-foreground mb-2">News moderation</h3>
         <p className="text-sm text-muted">{posts.length} posts loaded</p>
       </div>
 

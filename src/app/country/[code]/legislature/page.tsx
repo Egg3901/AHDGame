@@ -69,7 +69,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { code } = await params;
   const id = code.toUpperCase() as CountryId;
   const config = COUNTRY_CONFIGS[id];
-  if (!config) return { title: "Legislature Not Found | A House Divided" };
+  if (!config) return { title: "Legislature not found | A House Divided" };
   if (id === "BG") {
     const { name, seats } = await bgLegislaturePresentation();
     return {

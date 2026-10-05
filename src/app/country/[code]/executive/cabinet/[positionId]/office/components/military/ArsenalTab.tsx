@@ -240,7 +240,7 @@ export function ArsenalTab({
             <div>
               <label
                 htmlFor="award-supplier"
-                className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted"
+                className="mb-1.5 block text-body-sm font-medium text-muted"
               >
                 Supplier
               </label>
@@ -283,7 +283,7 @@ export function ArsenalTab({
               <div>
                 <label
                   htmlFor="award-component"
-                  className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted"
+                  className="mb-1.5 block text-body-sm font-medium text-muted"
                 >
                   Domain
                 </label>
@@ -310,7 +310,7 @@ export function ArsenalTab({
             <div>
               <label
                 htmlFor="award-lots"
-                className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted"
+                className="mb-1.5 block text-body-sm font-medium text-muted"
               >
                 Lots ordered
               </label>
@@ -354,7 +354,7 @@ export function ArsenalTab({
                 <div>
                   <label
                     htmlFor="award-grade"
-                    className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted"
+                    className="mb-1.5 block text-body-sm font-medium text-muted"
                   >
                     Grade
                   </label>
@@ -388,7 +388,7 @@ export function ArsenalTab({
                 <div>
                   <label
                     htmlFor="award-price"
-                    className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-muted"
+                    className="mb-1.5 block text-body-sm font-medium text-muted"
                   >
                     Price per lot
                   </label>

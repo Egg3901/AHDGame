@@ -119,7 +119,7 @@ export function PlayerBannerAdsTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-base font-semibold text-foreground">Player Banner Ads</h3>
+          <h3 className="text-base font-semibold text-foreground">Player banner ads</h3>
           <p className="mt-0.5 text-xs text-muted">
             {ads.length} ad{ads.length !== 1 ? "s" : ""} total ·{" "}
             {ads.filter((a) => a.isActive).length} active ·{" "}

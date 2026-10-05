@@ -136,7 +136,7 @@ export function CookieConsentBanner() {
             to find confusing flows and technical problems. You can reject optional analytics or
             change your choice at any time. See our{" "}
             <Link href="/privacy" className="text-primary hover:underline">
-              Privacy Policy
+              Privacy policy
             </Link>
             .
           </p>

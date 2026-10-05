@@ -15,7 +15,7 @@ import {
 } from "@/lib/banking/settlementJournal";
 import { settleAtomicDocumentTransition } from "@/lib/banking/atomicDocumentSettlement";
 import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
-import { sovereignClaimIncome } from "@/lib/banking/rules/sovereignCouponIncome";
+import { bankSovereignMaturityCostBasis } from "@/lib/banking/rules/sovereignClaims";
 
 /** Add a stable principal claim before the legacy holder payout loop can run. */
 export async function addBankMaturityClaims(
@@ -36,6 +36,19 @@ export async function addBankMaturityClaims(
     string,
     { bankId: ObjectId; charteredTurn: number; units: number }
   >();
+  const holderCostBasisInputs = (input.bond.holders ?? []).flatMap((holder) =>
+    holder.bankId && Number.isSafeInteger(holder.charteredTurn)
+      ? [
+          {
+            bankId: holder.bankId.toHexString(),
+            charteredTurn: holder.charteredTurn!,
+            units: holder.units,
+            avgCostPerUnit: holder.avgCostPerUnit,
+            tradeId: holder.bankTreasuryTradeId,
+          },
+        ]
+      : []
+  );
   for (const holder of input.bond.holders ?? []) {
     if (!holder.bankId || !Number.isSafeInteger(holder.charteredTurn)) continue;
     if (holder.bankTreasuryTradeId) continue;
@@ -51,6 +64,12 @@ export async function addBankMaturityClaims(
   for (const holder of unitsByEpoch.values()) {
     const amountLocal = roundSavingsAmount(holder.units * BOND_UNIT_FACE_VALUE, input.currencyCode);
     if (amountLocal <= 0) continue;
+    const costBasisLocal = bankSovereignMaturityCostBasis(
+      holderCostBasisInputs,
+      holder.bankId.toHexString(),
+      holder.charteredTurn,
+      input.currencyCode
+    );
     const claim: BankSovereignClaim = {
       id: `bank-sovereign-maturity:${input.bond._id.toHexString()}:${holder.bankId.toHexString()}:${holder.charteredTurn}`,
       kind: "maturity",
@@ -61,6 +80,7 @@ export async function addBankMaturityClaims(
       countryId: input.countryId,
       currencyCode: input.currencyCode,
       amountLocal,
+      ...(costBasisLocal !== null ? { costBasisLocal } : {}),
       turn: input.turn,
       ledgerCreatedAt: new Date(),
       ...(input.anchorRate !== undefined ? { anchorRate: input.anchorRate } : {}),
@@ -446,7 +466,11 @@ async function ensureLedgerWitness(
 
 function bankPayoutTransition(claim: BankSovereignClaim, attemptTurn: number): BankingTransition {
   const key = `${claim.id}:bank:${attemptTurn}`;
-  const couponIncome = sovereignClaimIncome(claim.kind, claim.amountLocal);
+  const couponIncome = claim.kind === "coupon" ? claim.amountLocal : 0;
+  const realizedGain =
+    claim.kind === "maturity" && Number.isFinite(claim.costBasisLocal)
+      ? claim.amountLocal - claim.costBasisLocal!
+      : 0;
   const projection: BankingTransition["projections"][number] = {
     collection: "corporations",
     filter: { _id: oid(claim.bankId) },
@@ -454,9 +478,12 @@ function bankPayoutTransition(claim: BankSovereignClaim, attemptTurn: number): B
       $inc: {
         [escrowPath(claim)]: -claim.amountLocal,
         "bankCharter.cashReserves": claim.amountLocal,
-        // Only a funded coupon is earnings. It rides the same atomic write as
-        // the cash so a crash or replay can never split income from the vault.
-        ...(couponIncome > 0 ? { "bankCharter.sovereignCouponIncomeTotal": couponIncome } : {}),
+        ...(couponIncome > 0
+          ? { "bankCharter.sovereignCouponIncomePaidLifetime": couponIncome }
+          : {}),
+        ...(realizedGain !== 0
+          ? { "bankCharter.treasuryRealizedGainPaidLifetime": realizedGain }
+          : {}),
       },
     },
     note: `Atomically release funded sovereign ${claim.kind} cash to the matching charter epoch`,

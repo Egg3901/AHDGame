@@ -173,30 +173,30 @@ describe("WhiteHouseClient foreign affairs tab", () => {
 
   it("shows for the sitting president", async () => {
     renderWith({ isPresident: true, isAdmin: false });
-    expect(await screen.findByRole("button", { name: "Foreign Affairs" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Foreign affairs" })).toBeTruthy();
   });
 
   it("shows for an admin", async () => {
     renderWith({ isPresident: false, isAdmin: true });
-    expect(await screen.findByRole("button", { name: "Foreign Affairs" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Foreign affairs" })).toBeTruthy();
   });
 
   it("is hidden from a visitor", async () => {
     renderWith({ isPresident: false, isAdmin: false });
     await waitFor(() => expect(screen.getByText("Jed Bartlet")).toBeTruthy());
-    expect(screen.queryByRole("button", { name: "Foreign Affairs" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Foreign affairs" })).toBeNull();
   });
 
   it("is hidden when the conflicts subsystem is off", async () => {
     conflictsSpy.mockReturnValue(false);
     renderWith({ isPresident: true, isAdmin: false });
     await waitFor(() => expect(screen.getByText("Jed Bartlet")).toBeTruthy());
-    expect(screen.queryByRole("button", { name: "Foreign Affairs" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Foreign affairs" })).toBeNull();
   });
 
   it("mounts the tab body when the president opens it", async () => {
     renderWith({ isPresident: true, isAdmin: false });
-    (await screen.findByRole("button", { name: "Foreign Affairs" })).click();
+    (await screen.findByRole("button", { name: "Foreign affairs" })).click();
     await waitFor(() =>
       expect(screen.getByTestId("foreign-affairs-tab").textContent).toBe("canAct:true")
     );

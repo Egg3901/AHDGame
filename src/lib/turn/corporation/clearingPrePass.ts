@@ -43,6 +43,7 @@ import {
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
+import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
 import { mediaAudienceFit } from "@/lib/mediaEditorial/rules";
 import {
@@ -56,6 +57,7 @@ import {
   rawAdvertisingOffer,
   settlePoliticalAdMarket,
   type PoliticalAdClearingOffer,
+  type PoliticalMediaFallbackTreasuryTerms,
 } from "@/lib/politicalMedia/market";
 import type { PoliticalMediaOrderForClearing } from "@/lib/politicalMedia/journal";
 import {
@@ -103,6 +105,7 @@ export interface ClearingPrePassInput {
   brandLoyaltySliceEnabled: boolean;
   qualityPremiumPricingEnabled: boolean;
   politicalMediaOrders?: readonly PoliticalMediaOrderForClearing[];
+  treasuryCashLedgerEnabled: boolean;
 }
 
 export interface ClearingPrePassResult {
@@ -134,6 +137,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
     brandLoyaltySliceEnabled,
     qualityPremiumPricingEnabled,
     politicalMediaOrders = [],
+    treasuryCashLedgerEnabled,
   } = input;
   let { contractedByCorpCommodity } = input;
   let buyerDemandByCorpCommodity: Map<string, Map<string, number>> | undefined;
@@ -987,6 +991,25 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
         });
       }
 
+      const fallbackTreasuryByCountry = new Map<string, PoliticalMediaFallbackTreasuryTerms>();
+      for (const budget of lookups.federalBudgets) {
+        if (!budget.countryId) continue;
+        const currencyCode = resolveCountryCurrencyCode(budget);
+        const localPerAnchor = currencyCode
+          ? lookups.exchangeRatesByCurrency.get(currencyCode)
+          : undefined;
+        if (!currencyCode || !Number.isFinite(localPerAnchor) || !(localPerAnchor! > 0)) continue;
+        const currencyCodePresent = Object.prototype.hasOwnProperty.call(budget, "currencyCode");
+        fallbackTreasuryByCountry.set(budget.countryId, {
+          budgetId: String(budget._id),
+          currencyCode,
+          currencyCodePresent,
+          ...(currencyCodePresent ? { rawCurrencyCode: budget.currencyCode ?? null } : {}),
+          localPerAnchor: localPerAnchor!,
+          balancePath: treasuryCashLedgerEnabled ? "treasuryCashLocal" : "treasuryBalance",
+        });
+      }
+
       const political = settlePoliticalAdMarket({
         orders: politicalMediaOrders
           .filter((order) => !order.settlementPlan)
@@ -997,6 +1020,7 @@ export function runClearingPrePass(input: ClearingPrePassInput): ClearingPrePass
             createdTurn: order.identity.createdTurn,
             budgetAnchor: order.identity.requestedAnchor,
           })),
+        fallbackTreasuryByCountry,
         persistedPlans: politicalMediaOrders
           .filter(
             (order) => order.settlementPlan && order.settlementPlan.plannedTurn === (turn ?? 0)

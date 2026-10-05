@@ -154,18 +154,14 @@ export function SlateElectionResults({ election }: { election: ElectionDisplay }
     <div className="space-y-3">
       {primaryGroups.length > 0 && (
         <div className="space-y-3">
-          <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-            {t("card.primaryResults")}
-          </div>
+          <div className="text-body-sm font-medium text-muted">{t("card.primaryResults")}</div>
           <PrimaryCardGrid primaries={primaryGroups} countryId={election.countryId as CountryId} />
         </div>
       )}
 
       {generalEntries && generalEntries.length > 0 && (
         <div className="space-y-2">
-          <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-            {t("card.generalResults")}
-          </div>
+          <div className="text-body-sm font-medium text-muted">{t("card.generalResults")}</div>
           <div className="rounded-lg border border-card-border/60 px-3 py-3">
             <div className="flex gap-3">
               <div className="shrink-0 self-center">
@@ -187,7 +183,7 @@ export function SlateElectionResults({ election }: { election: ElectionDisplay }
                 />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="mb-1.5 flex items-center gap-2 text-[9px] font-medium uppercase tracking-wider text-muted/50 select-none">
+                <div className="mb-1.5 flex items-center gap-2 text-body-sm font-medium text-muted select-none">
                   <div className="w-5 shrink-0" />
                   <div className="w-36 shrink-0">{t("card.candidateHeader")}</div>
                   <div className="w-32 shrink-0">{t("card.partyHeader")}</div>

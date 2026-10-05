@@ -37,7 +37,7 @@ describe("StateMacroHeader", () => {
         topSectorLabel="Technology"
       />
     );
-    const link = screen.getByRole("link", { name: /National Economic Outlook/ });
+    const link = screen.getByRole("link", { name: /National economic outlook/ });
     expect(link.getAttribute("href")).toBe("/country/cn/economy");
     // CN regions are provinces, not states
     expect(screen.getByText(/Province Economy · Guangdong/)).toBeTruthy();

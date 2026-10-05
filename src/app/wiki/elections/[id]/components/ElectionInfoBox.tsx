@@ -36,7 +36,7 @@ export function ElectionInfoBox({ election, totalVotes }: ElectionInfoBoxProps) 
         )}
         {election.senateClass && (
           <div className="flex justify-between items-baseline">
-            <dt className="font-semibold text-muted">Senate Class</dt>
+            <dt className="font-semibold text-muted">Senate class</dt>
             <dd className="text-foreground font-medium">{election.senateClass}</dd>
           </div>
         )}
@@ -48,7 +48,7 @@ export function ElectionInfoBox({ election, totalVotes }: ElectionInfoBoxProps) 
         )}
         {totalVotes > 0 && (
           <div className="flex justify-between items-baseline">
-            <dt className="font-semibold text-muted">Total Votes</dt>
+            <dt className="font-semibold text-muted">Total votes</dt>
             <dd className="text-foreground font-medium">{totalVotes.toLocaleString("en-US")}</dd>
           </div>
         )}

@@ -37,9 +37,7 @@ export function ReferralsSection({ userId, referralCount }: ReferralsSectionProp
 
       {/* Invite link — preferred share path; pre-fills referral on /register */}
       <div>
-        <p className="mb-1.5 text-xs font-medium text-muted uppercase tracking-wider">
-          {t("referrals.inviteLink")}
-        </p>
+        <p className="mb-1.5 text-body-sm font-medium text-muted">{t("referrals.inviteLink")}</p>
         <div className="flex items-center gap-2">
           <code className="flex-1 truncate rounded-lg border border-card-border bg-card-elevated px-4 py-2.5 font-mono text-sm text-foreground tracking-wider select-all">
             /register?ref={userId}
@@ -60,9 +58,7 @@ export function ReferralsSection({ userId, referralCount }: ReferralsSectionProp
 
       {/* Code display */}
       <div>
-        <p className="mb-1.5 text-xs font-medium text-muted uppercase tracking-wider">
-          {t("referrals.referralCode")}
-        </p>
+        <p className="mb-1.5 text-body-sm font-medium text-muted">{t("referrals.referralCode")}</p>
         <div className="flex items-center gap-2">
           <code className="flex-1 rounded-lg border border-card-border bg-card-elevated px-4 py-2.5 font-mono text-sm text-foreground tracking-wider select-all">
             {userId}

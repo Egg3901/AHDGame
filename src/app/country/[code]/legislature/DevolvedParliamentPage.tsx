@@ -215,7 +215,7 @@ function BillsTab({
             onClick={() => setShowModal(true)}
             className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
           >
-            Propose Bill
+            Propose bill
           </button>
         </div>
       )}
@@ -318,12 +318,12 @@ function LeadershipTab({
       )}
       <div className="grid gap-4 sm:grid-cols-2">
         <LeaderCard
-          title="First Minister"
-          subtitle="Head of Government"
+          title="First minister"
+          subtitle="Head of government"
           character={leaders.primeMinister}
         />
         <LeaderCard
-          title="Opposition Leader"
+          title="Opposition leader"
           subtitle="Leader of the largest non-governing party"
           character={leaders.oppositionLeader}
         />
@@ -402,7 +402,7 @@ export function DevolvedParliamentPage({ countryId }: { countryId: CountryId }) 
     totalSeats: members?.totalSeats ?? seats,
     leader: leaders?.primeMinister
       ? {
-          label: "First Minister",
+          label: "First minister",
           name: leaders.primeMinister.characterName,
           id: leaders.primeMinister.characterId,
           sequentialId: leaders.primeMinister.sequentialId,
@@ -410,7 +410,7 @@ export function DevolvedParliamentPage({ countryId }: { countryId: CountryId }) 
       : null,
     minorityLeader: leaders?.oppositionLeader
       ? {
-          label: "Opposition Leader",
+          label: "Opposition leader",
           name: leaders.oppositionLeader.characterName,
           id: leaders.oppositionLeader.characterId,
           sequentialId: leaders.oppositionLeader.sequentialId,

@@ -117,19 +117,19 @@ export function WhipDefiancePanel({ defianceUrl }: { defianceUrl: string }) {
         <>
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-xl border border-card-border bg-card p-4">
-              <p className="text-body-sm text-muted">Active Defiance</p>
+              <p className="text-body-sm text-muted">Active defiance</p>
               <p className="mt-2 text-heading-sm font-bold tabular-nums text-foreground">
                 {data.activeCount}
               </p>
             </div>
             <div className="rounded-xl border border-card-border bg-card p-4">
-              <p className="text-body-sm text-muted">Players Defying</p>
+              <p className="text-body-sm text-muted">Players defying</p>
               <p className="mt-2 text-heading-sm font-bold tabular-nums text-warning">
                 {data.playerCount}
               </p>
             </div>
             <div className="rounded-xl border border-card-border bg-card p-4">
-              <p className="text-body-sm text-muted">NPPs Defying</p>
+              <p className="text-body-sm text-muted">NPPs defying</p>
               <p className="mt-2 text-heading-sm font-bold tabular-nums text-error">
                 {data.nppCount}
               </p>

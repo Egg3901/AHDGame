@@ -1,87 +1,58 @@
-# Bank viability calibration, 2026-10-04
+# Bank viability and funded bill calibration, 2026-10-04
 
-This deterministic local model uses the 1991 US budget, rate, savings APY,
-capital, branch ceiling, loan, fee, premium, sovereign issuance, pool quote,
-funded Treasury claims, confidence, deposit flight, and failure rules. It uses a
-representative bank with $5 million opening capital, 250 units of
-financial-sector capacity, a 50% branch share, and a $150 million deposit
-ceiling. It does not read or mutate a world database.
+## Finding
 
-The model opens the pool at the production migration value of 5% of 1991 M2
-($201.5B), then applies production pool inflow and finite funded primary issuance.
-Spendable Treasury cash starts at zero and grows only from actual pool-funded
-bond proceeds. Public-float and bank-holder coupons and maturities use one
-frozen per-bond claim. The claim pays both holder groups from the same Treasury
-cash debit and remains due until fully paid. The signed fiscal position stays
-an analytics track. Treasury accrual revenue and spending are not settled into
-the new spendable cash ledger, so that ledger is not a complete national
-budget cash model.
+The neutral viability target is not qualified. The updated deterministic bank-only diagnostic reports 26.91% annual realized ROE for the actual 1991 US opening-rate scenario, above the agreed 8 to 15% band, but its production-rule auction trace reaches `crisisPending` at turn 328. The bank-only return must not be presented as a neutral ten-year result once sovereign distress has been detected. The aggressive legal-risk scenario becomes insolvent at turn 240 after the injected recession shock. Neither result is production acceptance.
 
-| Scenario                                                                                                   | Annualized ROE at failure | Equity at failure | Outcome                                  |
-| ---------------------------------------------------------------------------------------------------------- | ------------------------: | ----------------: | ---------------------------------------- |
-| 1991 seed, balanced profile, current rates, pool seeded at 5% of M2                                        |                     1.54% |           $30.66M | Deposit run at turn 55                   |
-| 1991 midpoint rates, balanced profile                                                                      |                    -2.21% |           $28.30M | Deposit run at turn 55                   |
-| 1991 aggressive legal maximum deposit and minimum lending rates, 5-point prime shock scheduled at turn 240 |                    -4.61% |           $16.70M | Deposit run at turn 54, before the shock |
-| 1991 balanced profile with a 10.67% premium sensitivity                                                    |                     3.61% |           $18.78M | Deposit run at turn 54                   |
+The earlier 3% opening-prime, joint bank/public-float claim gate, omitted realized discount gains, and last-turn annualized income estimates are superseded. Actual 1991 US opening prime is 7%. Bank coupons and principal settle separately before public-float claims. Paid principal returns original acquisition basis; only the difference is realized income. Actual coupon receipts are income. Unpaid claims provide no cash.
 
-These are not viability passes. The first seeded 1991 reconciliation tranche
-places 25% of $3.665T opening sovereign principal into a bond due at turn 48.
-That $916.25B public-float claim remains unpaid. The modeled pool follows the
-production two-percent inflow toward target, and quarterly underwriting cannot
-exceed actual pool cash. By the balanced case's failure, Treasury cash is
-$336.87B and pool cash is $62.34B, against the original $916.25B due claim.
-The model correctly retains the bond and claim instead of erasing the debt or
-counting unpaid proceeds as bank income. The aggressive case fails before its
-turn-240 recession shock, so it does not establish the requested recession
-failure behavior. The earlier model result that reached turn 240 had removed
-unpaid matured obligations and was invalid.
+## Reproduction
 
-The funding gap corresponds to a production boundary: `treasuryTurn` records
-macro revenue, spending, and debt service in the signed fiscal accrual, while
-the funded Treasury cash ledger currently receives cash from funded sovereign
-issuance and explicit funded receipts. It does not receive the modeled annual
-tax revenue as cash. Treating the signed balance or revenue field as spendable
-cash would double-count analytics or create cash without a payer debit. Until a
-cash-conserving tax and budget flow exists, the model cannot claim sovereign
-rollover, bank liquidity, rescue, or whole-system viability. No seed debt,
-opening cash, pool capacity, or coupon yield was fabricated to make the
-scenario pass.
+Run `npx --no-install tsx --tsconfig tsconfig.json scripts/sim/bankViabilityCalibration.ts`. The script reads public seed and rule code, prints JSONL, accesses no game database, and starts no world simulation.
 
-The provisional insurance premium remains 0.4% annualized before the existing
-reserve risk weight. This change adds a separate measured cohort: annual
-insured-deposit exposure turns, actual gross insurance shortfalls, paid claim
-count, and recoveries attributable to resolutions opened after evidence
-measurement began. Pre-measurement estates do not supply recovery credit.
-The measured rate is same-cohort net claims per insured deposit-year plus a
-bounded reserve refill: a target of one year of observed net claims, refilled
-over five years. It is blended with the provisional rate by credibility, the
-product of measured years over ten and paid claims over three (each capped at
-one), so a fund moves toward its measured rate gradually and never jumps on a
-threshold turn. The base rate never falls below 0.4% and never exceeds 2%
-before the existing 0.5x to 3x risk weight, so one large failure in a thin
-cohort cannot price surviving banks into a failure spiral; losses beyond what
-the ceiling funds fall to the funded Treasury backstop. Premium collection is
-still limited by actual bank cash, and the existing shortfall path records any
-unpaid premium. No modeled scenario reaches a paid claim before its failure
-turn, so every row above prices at the provisional rate.
+This checkpoint uses the shared production positive-carry sweep, quote, funding-cost, cash-floor, public-float novation, market-demand, loan-demand, fee, premium, and solvency rules. The diagnostic tracks full-year income over average equity, equity movement over average equity, and compound annual equity growth separately. Cash transfers among the bank, households, market pool, Treasury and insurance fund are paired. Institutional pool inflow and sweep remain explicit system boundaries.
 
-The archived 1991 audit reports USD lifetime deposit-insurance payouts of
-$10.46B against $0.16B in premiums, with $10.30B covered by Treasury. These
-historical aggregates predate the measured cohort and do not include a matching
-insured deposit-year denominator or recovery cohort, so they cannot set an
-annual actuarial rate. The 10.67% sensitivity is a single-event stress
-calculation, not an expected annual loss or a proposed rate. No premium
-calibration or neutral 8 to 15% ROE acceptance is claimed from this evidence.
+The annual auction trace runs after modeled BondTurn coupon and maturity settlement, using the production US fiscal-year close calendar, `computeMarketDemand`, `classifyAuctionOutcome`, and `computeNextCrisisState`. It caps demand with the modeled aggregate primary-pool placed/requested ratio rounded to the production four-decimal precision, and reports requested and placed units at each scheduled primary auction. Annual income, average equity, realized ROE, economic ROE, and equity CAGR are recorded at each close so pre-crisis windows remain inspectable. The 1991 country seed is player-enabled, so the production crisis eligibility gate is active. This bank-only model has no NPP state, player or NPC holdings beyond the modeled bank, exchange-rate path, default history, executive decision, or crisis resolution. It stops crisis-state progression at `crisisPending`; it does not infer repudiation or apply a default credit overlay. The decision-window deadline is reported from the production 12-turn constant, not as a default date.
+
+## Results
+
+| Scenario                                                                       | Realized annual ROE | Economic annual ROE | Equity CAGR | Failure turn |
+| ------------------------------------------------------------------------------ | ------------------: | ------------------: | ----------: | -----------: |
+| 1991 US seeded rates, funded sweep and public-float novation                   |              26.91% |              24.64% |      27.74% |         none |
+| Legacy nearest-maturity and cash-only comparison                               |             -24.58% |             -20.49% |     -12.33% |         none |
+| 1991 US, zero-opening-pool sensitivity                                         |              27.58% |              25.31% |       26.9% |         none |
+| 8.5% prime, midpoint deposits                                                  |              29.41% |              26.48% |      25.88% |         none |
+| 8.5% prime, legal minimum deposits                                             |              25.74% |              23.47% |       36.3% |         none |
+| 1991 aggressive, legal maximum deposits/minimum lending, recession at turn 240 |            -136.33% |            -136.33% |         n/a |          240 |
+
+The seeded neutral auction trace is fully subscribed at turns 40, 88, and 136. Turn 184 is undersubscribed at a 0.708 pool fill. Turns 232, 280, and 328 fail at pool fills of 0.518, 0.443, and 0.401; the third consecutive annual failure enters `crisisPending` at turn 328. Those dates are the configured US fiscal closes, and the fills are sums of actual modeled primary placements over requested units. The source diagnostic's 12-turn executive decision window ends at turn 340. No resolution choice is modeled, and the bank-only ROE after that point is not a valid neutral acceptance result.
+
+| US fiscal close | Annual realized ROE | Annual economic ROE | Annual equity CAGR | Auction state | Neutral window |
+| --------------: | -----------------: | -----------------: | ----------------: | ------------- | -------------- |
+|              40 |            -12.46% |            -30.27% |           -27.81% | fully subscribed | pre-crisis |
+|              88 |             24.80% |             19.36% |            -3.09% | fully subscribed | pre-crisis |
+|             136 |             26.06% |             30.82% |             9.36% | fully subscribed | pre-crisis |
+|             184 |             37.63% |             34.13% |            17.08% | undersubscribed | pre-crisis |
+|             232 |             37.01% |             33.57% |            21.80% | failed, count 1 | pre-crisis |
+|             280 |             32.28% |             32.25% |            24.62% | failed, count 2 | pre-crisis |
+|             328 |             27.72% |             27.09% |            25.62% | crisis pending | invalid-distress |
+
+Annual values are derived after the model's current-turn bond claims and maturity face changes. The first row annualizes the available partial opening window to 48 turns; later rows use trailing 48-turn income and equity windows. Early windows can be reviewed independently, while turn 328 and any full-horizon summary are distress-ineligible.
+
+The baseline includes $30.424M of lifetime realized bill gains. Omitting those gains produces misleading operating-income ROE. The held-bill cost basis and unrealized gain bridge reconciles equity exactly in every scenario. Cash conservation error is at most $0.40 across the printed scenarios on trillion-dollar system stocks; this is floating-point arithmetic, with a $1 assertion tolerance.
+
+## Inputs and boundaries
+
+- The reference seed has $6.2T US GDP, $3.665T sovereign face and $4.03T external broad money. The model's $201.5B opening pool cash is conditional on the registered migration having seeded its M2 target. A read-only production preflight on 2026-10-05 found the `bondMarketPools` namespace missing despite its migration marker; the model's zero-opening-pool case matches that observed fresh-reset state. Spendable Treasury cash opens at zero. Signed fiscal projections are not spendable cash.
+- The representative bank starts with $5M capital, 250 financial-sector capacity units, 50% branch share and a $150M deposit ceiling. Seeded rate offsets are -1.75 percentage points for deposits and 4.125 for lending. The fixture runs 480 turns.
+- Quarterly issuance, scheduled Treasury/BondTurn ordering, conserved par novation, residual public-float cash payment, unpaid maturity stock and contractual coupon cutoff are modeled. No coupon accrues after maturity.
+- GDP, inflation, integrity, FX, entity participation and fiscal primary inputs are held constant. Market appetite responds to modeled debt, rating and prime through the production demand core. The neutral scenario falls below the sovereign distress threshold during its run, but the complete sovereign default/crisis state machine is outside this bank-only fixture. It must not be presented as a whole-world ten-year forecast.
+- Recession scenarios inject a five-point prime increase, five-times loan default rate and the existing production stress-haircut formula. The shock is a conditional fixture, not evidence that an ordinary world will generate it.
+- The reference seed fiscal budget differs from the final world after political budget initialization. This report is not a measurement of a deployed world or its final fiscal cash constraints.
+- Retail service-fee and high-premium rows are labeled sensitivities. They do not introduce an approved runtime fee or select a premium. A single representative-bank failure cannot calibrate portfolio insurance frequency. Measured premiums retain the production fallback until cohort evidence qualifies.
 
 ## Remaining acceptance work
 
-- Implement and qualify an actual payer-backed source for Treasury cash,
-  including tax collection, with exact-once receipt recovery and no double
-  counting against signed fiscal analytics.
-- Re-run the seeded maturity waterfall, neutral bank case, aggressive recession
-  case, and funded rescue after cash collection and rollover behavior are
-  complete.
-- Collect a credible post-start insurance exposure and resolution cohort before
-  replacing the provisional premium rate.
-- Qualify the 1991 minister or central-bank rescue choice against funded
-  Treasury cash and the original bank charter epoch.
+The production bank earnings projection must preserve actual funded coupons across TreasuryTurn/banking/BondTurn order and count genuine realized sale/redemption gains without treating returned principal as profit. Near-maturity executable quote economics and the evolving sovereign demand/default path require qualification before any balance adjustment. Full-program production rollout also needs the reviewed source promotion, startup migration/index verification and read-only or specifically authorized live checks. No feature activation or world advance is authorized by this report.
+
+The target is still open. Do not close bank viability or insurance calibration on these results.

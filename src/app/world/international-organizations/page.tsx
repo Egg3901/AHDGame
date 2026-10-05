@@ -4,7 +4,7 @@ import IntorgIndexClient from "./IntorgIndexClient";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "International Organizations · A House Divided",
+  title: "International organizations · A House Divided",
   description: "Multilateral institutions, free-trade agreements, and Secretary-General elections.",
 };
 

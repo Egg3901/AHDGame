@@ -405,9 +405,9 @@ export function CoalitionPrioritiesPanel({
                 onChange={(event) => setDraftType(event.target.value as DraftType)}
                 className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
               >
-                <option value="policy_theme">Policy Theme</option>
+                <option value="policy_theme">Policy theme</option>
                 <option value="bill">Bill</option>
-                <option value="leadership_goal">Leadership Goal</option>
+                <option value="leadership_goal">Leadership goal</option>
               </select>
             </label>
             <label className="block">
@@ -543,7 +543,7 @@ export function CoalitionPrioritiesPanel({
               onClick={() => void handleCreate()}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
-              {submitting ? "Saving…" : "Propose Priority"}
+              {submitting ? "Saving…" : "Propose priority"}
             </button>
           </div>
         </div>

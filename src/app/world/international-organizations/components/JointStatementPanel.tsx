@@ -186,7 +186,7 @@ export function JointStatementPanel({
       {/* In force */}
       {active.length > 0 && (
         <div className="space-y-3">
-          <h4 className="text-xs font-semibold uppercase tracking-widest text-muted">In force</h4>
+          <h4 className="text-body-sm font-medium text-muted">In force</h4>
           {active.map((l) => {
             const turnsLeft =
               l.jointStatementExpiresOnTurn != null
@@ -234,9 +234,7 @@ export function JointStatementPanel({
 
       {/* Pending */}
       <div className="space-y-3">
-        <h4 className="text-xs font-semibold uppercase tracking-widest text-muted">
-          Awaiting a vote
-        </h4>
+        <h4 className="text-body-sm font-medium text-muted">Awaiting a vote</h4>
         {pending.length === 0 ? (
           <div className="rounded-xl border border-card-border bg-card p-5">
             <p className="text-sm text-muted">No pending statements.</p>

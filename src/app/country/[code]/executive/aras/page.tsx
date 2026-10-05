@@ -88,13 +88,13 @@ export default async function ArasPage({ params }: PageProps) {
             <img src={heroSrc} alt="Flag of Ireland" className="h-full w-full object-cover" />
           </div>
           <div className="relative p-8">
-            <p className="text-xs uppercase tracking-widest text-muted">
+            <p className="text-body-sm font-medium text-muted">
               <Link href="/country/ie/executive" className="hover:text-foreground">
-                Government Buildings
+                Government buildings
               </Link>{" "}
               · Áras an Uachtaráin
             </p>
-            <h1 className="mt-2 text-3xl font-bold text-foreground">Office of the Uachtarán</h1>
+            <h1 className="mt-2 text-3xl font-bold text-foreground">Office of the uachtarán</h1>
             <p className="mt-1 text-body-sm text-muted">
               Head of state of Ireland — directly elected to a seven-year term, maximum two terms
               (Bunreacht na hÉireann, Article 12).
@@ -104,7 +104,7 @@ export default async function ArasPage({ params }: PageProps) {
 
         {/* Sitting Uachtarán card */}
         <section className="rounded-2xl border border-card-border bg-card p-6 shadow-card">
-          <SectionLabel as="h2">Sitting Uachtarán</SectionLabel>
+          <SectionLabel as="h2">Sitting uachtarán</SectionLabel>
           {uachtaran ? (
             <div className="flex items-center gap-4">
               <Link href={uachtaranHref!} className="shrink-0">
@@ -153,7 +153,7 @@ export default async function ArasPage({ params }: PageProps) {
 
         {/* Council of State (placeholder per §3.7 α) */}
         <section className="rounded-2xl border border-card-border bg-card p-6 shadow-card">
-          <SectionLabel as="h2">Council of State (Comhairle Stáit)</SectionLabel>
+          <SectionLabel as="h2">Council of state (Comhairle stáit)</SectionLabel>
           <p className="mt-1 text-body-sm text-muted leading-relaxed mb-4">
             The Council of State advises the Uachtarán on the exercise of reserved presidential
             powers (Article 31). Ex-officio members derived from sitting offices:
@@ -168,7 +168,7 @@ export default async function ArasPage({ params }: PageProps) {
               <span className="text-muted">{tanaiste?.name ?? "(vacant)"}</span>
             </li>
             <li className="flex items-baseline justify-between gap-4">
-              <span className="font-medium text-foreground">Chief Justice</span>
+              <span className="font-medium text-foreground">Chief justice</span>
               <span className="text-muted italic">not modeled</span>
             </li>
             <li className="flex items-baseline justify-between gap-4">
@@ -180,7 +180,7 @@ export default async function ArasPage({ params }: PageProps) {
               <span className="text-muted italic">not modeled</span>
             </li>
             <li className="flex items-baseline justify-between gap-4">
-              <span className="font-medium text-foreground">Attorney General</span>
+              <span className="font-medium text-foreground">Attorney general</span>
               <span className="text-muted italic">not modeled</span>
             </li>
           </ul>

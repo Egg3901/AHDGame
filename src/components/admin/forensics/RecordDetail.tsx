@@ -215,47 +215,35 @@ export function RecordDetail({
             {/* Meta grid */}
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-card-border/60 bg-card/40 p-3 text-sm">
               <div>
-                <dt className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-                  When
-                </dt>
+                <dt className="mb-0.5 text-body-sm font-medium text-muted">When</dt>
                 <dd className="tabular-nums" title={formatTimestamp(r.ts)}>
                   {formatTimestamp(r.ts)}{" "}
                   <span className="text-muted">({formatRelative(r.ts)})</span>
                 </dd>
               </div>
               <div>
-                <dt className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-                  Turn
-                </dt>
+                <dt className="mb-0.5 text-body-sm font-medium text-muted">Turn</dt>
                 <dd className="tabular-nums">{r.turn}</dd>
               </div>
               <div>
-                <dt className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-                  Actor
-                </dt>
+                <dt className="mb-0.5 text-body-sm font-medium text-muted">Actor</dt>
                 <dd className="truncate">
                   {describeActor(r.actor)}{" "}
                   <span className="text-xs text-muted">({r.actor.kind})</span>
                 </dd>
               </div>
               <div>
-                <dt className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-                  Subject
-                </dt>
+                <dt className="mb-0.5 text-body-sm font-medium text-muted">Subject</dt>
                 <dd className="truncate">{describeParty(r.subject)}</dd>
               </div>
               {r.counterparty && (
                 <div>
-                  <dt className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-                    Counterparty
-                  </dt>
+                  <dt className="mb-0.5 text-body-sm font-medium text-muted">Counterparty</dt>
                   <dd className="truncate">{describeParty(r.counterparty)}</dd>
                 </div>
               )}
               <div>
-                <dt className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-                  Source
-                </dt>
+                <dt className="mb-0.5 text-body-sm font-medium text-muted">Source</dt>
                 <dd>
                   {r.source}
                   {r.phase ? ` · ${r.phase}` : ""}

@@ -195,7 +195,7 @@ export function StateLeanPanel({
               <h3 className="text-sm font-semibold text-muted">{cat.name}</h3>
               <table className="mt-2 w-full text-xs">
                 <thead>
-                  <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
+                  <tr className="text-left text-body-sm font-medium text-muted">
                     <th className="pb-1 font-medium">Group</th>
                     <th className="pb-1 font-medium text-right">Share</th>
                     <th className="pb-1 font-medium text-right">Turnout</th>

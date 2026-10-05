@@ -54,7 +54,7 @@ export default function ForSalePanel({
       <div className="rounded-xl border border-success/30 bg-success/5 p-6">
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-success">
-            For Sale
+            For sale
           </span>
           <h3 className="text-sm font-semibold text-foreground">Buy this sector</h3>
         </div>
@@ -134,8 +134,8 @@ export default function ForSalePanel({
                       ? "Merging…"
                       : "Buying…"
                     : forSaleInfo.conflict
-                      ? "Confirm Merge"
-                      : "Confirm Purchase"}
+                      ? "Confirm merge"
+                      : "Confirm purchase"}
                 </button>
                 <button
                   type="button"
@@ -158,7 +158,7 @@ export default function ForSalePanel({
                 (forSaleInfo.conflict ? "Merge into your existing sector" : "Buy this sector")
               }
             >
-              {forSaleInfo.conflict ? "Buy & Merge Sector" : "Buy Sector"}
+              {forSaleInfo.conflict ? "Buy & merge sector" : "Buy sector"}
             </button>
           )}
         </div>
@@ -219,7 +219,7 @@ export default function ForSalePanel({
             ? "Listed for secured recovery"
             : unlisting
               ? "Unlisting…"
-              : "Unlist Sector"}
+              : "Unlist sector"}
         </button>
       </div>
     );
@@ -230,7 +230,7 @@ export default function ForSalePanel({
     <div className="rounded-xl border border-card-border bg-card p-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">List Sector for Sale</h3>
+          <h3 className="text-sm font-semibold text-foreground">List sector for sale</h3>
           <p className="mt-1 text-xs text-muted">
             Sell this sector to another CEO at {PRICE_PCT}% of its estimated worth, which is what
             its future profits are worth today. The money goes straight to your corporation
@@ -244,7 +244,7 @@ export default function ForSalePanel({
             disabled={listing}
             className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            List for Sale
+            List for sale
           </button>
         )}
       </div>
@@ -275,7 +275,7 @@ export default function ForSalePanel({
               disabled={listing}
               className="flex-1 rounded-lg border border-primary/40 bg-primary px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {listing ? "Listing…" : "Confirm Listing"}
+              {listing ? "Listing…" : "Confirm listing"}
             </button>
             <button
               type="button"

@@ -130,7 +130,8 @@ describe("treasury accrual stock-flow ownership", () => {
     // One projected coupon-book read prices debt service (#2089); the funded
     // holder paths stay off, so holder arrays are never loaded.
     expect(find).toHaveBeenCalledTimes(1);
-    const options = find.mock.calls[0]?.[1] as { projection?: Record<string, unknown> } | undefined;
+    const options = (find.mock.calls[0] as unknown[] | undefined)?.[1] as
+      { projection?: Record<string, unknown> } | undefined;
     expect(options?.projection).not.toHaveProperty("holders");
   });
 

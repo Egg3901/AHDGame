@@ -141,7 +141,7 @@ describe("BuildOrgPanel", () => {
     renderPanel({ canBuildOrg: false });
     await waitFor(() =>
       expect(
-        (screen.getByRole("button", { name: "Build Org" }) as HTMLButtonElement).disabled
+        (screen.getByRole("button", { name: "Build org" }) as HTMLButtonElement).disabled
       ).toBe(true)
     );
   });
@@ -214,7 +214,7 @@ describe("BuildOrgPanel", () => {
     renderPanel();
 
     await waitFor(() => expect(screen.getByText("This click")).toBeTruthy());
-    expect(screen.getByText("Estimated Funds")).toBeTruthy();
+    expect(screen.getByText("Estimated funds")).toBeTruthy();
     expect(screen.getByText(/5,625/)).toBeTruthy();
   });
 

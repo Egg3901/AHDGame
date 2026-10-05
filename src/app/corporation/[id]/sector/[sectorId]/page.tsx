@@ -1076,7 +1076,7 @@ export default function SectorDetailPage() {
             <ManagementPanel>
               {/* Sector Name editor */}
               <div>
-                <label className="block text-sm font-semibold text-foreground">Sector Name</label>
+                <label className="block text-sm font-semibold text-foreground">Sector name</label>
                 <p className="mt-1 text-xs text-muted">
                   Give this sector a custom display name. Leave blank to use the default type label.
                 </p>
@@ -1095,7 +1095,7 @@ export default function SectorDetailPage() {
                     disabled={nameSaving}
                     className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
                   >
-                    {nameSaving ? "Saving..." : "Save Name"}
+                    {nameSaving ? "Saving..." : "Save name"}
                   </button>
                 </div>
                 {nameMessage && <p className="mt-3 text-sm text-muted">{nameMessage}</p>}

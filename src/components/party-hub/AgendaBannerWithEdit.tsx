@@ -64,10 +64,10 @@ export function AgendaBannerWithEdit({
 
     return (
       <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm space-y-2">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+        <div className="text-body-sm font-medium text-muted">
           {partyAbbreviation
             ? `${partyAbbreviation} National Agenda — Edit`
-            : "National Agenda — Edit"}
+            : "National agenda — Edit"}
         </div>
         <input
           type="text"
@@ -101,7 +101,7 @@ export function AgendaBannerWithEdit({
             disabled={submitting || !headline.trim()}
             className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
           >
-            {submitting ? "Saving…" : "Save Agenda"}
+            {submitting ? "Saving…" : "Save agenda"}
           </button>
         </div>
       </div>
@@ -112,8 +112,8 @@ export function AgendaBannerWithEdit({
     return (
       <div className="rounded-xl border border-dashed border-card-border bg-card p-4 shadow-sm flex items-center justify-between gap-2">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-            {partyAbbreviation ? `${partyAbbreviation} National Agenda` : "National Agenda"}
+          <div className="text-body-sm font-medium text-muted">
+            {partyAbbreviation ? `${partyAbbreviation} National Agenda` : "National agenda"}
           </div>
           <p className="text-xs text-muted mt-0.5">No active agenda. Chairs can set one.</p>
         </div>
@@ -122,7 +122,7 @@ export function AgendaBannerWithEdit({
           onClick={() => setEditing(true)}
           className="shrink-0 rounded-md border border-card-border px-2 py-1 text-[10px] font-medium uppercase tracking-wider hover:bg-[var(--card-muted)]"
         >
-          Set Agenda
+          Set agenda
         </button>
       </div>
     );

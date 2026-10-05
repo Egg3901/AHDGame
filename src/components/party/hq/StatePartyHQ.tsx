@@ -448,7 +448,7 @@ export function StatePartyHQ({
           {canSpendPs && bulkMode && estimate && (
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-card-border pb-2 text-xs">
               <span className="font-medium">
-                Build Org · Nat&apos;l PS · {estimate.states} states · Est.{" "}
+                Build org · nat&apos;l PS · {estimate.states} states · Est.{" "}
                 <b className="tabular-nums">{estimate.totalPS} Nat&apos;l PS</b>
                 <span className="text-muted"> (have {nationalPs.toFixed(1)})</span>
                 {estimate.totalCash > 0 ? (
@@ -534,7 +534,7 @@ export function StatePartyHQ({
                   onClick={() => setBulkMode("build")}
                   className={`rounded-md border px-3 py-1.5 font-semibold shadow-sm transition-colors ${bulkMode === "build" ? "border-primary bg-primary/15 text-primary" : "border-card-border bg-card hover:border-primary/60 hover:bg-primary/10"}`}
                 >
-                  Build Org
+                  Build org
                 </button>
               )}
               <button

@@ -66,12 +66,12 @@ function relationshipBadge(score: number) {
 function endorsementLikelihoodChip(likelihood: CandidacyOption["endorsementLikelihood"]) {
   if (likelihood === "likely_accept") {
     return {
-      label: "Likely to Accept",
+      label: "Likely to accept",
       className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-200",
     };
   }
   return {
-    label: "Likely to Decline",
+    label: "Likely to decline",
     className: "border-amber-500/40 bg-amber-500/10 text-amber-200",
   };
 }
@@ -214,7 +214,7 @@ export function NppCapitalPanel({ nppId, nppName }: { nppId: string; nppName: st
               <div className="text-2xl font-bold tabular-nums">{state.balance.current}</div>
             </div>
             <div className="ml-4 border-l border-zinc-800 pl-4">
-              <span className="text-xs text-zinc-500">Campaign Funds</span>
+              <span className="text-xs text-zinc-500">Campaign funds</span>
               <div className="text-2xl font-bold tabular-nums">
                 {state.currencySymbol}
                 {state.balance.funds.toLocaleString("en-US")}

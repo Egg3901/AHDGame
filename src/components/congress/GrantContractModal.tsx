@@ -78,7 +78,7 @@ export function GrantContractModal({
   }
 
   return (
-    <Modal open title="Grant Resource Contract" onClose={onClose}>
+    <Modal open title="Grant resource contract" onClose={onClose}>
       {formState.awaitingConfirmation && (
         <div className="mb-4 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
           Warning: this contract over-allocates the state&apos;s capacity for this resource.
@@ -167,7 +167,7 @@ export function GrantContractModal({
               disabled={formState.submitting}
               className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
-              {formState.submitting ? "Granting..." : "Grant Contract"}
+              {formState.submitting ? "Granting..." : "Grant contract"}
             </button>
             <button
               type="button"

@@ -139,9 +139,7 @@ export default function HeroPanel({
       {/* Stats strip */}
       <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
         <div className="flex flex-col px-5 py-3 min-w-max">
-          <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-            Market Price
-          </span>
+          <span className="text-body-sm font-medium text-muted">Market price</span>
           <span className="text-base font-bold tabular-nums">{priceDisplay}</span>
           <span
             className={`text-xs tabular-nums ${
@@ -158,7 +156,7 @@ export default function HeroPanel({
           <span className="mt-1 text-[10px] text-muted">{marketScope.marketCaption}</span>
         </div>
         <div className="flex flex-col px-5 py-3 min-w-max">
-          <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
+          <span className="text-body-sm font-medium text-muted">
             {activeCountry ? "Regions" : "Rolling 1Y"}
           </span>
           {activeCountry ? (
@@ -189,8 +187,8 @@ export default function HeroPanel({
           )}
         </div>
         <div className="flex flex-col px-5 py-3 min-w-max">
-          <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-            {activeCountry ? "National Supply" : "Global Supply"}
+          <span className="text-body-sm font-medium text-muted">
+            {activeCountry ? "National supply" : "Global supply"}
           </span>
           <span className="text-base font-bold tabular-nums text-success">
             {formatUnits(marketScope.supply, data.unit)}
@@ -198,8 +196,8 @@ export default function HeroPanel({
           <span className="text-xs text-muted">per day</span>
         </div>
         <div className="flex flex-col px-5 py-3 min-w-max">
-          <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-            {activeCountry ? "National Demand" : "Global Demand"}
+          <span className="text-body-sm font-medium text-muted">
+            {activeCountry ? "National demand" : "Global demand"}
           </span>
           <span className="text-base font-bold tabular-nums text-error">
             {formatUnits(marketScope.demand, data.unit)}
@@ -207,9 +205,7 @@ export default function HeroPanel({
           <span className="text-xs text-muted">per day</span>
         </div>
         <div className="flex flex-col px-5 py-3 min-w-max">
-          <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-            Balance
-          </span>
+          <span className="text-body-sm font-medium text-muted">Balance</span>
           <span className={`text-base font-bold tabular-nums ${balanceColor}`}>
             {balance > 0 ? "+" : ""}
             {formatUnits(Math.abs(balance), data.unit)}

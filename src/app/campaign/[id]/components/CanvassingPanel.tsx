@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { getDemographicCategoriesForCountry } from "@/lib/demographics/countryDemographics";
 import { DE_GROUP_EN_LABELS } from "@/lib/seeds/de/deDemographicCategories";
-import { BLEND, FONT } from "@/components/blend/tokens";
+import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import { blendButtonStyle, BlendLabel, BlendSelect } from "@/components/blend/BlendControls";
 import { apiErrorText } from "@/lib/errors/catalog";
 
@@ -282,7 +282,7 @@ export function CanvassingPanel({
       Voter canvassing
     </h3>
   ) : (
-    <h3 className="text-xl font-bold text-foreground mb-4">Voter Canvassing</h3>
+    <h3 className="text-xl font-bold text-foreground mb-4">Voter canvassing</h3>
   );
 
   if (eligibility.status === "loading") {
@@ -471,17 +471,7 @@ export function CanvassingPanel({
             borderTop: `1px solid ${BLEND.hairline}`,
           }}
         >
-          <div
-            style={{
-              fontFamily: FONT.mono,
-              fontSize: 9.5,
-              letterSpacing: ".16em",
-              textTransform: "uppercase",
-              color: BLEND.mutedDimmer,
-            }}
-          >
-            How canvassing works
-          </div>
+          <div style={BLEND_LABEL}>How canvassing works</div>
           <ul
             style={{
               margin: "8px 0 0",
@@ -521,7 +511,7 @@ export function CanvassingPanel({
         {!isSingleCategory && (
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">
-              Demographic Category
+              Demographic category
             </label>
             <select
               value={selectedCategory}
@@ -545,7 +535,7 @@ export function CanvassingPanel({
         {activeCategory && (
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">
-              {isSingleCategory ? "Voter Group" : "Specific Group"}
+              {isSingleCategory ? "Voter group" : "Specific group"}
             </label>
             <select
               value={selectedGroup}
@@ -621,7 +611,7 @@ export function CanvassingPanel({
 
       <div className="mt-6 rounded-md bg-info/10 p-4">
         <p className="text-sm text-foreground">
-          <strong>How Canvassing Works:</strong>
+          <strong>How canvassing works:</strong>
         </p>
         <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-muted">
           <li>Effectiveness scales with your alignment to the demographic</li>

@@ -192,7 +192,7 @@ export default function StrategyChangeConfirm({
       {/* Commodity changes table */}
       <table className="w-full border-collapse">
         <thead>
-          <tr className="text-[9px] uppercase tracking-wider text-muted border-b border-card-border">
+          <tr className="text-sm font-semibold text-foreground border-b border-card-border">
             <th className="text-left py-1 font-semibold">Commodity</th>
             <th className="text-right py-1 pr-1.5 font-semibold">Output</th>
             <th className="text-right py-1 pr-1.5 font-semibold">Input</th>

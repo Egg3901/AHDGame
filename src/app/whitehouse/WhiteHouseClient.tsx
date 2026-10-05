@@ -518,7 +518,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
           )}
           {(data.isPresident || data.isAdmin) && (
             <TabButton active={activeTab === "orders"} onClick={() => setActiveTab("orders")}>
-              Executive Orders
+              Executive orders
             </TabButton>
           )}
           {(data.isPresident || data.isAdmin) && (
@@ -531,7 +531,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
           )}
           {(data.isPresident || data.isAdmin) && conflictsEnabled && (
             <TabButton active={activeTab === "foreign"} onClick={() => setActiveTab("foreign")}>
-              Foreign Affairs
+              Foreign affairs
             </TabButton>
           )}
           {data.isAdmin && (
@@ -573,7 +573,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                     disabled={submitting}
                     className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-black hover:bg-amber-400 disabled:opacity-50 transition-colors"
                   >
-                    Initialize President &amp; VP Slots
+                    Initialize president &amp; VP slots
                   </button>
                 </div>
               </div>
@@ -593,7 +593,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                   needsInit={needsExecutiveInit}
                 />
                 <ExecutiveCard
-                  title="Vice President"
+                  title="Vice president"
                   data={data.vicePresident}
                   officialId={data.vicePresidentOfficialId}
                   onAppoint={() => setAppointModal("vicePresident")}
@@ -635,7 +635,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                     tenureLine: sinceChip ?? undefined,
                   },
                   {
-                    title: "Vice President",
+                    title: "Vice president",
                     sealGlyph: "VP",
                     holder: data.vicePresident
                       ? {
@@ -658,7 +658,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                     href={`/country/${countryId.toLowerCase()}/executive/vice-president`}
                     className="rounded-lg border border-primary/40 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
                   >
-                    Open VP Office
+                    Open VP office
                   </Link>
                 )}
                 {data.isVicePresident && (
@@ -667,7 +667,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                     disabled={resignLoading}
                     className="rounded-lg border border-error/40 px-3 py-1.5 text-xs font-medium text-error hover:bg-error/10 disabled:opacity-50 transition-colors"
                   >
-                    {resignLoading ? "Resigning…" : "Resign as Vice President"}
+                    {resignLoading ? "Resigning…" : "Resign as vice president"}
                   </button>
                 )}
                 {/* The 25th-Amendment VP nomination is a US mechanic; other
@@ -684,7 +684,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                       }}
                       className="rounded-lg border border-primary/40 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
                     >
-                      Nominate Vice President
+                      Nominate vice president
                     </button>
                   )}
                 {/* SCOTUS is a US-only mechanic (#3581) — other presidential
@@ -917,7 +917,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
       {vpNominateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="w-full max-w-md rounded-xl border border-card-border bg-card p-6 mx-4 shadow-modal">
-            <h3 className="text-lg font-semibold mb-2">Nominate Vice President</h3>
+            <h3 className="text-lg font-semibold mb-2">Nominate vice president</h3>
             <p className="text-sm text-muted mb-4">
               Under the 25th Amendment, the President nominates a VP who must be confirmed by a
               simple majority of the Senate. The vote closes after 24 hours.
@@ -968,7 +968,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="w-full max-w-md rounded-xl border border-card-border bg-card p-6 mx-4 shadow-modal">
             <h3 className="text-lg font-semibold mb-4">
-              Appoint {appointModal === "president" ? "President" : "Vice President"}
+              Appoint {appointModal === "president" ? "President" : "Vice president"}
             </h3>
             <p className="text-sm text-muted mb-4">
               Only player characters can serve. NPPs cannot be appointed.

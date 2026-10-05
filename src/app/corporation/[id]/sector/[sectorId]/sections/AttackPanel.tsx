@@ -144,7 +144,7 @@ export default function AttackPanel({
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
-      <h2 className="mb-1 text-lg font-bold text-foreground">Market Actions</h2>
+      <h2 className="mb-1 text-lg font-bold text-foreground">Market actions</h2>
       <p className="mb-4 text-xs text-muted">
         {plantsMode
           ? "Attempt a sector split against this rival's whole plants."
@@ -159,7 +159,7 @@ export default function AttackPanel({
           attackInfo.plantSplitQuote &&
           attackInfo.plantCount != null && (
             <div className="rounded-xl border border-error/20 bg-background/40 p-4">
-              <h3 className="text-sm font-semibold text-foreground">Split Rival Plants</h3>
+              <h3 className="text-sm font-semibold text-foreground">Split rival plants</h3>
               <p className="mt-1 text-xs text-muted">
                 Relative MS automatically sets the share and success chance. You do not choose a
                 percentage.
@@ -171,7 +171,7 @@ export default function AttackPanel({
               )}
               <div className="mt-4 grid grid-cols-3 gap-3 rounded-lg border border-card-border/60 bg-card/60 p-3 text-center">
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted">Automatic share</p>
+                  <p className="text-body-sm font-medium text-muted">Automatic share</p>
                   <p className="mt-1 font-semibold tabular-nums text-foreground">
                     {(attackInfo.plantSplitQuote.seizureFraction * 100).toFixed(
                       (attackInfo.plantSplitQuote.seizureFraction * 100) % 1 === 0 ? 0 : 1
@@ -180,13 +180,13 @@ export default function AttackPanel({
                   </p>
                 </div>
                 <div className="border-x border-card-border/60 px-2">
-                  <p className="text-[10px] uppercase tracking-wider text-muted">Plants at risk</p>
+                  <p className="text-body-sm font-medium text-muted">Plants at risk</p>
                   <p className="mt-1 font-semibold tabular-nums text-foreground">
                     {attackInfo.plantSplitQuote.plantsAtRisk.toLocaleString("en-US")}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted">Success chance</p>
+                  <p className="text-body-sm font-medium text-muted">Success chance</p>
                   <p className="mt-1 font-semibold tabular-nums text-foreground">
                     {(attackInfo.plantSplitQuote.successProbability * 100).toFixed(1)}%
                   </p>
@@ -211,7 +211,7 @@ export default function AttackPanel({
         {showAttack && !plantsMode && (
           <div className="rounded-xl border border-error/20 bg-background/40 p-4">
             <h3 className="text-sm font-semibold text-foreground">
-              {showSplit ? "Attack Sector" : "Take Over Plants"}
+              {showSplit ? "Attack sector" : "Take over plants"}
             </h3>
             <p className="mt-1 text-xs text-muted">
               {showSplit
@@ -257,7 +257,7 @@ export default function AttackPanel({
                 className="rounded-lg border border-error/30 bg-error/10 px-4 py-2 text-sm font-medium text-error transition-colors hover:bg-error/20 disabled:cursor-not-allowed disabled:opacity-40"
                 title={attackReason}
               >
-                {attacking ? "Attacking..." : showSplit ? "Attack Sector" : "Take Over"}
+                {attacking ? "Attacking..." : showSplit ? "Attack sector" : "Take over"}
               </button>
             </div>
           </div>
@@ -265,7 +265,7 @@ export default function AttackPanel({
 
         {showSplit && (
           <div className="rounded-xl border border-primary/20 bg-background/40 p-4">
-            <h3 className="text-sm font-semibold text-foreground">Split Unowned Market</h3>
+            <h3 className="text-sm font-semibold text-foreground">Split unowned market</h3>
             <p className="mt-1 text-xs text-muted">
               Capture the remaining unowned market share for this sector type without targeting a
               competitor directly.
@@ -274,9 +274,7 @@ export default function AttackPanel({
             {/* Strength selector */}
             {hasStrengthData && activeSplitCost > 0 && (
               <div className="mt-3">
-                <div className="mb-1 text-[10px] uppercase tracking-wider text-muted">
-                  Split strength
-                </div>
+                <div className="mb-1 text-body-sm font-medium text-muted">Split strength</div>
                 <div className="flex gap-1">
                   {(["full", "half"] as SplitStrength[]).map((strength) => (
                     <button

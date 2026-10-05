@@ -34,15 +34,15 @@ const ledger: WorldTradeLedger = {
 describe("WorldTradeClient", () => {
   it("renders the masthead title and live turn", () => {
     render(<WorldTradeClient ledger={ledger} />);
-    expect(screen.getByText("World Trade Ledger")).toBeTruthy();
-    expect(screen.getByText(/Live · Turn 412/)).toBeTruthy();
+    expect(screen.getByText("World trade ledger")).toBeTruthy();
+    expect(screen.getByText(/Live · turn 412/)).toBeTruthy();
     expect(screen.getByText("IMBALANCED")).toBeTruthy();
   });
 
   it("switches the active view tab on click", () => {
     render(<WorldTradeClient ledger={ledger} />);
-    const nations = screen.getByRole("tab", { name: "By Nation" });
-    const commodities = screen.getByRole("tab", { name: "By Commodity" });
+    const nations = screen.getByRole("tab", { name: "By nation" });
+    const commodities = screen.getByRole("tab", { name: "By commodity" });
     expect(nations.getAttribute("aria-selected")).toBe("true");
     fireEvent.click(commodities);
     expect(commodities.getAttribute("aria-selected")).toBe("true");

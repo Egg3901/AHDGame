@@ -165,7 +165,7 @@ function BillsTab({
             onClick={() => setShowModal(true)}
             className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
           >
-            Propose Bill
+            Propose bill
           </button>
         </div>
       )}

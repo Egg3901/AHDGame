@@ -39,7 +39,7 @@ export function CandidateTotalsPanel({
                 />
                 {c.name}
                 {c.isNPP && (
-                  <span className="text-[10px] uppercase tracking-wide text-muted">
+                  <span className="text-body-sm font-medium text-muted">
                     <NppAbbr />
                   </span>
                 )}

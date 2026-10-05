@@ -362,9 +362,7 @@ export function ElectionsManageTab() {
       {/* Filter + Election List */}
       <div className="rounded-lg border border-card-border bg-card p-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-            Election List
-          </span>
+          <span className="text-body-sm font-medium text-muted">Election list</span>
           <ElectionFilterBar
             filterCountry={
               selectedCountry === "global" ? "" : (selectedCountry as "US" | "UK" | "DE" | "JP")

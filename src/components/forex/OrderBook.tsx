@@ -106,24 +106,16 @@ export function OrderBook({ orders, onFilled }: Props) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-card-border bg-card-elevated">
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted">
-                Trader
+              <th className="px-4 py-3 text-left text-body-sm font-medium text-muted">Trader</th>
+              <th className="px-4 py-3 text-left text-body-sm font-medium text-muted">Pair</th>
+              <th className="px-4 py-3 text-right text-body-sm font-medium text-muted">Amount</th>
+              <th className="px-4 py-3 text-right text-body-sm font-medium text-muted">
+                Limit rate
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted">
-                Pair
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted">
-                Amount
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted">
-                Limit Rate
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted hidden sm:table-cell">
+              <th className="px-4 py-3 text-right text-body-sm font-medium text-muted hidden sm:table-cell">
                 Filled
               </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted">
-                Action
-              </th>
+              <th className="px-4 py-3 text-right text-body-sm font-medium text-muted">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-card-border">

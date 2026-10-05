@@ -158,7 +158,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-lg font-semibold text-foreground">Free-Trade Agreements</h3>
+          <h3 className="text-lg font-semibold text-foreground">Free-trade agreements</h3>
           <p className="text-xs text-muted">
             Active FTAs zero out tariffs between every party in the agreement.
           </p>
@@ -224,7 +224,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
 
       {/* Active FTAs */}
       <div className="space-y-3">
-        <h4 className="text-xs font-semibold uppercase tracking-widest text-muted">Active</h4>
+        <h4 className="text-body-sm font-medium text-muted">Active</h4>
         {withdrawSuccess && (
           <div className="rounded-xl border border-success/30 bg-success/5 p-4 text-sm text-success">
             {withdrawSuccess}
@@ -290,9 +290,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
 
       {/* Pending FTAs */}
       <div className="space-y-3">
-        <h4 className="text-xs font-semibold uppercase tracking-widest text-muted">
-          Awaiting ratification
-        </h4>
+        <h4 className="text-body-sm font-medium text-muted">Awaiting ratification</h4>
         {pendingFtas.length === 0 ? (
           <div className="rounded-xl border border-card-border bg-card p-5">
             <p className="text-sm text-muted">No pending legislation.</p>

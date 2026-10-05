@@ -107,12 +107,12 @@ export function LawTypesTab() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Law Types</h2>
+        <h2 className="text-lg font-semibold">Law types</h2>
         <button
           onClick={handleCreate}
           className="inline-flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
         >
-          + Create New Law Type
+          + Create new law type
         </button>
       </div>
 
@@ -123,7 +123,7 @@ export function LawTypesTab() {
           onChange={(e) => setDomainFilter(e.target.value)}
           className="rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
         >
-          <option value="all">All Domains</option>
+          <option value="all">All domains</option>
           {domains.map((d) => (
             <option key={d} value={d} className="capitalize">
               {d}

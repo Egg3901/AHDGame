@@ -76,17 +76,11 @@ export function ResultsTable({ units, candidatesById, unitLabel, title }: Result
           <thead>
             <tr className="border-b border-card-border">
               <th className="pb-2 pr-3">{headerButton("name", unitLabel)}</th>
-              <th className="pb-2 pr-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted">
-                Leader
-              </th>
-              <th className="pb-2 pr-3 text-right text-[11px] font-semibold uppercase tracking-wider text-muted">
-                Votes
-              </th>
+              <th className="pb-2 pr-3 text-left text-body-sm font-medium text-muted">Leader</th>
+              <th className="pb-2 pr-3 text-right text-body-sm font-medium text-muted">Votes</th>
               <th className="pb-2 pr-3 text-right">{headerButton("margin", "Margin", true)}</th>
               <th className="pb-2 pr-3 text-right">{headerButton("reporting", "In", true)}</th>
-              <th className="pb-2 text-right text-[11px] font-semibold uppercase tracking-wider text-muted">
-                Status
-              </th>
+              <th className="pb-2 text-right text-body-sm font-medium text-muted">Status</th>
             </tr>
           </thead>
           <tbody>

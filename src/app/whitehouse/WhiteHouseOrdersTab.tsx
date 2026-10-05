@@ -158,7 +158,7 @@ export function WhiteHouseOrdersTab({ countryId }: Props) {
                 : ""
             }
           >
-            + Admin Override
+            + Admin override
           </button>
         </section>
       )}

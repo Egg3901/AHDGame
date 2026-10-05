@@ -217,7 +217,7 @@ export function BuildOrgPanel({
       scopes={eligibleScopes}
       color={partyColor}
       busy={busy}
-      label="Build Org"
+      label="Build org"
       busyLabel="Building…"
       singleDisabled={!canBuildOrg || insufficientPs || noPresence}
       stateDisabled={!canBuildOrg || statePoolInsufficient || noPresence}
@@ -290,7 +290,7 @@ export function BuildOrgPanel({
             }
           : undefined
       }
-      gain={{ label: "Estimated Gain", value: preview.projectedGain, sign: "+", unit: "Org" }}
+      gain={{ label: "Estimated gain", value: preview.projectedGain, sign: "+", unit: "Org" }}
       factors={preview.factors}
     />
   ) : preview && !preview.ok ? (
@@ -328,9 +328,9 @@ export function BuildOrgPanel({
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            <h2 className={compact ? "text-sm font-semibold" : "font-semibold"}>Build Org</h2>
+            <h2 className={compact ? "text-sm font-semibold" : "font-semibold"}>Build org</h2>
             <Tooltip
-              label="About Build Org"
+              label="About build org"
               content="Spend Political Strength (PS) to grow your Org% in this state. Each click claims unaffiliated pool first, then poaches rivals. Bigger Org and lower rival PS make a rival a larger target."
             />
           </div>
@@ -342,9 +342,9 @@ export function BuildOrgPanel({
           )}
         </div>
         <div className="text-right shrink-0">
-          <div className="flex items-center justify-end text-[10px] uppercase tracking-wider text-muted">
+          <div className="flex items-center justify-end text-body-sm font-medium text-muted">
             {headerPoolLabel}
-            <Tooltip label="About Political Strength" content={headerPoolTooltip} />
+            <Tooltip label="About political strength" content={headerPoolTooltip} />
           </div>
           <div
             key={`ps-${bumpKey}`}
@@ -361,7 +361,7 @@ export function BuildOrgPanel({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm min-w-0">
             <div className="flex items-center text-muted text-xs">
-              Spend Political Strength
+              Spend political strength
               <Tooltip
                 label="About the pressure ladder"
                 content={`Each Build Org click costs a base of ${BUILD_ORG_BASE_PS_COST} PS, plus escalation from how often you've built in this state recently (the pressure ladder).`}
@@ -392,7 +392,7 @@ function PoachLines({ poaches }: { poaches: PoachLine[] }) {
   const sorted = [...poaches].sort((a, b) => b.loss - a.loss);
   return (
     <div className="rounded-lg border border-card-border/40 bg-background/30 px-4 py-3">
-      <div className="flex items-center text-[10px] font-semibold uppercase tracking-wide text-muted">
+      <div className="flex items-center text-body-sm font-medium text-muted">
         Taken from rivals
         <Tooltip
           label="About rival poaching"

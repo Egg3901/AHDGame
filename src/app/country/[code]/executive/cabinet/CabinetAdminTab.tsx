@@ -203,7 +203,7 @@ export function CabinetAdminTab({
                         )
                       }
                     >
-                      {busy === `cooldown:${seat.id}` ? "…" : "Reset Cooldown"}
+                      {busy === `cooldown:${seat.id}` ? "…" : "Reset cooldown"}
                     </Button>
                   )}
                 </div>

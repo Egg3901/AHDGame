@@ -13,7 +13,7 @@ export function GameHealthSummaryCards({ snapshot }: Props) {
 
   const cards = [
     {
-      label: "Last Turn",
+      label: "Last turn",
       value: `${snapshot.turnProcessing.durationMs.toLocaleString("en-US")}ms`,
       sub: `Turn ${snapshot.turn}`,
     },

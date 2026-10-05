@@ -15,7 +15,7 @@ interface BillListControlsProps {
 const VOTE_FILTERS: { value: BillVoteFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "voted", label: "Voted" },
-  { value: "not_voted", label: "Not Voted" },
+  { value: "not_voted", label: "Not voted" },
 ];
 
 export function BillListControls({

@@ -48,7 +48,7 @@ export function Step5Committee({ positions, policyDomain, onChange }: Step5Commi
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="font-medium">Committee Positions</h3>
+        <h3 className="font-medium">Committee positions</h3>
         <p className="text-xs text-muted mt-1">
           Auto-generated based on policy domain. Edit names if needed.
         </p>

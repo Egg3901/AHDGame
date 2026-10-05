@@ -23,29 +23,29 @@ export default function LedgerMasthead({ ledger }: { ledger: WorldTradeLedger })
 
   const cells: Array<{ label: string; value: string; sub: string; tone?: string }> = [
     {
-      label: "World Trade Volume",
+      label: "World trade volume",
       value: formatAmountChip(h.worldVolume),
       sub: "gross exports · per turn",
     },
     {
-      label: "Largest Surplus",
+      label: "Largest surplus",
       value: h.largestSurplus ? `${formatAmountChip(h.largestSurplus.value)} ▲` : "—",
       sub: h.largestSurplus ? nameOf(ledger, h.largestSurplus.code) : "no surplus",
       tone: "text-success",
     },
     {
-      label: "Largest Deficit",
+      label: "Largest deficit",
       value: h.largestDeficit ? `${formatAmountChip(h.largestDeficit.value)} ▼` : "—",
       sub: h.largestDeficit ? nameOf(ledger, h.largestDeficit.code) : "no deficit",
       tone: "text-error",
     },
     {
-      label: "Balance Split",
+      label: "Balance split",
       value: `${h.surplusCount} / ${h.deficitCount}`,
       sub: "surplus / deficit nations",
     },
     {
-      label: "Most Traded Good",
+      label: "Most traded good",
       value: formatAmountChip(h.mostTradedGood.volume),
       sub: h.mostTradedGood.label,
     },
@@ -75,10 +75,10 @@ export default function LedgerMasthead({ ledger }: { ledger: WorldTradeLedger })
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-body-sm font-medium" style={{ color: GOLD_SOFT }}>
-              World Trade Organisation · Settlement &amp; Customs Registry
+              World trade organisation · settlement &amp; customs registry
             </div>
             <h1 className="mt-1 text-2xl font-bold text-white sm:text-3xl">
-              World Trade Ledger
+              World trade ledger
               <span className="ml-2 align-middle text-sm font-semibold text-white/50">
                 balance of trade
               </span>
@@ -92,7 +92,7 @@ export default function LedgerMasthead({ ledger }: { ledger: WorldTradeLedger })
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black px-2.5 py-0.5 font-medium text-white/80">
                 <span className="h-2 w-2 shrink-0 rounded-full bg-success" aria-hidden />
-                Live · Turn {ledger.turn}
+                Live · turn {ledger.turn}
               </span>
               <span className="rounded-full border border-white/10 bg-black px-2.5 py-0.5 font-medium text-white/60">
                 Customs clearing record

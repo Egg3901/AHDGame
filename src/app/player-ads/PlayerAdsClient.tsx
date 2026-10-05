@@ -103,7 +103,7 @@ export function PlayerAdsClient() {
     <div className="min-h-screen bg-background pb-16">
       <div className="mx-auto max-w-5xl px-4 sm:px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Place a Banner Ad</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Place a banner ad</h1>
           <p className="mt-2 text-sm text-muted">
             Promote your party, faction, or corporation across high-traffic public pages. Ads
             display indefinitely and rotate in order of lowest view count until equalised.
@@ -133,10 +133,10 @@ export function PlayerAdsClient() {
                 <div className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 mb-3">
                   <p className="text-sm font-medium text-primary">
                     {info.tier === "supporter-plus-plus"
-                      ? "Supporter++ Benefits Active"
+                      ? "Supporter++ benefits active"
                       : info.tier === "supporter-plus"
-                        ? "Supporter+ Benefits Active"
-                        : "Supporter Benefits Active"}
+                        ? "Supporter+ benefits active"
+                        : "Supporter benefits active"}
                   </p>
                   <p className="text-xs text-muted mt-0.5">
                     {info.isFree
@@ -179,7 +179,7 @@ export function PlayerAdsClient() {
 
         {/* Guidelines */}
         <div className="rounded-xl border border-card-border bg-card p-5 mb-6">
-          <h2 className="text-base font-semibold mb-3">Content Guidelines</h2>
+          <h2 className="text-base font-semibold mb-3">Content guidelines</h2>
           <p className="text-sm text-muted mb-3">
             Every ad is reviewed by an admin before it starts serving. Violations are rejected or
             removed without refund and may lead to account penalties.
@@ -208,7 +208,7 @@ export function PlayerAdsClient() {
             onSubmit={(e) => void onSubmit(e)}
             className="rounded-xl border border-card-border bg-card p-5 sm:p-6 space-y-5"
           >
-            <h2 className="text-base font-semibold">Upload Your Banner</h2>
+            <h2 className="text-base font-semibold">Upload your banner</h2>
 
             {/* Image upload */}
             <div>

@@ -44,6 +44,7 @@ import { sumConstructionInProgressAnchor } from "@/lib/corporations/sectorProfit
 import { ceoOwnershipFraction } from "@/lib/corporations/ceoOwnership";
 import { bankEquity } from "@/lib/banking/balanceSheet";
 import { bankNpvFromPerTurnIncome } from "@/lib/banking/valuation";
+import { bankIncomeIncludingUnbookedSovereignAssets } from "@/lib/banking/rules/sovereignClaims";
 
 export interface RecomputeSharePricesResult {
   corpsRepriced: number;
@@ -137,7 +138,7 @@ export async function recomputeSharePricesAfterBondTurn(
     const id = corp._id.toString();
     const charter = corp.bankCharter?.status === "active" ? corp.bankCharter : null;
     const bankIncomeAnchor = charter
-      ? (charter.lastBankingIncome ?? 0) /
+      ? bankIncomeIncludingUnbookedSovereignAssets(charter) /
         (lookups.exchangeRatesByCurrency.get(charter.currency) ?? 1)
       : 0;
     baseEarningsMap.set(
@@ -179,7 +180,7 @@ export async function recomputeSharePricesAfterBondTurn(
       : 0;
     const bankNpvAnchor = activeBankCharter
       ? bankNpvFromPerTurnIncome(
-          (activeBankCharter.lastBankingIncome ?? 0) / bankFxRate,
+          bankIncomeIncludingUnbookedSovereignAssets(activeBankCharter) / bankFxRate,
           bankNpvBoostMultiplier(turn)
         )
       : 0;

@@ -71,7 +71,7 @@ export function HealPartyMembership() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Party Membership</h3>
+        <h3 className="font-semibold text-sm">Heal party membership</h3>
         <p className="mt-1 text-xs text-muted">
           Fixes characters and NPPs whose party assignment doesn&apos;t match their country. This
           can happen after party ID migrations when a US player ends up in a UK party (or vice
@@ -92,7 +92,7 @@ export function HealPartyMembership() {
           disabled={loading}
           className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs font-medium text-warning transition-colors hover:bg-warning/20 disabled:opacity-50"
         >
-          {loading ? "Fixing..." : "Fix Party Assignments"}
+          {loading ? "Fixing..." : "Fix party assignments"}
         </button>
       </div>
 
@@ -111,8 +111,8 @@ export function HealPartyMembership() {
                         <th className="pb-1">Name</th>
                         <th className="pb-1">Type</th>
                         <th className="pb-1">State</th>
-                        <th className="pb-1">Current Party</th>
-                        <th className="pb-1">Suggested Fix</th>
+                        <th className="pb-1">Current party</th>
+                        <th className="pb-1">Suggested fix</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-card-border/50">

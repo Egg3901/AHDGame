@@ -354,7 +354,7 @@ export function ActivityLogTab({
 
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold sm:text-lg">Activity Log</h2>
+      <h2 className="text-base font-semibold sm:text-lg">Activity log</h2>
 
       {/* Filter bar */}
       <div className="flex flex-wrap gap-2">

@@ -163,7 +163,7 @@ export function SoeDirectorPanel({ dashboard, soe, onSaved }: Props) {
 function Readout({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
-      <div className="text-[10px] font-bold uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div className="mt-0.5 text-sm font-bold tabular-nums text-foreground">{value}</div>
     </div>
   );

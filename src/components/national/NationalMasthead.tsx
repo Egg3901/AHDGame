@@ -81,7 +81,7 @@ export function NationalMasthead({
                   background: hexToRgba(id.accent, 0.16),
                 }}
               >
-                National Corporation
+                National corporation
               </span>
               <span
                 className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium"

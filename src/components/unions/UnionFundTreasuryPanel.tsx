@@ -90,10 +90,7 @@ export function UnionFundTreasuryPanel({
       {isHead && (
         <>
           <div className="flex flex-wrap items-center gap-2">
-            <label
-              htmlFor="union-fund-amount"
-              className="text-[11px] uppercase tracking-wider text-muted"
-            >
+            <label htmlFor="union-fund-amount" className="text-body-sm font-medium text-muted">
               Contribute from campaign funds
             </label>
             <input
@@ -114,7 +111,7 @@ export function UnionFundTreasuryPanel({
               onClick={handleFund}
               className="w-fit rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
             >
-              {pending ? "Sending…" : "Fund Treasury"}
+              {pending ? "Sending…" : "Fund treasury"}
             </button>
           </div>
           {amountDraft !== "" && !amountValid && (

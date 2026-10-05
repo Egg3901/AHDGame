@@ -85,7 +85,7 @@ export function PulseStrip({ countryId, pulse }: PulseStripProps) {
 
   return (
     <div className="grid grid-cols-2 divide-x divide-card-border bg-card-muted/60 lg:grid-cols-5">
-      <Cell label="Gross Domestic Product" className="col-span-2 lg:col-span-1">
+      <Cell label="Gross domestic product" className="col-span-2 lg:col-span-1">
         <span className="font-mono text-lg font-bold leading-tight tabular-nums text-foreground">
           {pulse.gdpMillions > 0 ? formatGDP(pulse.gdpMillions, prefix) : "—"}
         </span>
@@ -98,7 +98,7 @@ export function PulseStrip({ countryId, pulse }: PulseStripProps) {
         </span>
       </Cell>
 
-      <Cell label="GDP Growth">
+      <Cell label="GDP growth">
         <span
           className={`font-mono text-lg font-bold leading-tight tabular-nums ${
             growth == null ? "text-muted" : growth >= 0 ? "text-success" : "text-error"
@@ -138,7 +138,7 @@ export function PulseStrip({ countryId, pulse }: PulseStripProps) {
         )}
       </Cell>
 
-      <Cell label="Prime Rate">
+      <Cell label="Prime rate">
         <span className="font-mono text-lg font-bold leading-tight tabular-nums text-foreground">
           {prime != null ? (
             <>
@@ -160,7 +160,7 @@ export function PulseStrip({ countryId, pulse }: PulseStripProps) {
         )}
       </Cell>
 
-      <Cell label="Credit Standing">
+      <Cell label="Credit standing">
         <span className="font-mono text-lg font-bold leading-tight">
           <span style={{ color: "var(--stat, var(--primary))" }}>{pulse.credit.rating ?? "—"}</span>{" "}
           {pulse.credit.debtToGdpRatio != null && (

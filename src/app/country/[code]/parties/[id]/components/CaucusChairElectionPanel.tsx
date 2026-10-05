@@ -174,7 +174,7 @@ export function CaucusChairElectionPanel({
                 className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:opacity-90 disabled:opacity-40"
                 style={{ backgroundColor: caucusColor }}
               >
-                {actionLoading ? "..." : "Run for Chair"}
+                {actionLoading ? "..." : "Run for chair"}
               </button>
             )}
             {data.isCandidate && (
@@ -194,7 +194,7 @@ export function CaucusChairElectionPanel({
                 disabled={actionLoading}
                 className="rounded-lg border border-error/40 bg-error/10 px-3 py-1.5 text-xs font-semibold text-error hover:bg-error/20 disabled:opacity-40"
               >
-                {actionLoading ? "..." : "Withdraw Vote"}
+                {actionLoading ? "..." : "Withdraw vote"}
               </button>
             )}
           </div>
@@ -243,7 +243,7 @@ export function CaucusChairElectionPanel({
                       )}
                       {isMyVote && (
                         <span className="shrink-0 text-body-sm font-medium text-success">
-                          Your Vote
+                          Your vote
                         </span>
                       )}
                     </div>

@@ -101,12 +101,12 @@ export function KeyInsightsPanel({
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5">
-      <h3 className="text-lg font-semibold mb-4">Key Insights</h3>
+      <h3 className="text-lg font-semibold mb-4">Key insights</h3>
 
       <div className="grid gap-6 sm:grid-cols-2">
         {/* Closest States */}
         <div>
-          <div className="text-sm font-medium text-muted mb-2">Closest States</div>
+          <div className="text-sm font-medium text-muted mb-2">Closest states</div>
           <div className="space-y-2">
             {closestStates.map((state) => (
               <div key={state.stateId} className="flex items-center justify-between text-sm">
@@ -128,7 +128,7 @@ export function KeyInsightsPanel({
 
         {/* Biggest Wins */}
         <div>
-          <div className="text-sm font-medium text-muted mb-2">Biggest Landslides</div>
+          <div className="text-sm font-medium text-muted mb-2">Biggest landslides</div>
           <div className="space-y-2">
             {biggestWins.map((state) => (
               <div key={state.stateId} className="flex items-center justify-between text-sm">
@@ -151,7 +151,7 @@ export function KeyInsightsPanel({
 
       {/* Popular Vote Margin */}
       <div className="mt-4 pt-4 border-t border-card-border">
-        <div className="text-sm font-medium text-muted mb-1">Popular Vote Margin</div>
+        <div className="text-sm font-medium text-muted mb-1">Popular vote margin</div>
         <div className="text-2xl font-bold tabular-nums">
           {formatVotes(popularVoteMargin)} votes ({popularVoteMarginPct.toFixed(2)}%)
         </div>
@@ -159,7 +159,7 @@ export function KeyInsightsPanel({
 
       {/* Regional Breakdown */}
       <div className="mt-4 pt-4 border-t border-card-border">
-        <div className="text-sm font-medium text-muted mb-3">Regional Performance</div>
+        <div className="text-sm font-medium text-muted mb-3">Regional performance</div>
         <div className="grid gap-3 sm:grid-cols-2">
           {regionalBreakdown.map((region) => {
             const entries = Object.entries(region.statesByCandidate).sort((a, b) => b[1] - a[1]);

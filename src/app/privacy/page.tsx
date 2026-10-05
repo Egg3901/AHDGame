@@ -3,7 +3,7 @@ import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "Privacy Policy | A House Divided",
+  title: "Privacy policy | A House Divided",
   description:
     "Privacy Policy for A House Divided: how we collect, use, store, and protect account and gameplay data.",
   pathname: "/privacy",
@@ -16,7 +16,7 @@ export default function PrivacyPolicyPage() {
     <div className="min-h-screen bg-background pb-16">
       <div className="mx-auto max-w-4xl px-4 sm:px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Privacy Policy</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Privacy policy</h1>
           <p className="mt-2 text-sm text-muted">Effective date: {EFFECTIVE_DATE}</p>
         </div>
 
@@ -293,7 +293,7 @@ export default function PrivacyPolicyPage() {
                   rel="noopener noreferrer"
                   className="text-primary hover:underline"
                 >
-                  Google Ads Settings
+                  Google ads settings
                 </a>
                 . You can also opt out of a third-party vendor&apos;s use of cookies for
                 personalized advertising by visiting{" "}
@@ -436,7 +436,7 @@ export default function PrivacyPolicyPage() {
         <p className="mt-6 text-center text-xs text-muted">
           See also:{" "}
           <Link href="/terms" className="text-primary hover:underline">
-            Terms of Service
+            Terms of service
           </Link>
         </p>
       </div>

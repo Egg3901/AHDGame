@@ -97,7 +97,7 @@ export function ModeratorsManagementTab() {
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-card-border bg-card p-4">
-        <h3 className="mb-3 text-sm font-semibold">Assign Moderator</h3>
+        <h3 className="mb-3 text-sm font-semibold">Assign moderator</h3>
         <div className="flex gap-2">
           {selectedUser ? (
             <div className="flex-1 flex items-center gap-2">
@@ -135,7 +135,7 @@ export function ModeratorsManagementTab() {
 
       <div className="rounded-lg border border-card-border bg-card">
         <div className="border-b border-card-border px-4 py-3">
-          <h3 className="text-sm font-semibold">Current Moderators ({moderators.length})</h3>
+          <h3 className="text-sm font-semibold">Current moderators ({moderators.length})</h3>
         </div>
         {moderators.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-muted">No moderators assigned</p>

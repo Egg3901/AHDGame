@@ -115,7 +115,7 @@ export function BondProfilePanel({
       <ActingLockNote reason={actingLockReason} />
 
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-foreground">Sovereign Bond Maturity Profile</h2>
+        <h2 className="text-lg font-semibold text-foreground">Sovereign bond maturity profile</h2>
         <p className="text-sm text-muted mt-1">
           Set the split of quarterly sovereign debt issuance across maturities. Values must sum to
           100%.
@@ -154,9 +154,7 @@ export function BondProfilePanel({
       </div>
 
       <div className="rounded-lg border border-card-border bg-background/60 p-4 mb-4">
-        <div className="text-[11px] font-semibold text-muted uppercase tracking-wider mb-2">
-          Debt Coverage
-        </div>
+        <div className="text-body-sm font-medium text-muted mb-2">Debt coverage</div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
           <div>
             <div className="text-[11px] text-muted mb-0.5">National debt principal</div>
@@ -191,7 +189,7 @@ export function BondProfilePanel({
           isLoading={saving}
           onClick={handleSave}
         >
-          Save Profile
+          Save profile
         </Button>
         {feedback && (
           <span

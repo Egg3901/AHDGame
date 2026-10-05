@@ -9,7 +9,7 @@ import { US_SENATE_2020 } from "@/lib/constants/historicalSeats";
 
 export const metadata: Metadata = {
   ...publicPageMetadata({
-    title: "Officials & Vacancies | A House Divided",
+    title: "Officials & vacancies | A House Divided",
     description:
       "Browse current player and NPC elected officials across the simulation and find vacant offices you can run for in the next election cycle.",
     pathname: "/officials",
@@ -84,7 +84,7 @@ export default async function OfficialsPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">Officials & Vacancies</h1>
+        <h1 className="text-3xl font-bold">Officials & vacancies</h1>
         <p className="mt-2 text-muted">View current elected officials and vacant offices</p>
       </div>
 

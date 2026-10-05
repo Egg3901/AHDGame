@@ -106,7 +106,7 @@ export function StatAllocationGate() {
       />
       <div className="relative z-10 w-full max-w-lg rounded-xl border border-card-border bg-card shadow-2xl">
         <div className="relative px-5 pt-5 pb-4">
-          <h2 className="text-lg font-semibold text-foreground">Allocate Your Stats</h2>
+          <h2 className="text-lg font-semibold text-foreground">Allocate your stats</h2>
           <p className="mt-1 text-xs text-muted">
             Your politician has earned a stat sheet. We&apos;ve suggested a build from your career —
             rearrange it however you like, then lock it in. This is a one-time choice.
@@ -145,7 +145,7 @@ export function StatAllocationGate() {
                   isLoading={submitting}
                   className="min-w-[160px]"
                 >
-                  {remaining === 0 ? "Lock In Stats" : `${remaining} points left`}
+                  {remaining === 0 ? "Lock in stats" : `${remaining} points left`}
                 </Button>
               </div>
             </>

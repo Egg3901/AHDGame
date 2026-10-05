@@ -44,7 +44,7 @@ export function VoteButtons({ onVote, disabled, disabledReason, currentVote }: P
           disabled={disabled || pending !== null}
           isLoading={pending === "yes"}
         >
-          Vote Yes
+          Vote yes
         </Button>
         <Button
           size="sm"
@@ -53,7 +53,7 @@ export function VoteButtons({ onVote, disabled, disabledReason, currentVote }: P
           disabled={disabled || pending !== null}
           isLoading={pending === "no"}
         >
-          Vote No
+          Vote no
         </Button>
         <Button
           size="sm"

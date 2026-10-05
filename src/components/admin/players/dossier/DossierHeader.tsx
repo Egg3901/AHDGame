@@ -109,9 +109,7 @@ export function DossierHeader({ dossier, context, refreshing }: DossierHeaderPro
                 {dossier.money.totals.net >= 0 ? "+" : "-"}
                 {formatCompactAmount(Math.abs(dossier.money.totals.net))}
               </span>
-              <span className="text-[10px] font-medium uppercase tracking-wide text-muted">
-                Net money
-              </span>
+              <span className="text-body-sm font-medium text-muted">Net money</span>
             </div>
           </div>
         </div>
@@ -147,7 +145,7 @@ function Vital({ label, value, alarming }: { label: string; value: number; alarm
       >
         {value}
       </span>
-      <span className="text-[10px] font-medium uppercase tracking-wide text-muted">{label}</span>
+      <span className="text-body-sm font-medium text-muted">{label}</span>
     </div>
   );
 }

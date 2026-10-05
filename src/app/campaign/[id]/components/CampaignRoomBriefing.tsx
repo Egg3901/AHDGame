@@ -5,7 +5,7 @@ import type {
   CampaignBriefing,
   CampaignData,
 } from "@/lib/campaigns/dto/campaignView";
-import { BLEND, FONT } from "@/components/blend/tokens";
+import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 
 interface CampaignRoomBriefingProps {
   campaign: CampaignData;
@@ -39,19 +39,9 @@ export function CampaignRoomBriefing({ campaign }: CampaignRoomBriefingProps) {
         }}
       >
         <h3 style={{ margin: 0, fontFamily: FONT.sans, fontSize: 17, fontWeight: 600 }}>
-          Campaign Room
+          Campaign room
         </h3>
-        <span
-          style={{
-            fontFamily: FONT.mono,
-            fontSize: 9.5,
-            letterSpacing: ".16em",
-            textTransform: "uppercase",
-            color: BLEND.mutedDimmer,
-          }}
-        >
-          Manager briefing
-        </span>
+        <span style={BLEND_LABEL}>Manager briefing</span>
       </div>
 
       {/* Operations saturation and action tradeoffs used to sit here, listing
@@ -86,18 +76,7 @@ function CardShell({ title, children }: { title: string; children: React.ReactNo
         padding: 14,
       }}
     >
-      <div
-        style={{
-          marginBottom: 8,
-          fontFamily: FONT.mono,
-          fontSize: 9.5,
-          letterSpacing: ".14em",
-          textTransform: "uppercase",
-          color: BLEND.mutedDimmer,
-        }}
-      >
-        {title}
-      </div>
+      <div style={{ ...BLEND_LABEL, marginBottom: 8 }}>{title}</div>
       {children}
     </div>
   );
@@ -227,18 +206,7 @@ export function PathToVictoryCard({ path }: { path: CampaignBriefing["path"] }) 
       <Meter pct={pct} />
       {path.tippingStates.length > 0 ? (
         <>
-          <div
-            style={{
-              margin: "12px 0 2px",
-              fontFamily: FONT.mono,
-              fontSize: 9.5,
-              letterSpacing: ".14em",
-              textTransform: "uppercase",
-              color: BLEND.mutedDimmer,
-            }}
-          >
-            Closest states
-          </div>
+          <div style={{ ...BLEND_LABEL, margin: "12px 0 2px" }}>Closest states</div>
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {path.tippingStates.map((s) => (
               <Row key={s.stateId} label={s.name} value={`${s.marginPp.toFixed(1)} pt`} />

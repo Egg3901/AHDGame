@@ -42,12 +42,21 @@ export interface PoliticalAdOrderAllocation {
   orderId: string;
   requestedAnchor: number;
   deliveredAnchor: number;
+  /** Funded fallback spend when no advertising outlet operates in the target state. */
+  fallbackAnchor: number;
   unfilledAnchor: number;
   deliveredUnits: number;
   sellers: PoliticalAdSellerAllocation[];
 }
 
 const compareText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Spend one quarter of a funded order for a weaker local effect when no outlet exists. */
+export const POLITICAL_MEDIA_NO_OUTLET_FALLBACK_SHARE = 0.25;
+
+export function politicalMediaStateKey(countryId: string, stateId: string): string {
+  return `${countryId}:${stateId}`;
+}
 
 /** Fraction of the frozen requested anchor budget that actually cleared. */
 export function politicalMediaFillRatio(deliveredAnchor: number, requestedAnchor: number): number {
@@ -69,7 +78,9 @@ export function politicalMediaFillRatio(deliveredAnchor: number, requestedAnchor
  */
 export function allocatePoliticalAdOrders(
   orders: readonly PoliticalAdOrderDemand[],
-  sellers: readonly PoliticalAdSellerOffer[]
+  sellers: readonly PoliticalAdSellerOffer[],
+  statesWithOutlets: ReadonlySet<string> = new Set(),
+  fallbackEligibleStates: ReadonlySet<string> = new Set()
 ): PoliticalAdOrderAllocation[] {
   const remainingBySector = new Map(
     sellers.map((seller) => [
@@ -85,6 +96,7 @@ export function allocatePoliticalAdOrders(
     let remainingAnchor =
       Number.isFinite(order.budgetAnchor) && order.budgetAnchor > 0 ? order.budgetAnchor : 0;
     let deliveredAnchor = 0;
+    let fallbackAnchor = 0;
     let deliveredUnits = 0;
     const allocations: PoliticalAdSellerAllocation[] = [];
     const matchingSellers = sellers
@@ -132,10 +144,25 @@ export function allocatePoliticalAdOrders(
       remainingAnchor = Math.max(0, remainingAnchor - amountAnchor);
     }
 
+    if (
+      matchingSellers.length === 0 &&
+      !statesWithOutlets.has(politicalMediaStateKey(order.countryId, order.stateId)) &&
+      fallbackEligibleStates.has(politicalMediaStateKey(order.countryId, order.stateId))
+    ) {
+      fallbackAnchor =
+        Math.min(
+          Number.isFinite(order.budgetAnchor) ? Math.max(0, order.budgetAnchor) : 0,
+          remainingAnchor
+        ) * POLITICAL_MEDIA_NO_OUTLET_FALLBACK_SHARE;
+      deliveredAnchor += fallbackAnchor;
+      remainingAnchor = Math.max(0, remainingAnchor - fallbackAnchor);
+    }
+
     return {
       orderId: order.orderId,
       requestedAnchor: Math.max(0, Number.isFinite(order.budgetAnchor) ? order.budgetAnchor : 0),
       deliveredAnchor,
+      fallbackAnchor,
       unfilledAnchor: remainingAnchor,
       deliveredUnits,
       sellers: allocations,

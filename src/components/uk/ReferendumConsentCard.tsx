@@ -196,7 +196,7 @@ export function ReferendumConsentCard({
                     href={referendumDetailUrl(countryId, r.regionId)}
                     className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 hover:text-amber-500"
                   >
-                    View Campaign →
+                    View campaign →
                   </Link>
                 </div>
               )}

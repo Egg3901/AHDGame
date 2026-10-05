@@ -83,7 +83,7 @@ export function AdminSidebar({
       <div className="flex items-center gap-2 px-2 pb-2">
         <span className="inline-block h-6 w-1 rounded-full bg-primary" />
         <div className="min-w-0">
-          <div className="truncate text-xs font-bold tracking-wide uppercase">Admin Panel</div>
+          <div className="truncate text-xs font-bold tracking-wide uppercase">Admin panel</div>
           <div className="truncate text-[10px] text-muted">
             Game ops &middot; Users &middot; System
           </div>
@@ -93,9 +93,7 @@ export function AdminSidebar({
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto pb-2">
         {pins.length > 0 && (
           <div className="flex flex-col gap-0.5">
-            <div className="px-2 pt-1 pb-1 text-[10px] font-semibold tracking-widest text-muted uppercase">
-              Pinned
-            </div>
+            <div className="px-2 pt-1 pb-1 text-body-sm font-medium text-muted">Pinned</div>
             {pins.map((pin) => {
               const badge = pinBadge(pin);
               const hasBadge = typeof badge === "number" && badge > 0;
@@ -134,9 +132,7 @@ export function AdminSidebar({
 
         {ADMIN_NAV_GROUPS.map((group) => (
           <div key={group.label} className="flex flex-col gap-0.5">
-            <div className="px-2 pt-1 pb-1 text-[10px] font-semibold tracking-widest text-muted uppercase">
-              {group.label}
-            </div>
+            <div className="px-2 pt-1 pb-1 text-body-sm font-medium text-muted">{group.label}</div>
             {group.ids.map((id) => {
               const tab = TAB_BY_ID.get(id);
               if (!tab) return null;

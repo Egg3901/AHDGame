@@ -17,7 +17,7 @@ export default function CommoditiesView({ ledger }: { ledger: WorldTradeLedger }
     <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
       <div className="mb-2 flex items-baseline justify-between gap-2">
         <h3 className="text-sm font-bold text-foreground">
-          Commodity Flows{" "}
+          Commodity flows{" "}
           <span className="font-normal text-muted">· who the world is long &amp; short</span>
         </h3>
         <span className="text-[10px] text-muted">top net importer ◀ · ▶ top net exporter</span>

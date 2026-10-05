@@ -60,9 +60,7 @@ export function PortfolioShell<K extends string>({
               {mastheadAside && <div className="mt-3">{mastheadAside}</div>}
             </div>
             <div className="flex items-baseline gap-3 sm:flex-col sm:items-end sm:gap-0 shrink-0">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-bold">
-                {netWorthLabel}
-              </span>
+              <span className="text-body-sm font-medium text-muted">{netWorthLabel}</span>
               <span className="text-2xl sm:text-3xl font-bold text-foreground tabular-nums tracking-tight">
                 {netWorth}
               </span>
@@ -443,9 +441,7 @@ export function StatCard({
 }) {
   return (
     <div className="rounded-xl border border-card-border bg-card px-4 py-4 shadow-sm">
-      <span className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-1">
-        {label}
-      </span>
+      <span className="block text-body-sm font-medium text-muted mb-1">{label}</span>
       <span
         className={`block text-lg sm:text-xl font-bold tabular-nums ${
           accent === "success" ? "text-success" : "text-foreground"

@@ -331,7 +331,7 @@ export function TurnControls() {
       <div className="border-b border-card-border bg-gradient-to-r from-primary/5 to-transparent px-6 py-5">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-foreground">Game Clock</h2>
+            <h2 className="text-lg font-bold text-foreground">Game clock</h2>
             <p className="text-xs text-muted">Real-time turn management</p>
           </div>
           {gameState && (
@@ -355,7 +355,7 @@ export function TurnControls() {
               active={gameState.isActive}
               label={
                 gameState.isActive
-                  ? "Cron Active"
+                  ? "Cron active"
                   : gameState.pauseKind === "auto-drift"
                     ? "Auto-Paused"
                     : "Paused"
@@ -371,12 +371,12 @@ export function TurnControls() {
             />
             <StatusBadge
               active={gameState.corporationActionsPaused}
-              label="Corp Paused"
+              label="Corp paused"
               color="bg-yellow-500"
             />
             <StatusBadge
               active={gameState.playerTransfersPaused}
-              label="Transfers Paused"
+              label="Transfers paused"
               color="bg-orange-500"
             />
             <StatusBadge
@@ -549,14 +549,14 @@ export function TurnControls() {
           disabled={loading || gameState?.isActive === true}
           variant="success"
         >
-          Start Cron
+          Start cron
         </ControlBtn>
         <ControlBtn
           onClick={() => callAdmin("/api/admin/turn/stop", "stop")}
           disabled={loading || gameState?.isActive === false}
           variant="danger"
         >
-          Pause Cron
+          Pause cron
         </ControlBtn>
         <ControlBtn
           onClick={() =>
@@ -570,7 +570,7 @@ export function TurnControls() {
               : "Pause corporation actions"
           }
         >
-          {gameState?.corporationActionsPaused ? "Resume Corp" : "Pause Corp"}
+          {gameState?.corporationActionsPaused ? "Resume corp" : "Pause corp"}
         </ControlBtn>
         <ControlBtn
           onClick={() =>
@@ -584,10 +584,10 @@ export function TurnControls() {
               : "Pause player-to-player transfers"
           }
         >
-          {gameState?.playerTransfersPaused ? "Resume Transfers" : "Pause Transfers"}
+          {gameState?.playerTransfersPaused ? "Resume transfers" : "Pause transfers"}
         </ControlBtn>
         <ControlBtn onClick={handleManualTurn} disabled={loading} variant="primary">
-          Manual Turn
+          Manual turn
         </ControlBtn>
         {gameState?.isProcessing && (
           <ControlBtn
@@ -614,7 +614,7 @@ export function TurnControls() {
                 : `Reset Lock becomes available in about ${formatLockCountdown(gameState.processingLockRetryAfterSeconds)}`
             }
           >
-            Reset Lock
+            Reset lock
           </ControlBtn>
         )}
 
@@ -712,14 +712,14 @@ export function TurnControls() {
       {showHelp && (
         <div className="border-t border-card-border bg-background/50 px-6 py-4">
           <p className="text-sm leading-relaxed text-muted">
-            <strong className="text-foreground">Start/Pause Cron:</strong> Toggle automatic turn
-            processing. <strong className="text-foreground">Pause/Resume Corp:</strong> Block sector
+            <strong className="text-foreground">Start/Pause cron:</strong> Toggle automatic turn
+            processing. <strong className="text-foreground">Pause/Resume corp:</strong> Block sector
             splits/attacks (shares still allowed).{" "}
-            <strong className="text-foreground">Manual Turn:</strong> Process 1 turn immediately.{" "}
+            <strong className="text-foreground">Manual turn:</strong> Process 1 turn immediately.{" "}
             <strong className="text-foreground">Batch:</strong> Process 1–20 turns sequentially.{" "}
-            <strong className="text-foreground">Enable Forex:</strong> One-time migration to
+            <strong className="text-foreground">Enable forex:</strong> One-time migration to
             activate currency exchange (irreversible).{" "}
-            <strong className="text-foreground">Fast Mode:</strong> Toggle 30-minute turn cycles
+            <strong className="text-foreground">Fast mode:</strong> Toggle 30-minute turn cycles
             (default: 60 minutes). <strong className="text-foreground">Config/System:</strong>{" "}
             First-time setup only.
           </p>

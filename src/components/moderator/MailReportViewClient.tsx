@@ -241,7 +241,7 @@ export function MailReportViewClient({
               disabled={actioning !== null || messages.length === 0}
               className="rounded-lg bg-yellow-500/10 px-3 py-1.5 text-xs font-medium text-yellow-400 transition-colors hover:bg-yellow-500/20 disabled:opacity-50"
             >
-              Delete Mail
+              Delete mail
             </button>
             <button
               type="button"
@@ -249,7 +249,7 @@ export function MailReportViewClient({
               disabled={actioning !== null}
               className="rounded-lg bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-400 transition-colors hover:bg-blue-500/20 disabled:opacity-50"
             >
-              Warn Sender
+              Warn sender
             </button>
             <button
               type="button"
@@ -257,7 +257,7 @@ export function MailReportViewClient({
               disabled={actioning !== null}
               className="rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-50"
             >
-              Ban Sender
+              Ban sender
             </button>
           </div>
         </div>

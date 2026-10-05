@@ -136,7 +136,7 @@ function BillDetailContent() {
           href="/congress?chamber=senate&tab=bills"
           className="text-sm text-primary hover:underline"
         >
-          ← Back to Bills
+          ← Back to bills
         </Link>
       </div>
     );
@@ -370,7 +370,7 @@ function BillDetailContent() {
                 onClick={() => handleAction("withdraw")}
                 className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors"
               >
-                Withdraw Bill
+                Withdraw bill
               </button>
             )}
             {bill.canFilibuster && (
@@ -378,7 +378,7 @@ function BillDetailContent() {
                 onClick={() => handleAction("filibuster")}
                 className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-500/20 transition-colors"
               >
-                Invoke Filibuster
+                Invoke filibuster
               </button>
             )}
           </div>
@@ -406,7 +406,7 @@ function BillDetailContent() {
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
                     <h3 className="text-base font-semibold text-amber-300">
-                      Congressional Veto Override
+                      Congressional veto override
                     </h3>
                     <p className="text-xs text-muted mt-1">
                       This is a new vote. A two-thirds supermajority of all seats in{" "}
@@ -438,7 +438,7 @@ function BillDetailContent() {
                       <p className="text-xs text-muted">
                         Your vote:{" "}
                         <span className="font-medium text-foreground capitalize">
-                          {bill.myOverrideVote === "for" ? "Override" : "Sustain Veto"}
+                          {bill.myOverrideVote === "for" ? "Override" : "Sustain veto"}
                         </span>
                         . You may change it.
                       </p>
@@ -462,7 +462,7 @@ function BillDetailContent() {
                             : "border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
                         }`}
                       >
-                        ↑ Vote to Override
+                        ↑ Vote to override
                       </button>
                       <button
                         onClick={() => handleAction("veto_override_vote", { vote: "against" })}
@@ -473,7 +473,7 @@ function BillDetailContent() {
                             : "border-card-border bg-card/50 text-muted hover:text-foreground hover:bg-card"
                         }`}
                       >
-                        ↓ Sustain Veto
+                        ↓ Sustain veto
                       </button>
                     </div>
                   </div>
@@ -555,7 +555,7 @@ function BillDetailContent() {
                   )}
                   {bill.canVoteOrigin && (
                     <div className="space-y-2 border-t border-card-border/60 pt-3">
-                      <div className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+                      <div className="text-center text-body-sm font-medium text-muted">
                         Cast your vote
                       </div>
                       <VoteShiftPreview preview={bill.voteShiftPreview} currentVote={bill.myVote} />
@@ -628,7 +628,7 @@ function BillDetailContent() {
                 (bill.voteByPartyOther?.length ?? 0) > 0) && (
                 <div className="min-w-0 rounded-xl border border-card-border bg-card p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-lg font-semibold">Vote by Party</h3>
+                    <h3 className="text-lg font-semibold">Vote by party</h3>
                     {/* Chamber sub-tabs — bicameral only */}
                     {!isUnicameral && (
                       <div className="flex rounded-lg border border-card-border overflow-hidden text-sm">
@@ -689,7 +689,7 @@ function BillDetailContent() {
               ((bill.voteByPartyOrigin?.length ?? 0) > 0 ||
                 (bill.voteByPartyOther?.length ?? 0) > 0) && (
                 <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-                  <h3 className="text-lg font-semibold">Member Vote History</h3>
+                  <h3 className="text-lg font-semibold">Member vote history</h3>
                   <VoteListTable
                     billId={id}
                     chamber={voteTableChamber}
@@ -704,7 +704,7 @@ function BillDetailContent() {
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
                     <h3 className="text-base font-semibold text-purple-300">
-                      Awaiting Presidential Action
+                      Awaiting presidential action
                     </h3>
                     <p className="text-xs text-muted mt-1">
                       The President has until the deadline to sign or veto. If no action is taken,
@@ -721,7 +721,7 @@ function BillDetailContent() {
                       onClick={() => handleAction("presidential_action", { decision: "sign" })}
                       className="flex-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 py-2 text-sm font-medium text-emerald-400 hover:bg-emerald-500/20 transition-colors"
                     >
-                      ✓ Sign Into Law
+                      ✓ Sign into law
                     </button>
                     <button
                       onClick={() => setVetoModalOpen(true)}
@@ -737,7 +737,7 @@ function BillDetailContent() {
             {/* Full text */}
             {bill.fullText && (
               <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-                <h3 className="text-lg font-semibold">Full Text</h3>
+                <h3 className="text-lg font-semibold">Full text</h3>
                 <pre className="text-xs text-muted whitespace-pre-wrap leading-relaxed font-sans">
                   {bill.fullText}
                 </pre>
@@ -747,7 +747,7 @@ function BillDetailContent() {
             {/* Override failed panel — US only */}
             {!isUnicameral && bill.status === "override_failed" && (
               <div className="rounded-xl border border-error/30 bg-error/5 p-5 space-y-3">
-                <h3 className="text-base font-semibold text-error">Veto Sustained</h3>
+                <h3 className="text-base font-semibold text-error">Veto sustained</h3>
                 <p className="text-xs text-muted">
                   The override attempt failed to reach a 2/3 supermajority of the seats in both
                   chambers. The presidential veto stands.
@@ -772,7 +772,7 @@ function BillDetailContent() {
             {/* Veto overridden panel — US only */}
             {!isUnicameral && bill.status === "signed" && bill.presidentAction === "override" && (
               <div className="rounded-xl border border-success/30 bg-success/5 p-5 space-y-3">
-                <h3 className="text-base font-semibold text-success">Veto Overridden</h3>
+                <h3 className="text-base font-semibold text-success">Veto overridden</h3>
                 <p className="text-xs text-muted">
                   Congress overrode the presidential veto with a 2/3 supermajority of the seats in
                   both chambers. The bill is now law.
@@ -829,7 +829,7 @@ function BillDetailContent() {
             {/* Whip Count — every seated party, free vote when unwhipped */}
             {bill.whipCounts && bill.whipCounts.length > 0 && (
               <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-                <h3 className="text-lg font-semibold">Whip Count</h3>
+                <h3 className="text-lg font-semibold">Whip count</h3>
                 <div className="space-y-2">
                   {bill.whipCounts.map((w) => (
                     <div key={w.partyId} className="flex items-center gap-2 text-sm">
@@ -846,7 +846,7 @@ function BillDetailContent() {
                         {w.direction === "for"
                           ? "Whipping Aye"
                           : w.direction === "against"
-                            ? "Whipping No"
+                            ? "Whipping no"
                             : "Free vote"}
                       </span>
                     </div>

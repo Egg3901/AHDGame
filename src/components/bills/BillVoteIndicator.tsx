@@ -76,9 +76,9 @@ export function BillVoteIndicator({
 
   const indicator =
     currentVote === "for" ? (
-      <span className="text-success text-xs font-medium">&#10003; Voted For</span>
+      <span className="text-success text-xs font-medium">&#10003; Voted for</span>
     ) : currentVote === "against" ? (
-      <span className="text-error text-xs font-medium">&#10007; Voted Against</span>
+      <span className="text-error text-xs font-medium">&#10007; Voted against</span>
     ) : currentVote === "abstain" ? (
       <span className="text-muted text-xs font-medium">&mdash; Abstained</span>
     ) : canVote ? (

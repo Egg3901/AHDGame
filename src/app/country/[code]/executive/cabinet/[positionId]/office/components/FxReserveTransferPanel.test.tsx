@@ -17,9 +17,9 @@ describe("FX reserve transfer panel", () => {
     render(<FxReserveTransferPanel countryCode="US" canAct onUpdate={onUpdate} />);
     expect(screen.getByText(/one-time transfer/)).toBeTruthy();
     fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "1000" } });
-    fireEvent.click(screen.getByRole("button", { name: "Transfer to FX Reserve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Transfer to FX reserve" }));
     await screen.findByText("Connection interrupted");
-    fireEvent.click(screen.getByRole("button", { name: "Transfer to FX Reserve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Transfer to FX reserve" }));
     await screen.findByText(/Transferred \$1,000/);
     const first = JSON.parse(fetch.mock.calls[0][1].body),
       second = JSON.parse(fetch.mock.calls[1][1].body);

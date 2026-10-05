@@ -100,7 +100,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       actor: auth.user,
       queueItems,
     });
-    if ("error" in result) {
+    if (result.error !== undefined) {
       return errorResponse(result.status, result.error);
     }
 

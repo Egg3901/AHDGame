@@ -42,7 +42,7 @@ export function BillProvisionCard({
       {view.effects && view.effects.length > 0 && (
         <div className="flex flex-col gap-1.5">
           <span
-            className="text-[9px] font-semibold uppercase tracking-[0.14em] text-muted"
+            className="text-body-sm font-medium text-muted"
             title="Change relative to the current law. An arrow shows how each metric moves if this provision passes; green = beneficial, red = harmful."
           >
             Projected effects vs current law
@@ -109,9 +109,7 @@ function ProvisionFiscalRow({ fiscal }: { fiscal: NonNullable<BillProvisionView[
     const delta = fiscal.revenueDelta ?? 0;
     return (
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-background/60 px-2.5 py-1.5 text-xs">
-        <span className="font-semibold uppercase tracking-[0.14em] text-[9px] text-muted">
-          Fiscal impact
-        </span>
+        <span className="text-body-sm font-medium text-muted">Fiscal impact</span>
         <span className="tabular-nums">
           Rate {fiscal.currentRate}% → {fiscal.proposedRate}%
         </span>
@@ -128,9 +126,7 @@ function ProvisionFiscalRow({ fiscal }: { fiscal: NonNullable<BillProvisionView[
   const netDelta = fiscal.netDelta ?? proposed.net;
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-background/60 px-2.5 py-1.5 text-xs">
-      <span className="font-semibold uppercase tracking-[0.14em] text-[9px] text-muted">
-        Fiscal impact
-      </span>
+      <span className="text-body-sm font-medium text-muted">Fiscal impact</span>
       <span className="tabular-nums text-muted">
         Cost {fiscal.current ? `${money(fiscal.current.cost)} → ` : ""}
         {money(proposed.cost)}/yr

@@ -559,7 +559,7 @@ export function FeatureGatesPanel() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 shadow-card sm:p-6">
       <div className="mb-4">
-        <h3 className="text-sm font-semibold">Feature Gates</h3>
+        <h3 className="text-sm font-semibold">Feature gates</h3>
         <p className="text-xs leading-relaxed text-muted">
           One control surface for every game feature flag, including the graduated system modes.
           Gates marked <span className="font-semibold text-primary">seed default</span> ship enabled
@@ -586,9 +586,7 @@ export function FeatureGatesPanel() {
             >
               <div className="mb-1 flex items-center justify-between gap-2">
                 <span className="text-sm font-semibold">{gate.label}</span>
-                <span className="text-[10px] uppercase tracking-wider text-muted">
-                  {liveVersion} live
-                </span>
+                <span className="text-body-sm font-medium text-muted">{liveVersion} live</span>
               </div>
               <p className="mb-3 text-xs text-muted">{gate.desc}</p>
               <div className="inline-flex gap-1 rounded-lg border border-card-border bg-card p-1">
@@ -639,7 +637,7 @@ export function FeatureGatesPanel() {
             <span className="text-sm font-semibold">NPP autonomy</span>
             <DefaultBadge />
           </div>
-          <span className="text-[10px] uppercase tracking-wider text-muted">
+          <span className="text-body-sm font-medium text-muted">
             {NPP_LEVELS.find((l) => l.value === state.nppAutonomyLevel)?.label}
           </span>
         </div>
@@ -687,7 +685,7 @@ export function FeatureGatesPanel() {
       <div className="mb-5 rounded-lg border border-card-border bg-background/40 p-4">
         <div className="mb-1 flex items-center justify-between gap-2">
           <span className="text-sm font-semibold">NPP foreign policy</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted">
+          <span className="text-body-sm font-medium text-muted">
             {
               NPP_FOREIGN_POLICY_MODES.find((mode) => mode.value === state.nppForeignPolicyMode)
                 ?.label
@@ -733,7 +731,7 @@ export function FeatureGatesPanel() {
         <div className="mt-3 border-t border-card-border pt-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <span className="text-xs font-semibold">Active capability stage</span>
-            <span className="text-[10px] uppercase tracking-wider text-muted">
+            <span className="text-body-sm font-medium text-muted">
               {
                 NPP_FOREIGN_POLICY_STAGES.find(
                   (stage) => stage.value === state.nppForeignPolicyStage
@@ -782,7 +780,7 @@ export function FeatureGatesPanel() {
             <span className="text-sm font-semibold">NPP entry viability</span>
             <DefaultBadge />
           </div>
-          <span className="text-[10px] uppercase tracking-wider text-muted">
+          <span className="text-body-sm font-medium text-muted">
             {
               NPP_ENTRY_VIABILITY_MODES.find((mode) => mode.value === state.nppEntryViabilityMode)
                 ?.label
@@ -842,7 +840,7 @@ export function FeatureGatesPanel() {
                   <span className="text-sm font-semibold">{mode.label}</span>
                   {mode.defaultValue !== "off" ? <DefaultBadge /> : null}
                 </div>
-                <span className="text-[10px] uppercase tracking-wider text-muted">
+                <span className="text-body-sm font-medium text-muted">
                   {mode.levels.find((l) => l.value === current)?.label ?? current}
                 </span>
               </div>

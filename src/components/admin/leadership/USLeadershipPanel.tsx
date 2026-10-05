@@ -34,8 +34,8 @@ const STATUS_COLORS: Record<string, string> = {
 
 const TABS = [
   { id: "speaker", label: "Speaker" },
-  { id: "house_leadership", label: "House Leadership" },
-  { id: "senate_leadership", label: "Senate Leadership" },
+  { id: "house_leadership", label: "House leadership" },
+  { id: "senate_leadership", label: "Senate leadership" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];

@@ -61,7 +61,7 @@ export function HealDiscordUsers() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Player Account Linkage</h3>
+        <h3 className="font-semibold text-sm">Heal player account linkage</h3>
         <p className="mt-1 text-xs text-muted">
           Detects and fixes missing activeCharacterId links, broken character references, and
           characters missing countryId. Affects Discord-registered and legacy accounts.
@@ -81,7 +81,7 @@ export function HealDiscordUsers() {
           disabled={loading}
           className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
         >
-          {loading ? "Healing..." : "Heal All"}
+          {loading ? "Healing..." : "Heal all"}
         </button>
       </div>
 

@@ -240,7 +240,7 @@ export function StatCell({
     // Tooltip rather than a title attribute: native tooltips never fire on
     // touch, which is where these stats were being misread.
     <div className="flex min-w-max flex-col px-5 py-3">
-      <span className="flex items-center text-[10px] font-medium uppercase tracking-widest text-muted">
+      <span className="flex items-center text-body-sm font-medium text-muted">
         {label}
         {hint && <Tooltip content={hint} label={`What ${label} means`} />}
       </span>

@@ -133,11 +133,7 @@ export function DropdownPanel({
 }
 
 export function MenuLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
-      {children}
-    </div>
-  );
+  return <div className="px-2.5 pb-1 pt-2 text-body-sm font-medium text-muted">{children}</div>;
 }
 
 export function MenuRow({

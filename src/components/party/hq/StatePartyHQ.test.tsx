@@ -73,17 +73,17 @@ describe("StatePartyHQ", () => {
     expect(screen.getByText("12.5")).toBeTruthy();
   });
 
-  it("shows the bulk bar with Build Org when rows are selected (chair)", async () => {
+  it("shows the bulk bar with Build org when rows are selected (chair)", async () => {
     setup();
     await waitFor(() => expect(screen.getByText("California")).toBeTruthy());
     const caRow = screen.getByText("California").closest("tr")!;
     fireEvent.click(within(caRow).getByLabelText("Select California"));
     expect(screen.getByText(/1 states/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Build Org" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Build org" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Contest" })).toBeNull();
   });
 
-  it("labels bulk Build Org as national PS and blocks when the national reserve is empty", async () => {
+  it("labels bulk Build org as national PS and blocks when the national reserve is empty", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string) => {
@@ -118,14 +118,14 @@ describe("StatePartyHQ", () => {
     await waitFor(() => expect(screen.getByText("California")).toBeTruthy());
     const caRow = screen.getByText("California").closest("tr")!;
     fireEvent.click(within(caRow).getByLabelText("Select California"));
-    fireEvent.click(screen.getByRole("button", { name: "Build Org" }));
+    fireEvent.click(screen.getByRole("button", { name: "Build org" }));
     await waitFor(() => expect(screen.getByText(/Insufficient national PS/)).toBeTruthy());
     expect(
       (screen.getByRole("button", { name: /Confirm \(5 Nat'l PS\)/ }) as HTMLButtonElement).disabled
     ).toBe(true);
   });
 
-  // Bulk Build Org bills the national treasury once per selected state, so the
+  // Bulk Build org bills the national treasury once per selected state, so the
   // cash — not the per-state PS ladder — is what scales with the selection.
   // Without a pre-flight check the run half-completes and the rest come back
   // refused, after the estimate promised the full Org total.
@@ -169,7 +169,7 @@ describe("StatePartyHQ", () => {
     await waitFor(() => expect(screen.getByText("California")).toBeTruthy());
     const caRow = screen.getByText("California").closest("tr")!;
     fireEvent.click(within(caRow).getByLabelText("Select California"));
-    fireEvent.click(screen.getByRole("button", { name: "Build Org" }));
+    fireEvent.click(screen.getByRole("button", { name: "Build org" }));
   }
 
   it("totals the cash price of a bulk selection alongside the PS", async () => {
@@ -213,11 +213,11 @@ describe("StatePartyHQ", () => {
     expect(confirm.disabled).toBe(false);
   });
 
-  it("hides Build Org when the viewer cannot spend PS", async () => {
+  it("hides Build org when the viewer cannot spend PS", async () => {
     setup({ canSpendPs: false });
     await waitFor(() => expect(screen.getByText("California")).toBeTruthy());
     const caRow = screen.getByText("California").closest("tr")!;
     fireEvent.click(within(caRow).getByLabelText("Select California"));
-    expect(screen.queryByRole("button", { name: "Build Org" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Build org" })).toBeNull();
   });
 });

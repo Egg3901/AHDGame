@@ -142,7 +142,7 @@ export function ReshufflePanel({
         id="cabinet-reshuffle-heading"
         className="text-sm font-semibold uppercase tracking-widest text-muted"
       >
-        Cabinet Reshuffle
+        Cabinet reshuffle
       </h2>
       <p className="mt-2 text-sm text-foreground" aria-live="polite">
         {available ? (
@@ -159,7 +159,7 @@ export function ReshufflePanel({
           className="mt-3"
           aria-label="Open the cabinet reshuffle editor"
         >
-          Reshape Cabinet
+          Reshape cabinet
         </Button>
       )}
       {isPrimeMinister && !available && (
@@ -240,7 +240,7 @@ export function ReshufflePanel({
               className="flex-1"
               aria-label="Submit the new cabinet roster"
             >
-              {submitting ? "Reshuffling..." : "Confirm Reshuffle"}
+              {submitting ? "Reshuffling..." : "Confirm reshuffle"}
             </Button>
           </div>
         </div>

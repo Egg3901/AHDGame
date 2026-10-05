@@ -565,7 +565,7 @@ function LegacyProposeLegislationModal({
       <div className="my-auto w-full max-w-lg space-y-5 rounded-2xl border border-card-border bg-card p-6 shadow-modal">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold">Propose Legislation</h2>
+            <h2 className="text-lg font-semibold">Propose legislation</h2>
             <p className="text-xs text-muted">
               Costs {BILL_PROPOSE_ACTION_COST} action points and {npiCost} national influence.
             </p>
@@ -625,7 +625,7 @@ function LegacyProposeLegislationModal({
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-muted">
-                Originating Chamber
+                Originating chamber
               </label>
               <select
                 value={billChamber}
@@ -657,7 +657,7 @@ function LegacyProposeLegislationModal({
             <div className="space-y-3">
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted">
-                  Restriction Type
+                  Restriction type
                 </label>
                 <div
                   role="tablist"
@@ -701,7 +701,7 @@ function LegacyProposeLegislationModal({
           ) : isSubsidyCat ? (
             <div className="space-y-3">
               <div className="mb-2 flex items-center justify-between">
-                <label className="block text-xs text-muted">Subsidy Provisions</label>
+                <label className="block text-xs text-muted">Subsidy provisions</label>
                 {subsidyProvisions.length < MAX_PROVISIONS && (
                   <button
                     type="button"
@@ -732,8 +732,8 @@ function LegacyProposeLegislationModal({
                       }
                       className="flex-1 rounded-lg border border-card-border bg-card px-2 py-1.5 text-sm"
                     >
-                      <option value="subsidy">Grant Subsidy</option>
-                      <option value="end_subsidy">End Subsidy</option>
+                      <option value="subsidy">Grant subsidy</option>
+                      <option value="end_subsidy">End subsidy</option>
                     </select>
                     {subsidyProvisions.length > 1 && (
                       <button
@@ -763,7 +763,7 @@ function LegacyProposeLegislationModal({
                     className="w-full rounded-lg border border-card-border bg-card px-2 py-1.5 text-sm"
                   >
                     <option value="economy_wide">Economy-wide</option>
-                    <option value="sector">Specific Sector</option>
+                    <option value="sector">Specific sector</option>
                   </select>
                   {sp.scopeType === "sector" && (
                     <SubsidySectorSelect
@@ -842,7 +842,7 @@ function LegacyProposeLegislationModal({
                   <option value="ban">Ban unions nationally</option>
                   <option value="repeal_ban">Repeal the union ban</option>
                 </select>
-                <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted/70">
+                <div className="flex items-center justify-between text-body-sm font-medium text-muted">
                   <span>← Right-to-work</span>
                   <span>Neutral (0)</span>
                   <span>Collective bargaining →</span>
@@ -890,7 +890,7 @@ function LegacyProposeLegislationModal({
                   disabled={rows.length >= maxPolicyRows}
                   className="rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
                 >
-                  + Add Provision
+                  + Add provision
                 </button>
               </div>
               {hasStandaloneProvision && rows.some((r) => !r.legislationTypeId) && (
@@ -917,7 +917,7 @@ function LegacyProposeLegislationModal({
                     className="space-y-2 rounded-lg border border-card-border bg-background/40 p-3"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+                      <span className="text-body-sm font-medium text-muted">
                         Provision {idx + 1}
                       </span>
                       {(rows.length > 1 || hasStandaloneProvision) && (
@@ -1184,7 +1184,7 @@ function LegacyProposeLegislationModal({
                   />
                   Set registration access
                 </label>
-                <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted/70">
+                <div className="flex items-center justify-between text-body-sm font-medium text-muted">
                   <span>&larr; Restricted</span>
                   <span>Neutral (0)</span>
                   <span>Automatic &rarr;</span>
@@ -1275,7 +1275,7 @@ function LegacyProposeLegislationModal({
               disabled={submitDisabled}
               className="flex-1 rounded-lg bg-primary py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
-              {submitting ? "Proposing…" : "Propose Bill"}
+              {submitting ? "Proposing…" : "Propose bill"}
             </button>
           </div>
         </form>

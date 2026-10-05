@@ -82,36 +82,22 @@ export function MyOrders({ orders, onOrderCancelled }: Props) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-card-border bg-card-elevated">
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted">
-                Placed
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted">
-                Type
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted">
-                Pair
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted">
-                Amount
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted hidden sm:table-cell">
+              <th className="px-4 py-3 text-left text-body-sm font-medium text-muted">Placed</th>
+              <th className="px-4 py-3 text-left text-body-sm font-medium text-muted">Type</th>
+              <th className="px-4 py-3 text-left text-body-sm font-medium text-muted">Pair</th>
+              <th className="px-4 py-3 text-right text-body-sm font-medium text-muted">Amount</th>
+              <th className="px-4 py-3 text-right text-body-sm font-medium text-muted hidden sm:table-cell">
                 Filled
               </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted">
-                Rate
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted hidden md:table-cell">
+              <th className="px-4 py-3 text-right text-body-sm font-medium text-muted">Rate</th>
+              <th className="px-4 py-3 text-right text-body-sm font-medium text-muted hidden md:table-cell">
                 Fee
               </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted hidden lg:table-cell">
+              <th className="px-4 py-3 text-right text-body-sm font-medium text-muted hidden lg:table-cell">
                 Expires
               </th>
-              <th className="px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-muted">
-                Status
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted">
-                Action
-              </th>
+              <th className="px-4 py-3 text-center text-body-sm font-medium text-muted">Status</th>
+              <th className="px-4 py-3 text-right text-body-sm font-medium text-muted">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-card-border">

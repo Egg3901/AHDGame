@@ -87,30 +87,20 @@ export function TradeHistory() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-card-border bg-card-elevated">
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted">
-                Date
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted">
-                Type
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted">
-                Pair
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted">
-                Amount
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted hidden sm:table-cell">
+              <th className="px-4 py-3 text-left text-body-sm font-medium text-muted">Date</th>
+              <th className="px-4 py-3 text-left text-body-sm font-medium text-muted">Type</th>
+              <th className="px-4 py-3 text-left text-body-sm font-medium text-muted">Pair</th>
+              <th className="px-4 py-3 text-right text-body-sm font-medium text-muted">Amount</th>
+              <th className="px-4 py-3 text-right text-body-sm font-medium text-muted hidden sm:table-cell">
                 Filled
               </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted hidden md:table-cell">
+              <th className="px-4 py-3 text-right text-body-sm font-medium text-muted hidden md:table-cell">
                 Rate
               </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted hidden md:table-cell">
+              <th className="px-4 py-3 text-right text-body-sm font-medium text-muted hidden md:table-cell">
                 Spread
               </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted">
-                Status
-              </th>
+              <th className="px-4 py-3 text-right text-body-sm font-medium text-muted">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-card-border">

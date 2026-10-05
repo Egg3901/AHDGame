@@ -31,12 +31,12 @@ const SCORE_BREAKDOWN_ROWS: {
   key: keyof LegacyLeaderboardEntry["scoreBreakdown"];
   label: string;
 }[] = [
-  { key: "nationalInfluence", label: "National Influence" },
-  { key: "partyInfluence", label: "Party Power" },
+  { key: "nationalInfluence", label: "National influence" },
+  { key: "partyInfluence", label: "Party power" },
   { key: "achievements", label: "Achievements" },
-  { key: "officeTier", label: "Highest Office Held" },
-  { key: "wealth", label: "Personal Wealth" },
-  { key: "infamyPenalty", label: "Infamy Penalty" },
+  { key: "officeTier", label: "Highest office held" },
+  { key: "wealth", label: "Personal wealth" },
+  { key: "infamyPenalty", label: "Infamy penalty" },
 ];
 
 /** ₳ is this game's internal-currency symbol — see formatters.ts. Net worth is forex-normalized to it so amounts are comparable across countries. */
@@ -80,11 +80,11 @@ function ScoreBreakdownModal({
           <div className="space-y-1">
             {(
               [
-                { key: "personal", label: "Personal Wealth" },
+                { key: "personal", label: "Personal wealth" },
                 { key: "savings", label: "Savings" },
-                { key: "shares", label: "Corporation Shares" },
+                { key: "shares", label: "Corporation shares" },
                 { key: "bonds", label: "Bonds" },
-                { key: "indexFunds", label: "Index Fund Positions" },
+                { key: "indexFunds", label: "Index fund positions" },
               ] as const
             ).map(({ key, label }) => (
               <div key={key} className="flex items-center justify-between py-1.5 text-sm">
@@ -95,7 +95,7 @@ function ScoreBreakdownModal({
               </div>
             ))}
             <div className="mt-2 flex items-center justify-between border-t border-card-border pt-2 text-sm font-semibold">
-              <span className="text-foreground">Total Net Worth</span>
+              <span className="text-foreground">Total net worth</span>
               <span className="font-mono text-foreground">{formatNetWorth(row.netWorth)}</span>
             </div>
             <p className="mt-2 text-xs text-muted">
@@ -120,7 +120,7 @@ function ScoreBreakdownModal({
               );
             })}
             <div className="mt-2 flex items-center justify-between border-t border-card-border pt-2 text-sm font-semibold">
-              <span className="text-foreground">Total Legacy Score</span>
+              <span className="text-foreground">Total legacy score</span>
               <span className="font-mono text-foreground">{formatCompactNumber(row.score)}</span>
             </div>
           </div>
@@ -247,7 +247,7 @@ export default function LegacyLeaderboardClient({
     },
     {
       key: "score",
-      header: isNetWorth ? "Net Worth" : "Legacy Score",
+      header: isNetWorth ? "Net worth" : "Legacy score",
       render: (row) => (
         <button
           type="button"
@@ -262,7 +262,7 @@ export default function LegacyLeaderboardClient({
     },
     {
       key: "nationalInfluence",
-      header: "National Influence",
+      header: "National influence",
       hideOnMobile: true,
       render: (row) => (
         <span className="text-sm text-muted">{formatCompactNumber(row.nationalInfluence)}</span>
@@ -270,7 +270,7 @@ export default function LegacyLeaderboardClient({
     },
     {
       key: "partyInfluence",
-      header: "Party Power",
+      header: "Party power",
       hideOnMobile: true,
       render: (row) => (
         <span className="text-sm text-muted">{formatCompactNumber(row.partyInfluence)}</span>
@@ -278,7 +278,7 @@ export default function LegacyLeaderboardClient({
     },
     {
       key: "office",
-      header: "Highest Office",
+      header: "Highest office",
       hideOnMobile: true,
       render: (row) => <span className="text-sm text-muted">{row.highestOffice ?? "—"}</span>,
     },
@@ -308,11 +308,11 @@ export default function LegacyLeaderboardClient({
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
               <Trophy className="h-6 w-6" aria-hidden="true" />
             </div>
-            <p className="text-body-xs font-semibold uppercase tracking-widest text-primary">
+            <p className="text-body-sm font-medium text-primary">
               {scope === "all" ? "Across every iteration" : "This iteration"}
             </p>
             <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
-              Hall of Fame
+              Hall of fame
             </h1>
             <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted">
               Every player, ranked by their single best life — Alpha, Beta, and every iteration
@@ -334,8 +334,8 @@ export default function LegacyLeaderboardClient({
           >
             {(
               [
-                { value: "legacy", label: "Legacy Score" },
-                { value: "netWorth", label: "Net Worth" },
+                { value: "legacy", label: "Legacy score" },
+                { value: "netWorth", label: "Net worth" },
               ] as const
             ).map((opt) => (
               <button
@@ -363,8 +363,8 @@ export default function LegacyLeaderboardClient({
           >
             {(
               [
-                { value: "all", label: "All Time" },
-                { value: "current", label: "Current Iteration" },
+                { value: "all", label: "All time" },
+                { value: "current", label: "Current iteration" },
               ] as const
             ).map((opt) => (
               <button
@@ -398,7 +398,7 @@ export default function LegacyLeaderboardClient({
                   )}
                 </div>
                 <div>
-                  <p className="text-body-xs font-medium uppercase tracking-wider text-muted">
+                  <p className="text-body-sm font-medium text-muted">
                     {scope === "all" ? "Your all-time standing" : "Your standing this iteration"}
                   </p>
                   <p className="mt-1 text-xl font-bold text-foreground">
@@ -416,7 +416,7 @@ export default function LegacyLeaderboardClient({
                 <div className="border-t border-card-border pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
                   <label
                     htmlFor="legacy-display-choice"
-                    className="mb-2 block text-body-xs font-medium uppercase tracking-wider text-muted"
+                    className="mb-2 block text-body-sm font-medium text-muted"
                   >
                     Hall of Fame display name
                   </label>
@@ -464,7 +464,7 @@ export default function LegacyLeaderboardClient({
           <section className={`space-y-3 ${loading ? "opacity-60" : ""}`}>
             <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-body-xs font-medium uppercase tracking-wider text-primary">
+                <p className="text-body-sm font-medium text-primary">
                   {isNetWorth ? "The vault" : "The record book"}
                 </p>
                 <h2 className="mt-1 text-xl font-bold text-foreground">

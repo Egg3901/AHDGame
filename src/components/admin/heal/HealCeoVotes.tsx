@@ -65,7 +65,7 @@ export function HealCeoVotes() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Stale CEO Votes</h3>
+        <h3 className="font-semibold text-sm">Heal stale CEO votes</h3>
         <p className="mt-1 text-xs text-muted">
           Clears CEO votes and pending CEO offers for corporations with vacant CEO positions. Use
           when a CEO cannot accept the position due to stale vote data blocking re-election.
@@ -85,7 +85,7 @@ export function HealCeoVotes() {
           disabled={loading}
           className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
         >
-          {loading ? "Healing..." : "Heal All Vacant"}
+          {loading ? "Healing..." : "Heal all vacant"}
         </button>
       </div>
 

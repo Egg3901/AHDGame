@@ -232,7 +232,7 @@ export function OfficeHistoryAdmin({
   return (
     <div className="mt-3 rounded-lg border border-dashed border-card-border bg-background/40 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+        <span className="text-body-sm font-medium text-muted">
           Admin · curate {iteration.type} {iteration.number}
         </span>
         {!formOpen && (
@@ -307,7 +307,7 @@ export function OfficeHistoryAdmin({
             value={form.startYear}
             onChange={(e) => setForm({ ...form, startYear: e.target.value })}
           />
-          <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wider text-muted">
+          <label className="flex flex-col gap-1 text-body-sm font-medium text-muted">
             Start date (real-world)
             <input
               className={inputClass}
@@ -334,7 +334,7 @@ export function OfficeHistoryAdmin({
                 value={form.endYear}
                 onChange={(e) => setForm({ ...form, endYear: e.target.value })}
               />
-              <label className="flex flex-col gap-1 text-[10px] uppercase tracking-wider text-muted">
+              <label className="flex flex-col gap-1 text-body-sm font-medium text-muted">
                 End date (real-world)
                 <input
                   className={inputClass}

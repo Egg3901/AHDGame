@@ -354,7 +354,7 @@ export function JPDietPage({ countryId }: Props) {
     totalSeats: activeTotalSeats,
     leader: leaders?.primeMinister
       ? {
-          label: "Prime Minister",
+          label: "Prime minister",
           name: leaders.primeMinister.characterName,
           id: leaders.primeMinister.characterId,
           sequentialId: leaders.primeMinister.sequentialId,
@@ -362,7 +362,7 @@ export function JPDietPage({ countryId }: Props) {
       : null,
     minorityLeader: leaders?.oppositionLeader
       ? {
-          label: "Opposition Leader",
+          label: "Opposition leader",
           name: leaders.oppositionLeader.characterName,
           id: leaders.oppositionLeader.characterId,
           sequentialId: leaders.oppositionLeader.sequentialId,
@@ -512,7 +512,7 @@ export function JPDietPage({ countryId }: Props) {
                     onClick={() => setShowProposeModal(true)}
                     className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
                   >
-                    Propose Bill
+                    Propose bill
                   </button>
                 </div>
               )}
@@ -524,7 +524,7 @@ export function JPDietPage({ countryId }: Props) {
                     onClick={() => setShowProposeModal(true)}
                     className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
                   >
-                    Propose Bill
+                    Propose bill
                   </button>
                 </div>
               )}
@@ -576,7 +576,7 @@ export function JPDietPage({ countryId }: Props) {
                     href={`/country/${countryId.toLowerCase()}/executive/cabinet`}
                     className="shrink-0 rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-card-border/60"
                   >
-                    Open Cabinet
+                    Open cabinet
                   </Link>
                   <button
                     type="button"
@@ -584,7 +584,7 @@ export function JPDietPage({ countryId }: Props) {
                     disabled={!canProposeCabinetBill}
                     className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
                   >
-                    Propose Bill
+                    Propose bill
                   </button>
                 </div>
               </div>
@@ -614,7 +614,7 @@ export function JPDietPage({ countryId }: Props) {
                     onClick={() => setAppointModalOpen(true)}
                     className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
                   >
-                    Appoint Prime Minister
+                    Appoint prime minister
                   </button>
                 </div>
               )}
@@ -623,7 +623,7 @@ export function JPDietPage({ countryId }: Props) {
               {government?.status === "formed" && viewerIsSittingPM && snapElectionsAllowed && (
                 <div className="rounded-xl border border-warning/20 bg-warning/5 px-4 py-3">
                   <div className="mb-2">
-                    <p className="text-sm font-medium text-foreground">Dissolve the Shūgiin</p>
+                    <p className="text-sm font-medium text-foreground">Dissolve the shūgiin</p>
                     <p className="text-xs text-muted">
                       As Prime Minister, you may call a snap election. All active legislation will
                       fail.
@@ -657,7 +657,7 @@ export function JPDietPage({ countryId }: Props) {
                       disabled
                       className="shrink-0 rounded-lg border border-warning/20 bg-warning/5 px-4 py-2 text-sm font-semibold text-warning/40 cursor-not-allowed opacity-50"
                     >
-                      Propose No-Confidence
+                      Propose no-confidence
                     </button>
                   ) : noConfirmOpen ? (
                     <div className="flex items-center gap-2 shrink-0">
@@ -682,7 +682,7 @@ export function JPDietPage({ countryId }: Props) {
                       disabled={!viewerMayProposeNoConfidence}
                       className="shrink-0 rounded-lg border border-warning/40 bg-warning/10 px-4 py-2 text-sm font-semibold text-warning hover:bg-warning/20 disabled:opacity-50 transition-colors"
                     >
-                      Propose No-Confidence
+                      Propose no-confidence
                     </button>
                   )}
                 </div>
@@ -720,9 +720,7 @@ export function JPDietPage({ countryId }: Props) {
               {/* Leader cards */}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-xl border border-card-border bg-card p-5">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-2">
-                    Prime Minister
-                  </p>
+                  <p className="text-body-sm font-medium text-muted mb-2">Prime minister</p>
                   {leaders?.primeMinister ? (
                     <div className="flex items-center gap-3">
                       <Avatar
@@ -745,9 +743,7 @@ export function JPDietPage({ countryId }: Props) {
                   )}
                 </div>
                 <div className="rounded-xl border border-card-border bg-card p-5">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-muted mb-2">
-                    Opposition Leader
-                  </p>
+                  <p className="text-body-sm font-medium text-muted mb-2">Opposition leader</p>
                   {leaders?.oppositionLeader ? (
                     <div className="flex items-center gap-3">
                       <Avatar

@@ -413,10 +413,10 @@ export function NationalPartyInfluencePanel({
       }}
     >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xl font-semibold">National Party NPP Influence</h2>
+        <h2 className="text-xl font-semibold">National party NPP influence</h2>
         <div className="flex items-center gap-4 text-sm">
           <span>
-            <span className="text-muted">Action Points: </span>
+            <span className="text-muted">Action points: </span>
             <span className="font-medium">
               {data.nppActionPoints ?? 0} / {data.nppActionPointCap ?? 0}
             </span>
@@ -483,7 +483,7 @@ export function NationalPartyInfluencePanel({
 
               {selectedState && racesInSelectedState.length > 0 && (
                 <div className="mb-4">
-                  <label className="mb-2 block text-sm font-medium">Select Race</label>
+                  <label className="mb-2 block text-sm font-medium">Select race</label>
                   <select
                     aria-label="Advanced: select race"
                     value={selectedRace}
@@ -511,7 +511,7 @@ export function NationalPartyInfluencePanel({
                 <>
                   <div className="mb-4">
                     <label className="mb-2 block text-sm font-medium">
-                      Select NPP to Influence
+                      Select NPP to influence
                     </label>
                     <select
                       aria-label="Advanced: select NPP"
@@ -550,7 +550,7 @@ export function NationalPartyInfluencePanel({
                             }
                           >
                             {selectedNPPData.party === partyId
-                              ? "Same Party"
+                              ? "Same party"
                               : selectedNPPData.party}
                           </span>
                         </div>
@@ -563,7 +563,7 @@ export function NationalPartyInfluencePanel({
                               </span>
                             </div>
                             <div className="flex flex-col">
-                              <span className="text-xs text-muted">Political Influence</span>
+                              <span className="text-xs text-muted">Political influence</span>
                               <span className="font-medium">
                                 {formatNationalNppStat(selectedNPPData.stats.politicalInfluence)}
                                 /100
@@ -592,7 +592,7 @@ export function NationalPartyInfluencePanel({
                       </div>
 
                       <div className="mb-4">
-                        <label className="mb-2 block text-sm font-medium">Select Action</label>
+                        <label className="mb-2 block text-sm font-medium">Select action</label>
                         <div className="grid gap-2 sm:grid-cols-2">
                           {actionsForSelectedTarget.map((action) => (
                             <button
@@ -637,7 +637,7 @@ export function NationalPartyInfluencePanel({
                           {selectedAction === "oppose_candidate" && (
                             <div>
                               <label className="mb-2 block text-sm font-medium">
-                                Select Election
+                                Select election
                               </label>
                               <select
                                 value={selectedElection}
@@ -666,7 +666,7 @@ export function NationalPartyInfluencePanel({
                           {selectedAction === "oppose_candidate" && selectedElection && (
                             <div>
                               <label className="mb-2 block text-sm font-medium">
-                                Select Candidate
+                                Select candidate
                               </label>
                               <select
                                 value={selectedCandidate}
@@ -704,7 +704,7 @@ export function NationalPartyInfluencePanel({
                           {selectedAction === "relocate_state" && (
                             <div>
                               <label className="mb-2 block text-sm font-medium">
-                                Select Target {regionLabel}
+                                Select target {regionLabel}
                               </label>
                               <select
                                 value={selectedTargetState}
@@ -770,7 +770,7 @@ export function NationalPartyInfluencePanel({
                               className="flex-1 rounded-lg py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
                               style={{ backgroundColor: partyColor }}
                             >
-                              {executing ? "Attempting..." : "Execute Now"}
+                              {executing ? "Attempting..." : "Execute now"}
                             </button>
                             <button
                               onClick={handleAddToQueue}
@@ -783,7 +783,7 @@ export function NationalPartyInfluencePanel({
                               }
                               className="flex-1 rounded-lg border border-card-border bg-card py-2 text-sm font-medium transition-colors hover:bg-card-muted disabled:opacity-50"
                             >
-                              Add to Queue
+                              Add to queue
                             </button>
                           </div>
                         </div>

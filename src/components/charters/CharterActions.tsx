@@ -87,7 +87,7 @@ export function CharterActions({ charterId, alreadySigned, alreadyRejected }: Ch
     <div className="space-y-3">
       <div className="flex flex-col gap-2 sm:flex-row">
         <Button onClick={sign} disabled={pending !== null} className="flex-1">
-          {pending === "sign" ? "Signing…" : "Sign Charter"}
+          {pending === "sign" ? "Signing…" : "Sign charter"}
         </Button>
         <Button
           onClick={() => setShowRejectInput((v) => !v)}
@@ -95,7 +95,7 @@ export function CharterActions({ charterId, alreadySigned, alreadyRejected }: Ch
           variant="secondary"
           className="flex-1"
         >
-          {showRejectInput ? "Cancel reject" : "Reject Charter"}
+          {showRejectInput ? "Cancel reject" : "Reject charter"}
         </Button>
       </div>
       {showRejectInput && (

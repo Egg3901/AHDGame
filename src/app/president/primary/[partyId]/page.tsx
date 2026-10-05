@@ -418,7 +418,7 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
           </p>
         </div>
         <div className="text-right">
-          <div className="text-xs text-muted uppercase tracking-wider">Phase</div>
+          <div className="text-body-sm font-medium text-muted">Phase</div>
           <div className="text-sm font-semibold">
             {inStaggerWindow ? (
               <span className="text-amber-400">
@@ -427,7 +427,7 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
             ) : primaryEnded ? (
               <span className="text-muted">Primary ended</span>
             ) : (
-              <span className="text-blue-400">Pre-Stagger Projection</span>
+              <span className="text-blue-400">Pre-stagger projection</span>
             )}
           </div>
         </div>
@@ -487,7 +487,7 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
         <div className="mb-4 rounded-xl border border-card-border bg-card p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold">Campaign Presence</h3>
+              <h3 className="text-sm font-semibold">Campaign presence</h3>
               <p className="mt-1 text-xs text-muted">
                 Per-state infrastructure you build across cycles. Maxing a state is +25% primary
                 vote weight there, independent of party-wide org.
@@ -509,7 +509,7 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
         waveHighlight={nextWave?.states}
         header={
           <div className="flex flex-wrap items-center gap-4 px-2">
-            <span className="text-xs text-muted uppercase tracking-wider">Delegate leaders:</span>
+            <span className="text-body-sm font-medium text-muted">Delegate leaders:</span>
             {standings.slice(0, 4).map((s, i) => (
               <div key={s.candidate._id.toString()} className="flex items-center gap-2">
                 <span
@@ -575,13 +575,13 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
 
       {candidates.length > 0 && (
         <div className="mt-6 rounded-xl border border-card-border bg-card overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-card-border bg-background text-xs font-medium uppercase tracking-wider text-muted">
+          <div className="px-4 py-2.5 border-b border-card-border bg-background text-sm font-semibold text-foreground">
             Standings
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px] text-sm">
               <thead>
-                <tr className="border-b border-card-border bg-background text-left text-xs font-medium uppercase tracking-wider text-muted">
+                <tr className="border-b border-card-border bg-background text-left text-sm font-semibold text-foreground">
                   <th className="px-3 py-2">#</th>
                   <th className="px-3 py-2">Candidate</th>
                   <th className="px-3 py-2 text-right">Proj. Del.</th>
@@ -601,7 +601,7 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
                   <th className="px-3 py-2 text-right">Fav.</th>
                   <th className="px-3 py-2 text-right">NI</th>
                   <th className="px-3 py-2 text-right">Endorsed</th>
-                  <th className="px-3 py-2">Campaigning In</th>
+                  <th className="px-3 py-2">Campaigning in</th>
                   {viewerIsLoggedInWithCharacter && viewerInParty && (
                     <th className="px-3 py-2 text-right">Endorse</th>
                   )}

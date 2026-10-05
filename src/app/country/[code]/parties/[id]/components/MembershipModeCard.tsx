@@ -118,7 +118,7 @@ export function MembershipModeCard({ party, countryCode, onUpdate }: MembershipM
                 : "bg-card text-muted hover:text-foreground"
             }`}
           >
-            Approval Required
+            Approval required
           </button>
         </div>
         {savingMode && <span className="text-xs text-muted">Saving…</span>}

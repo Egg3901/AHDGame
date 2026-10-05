@@ -228,7 +228,7 @@ function resourceRegionData<R extends { id?: string; _id?: string; name: string 
 // ---------------------------------------------------------------------------
 
 const UK_MODES: MapModeConfig[] = [
-  { id: "partyOrg", label: "Party Org", description: "Leading party organization per region" },
+  { id: "partyOrg", label: "Party org", description: "Leading party organization per region" },
   { id: "commons", label: "Commons", description: "MPs by party per region" },
   { id: "approval", label: "Approval", description: "Government approval heatmap" },
   {
@@ -241,7 +241,7 @@ const UK_MODES: MapModeConfig[] = [
   { id: "resources", label: "Resources", description: "Extractable resource capacity by region" },
   {
     id: "sectorBonuses",
-    label: "Sector Bonus",
+    label: "Sector bonus",
     description: "Primary sector profit margin bonus by region",
   },
   {
@@ -303,7 +303,7 @@ function buildUKRegionData(args: BuildRegionDataArgs): Record<string, MapRegionC
 // ---------------------------------------------------------------------------
 
 const DE_MODES: MapModeConfig[] = [
-  { id: "partyOrg", label: "Party Org", description: "Leading party organization per Land" },
+  { id: "partyOrg", label: "Party org", description: "Leading party organization per Land" },
   { id: "bundestag", label: "Bundestag", description: "Bundestag seats by party per Land" },
   { id: "approval", label: "Approval", description: "Government approval heatmap" },
   { id: "lean", label: "Lean", description: "Combined, economic, or social lean per Land" },
@@ -311,7 +311,7 @@ const DE_MODES: MapModeConfig[] = [
   { id: "resources", label: "Resources", description: "Extractable resource capacity by Land" },
   {
     id: "sectorBonuses",
-    label: "Sector Bonus",
+    label: "Sector bonus",
     description: "Primary sector profit margin bonus by Land",
   },
   {
@@ -380,7 +380,7 @@ function buildDERegionData(
 // ---------------------------------------------------------------------------
 
 const JP_MODES: MapModeConfig[] = [
-  { id: "partyOrg", label: "Party Org", description: "Leading party organization per region" },
+  { id: "partyOrg", label: "Party org", description: "Leading party organization per region" },
   { id: "shugiin", label: "Shugiin", description: "House of Representatives seats by party" },
   { id: "sangiin", label: "Sangiin", description: "House of Councillors seats by party" },
   { id: "governor", label: "Governor", description: "Regional governor by party" },
@@ -389,7 +389,7 @@ const JP_MODES: MapModeConfig[] = [
   { id: "resources", label: "Resources", description: "Extractable resource capacity by region" },
   {
     id: "sectorBonuses",
-    label: "Sector Bonus",
+    label: "Sector bonus",
     description: "Primary sector profit margin bonus by region",
   },
   {
@@ -491,14 +491,14 @@ export function isPreHKHandover(gameTime: MapGameTime | undefined): boolean {
 }
 
 const CN_MODES: MapModeConfig[] = [
-  { id: "partyOrg", label: "Party Org", description: "Leading party organization per region" },
+  { id: "partyOrg", label: "Party org", description: "Leading party organization per region" },
   { id: "npc", label: "NPC", description: "National People's Congress seats by party per region" },
   { id: "approval", label: "Approval", description: "Government approval heatmap" },
   { id: "lean", label: "Lean", description: "Combined, economic, or social lean per region" },
   { id: "resources", label: "Resources", description: "Extractable resource capacity by region" },
   {
     id: "sectorBonuses",
-    label: "Sector Bonus",
+    label: "Sector bonus",
     description: "Primary sector profit margin bonus by region",
   },
   {
@@ -554,14 +554,14 @@ function buildCNRegionData(args: BuildRegionDataArgs): Record<string, MapRegionC
 // ---------------------------------------------------------------------------
 
 const BR_MODES: MapModeConfig[] = [
-  { id: "partyOrg", label: "Party Org", description: "Leading party organization per region" },
+  { id: "partyOrg", label: "Party org", description: "Leading party organization per region" },
   { id: "chamber", label: "Chamber", description: "Câmara dos Deputados seats by party" },
   { id: "approval", label: "Approval", description: "Government approval heatmap" },
   { id: "lean", label: "Lean", description: "Combined, economic, or social lean per region" },
   { id: "resources", label: "Resources", description: "Extractable resource capacity by region" },
   {
     id: "sectorBonuses",
-    label: "Sector Bonus",
+    label: "Sector bonus",
     description: "Primary sector profit margin bonus by region",
   },
   {
@@ -633,8 +633,8 @@ const totalDeMandates = deRegions.reduce((s, r) => s + r.houseDistricts, 0);
 // Mode set mirrors JP (the full chamber+governor template), English labels.
 // ---------------------------------------------------------------------------
 const NG_MODES: MapModeConfig[] = [
-  { id: "partyOrg", label: "Party Org", description: "Leading party organization per zone" },
-  { id: "house", label: "House of Reps", description: "House of Representatives seats by party" },
+  { id: "partyOrg", label: "Party org", description: "Leading party organization per zone" },
+  { id: "house", label: "House of reps", description: "House of Representatives seats by party" },
   { id: "senate", label: "Senate", description: "Senate seats by party" },
   { id: "governor", label: "Governor", description: "Zone governor by party" },
   { id: "approval", label: "Approval", description: "Government approval heatmap" },

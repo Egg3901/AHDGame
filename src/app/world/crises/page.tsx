@@ -425,7 +425,7 @@ export default function CrisesPage() {
     { id: "global", label: "Global" },
     { id: "country", label: "National" },
     { id: "region", label: "Regional" },
-    { id: "debt", label: "Debt Watch" },
+    { id: "debt", label: "Debt watch" },
   ];
 
   return (
@@ -464,11 +464,11 @@ export default function CrisesPage() {
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs font-semibold uppercase tracking-wider text-purple-300">
-                    World Events
+                    World events
                   </span>
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight">
-                  Global Crises
+                  Global crises
                 </h1>
                 <p className="text-sm text-white/60 mt-1">
                   Active world events affecting nations, economies, and metrics.
@@ -480,25 +480,19 @@ export default function CrisesPage() {
           {/* Stats strip */}
           <div className="flex items-stretch overflow-x-auto divide-x divide-card-border border-t border-card-border">
             <div className="flex flex-col px-5 py-3 min-w-max">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                Active
-              </span>
+              <span className="text-body-sm font-medium text-muted">Active</span>
               <span className="text-base font-bold tabular-nums text-foreground">
                 {loading || error ? "—" : counts.activeAllScopes}
               </span>
             </div>
             <div className="flex flex-col px-5 py-3 min-w-max">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                Resolved, all scopes
-              </span>
+              <span className="text-body-sm font-medium text-muted">Resolved, all scopes</span>
               <span className="text-base font-bold tabular-nums text-foreground">
                 {loading || error ? "—" : counts.resolvedAllScopes}
               </span>
             </div>
             <div className="flex flex-col px-5 py-3 min-w-max">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                Countries Affected
-              </span>
+              <span className="text-body-sm font-medium text-muted">Countries affected</span>
               <span className="text-base font-bold tabular-nums text-foreground">
                 {loading || error
                   ? "—"
@@ -540,7 +534,7 @@ export default function CrisesPage() {
                   d="M12 4v16m8-8H4"
                 />
               </svg>
-              Manage Crises
+              Manage crises
             </Link>
           )}
         </div>

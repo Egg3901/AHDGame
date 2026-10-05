@@ -224,12 +224,12 @@ export function missingGameStateFlagDefaults(
  * fresh-world flag fields, which a non-reset top-up must only insert so it
  * never flips a running world.
  */
-export function splitFreshWorldGameConfigFlags<T extends Record<string, unknown>>(
+export function splitFreshWorldGameConfigFlags<T extends object>(
   config: T
 ): { settings: Record<string, unknown>; flags: Record<string, unknown> } {
   const settings: Record<string, unknown> = {};
   const flags: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(config)) {
+  for (const [key, value] of Object.entries(config as Record<string, unknown>)) {
     if (key in FRESH_WORLD_GAME_CONFIG_FLAGS || key in NON_GAMEPLAY_GAME_CONFIG_FIELDS) {
       flags[key] = value;
     } else {

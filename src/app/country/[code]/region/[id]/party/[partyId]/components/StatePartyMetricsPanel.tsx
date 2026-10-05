@@ -25,7 +25,7 @@ function getOrgEffects(organization: number): OrgEffect[] {
 
   return [
     {
-      label: "Vote Power",
+      label: "Vote power",
       value: `${votePower}×`,
       blurb: "General-election vote scalar",
       tooltip:
@@ -39,7 +39,7 @@ function getOrgEffects(organization: number): OrgEffect[] {
         "Adds up to 25 points to presidential primary scoring when this is the candidate's home state. Formula: (Org ÷ 100) × 25.",
     },
     {
-      label: "NPP Quality",
+      label: "NPP quality",
       value: nppQuality,
       blurb: "Recruitment capacity from Org",
       tooltip:
@@ -85,9 +85,9 @@ export function StatePartyMetricsPanel({ stateParty }: StatePartyMetricsPanelPro
                 d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
               />
             </svg>
-            <h2 className="font-semibold">Party Organization</h2>
+            <h2 className="font-semibold">Party organization</h2>
             <Tooltip
-              label="About Party Organization"
+              label="About party organization"
               content="Your share of this state's 100-point Org pool — infrastructure, volunteers, and ground game. It decays each turn; use Build Org below to grow it. The leftover pool is Unaffiliated."
             />
           </div>
@@ -117,9 +117,7 @@ export function StatePartyMetricsPanel({ stateParty }: StatePartyMetricsPanelPro
 
         {/* What Org does — readable rows with tooltips, not unlabeled icon tiles */}
         <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
-            What Org does here
-          </div>
+          <div className="mb-2 text-body-sm font-medium text-muted">What Org does here</div>
           <div className="divide-y divide-card-border/40 rounded-lg border border-card-border/40 bg-background/40">
             {effects.map((effect) => (
               <div
