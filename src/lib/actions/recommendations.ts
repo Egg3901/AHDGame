@@ -601,8 +601,7 @@ export function checkPartyActions(
   }
 
   // Build Org recommendation if player has PS to spend on this state party.
-  // The server gates on pool headroom OR poachable rivals — we don't gate the
-  // recommendation on a per-party cap.
+  // There is no per-party cap: every successful click adds one bucket unit.
   if (statePartyOrg && (statePartyOrg.politicalStrength ?? 0) > 0) {
     const orgValue = (statePartyOrg.organization ?? 0).toFixed(1);
     recommendations.push({
@@ -610,7 +609,7 @@ export function checkPartyActions(
       priority: "high",
       category: "party",
       title: "Grow Party Organization",
-      why: `${partyLabel} has ${orgValue}% org in this state. Build Org grows it from the unaffiliated pool and by poaching rivals, and costs both Political Strength and money from the paying tier's treasury.`,
+      why: `${partyLabel} has ${orgValue}% Org share in this state. Build Org adds one durable unit to its regional bucket balance and costs both Political Strength and money from the paying tier's treasury.`,
       action: {
         type: "build-org",
         // Price of one click at base pressure. The real cost rises with the
@@ -620,7 +619,7 @@ export function checkPartyActions(
           ap: 0,
           funds: orgBuildCashPrice(character.countryId, "state", BUILD_ORG_BASE_PS_COST),
         },
-        estimatedBenefit: "+0.1 to 1 Org% per click (varies with state context)",
+        estimatedBenefit: "+1 organization unit per click; Org% follows bucket share",
         targetPartyName: partyName,
       },
       link: `/country/${countryPath}/region/${statePartyOrg.stateId}/party/${statePartyOrg.partyId}`,

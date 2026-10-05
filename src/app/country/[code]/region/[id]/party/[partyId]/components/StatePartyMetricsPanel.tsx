@@ -88,7 +88,7 @@ export function StatePartyMetricsPanel({ stateParty }: StatePartyMetricsPanelPro
             <h2 className="font-semibold">Party Organization</h2>
             <Tooltip
               label="About Party Organization"
-              content="Your share of this state's 100-point Org pool — infrastructure, volunteers, and ground game. It decays each turn; use Build Org below to grow it. The leftover pool is Unaffiliated."
+              content="Your share of this state's organization bucket. Each Build Org click adds one fixed unit. Organization can decay if your party becomes inactive in this state or region."
             />
           </div>
           <p className="text-xs text-muted/70 leading-relaxed max-w-md">

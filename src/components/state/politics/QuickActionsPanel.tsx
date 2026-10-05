@@ -127,6 +127,7 @@ type OrgBuildPreview =
       ok: true;
       effectiveCost: number;
       projectedGain: number;
+      contributionUnits: number;
       /** Cash price of the next click. Absent on a pre-2026-09-02 response. */
       cashPrice?: number;
     }
@@ -164,7 +165,7 @@ function OrgBuildEstimate({
               }
             : undefined
         }
-        gain={{ sign: "+", value: preview.projectedGain, unit: "Org" }}
+        gain={{ sign: "+", value: preview.projectedGain, unit: "% Org share" }}
       />
     </span>
   );
