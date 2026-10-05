@@ -1,6 +1,13 @@
 "use client";
 
-import { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
+import {
+  Suspense,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -68,6 +75,11 @@ import {
   InterfaceQuickSettings,
 } from "./components/QuickSettingsPanels";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
+import { isStoreAppDocument } from "@/lib/displayMode";
+
+const STORE_APP_HIDDEN_SECTIONS = new Set(["patreon", "supporter-perks"]);
+// The store-app marker is set once by the root layout and never changes.
+const subscribeNever = () => () => {};
 
 export function SettingsPageContent() {
   const resolveCountryName = useCountryDisplayName();
@@ -87,6 +99,9 @@ export function SettingsPageContent() {
   const characterSyncAttemptedRef = useRef(false);
   const deepLinkScrolledRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
+  // Supporter perks are bought outside the App Store, so the phone app does
+  // not show them (guideline 3.1.1). The server snapshot keeps hydration stable.
+  const storeApp = useSyncExternalStore(subscribeNever, isStoreAppDocument, () => false);
   const [oauthBannerDismissed, setOauthBannerDismissed] = useState(false);
   const discord = searchParams.get("discord");
   const google = searchParams.get("google");
@@ -660,6 +675,7 @@ export function SettingsPageContent() {
   );
   const availableSections = ALL_SECTIONS.filter(
     (section) =>
+      (!storeApp || !STORE_APP_HIDDEN_SECTIONS.has(section.id)) &&
       (!rawUser?.singleplayer ||
         ![
           "identity",

@@ -9,7 +9,7 @@ export const metadata: Metadata = publicPageMetadata({
   pathname: "/terms",
 });
 
-const EFFECTIVE_DATE = "April 30, 2026";
+const EFFECTIVE_DATE = "October 5, 2026";
 
 export default function TermsOfServicePage() {
   return (
@@ -76,6 +76,34 @@ export default function TermsOfServicePage() {
               discretion.
             </p>
             <div className="space-y-5 text-sm text-muted leading-relaxed">
+              <div>
+                <p className="font-semibold text-foreground mb-1">
+                  Zero tolerance for objectionable content and abusive players
+                </p>
+                <p>
+                  There is no tolerance for objectionable content or abusive players anywhere in the
+                  Service, including news posts, party and legislative discussions, mail, names,
+                  profiles and uploaded images. Content that breaks these rules is removed and the
+                  player who posted it is warned, suspended or banned. Text is checked against a
+                  filter before it is published, and moderators review what the filter misses.
+                </p>
+              </div>
+              <div>
+                <p className="font-semibold text-foreground mb-1">Reporting and blocking</p>
+                <p>
+                  You can report a player or their content, and block a player, from their character
+                  profile. Blocked players cannot send you mail. Moderators review reports and act
+                  on them within 24 hours, removing objectionable content and removing the player
+                  who posted it where the rules call for it. You can also report a problem to{" "}
+                  <a
+                    href="mailto:admin@ahousedividedgame.com"
+                    className="text-primary hover:underline"
+                  >
+                    admin@ahousedividedgame.com
+                  </a>
+                  .
+                </p>
+              </div>
               <div>
                 <p className="font-semibold text-foreground mb-1">No multi-accounting</p>
                 <p>

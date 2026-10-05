@@ -2,6 +2,7 @@ import { ApiError, badRequest, forbidden, notFound } from "@/lib/api/errors";
 import type { Character, PlayerMail, PlayerMailReport, User } from "@/lib/db/types";
 import { ObjectId, type Db } from "mongodb";
 import { createNotifications } from "@/lib/notifications";
+import { containsSlur } from "@/lib/moderation";
 
 type MailSender = Pick<Character, "_id" | "name" | "sequentialId" | "userId">;
 
@@ -14,6 +15,10 @@ export async function sendPlayerMail(
 ): Promise<void> {
   if (toCharacterId === sender._id.toString()) {
     throw badRequest("Cannot send mail to yourself");
+  }
+  // Same slur filter as news posts and discussions (App Store rule 1.2).
+  if (containsSlur(`${subject} ${body}`)) {
+    throw badRequest("Your message contains prohibited language and cannot be sent.");
   }
 
   const toCharOid = new ObjectId(toCharacterId);
