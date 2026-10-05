@@ -331,7 +331,10 @@ async function handleGoogleLogin(
     // ApiError → surface as a user-facing redirect rather than a 500.
     if (err instanceof Error && "status" in err && (err as { status: number }).status === 403) {
       return NextResponse.redirect(
-        new URL("/auth/google/result?status=error&reason=registration_blocked", baseUrl)
+        new URL(
+          `/auth/google/result?status=error&reason=registration_blocked&next=${encodeURIComponent("/login")}`,
+          baseUrl
+        )
       );
     }
     throw err;

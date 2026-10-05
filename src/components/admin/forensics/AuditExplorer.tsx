@@ -425,7 +425,7 @@ export default function AuditExplorer({
  */
 function RecordDetailPanel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md border-l border-card-border bg-background shadow-modal lg:static lg:z-auto lg:w-[26rem] lg:max-w-none lg:rounded-xl lg:border lg:shadow-card">
+    <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md border-l pt-[env(safe-area-inset-top,0px)] lg:pt-0 border-card-border bg-background shadow-modal lg:static lg:z-auto lg:w-[26rem] lg:max-w-none lg:rounded-xl lg:border lg:shadow-card">
       {children}
     </div>
   );
