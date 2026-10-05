@@ -16,6 +16,43 @@ beforeEach(() => {
   db.collection("bankMoneyMoves");
 });
 
+describe("validateBillProvisions: reset version isolation", () => {
+  it("rejects legacy provisions when legislation v2 is active", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      resetWorldId: "world-1",
+      metricsSystemVersion: "v2",
+      legislationSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "world-1",
+          revision: 3,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "metrics",
+        },
+        legislation: {
+          worldId: "world-1",
+          revision: 6,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "legislation",
+        },
+      },
+    });
+
+    const result = await validateBillProvisions(
+      db as unknown as Db,
+      [{ type: "tariff", scopeType: "economy_wide", rate: 10 }],
+      "trade",
+      "US"
+    );
+
+    expect(result).toMatchObject({ ok: false, status: 409 });
+    if (!result.ok) expect(result.error).toMatch(/only reviewed legislation v2/i);
+  });
+});
+
 describe("validateBillProvisions — embargo", () => {
   it("accepts a block embargo in a trade bill", async () => {
     const result = await validateBillProvisions(
@@ -196,7 +233,8 @@ describe("validateBillProvisions: media ownership availability", () => {
     expect(db.collectionMocks.corporateSectors.find).not.toHaveBeenCalled();
     expect(db.collectionMocks.gameConfig.findOne).not.toHaveBeenCalled();
     expect(db.collectionMocks.bankMoneyMoves.find).not.toHaveBeenCalled();
-    expect(db.collectionMocks.gameState.findOne).toHaveBeenCalledOnce();
+    // Era context and reset-version isolation each use a narrow game-state read.
+    expect(db.collectionMocks.gameState.findOne).toHaveBeenCalledTimes(2);
   });
 });
 

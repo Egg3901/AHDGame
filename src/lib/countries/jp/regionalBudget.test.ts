@@ -154,7 +154,12 @@ describe("processJPRegionalBudgets", () => {
     db.collectionMocks.macroMetrics!.find.mockImplementation(() => cursor([]));
     db.collectionMocks.cabinetSettings!.findOne.mockResolvedValue(null);
 
-    await processJPRegionalBudgets(db as never, 10);
+    await processJPRegionalBudgets(db as never, 10, false, 1, true, "world-test");
+
+    expect(db.collectionMocks.resetLawPrograms!.find).toHaveBeenCalledWith(
+      expect.objectContaining({ country: "JP", worldId: "world-test" }),
+      expect.any(Object)
+    );
 
     const setData =
       db.collectionMocks.regionalBudgets!.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;

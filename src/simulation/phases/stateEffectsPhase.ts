@@ -179,7 +179,9 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
         db,
         newTurn,
         regionalBudgetCadence,
-        gameState.regionalLegislationFinanceEnabled === true
+        gameState.regionalLegislationFinanceEnabled === true,
+        resetSystemVersionsForCountry(gameState, RESET_V2_READY, "UK").legislation === "v2",
+        typeof gameState.resetWorldId === "string" ? gameState.resetWorldId : undefined
       )
     );
     const jpRegionalBudgetPromise = runRegionalBudgetPhase("jpRegionalBudgetProcessing", () =>
@@ -187,7 +189,9 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
         db,
         newTurn,
         gameState.regionalLegislationFinanceEnabled === true,
-        regionalBudgetCadence
+        regionalBudgetCadence,
+        resetSystemVersionsForCountry(gameState, RESET_V2_READY, "JP").legislation === "v2",
+        typeof gameState.resetWorldId === "string" ? gameState.resetWorldId : undefined
       )
     );
     const policyEffectsPromise = (async () => {

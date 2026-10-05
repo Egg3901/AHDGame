@@ -121,6 +121,24 @@ export async function validateBillProvisions(
   const allowedDomains =
     CATEGORY_TO_POLICY_DOMAINS[category as keyof typeof CATEGORY_TO_POLICY_DOMAINS] ?? [];
   const { year: eraYear, currentTurn, mediaRegulation } = await getEraContext(db);
+  const resetState =
+    sourceCountry && ["US", "UK", "JP"].includes(sourceCountry)
+      ? await db.collection<GameState>("gameState").findOne(
+          { _id: "current" },
+          {
+            projection: {
+              resetWorldId: 1,
+              startingYear: 1,
+              metricsSystemVersion: 1,
+              legislationSystemVersion: 1,
+              resetVersionSeeds: 1,
+            },
+          }
+        )
+      : null;
+  const resetLegislationV2 =
+    sourceCountry != null &&
+    resetSystemVersionsForCountry(resetState, RESET_V2_READY, sourceCountry).legislation === "v2";
   const validatedPolicyProvisions: ValidatedPolicyProvision[] = [];
   const validatedTariffProvisions: {
     type: "tariff";
@@ -151,6 +169,13 @@ export async function validateBillProvisions(
     // accepting one here would let any backbencher take the country to war by
     // hand-rolling a provision. Refused outright rather than validated.
     const rawType = "type" in (rawP as object) ? (rawP as { type: unknown }).type : undefined;
+    if (resetLegislationV2 && rawType !== "reset_law") {
+      return {
+        ok: false,
+        status: 409,
+        error: "This world accepts only reviewed legislation v2 provisions.",
+      };
+    }
     if (rawType === "reset_law") {
       const selection = rawP as {
         familyId?: unknown;
@@ -176,31 +201,15 @@ export async function validateBillProvisions(
         return { ok: false, status: 400, error: "A v2 bill cannot repeat a law family." };
       }
       if (!reviewedNationalCatalog) {
-        const gameState = await db.collection<GameState>("gameState").findOne(
-          { _id: "current" },
-          {
-            projection: {
-              resetWorldId: 1,
-              startingYear: 1,
-              metricsSystemVersion: 1,
-              legislationSystemVersion: 1,
-              resetVersionSeeds: 1,
-            },
-          }
-        );
-        if (
-          !gameState?.resetWorldId ||
-          resetSystemVersionsForCountry(gameState, RESET_V2_READY, sourceCountry).legislation !==
-            "v2"
-        ) {
+        if (!resetState?.resetWorldId || !resetLegislationV2) {
           return { ok: false, status: 409, error: "Legislation v2 is not enabled." };
         }
         reviewedNationalCatalog = await loadReviewedLawCatalog({
           db,
-          worldId: gameState.resetWorldId,
+          worldId: resetState.resetWorldId,
           country: sourceCountry as ResetCountry,
           scope: "national",
-          year: eraYear ?? gameState.startingYear ?? 1991,
+          year: eraYear ?? resetState.startingYear ?? 1991,
         });
       }
       const family = reviewedNationalCatalog.find(

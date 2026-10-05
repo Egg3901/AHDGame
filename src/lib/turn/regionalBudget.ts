@@ -278,7 +278,9 @@ export async function processRegionalBudgets(
   turnNumber: number,
   /** Turns since this phase last ran; scales the value-base drift. */
   turnsElapsed = 1,
-  regionalFinanceEnabled = false
+  regionalFinanceEnabled = false,
+  resetLegislationV2Enabled = false,
+  resetWorldId?: string
 ): Promise<{ regionsProcessed: number }> {
   // 1. Fetch all UK regions
   const ukRegions = await db.collection<State>("states").find({ countryId: "UK" }).toArray();
@@ -292,25 +294,29 @@ export async function processRegionalBudgets(
     .collection<StatePolicy>("statePolicies")
     .find({ stateId: { $in: ukRegions.map((r) => r._id as string) } })
     .toArray();
-  const resetPrograms = await db
-    .collection<ResetLawProgramDocument>("resetLawPrograms")
-    .find(
-      {
-        country: "UK",
-        scope: "regional",
-        regionId: { $in: ukRegions.map((region) => String(region._id)) },
-      },
-      {
-        projection: {
-          _id: 1,
-          regionId: 1,
-          familyId: 1,
-          choice: 1,
-          annualAgencyAllocation: 1,
-        },
-      }
-    )
-    .toArray();
+  const resetPrograms =
+    resetLegislationV2Enabled && resetWorldId
+      ? await db
+          .collection<ResetLawProgramDocument>("resetLawPrograms")
+          .find(
+            {
+              country: "UK",
+              worldId: resetWorldId,
+              scope: "regional",
+              regionId: { $in: ukRegions.map((region) => String(region._id)) },
+            },
+            {
+              projection: {
+                _id: 1,
+                regionId: 1,
+                familyId: 1,
+                choice: 1,
+                annualAgencyAllocation: 1,
+              },
+            }
+          )
+          .toArray()
+      : [];
   const resetProgramsByRegion = new Map<string, ResetLawProgramDocument[]>();
   for (const program of resetPrograms) {
     if (!program.regionId) continue;
