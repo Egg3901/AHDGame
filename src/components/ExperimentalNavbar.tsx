@@ -67,6 +67,7 @@ import {
 } from "@/components/navbar/experimentalNavPrimitives";
 import { ExperimentalUserMenu } from "@/components/navbar/ExperimentalUserMenu";
 import { ExperimentalMobileMenu } from "@/components/navbar/ExperimentalMobileMenu";
+import { hasSandboxAccess } from "@/lib/sandbox/access";
 import { Wordmark, WORDMARK } from "@/components/Wordmark";
 import type {
   AdminCharacter,
@@ -297,10 +298,14 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
 
   const canAccessSandbox =
     !user?.singleplayer &&
-    (user?.isAdmin ||
-      user?.isModerator ||
-      ((user?.patreonTier === "supporter-plus" || user?.patreonTier === "supporter-plus-plus") &&
-        user?.isPatronActive));
+    hasSandboxAccess({
+      isAdmin: user?.isAdmin,
+      isModerator: user?.isModerator,
+      patreonTier: user?.patreonTier,
+      isPatronActive: user?.isPatronActive,
+      testerAccessEnabled: user?.sandboxTesterAccess,
+      testerGranted: user?.sandboxTesterAccess,
+    });
   const showWiki = !!(user?.isAdmin || user?.isModerator) || !wikiDisabled;
 
   // Top-level tabs: Actions · State · Nation · World (Help and Staff are

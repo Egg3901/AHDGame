@@ -22,6 +22,7 @@ import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
 import { getGameStateCollection } from "@/lib/db/collections";
 import { isPatreonActive } from "@/lib/db/types";
+import type { GameConfig } from "@/lib/db/types";
 import type {
   Campaign,
   Character,
@@ -209,6 +210,7 @@ export async function GET() {
             patreonExpiresAt: 1,
             patreonProfileBorder: 1,
             patreonHighlightColor: 1,
+            sandboxAccessGrantedAt: 1,
           },
         }
       ),
@@ -217,6 +219,13 @@ export async function GET() {
       isForexEnabled(),
       isLabourFullMode(),
     ]);
+    const sandboxTesterAccessEnabled = user?.sandboxAccessGrantedAt
+      ? (
+          await db
+            .collection<GameConfig>("gameConfig")
+            .findOne({ _id: "default" }, { projection: { sandboxTesterAccessEnabled: 1 } })
+        )?.sandboxTesterAccessEnabled === true
+      : false;
     const wikiDisabled = !!gameState?.wikiDisabled;
     const rpgStatsEnabled = !!gameState?.rpgStatsEnabled;
     const conflictsEnabled = !!gameState?.conflictsEnabled;
@@ -684,6 +693,7 @@ export async function GET() {
           enableExperimentalUI: user.enableExperimentalUI !== false,
           patreonTier: user.patreonTier ?? null,
           isPatronActive: isPatreonActive(user.patreonTier ?? null, user.patreonExpiresAt ?? null),
+          sandboxTesterAccess: sandboxTesterAccessEnabled && !!user.sandboxAccessGrantedAt,
           imperialCharacter: activeImperialCharacterForUser,
           character: character
             ? {

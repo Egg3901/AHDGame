@@ -9,6 +9,7 @@ import { UsersTable } from "./UsersTable";
 import { DuplicateGroupsView } from "./DuplicateGroupsView";
 import { RetiredCharactersModal } from "./RetiredCharactersModal";
 import { ModNoteModal } from "./ModNoteModal";
+import { SandboxAccessSwitch } from "./SandboxAccessSwitch";
 
 interface UsersTabProps {
   context?: "admin" | "moderator";
@@ -355,6 +356,31 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
     }
   };
 
+  const handleSetSandboxAccess = async (userId: string, username: string, granted: boolean) => {
+    if (
+      !confirm(
+        `${granted ? "Grant" : "Revoke"} sandbox tester access for ${username}? This does not change supporter status.`
+      )
+    )
+      return;
+    try {
+      const res = await fetch("/api/admin/users/sandbox-access", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, granted }),
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(`Error: ${apiErrorText(data, "Request failed")}`);
+      setUsers((previous) =>
+        previous.map((user) =>
+          user.id === userId ? { ...user, sandboxAccessGranted: granted } : user
+        )
+      );
+    } catch {
+      alert("Network error");
+    }
+  };
+
   const duplicateGroups = getDuplicateGroups(users);
   const duplicateUserIds = new Set(duplicateGroups.flatMap((g) => g.members.map((m) => m.id)));
   const duplicateCount = duplicateUserIds.size;
@@ -379,6 +405,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
 
   return (
     <div className="space-y-4">
+      {!isModeratorContext && <SandboxAccessSwitch />}
       <UsersToolbar
         searchTerm={searchTerm}
         onSearchTermChange={setSearchTerm}
@@ -459,6 +486,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
           onRetireCharacter={handleRetireCharacter}
           onDeleteUser={handleDeleteUser}
           onSetSingleplayerEntitlement={handleSetSingleplayerEntitlement}
+          onSetSandboxAccess={handleSetSandboxAccess}
         />
       )}
     </div>
