@@ -2,6 +2,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { ClearingResult } from "./types";
 import { reachableDemandUnits } from "@/lib/market/tradePartition";
+import { isStateScopedCommodity } from "@/lib/market/rules/commodityMarketScope";
 
 /**
  * Per-country, per-commodity REACHABLE market book, in commodity units.
@@ -108,6 +109,26 @@ export function buildReachableBooks(args: BuildReachableBooksArgs): ReachableBoo
   for (const c of countries) books.set(c, new Map());
 
   for (const commodity of commodities) {
+    if (isStateScopedCommodity(commodity)) {
+      // A local service cannot sell to a foreign deficit or compete with a
+      // foreign surplus. State-level consumers refine this domestic aggregate.
+      for (const home of countries) {
+        const balance = balances.get(home)?.get(commodity);
+        const supply = balance?.supply ?? 0;
+        const demand = balance?.demand ?? 0;
+        books.get(home)!.set(commodity, {
+          supply,
+          demand,
+          domesticDemand: demand,
+          imports: 0,
+          exports: 0,
+          blockedSupply: 0,
+          untradedSupply: 0,
+          unmetForeignDemand: 0,
+        });
+      }
+      continue;
+    }
     // Supply that reaches no market at all, identical for every viewer: it is
     // absent from the clearing engine, not merely walled off from one country.
     let untradedSupply = 0;

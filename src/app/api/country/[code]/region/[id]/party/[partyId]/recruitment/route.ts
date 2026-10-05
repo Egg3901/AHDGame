@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { calculateRecruitmentSlots } from "@/lib/npp/recruitment";
@@ -53,7 +53,7 @@ export async function GET(
     const { code, id, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
     const authResult = await requireAuthWithCharacter();
@@ -65,12 +65,12 @@ export async function GET(
     // Get state to determine country
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const partyIdStr = String(party.sequentialId);
@@ -86,7 +86,7 @@ export async function GET(
     const isStateLeadership = isStateChair || isStateViceChair;
 
     if (!isStateLeadership && !auth.isAdmin) {
-      return NextResponse.json({ error: "Not state leadership" }, { status: 403 });
+      return errorResponse(403, "Not state leadership");
     }
 
     // Count party NPPs
@@ -190,7 +190,7 @@ export async function POST(
     const { code, id, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
     const authResult = await requireAuthWithCharacter();
@@ -210,12 +210,12 @@ export async function POST(
     // Get state to determine country
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const partyIdStr = String(party.sequentialId);
@@ -230,7 +230,7 @@ export async function POST(
     const isStateViceChair = statePartyOrg?.viceChairId?.toString() === charId;
 
     if (!isStateChair && !isStateViceChair && !auth.isAdmin) {
-      return NextResponse.json({ error: "Not state leadership" }, { status: 403 });
+      return errorResponse(403, "Not state leadership");
     }
 
     const nppControl = await getPartyNppControlStatus({
@@ -242,7 +242,7 @@ export async function POST(
       now,
     });
     if (!nppControl.ok) {
-      return NextResponse.json({ error: nppControl.error }, { status: 403 });
+      return errorResponse(403, nppControl.error);
     }
 
     // Turn-first state-level cooldown (24 turns); helper falls back to Date.
@@ -252,9 +252,9 @@ export async function POST(
       gameNow.getTime()
     );
     if (cooldownRemainingTurns > 0) {
-      return NextResponse.json(
-        { error: `Recruitment on cooldown. Available in ${cooldownRemainingTurns} hours.` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Recruitment on cooldown. Available in ${cooldownRemainingTurns} hours.`
       );
     }
 
@@ -269,14 +269,14 @@ export async function POST(
     const partyNppCapacity = await getPartyNppCapacity(db, countryId, partyIdStr, now);
     const capacityError = partyNppCapacityError(partyNppCapacity, partyNPPCount);
     if (capacityError) {
-      return NextResponse.json({ error: capacityError }, { status: 400 });
+      return errorResponse(400, capacityError);
     }
 
     const maxSlots = calculateRecruitmentSlots(stateOrg);
     if (stateNPPCount >= maxSlots) {
-      return NextResponse.json(
-        { error: `No recruitment slots available in ${state.name}. Max: ${maxSlots}` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `No recruitment slots available in ${state.name}. Max: ${maxSlots}`
       );
     }
 
@@ -285,11 +285,9 @@ export async function POST(
     // `statePartyOrg.hasPresence` flag, which lags membership events.
     const { presence, frontier } = await getPartyFrontier(db, countryId, partyIdStr);
     if (!isInFrontier(presence, frontier, stateId)) {
-      return NextResponse.json(
-        {
-          error: `${party.name} is not established in or next to ${state.name}. Recruit in a region the party already reaches first.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `${party.name} is not established in or next to ${state.name}. Recruit in a region the party already reaches first.`
       );
     }
 
@@ -301,17 +299,15 @@ export async function POST(
     const availableAp =
       statePartyOrg?.nppActionPoints ?? nppActionPointCap("state", resolvePartyTier(party));
     if (availableAp < recruitCost) {
-      return NextResponse.json(
-        { error: `Insufficient state party actions. Need ${recruitCost}, have ${availableAp}` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient state party actions. Need ${recruitCost}, have ${availableAp}`
       );
     }
     if (stateTreasury < recruitFund) {
-      return NextResponse.json(
-        {
-          error: `Insufficient state party funds. Need $${recruitFund.toLocaleString()}, have $${stateTreasury.toLocaleString()}`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient state party funds. Need $${recruitFund.toLocaleString()}, have $${stateTreasury.toLocaleString()}`
       );
     }
 
@@ -323,7 +319,7 @@ export async function POST(
     const usedNames = new Set(existingNPPs.map((n) => n.name));
     const name = generateUniqueNPPName([...usedNames], 100, countryId);
     if (!name) {
-      return NextResponse.json({ error: "Failed to generate unique name" }, { status: 500 });
+      return errorResponse(500, "Failed to generate unique name");
     }
 
     const quality = calculateQualityBonus(stateOrg);
@@ -502,9 +498,9 @@ export async function POST(
     });
   } catch (error) {
     if (error instanceof Error && error.message === "STATE_RECRUITMENT_CHANGED") {
-      return NextResponse.json(
-        { error: "Recruitment resources or cooldown changed before the recruit completed." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Recruitment resources or cooldown changed before the recruit completed."
       );
     }
     return handleRouteError(error);

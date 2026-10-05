@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getAuthUser } from "@/lib/auth";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
 import type { MarketCapHistory } from "@/lib/db/types";
@@ -25,14 +25,14 @@ export async function GET(request: Request) {
       requestedLimit > 10000 ||
       !["raw-market-cap", "index"].includes(metric)
     ) {
-      return NextResponse.json({ error: "Invalid history limit or metric." }, { status: 400 });
+      return errorResponse(400, "Invalid history limit or metric.");
     }
     const limit = requestedLimit;
 
     if (!EXCHANGE_API_KEYS.has(exchange)) {
-      return NextResponse.json(
-        { error: `Invalid exchange. Use one of: ${[...EXCHANGE_API_KEYS].join(", ")}` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Invalid exchange. Use one of: ${[...EXCHANGE_API_KEYS].join(", ")}`
       );
     }
 

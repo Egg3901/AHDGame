@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   COMMODITY_LABELS,
@@ -10,6 +11,7 @@ import {
 import { type CountryId } from "@/lib/constants/countries";
 import { useRegisteredCountries } from "@/contexts/RegisteredCountriesContext";
 import { Button } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CapacityRow {
   stateId: string;
@@ -78,7 +80,7 @@ export function ResourceCapacityAdminPanel() {
         body: JSON.stringify({ targets: ["stateResourceCapacity"] }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      if (!res.ok) throw new Error(apiErrorText(json, `HTTP ${res.status}`));
       setSeedMsg(json.logs?.join("\n") ?? json.message ?? "Seeded");
       await fetchAll();
     } catch (e) {
@@ -190,7 +192,7 @@ export function ResourceCapacityAdminPanel() {
       {/* Header + seed */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-heading-sm font-semibold">Resource Capacity</h2>
+          <h2 className="text-heading-sm font-semibold">Resource capacity</h2>
           <p className="text-body-sm text-muted">
             Per-state extraction ceilings (units/turn) for the 7 extractable commodities. Unseeded
             or zero values cap extraction at 0, which is what bounds commodity supply and keeps
@@ -198,7 +200,7 @@ export function ResourceCapacityAdminPanel() {
           </p>
         </div>
         <Button variant="primary" onClick={handleSeed} isLoading={seeding}>
-          {seeding ? "Seeding…" : "Seed Resource Capacity"}
+          {seeding ? "Seeding…" : "Seed resource capacity"}
         </Button>
       </div>
 
@@ -207,7 +209,10 @@ export function ResourceCapacityAdminPanel() {
           {seedMsg}
         </pre>
       )}
-      {error && <p className="text-body-sm text-error bg-error/10 rounded-lg px-4 py-3">{error}</p>}
+      <InlineError
+        error={error}
+        className="text-body-sm text-error bg-error/10 rounded-lg px-4 py-3"
+      />
       {actionError && (
         <p className="text-body-sm text-error bg-error/10 rounded-lg px-4 py-3">{actionError}</p>
       )}
@@ -247,9 +252,7 @@ export function ResourceCapacityAdminPanel() {
         <div className="flex overflow-x-auto divide-x divide-card-border">
           {EXTRACTABLE_RESOURCES.map((res) => (
             <div key={res} className="flex flex-col px-4 py-2 min-w-max">
-              <span className="text-[10px] uppercase tracking-widest text-muted font-medium">
-                {COMMODITY_LABELS[res]}
-              </span>
+              <span className="text-body-sm font-medium text-muted">{COMMODITY_LABELS[res]}</span>
               <span className="text-body-lg font-bold tabular-nums">
                 {totalsByResource[res].toLocaleString("en-US")}
               </span>
@@ -264,7 +267,7 @@ export function ResourceCapacityAdminPanel() {
         <div className="text-muted text-body-sm py-8 text-center">Loading…</div>
       ) : filtered.length === 0 ? (
         <div className="rounded-xl border border-card-border bg-card p-8 text-center text-body-sm text-muted">
-          No capacity records. Click <strong>Seed Resource Capacity</strong> above to populate every
+          No capacity records. Click <strong>Seed resource capacity</strong> above to populate every
           state.
         </div>
       ) : (

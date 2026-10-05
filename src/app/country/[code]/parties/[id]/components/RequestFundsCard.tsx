@@ -12,6 +12,7 @@ import {
   getEffectivePlayerPayoutCap,
   PAYOUT_CAP_MULTI_OFFICER_MULTIPLIER,
 } from "@/lib/treasury/payoutCapValues";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Member-initiated Request Funds card. Any party member can request
@@ -93,7 +94,7 @@ export function RequestFundsCard({
       });
       const data = await res.json();
       if (!res.ok) {
-        setMsg(`✗ ${data.error ?? "Request failed"}`);
+        setMsg(`✗ ${apiErrorText(data, "Request failed")}`);
         return;
       }
       setMsg(`✓ ${data.message ?? "Request submitted"}`);

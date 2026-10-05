@@ -99,6 +99,7 @@ import { migration as repairDuplicateCorporationSequentialIds } from "./entries/
 import { migration as normalizeShareCorporateActions } from "./entries/2026-09-18-normalize-share-corporate-actions";
 
 import { migration as turnClockIndexes } from "./entries/2026-09-20-turn-clock-indexes";
+import { migration as legislativeAdministrationMetadata } from "./entries/2026-09-21-legislative-administration-metadata";
 import { migration as activatePendingNppDefenceContracts } from "./entries/2026-09-24-activate-pending-npp-defence-contracts";
 import { migration as backfillNppTechBaselines } from "./entries/2026-09-24-backfill-npp-tech-baselines";
 import { migration as longHorizonTelemetryIndexes } from "./entries/2026-09-30-long-horizon-telemetry-indexes";
@@ -110,6 +111,7 @@ import { migration as manufacturingProductProjectsV2Index } from "./entries/2026
 import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-media-product-projects-v1-index";
 import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank-treasury-trade-indexes";
 import { migration as underwritingRecoveryIndexes } from "./entries/2026-10-04-underwriting-recovery-indexes";
+import { migration as advertisingAgreementIndexes } from "./entries/2026-10-05-advertising-agreement-indexes";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -309,6 +311,7 @@ export const MIGRATIONS: Migration[] = [
   marketChartIndexes,
   unionProsecutionBarIndex,
   turnClockIndexes,
+  legislativeAdministrationMetadata,
   // True NPP-owned suppliers never had a player who could answer an offer, so
   // awards made before automatic activation shipped remain pending forever.
   // Activate those legacy rows while preserving offers to player-owned corps
@@ -344,6 +347,7 @@ export const MIGRATIONS: Migration[] = [
   bankTreasuryTradeIndexes,
   underwritingRecoveryIndexes,
   bankFailurePoliticsIndex,
+  advertisingAgreementIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

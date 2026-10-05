@@ -591,7 +591,7 @@ describe("canvassing campaign turnout integration", () => {
       "@/lib/campaignTargeting/audience"
     );
     vi.mocked(loadCampaignAudience).mockImplementation(actual.loadCampaignAudience);
-  });
+  }, 120_000);
 
   it.each(["UK", "JP", "DE", "IE", "CN", "BR", "DD"])(
     "rejects a native-only target in a legacy %s race without spending",

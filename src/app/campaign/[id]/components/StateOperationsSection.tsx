@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BLEND, FONT } from "@/components/blend/tokens";
+import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import { BlendScopeInline } from "@/components/blend/BlendScope";
 import { PrimaryCampaignControls } from "@/components/elections/primary/PrimaryCampaignControls";
 import { StatePickerModal } from "@/components/elections/primary/StatePickerModal";
@@ -13,6 +13,7 @@ import type {
   LiveAttackRow,
   StateOperationsView,
 } from "@/lib/elections/dto/stateOperations";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export interface StateOperationsSectionProps {
   view: StateOperationsView;
@@ -34,19 +35,7 @@ function money(n: number): string {
 }
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        fontFamily: FONT.mono,
-        fontSize: 9.5,
-        letterSpacing: ".16em",
-        textTransform: "uppercase",
-        color: BLEND.mutedDimmer,
-      }}
-    >
-      {children}
-    </div>
-  );
+  return <div style={BLEND_LABEL}>{children}</div>;
 }
 
 function Note({ children }: { children: React.ReactNode }) {
@@ -130,7 +119,7 @@ export function StateOperationsSection({
         setPresenceOpen(false);
         onChanged();
       } else {
-        setPresenceMessage(`✗ ${data.error ?? "That did not work."}`);
+        setPresenceMessage(`✗ ${apiErrorText(data, "That did not work.")}`);
       }
     } catch {
       setPresenceMessage("✗ Network error");
@@ -350,15 +339,11 @@ export function StateOperationsSection({
                                 setAttackTarget({ candidateId: o.candidateId, attack })
                               }
                               style={{
+                                ...BLEND_LABEL,
                                 border: `1px solid ${affordable ? BLEND.negative : BLEND.hairlineStrong}`,
                                 background: "transparent",
                                 padding: "7px 13px",
-                                fontFamily: FONT.mono,
-                                fontSize: 10.5,
-                                letterSpacing: ".08em",
                                 fontWeight: 700,
-                                textTransform: "uppercase",
-                                color: affordable ? BLEND.negative : BLEND.mutedDim,
                                 cursor: affordable && !pending ? "pointer" : "not-allowed",
                               }}
                             >

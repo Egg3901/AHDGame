@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -42,6 +43,7 @@ import {
   type StateMapEntry,
   type StateMapRenderMode,
 } from "./slate/stateMapData";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * National Recruitment Slate tab. Top half is the country-aware state map
@@ -200,13 +202,13 @@ function getAcceptanceChip(
   ) {
     if (candidate.refusalReason) {
       return {
-        label: "Likely to Decline",
+        label: "Likely to decline",
         className: ACCEPTANCE_LIKELIHOOD_STYLES.unlikely,
       };
     }
 
     return {
-      label: "Likely to Accept",
+      label: "Likely to accept",
       className: ACCEPTANCE_LIKELIHOOD_STYLES.likely,
     };
   }
@@ -220,7 +222,7 @@ function getAcceptanceChip(
 
   if (candidate.status === "withdrawn") {
     return {
-      label: "Could Not File",
+      label: "Could not file",
       className: ACCEPTANCE_LIKELIHOOD_STYLES.unlikely,
     };
   }
@@ -240,7 +242,7 @@ function getAcceptanceChip(
   }
 
   return {
-    label: "Likely to Accept",
+    label: "Likely to accept",
     className: ACCEPTANCE_LIKELIHOOD_STYLES.likely,
   };
 }
@@ -289,7 +291,7 @@ export function SlateTab({
       ]);
       if (!overviewRes.ok) {
         const body = (await overviewRes.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `Failed to load slate (${overviewRes.status})`);
+        throw new Error(apiErrorText(body, `Failed to load slate (${overviewRes.status})`));
       }
       setOverview((await overviewRes.json()) as OverviewResponse);
 
@@ -372,7 +374,7 @@ export function SlateTab({
   }, [overview, itemsByState]);
 
   if (overviewLoading) {
-    return <PanelStub>Loading Slates...</PanelStub>;
+    return <PanelStub>Loading slates...</PanelStub>;
   }
   if (overviewError) {
     return <PanelStub error>{overviewError}</PanelStub>;
@@ -736,7 +738,7 @@ function RaceSlatePanel({
       );
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `Failed to load slate (${res.status})`);
+        throw new Error(apiErrorText(body, `Failed to load slate (${res.status})`));
       }
       setDetail((await res.json()) as SlateDetailResponse);
     } catch (err) {
@@ -775,7 +777,7 @@ function RaceSlatePanel({
             onClick={() => setPickerOpen((open) => !open)}
             className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
           >
-            {pickerOpen ? "Cancel" : "Assign Candidates"}
+            {pickerOpen ? "Cancel" : "Assign candidates"}
           </button>
         )}
       </div>
@@ -798,8 +800,8 @@ function RaceSlatePanel({
         />
       )}
 
-      {loading && <p className="text-xs text-muted">Loading Slate...</p>}
-      {error && <p className="text-xs text-error">{error}</p>}
+      {loading && <p className="text-xs text-muted">Loading slate...</p>}
+      <InlineError error={error} className="text-xs text-error" />
 
       {detail && detail.candidates.length === 0 && (
         <p className="text-xs text-muted">

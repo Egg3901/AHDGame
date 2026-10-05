@@ -3,7 +3,7 @@ import { ObjectId, type UpdateFilter } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError, badRequest, notFound } from "@/lib/api/errors";
+import { handleRouteError, badRequest, notFound, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createAdminLog } from "@/lib/adminLog";
 import type { BannedIp } from "@/lib/db/types";
@@ -33,8 +33,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     if (!ObjectId.isValid(id)) throw badRequest("Invalid id.");
 
     const parsed = await parseJsonBody(request, patchSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const objectId = new ObjectId(id);

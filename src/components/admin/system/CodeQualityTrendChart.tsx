@@ -35,7 +35,7 @@ export const CodeQualityTrendChart = memo(function CodeQualityTrendChart({ snaps
   return (
     <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
       <h3 className="mb-3 text-sm font-semibold text-foreground">
-        Quality Trend (Last 10 Deployments)
+        Quality trend (last 10 deployments)
       </h3>
       <ResponsiveContainer width="100%" height={250}>
         <LineChart data={data}>

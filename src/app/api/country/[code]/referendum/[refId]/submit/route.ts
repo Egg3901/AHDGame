@@ -1,7 +1,6 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -21,10 +20,10 @@ export async function POST(
     const { code, refId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (countryId !== "UK") {
-      return NextResponse.json({ error: "Referendums are UK-only." }, { status: 400 });
+      return errorResponse(400, "Referendums are UK-only.");
     }
 
     const auth = await requireHumanSessionWithCharacter(request);
@@ -39,7 +38,7 @@ export async function POST(
       })
     );
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const isAdmin = auth.user.isAdmin === true;
@@ -54,7 +53,7 @@ export async function POST(
       action: parsed.data.action,
       adminOverride,
     });
-    return NextResponse.json(result.body, { status: result.status });
+    return statusResponse(result.status, result.body);
   } catch (error) {
     return handleRouteError(error);
   }

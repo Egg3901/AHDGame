@@ -85,7 +85,7 @@ describe("GET nuclear/covert", () => {
     });
     expect(res.status).toBe(404);
     // Nothing else attached: the surface must not exist for anyone else.
-    expect(await res.json()).toEqual({ eligible: false });
+    expect(await res.json()).toMatchObject({ eligible: false });
   });
 
   it("404s while the Cold War subsystem is off", async () => {

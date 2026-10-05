@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createAdminLog } from "@/lib/adminLog";
 import type { GameConfig } from "@/lib/db/types";
@@ -171,7 +171,7 @@ export async function PATCH(request: Request) {
 
     const parsed = await parseJsonBody(request, patchSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const {
@@ -248,29 +248,20 @@ export async function PATCH(request: Request) {
     // of truth for "has this tier actually shipped"; enforce it here so the API
     // agrees with the selector instead of trusting the client.
     if (MARKET_MODE_INFO[mode].live !== true && allowNonLive !== true) {
-      return NextResponse.json(
-        {
-          error:
-            `Market mode "${mode}" is not live yet. ` +
-            `Pass allowNonLive: true to set it deliberately.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Market mode "${mode}" is not live yet. ` +
+          `Pass allowNonLive: true to set it deliberately.`
       );
     }
 
     const db = await getDb();
     const gameConfig = db.collection<GameConfig>("gameConfig");
     if (productLinesV2Enabled === true && !marketAtLeast(mode, "plants")) {
-      return NextResponse.json(
-        { error: "Product lines require the plants market tier." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Product lines require the plants market tier.");
     }
     if (mediaProductSlatesEnabled === true && !marketAtLeast(mode, "clearing")) {
-      return NextResponse.json(
-        { error: "Media product slates require the clearing market tier." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Media product slates require the clearing market tier.");
     }
     const existingConfig = await gameConfig.findOne(
       { _id: "default" },
@@ -292,10 +283,7 @@ export async function PATCH(request: Request) {
     const effectiveMediaProductSlatesEnabled =
       mediaProductSlatesEnabled ?? existingConfig?.mediaProductSlatesEnabled === true;
     if (effectiveMediaProductSlatesEnabled && !effectiveMediaModelsEnabled) {
-      return NextResponse.json(
-        { error: "Media product slates require media operating models." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Media product slates require media operating models.");
     }
     if (
       (effectiveMediaProductSlatesEnabled &&
@@ -305,22 +293,16 @@ export async function PATCH(request: Request) {
       (effectiveMediaProductSlatesEnabled &&
         !(qualityPremiumPricingEnabled ?? existingConfig?.qualityPremiumPricingEnabled))
     ) {
-      return NextResponse.json(
-        {
-          error:
-            "Media product slates require brand loyalty, loyalty clearing, and quality pricing.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Media product slates require brand loyalty, loyalty clearing, and quality pricing."
       );
     }
     const priorMode = await getMarketSystemMode(existingConfig);
     const effectiveMediaRegulationEnabled =
       mediaRegulationEnabled ?? existingConfig?.mediaRegulationEnabled === true;
     if (effectiveMediaRegulationEnabled && !marketAtLeast(mode, "clearing")) {
-      return NextResponse.json(
-        { error: "Media regulation requires the clearing market tier." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Media regulation requires the clearing market tier.");
     }
     // Stamp the turn, not just the clock. See `marketSystemModeUpdatedTurn` in
     // the GameConfig type for why: the whole soak/rollback vocabulary is
@@ -330,14 +312,14 @@ export async function PATCH(request: Request) {
     const currentTurn = await getCurrentTurn(db);
     if (shortageResponsiveSourcingEnabled === true) {
       if (!intervention) {
-        return NextResponse.json(
-          { error: "An economic intervention plan is required to enable shortage sourcing." },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "An economic intervention plan is required to enable shortage sourcing."
         );
       }
       const activationError = validateInterventionActivation(intervention, currentTurn);
       if (activationError) {
-        return NextResponse.json({ error: activationError }, { status: 400 });
+        return errorResponse(400, activationError);
       }
     }
     // #1001 dark gates are sandbox-only until the worldsim comparison and
@@ -347,21 +329,18 @@ export async function PATCH(request: Request) {
       sovereignIssuanceConsolidationEnabled === true ||
       domesticSovereignBondCoverageEnabled === true
     ) {
-      return NextResponse.json(
-        {
-          error:
-            "Sovereign issuance consolidation and domestic sovereign-bond coverage " +
-            "are sandbox-only until #1001 worldsim evidence lands: queue a worldsim " +
-            "comparison instead of enabling them on the live world.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Sovereign issuance consolidation and domestic sovereign-bond coverage " +
+          "are sandbox-only until #1001 worldsim evidence lands: queue a worldsim " +
+          "comparison instead of enabling them on the live world."
       );
     }
     if (indexFundBondLiquidityEnabled === true) {
       if (!bondLiquidityIntervention) {
-        return NextResponse.json(
-          { error: "An economic intervention plan is required to enable bond liquidity." },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "An economic intervention plan is required to enable bond liquidity."
         );
       }
       const activationError = validateInterventionActivation(
@@ -369,14 +348,14 @@ export async function PATCH(request: Request) {
         currentTurn
       );
       if (activationError) {
-        return NextResponse.json({ error: activationError }, { status: 400 });
+        return errorResponse(400, activationError);
       }
     }
     if (equityLiquidityFacilityEnabled === true) {
       if (!equityLiquidityIntervention) {
-        return NextResponse.json(
-          { error: "An economic intervention plan is required to enable equity liquidity." },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "An economic intervention plan is required to enable equity liquidity."
         );
       }
       const activationError = validateInterventionActivation(
@@ -384,14 +363,14 @@ export async function PATCH(request: Request) {
         currentTurn
       );
       if (activationError) {
-        return NextResponse.json({ error: activationError }, { status: 400 });
+        return errorResponse(400, activationError);
       }
     }
     if (nppMarketCoverageEnabled === true) {
       if (!marketCoverageIntervention) {
-        return NextResponse.json(
-          { error: "An economic intervention plan is required to enable market coverage." },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "An economic intervention plan is required to enable market coverage."
         );
       }
       const activationError = validateInterventionActivation(
@@ -399,14 +378,14 @@ export async function PATCH(request: Request) {
         currentTurn
       );
       if (activationError) {
-        return NextResponse.json({ error: activationError }, { status: 400 });
+        return errorResponse(400, activationError);
       }
     }
     if (nppFragileMarketSupplyEnabled === true) {
       if (!fragileMarketSupplyIntervention) {
-        return NextResponse.json(
-          { error: "An economic intervention plan is required to enable fragile-market supply." },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "An economic intervention plan is required to enable fragile-market supply."
         );
       }
       const activationError = validateInterventionActivation(
@@ -414,7 +393,7 @@ export async function PATCH(request: Request) {
         currentTurn
       );
       if (activationError) {
-        return NextResponse.json({ error: activationError }, { status: 400 });
+        return errorResponse(400, activationError);
       }
     }
 
@@ -537,12 +516,9 @@ export async function PATCH(request: Request) {
         const configResult = await configUpdate();
         if (effectiveMediaProductSlatesEnabled && configResult.matchedCount !== 1) {
           await snapshotUpdate(false);
-          return NextResponse.json(
-            {
-              error:
-                "Media product prerequisites changed. Refresh and enable the required gates first.",
-            },
-            { status: 409 }
+          return errorResponse(
+            409,
+            "Media product prerequisites changed. Refresh and enable the required gates first."
           );
         }
         await snapshotUpdate(effectiveMediaRegulationEnabled);
@@ -562,12 +538,9 @@ export async function PATCH(request: Request) {
     } else {
       const configResult = await configUpdate();
       if (effectiveMediaProductSlatesEnabled && configResult.matchedCount !== 1) {
-        return NextResponse.json(
-          {
-            error:
-              "Media product prerequisites changed. Refresh and enable the required gates first.",
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "Media product prerequisites changed. Refresh and enable the required gates first."
         );
       }
       await snapshotUpdate(effectiveMediaRegulationEnabled);

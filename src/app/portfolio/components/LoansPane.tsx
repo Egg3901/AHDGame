@@ -74,9 +74,7 @@ export function LoansPane({
       <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-muted font-semibold mb-1">
-              Your Rate
-            </p>
+            <p className="text-body-sm font-medium text-muted mb-1">Your rate</p>
             <p className="text-2xl font-bold text-foreground tabular-nums">
               {s.effectiveRatePercent.toFixed(2)}% p.a.
             </p>
@@ -89,9 +87,7 @@ export function LoansPane({
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] uppercase tracking-widest text-muted font-semibold mb-1">
-              Outstanding
-            </p>
+            <p className="text-body-sm font-medium text-muted mb-1">Outstanding</p>
             <p className="text-2xl font-bold text-error tabular-nums">
               {formatAmount(s.outstandingInternal)}
             </p>
@@ -170,7 +166,7 @@ export function LoansPane({
       {hasOutstanding && (
         <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
           <div className="bg-card-elevated px-4 py-3 border-b border-card-border">
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted">Balances</p>
+            <p className="text-body-sm font-medium text-muted">Balances</p>
           </div>
           <div className="divide-y divide-card-border">
             {Object.entries(s.balances)

@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { Avatar } from "@/components/Avatar";
 import { PartyLogo } from "@/components/PartyLogo";
 import type { CountryId } from "@/lib/constants/countries";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 interface PrimaryCandidate {
   id: string;
@@ -85,7 +86,7 @@ export function PrimaryCard({
                   )}
                   {candidate.isNPP && (
                     <span className="rounded-full bg-purple-500/20 border border-purple-500/40 px-1.5 py-0.5 text-[9px] text-purple-400 shrink-0">
-                      NPP
+                      <NppAbbr />
                     </span>
                   )}
                 </div>

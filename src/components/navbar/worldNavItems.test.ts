@@ -12,7 +12,7 @@ describe("buildWorldNavItems", () => {
     const labels = items.map((i) => i.label);
     expect(labels).toContain("Hall of Fame");
     expect(labels).toContain("Trade");
-    expect(labels).toContain("Nations");
+    expect(labels).toContain("Nations & World Map");
   });
 
   it("gates conflicts and unions behind feature flags", () => {
@@ -44,6 +44,12 @@ describe("buildWorldNavItems", () => {
     const us = buildWorldNavItems({ countryId: "US" }).find((i) => i.id === "map");
     expect(us?.label).toBe("Country Map");
     expect(us?.href).toContain("/country/us");
+  });
+
+  it("names the world map destination on the Nations item", () => {
+    const nations = buildWorldNavItems({ countryId: "US" }).find((i) => i.id === "nations");
+    expect(nations?.label).toBe("Nations & World Map");
+    expect(nations?.href).toBe("/world");
   });
 });
 

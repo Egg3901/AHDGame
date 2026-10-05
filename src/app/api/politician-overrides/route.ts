@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
 import type { PoliticianOverride } from "@/lib/db/types";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 
 // GET /api/politician-overrides — Returns all politician profile overrides (admin only)
 // Auth: requireBasicAuth
@@ -13,7 +13,7 @@ export async function GET() {
     if (!auth.ok) return auth.response;
     const user = auth.user;
     if (!user.isAdmin) {
-      return NextResponse.json({ error: "Admin only" }, { status: 403 });
+      return errorResponse(403, "Admin only");
     }
 
     const db = await getDb();

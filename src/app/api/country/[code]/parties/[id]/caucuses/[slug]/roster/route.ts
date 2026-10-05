@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { findCaucusBySlug, listCaucusMemberships } from "@/lib/db/caucusLookup";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -20,7 +20,7 @@ export async function GET(
     const { code, id, slug } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const filterParam = new URL(request.url).searchParams.get("filter");
@@ -33,13 +33,13 @@ export async function GET(
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const partyId = String(party.sequentialId);
 
     const resolved = await findCaucusBySlug(db, countryId, partyId, slug);
     if (!resolved) {
-      return NextResponse.json({ error: "Caucus not found" }, { status: 404 });
+      return errorResponse(404, "Caucus not found");
     }
     const { caucus, isRedirect } = resolved;
 

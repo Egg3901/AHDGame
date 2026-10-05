@@ -52,7 +52,7 @@ export function HealingTools() {
     <>
       <Button variant="secondary" size="sm" onClick={() => setIsDialogOpen(true)}>
         <span className="mr-2 text-red-500">🩹</span>
-        Healing Tools
+        Healing tools
       </Button>
 
       <Modal
@@ -60,20 +60,20 @@ export function HealingTools() {
         onClose={() => {
           if (!isRunning) setIsDialogOpen(false);
         }}
-        title="Data Healing Tools"
+        title="Data healing tools"
         closeOnEscape={!isRunning}
       >
         <div className="space-y-4">
           <p className="text-sm text-muted">Fix known data issues from bugs. Use with caution!</p>
 
           <div className="space-y-2">
-            <Label htmlFor="healing-type">Healing Operation</Label>
+            <Label htmlFor="healing-type">Healing operation</Label>
             <select
               id="healing-type"
               disabled
               className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <option value="nationalization-shares">Bug #0803: Nationalization Share Loss</option>
+              <option value="nationalization-shares">Bug #0803: Nationalization share loss</option>
             </select>
             <p className="text-xs text-muted">
               Fixes corporations that lost shares when nationalized
@@ -105,7 +105,7 @@ export function HealingTools() {
               onClick={runHealing}
               disabled={isRunning}
             >
-              {isRunning ? "Running..." : dryRun ? "Run Dry Run" : "Confirm & Heal"}
+              {isRunning ? "Running..." : dryRun ? "Run dry run" : "Confirm & heal"}
             </Button>
           </div>
         </div>

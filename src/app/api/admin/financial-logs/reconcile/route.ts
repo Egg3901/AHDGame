@@ -19,7 +19,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { FinancialTxLogEntry, FinancialSubjectType } from "@/lib/db/types/financialTxLog";
 import type { PortfolioHistory, GameState, ExchangeRate } from "@/lib/db/types";
 
@@ -47,13 +47,10 @@ export async function GET(request: Request) {
     );
 
     if (!subjectIdParam || !/^[0-9a-f]{24}$/i.test(subjectIdParam)) {
-      return NextResponse.json({ error: "Invalid subjectId" }, { status: 400 });
+      return errorResponse(400, "Invalid subjectId");
     }
     if (!["character", "corporation"].includes(subjectTypeParam)) {
-      return NextResponse.json(
-        { error: "Reconcile only supports character / corporation subjects" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Reconcile only supports character / corporation subjects");
     }
 
     const db = await getDb();

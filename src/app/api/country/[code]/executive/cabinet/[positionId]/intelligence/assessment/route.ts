@@ -15,7 +15,7 @@
 // Auth: the intelligence seat holder, their head of government or head of state,
 // or an admin. Errors: 400, 401, 403, 404
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getCovertNuclearProgram } from "@/lib/db/collections/covertNuclearPrograms";
 import { getNuclearProgram } from "@/lib/db/collections/nuclearPrograms";
 import { getIntelligenceCoverageCollection } from "@/lib/db/collections/intelligence";
@@ -60,7 +60,7 @@ export async function GET(request: Request, { params }: IntelligenceRouteParams)
       requestedDomain !== "military" &&
       requestedDomain !== "economic"
     ) {
-      return NextResponse.json({ error: "Unknown assessment domain" }, { status: 400 });
+      return errorResponse(400, "Unknown assessment domain");
     }
 
     const coverageRow = await (

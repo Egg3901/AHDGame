@@ -42,7 +42,7 @@ export function Step2MetricEffects({ effectTargets, onChange }: Step2MetricEffec
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="font-medium">Metric Effects</h3>
+        <h3 className="font-medium">Metric effects</h3>
         <p className="text-xs text-muted mt-1">
           Effects apply uniformly to all 50 states. National metrics are derived from state
           averages.
@@ -120,7 +120,7 @@ export function Step2MetricEffects({ effectTargets, onChange }: Step2MetricEffec
         onClick={addEffect}
         className="w-full rounded-lg border border-dashed border-card-border py-3 text-sm text-muted hover:text-foreground hover:border-foreground/30 transition-colors"
       >
-        + Add Metric Effect
+        + Add metric effect
       </button>
     </div>
   );

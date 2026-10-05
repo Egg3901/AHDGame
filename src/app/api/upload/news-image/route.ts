@@ -12,7 +12,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseFormData } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import type { Character } from "@/lib/db/types";
@@ -32,22 +32,19 @@ export async function POST(request: Request) {
 
     const parsed = await parseFormData(request);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const formData = parsed.data;
 
     const file = formData.get("file");
     if (!file || !(file instanceof Blob)) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+      return errorResponse(400, "No file uploaded");
     }
     if (!ALLOWED_TYPES.has(file.type)) {
-      return NextResponse.json(
-        { error: "Only PNG, JPEG, and WebP images are allowed for news images." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Only PNG, JPEG, and WebP images are allowed for news images.");
     }
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: "Image must be under 8 MB." }, { status: 400 });
+      return errorResponse(400, "Image must be under 8 MB.");
     }
 
     const db = await getDb();
@@ -55,7 +52,7 @@ export async function POST(request: Request) {
       userId: new ObjectId(auth.user.userId),
     });
     if (!character) {
-      return NextResponse.json({ error: "Character required" }, { status: 403 });
+      return errorResponse(403, "Character required");
     }
 
     const rawBuffer = Buffer.from(await file.arrayBuffer());

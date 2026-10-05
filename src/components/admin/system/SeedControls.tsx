@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function SeedControls() {
   const [loading, setLoading] = useState(false);
@@ -35,7 +36,7 @@ export function SeedControls() {
       const data = await res.json();
       setResult({
         ok: res.ok,
-        message: data.message ?? data.error ?? "Unknown response",
+        message: data.message ?? apiErrorText(data, "Unknown response"),
         logs: data.logs,
       });
     } catch {
@@ -62,7 +63,7 @@ export function SeedControls() {
           />
         </svg>
       </div>
-      <h3 className="mb-1 text-lg font-semibold">Seed Database</h3>
+      <h3 className="mb-1 text-lg font-semibold">Seed database</h3>
       <p className="mb-4 text-sm text-muted">
         Runs the legacy API-key seed route backed by <code>scripts/seed/seed.ts</code>. This is
         reference-data seeding only, not the full runtime bootstrap/reset flow.

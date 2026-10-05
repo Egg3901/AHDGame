@@ -435,7 +435,7 @@ export function MarketStats({
                       <Tooltip content="Combined gross revenue across this sector per 24-turn reporting period (6 game months)" />
                     </th>
                     <th className="px-4 py-3 font-semibold tabular-nums">
-                      6M Price Return
+                      6M price return
                       <Tooltip content="Price return of current sector listings over 24 turns (6 game months), using reconstructed starting capitalization weights" />
                     </th>
                     <th className="px-4 py-3 font-semibold tabular-nums">

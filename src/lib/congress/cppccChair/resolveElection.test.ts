@@ -51,6 +51,10 @@ describe("resolveCppccChairElection", () => {
       },
     ]);
 
+    db.collection("characters");
+    db.collectionMocks.characters!.findOne.mockResolvedValue({
+      avatarUrl: "https://cdn.example/cppcc-chair.png",
+    });
     const { resolveCppccChairElection } = await import("./resolveElection");
     const resolved = await resolveCppccChairElection(db as unknown as Db, new Map(), true);
 
@@ -58,6 +62,16 @@ describe("resolveCppccChairElection", () => {
     const [filter, update] = db.collectionMocks.congressLeaders!.updateOne.mock.calls[0];
     expect(filter).toEqual({ role: "chair_cppcc" });
     expect(update.$set.characterId).toBe(winnerId);
+    const { sendCountryGameEvent } = await import("@/lib/discordWebhooks");
+    expect(sendCountryGameEvent).toHaveBeenCalledTimes(1);
+    expect(sendCountryGameEvent).toHaveBeenCalledWith("CN", {
+      title: "Leadership Election Result \u2014 Chairman of the CPPCC",
+      description: "**Winner** has been elected as **Chairman of the CPPCC**.",
+      color: 0,
+      footer: { text: "A House Divided" },
+      timestamp: expect.any(String),
+      thumbnail: { url: "https://cdn.example/cppcc-chair.png" },
+    });
   });
 
   it("vacates the role when there are no candidacies", async () => {

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { ensureSlate } from "@/lib/db/recruitmentSlateLookup";
 import { createNotification } from "@/lib/notifications";
@@ -48,10 +48,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id, electionId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     if (!ObjectId.isValid(electionId)) {
-      return NextResponse.json({ error: "Invalid election id" }, { status: 400 });
+      return errorResponse(400, "Invalid election id");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -59,19 +59,19 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, assignSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
 
     const partyId = String(party.sequentialId);
     const electionObjId = new ObjectId(electionId);
     const election = await db
       .collection<Election>("elections")
       .findOne({ _id: electionObjId, countryId });
-    if (!election) return NextResponse.json({ error: "Election not found" }, { status: 404 });
+    if (!election) return errorResponse(404, "Election not found");
     const authority = await resolveSlateAuthority({
       db,
       party,
@@ -80,26 +80,17 @@ export async function POST(request: Request, { params }: RouteParams) {
       isAdmin: !!auth.user.isAdmin,
     });
     if (!authority.canManage) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the national or state party chair / vice chair for this race can assign slate candidates.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the national or state party chair / vice chair for this race can assign slate candidates."
       );
     }
 
     if (election.electionType === "president") {
-      return NextResponse.json(
-        { error: "Presidential races do not use the slate assignment board." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Presidential races do not use the slate assignment board.");
     }
     if (election.status !== "upcoming" && election.status !== "active") {
-      return NextResponse.json(
-        { error: "Slate is locked: this race is no longer accepting candidates." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Slate is locked: this race is no longer accepting candidates.");
     }
     // A race keeps `status: "active"` through its general phase, so the status
     // check above does not catch a race whose primary has already closed.
@@ -107,12 +98,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // election (bypassing the primary) on the next turn, so block it here.
     const currentTurn = await getCurrentTurn(db);
     if (isPrimaryClosed(election, currentTurn, new Date())) {
-      return NextResponse.json(
-        {
-          error:
-            "Slate is locked: the primary has ended for this race, so it can no longer accept new candidates.",
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Slate is locked: the primary has ended for this race, so it can no longer accept new candidates."
       );
     }
     const candidateObjId = new ObjectId(parsed.data.candidateId);
@@ -160,11 +148,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         }))
     );
     if (usage.remaining <= 0) {
-      return NextResponse.json(
-        {
-          error: `This race already has ${usage.cap} assigned candidates. Withdraw one before assigning another.`,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `This race already has ${usage.cap} assigned candidates. Withdraw one before assigning another.`
       );
     }
 
@@ -178,7 +164,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         now: new Date(),
       });
       if (!nppControl.ok) {
-        return NextResponse.json({ error: nppControl.error }, { status: 403 });
+        return errorResponse(403, nppControl.error);
       }
     }
 
@@ -191,10 +177,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       now,
     });
     if (slate.archivedAt) {
-      return NextResponse.json(
-        { error: "Slate has been archived for this race." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Slate has been archived for this race.");
     }
 
     const existingRow = await db.collection<SlateCandidate>("slateCandidates").findOne({
@@ -202,16 +185,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       candidateId: candidateObjId,
     });
     if (existingRow && existingRow.status === "filed") {
-      return NextResponse.json(
-        { error: "This candidate has already filed from the slate." },
-        { status: 409 }
-      );
+      return errorResponse(409, "This candidate has already filed from the slate.");
     }
     if (existingRow && existingRow.status !== "withdrawn" && existingRow.status !== "declined") {
-      return NextResponse.json(
-        { error: "This candidate is already on the slate." },
-        { status: 409 }
-      );
+      return errorResponse(409, "This candidate is already on the slate.");
     }
 
     const candidate =
@@ -246,7 +223,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           });
 
     if ("error" in candidate) {
-      return NextResponse.json({ error: candidate.error }, { status: candidate.status });
+      return errorResponse(candidate.status, candidate.error);
     }
 
     const sameStateSlateIds = (

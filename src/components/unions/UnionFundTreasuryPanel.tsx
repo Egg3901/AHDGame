@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { formatLocalAmountFull } from "@/lib/utils/formatters";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface UnionFundTreasuryPanelProps {
   unionId: string;
@@ -60,7 +61,7 @@ export function UnionFundTreasuryPanel({
         ok: res.ok,
         text: res.ok
           ? `Contributed ${money(Math.floor(amount))} to the treasury.`
-          : (data.error ?? "The contribution failed."),
+          : apiErrorText(data, "The contribution failed."),
       });
       if (res.ok) {
         setAmountDraft("");
@@ -89,10 +90,7 @@ export function UnionFundTreasuryPanel({
       {isHead && (
         <>
           <div className="flex flex-wrap items-center gap-2">
-            <label
-              htmlFor="union-fund-amount"
-              className="text-[11px] uppercase tracking-wider text-muted"
-            >
+            <label htmlFor="union-fund-amount" className="text-body-sm font-medium text-muted">
               Contribute from campaign funds
             </label>
             <input
@@ -113,7 +111,7 @@ export function UnionFundTreasuryPanel({
               onClick={handleFund}
               className="w-fit rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
             >
-              {pending ? "Sending…" : "Fund Treasury"}
+              {pending ? "Sending…" : "Fund treasury"}
             </button>
           </div>
           {amountDraft !== "" && !amountValid && (

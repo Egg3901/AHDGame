@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError, forbidden, notFound } from "@/lib/api/errors";
+import { handleRouteError, forbidden, notFound, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { findCaucusBySlug } from "@/lib/db/caucusLookup";
@@ -18,7 +18,7 @@ export async function GET(
     const { code, id, slug } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 404 });
+      return errorResponse(404, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();

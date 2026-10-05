@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId, isParliamentarySystem } from "@/lib/constants/countries";
 import {
   appointShadowCabinetHandler,
@@ -27,12 +27,12 @@ async function resolveParliamentaryCountry(
 
 export async function POST(request: Request, { params }: { params: Promise<{ code: string }> }) {
   const countryId = await resolveParliamentaryCountry(params);
-  if (!countryId) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!countryId) return errorResponse(404, "Not found");
   return appointShadowCabinetHandler(request, countryId);
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ code: string }> }) {
   const countryId = await resolveParliamentaryCountry(params);
-  if (!countryId) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!countryId) return errorResponse(404, "Not found");
   return clearShadowCabinetHandler(request, countryId);
 }

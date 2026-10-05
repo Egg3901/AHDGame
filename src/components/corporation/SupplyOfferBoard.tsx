@@ -14,6 +14,7 @@ import {
   SUPPLY_AGREEMENT_DURATION_MAX_TURNS,
 } from "@/lib/db/types/supplyAgreement";
 import type { SupplyListingView } from "@/lib/db/types/supplyListing";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function SupplyOfferBoard({
   corpId,
@@ -52,7 +53,7 @@ export function SupplyOfferBoard({
     })
       .then(async (r) => {
         const data = await r.json();
-        if (!r.ok) throw new Error(data.error || t("failed"));
+        if (!r.ok) throw new Error(apiErrorText(data, t("failed")));
         if (!controller.signal.aborted) {
           setListings(data.listings);
           setOwn(data.ownListings);
@@ -78,7 +79,7 @@ export function SupplyOfferBoard({
           body: JSON.stringify(body),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || t("failed"));
+        if (!response.ok) throw new Error(apiErrorText(data, t("failed")));
         setRevision((n) => n + 1);
         return true;
       } catch (e) {

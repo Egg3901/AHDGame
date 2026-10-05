@@ -6,7 +6,7 @@ import { requireAdmin } from "@/lib/api/requireAdmin";
 import { getClientIp } from "@/lib/utils/network";
 import { checkRateLimit, SUGGESTION_SUBMIT_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
 import { logRequest } from "@/lib/api/requestLog";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createSuggestionSchema } from "@/lib/api/schemas/suggestion";
 import { getNextSuggestionNumber } from "@/lib/suggestionCounter";
@@ -45,9 +45,9 @@ export async function PUT(request: Request) {
     const webhookUrl = await getDiscordSuggestionsWebhookUrl();
     if (!webhookUrl) {
       logRequest("PUT", path, 400, Date.now() - start);
-      return NextResponse.json(
-        { error: "Suggestions Discord webhook URL is not configured in game config." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Suggestions Discord webhook URL is not configured in game config."
       );
     }
 
@@ -184,7 +184,7 @@ export async function POST(request: Request) {
     const parsed = await parseJsonBody(request, createSuggestionSchema);
     if (!parsed.success) {
       logRequest("POST", path, parsed.status, Date.now() - start);
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
 

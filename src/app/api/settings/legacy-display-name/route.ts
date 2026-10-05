@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { badRequest, handleRouteError } from "@/lib/api/errors";
+import { badRequest, handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Character } from "@/lib/db/types/character";
 import type { RetiredCharacter } from "@/lib/db/types/retiredCharacter";
 
@@ -20,7 +20,7 @@ export async function PATCH(request: Request) {
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { characterId } = parsed.data;

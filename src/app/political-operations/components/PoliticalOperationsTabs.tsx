@@ -10,8 +10,8 @@ interface Props {
 export function PoliticalOperationsTabs({ activeTab, onChange }: Props) {
   const tabs: Array<{ id: PoliticalOperationsTab; label: string; disabled: boolean }> = [
     { id: "overview", label: "Overview", disabled: false },
-    { id: "stateElection", label: "State Election", disabled: true },
-    { id: "presidentialElection", label: "Presidential Election", disabled: false },
+    { id: "stateElection", label: "State election", disabled: true },
+    { id: "presidentialElection", label: "Presidential election", disabled: false },
   ];
 
   return (

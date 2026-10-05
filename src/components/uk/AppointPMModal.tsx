@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect } from "react";
 import { Modal } from "@/components/ui";
 
@@ -49,7 +50,7 @@ export default function AppointPMModal({
     fetch(`/api/country/${countryCode}/${endpointPath}`)
       .then(async (res) => {
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Failed to load candidates.");
+        if (!res.ok) throw new Error(apiErrorText(data, "Failed to load candidates."));
         return data;
       })
       .then((data) => {
@@ -85,7 +86,7 @@ export default function AppointPMModal({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to nominate candidate.");
+        setError(apiErrorText(data, "Failed to nominate candidate."));
       } else {
         onSuccess?.(data.voteId ?? "");
         onClose();

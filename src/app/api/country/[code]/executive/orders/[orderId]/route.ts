@@ -1,7 +1,6 @@
-import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { rescindOrder } from "@/lib/governorOffice/orders/rescindOrder";
@@ -19,10 +18,10 @@ export async function DELETE(
     const { code, orderId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (!ObjectId.isValid(orderId)) {
-      return NextResponse.json({ error: "Invalid orderId" }, { status: 400 });
+      return errorResponse(400, "Invalid orderId");
     }
 
     const auth = await requireHumanSessionWithCharacter(request);
@@ -31,17 +30,14 @@ export async function DELETE(
     const db = await getDb();
     const leader = await isSittingLeader(db, countryId, auth.user.character._id);
     if (!leader) {
-      return NextResponse.json(
-        { error: "Only the sitting leader can rescind national orders" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the sitting leader can rescind national orders");
     }
 
     const result = await rescindOrder(db, {
       orderId: new ObjectId(orderId),
       rescindedByCharacterId: auth.user.character._id,
     });
-    return NextResponse.json(result.body, { status: result.status });
+    return statusResponse(result.status, result.body);
   } catch (error) {
     return handleRouteError(error);
   }

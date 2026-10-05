@@ -70,6 +70,13 @@ describe("resolveLeadershipElection — announce idempotency", () => {
 
     expect(resolved).toBe(true);
     expect(sendCountryGameEvent).toHaveBeenCalledTimes(1);
+    expect(sendCountryGameEvent).toHaveBeenCalledWith("US", {
+      title: "Leadership Election Result \u2014 House Minority Leader",
+      description: "**Winner** has been elected as **House Minority Leader** in the House.",
+      color: 0,
+      footer: { text: "A House Divided" },
+      timestamp: expect.any(String),
+    });
   });
 
   it("does not announce when another worker already closed the election", async () => {

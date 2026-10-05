@@ -358,7 +358,7 @@ describe("POST /api/country/[code]/international-organizations/[orgId]/propose-l
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       error: "Government is in formation; legislation is frozen until a PM is seated",
     });
     expect(isMember).not.toHaveBeenCalled();

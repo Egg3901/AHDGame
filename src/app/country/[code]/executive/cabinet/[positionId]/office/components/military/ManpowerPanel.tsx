@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import type { ManpowerView } from "../../useCabinetOffice";
 import { SectionCard, Tile, Badge, Meter } from "../dossier";
@@ -50,7 +52,7 @@ export function ManpowerPanel({
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         // Surface the refusal and roll back rather than showing a mode that was rejected.
         setMode(previous);
-        setError(body?.error ?? "Could not change the reinforcement mode.");
+        setError(apiErrorText(body, "Could not change the reinforcement mode."));
       }
     } catch {
       setMode(previous);
@@ -106,7 +108,7 @@ export function ManpowerPanel({
             Conscription requires a reserve law that permits it.
           </p>
         )}
-        {error && <p className="mt-1.5 text-[11px] text-error">{error}</p>}
+        <InlineError error={error} className="mt-1.5 text-[11px] text-error" />
       </div>
     </SectionCard>
   );

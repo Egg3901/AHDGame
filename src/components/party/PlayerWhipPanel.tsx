@@ -11,6 +11,7 @@ import type { PlayerWhipIssuerRole } from "@/lib/partyWhips/playerWhipSummary";
 import { whipIssuerRoleLabel } from "@/lib/partyWhips/issuerRole";
 import type { PlayerWhipMode } from "@/lib/db/types";
 import type { WhipEndpointConfig } from "./WhipTabs";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface PlayerWhipEntry {
   direction: string;
@@ -148,7 +149,7 @@ export function PlayerWhipPanel({
         showToast(successPrefix ? `${successPrefix} ${data.message}` : data.message, "success");
         setRefreshKey((k) => k + 1);
       } else {
-        showToast(data.error || "Failed to issue whip", "error");
+        showToast(apiErrorText(data, "Failed to issue whip"), "error");
       }
     } catch {
       showToast("Network error", "error");
@@ -483,7 +484,7 @@ export function PlayerWhipPanel({
                         >
                           {whippingId === `cv_${election.id}_for`
                             ? "Issuing..."
-                            : "Whip FOR (Remove PM)"}
+                            : "Whip FOR (remove PM)"}
                         </button>
                         <button
                           onClick={() =>
@@ -495,7 +496,7 @@ export function PlayerWhipPanel({
                         >
                           {whippingId === `cv_${election.id}_against`
                             ? "Issuing..."
-                            : "Whip AGAINST (Keep PM)"}
+                            : "Whip AGAINST (keep PM)"}
                         </button>
                       </div>
                     ) : isVacate ? (
@@ -514,7 +515,7 @@ export function PlayerWhipPanel({
                         >
                           {whippingId === `cv_${election.id}_for`
                             ? "Issuing..."
-                            : "Whip FOR (Vacate)"}
+                            : "Whip FOR (vacate)"}
                         </button>
                         <button
                           onClick={() =>
@@ -526,7 +527,7 @@ export function PlayerWhipPanel({
                         >
                           {whippingId === `cv_${election.id}_against`
                             ? "Issuing..."
-                            : "Whip AGAINST (Keep Speaker)"}
+                            : "Whip AGAINST (keep speaker)"}
                         </button>
                       </div>
                     ) : isImpeachment ? (
@@ -550,7 +551,7 @@ export function PlayerWhipPanel({
                         >
                           {whippingId === `cv_${election.id}_for`
                             ? "Issuing..."
-                            : "Whip FOR (Remove)"}
+                            : "Whip FOR (remove)"}
                         </button>
                         <button
                           onClick={() =>
@@ -567,7 +568,7 @@ export function PlayerWhipPanel({
                         >
                           {whippingId === `cv_${election.id}_against`
                             ? "Issuing..."
-                            : "Whip AGAINST (Acquit)"}
+                            : "Whip AGAINST (acquit)"}
                         </button>
                       </div>
                     ) : (
@@ -631,7 +632,7 @@ export function PlayerWhipPanel({
                         href={`/congress/nominations/${item.id}`}
                         className="hover:text-primary transition-colors"
                       >
-                        {item.type ?? "Cabinet Nomination"}
+                        {item.type ?? "Cabinet nomination"}
                       </Link>
                     </h4>
                     {whip.existingWhips.length > 0 && (

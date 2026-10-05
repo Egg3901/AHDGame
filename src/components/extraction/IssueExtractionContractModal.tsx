@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { Modal, Button } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -127,7 +129,7 @@ export function IssueExtractionContractModal({
         return;
       }
       if (!res.ok) {
-        setError(json.error ?? "Failed to issue the offer.");
+        setError(apiErrorText(json, "Failed to issue the offer."));
         setSubmitting(false);
         return;
       }
@@ -140,7 +142,7 @@ export function IssueExtractionContractModal({
   }
 
   return (
-    <Modal open title="Issue Extraction Contract" onClose={onClose} maxWidthClass="max-w-lg">
+    <Modal open title="Issue extraction contract" onClose={onClose} maxWidthClass="max-w-lg">
       <form onSubmit={submit} className="space-y-4">
         {!fixedStateId && stateOptions && (
           <div>
@@ -276,16 +278,16 @@ export function IssueExtractionContractModal({
 
         {!authorityAllowed && (
           <p className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
-            The Resource Extraction Authority Act currently reserves {level} issuance for a
+            The resource extraction authority act currently reserves {level} issuance for a
             different level of government in this country.
           </p>
         )}
 
-        {error && <p className="text-sm text-error">{error}</p>}
+        <InlineError error={error} className="text-sm text-error" />
 
         <div className="flex gap-3 pt-1">
           <Button type="submit" disabled={submitting || !authorityAllowed} className="flex-1">
-            {submitting ? "Sending..." : "Send Offer"}
+            {submitting ? "Sending..." : "Send offer"}
           </Button>
           <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel

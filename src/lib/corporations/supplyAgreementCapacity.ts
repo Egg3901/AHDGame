@@ -114,11 +114,10 @@ export function computeSupplierCommodityCapacityUnits(args: {
     // media makes state information rather than advertising, and media supply
     // is derated in every economy.
     const supplyMix = applyPlannedEconomyOutputMix(
-      s.sectorType === "media" && s.mediaDiscriminator === "entertainment"
-        ? "entertainment"
-        : s.sectorType,
+      s.sectorType,
       rates.supply ?? {},
-      plannedEconomy
+      plannedEconomy,
+      s.mediaDiscriminator
     );
     const scaled =
       plantsCapacityScaledUnits({
@@ -126,7 +125,8 @@ export function computeSupplierCommodityCapacityUnits(args: {
         isNatcorp: args.isNatcorp,
         productionPolicyLevel: s.productionPolicyLevel,
         embargoSupplyFactor:
-          embargoSupplyFactorFor(s) * plannedEconomyMediaSupplyFactor(s.sectorType, plannedEconomy),
+          embargoSupplyFactorFor(s) *
+          plannedEconomyMediaSupplyFactor(s.sectorType, plannedEconomy, s.mediaDiscriminator),
       }) ?? 0;
     capacityUnits += scaled * commodityMixWeight(supplyMix, COMMODITY_BASE_PRICES, args.commodity);
   }
@@ -165,11 +165,10 @@ export function computeSupplierCommodityAchievableUnits(args: {
       args.commandEconomyEnabled
     );
     const supplyMix = applyPlannedEconomyOutputMix(
-      sector.sectorType === "media" && sector.mediaDiscriminator === "entertainment"
-        ? "entertainment"
-        : sector.sectorType,
+      sector.sectorType,
       rates.supply ?? {},
-      plannedEconomy
+      plannedEconomy,
+      sector.mediaDiscriminator
     );
     const weight = commodityMixWeight(supplyMix, COMMODITY_BASE_PRICES, args.commodity);
     if (!(weight > 0)) continue;
@@ -178,7 +177,11 @@ export function computeSupplierCommodityAchievableUnits(args: {
       isNatcorp: args.isNatcorp,
       embargoSupplyFactor:
         embargoSupplyFactorFor(sector) *
-        plannedEconomyMediaSupplyFactor(sector.sectorType, plannedEconomy),
+        plannedEconomyMediaSupplyFactor(
+          sector.sectorType,
+          plannedEconomy,
+          sector.mediaDiscriminator
+        ),
     });
     if (scaled === null) return null;
     units += scaled * weight;

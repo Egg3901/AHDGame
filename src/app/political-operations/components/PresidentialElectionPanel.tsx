@@ -31,7 +31,7 @@ export function PresidentialElectionPanel({ activePresidentialCandidacy }: Props
             sub === "stateOrg" ? "bg-primary/10 text-primary" : "text-muted hover:text-foreground"
           }`}
         >
-          Campaign Presence
+          Campaign presence
         </button>
         <button
           type="button"
@@ -51,7 +51,7 @@ export function PresidentialElectionPanel({ activePresidentialCandidacy }: Props
                 : "text-muted hover:text-foreground"
           }`}
         >
-          Campaign Manager
+          Campaign manager
         </button>
       </nav>
       {sub === "stateOrg" && <StateOrganizationTab />}
@@ -59,7 +59,7 @@ export function PresidentialElectionPanel({ activePresidentialCandidacy }: Props
         <iframe
           src={`/campaign/${activePresidentialCandidacy.campaignId}?embedded=political-operations`}
           className="h-[700px] w-full rounded border border-card-border"
-          title="Campaign Manager"
+          title="Campaign manager"
         />
       )}
     </div>

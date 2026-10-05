@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui";
@@ -41,7 +42,7 @@ export default function BondDetailPage({ params }: { params: Promise<{ id: strin
         setHistory(json.priceHistory || []);
         setHolders(json.holders || []);
       } else {
-        setError(json.error || "Failed to load bond");
+        setError(apiErrorText(json, "Failed to load bond"));
       }
     } catch {
       setError("Network error");
@@ -70,7 +71,7 @@ export default function BondDetailPage({ params }: { params: Promise<{ id: strin
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">
-          <h1 className="text-2xl font-bold text-foreground">Bond Not Found</h1>
+          <h1 className="text-2xl font-bold text-foreground">Bond not found</h1>
           <p className="text-muted">{error || "This bond does not exist."}</p>
           <BackButton />
         </div>
@@ -140,7 +141,7 @@ export default function BondDetailPage({ params }: { params: Promise<{ id: strin
 
         {/* ─── Price Chart ─────────────────────────────────────────────── */}
         <div className="rounded-xl border border-card-border bg-card p-6">
-          <h2 className="text-lg font-bold text-foreground mb-4">Price History</h2>
+          <h2 className="text-lg font-bold text-foreground mb-4">Price history</h2>
           {history.length < 2 ? (
             <div className="flex items-center justify-center h-[180px] text-muted text-sm border border-dashed border-card-border rounded-lg bg-card-elevated/30">
               Not enough price history yet.
@@ -178,16 +179,16 @@ export default function BondDetailPage({ params }: { params: Promise<{ id: strin
                   return formatAmount(anchor, bondCode);
                 };
                 return [
-                  { label: "Total Issued", value: fmtBond(bond.totalIssued) },
-                  { label: "Total Units", value: bond.totalUnits.toLocaleString("en-US") },
+                  { label: "Total issued", value: fmtBond(bond.totalIssued) },
+                  { label: "Total units", value: bond.totalUnits.toLocaleString("en-US") },
                   {
-                    label: "Public Float",
+                    label: "Public float",
                     value: `${bond.publicFloat.toLocaleString("en-US")} (${bond.publicFloatPercentage.toFixed(1)}%)`,
                   },
                   ...(bond.marketDepthUnits != null
                     ? [
                         {
-                          label: "Market Depth",
+                          label: "Market depth",
                           value: `${bond.marketDepthUnits.toLocaleString("en-US")} units at bid`,
                         },
                       ]
@@ -195,15 +196,18 @@ export default function BondDetailPage({ params }: { params: Promise<{ id: strin
                   ...((bond.unsoldUnits ?? 0) > 0
                     ? [
                         {
-                          label: "Still Placing",
+                          label: "Still placing",
                           value: `${(bond.unsoldUnits ?? 0).toLocaleString("en-US")} units unsold`,
                         },
                       ]
                     : []),
-                  { label: "Issued At Turn", value: `T${bond.issuedAtTurn}` },
-                  { label: "Matures At Turn", value: `T${bond.maturityTurn}` },
+                  {
+                    label: "Issued at turn",
+                    value: bond.issuedAtTurn < 0 ? "Before reset" : `T${bond.issuedAtTurn}`,
+                  },
+                  { label: "Matures at turn", value: `T${bond.maturityTurn}` },
                   { label: "Coupon / Turn", value: fmtBond(bond.perTurnCoupon) },
-                  { label: "Total Interest Paid", value: fmtBond(bond.totalInterestPaid) },
+                  { label: "Total interest paid", value: fmtBond(bond.totalInterestPaid) },
                 ];
               })(),
             ].map(({ label, value }) => (

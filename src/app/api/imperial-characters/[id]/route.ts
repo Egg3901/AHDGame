@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import type { Corporation } from "@/lib/db/types/corporation";
 import { getImperialTitle } from "@/lib/imperial";
@@ -16,7 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const sequentialId = parseInt(id, 10);
     if (isNaN(sequentialId)) {
-      return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+      return errorResponse(400, "Invalid ID");
     }
 
     const db = await getDb();
@@ -25,7 +25,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       .findOne({ sequentialId });
 
     if (!imperial) {
-      return NextResponse.json({ error: "Imperial character not found" }, { status: 404 });
+      return errorResponse(404, "Imperial character not found");
     }
 
     const title = getImperialTitle(imperial.countryId, imperial.gender);

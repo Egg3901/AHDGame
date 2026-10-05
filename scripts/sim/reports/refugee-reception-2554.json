@@ -1,0 +1,169 @@
+{
+  "baseCommit": "b2fba55e8e7b1aa196a015a9433dadeb055b36f0",
+  "sourceHashes": {
+    "src/lib/livingConflict/rules/refugeeReception.ts": "1ca24014b24d543f427558b65f572e1ebb333cfa6c490b431f1226f7733ed91d",
+    "src/lib/livingConflict/refugeeReception.ts": "028c0e794d7a2d76aaf7d700af8b690a63a38f615bdde8b81804bc37c10bb065",
+    "src/lib/crises/interactionEngine.ts": "7891265bce4a9ac4c16c74ee86d0b5742b914ed4bea94a26dcda76c5e2a2e9f2",
+    "src/lib/demographics/phase.ts": "93b2ac000ac147f83bd99ea2130124293834ffb3715a0a5cd2a2df009520f5f8",
+    "src/lib/demographics/flowJournal.ts": "3955b430edc2544e6ab9e1bb661dfd90886c5dc10f871fb66eaabda21ffc214f",
+    "src/lib/budget/spending.ts": "cc76cc4613d83554b26393a0525207119c616246f804255bb2ef82b01c430162",
+    "src/lib/budget/revenue.ts": "728f81300d9f26b168a91509f557f5664be23e566fb0682f27c15c171a89b969",
+    "src/lib/turn/treasuryTurn.ts": "cb756245f5cc086a2206d792a5664712ee230a20852138c031de90b35493268f",
+    "src/lib/livingConflict/defs/yugoslavia.ts": "ef70b25726735e71165ebfe96438f4b8a1fa076d9cf8bd6bc698069e56246e98",
+    "src/lib/livingConflict/globalResponse.ts": "0a993116dc51dd295ed3cc9ac27577859e3551299b3154c3cd76aaff1c8f9385",
+    "src/lib/db/types/crisis.ts": "169df8072b8ad63aeb98883727d2190f0757fd46bcec8665d063bbd5b4938ca7"
+  },
+  "scope": "Synthetic two-region actual response and phase fixtures, including synthetic DE neighbor authorization; not a world simulation",
+  "cases": [
+    {
+      "boundary": "none",
+      "populationMatchesControl": true,
+      "replayMatchesUninterrupted": true,
+      "historyEntries": 1,
+      "movedPeople": 31.25,
+      "annualServiceCost": 62500,
+      "routes": [
+        {
+          "originRegionId": "YU_ORIGIN",
+          "destinationRegionId": "AT_HOST",
+          "originCountryId": "YU",
+          "destinationCountryId": "AT",
+          "people": 31.25
+        }
+      ],
+      "responseCompleted": true,
+      "phaseCost": {
+        "commands": 35,
+        "reads": 22,
+        "replyBsonBytes": 14981
+      },
+      "cashPaidOver24Turns": 31248,
+      "treasuryReplayChargedTwice": false
+    },
+    {
+      "boundary": "vector",
+      "populationMatchesControl": true,
+      "replayMatchesUninterrupted": true,
+      "historyEntries": 1,
+      "movedPeople": 31.25,
+      "annualServiceCost": 62500,
+      "routes": [
+        {
+          "originRegionId": "YU_ORIGIN",
+          "destinationRegionId": "AT_HOST",
+          "originCountryId": "YU",
+          "destinationCountryId": "AT",
+          "people": 31.25
+        }
+      ],
+      "responseCompleted": true,
+      "phaseCost": {
+        "commands": 49,
+        "reads": 31,
+        "replyBsonBytes": 23975
+      }
+    },
+    {
+      "boundary": "history",
+      "populationMatchesControl": true,
+      "replayMatchesUninterrupted": true,
+      "historyEntries": 1,
+      "movedPeople": 31.25,
+      "annualServiceCost": 62500,
+      "routes": [
+        {
+          "originRegionId": "YU_ORIGIN",
+          "destinationRegionId": "AT_HOST",
+          "originCountryId": "YU",
+          "destinationCountryId": "AT",
+          "people": 31.25
+        }
+      ],
+      "responseCompleted": true,
+      "phaseCost": {
+        "commands": 52,
+        "reads": 34,
+        "replyBsonBytes": 25754
+      }
+    },
+    {
+      "boundary": "response-completion",
+      "populationMatchesControl": true,
+      "replayMatchesUninterrupted": true,
+      "historyEntries": 1,
+      "movedPeople": 31.25,
+      "annualServiceCost": 62500,
+      "routes": [
+        {
+          "originRegionId": "YU_ORIGIN",
+          "destinationRegionId": "AT_HOST",
+          "originCountryId": "YU",
+          "destinationCountryId": "AT",
+          "people": 31.25
+        }
+      ],
+      "responseCompleted": true,
+      "phaseCost": {
+        "commands": 54,
+        "reads": 35,
+        "replyBsonBytes": 26032
+      }
+    },
+    {
+      "boundary": "header-completion",
+      "populationMatchesControl": true,
+      "replayMatchesUninterrupted": true,
+      "historyEntries": 1,
+      "movedPeople": 31.25,
+      "annualServiceCost": 62500,
+      "routes": [
+        {
+          "originRegionId": "YU_ORIGIN",
+          "destinationRegionId": "AT_HOST",
+          "originCountryId": "YU",
+          "destinationCountryId": "AT",
+          "people": 31.25
+        }
+      ],
+      "responseCompleted": true,
+      "phaseCost": {
+        "commands": 55,
+        "reads": 35,
+        "replyBsonBytes": 26067
+      }
+    }
+  ],
+  "controls": [
+    {
+      "label": "sealed frontier",
+      "movedPeople": 0,
+      "serviceAnnualCost": 0
+    },
+    {
+      "label": "no displaced residents",
+      "movedPeople": 0,
+      "serviceAnnualCost": 0
+    },
+    {
+      "label": "expired corridor",
+      "movedPeople": 0,
+      "serviceAnnualCost": 0
+    },
+    {
+      "label": "closed enacted asylum",
+      "movedPeople": 0,
+      "serviceAnnualCost": 0
+    },
+    {
+      "label": "open enacted asylum",
+      "movedPeople": 31.25,
+      "serviceAnnualCost": 62500
+    }
+  ],
+  "limitations": [
+    "Admission share, law multipliers, initial service rate and support duration are authored assumptions pending world qualification.",
+    "No typed casualties, capacity damage, repair or refugee return is qualified here.",
+    "Service caseload is an initial-support obligation, not a trace of subsequent individual death or internal movement.",
+    "Concurrent world reset and turn writers remain unsupported."
+  ]
+}

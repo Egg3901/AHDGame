@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { buildAuctionListings } from "@/lib/nationalization/auctionListing";
 import { EXCHANGE_API_KEYS, getCountryForExchange } from "@/lib/constants/exchangeRegistry";
@@ -21,11 +21,9 @@ export async function GET(request: Request) {
     let countryId: ReturnType<typeof getCountryForExchange>;
     if (exchange !== "global") {
       if (!EXCHANGE_API_KEYS.has(exchange)) {
-        return NextResponse.json(
-          {
-            error: `Invalid exchange. Use "global" or one of: ${[...EXCHANGE_API_KEYS].join(", ")}`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Invalid exchange. Use "global" or one of: ${[...EXCHANGE_API_KEYS].join(", ")}`
         );
       }
       countryId = getCountryForExchange(exchange);

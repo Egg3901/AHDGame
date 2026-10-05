@@ -170,6 +170,8 @@ export type FlowSector = Pick<
 
 /** World context the flow derivation needs beyond the sectors themselves. */
 export interface CorpCommodityFlowContext {
+  /** Originating preset selects input recipes without following the game clock. */
+  preset?: string;
   /** `marketSystemMode >= "plants"` — measured production replaces the nameplate. */
   plantsEnabled?: boolean;
   /** State-owned corp: carries `NATCORP_COMMODITY_MULTIPLIER`. */
@@ -232,7 +234,8 @@ export function computeSectorCommodityUnits(
     sector.transitionStartTurn,
     currentTurn,
     sector.industryModel,
-    sector.mediaDiscriminator
+    sector.mediaDiscriminator,
+    context.preset
   );
   // The world ledger treats an unmodified `standard` strategy as the legacy
   // SECTOR_SUPPLY table. Several canonical rates have evolved there without
@@ -264,7 +267,12 @@ export function computeSectorCommodityUnits(
   // and without it the corp surfaces invent output it could never have made.
   const supplyRates = applyExtractionResourceCapacityToSupply(
     operatingType,
-    applyPlannedEconomyOutputMix(sector.sectorType, ledgerSupplyRates, plannedEconomy),
+    applyPlannedEconomyOutputMix(
+      sector.sectorType,
+      ledgerSupplyRates,
+      plannedEconomy,
+      sector.mediaDiscriminator
+    ),
     context.stateResourcesByState?.get(sector.stateId ?? "")
   );
 
@@ -319,7 +327,11 @@ export function computeSectorCommodityUnits(
           // advertising book), so omitting it overstated media tenfold.
           embargoSupplyFactor:
             embargoSupplyFactorFor(sector) *
-            plannedEconomyMediaSupplyFactor(sector.sectorType, plannedEconomy),
+            plannedEconomyMediaSupplyFactor(
+              sector.sectorType,
+              plannedEconomy,
+              sector.mediaDiscriminator
+            ),
         })
       : null;
   // Utilization scales INPUT demand: a plant running at 60% of nameplate

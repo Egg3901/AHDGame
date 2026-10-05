@@ -306,7 +306,13 @@ describe("bootstrap contract: orchestrator wiring", () => {
     // `collection` is needed because the orchestrator now stamps `isActive: false`
     // on gameState as part of sealing the world before the reset runs.
     const db = {
-      collection: () => ({ updateOne: async () => ({}), insertOne: async () => ({}) }),
+      collection: () => ({
+        findOne: async () => null,
+        updateOne: async () => ({}),
+        updateMany: async () => ({ modifiedCount: 0 }),
+        deleteMany: async () => ({ deletedCount: 0 }),
+        insertOne: async () => ({}),
+      }),
     } as never;
     await fresh({
       db,
@@ -384,7 +390,13 @@ describe("bootstrap contract: orchestrator wiring", () => {
     const streamed: string[] = [];
     const result = await fresh({
       db: {
-        collection: () => ({ updateOne: async () => ({}), insertOne: async () => ({}) }),
+        collection: () => ({
+          findOne: async () => null,
+          updateOne: async () => ({}),
+          updateMany: async () => ({ modifiedCount: 0 }),
+          deleteMany: async () => ({ deletedCount: 0 }),
+          insertOne: async () => ({}),
+        }),
       } as never,
       mode: "vacant",
       preset: "2019-default",
@@ -454,7 +466,10 @@ describe("bootstrap contract: orchestrator wiring", () => {
       // Recorded in `order` too, so the assertions below can place it.
       db: {
         collection: () => ({
+          findOne: async () => null,
           updateOne,
+          updateMany: async () => ({ modifiedCount: 0 }),
+          deleteMany: async () => ({ deletedCount: 0 }),
           insertOne: async () => {
             order.push("adminLogs.insertOne");
             return {};

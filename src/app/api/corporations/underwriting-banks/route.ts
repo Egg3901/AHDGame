@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { loadBankingPolicy } from "@/lib/banking/policy";
 import { listPrimaryUnderwritingBanks } from "@/lib/banking/underwritingOffer";
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     if (!auth.ok) return auth.response;
     const countryId = new URL(request.url).searchParams.get("countryId")?.toUpperCase();
     if (!countryId || !(countryId in COUNTRY_CURRENCY_MAP)) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     const db = await getDb();
     const policy = await loadBankingPolicy(db);

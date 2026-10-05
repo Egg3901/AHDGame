@@ -26,6 +26,7 @@ export async function seedATRegions(
   }
   const { atRegions } = await import("@/lib/seeds/at/atRegions");
   const { atRegions1953 } = await import("@/lib/seeds/at/atRegions1953");
+  const { atRegions1991 } = await import("@/lib/countries/at/data/atRegions1991");
   const { selectPresetBundle } = await import("@/lib/seeds/presetSelector");
   const bundle = selectPresetBundle(
     preset,
@@ -33,6 +34,7 @@ export async function seedATRegions(
       "2019-default": atRegions,
       "1953-default": atRegions1953,
       "1979-default": atRegions,
+      "1991-default": atRegions1991,
     },
     "seedAT:atRegions"
   );

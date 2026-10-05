@@ -6,6 +6,14 @@ export interface StatePartyOrg {
   countryId: CountryId;
   stateId: string;
   partyId: string;
+  /**
+   * Durable Build Org contribution balance. `organization` is the cached share
+   * derived from this regional bucket, not an independently mutable balance.
+   * Missing on legacy rows and bootstrapped from their current Org percentage.
+   */
+  organizationUnits?: number;
+  /** Game turn of the latest successful Build Org investment in this region. */
+  lastOrganizationBuildTurn?: number;
   organization: number;
   chairId: ObjectId | null;
   viceChairId: ObjectId | null;

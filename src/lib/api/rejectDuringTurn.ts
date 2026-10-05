@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { Db } from "mongodb";
 import type { GameState } from "@/lib/db/types";
 import { isTurnProcessingNow } from "@/lib/turn/processingLock";
+import { errorResponse } from "@/lib/api/errors";
 
 /**
  * Reject a player mutation while a live turn lock is processing snapshots of
@@ -22,8 +23,5 @@ export async function rejectDuringTurn(db: Db): Promise<NextResponse | null> {
 
   if (!gameState || !isTurnProcessingNow(gameState)) return null;
 
-  return NextResponse.json(
-    { error: "The game is processing this turn, try again shortly." },
-    { status: 409 }
-  );
+  return errorResponse(409, "The game is processing this turn, try again shortly.");
 }

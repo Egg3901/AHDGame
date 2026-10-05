@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import type { CentralBank, Corporation } from "@/lib/db/types";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getDb } from "@/lib/mongodb";
 import { loadBankingPolicy } from "@/lib/banking/policy";
@@ -29,10 +29,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (ceoCheck) return ceoCheck;
     const currency = resolveCorpLiquidCurrencyCode(corporation) as CurrencyCode | undefined;
     if (!currency)
-      return NextResponse.json(
-        { error: "The corporation's liquid currency is unavailable" },
-        { status: 409, headers: noStore }
-      );
+      return errorResponse(409, "The corporation's liquid currency is unavailable", {
+        headers: noStore,
+      });
     const centralBank = await db
       .collection<CentralBank>("centralBanks")
       .findOne(
@@ -40,10 +39,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         { projection: { primeRate: 1 } }
       );
     if (typeof centralBank?.primeRate !== "number" || !Number.isFinite(centralBank.primeRate))
-      return NextResponse.json(
-        { error: "The currency's loan rate is unavailable" },
-        { status: 409, headers: noStore }
-      );
+      return errorResponse(409, "The currency's loan rate is unavailable", { headers: noStore });
     const banks = await db
       .collection<Corporation>("corporations")
       .find(

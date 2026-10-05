@@ -149,4 +149,37 @@ describe("entertainment media dual-read through commodity pricing", () => {
     expect(canonical[0]?.mediaDiscriminator).toBe("entertainment");
     expect(computeRawSupplyDemand(canonical).global).toEqual(computeRawSupplyDemand(legacy).global);
   });
+
+  it("does not apply the news media supply derate to the canonical entertainment lane", () => {
+    const base = {
+      _id: new ObjectId(),
+      corporationId: new ObjectId(),
+      stateId: "US-CA",
+      countryId: "US",
+      strategyId: "film_studio",
+      revenue: 250_000,
+      producedUnits: 40,
+      createdAt: new Date(),
+    };
+    const rows = (sector: Record<string, unknown>) =>
+      buildSectorRows({
+        allSectors: [{ ...base, ...sector } as unknown as CorporateSector],
+        corporationById: new Map(),
+        natcorpIds: new Set(),
+        fxByCurrency: new Map(),
+        stateToCountry: new Map([["US-CA", "US"]]),
+        ledgerCurrentYear: 1991,
+        ledgerCommandEconomyEnabled: true,
+        turn: 1,
+      });
+
+    const legacy = rows({ sectorType: "entertainment" });
+    const canonical = rows({ sectorType: "media", mediaDiscriminator: "entertainment" });
+    const news = rows({ sectorType: "media", mediaDiscriminator: "media", strategyId: "standard" });
+
+    expect(legacy[0]?.embargoSupplyFactor).toBe(1);
+    expect(canonical[0]?.embargoSupplyFactor).toBe(1);
+    expect(news[0]?.embargoSupplyFactor).toBe(0.1);
+    expect(computeRawSupplyDemand(canonical).global).toEqual(computeRawSupplyDemand(legacy).global);
+  });
 });

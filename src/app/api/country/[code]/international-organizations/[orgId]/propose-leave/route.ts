@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { requireForeignMinister } from "@/lib/api/requireForeignMinister";
-import { handleRouteError, badRequest } from "@/lib/api/errors";
+import { handleRouteError, badRequest, statusResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -100,7 +100,7 @@ export async function POST(
         responseBody.autoFailWarning = result.autoFailWarning;
         responseBody.requiresElectionRiskConfirmation = true;
       }
-      return NextResponse.json(responseBody, { status: result.status });
+      return statusResponse(result.status, responseBody);
     }
 
     return NextResponse.json({ ok: true, billId: result.billId }, { status: 201 });

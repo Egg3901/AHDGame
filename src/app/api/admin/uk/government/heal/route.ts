@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import {
@@ -129,7 +129,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, healActionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { action, characterId } = parsed.data;
@@ -143,17 +143,14 @@ export async function POST(request: Request) {
 
     if (action === "appoint_pm") {
       if (!characterId || !ObjectId.isValid(characterId)) {
-        return NextResponse.json(
-          { error: "characterId is required and must be a valid ObjectId." },
-          { status: 400 }
-        );
+        return errorResponse(400, "characterId is required and must be a valid ObjectId.");
       }
       const db = await getDb();
       const character = await db
         .collection<Character>("characters")
         .findOne({ _id: new ObjectId(characterId) });
       if (!character) {
-        return NextResponse.json({ error: "Character not found." }, { status: 404 });
+        return errorResponse(404, "Character not found.");
       }
 
       const { appointUKPrimeMinister } = await import("@/lib/turn/ukGovernment");
@@ -181,7 +178,7 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ error: "Unknown action." }, { status: 400 });
+    return errorResponse(400, "Unknown action.");
   } catch (error) {
     return handleRouteError(error);
   }

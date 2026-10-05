@@ -18,6 +18,7 @@ import {
 } from "@/lib/db/types/supplyAgreement";
 import { useToast } from "@/contexts/ToastContext";
 import { supplyAgreementRequiresState } from "@/lib/market/commodityMarketScope";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface SupplyAgreement {
   _id: string;
@@ -28,7 +29,7 @@ interface SupplyAgreement {
   buyerCorpName?: string;
   buyerCorpTicker?: string | null;
   commodity: CommodityType;
-  /** State a freight contract is fulfilled from; absent on corporation-wide contracts. */
+  /** State a local service contract is fulfilled from; absent on corporation-wide contracts. */
   stateId?: string;
   volumeCap: number;
   pricePremium: number;
@@ -219,7 +220,7 @@ export default function SupplyAgreementsSection({
         );
         await load();
       } else {
-        showToast(data.error || "Action failed", "error");
+        showToast(apiErrorText(data, "Action failed"), "error");
       }
     } catch {
       showToast("Network error", "error");
@@ -286,7 +287,7 @@ export default function SupplyAgreementsSection({
         setCounterOpenId(null);
         await load();
       } else {
-        showToast(data.error || t("negotiation.counterOfferFailed"), "error");
+        showToast(apiErrorText(data, t("negotiation.counterOfferFailed")), "error");
       }
     } catch {
       showToast("Network error", "error");
@@ -307,7 +308,7 @@ export default function SupplyAgreementsSection({
       return;
     }
     if (supplyAgreementRequiresState(commodity) && !stateId) {
-      showToast(t("validation.freightState"), "error");
+      showToast(t("validation.localServiceState"), "error");
       return;
     }
     setSubmitting(true);
@@ -353,7 +354,7 @@ export default function SupplyAgreementsSection({
         setShowForm(false);
         await load();
       } else {
-        showToast(data.error || t("negotiation.failedToPropose"), "error");
+        showToast(apiErrorText(data, t("negotiation.failedToPropose")), "error");
       }
     } catch {
       showToast("Network error", "error");
@@ -889,7 +890,7 @@ export default function SupplyAgreementsSection({
                     >
                       <option value="">
                         {stateOptions.length === 0
-                          ? t("negotiation.noFreightPlants")
+                          ? t("negotiation.noLocalServicePlants")
                           : t("negotiation.selectState")}
                       </option>
                       {stateOptions.map(([id, snapshot]) => (
@@ -908,7 +909,7 @@ export default function SupplyAgreementsSection({
                       className="h-8 w-full rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground placeholder:text-muted focus:border-foreground focus:outline-none"
                     />
                   )}
-                  <p className="text-[11px] text-muted">{t("negotiation.freightHelp")}</p>
+                  <p className="text-[11px] text-muted">{t("negotiation.localServiceHelp")}</p>
                   {proposalRole === "buyer" && (
                     <p className="text-[11px] text-muted">{t("negotiation.buyerFreightHelp")}</p>
                   )}

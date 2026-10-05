@@ -653,7 +653,7 @@ export default function CommodityWorldMapView({
           <button
             onClick={zoomIn}
             className="w-8 h-8 flex items-center justify-center rounded-md text-muted hover:text-foreground hover:bg-card-elevated transition-colors"
-            title="Zoom In"
+            title="Zoom in"
           >
             <svg
               width="16"
@@ -673,7 +673,7 @@ export default function CommodityWorldMapView({
           <button
             onClick={zoomOut}
             className="w-8 h-8 flex items-center justify-center rounded-md text-muted hover:text-foreground hover:bg-card-elevated transition-colors"
-            title="Zoom Out"
+            title="Zoom out"
           >
             <svg
               width="16"

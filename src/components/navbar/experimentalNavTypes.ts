@@ -10,6 +10,7 @@ export interface NavLinkRef {
   singleplayer?: boolean;
   patreonTier?: string | null;
   isPatronActive?: boolean;
+  sandboxTesterAccess?: boolean;
 }
 
 export interface AdminCharacter {

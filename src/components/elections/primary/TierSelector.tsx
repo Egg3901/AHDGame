@@ -57,9 +57,7 @@ export function TierSelector({
 
   return (
     <div className="flex flex-wrap items-center gap-2 px-1 py-2">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-        {t("tierSelector.raceTier")}
-      </span>
+      <span className="text-body-sm font-medium text-muted">{t("tierSelector.raceTier")}</span>
       {TIERS.map((tier) => {
         const isActive = tier.id === activeTier;
         const isClickable = !isActive && !!onTierChange;

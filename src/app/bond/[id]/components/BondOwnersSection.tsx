@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 import type { Holder } from "./bondTypes";
+import { getBondHolderPresentation } from "./bondHolderPresentation";
 
 const HOLDER_COLORS = [
   "#3b82f6",
@@ -48,7 +49,7 @@ export function BondOwnersSection({
   }));
   if (publicFloat > 0) {
     slices.push({
-      label: "Public Float",
+      label: "Public float",
       units: publicFloat,
       color: PUBLIC_FLOAT_COLOR,
       pct: totalUnits > 0 ? (publicFloat / totalUnits) * 100 : 0,
@@ -140,7 +141,7 @@ export function BondOwnersSection({
   return (
     <div className="rounded-xl border border-card-border bg-card overflow-hidden">
       <div className="px-6 py-4 border-b border-card-border flex items-center justify-between">
-        <h2 className="text-lg font-bold text-foreground">Bond Ownership</h2>
+        <h2 className="text-lg font-bold text-foreground">Bond ownership</h2>
         <span className="text-xs text-muted tabular-nums">
           {totalUnits.toLocaleString("en-US")} total units
         </span>
@@ -269,8 +270,8 @@ export function BondOwnersSection({
                               </svg>
                             </div>
                             <div>
-                              <span className="font-medium text-foreground">Public Float</span>
-                              <span className="block text-[10px] text-muted uppercase tracking-wide">
+                              <span className="font-medium text-foreground">Public float</span>
+                              <span className="block text-body-sm font-medium text-muted">
                                 Available
                               </span>
                             </div>
@@ -289,13 +290,7 @@ export function BondOwnersSection({
                     );
                   }
                   const holder = h!;
-                  const href =
-                    holder.type === "character" && holder.sequentialId != null
-                      ? `/character/${holder.id}`
-                      : holder.type === "corporation" && holder.sequentialId != null
-                        ? `/corporation/${holder.sequentialId}`
-                        : null;
-                  const imgSrc = holder.type === "character" ? holder.avatarUrl : holder.logoUrl;
+                  const { href, imageUrl: imgSrc, typeLabel } = getBondHolderPresentation(holder);
                   return (
                     <tr key={holder.id}>
                       <td className="py-2.5 pr-4">
@@ -343,9 +338,7 @@ export function BondOwnersSection({
                                 {holder.name}
                               </span>
                             )}
-                            <span className="text-[10px] text-muted uppercase tracking-wide">
-                              {holder.type === "character" ? "Character" : "Corporation"}
-                            </span>
+                            <span className="text-body-sm font-medium text-muted">{typeLabel}</span>
                           </div>
                         </div>
                       </td>

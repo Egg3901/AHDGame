@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface TargetUnion {
   unionId: string;
@@ -72,7 +73,7 @@ export function UnionEnforcementDesk({
       });
       const data = await response.json();
       if (!response.ok) {
-        setResult(data.error ?? "Enforcement action failed.");
+        setResult(apiErrorText(data, "Enforcement action failed."));
       } else if ("posture" in data) {
         setPosture(data.posture);
         setCanChange(false);

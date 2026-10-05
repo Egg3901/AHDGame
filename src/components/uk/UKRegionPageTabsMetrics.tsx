@@ -37,7 +37,7 @@ function UKBudgetPanel({ budget }: { budget: RegionalBudgetSummary }) {
 
   return (
     <BudgetSummaryPanel
-      title="Regional Budget"
+      title="Regional budget"
       currencySymbol="£"
       balance={surplus}
       warningBadge={
@@ -46,11 +46,11 @@ function UKBudgetPanel({ budget }: { budget: RegionalBudgetSummary }) {
           : undefined
       }
       stats={[
-        { label: "Council Tax", value: budget.councilTaxRevenue },
-        { label: "Business Rates", value: budget.businessRatesRevenue },
-        { label: "Westminster Grant", value: budget.westminsterGrant },
-        { label: "Total Budget", value: budget.totalBudget },
-        { label: "Enacted Spending", value: budget.enactedBillCosts },
+        { label: "Council tax", value: budget.councilTaxRevenue },
+        { label: "Business rates", value: budget.businessRatesRevenue },
+        { label: "Westminster grant", value: budget.westminsterGrant },
+        { label: "Total budget", value: budget.totalBudget },
+        { label: "Enacted spending", value: budget.enactedBillCosts },
         { label: surplus >= 0 ? "Surplus" : "Deficit", value: surplus, colorClass: balanceColor },
       ]}
     />

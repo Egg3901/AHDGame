@@ -1,4 +1,5 @@
 import type { GameConfig } from "@/lib/db/types";
+import { FRESH_WORLD_GAME_CONFIG_FLAGS } from "./featureFlagDefaults";
 
 export const gameConfig: GameConfig = {
   _id: "default",
@@ -62,118 +63,25 @@ export const gameConfig: GameConfig = {
   // with ADMIN_REGISTRATION_KEY. Disable from the admin dashboard once filled.
   adminRegistrationEnabled: true,
 
-  // NPP economy, line of credit, and index funds are core systems — on by
-  // default for every fresh world (no longer admin-gated). Index funds boot to
-  // "full" mode; bootstrapGameWorld runs the fund-definition migrations so the
-  // fund docs exist alongside this flag.
-  nppEconomyEnabled: true,
-  lineOfCreditEnabled: true,
+  // Fresh-world gameplay flags: every gate on and every rollout ladder at its
+  // top, per the policy in featureFlagDefaults.ts.
+  ...FRESH_WORLD_GAME_CONFIG_FLAGS,
   // The rollout start turn is filled by the startup migration or the first
   // economy turn. Keeping the object present makes the feature explicit while
   // preserving the live world's exact start point.
   centralBankPricingPhaseIn: {},
-  moneySupplyEnabled: true,
-  indexFundsMode: "full",
 
-  // Fresh worlds boot at the TOP of every rollout ladder (owner decision,
-  // 2026-07-27; market ladder raised to "plants" 2026-08-08). Previously
-  // `wages`/`ledger` left three whole tiers inert: union membership pressure is
-  // only read at labour `full`, and brand loyalty plus quality-premium pricing
-  // only accrue at market `clearing` or above — so a default world silently ran
-  // with systems that existed but could never fire. Admins can still dial any
-  // of these down per world. The "one-way" caution around the plants flip
-  // (scripts/ops/plantsPreflight.ts) governs migrating a LIVE legacy economy; a
-  // fresh world has no legacy revenue to rebase, so it does not apply here.
-  labourSystemMode: "full",
-  marketSystemMode: "plants",
-  // Product projects are opt-in; absent and false both keep product reads off.
-  productLinesV2Enabled: false,
-  // Freight routes are observable from a fresh world, but the economic effect
-  // requires an explicit, separately-soaked rollout.
-  freightSettlementMode: "shadow",
-  // Canonical freight billing (issue #897) ships dark: turning it on is a
-  // balance change (a world-scale shipping bill becomes real money) and
-  // requires a simulation report per CONTRIBUTING.md before any world enables it.
-  canonicalFreightBillingEnabled: false,
-  shortageResponsiveSourcingEnabled: false,
-  sovereignIssuanceConsolidationEnabled: false,
-  indexFundBondLiquidityEnabled: false,
-  domesticSovereignBondCoverageEnabled: false,
-  nppMarketCoverageEnabled: false,
-  nppFragileMarketSupplyEnabled: false,
-  // Autonomous NPP fund redemption (#2120) ships dark: enabling it changes
-  // simulated NPP portfolios and fund liquidity and needs a worldsim report.
-  nppFundRedemptionEnabled: false,
-  // Fresh worlds price campaign costs and generated income in their reset era.
-  // Existing persisted false/absent flags retain their previous price basis.
-  campaignEraPriceLevelEnabled: true,
-  regionalConditionsOverviewEnabled: true,
-
-  // Market launch guard: armed by default now that the market boots at the top
-  // tier. It measures drawdown against what fundamentals justify, so an honest
-  // monetary repricing no longer trips it — only a genuine decoupling of price
-  // from value does.
+  // Non-gameplay switches (see NON_GAMEPLAY_GAME_CONFIG_FIELDS for reasons).
+  // Market launch guard: an automated safety kill switch, armed by default.
   marketGuardEnabled: true,
-
-  // Command economies (USSR, DDR, command-era China) modelled as planned rather
-  // than market economies. Fail-safe in code, so this seed value is what turns
-  // it on for a fresh world; without it every planned economy silently fell
-  // through to the market path and its state enterprises were never simulated.
+  // Era-derived: bootstrapGameWorld overwrites this from the preset.
   commandEconomyEnabled: true,
-  // Editorial stance reads state political leans and changes media ad availability.
-  // It stays dark on fresh worlds until its rollout is explicitly approved.
-  mediaEditorialEnabled: false,
-  mediaOperatingModelsEnabled: false,
-  mediaRegulationEnabled: false,
-
-  // Sovereignty transitions (decolonization). Safe as a default because the
-  // phase carries its own era ceiling — a modern-preset world is a no-op even
-  // with the flag on, so this only bites in worlds actually inside the era.
-  worldTransitionsEnabled: true,
-
-  // Bretton Woods exit. Inert until a world's in-game year reaches the gold
-  // -cover pressure window (earliest 1968), so it costs a modern world nothing.
-  brettonWoodsExitEnabled: true,
-
-  // Structural-market and economy subsystems that were previously only ever
-  // switched on by the sim harness.
-  extractionOutputScaleEnabled: true,
-  commodityScarcityDriftEnabled: true,
-  qualityPremiumPricingEnabled: true,
-  sectorQualityEnabled: true,
-  stockCoverCapEnabled: true,
-  supplyAgreementsEnabled: true,
-  contractIssuanceEnabled: true,
-  prospectingEnabled: true,
-  brandLoyaltyEnabled: true,
-  brandLoyaltySliceEnabled: true,
-  nppCorporateAttacksEnabled: true,
-
-  // Consumer demand: household consumption SUPERSEDES the demographics uplift
-  // and the two must never both be on (nothing enforces it in code — the two
-  // reads in commodityPriceTurn are independent ifs with no else, so enabling
-  // both stacks a demographics uplift on a household basket at a size neither
-  // model was calibrated for).
-  householdConsumptionEnabled: true,
+  // Superseded by householdConsumptionEnabled; enabling both double-counts
+  // consumer demand.
   demographicsDemandEnabled: false,
-
-  // Shadow double-entry ledger runs in fresh worlds (owner decision
-  // 2026-08-08: feature flags default ON except ops/maintenance and the sector
-  // auto-seed). It was previously held dark pending a prod observe-mode week;
-  // the sim harness (scripts/sim/runWorld.ts) has been the acceptance test bed.
-  // Observe-only by construction — it never changes a balance. See the
-  // shadow-ledger plan.
+  // Shadow double-entry ledger: observe-only reconciliation, never changes a
+  // balance.
   ledgerShadow: true,
-  // Funded Treasury cash is a separate, opt-in stock. Fiscal aggregates are
-  // analytical and cannot be treated as cash receipts or obligations.
-  treasuryCashLedgerEnabled: false,
-
-  // NPP corporations can be targeted by corporate attacks, per the same
-  // flags-default-on rule; admins can still dial it down per world.
-  nppCorpsAttackable: true,
-
-  // First member to join a party with no chair becomes chair (can be turned off on admin dashboard).
-  firstJoinerBecomesPartyChair: true,
 };
 
 export default gameConfig;

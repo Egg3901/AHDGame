@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useMemo, useState } from "react";
 import {
   IPO_MIN_FLOAT_PCT,
@@ -146,7 +147,7 @@ function GoPublicCard({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to go public");
+        setError(apiErrorText(data, "Failed to go public"));
         return;
       }
       setSuccess(
@@ -339,7 +340,7 @@ function PrivatizeCard({
       const res = await fetch(`/api/corporations/${corpId}/privatize`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to open vote");
+        setError(apiErrorText(data, "Failed to open vote"));
         return;
       }
       setSuccess(

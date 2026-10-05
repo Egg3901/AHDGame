@@ -12,6 +12,7 @@ import type {
   State,
   Character,
 } from "@/lib/db/types";
+import { errorResponse } from "@/lib/api/errors";
 
 interface ValidationResult {
   success: true;
@@ -42,16 +43,13 @@ export async function validateStatePartyElectionAccess(
   if (!authUser || !authUser.character) {
     return {
       success: false,
-      response: NextResponse.json(
-        { error: "You must have a character to participate" },
-        { status: 401 }
-      ),
+      response: errorResponse(401, "You must have a character to participate"),
     };
   }
   if (authUser.isBanned) {
     return {
       success: false,
-      response: NextResponse.json({ error: "Account is banned" }, { status: 403 }),
+      response: errorResponse(403, "Account is banned"),
     };
   }
 
@@ -61,14 +59,14 @@ export async function validateStatePartyElectionAccess(
   if (!state) {
     return {
       success: false,
-      response: NextResponse.json({ error: "State not found" }, { status: 404 }),
+      response: errorResponse(404, "State not found"),
     };
   }
   const party = await findPartyBySequentialId(db, partyId, countryId);
   if (!party) {
     return {
       success: false,
-      response: NextResponse.json({ error: "Party not found" }, { status: 404 }),
+      response: errorResponse(404, "Party not found"),
     };
   }
 
@@ -76,10 +74,7 @@ export async function validateStatePartyElectionAccess(
   if (authUser.character.homeState !== stateId || authUser.character.party !== canonicalPartyId) {
     return {
       success: false,
-      response: NextResponse.json(
-        { error: "You must be a member of this state party to participate" },
-        { status: 403 }
-      ),
+      response: errorResponse(403, "You must be a member of this state party to participate"),
     };
   }
 
@@ -96,10 +91,7 @@ export async function validateStatePartyElectionAccess(
   if (!election) {
     return {
       success: false,
-      response: NextResponse.json(
-        { error: `No active ${position} election for this state party` },
-        { status: 400 }
-      ),
+      response: errorResponse(400, `No active ${position} election for this state party`),
     };
   }
 
@@ -107,10 +99,7 @@ export async function validateStatePartyElectionAccess(
   if (hasTurnBackedWindowClosed(election, gameTime.currentTurn, gameTime.effectiveNow)) {
     return {
       success: false,
-      response: NextResponse.json(
-        { error: `${position} election voting has already closed` },
-        { status: 400 }
-      ),
+      response: errorResponse(400, `${position} election voting has already closed`),
     };
   }
 

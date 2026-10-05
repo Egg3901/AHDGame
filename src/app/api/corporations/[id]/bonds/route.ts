@@ -6,7 +6,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { parseJsonBody } from "@/lib/api/validate";
 import { issueBondSchema } from "@/lib/api/schemas/bonds";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getGameState } from "@/lib/gameState";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { Corporation, Bond, CorporateSector } from "@/lib/db/types";
@@ -36,6 +36,7 @@ import {
 import { indexFundOwnershipFraction } from "@/lib/corporations/indexOwnership";
 import {
   computeCorporateCreditAtTurn,
+  corporateBondMaturityLiquidity,
   sumCorporateSectorNpv,
   sumCorporateSectorPerTurnIncome,
   sumCorporateSectorAnnualRevenue,
@@ -461,7 +462,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, issueBondSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { faceValue, maturityTurns } = parsed.data;
@@ -481,12 +482,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     if (corporation.imfBailoutActive) {
-      return NextResponse.json(
-        {
-          error:
-            "Cannot issue corporate bonds while an IMF restructuring program is active for this corporation",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Cannot issue corporate bonds while an IMF restructuring program is active for this corporation"
       );
     }
 
@@ -497,11 +495,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // instant passes. Time-boxed to give the opening days an easier start; it
     // lifts itself with no deploy. See BOND_ISSUANCE_FREEZE_UNTIL.
     if (BOND_ISSUANCE_FREEZE_UNTIL && Date.now() < BOND_ISSUANCE_FREEZE_UNTIL.getTime()) {
-      return NextResponse.json(
-        {
-          error: "Bond issuance is paused for the opening of the world and will reopen shortly.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Bond issuance is paused for the opening of the world and will reopen shortly."
       );
     }
 
@@ -515,11 +511,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (latestBond) {
       const cooldownEnd = latestBond.issuedAtTurn + postEffectiveCooldown;
       if (currentTurn < cooldownEnd) {
-        return NextResponse.json(
-          {
-            error: `Bond issuance on cooldown. ${cooldownEnd - currentTurn} turns remaining.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Bond issuance on cooldown. ${cooldownEnd - currentTurn} turns remaining.`
         );
       }
     }
@@ -590,11 +584,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       annualRevenuePost * MAX_BOND_ISSUANCE_REVENUE_FRACTION
     );
     if (faceValue > maxPerIssuancePost) {
-      return NextResponse.json(
-        {
-          error: `Issuance of ₳${faceValue.toLocaleString()} exceeds per-issuance cap of ₳${Math.round(maxPerIssuancePost).toLocaleString()} (25% of annual revenue, floor ₳${MIN_BOND_ISSUANCE_PER_ISSUE.toLocaleString()})`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Issuance of ₳${faceValue.toLocaleString()} exceeds per-issuance cap of ₳${Math.round(maxPerIssuancePost).toLocaleString()} (25% of annual revenue, floor ₳${MIN_BOND_ISSUANCE_PER_ISSUE.toLocaleString()})`
       );
     }
 
@@ -633,27 +625,23 @@ export async function POST(request: Request, { params }: RouteParams) {
         limitedBy === "exitEquity"
           ? "Its realizable assets do not support any more debt"
           : "It needs more equity headroom";
-      return NextResponse.json(
-        {
-          error: `This corporation is too small to issue bonds yet. ${shortfallReason} (currently ₳${Math.round(maxAllowedIssuance).toLocaleString()}, minimum ₳${BOND_ISSUANCE_MIN_HEADROOM.toLocaleString()}).`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `This corporation is too small to issue bonds yet. ${shortfallReason} (currently ₳${Math.round(maxAllowedIssuance).toLocaleString()}, minimum ₳${BOND_ISSUANCE_MIN_HEADROOM.toLocaleString()}).`
       );
     }
     if (faceValue < effectiveMinIssuance) {
-      return NextResponse.json(
-        { error: `Minimum issuance is ₳${Math.round(effectiveMinIssuance).toLocaleString()}` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Minimum issuance is ₳${Math.round(effectiveMinIssuance).toLocaleString()}`
       );
     }
 
     // Max debt: 2x going-concern equity (all ₳)
     if (existingDebt + faceValue > totalEquity * MAX_BOND_ISSUANCE_FRACTION) {
-      return NextResponse.json(
-        {
-          error: `Total debt would exceed ${MAX_BOND_ISSUANCE_FRACTION}x equity. Current debt: ₳${existingDebt.toLocaleString()}, equity: ₳${Math.round(totalEquity).toLocaleString()}`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Total debt would exceed ${MAX_BOND_ISSUANCE_FRACTION}x equity. Current debt: ₳${existingDebt.toLocaleString()}, equity: ₳${Math.round(totalEquity).toLocaleString()}`
       );
     }
 
@@ -672,11 +660,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // The invariant survives the issuance either way: proceeds add `face` to
     // both sides, so a corp inside the ceiling before is inside it after.
     if (existingDebt + faceValue > exitEquityPost * MAX_BOND_ISSUANCE_EXIT_EQUITY_FRACTION) {
-      return NextResponse.json(
-        {
-          error: `Total debt would exceed what this corporation could realize by selling up. Current debt: ₳${Math.round(existingDebt).toLocaleString()}, realizable assets: ₳${Math.round(exitEquityPost).toLocaleString()}. Building capacity, holding cash, or buying bonds all raise that figure.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Total debt would exceed what this corporation could realize by selling up. Current debt: ₳${Math.round(existingDebt).toLocaleString()}, realizable assets: ₳${Math.round(exitEquityPost).toLocaleString()}. Building capacity, holding cash, or buying bonds all raise that figure.`
       );
     }
 
@@ -707,6 +693,15 @@ export async function POST(request: Request, { params }: RouteParams) {
       totalEquity,
       {
         bondDefaultCreditPenaltyActive: penaltyActive,
+        nearTermLiquidityScore:
+          corporateBondMaturityLiquidity({
+            bonds: existingBonds,
+            liquidCapitalAnchor: postLiquidCapitalAnchor,
+            incomePerTurn: issueIncomePerTurn,
+            annualCouponObligations: annualInterest,
+            currentTurn,
+            fxByCurrency,
+          }).liquidityScore ?? undefined,
         // Ticket #1138: this route DISPLAYS, it does not advance the model. Passing
         // the stored snapshot as `previousCompositeScore` blended it a second time
         // and reported a score the turn never wrote. Use it verbatim instead.
@@ -845,12 +840,10 @@ export async function POST(request: Request, { params }: RouteParams) {
         },
       });
       if (settlement.status !== "applied" && settlement.status !== "replayed") {
-        return NextResponse.json(
-          {
-            error: "The funded bond placement is settling. Retry after its journal completes.",
-            settlementStatus: settlement.status,
-          },
-          { status: settlement.status === "partial" ? 202 : 409 }
+        return errorResponse(
+          settlement.status === "partial" ? 202 : 409,
+          "The funded bond placement is settling. Retry after its journal completes.",
+          { extra: { settlementStatus: settlement.status } }
         );
       }
       underwritingFill = {

@@ -149,7 +149,7 @@ export function CovertPanel({
                   >
                     {stage.name}
                   </span>
-                  <span className="ml-auto text-[10px] font-bold uppercase tracking-wider text-muted">
+                  <span className="ml-auto text-body-sm font-medium text-muted">
                     {done ? "Complete" : current ? "In progress" : "Locked"}
                   </span>
                 </div>

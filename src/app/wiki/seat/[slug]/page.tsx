@@ -3,6 +3,7 @@ import { Avatar } from "@/components/Avatar";
 import { notFound } from "next/navigation";
 import { getSeatData } from "@/lib/wiki/seatData";
 import { regionUrl } from "@/lib/urls";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -11,7 +12,7 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps) {
   const { slug } = await params;
   const data = await getSeatData(slug);
-  if (!data) return { title: "Not Found", robots: { index: false, follow: false } };
+  if (!data) return { title: "Not found", robots: { index: false, follow: false } };
   return {
     title: `${data.title} | Wiki | A House Divided`,
     description: `Current officeholders for ${data.title}`,
@@ -52,7 +53,7 @@ export default async function WikiSeatPage({ params }: PageProps) {
       </header>
 
       <section className="rounded-xl border border-card-border bg-card/60 p-6">
-        <h2 className="mb-4 text-xl font-semibold text-foreground">Current Officeholder(s)</h2>
+        <h2 className="mb-4 text-xl font-semibold text-foreground">Current officeholder(s)</h2>
         {data.holders.length === 0 ? (
           <div className="rounded-lg border border-dashed border-card-border bg-card/40 p-6 text-center">
             <p className="font-medium text-muted">Vacant</p>
@@ -102,7 +103,9 @@ export default async function WikiSeatPage({ params }: PageProps) {
                       </span>
                     )}
                     {h.isNPP && (
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted">NPP</span>
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted">
+                        <NppAbbr />
+                      </span>
                     )}
                   </div>
                 </div>

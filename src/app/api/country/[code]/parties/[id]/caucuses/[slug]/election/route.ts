@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { isInNewCharacterCooldown } from "@/lib/auth/newCharacterCooldown";
 import { getLeadershipEligibility } from "@/lib/parties/leadershipTenure";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -33,7 +33,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { code, id, slug } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const [db, authUser] = await Promise.all([
@@ -41,17 +41,17 @@ export async function GET(_request: Request, { params }: RouteParams) {
       getAuthUserWithCharacter().catch(() => null),
     ]);
     if (!authUser) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const party = await findPartyBySequentialId(db, id, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const partyId = String(party.sequentialId);
     const resolved = await findCaucusBySlug(db, countryId, partyId, slug);
     if (!resolved) {
-      return NextResponse.json({ error: "Caucus not found" }, { status: 404 });
+      return errorResponse(404, "Caucus not found");
     }
     const { caucus } = resolved;
 
@@ -59,10 +59,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       authUser.isAdmin ||
       (authUser.character?.party === partyId && authUser.character?.countryId === caucus.countryId);
     if (!isViewerAllowed) {
-      return NextResponse.json(
-        { error: "Only party members may view caucus elections." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only party members may view caucus elections.");
     }
 
     let activeElection = await db.collection<CaucusChairElection>("caucusChairElections").findOne({

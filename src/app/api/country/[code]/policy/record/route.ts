@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { loadPolicyRecordPayload } from "@/lib/policy/policyRecordPayload";
 
@@ -14,7 +14,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const payload = await loadPolicyRecordPayload(countryId);
     return NextResponse.json(payload, {

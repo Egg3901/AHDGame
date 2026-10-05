@@ -2,6 +2,7 @@
 // Auth: requireAuth.
 // Errors: 400 (invalid id), 401, 404 (no such alert).
 
+import { errorResponse } from "@/lib/api/errors";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
@@ -19,7 +20,7 @@ export async function POST(_req: Request, { params }: RouteParams) {
 
   const { id } = await params;
   if (!isHexObjectIdString(id)) {
-    return NextResponse.json({ error: "Invalid alert id" }, { status: 400 });
+    return errorResponse(400, "Invalid alert id");
   }
 
   const db = await getDb();
@@ -28,7 +29,7 @@ export async function POST(_req: Request, { params }: RouteParams) {
     .collection<GlobalAlert>("globalAlerts")
     .updateOne({ _id: new ObjectId(id) }, { $addToSet: { dismissedByUserIds: userId } });
   if (result.matchedCount === 0) {
-    return NextResponse.json({ error: "Alert not found" }, { status: 404 });
+    return errorResponse(404, "Alert not found");
   }
   return NextResponse.json({ ok: true });
 }

@@ -110,9 +110,7 @@ export function BondHeroPanel({
 
         <div className="flex items-center gap-4 shrink-0">
           <div className="text-right">
-            <p className="text-[10px] uppercase tracking-wider text-muted font-medium">
-              Yield to Maturity
-            </p>
+            <p className="text-body-sm font-medium text-muted">Yield to maturity</p>
             <p className="text-2xl font-mono font-bold tabular-nums text-success">
               {yieldToMaturity.toFixed(2)}%
             </p>
@@ -132,9 +130,9 @@ export function BondHeroPanel({
       <div className="flex items-center overflow-x-auto divide-x divide-card-border">
         {(
           [
-            { label: "Face Value", value: fmtBondPrice(bond.faceValue) },
-            { label: "Coupon Rate", value: `${bond.couponRate.toFixed(2)}%` },
-            { label: "Market Price", value: fmtBondPrice(bond.pricePerUnit) },
+            { label: "Face value", value: fmtBondPrice(bond.faceValue) },
+            { label: "Coupon rate", value: `${bond.couponRate.toFixed(2)}%` },
+            { label: "Market price", value: fmtBondPrice(bond.pricePerUnit) },
             ...(bond.bidPricePerUnit != null && bond.askPricePerUnit != null
               ? [
                   {
@@ -145,19 +143,16 @@ export function BondHeroPanel({
                 ]
               : []),
             { label: "Maturity", value: bond.matured ? "Matured" : `${bond.turnsRemaining} turns` },
-            { label: "Total Units", value: bond.totalUnits.toLocaleString("en-US") },
+            { label: "Total units", value: bond.totalUnits.toLocaleString("en-US") },
             {
-              label: "Public Float",
+              label: "Public float",
               value: `${bond.publicFloatPercentage.toFixed(1)}%`,
               hint: "Units not held by the issuer. Anyone can buy them.",
             },
           ] as { label: string; value: string; hint?: string }[]
         ).map(({ label, value, hint }) => (
           <div key={label} className="flex flex-col px-5 py-3 min-w-max">
-            <span
-              className="text-[10px] uppercase tracking-widest text-muted font-medium"
-              title={hint}
-            >
+            <span className="text-body-sm font-medium text-muted" title={hint}>
               {label}
             </span>
             <span className="text-base font-bold tabular-nums text-foreground">{value}</span>

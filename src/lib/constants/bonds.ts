@@ -13,12 +13,13 @@
 
 import type { CreditRating } from "@/lib/db/types/centralBank";
 import { CREDIT_RATING_SPREADS, CREDIT_RATINGS } from "@/lib/db/types/centralBank";
+import { calculateCorporateCreditScore } from "@/lib/bonds/rules/corporateCreditScore";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import type { BondMaturityTurns } from "@/lib/db/types/bond";
 
 /**
  * Extra percentage points added to tier credit spreads for **corporate** bond coupons only.
- * Sovereign/treasury issuance uses prime alone — see `issueSovereignBondSeries`.
+ * Sovereign issuance uses its separate term, credibility and issuer-risk policy.
  */
 export const CORPORATE_BOND_SPREAD_PREMIUM = 1.0;
 
@@ -178,6 +179,9 @@ export const CREDIT_RATING_WEIGHTS = {
 } as const;
 
 /** Composite score thresholds for each rating tier */
+/** Half a game year of maturity liquidity, provisional until source-pinned balance qualification. */
+export const CORPORATE_CREDIT_MATURITY_HORIZON_TURNS = TURNS_PER_YEAR / 2;
+
 export const CREDIT_RATING_THRESHOLDS: [number, CreditRating][] = [
   [85, "AAA"],
   [70, "AA"],
@@ -204,6 +208,8 @@ export function calculateCreditScore(
   annualInterestPayments: number,
   totalEquity: number,
   options?: {
+    /** Percentage of forecast near-term debt service covered, bounded from zero to 100. */
+    nearTermLiquidityScore?: number;
     bondDefaultCreditPenaltyActive?: boolean;
     previousCompositeScore?: number;
     /**
@@ -232,106 +238,19 @@ export function calculateCreditScore(
     liquidity: number;
   };
 } {
-  // 1. Debt-to-equity ratio score (lower ratio = better)
-  // D/E of 0 → 100, D/E of 1 → 60, D/E of 3+ → 0
-  const deRatio = totalEquity > 0 ? totalDebt / totalEquity : totalDebt > 0 ? 10 : 0;
-  const debtToEquity = Math.max(0, Math.min(100, 100 - (deRatio / 3) * 100));
-
-  // 2. Interest coverage ratio score (higher coverage = better)
-  // Coverage 5x+ → 100, 1x → 40, 0x → 0
-  // Negative income softened: floor at -2x instead of hard zero
-  const coverage =
-    annualInterestPayments > 0 ? annualIncome / annualInterestPayments : annualIncome > 0 ? 10 : 5; // No debt = good coverage
-  const interestCoverage = Math.max(0, Math.min(100, coverage * 20));
-
-  // 3. Profitability score (positive income relative to equity)
-  // ROE 20%+ → 100, 0% → 40, deeply negative → 5
-  // Uses a gentler curve for losses: small deficits don't crater the score
-  const roe = totalEquity > 0 ? annualIncome / totalEquity : 0;
-  let profitability: number;
-  if (roe >= 0) {
-    // Positive ROE: 40 baseline + linear climb to 100 at ~17% ROE
-    profitability = Math.min(100, 40 + roe * 350);
-  } else {
-    // Negative ROE: gentle decline from 40 using sqrt curve
-    // ROE -5% → ~32, ROE -20% → ~20, ROE -50% → ~10
-    const lossMagnitude = Math.min(Math.abs(roe), 1); // cap at -100%
-    profitability = Math.max(5, 40 - 50 * Math.sqrt(lossMagnitude));
-  }
-
-  // 4. Liquidity score (cash relative to short-term obligations)
-  // Cash covers 2x+ annual interest → 100, 1x → 70, 0x → 20
-  const liquidityRatio =
-    annualInterestPayments > 0 ? liquidCapital / annualInterestPayments : liquidCapital > 0 ? 5 : 0;
-  const liquidity = Math.max(0, Math.min(100, 20 + liquidityRatio * 40));
-
-  // Weighted composite (raw, before smoothing)
-  const rawComposite = Math.round(
-    debtToEquity * CREDIT_RATING_WEIGHTS.debtToEquity +
-      interestCoverage * CREDIT_RATING_WEIGHTS.interestCoverage +
-      profitability * CREDIT_RATING_WEIGHTS.profitability +
-      liquidity * CREDIT_RATING_WEIGHTS.liquidity
+  return calculateCorporateCreditScore(
+    liquidCapital,
+    totalDebt,
+    annualIncome,
+    annualInterestPayments,
+    totalEquity,
+    options,
+    {
+      weights: CREDIT_RATING_WEIGHTS,
+      thresholds: CREDIT_RATING_THRESHOLDS,
+      ratings: CREDIT_RATINGS,
+    }
   );
-
-  // Inertia smoothing: blend 75% new + 25% previous to prevent single-turn score nuking.
-  // Real credit agencies use trailing multi-quarter data - this approximates that lag.
-  //
-  // Ticket #1138: smoothing is a TURN-TIME mechanic. The turn blends against the
-  // previous snapshot and then PERSISTS the result. A read-only surface that passes
-  // the persisted value back in as `previousCompositeScore` blends a second time
-  // against an already-blended number, so it reports a score the turn never wrote.
-  // That is why one corp showed AA / 76 on the bonds panel (0.75 x 85 + 0.25 x 47)
-  // while its header, health card and peer stats all read the stored 47 / BBB.
-  // Display surfaces must pass `persistedCompositeScore` instead, which is used
-  // verbatim. Only the turn may smooth.
-  let compositeScore: number;
-  if (options?.persistedCompositeScore != null && options.persistedCompositeScore > 0) {
-    compositeScore = Math.round(options.persistedCompositeScore);
-  } else if (options?.previousCompositeScore != null && options.previousCompositeScore > 0) {
-    compositeScore = Math.round(0.75 * rawComposite + 0.25 * options.previousCompositeScore);
-  } else {
-    compositeScore = rawComposite;
-  }
-
-  // Map to letter rating
-  let rating: CreditRating = "CCC";
-  for (const [threshold, grade] of CREDIT_RATING_THRESHOLDS) {
-    if (compositeScore >= threshold) {
-      rating = grade;
-      break;
-    }
-  }
-
-  if (options?.bondDefaultCreditPenaltyActive) {
-    // A live default overrides everything, including index inclusion. Passive
-    // funds holding your stock does not make you a good credit after you have
-    // missed a coupon.
-    rating = "CCC";
-    compositeScore = Math.min(compositeScore, 12);
-  } else {
-    // Net the notch adjustments so the two never double-apply in sequence.
-    // CREDIT_RATINGS runs best → worst, so +1 index = one step toward the front.
-    const notches =
-      (options?.insiderConcentrationPenalty ? 1 : 0) - (options?.indexInclusionUpgrade ? 1 : 0);
-    if (notches !== 0) {
-      const idx = CREDIT_RATINGS.indexOf(rating);
-      if (idx >= 0) {
-        const next = Math.max(0, Math.min(CREDIT_RATINGS.length - 1, idx + notches));
-        rating = CREDIT_RATINGS[next];
-      }
-    }
-  }
-
-  return {
-    rating,
-    compositeScore,
-    components: {
-      debtToEquity: Math.round(debtToEquity),
-      interestCoverage: Math.round(interestCoverage),
-      profitability: Math.round(profitability),
-      liquidity: Math.round(liquidity),
-    },
-  };
 }
 
 /**

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
 import { UNION_STRENGTH_DECAY_PER_TURN } from "@/lib/unions/unionEconomy";
@@ -11,7 +12,7 @@ import {
 import { WAGE_LEVEL_MAX, WAGE_LEVEL_MIN } from "@/lib/labour/laborCost";
 import { HeroImage } from "@/components/HeroImage";
 import BackButton from "@/components/BackButton";
-import { EmptyState, Skeleton, TabRowSkeleton, Tooltip } from "@/components/ui";
+import { EmptyState, Skeleton, TabRowSkeleton } from "@/components/ui";
 import { UnionEmblem } from "@/components/unions/UnionEmblem";
 import {
   UnionBargainingPanel,
@@ -27,126 +28,25 @@ import { UnionServicesPanel } from "@/components/unions/UnionServicesPanel";
 import { UnionFundTreasuryPanel } from "@/components/unions/UnionFundTreasuryPanel";
 import { UnionPoliticalContributionsPanel } from "@/components/unions/UnionPoliticalContributionsPanel";
 import { BASE_APPROVAL, unionMembers } from "@/lib/unions/unionDues";
-import { normalizeServiceIds, type UnionServiceId } from "@/lib/unions/unionServices";
+import { normalizeServiceIds } from "@/lib/unions/unionServices";
 import { buildCharacterHref, buildNppHref } from "@/lib/utils/profileUrls";
-
-interface UnionDetail {
-  id: string;
-  name: string;
-  countryId: string;
-  countryName: string;
-  sectorType: string;
-  sectorLabel: string;
-  ownerId: string | null;
-  pendingLeaderCharacterId: string | null;
-  electionOpen: boolean;
-  leadershipElectionMinStrength: number;
-  strength: number;
-  organizeActionCost: number;
-  organizeStrengthGain: number;
-  organizeSectorActionCost?: number;
-  organizeSectorTreasuryCost?: number;
-  treasury: number;
-  /** Real headcount: workers across this union's sectors, weighted by unionization. */
-  members: number;
-  /** 0-100, how the membership rates the bargain. Dues push it down, services push it up. */
-  approval: number;
-  /** Annual dues charged per member, in the union's home currency. */
-  duesPerWorkerAnnual: number;
-  /** Service programmes currently switched on. */
-  activeServices: UnionServiceId[];
-  paidServices?: UnionServiceId[];
-  /**
-   * Share of remaining per-turn budget sent to organizers as political
-   * contributions, 0-0.5. Absent reads as none.
-   */
-  politicalContributionPct?: number;
-  /**
-   * Member-weighted average annual wage across this union's sectors, needed to
-   * price dues and services against local pay. 0 = not known yet (e.g. before
-   * the labour system has written sector wages).
-   */
-  annualWage: number;
-  /** The union's standing public wage claim, or null when it has none. */
-  demandedWageLevel: number | null;
-  /** True while this union's country bans unions: every action 403s server-side. */
-  suspended: boolean;
-  /**
-   * Illicit-union shadow snapshot, present only while suspended. Exact heat
-   * never leaves the server: `heatText` is the vague bracket the UI renders.
-   */
-  underground: {
-    strength: number | null;
-    status: "dark" | "suspected" | "exposed" | null;
-    heatText: "cold" | "warm" | "hot" | null;
-    exposedUntilTurn: number | null;
-    actionCost: number;
-    quietGain: number;
-    massGain: number;
-  } | null;
-  currentTurn: number;
-}
-
-/** Union-wide membership rollup: covered headcount and density over the sectors this union stands in. */
-interface WorkforceSummary {
-  totalWorkers: number;
-  unionizedWorkers: number;
-  /** Fraction 0-1 of the total workforce that is unionized. */
-  density: number;
-}
-
-interface VoteTally {
-  characterId: string;
-  name: string;
-  votes: number;
-}
-
-interface CandidateOption {
-  characterId: string;
-  name: string;
-  sequentialId: number | null;
-  avatarUrl: string | null;
-  /** True when this seat is held by an NPP (`Union.ownerType === "npp"`). */
-  isNPP?: boolean;
-}
-
-/** One organizer on the roster, with the banked strength that is their vote weight. */
-interface OrganizerRow extends CandidateOption {
-  strength: number;
-  organizeCount: number;
-  influencePct: number;
-  isLeader: boolean;
-}
-
-interface SectorRow {
-  sectorId: string;
-  corporationId: string;
-  corporationName: string;
-  stateId: string;
-  wageLevel: number;
-  workers: number;
-  wageGap: number | null;
-  unionization: number;
-  representingUnionId: string | null;
-  strikeActive: boolean;
-  strikeCooldownUntilTurn: number | null;
-  strikeBlockReason:
-    "underorganized" | "already_striking" | "sector_cooldown" | "collective_agreement" | null;
-}
-
-interface ActionableBill {
-  billId: string;
-  billTitle: string;
-  status: string;
-  stance: "endorse" | "oppose" | null;
-}
-
-interface EndorsementRow {
-  billId: string;
-  billTitle: string;
-  stance: "endorse" | "oppose";
-  createdAt: string;
-}
+import type {
+  UnionDetail,
+  WorkforceSummary,
+  VoteTally,
+  CandidateOption,
+  OrganizerRow,
+  SectorRow,
+  ActionableBill,
+  EndorsementRow,
+} from "./unionTypes";
+import {
+  StanceBadge,
+  UndergroundOrganizePanel,
+  ActionResult,
+  StatCell,
+  describeUndergroundResult,
+} from "./UnionPanels";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -236,7 +136,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
       } else if (unionRes.status === 404) {
         setNotFound(true);
       } else {
-        setLoadError(unionData.error ?? "Failed to load union.");
+        setLoadError(apiErrorText(unionData, "Failed to load union."));
       }
       // A failed /me or vote fetch used to render silently as "you are not the
       // leader and have no banked strength", which is indistinguishable from
@@ -303,7 +203,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
       } else {
         setResult({
           ok: res.ok,
-          text: res.ok ? "Done." : (data.error ?? "Action failed"),
+          text: res.ok ? "Done." : apiErrorText(data, "Action failed"),
         });
       }
       if (res.ok) await loadData();
@@ -418,7 +318,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
     },
     {
       key: "stances",
-      label: "Legislative Stances",
+      label: "Legislative stances",
       count: new Set([
         ...actionableBills.map((bill) => bill.billId),
         ...endorsements.map((e) => e.billId),
@@ -494,7 +394,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
         {/* Stats strip */}
         <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
           <div className="flex min-w-[140px] flex-col gap-0.5 px-4 py-3 sm:px-5">
-            <span className="text-[11px] uppercase tracking-wider text-muted">President</span>
+            <span className="text-body-sm font-medium text-muted">President</span>
             {presidentHref && leader ? (
               <Link
                 href={presidentHref}
@@ -536,7 +436,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
             hint="The union's war chest. Dues flow in each turn based on how organized it is; recruitment drives and strikes are paid out of it."
           />
           <StatCell
-            label="Open Campaigns"
+            label="Open campaigns"
             value={String(
               bargainingCampaigns.filter(
                 (campaign) => campaign.status === "negotiating" || campaign.status === "dispute"
@@ -642,7 +542,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
               onClick={() => runAction("organize")}
               className="w-fit rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
             >
-              Run Organize Drive
+              Run organize drive
             </button>
             <span className="text-[11px] text-muted">
               Costs {organizeActionCost} action points
@@ -735,7 +635,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
                 onClick={() => runAction("leader/accept")}
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
               >
-                Accept Presidency
+                Accept presidency
               </button>
               <button
                 type="button"
@@ -774,7 +674,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
               as the per-local gap column below and as a callout on the CEO's
               own wage panel, and does nothing else. */}
           <div className="space-y-2 border-t border-card-border pt-3">
-            <p className="text-[11px] uppercase tracking-wider text-muted">Public wage claim</p>
+            <p className="text-body-sm font-medium text-muted">Public wage claim</p>
             <p className="text-xs text-muted">
               The wage level this union says the industry should pay. Employers see it on their own
               wage panel and every local&apos;s shortfall is listed below. It binds nobody: to make
@@ -782,7 +682,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
             </p>
             <div className="flex flex-wrap items-end gap-2">
               <label className="flex flex-col gap-1">
-                <span className="text-[11px] uppercase tracking-wider text-muted">Wage level</span>
+                <span className="text-body-sm font-medium text-muted">Wage level</span>
                 <input
                   type="number"
                   step={0.05}
@@ -807,7 +707,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
                 }
                 className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
               >
-                Set Demand
+                Set demand
               </button>
               {union.demandedWageLevel != null && (
                 <button
@@ -816,7 +716,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
                   onClick={() => runAction("demand-wage", { demandedWageLevel: null })}
                   className="rounded-lg border border-card-border px-3 py-2 text-xs font-medium transition-colors hover:bg-card-elevated disabled:opacity-50"
                 >
-                  Withdraw Demand
+                  Withdraw demand
                 </button>
               )}
             </div>
@@ -850,7 +750,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
               }}
               className="text-xs font-medium text-muted transition-colors hover:text-error disabled:opacity-50"
             >
-              Resign Leadership
+              Resign leadership
             </button>
           </div>
         </section>
@@ -946,9 +846,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
                 {canVote && (
                   <div className="flex flex-wrap items-end gap-2">
                     <label className="flex flex-col gap-1">
-                      <span className="text-[11px] uppercase tracking-wider text-muted">
-                        Candidate
-                      </span>
+                      <span className="text-body-sm font-medium text-muted">Candidate</span>
                       <select
                         value={candidateDraft}
                         onChange={(e) => setCandidateDraft(e.target.value)}
@@ -971,7 +869,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
                       }
                       className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
                     >
-                      Cast Vote
+                      Cast vote
                     </button>
                     {myVote && <span className="text-xs text-muted">Your vote is recorded.</span>}
                   </div>
@@ -1046,7 +944,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
               <div className="overflow-x-auto rounded-xl border border-card-border bg-card">
                 <table className="w-full min-w-[760px] text-sm">
                   <thead>
-                    <tr className="border-b border-card-border bg-card-elevated text-left text-[11px] uppercase tracking-wider text-muted">
+                    <tr className="border-b border-card-border bg-card-elevated text-left text-sm font-semibold text-foreground">
                       <th className="px-4 py-3 font-medium">Corporation</th>
                       <th className="px-4 py-3 font-medium">State</th>
                       <th className="px-4 py-3 text-right font-medium">Workers</th>
@@ -1295,252 +1193,5 @@ export default function UnionDashboardPage({ params }: PageProps) {
           ))}
       </section>
     </main>
-  );
-}
-
-function StanceBadge({ stance }: { stance: "endorse" | "oppose" }) {
-  return (
-    <span
-      className={`rounded-md px-2 py-0.5 text-xs font-medium ${
-        stance === "endorse" ? "bg-success/15 text-success" : "bg-error/15 text-error"
-      }`}
-    >
-      {stance === "endorse" ? "Endorsed" : "Opposed"}
-    </span>
-  );
-}
-
-/** Outcome of the last union action, success or the server's reason for refusing. */
-/**
- * Success line for an underground drive response. Reports the gain and the
- * vague heat bracket, never exact heat (the server never sends it).
- */
-function describeUndergroundResult(data: {
-  strengthGain?: unknown;
-  heatText?: unknown;
-  status?: unknown;
-  crisisExtended?: unknown;
-}): string {
-  const gain = typeof data.strengthGain === "number" ? data.strengthGain : null;
-  const heat =
-    data.heatText === "cold" || data.heatText === "warm" || data.heatText === "hot"
-      ? data.heatText
-      : "warm";
-  const base =
-    gain != null
-      ? `Cell work done: +${gain} underground strength. Running ${heat}.`
-      : `Cell work done. Running ${heat}.`;
-  const exposure =
-    data.status === "exposed" ? " Exposed: gains run at half pace until the cell goes dark." : "";
-  const resistance =
-    data.crisisExtended === true ? " The wildcat strike gained one turn of resistance." : "";
-  return `${base}${exposure}${resistance}`;
-}
-
-const UNDERGROUND_STATUS_COPY: Record<
-  "dark" | "suspected" | "exposed",
-  { label: string; toneClass: string }
-> = {
-  dark: { label: "Operating in the dark", toneClass: "text-muted" },
-  suspected: { label: "Drawing attention", toneClass: "text-warning" },
-  exposed: { label: "Exposed", toneClass: "text-error" },
-};
-
-const UNDERGROUND_HEAT_COPY: Record<"cold" | "warm" | "hot", string> = {
-  cold: "Cold",
-  warm: "Warm",
-  hot: "Hot",
-};
-
-/**
- * The rank-and-file loop under a ban. Replaces the legal organize panel on
- * suspended unions: two drive modes (quiet cell work vs mass drive), a vague
- * heat readout, and the shadow pool that converts at half on repeal.
- */
-function UndergroundOrganizePanel({
-  countryName,
-  underground,
-  currentTurn,
-  myActions,
-  actionPending,
-  result,
-  onDrive,
-}: {
-  countryName: string;
-  underground: NonNullable<UnionDetail["underground"]>;
-  currentTurn: number;
-  myActions: number | null;
-  actionPending: boolean;
-  result: { ok: boolean; text: string } | null;
-  onDrive: (mode: "quiet" | "mass") => void;
-}) {
-  const status = underground.status ? UNDERGROUND_STATUS_COPY[underground.status] : null;
-  const exposed = underground.status === "exposed";
-  const quietGain = exposed ? underground.quietGain / 2 : underground.quietGain;
-  const massGain = exposed ? underground.massGain / 2 : underground.massGain;
-  const cannotAfford = myActions != null && myActions < underground.actionCost;
-  const actionsLoading = myActions == null;
-  const exposedTurnsLeft =
-    underground.status === "exposed" && underground.exposedUntilTurn != null
-      ? Math.max(0, underground.exposedUntilTurn - currentTurn + 1)
-      : 0;
-  return (
-    <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
-      <div className="flex items-center gap-3">
-        <h2 className="text-sm font-semibold text-muted">Organize underground</h2>
-        <div className="h-px flex-1 bg-card-border" />
-      </div>
-
-      <p className="text-sm text-muted">
-        The ban froze this union&apos;s treasury and leadership, but the cells kept meeting. Anyone
-        in {countryName} can run quiet cell work or a loud mass drive. Both build hidden strength
-        that converts to legal strength at half if the ban is ever repealed. Noise brings attention:
-        loud stretches get noticed, and an exposed cell builds at half pace. Strong mass drives can
-        prolong a live wildcat crisis by one turn per drive.
-      </p>
-
-      <div className="flex flex-wrap gap-4 text-sm">
-        <div>
-          <span className="text-muted">Built underground:</span>{" "}
-          <span className="font-semibold tabular-nums">
-            {underground.strength == null
-              ? "Hidden until you organize"
-              : Math.round(underground.strength)}
-          </span>
-        </div>
-        <div>
-          <span className="text-muted">Status:</span>{" "}
-          <span className={`font-semibold ${status?.toneClass ?? ""}`}>
-            {status?.label ?? "Unknown"}
-          </span>
-          {exposedTurnsLeft > 0 && (
-            <span className="text-muted"> · {exposedTurnsLeft} turns left</span>
-          )}
-        </div>
-      </div>
-
-      {/* Heat is vague by design: the server never sends the number, only the bracket. */}
-      <div className="space-y-1">
-        <div
-          className="flex gap-1"
-          role="img"
-          aria-label={`Heat: ${underground.heatText ?? "unknown"}`}
-        >
-          {(Object.keys(UNDERGROUND_HEAT_COPY) as ("cold" | "warm" | "hot")[]).map((level) => {
-            const active = underground.heatText === level;
-            const tone =
-              level === "cold"
-                ? "border-success/30 bg-success/10 text-success"
-                : level === "warm"
-                  ? "border-warning/30 bg-warning/10 text-warning"
-                  : "border-error/30 bg-error/10 text-error";
-            return (
-              <span
-                key={level}
-                className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
-                  active ? tone : "border-card-border bg-card-elevated text-muted"
-                }`}
-              >
-                {UNDERGROUND_HEAT_COPY[level]}
-              </span>
-            );
-          })}
-        </div>
-        <p className="text-[11px] text-muted">
-          You never see the exact number. Quiet work and idle turns cool the trail.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap gap-4">
-        <div className="flex flex-col gap-1">
-          <button
-            type="button"
-            aria-describedby="underground-action-cost underground-quiet-effect"
-            disabled={actionPending || actionsLoading || cannotAfford}
-            onClick={() => onDrive("quiet")}
-            className="w-fit rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
-          >
-            Quiet cell work
-          </button>
-          <span id="underground-quiet-effect" className="text-[11px] text-muted">
-            +{quietGain} strength · low heat{exposed && " · halved while exposed"}
-          </span>
-        </div>
-        <div className="flex flex-col gap-1">
-          <button
-            type="button"
-            aria-describedby="underground-action-cost underground-mass-effect"
-            disabled={actionPending || actionsLoading || cannotAfford}
-            onClick={() => onDrive("mass")}
-            className="w-fit rounded-lg border border-card-border px-4 py-2 text-sm font-medium transition-colors hover:bg-card-elevated disabled:opacity-50"
-          >
-            Mass drive
-          </button>
-          <span id="underground-mass-effect" className="text-[11px] text-muted">
-            +{massGain} strength · high heat
-            {exposed && " · halved while exposed"}
-          </span>
-        </div>
-      </div>
-      <div className="flex flex-col gap-1">
-        <span id="underground-action-cost" className="text-[11px] text-muted">
-          Costs {underground.actionCost} action points
-          {actionsLoading ? " · checking your action points" : ` · you have ${myActions}`} · one
-          drive per turn
-        </span>
-        {cannotAfford && (
-          <span className="text-[11px] font-medium text-error">
-            Not enough action points. They refresh each turn.
-          </span>
-        )}
-      </div>
-
-      <ActionResult result={result} />
-    </section>
-  );
-}
-
-function ActionResult({ result }: { result: { ok: boolean; text: string } | null }) {
-  if (!result) return null;
-  return (
-    <p
-      // A refusal is an error, not a status update: screen readers should
-      // interrupt for it rather than queue it behind whatever else is talking.
-      role={result.ok ? "status" : "alert"}
-      className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm font-medium ${
-        result.ok
-          ? "border-success/30 bg-success/10 text-success"
-          : "border-error/30 bg-error/10 text-error"
-      }`}
-    >
-      <span aria-hidden>{result.ok ? "✓" : "⚠"}</span>
-      <span>{result.text}</span>
-    </p>
-  );
-}
-
-function StatCell({
-  label,
-  value,
-  hint,
-  sub,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  /** Plain-language reading of the number, printed under it. */
-  sub?: { label: string; toneClass: string };
-}) {
-  return (
-    // Tooltip rather than a title attribute: native tooltips never fire on
-    // touch, which is where these stats were being misread.
-    <div className="flex min-w-max flex-col px-5 py-3">
-      <span className="flex items-center text-[10px] font-medium uppercase tracking-widest text-muted">
-        {label}
-        {hint && <Tooltip content={hint} label={`What ${label} means`} />}
-      </span>
-      <span className="text-base font-bold tabular-nums">{value}</span>
-      {sub && <span className={`text-[11px] font-medium ${sub.toneClass}`}>{sub.label}</span>}
-    </div>
   );
 }

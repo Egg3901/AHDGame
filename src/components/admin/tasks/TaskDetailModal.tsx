@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState, useEffect } from "react";
 import type { Task, TaskStatus } from "@/lib/db/types";
 import type { TaskComment } from "@/lib/db/types/taskComment";
@@ -7,7 +8,7 @@ import { LocalTime } from "@/components/time/LocalTime";
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
   { value: "pending", label: "Pending" },
-  { value: "in_progress", label: "In Progress" },
+  { value: "in_progress", label: "In progress" },
   { value: "completed", label: "Completed" },
 ];
 
@@ -203,7 +204,7 @@ export function TaskDetailModal({ task, onClose, onStatusChange, onDelete }: Tas
               rows={2}
               className="w-full rounded border border-card-border bg-card-elevated px-3 py-2 text-sm placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-primary resize-none"
             />
-            {commentError && <p className="text-xs text-red-400">{commentError}</p>}
+            <InlineError error={commentError} className="text-xs text-red-400" />
             <div className="flex items-center gap-2">
               <select
                 value={commentStatus}
@@ -212,7 +213,7 @@ export function TaskDetailModal({ task, onClose, onStatusChange, onDelete }: Tas
               >
                 <option value="">No status change</option>
                 <option value="pending">→ Pending</option>
-                <option value="in_progress">→ In Progress</option>
+                <option value="in_progress">→ In progress</option>
                 <option value="completed">→ Completed</option>
               </select>
               <button

@@ -13,7 +13,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { buildAuditLogFilter, queryAuditLog } from "@/lib/audit/queryAuditLog";
 
 export async function GET(request: Request) {
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     const isAdmin = auth.user.isAdmin === true;
     const { searchParams } = new URL(request.url);
     const built = buildAuditLogFilter(searchParams, isAdmin);
-    if (!built.ok) return NextResponse.json({ error: built.error }, { status: 400 });
+    if (!built.ok) return errorResponse(400, built.error);
 
     const db = await getDb();
     const { rows, nextCursor, truncated } = await queryAuditLog(

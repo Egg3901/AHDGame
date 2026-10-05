@@ -31,5 +31,16 @@ export async function seedConflictIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  // A country's diplomacy panel lists live truces by membership in the
+  // countries array and expiry turn. The pair-declaration path uses `_id` and
+  // remains covered by Mongo's primary-key index.
+  await ensureIndex(
+    db,
+    "truces",
+    { countries: 1, expiresTurn: 1 },
+    { name: "truces_country_expiry" },
+    log
+  );
+
   log("Conflict indexes ensured");
 }

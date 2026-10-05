@@ -1,6 +1,6 @@
 // src/app/api/parties/[id]/whip/route.ts
 import { NextResponse } from "next/server";
-import { handleRouteError, forbidden, notFound, badRequest } from "@/lib/api/errors";
+import { handleRouteError, forbidden, notFound, badRequest, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
@@ -105,7 +105,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     // Get authenticated user with character
@@ -134,7 +134,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isAdmin = authData.isAdmin;
     const parsed = await parseJsonBody(request, whipSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { targetType, targetId, chamber, direction, mode, candidacyId, audience } = parsed.data;
 

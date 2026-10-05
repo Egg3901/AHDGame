@@ -25,7 +25,7 @@ import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { getParliamentaryExecutiveSurface } from "@/lib/constants/parliamentaryExecutiveSurface";
 import { getLowerChamberOfficeType } from "@/lib/legislature/chamberOfficeType";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
-import { getLiveLowerChamberSeats } from "@/lib/turn/lowerChamberSeats";
+import { getLiveLowerChamberSeats } from "@/lib/legislature/lowerChamberSeats";
 import { ParliamentaryGovernmentActions } from "./components/ParliamentaryGovernmentActions";
 import { ReferendumConsentSection } from "@/components/uk/ReferendumConsentSection";
 import { ExecutiveTabsClient } from "./ExecutiveTabsClient";

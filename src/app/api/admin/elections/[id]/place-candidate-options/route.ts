@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Election, Character, NPP, PoliticalParty } from "@/lib/db/types";
 
 interface RouteParams {
@@ -26,7 +26,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     try {
       electionObjectId = new ObjectId(electionId);
     } catch {
-      return NextResponse.json({ error: "Invalid election ID" }, { status: 400 });
+      return errorResponse(400, "Invalid election ID");
     }
 
     const db = await getDb();
@@ -35,7 +35,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     });
 
     if (!election || election.electionType !== "president") {
-      return NextResponse.json({ error: "Not a presidential election" }, { status: 404 });
+      return errorResponse(404, "Not a presidential election");
     }
 
     const existingCandidateIds = await db

@@ -15,6 +15,7 @@ const FLIPFLOP_AXIS_LABELS = { economic: "Economic", social: "Social" } as const
 const NEUTRAL_BUTTON =
   "rounded-md border border-card-border bg-card-elevated text-foreground transition-colors hover:bg-card-muted";
 import type { ActionCardProps } from "../actionsTypes";
+import { FUND_LINE_TERMS, fundLineKind } from "../actionsConstants";
 import ActionExecuteRow from "./ActionExecuteRow";
 
 const ActionCardCompact = memo(function ActionCardCompact({
@@ -111,8 +112,9 @@ const ActionCardCompact = memo(function ActionCardCompact({
     effectiveFundLabel = `+${formatCurrencyFaceAmount(fundraiseYield, campaignCurrency)}`;
   else if (isConvertCash) {
     effectiveFundLabel =
-      displayPersonalWealth > 0 ? `${formatAmount(personalAnchor)} available` : "No cash";
+      displayPersonalWealth > 0 ? `${formatAmount(personalAnchor)} to convert` : "No cash";
   } else effectiveFundLabel = card.fundLabel(character);
+  const fundKind = fundLineKind(card.type);
 
   const noDonor = card.requiresDonorBase && !isFundraiseEligible(character.donorBaseLevel);
   const noCash = isConvertCash && displayPersonalWealth <= 0;
@@ -160,9 +162,14 @@ const ActionCardCompact = memo(function ActionCardCompact({
               <span className="mx-1 text-muted" aria-hidden>
                 ·
               </span>
-              <span className={cantAffordFunds ? "text-error" : isFundraise ? "text-success" : ""}>
-                {effectiveFundLabel}
-              </span>
+              {fundKind === "cost" ? (
+                <span className={cantAffordFunds ? "text-error" : ""}>{effectiveFundLabel}</span>
+              ) : (
+                <span className={fundKind === "yield" ? "text-success" : ""}>
+                  <span className="font-normal text-muted">{FUND_LINE_TERMS[fundKind]} </span>
+                  {effectiveFundLabel}
+                </span>
+              )}
             </span>
             {projection && (
               <span className="tabular-nums text-muted">

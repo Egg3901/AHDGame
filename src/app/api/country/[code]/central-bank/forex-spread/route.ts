@@ -6,7 +6,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, badRequest, forbidden, notFound } from "@/lib/api/errors";
+import { handleRouteError, badRequest, forbidden, notFound, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isSameCountry } from "@/lib/api/sameCountry";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -45,7 +45,7 @@ export async function POST(request: Request, context: RouteContext) {
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const strength = clampForexSpreadStrength(parsed.data.strength);
 

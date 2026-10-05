@@ -46,7 +46,7 @@ export function getPostHogClient(): Promise<PostHogClient | null> {
         capture_pageleave: false,
         // Session replay is ON (executive decision 2026-09-26, reversal of the
         // removal-era default). Sampled, masked, and blocked on sensitive
-        // screens; see ANALYTICS_ROLLOUT.md step 4 and the privacy policy.
+        // screens; see the privacy policy.
         // Elements carrying data-replay-block are replaced with placeholders.
         session_recording: {
           sampleRate: 0.1,

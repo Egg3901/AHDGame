@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { State } from "@/lib/db/types";
@@ -23,7 +23,7 @@ export async function GET(
     const { code, id, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuth();
@@ -36,10 +36,10 @@ export async function GET(
     ]);
 
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const partyIdString = String(party.sequentialId);
@@ -52,10 +52,7 @@ export async function GET(
       (characterId === party.chairId?.toString() || characterId === party.viceChairId?.toString());
 
     if (!auth.user.isAdmin && !isStatePartyMember && !isNationalLeadership) {
-      return NextResponse.json(
-        { error: "State party analytics are only available to party members" },
-        { status: 403 }
-      );
+      return errorResponse(403, "State party analytics are only available to party members");
     }
 
     const [org, discipline, slate] = await Promise.all([

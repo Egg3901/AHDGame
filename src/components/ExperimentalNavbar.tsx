@@ -67,6 +67,7 @@ import {
 } from "@/components/navbar/experimentalNavPrimitives";
 import { ExperimentalUserMenu } from "@/components/navbar/ExperimentalUserMenu";
 import { ExperimentalMobileMenu } from "@/components/navbar/ExperimentalMobileMenu";
+import { hasSandboxAccess } from "@/lib/sandbox/access";
 import { Wordmark, WORDMARK } from "@/components/Wordmark";
 import type {
   AdminCharacter,
@@ -297,10 +298,14 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
 
   const canAccessSandbox =
     !user?.singleplayer &&
-    (user?.isAdmin ||
-      user?.isModerator ||
-      ((user?.patreonTier === "supporter-plus" || user?.patreonTier === "supporter-plus-plus") &&
-        user?.isPatronActive));
+    hasSandboxAccess({
+      isAdmin: user?.isAdmin,
+      isModerator: user?.isModerator,
+      patreonTier: user?.patreonTier,
+      isPatronActive: user?.isPatronActive,
+      testerAccessEnabled: user?.sandboxTesterAccess,
+      testerGranted: user?.sandboxTesterAccess,
+    });
   const showWiki = !!(user?.isAdmin || user?.isModerator) || !wikiDisabled;
 
   // Top-level tabs: Actions · State · Nation · World (Help and Staff are
@@ -396,7 +401,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
             {showLeaderboardHeader && (
               <>
                 <div className="px-2.5 pb-1 pt-2 flex items-center gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
+                  <span className="text-body-sm font-medium text-muted">
                     {t("menus.world.headers.leaderboard")}
                   </span>
                   <span className="rounded-full bg-warning/15 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-warning">
@@ -506,7 +511,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                   </svg>
                 </button>
               ) : (
-                <div className="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted/80">
+                <div className="px-2.5 pb-1 pt-2 text-body-sm font-medium text-muted">
                   {t(section.titleKey)}
                 </div>
               )}

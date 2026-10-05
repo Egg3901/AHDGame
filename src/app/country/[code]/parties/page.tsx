@@ -17,6 +17,7 @@ import { CreateCoalitionModal } from "./components/CreateCoalitionModal";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import { PARTY_SECTION_HEADING_CLASS } from "@/components/party/partyPageStyles";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Parties list: a header band with the title, totals and tabs, then the balance
@@ -181,7 +182,7 @@ export default function PartiesPage() {
         setCoalitionFormColor("#6366F1");
         fetchCoalitions();
       } else {
-        showToast(data.error ?? "Failed to create coalition", "error");
+        showToast(apiErrorText(data, "Failed to create coalition"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");

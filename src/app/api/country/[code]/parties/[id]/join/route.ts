@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { createNotification } from "@/lib/notifications";
@@ -30,7 +30,7 @@ export async function POST(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
@@ -53,7 +53,7 @@ export async function POST(
     ]);
 
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const partyIdStr = String(party.sequentialId);
@@ -62,20 +62,15 @@ export async function POST(
     const partyCountry = resolveCountry(party);
     const charCountry = resolveCountry(auth.character);
     if (!isSameCountry(auth.character, party)) {
-      return NextResponse.json(
-        {
-          error: `This party is for ${partyCountry} characters only. Your character belongs to ${charCountry}.`,
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        `This party is for ${partyCountry} characters only. Your character belongs to ${charCountry}.`
       );
     }
 
     // Check if already in this party (safe now since we've verified country match)
     if (auth.character.party === partyIdStr) {
-      return NextResponse.json(
-        { error: "You are already a member of this party" },
-        { status: 400 }
-      );
+      return errorResponse(400, "You are already a member of this party");
     }
 
     const now = new Date();
@@ -91,7 +86,7 @@ export async function POST(
       !auth.character.freePartyMoveUsedAt;
     const consumeFreePartyMove = !auth.isAdmin && !switchCooldown.ok && freeMoveAvailable;
     if (!auth.isAdmin && !switchCooldown.ok && !consumeFreePartyMove) {
-      return NextResponse.json({ error: switchCooldown.error }, { status: 429 });
+      return errorResponse(429, switchCooldown.error);
     }
 
     // Per-party block: a purged member cannot rejoin the party that purged them
@@ -103,12 +98,10 @@ export async function POST(
       currentTurn
     );
     if (!auth.isAdmin && purgeBlock.blocked) {
-      return NextResponse.json(
-        {
-          error: `You were expelled from ${party.name}. You can rejoin in ${purgeBlock.turnsRemaining} turn${purgeBlock.turnsRemaining === 1 ? "" : "s"}.`,
-          turnsRemaining: purgeBlock.turnsRemaining,
-        },
-        { status: 429 }
+      return errorResponse(
+        429,
+        `You were expelled from ${party.name}. You can rejoin in ${purgeBlock.turnsRemaining} turn${purgeBlock.turnsRemaining === 1 ? "" : "s"}.`,
+        { extra: { turnsRemaining: purgeBlock.turnsRemaining } }
       );
     }
 
@@ -118,7 +111,7 @@ export async function POST(
     if (!auth.isAdmin) {
       const frontierCheck = await canCharacterJoinParty(db, auth.character, party, countryId);
       if (!frontierCheck.ok) {
-        return NextResponse.json({ error: frontierCheck.error }, { status: 403 });
+        return errorResponse(403, frontierCheck.error);
       }
     }
 

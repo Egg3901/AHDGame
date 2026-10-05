@@ -3,7 +3,7 @@
 import type { TreasuryOverrideHistoryEntry } from "@/lib/treasury/partyTreasuryInsights";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { formatCurrency } from "@/lib/utils/formatters";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 
 interface TreasuryOverrideHistoryCardProps {
   title: string;
@@ -46,10 +46,7 @@ export function TreasuryOverrideHistoryCard({
               </div>
               <div className="mt-1 text-sm text-muted">{item.details}</div>
               <div className="mt-2 text-body-sm text-muted">
-                <LocalTime
-                  value={item.createdAt}
-                  options={{ dateStyle: "medium", timeStyle: "short" }}
-                />
+                <GameMonthTime value={item.createdAt} />
               </div>
             </div>
           ))}

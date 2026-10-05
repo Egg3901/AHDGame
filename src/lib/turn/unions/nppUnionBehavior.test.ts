@@ -18,6 +18,7 @@ import {
 } from "@/lib/unions/commands/bargaining";
 
 vi.mock("@/lib/unions/commands/bargaining", () => ({
+  loadBargainingLastEnded: vi.fn().mockResolvedValue(new Map()),
   openBargainingCampaignFromLiveConditions: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
   persistBargainingCounter: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
   persistBargainingMediationAction: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
@@ -287,7 +288,10 @@ describe("processNppUnionBehavior", () => {
       }),
       10,
       // Per-phase read cache shared by every campaign the phase opens (#2690).
-      expect.any(Map)
+      expect.any(Map),
+      // Bulk-loaded facts so the opener skips its per-union employer, agreement
+      // and cooldown reads (#2690).
+      expect.objectContaining({ employerKnownToExist: true, noActiveAgreement: true })
     );
     expect(
       vi.mocked(openBargainingCampaignFromLiveConditions).mock.calls[0][3].wageLevel

@@ -3,7 +3,7 @@
 // Errors: 400 (already enabled), 403, 404, 409 (turn processing)
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { GameState } from "@/lib/db/types";
 import { getProcessingLockState } from "@/lib/turn/processingLock";
@@ -28,11 +28,11 @@ export async function POST() {
     const gameState = await gameStateCol.findOne({ _id: "current" });
 
     if (!gameState) {
-      return NextResponse.json({ error: "Game state not initialized" }, { status: 404 });
+      return errorResponse(404, "Game state not initialized");
     }
 
     if (gameState.forexEnabled) {
-      return NextResponse.json({ error: "Forex already enabled" }, { status: 400 });
+      return errorResponse(400, "Forex already enabled");
     }
 
     if (gameState.isProcessing) {
@@ -43,20 +43,13 @@ export async function POST() {
       // know to clear the lock via /api/admin/turn/reset-lock before retrying.
       const lockState = getProcessingLockState(gameState);
       if (lockState.isStale) {
-        return NextResponse.json(
-          {
-            error:
-              "Turn processing lock appears stale (prior turn likely crashed). Reset the lock via Admin → Turn → Reset Lock, then retry forex enable.",
-            lockStale: true,
-            lockLastTouch: lockState.lastTouch?.toISOString() ?? null,
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "Turn processing lock appears stale (prior turn likely crashed). Reset the lock via Admin → Turn → Reset Lock, then retry forex enable.",
+          { extra: { lockStale: true, lockLastTouch: lockState.lastTouch?.toISOString() ?? null } }
         );
       }
-      return NextResponse.json(
-        { error: "Turn is currently processing. Wait for it to finish." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Turn is currently processing. Wait for it to finish.");
     }
 
     // Lock — prevent turns during migration

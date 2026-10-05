@@ -5,7 +5,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { goPublicSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { subsidiaryIssuanceBlockReason } from "@/lib/corporations/subsidiaries/issuanceGuard";
 import { getGameState } from "@/lib/gameState";
@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, goPublicSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -52,7 +52,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     const subBlock = await subsidiaryIssuanceBlockReason(corporation);
-    if (subBlock) return NextResponse.json({ error: subBlock }, { status: 403 });
+    if (subBlock) return errorResponse(403, subBlock);
 
     const gameState = await getGameState();
     const currentTurn = gameState?.currentTurn ?? 0;
@@ -78,7 +78,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     });
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     logWireEvent("corporation_ipo", wireHeadlineCorpIpo(corporation.name, parsed.data.floatPct), {

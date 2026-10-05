@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { crossCountryActionGuard } from "@/lib/api/crossCountryGuard";
@@ -43,7 +43,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { code, id: stateId, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
@@ -58,14 +58,14 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const statePartyOrg = await db
       .collection<StatePartyOrg>("statePartyOrg")
       .findOne({ _id: `${stateId.toUpperCase()}_${partyId}` });
     if (!statePartyOrg) {
-      return NextResponse.json({ error: "State party not found" }, { status: 404 });
+      return errorResponse(404, "State party not found");
     }
 
     const characterId = authResult.user.character._id;
@@ -74,10 +74,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const isAdmin = authResult.user.isAdmin;
 
     if (!isChair && !isViceChair && !isAdmin) {
-      return NextResponse.json(
-        { error: "Only the State Party Chair or Vice Chair can use NPP management" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the State Party Chair or Vice Chair can use NPP management");
     }
 
     const options = await getStatePartyInfluenceOptions(
@@ -142,7 +139,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: stateId, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
@@ -159,22 +156,20 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, partyInfluenceSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     if (!STATE_PARTY_MANAGEMENT_ACTIONS.includes(parsed.data.influenceType)) {
-      return NextResponse.json(
-        {
-          error: `${INFLUENCE_ACTIONS[parsed.data.influenceType].name} is not available in State NPP Management.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `${INFLUENCE_ACTIONS[parsed.data.influenceType].name} is not available in State NPP Management.`
       );
     }
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const result = await executeStatePartyInfluence({

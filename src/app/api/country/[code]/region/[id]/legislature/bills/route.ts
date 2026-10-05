@@ -2,14 +2,18 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { proposeStateBill } from "@/lib/legislature/commands/proposeStateBill";
 import { listStateLegislatureBills } from "@/lib/legislature/queries/stateBillQueries";
 import { STATE_BILL_CATEGORIES, MAX_PROVISIONS } from "@shared/constants/legislation";
-import { moderatedBillTitle, moderatedBillText } from "@/lib/api/schemas/congress";
+import {
+  moderatedBillTitle,
+  moderatedBillText,
+  stateBillProvisionSchema,
+} from "@/lib/api/schemas/congress";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 
 // GET /api/country/[code]/region/[id]/legislature/bills — Return state bills for a region.
@@ -23,7 +27,7 @@ export async function GET(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const [db, authUser] = await Promise.all([getDb(), getAuthUser().catch(() => null)]);
@@ -50,7 +54,7 @@ export async function POST(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuth();
@@ -59,49 +63,24 @@ export async function POST(
     const rateLimit = checkRateLimit(auth.user.userId, 10, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
-    const subsidyProvisionSchema = z.object({
-      type: z.literal("subsidy"),
-      scopeType: z.enum(["economy_wide", "sector"]),
-      targetSectorType: z.string().optional(),
-      targetStrategyId: z.string().optional(),
-      domesticOnly: z.boolean(),
-    });
-    const endSubsidyProvisionSchema = z.object({
-      type: z.literal("end_subsidy"),
-      scopeType: z.enum(["economy_wide", "sector"]),
-      targetSectorType: z.string().optional(),
-      targetStrategyId: z.string().optional(),
-    });
-    const policyProvisionSchema = z.object({
-      legislationTypeId: z.string().optional(),
-      policyOptionId: z.string().optional(),
-      effectDirection: z.number().optional(),
-      economic: z.number().optional(),
-      social: z.number().optional(),
-      proposedRate: z.number().optional(),
-    });
-
     const billSchema = z.object({
       title: moderatedBillTitle(),
       summary: moderatedBillText(z.string().min(1, "Summary required")),
       category: z.enum(STATE_BILL_CATEGORIES).optional(),
       legislationTypeId: z.string().optional(),
       effectDirection: z.number().optional(),
-      provisions: z
-        .array(z.union([subsidyProvisionSchema, endSubsidyProvisionSchema, policyProvisionSchema]))
-        .max(MAX_PROVISIONS)
-        .optional(),
+      provisions: z.array(stateBillProvisionSchema).max(MAX_PROVISIONS).optional(),
       adminOverride: z.boolean().optional(),
     });
 
     const parsed = await parseJsonBody(request, billSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     const result = await proposeStateBill(db, countryId, id, auth.user, parsed.data);
-    return NextResponse.json(result.body, { status: result.status });
+    return statusResponse(result.status, result.body);
   } catch (error) {
     return handleRouteError(error);
   }

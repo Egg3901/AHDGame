@@ -21,7 +21,8 @@ vi.mock("@/lib/auth", () => ({
 }));
 vi.mock("@/lib/auth/userDocCache", () => ({ invalidateCachedUser: mocks.invalidateCachedUser }));
 vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: mocks.recordAudit }));
-vi.mock("@/lib/api/errors", () => ({
+vi.mock("@/lib/api/errors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/errors")>()),
   handleRouteError: () => new Response(null, { status: 500 }),
 }));
 import { POST } from "./route";

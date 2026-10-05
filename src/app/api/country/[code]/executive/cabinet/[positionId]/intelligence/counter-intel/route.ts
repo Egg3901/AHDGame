@@ -10,7 +10,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getIntelligenceAgenciesCollection } from "@/lib/db/collections/intelligence";
 import { COUNTER_INTEL_MAX } from "@/lib/intelligence/config";
 import {
@@ -33,7 +33,7 @@ export async function POST(request: Request, { params }: IntelligenceRouteParams
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const turn = await loadCurrentTurn(db);

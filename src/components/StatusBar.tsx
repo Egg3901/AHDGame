@@ -53,7 +53,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
   const { stats, patchStats } = useCharacterStats();
   const {
     displayCurrencyPreference,
-    formatPrice: ctxFormatPrice,
+    formatListingPrice,
     toInternalFrom,
     formatAmount,
     formatAmountChip,
@@ -404,7 +404,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                         d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                       />
                     </svg>
-                    <span className="hidden sm:inline">Turn Processing</span>
+                    <span className="hidden sm:inline">Turn processing</span>
                     <span className="sm:hidden">Processing</span>
                   </span>
                 ) : (
@@ -479,7 +479,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
           className={`flex shrink-0 items-center gap-1 sm:gap-1.5 ${isMinimalLayout ? "hidden" : ""}`}
         >
           {/* Profile label — desktop only; shrink-0 so mono themes cannot crush it into the online count */}
-          <span className="hidden sm:inline shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted/50 mr-0.5">
+          <span className="hidden sm:inline shrink-0 text-body-sm font-medium text-muted mr-0.5">
             Profile
           </span>
 
@@ -542,7 +542,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
               <span className="text-muted">Remaining</span>
               <span className="font-bold text-primary tabular-nums">{stats?.actions ?? 0}</span>
             </div>
-            <TooltipLink href="/actions">Go to Actions</TooltipLink>
+            <TooltipLink href="/actions">Go to actions</TooltipLink>
           </StatusChip>
 
           {/* Campaign Funds chip */}
@@ -568,7 +568,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
             ariaLabel={`Campaign funds: ${compactFaceHome(stats?.campaignFundsStored ?? 0)}`}
           >
             <div className="flex items-center justify-between mb-2">
-              <p className="font-semibold text-foreground">Campaign Funds</p>
+              <p className="font-semibold text-foreground">Campaign funds</p>
               <span className="text-green-500 font-bold tabular-nums">
                 {compactFaceHome(stats?.campaignFundsStored ?? 0)}
               </span>
@@ -583,28 +583,28 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                   />
                   {stats.campaignIncomeBreakdown.donorBonus > 0 && (
                     <BreakdownRow
-                      label="Donor Network Bonus"
+                      label="Donor network bonus"
                       value={`+${fullFaceHome(stats.campaignIncomeBreakdown.donorBonus)}`}
                       valueClass="text-green-500/90"
                     />
                   )}
                   {stats.campaignIncomeBreakdown.officeBonus > 0 && (
                     <BreakdownRow
-                      label="Office Salary"
+                      label="Office salary"
                       value={`+${fullFaceHome(stats.campaignIncomeBreakdown.officeBonus)}`}
                       valueClass="text-green-500/90"
                     />
                   )}
                   {(stats.campaignIncomeBreakdown.unionContribution ?? 0) > 0 && (
                     <BreakdownRow
-                      label="Union Contribution"
+                      label="Union contribution"
                       value={`+${fullFaceHome(stats.campaignIncomeBreakdown.unionContribution)}`}
                       valueClass="text-green-500/90"
                     />
                   )}
                   {stats.campaignIncomeBreakdown.totalTax > 0 && (
                     <BreakdownRow
-                      label="Party Taxes"
+                      label="Party taxes"
                       value={`−${fullFaceHome(stats.campaignIncomeBreakdown.totalTax)}`}
                       valueClass="text-red-400"
                     />
@@ -629,7 +629,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                 Hourly CF income unavailable — open Profile for details.
               </p>
             )}
-            <TooltipLink href="/profile">View Profile</TooltipLink>
+            <TooltipLink href="/profile">View profile</TooltipLink>
           </StatusChip>
 
           {/* Personal Cash chip */}
@@ -654,7 +654,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
             ariaLabel={`Personal cash: ${compactFaceHome(stats?.personalHomeLiquid ?? 0)}`}
           >
             <div className="flex items-center justify-between mb-2">
-              <p className="font-semibold text-foreground">Personal Cash</p>
+              <p className="font-semibold text-foreground">Personal cash</p>
               <span className="text-amber-500 font-bold tabular-nums">
                 {compactFaceHome(stats?.personalHomeLiquid ?? 0)}
               </span>
@@ -689,7 +689,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                 />
               )}
             </div>
-            <TooltipLink href="/portfolio">View Portfolio</TooltipLink>
+            <TooltipLink href="/portfolio">View portfolio</TooltipLink>
           </StatusChip>
 
           {showStandardCorpCashOnly && stats.corp && (
@@ -708,7 +708,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
               <div
                 className={`hidden sm:block w-px h-4 bg-card-border/60 ${isFullLayout ? "mx-2 sm:mx-3" : "mx-0.5"}`}
               />
-              <span className="hidden sm:inline text-[10px] font-semibold uppercase tracking-wide text-muted/50 mr-0.5">
+              <span className="hidden sm:inline text-body-sm font-medium text-muted mr-0.5">
                 Elections
               </span>
 
@@ -741,13 +741,13 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                 }
                 ariaLabel={`Political influence: ${Math.round(influence)}%`}
               >
-                <p className="font-semibold text-foreground mb-2">Political Influence</p>
+                <p className="font-semibold text-foreground mb-2">Political influence</p>
                 <p className="text-[11px] text-muted leading-relaxed">
                   A proxy for name recognition — how well-known you are as a political figure. High
                   influence is essential to winning elections. Maintaining this stat should be your
                   number one priority.
                 </p>
-                <TooltipLink href="/profile">View Profile</TooltipLink>
+                <TooltipLink href="/profile">View profile</TooltipLink>
               </StatusChip>
 
               {/* Favorability chip — color tier reflects current value */}
@@ -794,7 +794,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                       improves vote share, demographic appeal, and media coverage. Opponents can
                       attack this stat directly — watch it carefully.
                     </p>
-                    <TooltipLink href="/profile">View Profile</TooltipLink>
+                    <TooltipLink href="/profile">View profile</TooltipLink>
                   </StatusChip>
                 );
               })()}
@@ -847,7 +847,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                       }
                       ariaLabel={`Vote share: ${elStats.myVotePct.toFixed(1)}%`}
                     >
-                      <p className="font-semibold text-foreground mb-2">Vote Share</p>
+                      <p className="font-semibold text-foreground mb-2">Vote share</p>
                       <div className="space-y-1 mb-2">
                         <BreakdownRow
                           label="Your share"
@@ -876,7 +876,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                         </div>
                       )}
                       <TooltipLink href={`/elections/${elStats.electionId}`}>
-                        View Election
+                        View election
                       </TooltipLink>
                     </StatusChip>
                   );
@@ -911,7 +911,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                       value={`${elStats.seatsProjected}/${elStats.totalSeats}`}
                       ariaLabel={`Projected seats: ${elStats.seatsProjected}/${elStats.totalSeats}`}
                     >
-                      <p className="font-semibold text-foreground mb-2">Seat Projection</p>
+                      <p className="font-semibold text-foreground mb-2">Seat projection</p>
                       <div className="space-y-1 mb-2">
                         <BreakdownRow
                           label="Projected seats"
@@ -929,7 +929,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                         </div>
                       )}
                       <TooltipLink href={`/elections/${elStats.electionId}`}>
-                        View Election
+                        View election
                       </TooltipLink>
                     </StatusChip>
                   );
@@ -944,7 +944,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                 className={`hidden sm:block w-px h-4 bg-card-border/60 ${isFullLayout ? "mx-2 sm:mx-3" : "mx-0.5"}`}
               />
               {/* Corp label — desktop only */}
-              <span className="hidden sm:inline text-[10px] font-semibold uppercase tracking-wide text-muted/50 mr-0.5">
+              <span className="hidden sm:inline text-body-sm font-medium text-muted mr-0.5">
                 Corp
               </span>
 
@@ -978,14 +978,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                         ? stats.corp.name.slice(0, 10) + "…"
                         : stats.corp.name}
                     </span>
-                    <span>
-                      {ctxFormatPrice(
-                        ceoCorpCurrency
-                          ? toInternalFrom(stats.corp.sharePrice, ceoCorpCurrency)
-                          : stats.corp.sharePrice,
-                        ceoCorpCurrency
-                      )}
-                    </span>
+                    <span>{formatListingPrice(stats.corp.sharePrice, ceoCorpCurrency)}</span>
                     <span
                       className={
                         (stats.corp.priceChange1h ?? 0) >= 0 ? "text-green-400" : "text-red-400"
@@ -1001,13 +994,8 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                 <p className="font-semibold text-foreground mb-2">{stats.corp.name}</p>
                 <div className="space-y-1 text-[11px] mb-2">
                   <BreakdownRow
-                    label="Share price"
-                    value={ctxFormatPrice(
-                      ceoCorpCurrency
-                        ? toInternalFrom(stats.corp.sharePrice, ceoCorpCurrency)
-                        : stats.corp.sharePrice,
-                      ceoCorpCurrency
-                    )}
+                    label={`Live share price${ceoCorpCurrency ? ` (${ceoCorpCurrency})` : ""}`}
+                    value={formatListingPrice(stats.corp.sharePrice, ceoCorpCurrency)}
                   />
                   <BreakdownRow
                     label="Change (1 turn)"
@@ -1031,7 +1019,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                   </div>
                 )}
                 <TooltipLink href={`/corporation/${stats.corp.sequentialId}`}>
-                  View Corporation
+                  View corporation
                 </TooltipLink>
               </StatusChip>
 
@@ -1095,7 +1083,7 @@ export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: bool
                   top of the 2% baseline). Grows from daily marketing spend.
                 </p>
                 <TooltipLink href={`/corporation/${stats.corp.sequentialId}`}>
-                  View Corporation
+                  View corporation
                 </TooltipLink>
               </StatusChip>
             </>

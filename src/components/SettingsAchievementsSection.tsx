@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { SectionLabel } from "@/components/ui";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { AchievementIcon } from "@/lib/utils/achievementIcons";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface AchievementItem {
   id: string;
@@ -78,7 +79,7 @@ export function SettingsAchievementsSection({ characterId }: SettingsAchievement
       if (res.ok) {
         setMsg({ text: t("achievements.saved"), ok: true });
       } else {
-        setMsg({ text: data.error ?? t("common.saveFailed"), ok: false });
+        setMsg({ text: apiErrorText(data, t("common.saveFailed")), ok: false });
       }
     } catch {
       setMsg({ text: t("common.networkError"), ok: false });

@@ -91,7 +91,7 @@ export function ReserveLeaders({ leaders }: Props) {
                 <div className="text-sm font-semibold tabular-nums text-foreground">
                   {formatAmount(leader.internalValue)}
                 </div>
-                <div className="text-[10px] uppercase tracking-wider text-muted">Reserve value</div>
+                <div className="text-body-sm font-medium text-muted">Reserve value</div>
               </div>
             </li>
           );

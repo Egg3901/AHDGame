@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { taxRateSchema } from "@/lib/api/schemas/settings";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
@@ -21,7 +21,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     // Verify authentication
@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, taxRateSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const rate = parsed.data.taxRate;
 
@@ -43,7 +43,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Get the party
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     // Verify user is the national chair, vice chair, treasurer, or admin
@@ -53,9 +53,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isTreasurer = party.treasurerId?.equals(authUser.character._id);
 
     if (!isAdmin && !isChair && !isViceChair && !isTreasurer) {
-      return NextResponse.json(
-        { error: "Only the party chair, vice chair, treasurer, or an admin can set the tax rate" },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the party chair, vice chair, treasurer, or an admin can set the tax rate"
       );
     }
 

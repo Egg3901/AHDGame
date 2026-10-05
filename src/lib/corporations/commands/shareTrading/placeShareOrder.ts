@@ -11,7 +11,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { placeOrderSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { assertCeoTradeNotBlocked } from "@/lib/corporations/commands/privatization/openVoteGuard";
 import {
@@ -99,7 +99,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
     const { id } = await params;
     const parsed = await parseJsonBody(request, placeOrderSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { type, shares, pricePerShare, placeAsCorporation } = parsed.data;
@@ -126,17 +126,15 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
     // near the market price are unaffected; the band only exists when the
     // corp has a positive fundamentalSharePrice to anchor on.
     if (!isWithinShareExecutionBand(corporation, pricePerShare)) {
-      return NextResponse.json(
-        {
-          error: `Limit price is too far from ${corporation.name}'s fundamental share price. Place an order closer to the current valuation.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Limit price is too far from ${corporation.name}'s fundamental share price. Place an order closer to the current valuation.`
       );
     }
 
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
     // Resting orders move value between players at fill time — same
     // disguised-transfer surface the new-character barrier covers elsewhere.
@@ -144,7 +142,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
     if (barrier) return barrier;
     const tradeLock = await assertCeoTradeNotBlocked(db, corporation, character._id);
     if (tradeLock.blocked) {
-      return NextResponse.json({ error: tradeLock.error }, { status: tradeLock.status });
+      return errorResponse(tradeLock.status, tradeLock.error);
     }
     const now = new Date();
     const forexEnabled = await isForexEnabled();
@@ -168,7 +166,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
         shares,
         currentTurn
       );
-      if (ceoCap) return NextResponse.json({ error: ceoCap.error }, { status: ceoCap.status });
+      if (ceoCap) return errorResponse(ceoCap.status, ceoCap.error);
     }
 
     // Treasury-backed market maker: an immediate-fill sell into the float is
@@ -183,26 +181,26 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
     let issuerBuybackSplit: EscrowDebitSplit | undefined;
     async function gateIssuerBuyback(): Promise<NextResponse | null> {
       if (marketQuote.active && shares > marketQuote.bidDepthShares) {
-        return NextResponse.json(
-          {
-            error: equityPoolDepthMessage(marketQuote.bidDepthShares, marketQuote.currency),
-            marketDepthShares: marketQuote.bidDepthShares,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          equityPoolDepthMessage(marketQuote.bidDepthShares, marketQuote.currency),
+          { extra: { marketDepthShares: marketQuote.bidDepthShares } }
         );
       }
       const settle = await settleFloatSellDebit(db, corporation, issuerBuyback);
       issuerBuybackSplit = settle.split;
       if (!settle.ok) {
         const sym = CURRENCY_SYMBOLS[issuerCurrency] ?? "$";
-        return NextResponse.json(
+        return errorResponse(
+          400,
+          marketQuote.active
+            ? equityPoolDepthMessage(marketQuote.bidDepthShares, marketQuote.currency)
+            : `${corporation.name}'s treasury can't cover this sale (needs ${sym}${issuerBuyback.toLocaleString(undefined, { maximumFractionDigits: 0 })}). List the shares for sale to a real buyer instead.`,
           {
-            error: marketQuote.active
-              ? equityPoolDepthMessage(marketQuote.bidDepthShares, marketQuote.currency)
-              : `${corporation.name}'s treasury can't cover this sale (needs ${sym}${issuerBuyback.toLocaleString(undefined, { maximumFractionDigits: 0 })}). List the shares for sale to a real buyer instead.`,
-            ...(marketQuote.active ? { marketDepthShares: marketQuote.bidDepthShares } : {}),
-          },
-          { status: 400 }
+            extra: {
+              ...(marketQuote.active ? { marketDepthShares: marketQuote.bidDepthShares } : {}),
+            },
+          }
         );
       }
       return null;
@@ -213,28 +211,22 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
         .collection<Corporation>("corporations")
         .findOne({ ceoId: character._id, ceoVacant: { $ne: true } });
       if (!placerCorp) {
-        return NextResponse.json(
-          { error: "You must be an active CEO to place orders on behalf of a corporation" },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "You must be an active CEO to place orders on behalf of a corporation"
         );
       }
 
       if (placerCorp._id.equals(corporation._id)) {
-        return NextResponse.json(
-          { error: "A corporation cannot trade its own shares" },
-          { status: 400 }
-        );
+        return errorResponse(400, "A corporation cannot trade its own shares");
       }
 
       if (placerCorp.countryOwnerId) {
-        return NextResponse.json(
-          { error: "National corporations cannot hold equity positions" },
-          { status: 400 }
-        );
+        return errorResponse(400, "National corporations cannot hold equity positions");
       }
 
       if (type === "buy" && (await corpPurchaseWouldCycle(db, placerCorp._id, corporation._id))) {
-        return NextResponse.json({ error: OWNERSHIP_CYCLE_ERROR }, { status: 400 });
+        return errorResponse(400, OWNERSHIP_CYCLE_ERROR);
       }
 
       const placerFxRate = await getCorpFxRate(db, placerCorp);
@@ -262,10 +254,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
             rates: fxRates,
           });
           if (!corpPurchaseEstimate) {
-            return NextResponse.json(
-              { error: "Exchange rate unavailable, try again shortly" },
-              { status: 503 }
-            );
+            return errorResponse(503, "Exchange rate unavailable, try again shortly");
           }
           const costInPlacerCapital =
             placerCurrency !== targetCurrency
@@ -281,7 +270,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
             costInPlacerCapital
           );
           if (!corpDebit.ok) {
-            return NextResponse.json({ error: "Insufficient corporation funds" }, { status: 400 });
+            return errorResponse(400, "Insufficient corporation funds");
           }
           let sharesCredited = false;
           try {
@@ -304,10 +293,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
             );
             if (!credited) {
               await refundCorpLiquidCapital(db, placerCorp._id, costInPlacerCapital);
-              return NextResponse.json(
-                { error: "Not enough shares remain in public float" },
-                { status: 409 }
-              );
+              return errorResponse(409, "Not enough shares remain in public float");
             }
             sharesCredited = true;
             void recordShareTrade(db, {
@@ -426,10 +412,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
           rates: fxRates,
         });
         if (!escrowEstimate) {
-          return NextResponse.json(
-            { error: "Exchange rate unavailable, try again shortly" },
-            { status: 503 }
-          );
+          return errorResponse(503, "Exchange rate unavailable, try again shortly");
         }
         const escrowInPlacerCapital =
           placerCurrency !== targetCurrency
@@ -441,10 +424,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
           escrowInPlacerCapital
         );
         if (!escrowDebit.ok) {
-          return NextResponse.json(
-            { error: "Insufficient corporation funds for escrow" },
-            { status: 400 }
-          );
+          return errorResponse(400, "Insufficient corporation funds for escrow");
         }
         try {
           await db.collection<ShareOrder>("shareOrders").insertOne({
@@ -544,10 +524,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
         );
         const available = ownedShares - alreadyReserved;
         if (available < shares) {
-          return NextResponse.json(
-            { error: `Only ${available.toLocaleString()} shares available` },
-            { status: 400 }
-          );
+          return errorResponse(400, `Only ${available.toLocaleString()} shares available`);
         }
         const fillsNow = executionPrice >= pricePerShare;
         if (fillsNow) {
@@ -584,10 +561,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
             await reverseFloatSellDebit(db, corporation, issuerBuyback, {
               split: issuerBuybackSplit,
             });
-            return NextResponse.json(
-              { error: "Shares were already sold or reserved by another action" },
-              { status: 409 }
-            );
+            return errorResponse(409, "Shares were already sold or reserved by another action");
           }
           let sellerCredited = false;
           try {
@@ -695,10 +669,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
           { requireSufficient: true }
         );
         if (reservedCorpShares < 0) {
-          return NextResponse.json(
-            { error: "Shares were already sold or reserved by another action" },
-            { status: 409 }
-          );
+          return errorResponse(409, "Shares were already sold or reserved by another action");
         }
         try {
           await db.collection<ShareOrder>("shareOrders").insertOne({
@@ -753,10 +724,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
     if (forexEnabled) {
       const fxResult = await loadCharacterFxRate(db, homeCurrency);
       if (!fxResult.ok) {
-        return NextResponse.json(
-          { error: "Exchange rate unavailable, try again shortly" },
-          { status: 503 }
-        );
+        return errorResponse(503, "Exchange rate unavailable, try again shortly");
       }
       charFxRate = fxResult.rate;
     }
@@ -784,10 +752,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
           forexEnabled
         );
         if (!debitResult.ok) {
-          return NextResponse.json(
-            { error: "Insufficient funds for immediate fill" },
-            { status: 400 }
-          );
+          return errorResponse(400, "Insufficient funds for immediate fill");
         }
         let sharesCredited = false;
         try {
@@ -810,10 +775,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
           );
           if (!credited) {
             await refundCharacterCash(db, character._id, homeCurrency, costInHome, forexEnabled);
-            return NextResponse.json(
-              { error: "Not enough shares remain in public float" },
-              { status: 409 }
-            );
+            return errorResponse(409, "Not enough shares remain in public float");
           }
           sharesCredited = true;
           void recordShareTrade(db, {
@@ -915,11 +877,9 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
         forexEnabled
       );
       if (!escrowDebit.ok) {
-        return NextResponse.json(
-          {
-            error: `Insufficient funds. Need ${escrowInHome.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${homeCurrency} in escrow`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Insufficient funds. Need ${escrowInHome.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${homeCurrency} in escrow`
         );
       }
       try {
@@ -1001,11 +961,9 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
       const availableShares = ownedShares - alreadyReserved;
 
       if (availableShares < shares) {
-        return NextResponse.json(
-          {
-            error: `Only ${availableShares.toLocaleString()} shares available (${alreadyReserved.toLocaleString()} reserved in open orders)`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Only ${availableShares.toLocaleString()} shares available (${alreadyReserved.toLocaleString()} reserved in open orders)`
         );
       }
 
@@ -1043,10 +1001,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
           await reverseFloatSellDebit(db, corporation, issuerBuyback, {
             split: issuerBuybackSplit,
           });
-          return NextResponse.json(
-            { error: "Shares were already sold or reserved by another action" },
-            { status: 409 }
-          );
+          return errorResponse(409, "Shares were already sold or reserved by another action");
         }
         let sellerCredited = false;
         try {
@@ -1162,10 +1117,7 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
         { requireSufficient: true }
       );
       if (reservedShares < 0) {
-        return NextResponse.json(
-          { error: "Shares were already sold or reserved by another action" },
-          { status: 409 }
-        );
+        return errorResponse(409, "Shares were already sold or reserved by another action");
       }
       try {
         await db.collection<ShareOrder>("shareOrders").insertOne({

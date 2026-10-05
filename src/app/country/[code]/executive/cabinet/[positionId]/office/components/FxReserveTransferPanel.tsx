@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   countryCode: string;
@@ -53,7 +54,7 @@ export function FxReserveTransferPanel({ countryCode, canAct, onUpdate }: Props)
       const json = await res.json();
       if (res.ok || (res.status >= 400 && res.status < 500)) pending.current = null;
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Transfer failed." });
+        setFeedback({ type: "error", message: apiErrorText(json, "Transfer failed.") });
       } else {
         setFeedback({
           type: "success",
@@ -75,7 +76,7 @@ export function FxReserveTransferPanel({ countryCode, canAct, onUpdate }: Props)
 
   return (
     <section className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
-      <h2 className="mb-2 text-lg font-semibold">FX Reserve Transfer</h2>
+      <h2 className="mb-2 text-lg font-semibold">FX reserve transfer</h2>
       <p className="mb-4 text-sm text-muted">
         Move treasury cash to the Central Bank&apos;s FX reserve pool. This is a one-time transfer,
         not a change to annual spending. Capped at 0.5% of annual revenue per turn. One transfer per
@@ -109,7 +110,7 @@ export function FxReserveTransferPanel({ countryCode, canAct, onUpdate }: Props)
 
       <div className="mt-4">
         <Button onClick={submit} disabled={!valid || !canAct || submitting}>
-          {submitting ? "Transferring…" : "Transfer to FX Reserve"}
+          {submitting ? "Transferring…" : "Transfer to FX reserve"}
         </Button>
       </div>
 

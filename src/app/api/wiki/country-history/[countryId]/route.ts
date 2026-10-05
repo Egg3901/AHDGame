@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkWikiDisabled } from "@/lib/api/wikiGuard";
 import { getCountryHistoryCollection } from "@/lib/db/collections/countryHistory";
 import type { CountryHistoryEvent } from "@/lib/db/types/countryHistoryEvent";
@@ -57,14 +57,14 @@ export async function GET(
     const { countryId: rawId } = await params;
     const upper = rawId.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[upper]) {
-      return NextResponse.json({ error: "Unknown country" }, { status: 400 });
+      return errorResponse(400, "Unknown country");
     }
     const db = await getDb();
     const user = await getAuthUser().catch(() => null);
     const isAdmin = user?.isAdmin === true;
     const accessible = await isCountryAccessible(upper, isAdmin);
     if (!accessible) {
-      return NextResponse.json({ error: "Country not available" }, { status: 400 });
+      return errorResponse(400, "Country not available");
     }
     const countryId = upper;
     const config = COUNTRY_CONFIGS[countryId];

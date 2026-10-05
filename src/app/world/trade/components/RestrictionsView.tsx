@@ -209,7 +209,7 @@ export default function RestrictionsView({ ledger }: { ledger: WorldTradeLedger 
     <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
       <div className="mb-3 flex items-baseline justify-between gap-2">
         <h3 className="text-sm font-bold text-foreground">
-          Trade Restrictions{" "}
+          Trade restrictions{" "}
           <span className="font-normal text-muted">· embargoes &amp; tariffs</span>
         </h3>
         <span className="text-[10px] text-muted">
@@ -233,9 +233,7 @@ export default function RestrictionsView({ ledger }: { ledger: WorldTradeLedger 
           {/* ── Active embargoes ── */}
           {groups.length > 0 && (
             <div className="space-y-5">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted">
-                Embargoes
-              </h4>
+              <h4 className="text-body-sm font-medium text-muted">Embargoes</h4>
               {groups.map((g) => (
                 <div key={g.code}>
                   <div className="mb-2 flex items-center gap-2">
@@ -299,7 +297,7 @@ export default function RestrictionsView({ ledger }: { ledger: WorldTradeLedger 
           {/* ── Tariffs ── */}
           {tariffGroups.length > 0 && (
             <div className="space-y-5">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted">Tariffs</h4>
+              <h4 className="text-body-sm font-medium text-muted">Tariffs</h4>
               {tariffGroups.map((g) => (
                 <div key={g.code}>
                   <div className="mb-2 flex items-center gap-2">
@@ -337,7 +335,7 @@ export default function RestrictionsView({ ledger }: { ledger: WorldTradeLedger 
           {/* ── Pending legislation ── */}
           {pending.length > 0 && (
             <div>
-              <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
+              <h4 className="mb-2 flex items-center gap-2 text-body-sm font-medium text-muted">
                 Pending in legislation
                 <span className="rounded-md border border-primary/40 px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-primary">
                   not yet in force

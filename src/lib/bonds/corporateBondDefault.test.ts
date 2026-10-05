@@ -191,6 +191,47 @@ describe("corporateBondDefault", () => {
     expect(p.creditRating.rating).toBe("CCC");
   });
 
+  it("prices other near maturities during a cashless defaulted-debt roll", () => {
+    const corp = { liquidCapital: 20, bondDefaultCreditPenaltyUntilTurn: 196 } as Corporation;
+    const rolled = {
+      totalIssued: 100,
+      defaulted: true,
+      couponRate: 5,
+      matured: false,
+      maturityTurn: 99,
+    } as Bond;
+    const quote = (otherMaturityTurn: number) =>
+      previewRefinanceIssuance({
+        corporation: corp,
+        liquidCapitalAnchor: 20,
+        allNonMaturedBonds: [
+          rolled,
+          {
+            totalIssued: 50,
+            defaulted: false,
+            couponRate: 5,
+            matured: false,
+            maturityTurn: otherMaturityTurn,
+          } as Bond,
+        ],
+        actualFaceAnchor: 100,
+        sectorNpv: 100,
+        annualIncome: 10,
+        primeRate: 5,
+        currentTurn: 100,
+        fxByCurrency: EMPTY_FX,
+        maturityTurns: 48,
+      });
+
+    const distant = quote(125);
+    const imminent = quote(101);
+    expect(imminent.creditRating.compositeScore).toBeLessThan(distant.creditRating.compositeScore);
+    expect(imminent.couponRate).toBeGreaterThan(distant.couponRate);
+    expect(imminent.creditRating.rating).not.toBe("CCC");
+    // The face being rolled contributes no proceeds to either quote.
+    expect(imminent.creditRating.components.liquidity).toBeLessThan(50);
+  });
+
   describe("allocateShareholderPool (bug #0540 — pro-rata across all buckets)", () => {
     const charA = new ObjectId();
     const charB = new ObjectId();

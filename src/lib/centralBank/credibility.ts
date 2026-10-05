@@ -1,4 +1,6 @@
 import { corridorVerdict } from "@/lib/centralBank/rateCorridor";
+import { stanceMatchesTaylorTarget } from "@/lib/centralBank/rules/credibility";
+import type { ChairAlignment } from "@/lib/centralBank/chairAlignment";
 
 /**
  * Central-bank credibility, derived from the existing scrutiny stock
@@ -69,18 +71,31 @@ export function capScrutinyGain(delta: number): number {
 }
 
 /**
- * Is the bank's current stance the one the corridor calls for?
- *
- * Above target inflation wants restrictive; below wants accommodative; inside
- * the band anything neutral counts. Uses the same `corridorVerdict` the UI
- * already shows, so what the player is told and what they are scored on cannot
- * drift apart.
+ * Is the bank's current rate aligned with the Taylor target used by the
+ * autonomous chair? Optional macro inputs preserve the historical helper
+ * behavior for older callers; the chair-turn pipeline always supplies actual
+ * era and macro inputs.
  */
 export function stanceIsCorrect(
   primeRate: number,
   inflation: number,
-  targetInflation: number
+  targetInflation: number,
+  neutralRate?: number,
+  gdpGrowth?: number,
+  alignment?: ChairAlignment | null
 ): boolean {
+  if (neutralRate !== undefined && gdpGrowth !== undefined) {
+    return stanceMatchesTaylorTarget({
+      primeRate,
+      neutralRate,
+      inflation,
+      targetInflation,
+      gdpGrowth,
+      alignment,
+    });
+  }
+  // Compatibility for older callers without macro inputs; all turn processing
+  // supplies the era-specific neutral rate and current output gap.
   const { stance } = corridorVerdict(primeRate, inflation);
   if (inflation > targetInflation + 0.5) return stance === "restrictive";
   if (inflation < targetInflation - 0.5) return stance === "accommodative";
@@ -100,7 +115,7 @@ export interface ResolveState {
  * Deliberately independent of whether inflation has actually responded: a chair
  * willing to hold an unpopular stance can ALWAYS climb out, which is what makes
  * the spiral escapable. The streak resets the moment the stance stops matching
- * the corridor, so the relief has to be re-earned.
+ * the Taylor target, so the relief has to be re-earned.
  */
 export function resolveRecoveryDelta(params: {
   correctStance: boolean;

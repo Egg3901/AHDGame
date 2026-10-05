@@ -7,11 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PageErrorBoundary } from "./PageErrorBoundary";
 
 const { captureException } = vi.hoisted(() => ({
-  captureException: vi.fn(),
+  captureException: vi.fn(() => Promise.resolve(undefined)),
 }));
 
 vi.mock("@/lib/observability/sentryClientLazy", () => ({
   captureClientException: captureException,
+  captureClientExceptionWithId: captureException,
 }));
 
 vi.mock("next/link", () => ({
@@ -56,8 +57,10 @@ describe("PageErrorBoundary", () => {
     );
 
     expect(screen.getByText("Something went wrong")).toBeTruthy();
-    expect(captureException).toHaveBeenCalledWith(renderError, {
-      extra: { pageName: "Bill page" },
-    });
+    expect(captureException).toHaveBeenCalledWith(
+      renderError,
+      expect.objectContaining({ tags: { error_code: "CLIENT_ERROR" } })
+    );
+    expect(screen.getByTestId("error-code").textContent).toBe("CLIENT_ERROR");
   });
 });

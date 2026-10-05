@@ -18,7 +18,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getGameTime } from "@/lib/time/gameTime";
 import type { Election, GameState } from "@/lib/db/types";
 
@@ -37,7 +37,7 @@ export async function POST() {
     const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
 
     if (!gameState) {
-      return NextResponse.json({ error: "Game state not found" }, { status: 404 });
+      return errorResponse(404, "Game state not found");
     }
 
     // Use the game clock for the "now" reference so timer arithmetic agrees

@@ -15,10 +15,9 @@ import type { CountryEraOverride } from "../../contract";
  *
  * ⚠️ `usdExchangeRate` IS SET HERE BECAUSE NO 1991 ERA SET IT. The field is the
  * anchor value of ONE unit of this country's stored seed currency, and its base
- * value is a modern 1.0. `ieRegions1991` authors regional GDP as EUR-equivalent,
- * so the anchor must be the reciprocal of `INITIAL_RATES_1991` (0.85 IEP-as-EUR/USD) — the
- * same table `seedExchangeRates` writes into the `exchangeRates` collection.
- * Left unset, Ireland read as a $42B economy against a real ~$47B.
+ * value is a modern 1.0. The reconciled 1991 regional GDP is in Irish pounds,
+ * so use the reciprocal of the sourced annual quote, 0.6212975 IEP/USD.
+ * gdpAnchorRate1991.test.ts pins this to the seeded currency quote.
  *
  * The conversion follows the seed's stored GDP denomination. Native-currency
  * output uses the opening quote; output already in the shared unit stays at 1.
@@ -28,6 +27,6 @@ import type { CountryEraOverride } from "../../contract";
 export const IE_1991: CountryEraOverride = {
   preset: "1991-default",
   config: {
-    usdExchangeRate: 1.1764705882352942,
+    usdExchangeRate: 1 / 0.6212975,
   },
 };

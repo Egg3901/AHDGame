@@ -40,6 +40,7 @@ import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { eraIdForYear } from "@/lib/seeds/eraInterpolation";
 import { eraForPreset } from "@/lib/seeds/presetSelector";
 import { getActionImage } from "@/lib/images/actionImages";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const CATEGORIES = ["all", "influence", "money", "research"];
 
@@ -229,9 +230,9 @@ export default function ActionsPage() {
           setFlash({ type, msg: data.message, ok: true });
         }
       } else if (viewMode === "compact") {
-        showToast(data.error ?? "Action failed.", "error");
+        showToast(apiErrorText(data, "Action failed."), "error");
       } else {
-        setFlash({ type, msg: data.error ?? "Action failed.", ok: false });
+        setFlash({ type, msg: apiErrorText(data, "Action failed."), ok: false });
       }
     } catch {
       if (viewMode === "compact") {
@@ -287,9 +288,9 @@ export default function ActionsPage() {
           });
         }
       } else if (viewMode === "compact") {
-        showToast(data.error ?? "Shift failed.", "error");
+        showToast(apiErrorText(data, "Shift failed."), "error");
       } else {
-        setFlash({ type: "flipflop", msg: data.error ?? "Shift failed.", ok: false });
+        setFlash({ type: "flipflop", msg: apiErrorText(data, "Shift failed."), ok: false });
       }
     } catch {
       if (viewMode === "compact") {
@@ -336,9 +337,9 @@ export default function ActionsPage() {
           setFlash({ type: "convertCash", msg: data.message, ok: true });
         }
       } else if (viewMode === "compact") {
-        showToast(data.error ?? "Conversion failed.", "error");
+        showToast(apiErrorText(data, "Conversion failed."), "error");
       } else {
-        setFlash({ type: "convertCash", msg: data.error ?? "Conversion failed.", ok: false });
+        setFlash({ type: "convertCash", msg: apiErrorText(data, "Conversion failed."), ok: false });
       }
     } catch {
       if (viewMode === "compact") {

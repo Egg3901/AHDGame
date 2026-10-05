@@ -135,6 +135,8 @@ export type ConsolePayload = {
      */
     lastBankingDepositInterest: number;
     lastBankingLoanInterest: number;
+    lastBankingSovereignCouponIncome?: number;
+    lastBankingTreasuryRealizedGain?: number;
     lastBankingLoanOriginationFees?: number;
     lastBankingUnderwritingFees?: number;
     loanOriginationFeesLifetime?: number;

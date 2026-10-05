@@ -19,6 +19,7 @@ import { anchorPerTurnToFinancialDaily } from "@/lib/imf/imfFacilityFinancials";
 import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
 import { loadBankingPolicy } from "@/lib/banking/policy";
 import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
+import { bankIncomeIncludingUnbookedSovereignAssets } from "@/lib/banking/rules/sovereignClaims";
 import { bankBookEquity, bankNpvFromPerTurnIncome, bankValuation } from "@/lib/banking/valuation";
 import { bankNpvBoostMultiplier } from "@/lib/corporations/rules/marketBoost";
 import {
@@ -308,7 +309,7 @@ export async function computeIncomeStatement(
     ? bankValuation(activeBankCharter, bankSheetOptions) / bankFxRate
     : 0;
   const bankIncomePerTurnAnchor = activeBankCharter
-    ? (activeBankCharter.lastBankingIncome ?? 0) / bankFxRate
+    ? bankIncomeIncludingUnbookedSovereignAssets(activeBankCharter) / bankFxRate
     : 0;
   const bankIncomeLocalPerDay = anchorToCorpCapital(
     bankIncomePerTurnAnchor * TURNS_PER_DAY,

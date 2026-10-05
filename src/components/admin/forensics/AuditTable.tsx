@@ -174,9 +174,7 @@ export function AuditTable({
     <div className="overflow-hidden rounded-xl border border-card-border bg-card shadow-card">
       {/* Slim status strip: keeps the stream scannable without a heavy header. */}
       <div className="flex items-baseline justify-between border-b border-card-border/70 bg-card-elevated/40 px-3 py-2">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
-          Action stream
-        </span>
+        <span className="text-body-sm font-medium text-muted">Action stream</span>
         <span className="text-[11px] tabular-nums text-muted">
           {total > 0 ? `${total.toLocaleString("en-US")}${hasMore ? "+" : ""} actions` : "loading…"}
         </span>
@@ -225,7 +223,7 @@ export function AuditTable({
               </div>
             )}
             {!hasMore && total > 0 && (
-              <div className="flex items-center gap-3 px-6 py-3 text-[11px] uppercase tracking-[0.14em] text-muted/70">
+              <div className="flex items-center gap-3 px-6 py-3 text-body-sm font-medium text-muted">
                 <span className="h-px flex-1 bg-card-border/60" aria-hidden />
                 End of results
                 <span className="h-px flex-1 bg-card-border/60" aria-hidden />

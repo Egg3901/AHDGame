@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Debounced autosave of a whole slice, with the server's refusal surfaced.
@@ -46,7 +47,7 @@ export function useDebouncedSave(
           });
           if (!res.ok) {
             const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-            setError(payload?.error ?? fallbackMessage);
+            setError(apiErrorText(payload, fallbackMessage));
             return;
           }
           setError(null);

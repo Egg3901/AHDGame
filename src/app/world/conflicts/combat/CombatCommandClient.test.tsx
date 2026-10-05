@@ -78,15 +78,15 @@ function renderClient(extra: Record<string, unknown> = {}) {
 describe("CombatCommandClient (smoke render)", () => {
   it("renders the header, screen nav, and order of battle", () => {
     renderClient();
-    expect(screen.getByRole("heading", { name: "Combat Command", level: 1 })).toBeTruthy();
-    expect(screen.getByText("Order of Battle")).toBeTruthy();
-    expect(screen.getByText("War Room")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Combat command", level: 1 })).toBeTruthy();
+    expect(screen.getByText("Order of battle")).toBeTruthy();
+    expect(screen.getByText("War room")).toBeTruthy();
     expect(screen.getAllByText("CV").length).toBeGreaterThan(0);
   });
 
-  it("declares an offensive from the War Room (fires the declare route)", () => {
+  it("declares an offensive from the War room (fires the declare route)", () => {
     renderClient();
-    fireEvent.click(screen.getByText("War Room"));
+    fireEvent.click(screen.getByText("War room"));
     expect(screen.getByText("ACTIVE FRONTS")).toBeTruthy();
     // a unit is deployed to afghan (first contested front) → the declare control shows
     fireEvent.click(screen.getByText("⚔ DECLARE OFFENSIVE"));
@@ -96,22 +96,22 @@ describe("CombatCommandClient (smoke render)", () => {
     expect(url).toContain("/battle/declare");
   });
 
-  it("navigates to Doctrine & Command", () => {
+  it("navigates to Doctrine & command", () => {
     renderClient();
-    fireEvent.click(screen.getByText("Doctrine & Command"));
+    fireEvent.click(screen.getByText("Doctrine & command"));
     expect(screen.getByText("NATIONAL DOCTRINE · FORCE-WIDE")).toBeTruthy();
   });
 
   it("makes order controls read-only for a viewer who does not hold defence", () => {
     renderClient({ canWrite: false });
     expect(screen.getByText(/read-only view/i)).toBeTruthy();
-    fireEvent.click(screen.getByText("Unit Dossier"));
+    fireEvent.click(screen.getByText("Unit dossier"));
     expect(screen.getByLabelText("Posture")).toHaveProperty("disabled", true);
     expect(screen.getByLabelText("Battle role")).toHaveProperty("disabled", true);
   });
 });
 
-describe("Commanding General hint", () => {
+describe("Commanding general hint", () => {
   const hint = { unpostedGenerals: 2, href: "/country/us/general/commands" };
 
   it("points a CG with unposted generals at their command page", () => {

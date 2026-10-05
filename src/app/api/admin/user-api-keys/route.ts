@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { withAdminAuth } from "@/lib/api/withAdminAuth";
 import { getDb } from "@/lib/mongodb";
 import { parseBoundedIntParam } from "@/lib/api/validate";
@@ -114,7 +114,7 @@ export const DELETE = withAdminAuth(async (_auth, request: Request) => {
     const { searchParams } = new URL(request.url);
     const keyId = searchParams.get("keyId");
     if (!keyId) {
-      return NextResponse.json({ error: "keyId is required" }, { status: 400 });
+      return errorResponse(400, "keyId is required");
     }
 
     const db = await getDb();
@@ -126,7 +126,7 @@ export const DELETE = withAdminAuth(async (_auth, request: Request) => {
       );
 
     if (result.matchedCount === 0) {
-      return NextResponse.json({ error: "Key not found or already revoked" }, { status: 404 });
+      return errorResponse(404, "Key not found or already revoked");
     }
 
     return NextResponse.json({ success: true });

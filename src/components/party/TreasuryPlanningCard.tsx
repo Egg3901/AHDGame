@@ -287,7 +287,7 @@ export function TreasuryPlanningCard({
             className="rounded-lg px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             style={{ backgroundColor: accentColor }}
           >
-            {saving ? "Saving…" : "Save Treasurer Plan"}
+            {saving ? "Saving…" : "Save treasurer plan"}
           </button>
         </div>
       </div>

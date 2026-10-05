@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getDb } from "@/lib/mongodb";
@@ -36,7 +36,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const { id, voteId } = await params;
     if (!ObjectId.isValid(voteId)) {
-      return NextResponse.json({ error: "Invalid vote ID" }, { status: 400 });
+      return errorResponse(400, "Invalid vote ID");
     }
     const db = await getDb();
     const resolved = await resolveCorporation(db, id);
@@ -47,11 +47,11 @@ export async function POST(request: Request, { params }: RouteParams) {
       _id: new ObjectId(voteId),
       corporationId: corporation._id,
     });
-    if (!vote) return NextResponse.json({ error: "Vote not found" }, { status: 404 });
+    if (!vote) return errorResponse(404, "Vote not found");
 
     const parsed = await parseJsonBody(request, CastSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { vote: choice, voterCorporationId } = parsed.data;
 
@@ -76,17 +76,11 @@ export async function POST(request: Request, { params }: RouteParams) {
           { projection: { _id: 1 } }
         );
       if (!managedCorp) {
-        return NextResponse.json(
-          { error: "You are not the CEO of that corporation" },
-          { status: 403 }
-        );
+        return errorResponse(403, "You are not the CEO of that corporation");
       }
       const corpHolding = corporation.shareholders?.find((s) => s.corporationId?.equals(corpOid));
       if (!corpHolding || corpHolding.shares <= 0) {
-        return NextResponse.json(
-          { error: "That corporation holds no shares in this corporation" },
-          { status: 403 }
-        );
+        return errorResponse(403, "That corporation holds no shares in this corporation");
       }
       voterId = corpOid;
       voterType = "corporation";
@@ -124,10 +118,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           voterType = "corporation";
           voteShares = corpHolding.shareholder.shares;
         } else {
-          return NextResponse.json(
-            { error: "You hold no shares in this corporation" },
-            { status: 403 }
-          );
+          return errorResponse(403, "You hold no shares in this corporation");
         }
       }
     }
@@ -140,7 +131,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       voteShares,
       choice,
     });
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
 
     // Re-fetch the vote with the newly cast ballot and check for immediate resolution.
     // Without this, a decisive vote (e.g. 68% YES meeting a 50% threshold) would leave

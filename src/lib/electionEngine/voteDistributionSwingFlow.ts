@@ -52,16 +52,15 @@ import {
   stateOrgBonusFraction,
 } from "./constants";
 import {
-  legislativeTenureTermsHeld,
   orgVoteWeight,
   personalOrgFloor,
-  personalStatTenureRetention,
   regBaselineMultiplier,
   regResistanceMultiplier,
   supportMoodMultiplier,
   effectivePeelableFraction,
   applyVoteReachFloor,
 } from "./electionFormulaFactors";
+import { personalStatTenureRetentionForCandidate } from "./rules/tenureRetention";
 import { persuasionDrivers } from "./persuasionDrivers";
 import type { EnrichedCandidate, DistributeVotesOptions, AppealWeightTrace } from "./types";
 import { democraticHealthMultiplierForCandidate } from "./democraticHealth";
@@ -95,39 +94,18 @@ function appealWeight(
   options: DistributeVotesOptions | undefined,
   trace?: AppealWeightTrace
 ): number {
-  // Personal-stat tenure erosion (see `personalStatTenureRetention`'s doc
-  // comment in electionFormulaFactors.ts for the full root-cause writeup).
-  // politicalInfluence / favorability have no tenure-aware decay of their
-  // own — unlike the swing-side incumbency driver (which already erodes via
-  // the economic referendum channel), a multi-term incumbent's reach/approval
-  // edge from these two stats never shrinks on its own. This scales that
-  // same per-term erosion onto the raw stat values feeding
-  // reach/appeal/approval below, gated on tenure data that only exists for
-  // tracked incumbencies: US President and US Senate (single scalar
-  // party+terms — one seat, one incumbent) and US House (a per-candidate map,
-  // since a multi-seat race can have several simultaneous incumbents — see
-  // `resolveHouseIncumbentTenures`'s doc comment in singleSeatIncumbency.ts).
-  // No tenure data (open seat, first term, fresh nominee, or an untracked race
-  // family) ⇒ 1.0 ⇒ complete no-op. It is a FRACTION of the stat, never a
-  // points charge against it, so no tenure however long can zero a candidate.
-  const isTenuredExecutiveIncumbent =
-    options?.incumbentPartyId != null && ec.party === options.incumbentPartyId;
-  const isTenuredLegislativeIncumbent =
-    options?.legislativeIncumbentPartyId != null &&
-    ec.party === options.legislativeIncumbentPartyId;
-  const houseIncumbentTerms = options?.houseIncumbentTenureTermsByCandidateId?.get(ec.candidateId);
-  // The Senate lane reports the term being SOUGHT where the other two report
-  // terms already HELD; `legislativeTenureTermsHeld` reconciles them so
-  // identical service earns identical erosion in every lane. See its doc
-  // comment in electionFormulaFactors.ts.
-  const legislativeTermsHeld = legislativeTenureTermsHeld(options?.legislativeIncumbentTenureTerms);
-  const tenureRetention = isTenuredExecutiveIncumbent
-    ? personalStatTenureRetention(options?.incumbentConsecutiveTerms)
-    : isTenuredLegislativeIncumbent
-      ? personalStatTenureRetention(legislativeTermsHeld)
-      : houseIncumbentTerms != null
-        ? personalStatTenureRetention(houseIncumbentTerms)
-        : 1;
+  // Retention is shared with granular poll projection so candidate reach and
+  // favorability use the same executive, Senate, and House tenure semantics.
+  const tenureRetention = personalStatTenureRetentionForCandidate(
+    { candidateId: ec.candidateId, partyId: ec.party },
+    {
+      executivePartyId: options?.incumbentPartyId,
+      executiveConsecutiveTerms: options?.incumbentConsecutiveTerms,
+      legislativePartyId: options?.legislativeIncumbentPartyId,
+      legislativeTenureTermsSought: options?.legislativeIncumbentTenureTerms,
+      houseTenureTermsByCandidateId: options?.houseIncumbentTenureTermsByCandidateId,
+    }
+  );
 
   const rawReachSource = options?.useNationalInfluenceForReach
     ? ec.nationalInfluence

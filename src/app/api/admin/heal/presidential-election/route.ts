@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { DEFAULT_DURATIONS } from "@/lib/turn/perpetualElections";
 import { archiveCampaignsForCandidates } from "@/lib/campaigns/archiveWithdrawnCampaigns";
 import type { Election, GameState } from "@/lib/db/types";
@@ -86,7 +86,7 @@ export async function POST() {
     const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
 
     if (!gameState) {
-      return NextResponse.json({ error: "GameState not found" }, { status: 500 });
+      return errorResponse(500, "GameState not found");
     }
 
     const now = new Date(gameState.lastTurnProcessed);

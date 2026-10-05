@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -16,6 +17,7 @@ import {
   votesNeeded,
 } from "@/lib/internationalOrganizations/resolutionRules";
 import { useEntityName } from "../useEntityName";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   org: OrgSummary;
@@ -70,7 +72,7 @@ export function SanctionsPanel({ org, viewer, currentTurn, votingWindowTurns, on
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? "Failed to table sanctions");
+        throw new Error(apiErrorText(body, "Failed to table sanctions"));
       }
       setShowForm(false);
       setTarget("");
@@ -95,7 +97,7 @@ export function SanctionsPanel({ org, viewer, currentTurn, votingWindowTurns, on
     );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body?.error ?? "Vote failed");
+      throw new Error(apiErrorText(body, "Vote failed"));
     }
     onChange();
   }
@@ -172,7 +174,7 @@ export function SanctionsPanel({ org, viewer, currentTurn, votingWindowTurns, on
               </select>
             </div>
           </div>
-          {error && <p className="mt-2 text-xs text-error">{error}</p>}
+          <InlineError error={error} className="mt-2 text-xs text-error" />
           <div className="mt-4 flex gap-2">
             <Button variant="primary" size="md" onClick={submit} isLoading={submitting}>
               Submit for a vote
@@ -187,7 +189,7 @@ export function SanctionsPanel({ org, viewer, currentTurn, votingWindowTurns, on
       {/* Active */}
       {active.length > 0 && (
         <div className="space-y-3">
-          <h4 className="text-xs font-semibold uppercase tracking-widest text-muted">Active</h4>
+          <h4 className="text-body-sm font-medium text-muted">Active</h4>
           {active.map((l) => (
             <div
               key={l._id.toString()}
@@ -215,9 +217,7 @@ export function SanctionsPanel({ org, viewer, currentTurn, votingWindowTurns, on
 
       {/* Pending */}
       <div className="space-y-3">
-        <h4 className="text-xs font-semibold uppercase tracking-widest text-muted">
-          Awaiting a vote
-        </h4>
+        <h4 className="text-body-sm font-medium text-muted">Awaiting a vote</h4>
         {pending.length === 0 ? (
           <div className="rounded-xl border border-card-border bg-card p-5">
             <p className="text-sm text-muted">No pending sanctions.</p>

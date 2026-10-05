@@ -7,7 +7,7 @@ import { flushServerPosthog } from "@/lib/analytics/serverPosthog";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { retireCharacter } from "@/lib/retireCharacter";
 import { buildRetireRecapOpts } from "@/lib/recap/retireRecapOpts";
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const userIdParam = searchParams.get("userId");
     if (!userIdParam || !/^[a-f\d]{24}$/i.test(userIdParam)) {
-      return NextResponse.json({ error: "Valid userId query param required" }, { status: 400 });
+      return errorResponse(400, "Valid userId query param required");
     }
 
     const db = await getDb();
@@ -66,20 +66,18 @@ export async function POST(request: Request) {
     if (!admin.ok) return admin.response;
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const userId = new ObjectId(parsed.data.userId);
 
     const user = await db.collection("users").findOne({ _id: userId });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (!user) return errorResponse(404, "User not found");
 
     // Find active character — use activeCharacterId if set, otherwise first character
     const charQuery = user.activeCharacterId ? { _id: user.activeCharacterId, userId } : { userId };
     const character = await db.collection<Character>("characters").findOne(charQuery);
-    if (!character)
-      return NextResponse.json({ error: "User has no active character" }, { status: 404 });
+    if (!character) return errorResponse(404, "User has no active character");
 
     const recapOpts = await buildRetireRecapOpts(db, character);
     await retireCharacter(db, character, userId, "admin_action", recapOpts);

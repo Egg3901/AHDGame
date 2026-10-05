@@ -111,6 +111,6 @@ describe("PATCH /api/settings/display-currency", () => {
     );
 
     expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: "Character not found" });
+    expect(await res.json()).toMatchObject({ error: "Character not found" });
   });
 });

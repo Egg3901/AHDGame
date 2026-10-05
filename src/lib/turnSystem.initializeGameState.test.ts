@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
+import { getDb } from "@/lib/mongodb";
+import { initializeGameState } from "./turnSystem";
+
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
 describe("initializeGameState", () => {
@@ -27,13 +31,10 @@ describe("initializeGameState", () => {
       };
     };
 
-    return import("@/lib/mongodb").then(async (m) => {
-      vi.mocked(m.getDb).mockResolvedValue({ collection } as never);
-    });
+    vi.mocked(getDb).mockResolvedValue({ collection } as never);
   });
 
   it("bakes both startingYear and preset on the new gameState doc", async () => {
-    const { initializeGameState } = await import("./turnSystem");
     await initializeGameState();
 
     expect(insertedDoc).not.toBeNull();
@@ -43,12 +44,13 @@ describe("initializeGameState", () => {
       startingYear: 2019,
       preset: "2019-default",
     });
-  }, 30000);
+    expect(insertedDoc?.worldEpochId).toMatch(/^[a-f0-9]{24}$/);
+  });
 
   it("bakes the production-default feature flags into a fresh world", async () => {
-    const { initializeGameState } = await import("./turnSystem");
     await initializeGameState();
 
+    expect(insertedDoc).toMatchObject(DEFAULT_GAME_STATE_FLAGS);
     expect(insertedDoc).toMatchObject({
       forexEnabled: true,
       playerRandomEventsEnabled: true,
@@ -56,10 +58,10 @@ describe("initializeGameState", () => {
       autoDisastersEnabled: true,
       crisisAidBillsEnabled: true,
       rpgStatsEnabled: true,
-      // Off by default: the 48-turn automatic sector reseed favours the state
-      // corp over private/spun-out corps (#2926) and re-seeds a deliberately
-      // shaped world. The one gameplay toggle held off; everything else is on.
-      autoSectorSeedEnabled: false,
+      // Fresh-world policy: every gameplay flag on, NPP autonomy at v4.
+      autoSectorSeedEnabled: true,
+      nppOffensiveInitiationEnabled: true,
+      nppOffensiveJoinEnabled: true,
       sectorTechTreesEnabled: true,
       nppAutonomyLevel: "v4",
       nppAutonomyEnabled: true,
@@ -84,7 +86,7 @@ describe("initializeGameState", () => {
     // eurozoneEnabled is era-derived — seedForex sets it per preset, so it is
     // absent on the bare init doc.
     expect(insertedDoc).not.toHaveProperty("eurozoneEnabled");
-  }, 30000);
+  });
 
   it("does not overwrite an existing gameState doc", async () => {
     existingDoc = {
@@ -93,7 +95,6 @@ describe("initializeGameState", () => {
       preset: "1991-default",
       currentTurn: 100,
     };
-    const { initializeGameState } = await import("./turnSystem");
     const result = await initializeGameState();
 
     expect(insertedDoc).toBeNull();

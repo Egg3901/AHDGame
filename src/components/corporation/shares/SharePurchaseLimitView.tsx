@@ -132,7 +132,7 @@ export function SharePurchaseLimitView({
               : "bg-card-elevated text-muted hover:text-foreground"
           }`}
         >
-          Buy Order
+          Buy order
         </button>
         <button
           type="button"
@@ -143,7 +143,7 @@ export function SharePurchaseLimitView({
               : "bg-card-elevated text-muted hover:text-foreground"
           }`}
         >
-          Sell Order
+          Sell order
         </button>
       </div>
 

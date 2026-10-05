@@ -4,6 +4,7 @@ import type { ElectionDisplay, CharacterBasic } from "@/lib/db/types";
 import { useFeedback } from "@/contexts/FeedbackContext";
 import { useToast } from "@/contexts/ToastContext";
 import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface UseElectionActionsProps {
   character: CharacterBasic | null;
@@ -92,8 +93,8 @@ export function useElectionActions({
           recordAction("Entered election", { electionId });
           await onSuccess?.();
         } else {
-          setMessage(`✗ ${data.error}`);
-          showToast(data.error ?? "Could not enter this race", "error");
+          setMessage(`✗ ${apiErrorText(data, "Request failed")}`);
+          showToast(apiErrorText(data, "Could not enter this race"), "error");
         }
       } catch {
         setMessage("✗ Network error");
@@ -133,8 +134,8 @@ export function useElectionActions({
           recordAction("Withdrew from election", { electionId });
           await onSuccess?.();
         } else {
-          setMessage(`✗ ${data.error}`);
-          showToast(data.error ?? "Could not withdraw from this race", "error");
+          setMessage(`✗ ${apiErrorText(data, "Request failed")}`);
+          showToast(apiErrorText(data, "Could not withdraw from this race"), "error");
         }
       } catch {
         setMessage("✗ Network error");

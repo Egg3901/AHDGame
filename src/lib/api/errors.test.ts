@@ -10,6 +10,8 @@ import {
   isDuplicateKeyError,
   internalError,
   handleRouteError,
+  errorResponse,
+  statusResponse,
 } from "./errors";
 
 // Mock NextResponse and Sentry
@@ -50,12 +52,16 @@ describe("ApiError", () => {
   describe("toJson", () => {
     it("includes error message always", () => {
       const error = new ApiError(400, "Something went wrong");
-      expect(error.toJson()).toEqual({ error: "Something went wrong" });
+      expect(error.toJson("r1")).toEqual({
+        error: "Something went wrong",
+        code: "BAD_REQUEST",
+        ref: "r1",
+      });
     });
 
     it("includes code when provided", () => {
       const error = new ApiError(400, "Bad request", "BAD_REQUEST");
-      expect(error.toJson()).toEqual({ error: "Bad request", code: "BAD_REQUEST" });
+      expect(error.toJson("r1")).toEqual({ error: "Bad request", code: "BAD_REQUEST", ref: "r1" });
     });
 
     it("includes details when provided", () => {
@@ -63,16 +69,20 @@ describe("ApiError", () => {
         field: "email",
         reason: "Invalid format",
       });
-      expect(error.toJson()).toEqual({
+      expect(error.toJson("r1")).toEqual({
         error: "Validation failed",
         code: "VALIDATION_ERROR",
+        ref: "r1",
         details: { field: "email", reason: "Invalid format" },
       });
     });
 
-    it("excludes code and details when undefined", () => {
+    it("falls back to the status catalog code and generates a ref", () => {
       const error = new ApiError(404, "Not found");
-      expect(error.toJson()).toEqual({ error: "Not found" });
+      const body = error.toJson();
+      expect(body).toMatchObject({ error: "Not found", code: "NOT_FOUND" });
+      expect(typeof body.ref).toBe("string");
+      expect(body.ref).not.toBe("");
     });
   });
 });
@@ -201,6 +211,7 @@ describe("handleRouteError", () => {
       error: "Internal server error",
       code: "INTERNAL_ERROR",
       eventId: "1234567890abcdef1234567890abcdef",
+      ref: "1234567890abcdef1234567890abcdef",
     });
   });
 
@@ -220,5 +231,51 @@ describe("handleRouteError", () => {
     expect(result.status).toBe(500);
     const body = (result as any).data;
     expect(body.error).toBe("Internal server error");
+  });
+});
+
+describe("errorResponse", () => {
+  it("wraps message in the shared envelope with a status-derived code and a ref", () => {
+    const res = errorResponse(404, "Missing");
+    expect(res.status).toBe(404);
+    expect((res as any).data).toMatchObject({ error: "Missing", code: "NOT_FOUND" });
+    expect(typeof (res as any).data.ref).toBe("string");
+  });
+
+  it("honors a custom code and falls back to catalog copy for empty messages", () => {
+    const custom = errorResponse(409, "Busy", { code: "TURN_IN_PROGRESS" });
+    expect((custom as any).data.code).toBe("TURN_IN_PROGRESS");
+    const empty = errorResponse(429, undefined);
+    expect((empty as any).data.error).toMatch(/too many requests/i);
+  });
+
+  it("keeps extra top-level fields and cannot be overridden by them", () => {
+    const res = errorResponse(409, "Locked", { extra: { turnsRemaining: 3, code: "NOPE" } });
+    expect((res as any).data).toMatchObject({
+      error: "Locked",
+      turnsRemaining: 3,
+      code: "CONFLICT",
+    });
+  });
+
+  it("passes structured messages through unchanged", () => {
+    const res = errorResponse(400, { fieldErrors: { a: ["bad"] } });
+    expect((res as any).data.error).toEqual({ fieldErrors: { a: ["bad"] } });
+    expect((res as any).data.code).toBe("BAD_REQUEST");
+  });
+});
+
+describe("statusResponse", () => {
+  it("leaves success statuses untouched", () => {
+    const res = statusResponse(200, { ok: true });
+    expect((res as any).data).toEqual({ ok: true });
+  });
+
+  it("adds code and ref to error statuses and keeps command fields", () => {
+    const res = statusResponse(422, { error: "Nope", reason: "cap" });
+    expect(res.status).toBe(422);
+    expect((res as any).data).toMatchObject({ error: "Nope", reason: "cap" });
+    expect(typeof (res as any).data.code).toBe("string");
+    expect(typeof (res as any).data.ref).toBe("string");
   });
 });

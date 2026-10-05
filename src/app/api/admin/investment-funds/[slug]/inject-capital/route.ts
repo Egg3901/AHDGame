@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import { isIndexFundsEnabled, INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFunds/featureFlag";
@@ -33,12 +33,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
     const parsed = await parseJsonBody(request, injectCapitalSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     if (!(await isIndexFundsEnabled())) {
-      return NextResponse.json({ error: INDEX_FUNDS_DISABLED_MESSAGE }, { status: 403 });
+      return errorResponse(403, INDEX_FUNDS_DISABLED_MESSAGE);
     }
 
     const { slug } = await params;
@@ -87,7 +87,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     );
 
     if (updateResult.matchedCount === 0) {
-      return NextResponse.json({ error: "Fund update failed" }, { status: 500 });
+      return errorResponse(500, "Fund update failed");
     }
 
     await emitFundAdminMintLeg(db, {

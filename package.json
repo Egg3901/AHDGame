@@ -1,6 +1,6 @@
 {
   "name": "a-house-divided",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "private": true,
   "engines": {
     "node": ">=20"
@@ -60,7 +60,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "node --max-old-space-size=8192 ./node_modules/typescript/bin/tsc --noEmit",
+    "typecheck": "node --max-old-space-size=12288 ./node_modules/typescript/bin/tsc --noEmit",
     "knip": "knip",
     "knip:production": "knip --production",
     "verify": "concurrently --kill-others-on-fail -n lint,fmt,tsc,arch -c auto \"npm run lint\" \"npm run format:check\" \"npm run typecheck\" \"npm run architecture:audit\" && npm run test:run",
@@ -71,6 +71,8 @@
     "wiki:screenshots": "npx tsx scripts/wiki-screenshots.ts",
     "simulate": "npx tsx scripts/simulate-legislation.ts",
     "simulate:industrial-relations": "npx tsx scripts/simulate-industrial-relations.ts",
+    "perf:aged-benchmark": "tsx scripts/perf/aged-benchmark.ts",
+    "perf:index-drift": "tsx scripts/perf/index-drift.ts",
     "sim:setup": "bash scripts/sim/local-setup.sh",
     "sim:worker": "bash scripts/sim/start-worker.sh",
     "sim:mcp": "npx tsx scripts/sim/localWorldsimMcp.ts",
@@ -79,9 +81,10 @@
     "audit:sector-viability": "npx tsx scripts/sim/sectorStrategyViability.ts",
     "sim:manufacturing-products-v2-balance": "npx tsx scripts/sim/manufacturingProductLinesV2Balance.ts",
     "ops:corporation-balance": "npx tsx scripts/ops/corporationBalanceAudit.ts --pretty",
-    "architecture:audit": "node scripts/architecture-audit.mjs",
+    "architecture:audit": "node scripts/architecture-audit.mjs && npm run architecture:contracts",
     "verify:build": "next build",
-    "postinstall": "node scripts/install/patch-mongodb-transaction-cursors.mjs && node scripts/install/verify-braces-depth.mjs && node scripts/install/patch-lightweight-chart-gestures.mjs"
+    "postinstall": "node scripts/install/patch-mongodb-transaction-cursors.mjs && node scripts/install/verify-braces-depth.mjs && node scripts/install/patch-lightweight-chart-gestures.mjs",
+    "architecture:contracts": "vitest run scripts/architecture/*.test.ts src/lib/admin/seed/seedManifest.test.ts src/lib/admin/seed/seedManifestDiscovery.test.ts src/lib/admin/resetGameWorld.test.ts src/lib/admin/bootstrapContract.test.ts src/lib/admin/resetAndBootstrapFailure.test.ts src/lib/admin/seed/indexes/resetRuntimeCoverage.test.ts src/simulation/engine/turnReadProjections.test.ts --maxWorkers=1"
   },
   "lint-staged": {
     "*.{ts,tsx,mts}": [

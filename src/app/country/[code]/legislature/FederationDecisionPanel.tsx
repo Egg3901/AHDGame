@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
@@ -102,7 +103,7 @@ export default function FederationDecisionPanel({
       });
       const body = (await response.json()) as { error?: string; billId?: string };
       if (!response.ok || !body.billId) {
-        setError(body.error ?? "The federation vote could not be opened.");
+        setError(apiErrorText(body, "The federation vote could not be opened."));
         return;
       }
       router.push(`/congress/bills/${body.billId}`);

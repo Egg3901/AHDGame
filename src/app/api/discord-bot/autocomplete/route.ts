@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_READ_LIMITS } from "@/lib/api/rateLimit";
 import { escapeRegex } from "@/lib/utils/escapeRegex";
@@ -15,7 +15,7 @@ import { filterCountryResults } from "./countryResults";
 export async function GET(request: Request) {
   try {
     if (!requireBotToken(request)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const rateLimit = checkRateLimit(
@@ -31,9 +31,9 @@ export async function GET(request: Request) {
     const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "10", 10), 25);
 
     if (type !== "characters" && type !== "states" && type !== "countries") {
-      return NextResponse.json(
-        { error: "Unsupported type. Use type=characters, type=states, or type=countries" },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Unsupported type. Use type=characters, type=states, or type=countries"
       );
     }
 

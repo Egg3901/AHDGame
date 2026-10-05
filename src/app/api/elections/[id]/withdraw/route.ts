@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { checkRateLimit, ELECTION_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -47,10 +47,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!resolved.ok) {
       if (resolved.reason === "invalid_id") {
         logRequest("POST", path, 400, Date.now() - start);
-        return NextResponse.json({ error: "Invalid election ID" }, { status: 400 });
+        return errorResponse(400, "Invalid election ID");
       }
       logRequest("POST", path, 404, Date.now() - start);
-      return NextResponse.json({ error: "Election not found" }, { status: 404 });
+      return errorResponse(404, "Election not found");
     }
 
     const election = resolved.election;
@@ -63,10 +63,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       election.status === "cancelled"
     ) {
       logRequest("POST", path, 400, Date.now() - start);
-      return NextResponse.json(
-        { error: "Cannot withdraw from a completed or cancelled election" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Cannot withdraw from a completed or cancelled election");
     }
 
     // Find the candidate entry
@@ -78,7 +75,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     if (!candidate) {
       logRequest("POST", path, 400, Date.now() - start);
-      return NextResponse.json({ error: "You are not entered in this race" }, { status: 400 });
+      return errorResponse(400, "You are not entered in this race");
     }
 
     // Update the candidate status to withdrawn

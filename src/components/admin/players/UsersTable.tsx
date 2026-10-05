@@ -28,6 +28,7 @@ interface UsersTableProps {
   onRetireCharacter: (userId: string, username: string) => void;
   onDeleteUser: (userId: string, username: string) => void;
   onSetSingleplayerEntitlement: (userId: string, username: string, entitled: boolean) => void;
+  onSetSandboxAccess: (userId: string, username: string, granted: boolean) => void;
 }
 
 export function UsersTable({
@@ -50,6 +51,7 @@ export function UsersTable({
   onRetireCharacter,
   onDeleteUser,
   onSetSingleplayerEntitlement,
+  onSetSandboxAccess,
 }: UsersTableProps) {
   const columns: ResponsiveTableColumn<UserData>[] = [
     {
@@ -86,7 +88,7 @@ export function UsersTable({
       header: "Party",
       render: (u) => (
         <span className={getPartyTextColor(u.party)}>
-          {u.party ? getPartyLabel(u.party) : "No Character"}
+          {u.party ? getPartyLabel(u.party) : "No character"}
         </span>
       ),
     },
@@ -106,7 +108,7 @@ export function UsersTable({
       : []),
     {
       key: "fingerprint",
-      header: isModeratorContext ? "Browser Signals" : "Fingerprint",
+      header: isModeratorContext ? "Browser signals" : "Fingerprint",
       render: (u) =>
         isModeratorContext ? (
           u.lastFingerprintKey || u.registrationFingerprintKey ? (
@@ -138,7 +140,7 @@ export function UsersTable({
     },
     {
       key: "lastLogin",
-      header: "Last Login",
+      header: "Last login",
       render: (u) => (
         <span className="text-sm text-muted">
           {u.lastLogin ? formatDate(u.lastLogin) : "Never"}
@@ -147,7 +149,7 @@ export function UsersTable({
     },
     {
       key: "lastLogout",
-      header: "Last Logout",
+      header: "Last logout",
       render: (u) => (
         <span className="text-sm text-muted">
           {u.lastLogout ? formatDate(u.lastLogout) : "Never"}
@@ -198,7 +200,7 @@ export function UsersTable({
       },
       {
         key: "lastIp",
-        header: "Last Known IP",
+        header: "Last known IP",
         mobileLabel: "Last IP",
         render: (u) => (
           <span className="font-mono text-sm break-all">
@@ -245,7 +247,7 @@ export function UsersTable({
               }`}
               title={getLatestNoteText(user) ? `Note: ${getLatestNoteText(user)}` : "Add mod note"}
             >
-              {getLatestNoteText(user) ? "View Note" : "Note"}
+              {getLatestNoteText(user) ? "View note" : "Note"}
             </button>
             {!user.isAdmin && (
               <button
@@ -329,7 +331,7 @@ export function UsersTable({
                       />
                       <MenuItem
                         label={
-                          user.singleplayerEntitled ? "Revoke Singleplayer" : "Grant Singleplayer"
+                          user.singleplayerEntitled ? "Revoke singleplayer" : "Grant singleplayer"
                         }
                         onClick={() => {
                           setMenuUserId(null);
@@ -338,6 +340,14 @@ export function UsersTable({
                             user.username,
                             !user.singleplayerEntitled
                           );
+                        }}
+                      />
+                      <MenuItem
+                        label={user.sandboxAccessGranted ? "Revoke sandbox" : "Grant sandbox"}
+                        title="Sandbox tester access without supporter perks (needs the Sandbox tester access switch on)"
+                        onClick={() => {
+                          setMenuUserId(null);
+                          onSetSandboxAccess(user.id, user.username, !user.sandboxAccessGranted);
                         }}
                       />
                       <MenuItem

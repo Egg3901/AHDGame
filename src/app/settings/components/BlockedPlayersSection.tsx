@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useState } from "react";
 
 interface BlockedPlayer {
@@ -75,7 +76,7 @@ export function BlockedPlayersSection() {
           ))}
         </ul>
       )}
-      {error && <p className="mt-2 text-xs text-error">{error}</p>}
+      <InlineError error={error} className="mt-2 text-xs text-error" />
     </div>
   );
 }

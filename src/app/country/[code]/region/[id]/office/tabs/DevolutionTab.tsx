@@ -304,7 +304,7 @@ export function DevolutionTab(props: Props) {
             onClick={() => setModalMode("admin")}
             className="self-end rounded-lg bg-error px-3 py-1.5 text-sm font-medium text-white hover:bg-error/80 sm:self-auto"
           >
-            + Admin Override
+            + Admin override
           </button>
         </div>
       )}

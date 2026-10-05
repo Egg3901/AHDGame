@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { z } from "zod";
 import { createNotification } from "@/lib/notifications";
@@ -233,8 +233,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       request,
       z.object({ candidateCharacterId: schemas.objectId })
     );
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { candidateCharacterId } = parsed.data;
 
     const db = await getDb();
@@ -266,7 +265,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       if (holdingCorp) {
         voterCorporationId = holdingCorp._id;
       } else {
-        return NextResponse.json({ error: "Only shareholders can vote for CEO" }, { status: 403 });
+        return errorResponse(403, "Only shareholders can vote for CEO");
       }
     }
 
@@ -279,7 +278,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         { projection: { name: 1, userId: 1, homeState: 1, countryId: 1 } }
       );
     if (!candidate) {
-      return NextResponse.json({ error: "Candidate character not found" }, { status: 404 });
+      return errorResponse(404, "Candidate character not found");
     }
     // The sitting CEO is exempt from the residency rules. A CEO who moves house,
     // or whose corp relocates its HQ, would otherwise become unvotable in their
@@ -289,16 +288,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isSoleOwnerReclaim = canSoleOwnerReclaim(corporation, voterCharacter._id, candidateOid);
     if (!isIncumbentCandidate && !isSoleOwnerReclaim) {
       if (candidate.homeState !== corporation.headquartersState) {
-        return NextResponse.json(
-          { error: "Candidate must be located in the corporation's HQ state" },
-          { status: 403 }
-        );
+        return errorResponse(403, "Candidate must be located in the corporation's HQ state");
       }
       if (corporation.countryId && candidate.countryId !== corporation.countryId) {
-        return NextResponse.json(
-          { error: "Candidate must be in the corporation's home country" },
-          { status: 403 }
-        );
+        return errorResponse(403, "Candidate must be in the corporation's home country");
       }
     }
 
@@ -476,7 +469,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     });
 
     if (deletion.deletedCount === 0) {
-      return NextResponse.json({ error: "You have no vote to withdraw" }, { status: 404 });
+      return errorResponse(404, "You have no vote to withdraw");
     }
 
     const allVotes = dedupeCeoVotes(

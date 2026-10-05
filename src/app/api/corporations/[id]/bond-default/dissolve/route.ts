@@ -4,7 +4,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { parseJsonBody } from "@/lib/api/validate";
 import { bondDefaultDissolveSchema } from "@/lib/api/schemas/bondDefault";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { executeCorporationBondDefaultDissolution } from "@/lib/bonds/executeCorporationBondDefaultDissolution";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -36,7 +36,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, bondDefaultDissolveSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -56,10 +56,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const currentTurn = await getCurrentTurn(db);
     const ageBlock = corporationDissolutionAgeBlock(corporation.foundedAtTurn, currentTurn);
     if (ageBlock.blocked) {
-      return NextResponse.json(
-        { error: dissolutionAgeBlockedMessage(ageBlock.turnsRemaining) },
-        { status: 400 }
-      );
+      return errorResponse(400, dissolutionAgeBlockedMessage(ageBlock.turnsRemaining));
     }
 
     const now = new Date();
@@ -75,10 +72,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     );
 
     if (!result) {
-      return NextResponse.json(
-        { error: "Bond settlement is already in progress for this corporation" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Bond settlement is already in progress for this corporation");
     }
 
     return NextResponse.json({

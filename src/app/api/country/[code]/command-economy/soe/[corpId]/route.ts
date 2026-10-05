@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { parseJsonBody } from "@/lib/api/validate";
-import { forbidden, handleRouteError, notFound } from "@/lib/api/errors";
+import { forbidden, handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import type { Corporation } from "@/lib/db/types/corporation";
 import {
@@ -61,7 +61,7 @@ export async function POST(request: Request, context: RouteContext) {
 
     const parsed = await parseJsonBody(request, schema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const set: Record<string, unknown> = { "soe.directive.setOnTurn": currentTurn };

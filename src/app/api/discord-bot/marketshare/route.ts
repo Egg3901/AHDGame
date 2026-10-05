@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_FINANCIAL_LIMITS } from "@/lib/api/rateLimit";
 import type { Corporation, CorporateSector, State, User } from "@/lib/db/types";
@@ -34,7 +34,7 @@ function roundMarketSharePercent(revenue: number, totalMarket: number): number {
 export async function GET(request: Request) {
   try {
     if (!requireBotToken(request)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const rateLimit = checkRateLimit(
@@ -52,19 +52,14 @@ export async function GET(request: Request) {
     const discordIdParam = url.searchParams.get("discordId");
 
     if (!sectorType || !CORPORATION_TYPES.includes(sectorType)) {
-      return NextResponse.json(
-        {
-          error: `Must provide a valid type. Options: ${CORPORATION_TYPES.join(", ")}`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Must provide a valid type. Options: ${CORPORATION_TYPES.join(", ")}`
       );
     }
 
     if (countryParam && !COUNTRY_IDS.includes(countryParam)) {
-      return NextResponse.json(
-        { error: `Invalid country. Options: ${COUNTRY_IDS.join(", ")}` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Invalid country. Options: ${COUNTRY_IDS.join(", ")}`);
     }
 
     const db = await getDb();
@@ -99,17 +94,13 @@ export async function GET(request: Request) {
     if (stateIdParam) {
       const st = stateById.get(stateIdParam);
       if (!st) {
-        return NextResponse.json({ error: "State not found", found: false }, { status: 404 });
+        return errorResponse(404, "State not found", { extra: { found: false } });
       }
       const stateCountry = st.countryId;
       if (countryParam && stateCountry !== countryParam) {
-        return NextResponse.json(
-          {
-            error: `State ${stateIdParam} is not in country ${countryParam}`,
-            found: false,
-          },
-          { status: 400 }
-        );
+        return errorResponse(400, `State ${stateIdParam} is not in country ${countryParam}`, {
+          extra: { found: false },
+        });
       }
       scopedStates = [st];
       scopeStateName = st.name;

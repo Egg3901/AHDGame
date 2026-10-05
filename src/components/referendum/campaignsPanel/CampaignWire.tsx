@@ -50,9 +50,7 @@ export function CampaignWire({
                 aria-hidden
               />
               <div className="min-w-0 flex-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-muted">
-                  Turn {e.turn}
-                </div>
+                <div className="text-body-sm font-medium text-muted">Turn {e.turn}</div>
                 <div className="text-[13px] text-foreground">{e.summary}</div>
               </div>
               {e.delta != null ? (

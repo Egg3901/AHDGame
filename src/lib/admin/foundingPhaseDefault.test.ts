@@ -56,7 +56,9 @@ const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
 // exist so the founding-flag resolution can be reached.
 const db = {
   collection: () => ({
+    findOne: async () => null,
     updateOne: async () => ({}),
+    updateMany: async () => ({ modifiedCount: 0 }),
     insertOne: async () => ({}),
     deleteMany: async () => ({ deletedCount: 0 }),
   }),

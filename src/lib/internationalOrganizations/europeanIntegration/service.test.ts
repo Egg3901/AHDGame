@@ -51,6 +51,55 @@ describe("European institutional initialization", () => {
     );
     expect(db.collectionMocks.gameState.updateOne).not.toHaveBeenCalled();
   });
+  it("replaces a previous world's record carried into a fresh 1991 world", async () => {
+    const db = createMockDb();
+    const carried = {
+      stage: "community",
+      source: "legacy-settlement",
+      establishedTurn: 1262,
+      ratifications: {},
+    };
+    db.collection("gameState").findOne.mockResolvedValue({
+      currentTurn: 1,
+      europeanIntegration: carried,
+    });
+    db.collection("gameState").updateOne.mockResolvedValue({ matchedCount: 1 });
+    const state = await ensureEuropeanIntegrationState(db as unknown as Db, "1991-default", false);
+    expect(state).toMatchObject({
+      stage: "community",
+      source: "historical-seed",
+      establishedTurn: 1,
+    });
+    // Replaced only while the carried record is still the stored one.
+    expect(db.collectionMocks.gameState.updateOne).toHaveBeenCalledWith(
+      {
+        _id: "current",
+        "europeanIntegration.establishedTurn": 1262,
+        "europeanIntegration.revision": { $exists: false },
+      },
+      { $set: { europeanIntegration: state } }
+    );
+    const definition = withEuropeanInstitution(INTERNATIONAL_ORGANIZATIONS.EU, state);
+    expect(definition.foundingMembersByEra?.["1991-default"]).toHaveLength(12);
+    expect(definition.foundingMembersByEra?.["1991-default"]).toContain("UK");
+  });
+  it("keeps this world's own record even when it predates the current turn", async () => {
+    const db = createMockDb();
+    const own = {
+      stage: "community",
+      source: "historical-seed",
+      establishedTurn: 1,
+      ratifications: {},
+    };
+    db.collection("gameState").findOne.mockResolvedValue({
+      currentTurn: 1,
+      europeanIntegration: own,
+    });
+    expect(await ensureEuropeanIntegrationState(db as unknown as Db, "1991-default", false)).toBe(
+      own
+    );
+    expect(db.collectionMocks.gameState.updateOne).not.toHaveBeenCalled();
+  });
   it("uses the winning state after concurrent initialization", async () => {
     const db = createMockDb();
     const winner = {

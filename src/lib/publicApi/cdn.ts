@@ -12,6 +12,7 @@
  */
 import { CDN_BASE, CDN_GEO, CDN_HERO_SLUGS } from "@/lib/images/cdnUrls";
 import {
+  ACTION_ART_REVISIONS,
   ACTION_IMAGE_SLUGS,
   countryArtSlugs,
   erasWithGenericSet,
@@ -56,6 +57,8 @@ export interface PublicCdnCatalog {
       eraGenericSets: string[];
       /** Era → country → slugs published under `actions/{era}/{country}/`. */
       countryArt: Record<string, Record<string, readonly ActionImageSlug[]>>;
+      /** `{era|neutral}/{slug}` → revision n; that file is published as `{slug}-v{n}.webp`. */
+      artRevisions: Readonly<Record<string, number>>;
     };
     geoJson: Record<string, string>;
     scotusBuilding: string;
@@ -163,14 +166,15 @@ export function buildCdnCatalog(): PublicCdnCatalog {
       {
         name: "actions",
         description:
-          "Action-card art. Era-generic files live under actions/{era}/; a subset of eras and countries has bespoke national art under actions/{era}/{country}/.",
+          "Action-card art. Every era has a generic set under actions/{era}/, a subset of eras and countries has bespoke national art under actions/{era}/{country}/, and actions/neutral/ is the era-neutral fallback.",
         urlTemplates: [
-          `${staticBase}/actions/{slug}.webp`,
+          `${staticBase}/actions/neutral/{slug}.webp`,
           `${staticBase}/actions/{era}/{slug}.webp`,
           `${staticBase}/actions/{era}/{country}/{slug}.webp`,
         ],
         slugs: ACTION_IMAGE_SLUGS,
-        notes: "See assets.actionCards for which eras, countries, and slugs have art published.",
+        notes:
+          "See assets.actionCards for which eras, countries, and slugs have art published. A generic or neutral slug listed in assets.actionCards.artRevisions is published as {slug}-v{revision}.webp.",
       },
       {
         name: "create-character",
@@ -213,6 +217,7 @@ export function buildCdnCatalog(): PublicCdnCatalog {
         slugs: ACTION_IMAGE_SLUGS,
         eraGenericSets: erasWithGenericSet(),
         countryArt: countryArtSlugs(),
+        artRevisions: ACTION_ART_REVISIONS,
       },
       geoJson: configuredAssetMap(CDN_GEO),
       scotusBuilding: configuredAssetUrl(SCOTUS_HERO_IMAGE_URL),

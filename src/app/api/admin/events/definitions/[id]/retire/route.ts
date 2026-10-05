@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { getEventDefinitionsCollection } from "@/lib/db/collections/eventDefinitions";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -12,7 +12,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid definition id" }, { status: 400 });
+      return errorResponse(400, "Invalid definition id");
     }
 
     const db = await getDb();

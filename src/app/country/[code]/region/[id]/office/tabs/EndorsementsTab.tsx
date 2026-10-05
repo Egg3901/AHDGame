@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { RaceList, type Race } from "./endorsements/RaceList";
@@ -41,7 +43,7 @@ export function EndorsementsTab(props: Props) {
     );
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      setError(data?.error ?? "Withdraw failed.");
+      setError(apiErrorText(data, "Withdraw failed."));
     } else {
       router.refresh();
     }
@@ -52,7 +54,7 @@ export function EndorsementsTab(props: Props) {
     <div className="space-y-6">
       <section>
         <h2 className="text-sm font-semibold mb-2">Active endorsements</h2>
-        {error && <p className="text-sm text-error mb-2">{error}</p>}
+        <InlineError error={error} className="text-sm text-error mb-2" />
         {props.activeEndorsements.length === 0 ? (
           <p className="text-sm text-muted">No active endorsements.</p>
         ) : (

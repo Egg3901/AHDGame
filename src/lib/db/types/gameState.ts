@@ -2,6 +2,7 @@ import type { EuroMonetaryUnion } from "@/lib/currency/euro/rules";
 import type { ObjectId } from "mongodb";
 import type { CountryId, CountryStatus } from "../../constants/countries";
 import type { TurnPhaseTelemetryMap } from "./turnPhaseTelemetry";
+import type { ResetSystem, ResetSystemSeedReceipt } from "../../resetVersions/rules";
 
 export type NppEntryViabilityMode = "off" | "observe" | "enforce";
 
@@ -73,6 +74,12 @@ export interface IterationStampFields {
 }
 
 export interface GameState {
+  /** Unique world identity for replay receipts; replaced on each reset. */
+  worldEpochId?: string;
+  /** Stable start timestamp for filtering retained event archives by world. */
+  worldEpochStartedAt?: Date;
+  /** Written before journal-enabled population planning, distinguishing legacy crash recovery. */
+  demographicFlowAttempt?: { worldEpochId: string; turn: number };
   /**
    * Snapshot of media regulation gates used by legislation endpoints that
    * already read this document. Admin market configuration keeps it current so
@@ -488,6 +495,25 @@ export interface GameState {
   legislationDemographicEffectsV2Enabled?: boolean;
   legislationDemographicEffectsV2EnabledBy?: string;
   legislationDemographicEffectsV2EnabledAt?: string;
+  /** Reset-era metrics engine. Absent and invalid values run the live v1 path. */
+  /** Changes on every world reset; an opening-seed receipt is valid only for this world. */
+  resetWorldId?: string;
+  /** Per-system, per-world proof that v2 data was populated and verified. */
+  resetVersionSeeds?: Partial<Record<ResetSystem, ResetSystemSeedReceipt>>;
+  /** Admin selection for the next reset; changing it does not convert the live world. */
+  resetSystemSelections?: Partial<Record<ResetSystem, "v1" | "v2">>;
+  resetSystemSelectionsAudit?: Partial<Record<ResetSystem, { by: string; at: string }>>;
+  metricsSystemVersion?: "v1" | "v2";
+  metricsSystemVersionBy?: string;
+  metricsSystemVersionAt?: string;
+  /** Reset-era legislation catalog and proposal flow, including its modal. */
+  legislationSystemVersion?: "v1" | "v2";
+  legislationSystemVersionBy?: string;
+  legislationSystemVersionAt?: string;
+  /** Reset-era Cabinet portfolios, treasury, and ministerial actions. */
+  cabinetSystemVersion?: "v1" | "v2";
+  cabinetSystemVersionBy?: string;
+  cabinetSystemVersionAt?: string;
   /**
    * Master gate for the new-player onboarding checklist (profile checklist
    * card, page-visit step tracking, welcome mail, completion reward). When
@@ -503,9 +529,8 @@ export interface GameState {
    * stamps it onto their `retiredCharacters` doc, the post-reset gate surfaces
    * it on next login, and it becomes re-viewable in character history. Voluntary
    * and admin retirements also build a recap while on. Fail-closed: absent/false
-   * = system inert (no recaps written, gate returns nothing). Default OFF (staged
-   * rollout — not in DEFAULT_GAME_STATE_FLAGS); an explicit enable survives
-   * future resets via missingGameStateFlagDefaults.
+   * = system inert (no recaps written, gate returns nothing). Fresh worlds seed
+   * it on (DEFAULT_GAME_STATE_FLAGS).
    */
   seasonRecapEnabled?: boolean;
   seasonRecapEnabledBy?: string;
@@ -516,17 +541,40 @@ export interface GameState {
    * committed, and neither the Cold War Ledger nor the Influence tab renders.
    * Seeding is the deliberate exception — opening values are written regardless
    * so flipping this on a live world shows a populated map, not blank rows.
-   * Fail-closed: only an explicit `true` enables. NOT in
-   * DEFAULT_GAME_STATE_FLAGS — staged rollout, default off; an explicit enable
-   * survives resets.
+   * Fail-closed: only an explicit `true` enables. Fresh worlds seed it on
+   * (DEFAULT_GAME_STATE_FLAGS).
    */
   intOrgAlignmentEnabled?: boolean;
   intOrgAlignmentEnabledBy?: string;
   intOrgAlignmentEnabledAt?: string;
   /**
+   * Stage-1 proof gate for department-funded legislation. Only the US
+   * `public_health_opt_1` vertical slice reads it. Fail-closed and deliberately
+   * absent from default flags until Gate 1 is accepted.
+   */
+  departmentProgramSliceEnabled?: boolean;
+  departmentProgramSliceEnabledBy?: string;
+  departmentProgramSliceEnabledAt?: string;
+  /** Generalized national department accounts and program settlement. */
+  departmentFinanceEnabled?: boolean;
+  departmentFinanceEnabledBy?: string;
+  departmentFinanceEnabledAt?: string;
+  /** Jurisdiction selection, conflict rules, and delivered law outcomes. */
+  lawAdministrationEnabled?: boolean;
+  lawAdministrationEnabledBy?: string;
+  lawAdministrationEnabledAt?: string;
+  /** Regional discretion, underfunding settlement, and national grants. */
+  regionalLegislationFinanceEnabled?: boolean;
+  regionalLegislationFinanceEnabledBy?: string;
+  regionalLegislationFinanceEnabledAt?: string;
+  /** Canonical metric aliases and derived political readouts. */
+  canonicalPoliticalMetricsEnabled?: boolean;
+  canonicalPoliticalMetricsEnabledBy?: string;
+  canonicalPoliticalMetricsEnabledAt?: string;
+  /**
    * Master gate for settlement crises (the German Question). Fail-closed: only
-   * an explicit `true` enables. NOT in DEFAULT_GAME_STATE_FLAGS — staged
-   * rollout, default off; an explicit enable survives resets.
+   * an explicit `true` enables. Fresh worlds seed it on
+   * (DEFAULT_GAME_STATE_FLAGS).
    */
   settlementCrisisEnabled?: boolean;
   settlementCrisisEnabledBy?: string;
@@ -676,6 +724,25 @@ export interface GameState {
 export interface CountryGameState {
   /** Country ID - acts as document _id */
   _id: CountryId;
+  /** JP 1991: approved 1994 Shugiin reform applies to later elections only. */
+  jpShugiinElectoralMandate?: {
+    law: "mixed-1994-v1";
+    passedTurn: number;
+    billId: string;
+  };
+  /** Latest successfully resolved Shugiin rule/capacity per region. */
+  jpShugiinResolvedRegionalRules?: Record<
+    string,
+    {
+      ruleVersion: "sntv-1991-v1" | "mixed-1994-v1";
+      totalSeats: number;
+      districtSeats: number;
+      listSeats: number;
+      electionId: string;
+      cycle: number;
+      resolvedAtTurn: number;
+    }
+  >;
   /** HU 1991: enacted 1994 electoral amendment, never inferred from the year. */
   huElectoralLaw1994SinceTurn?: number;
   /** A bound parliamentary decision authorizes the later Hungarian electoral system. */

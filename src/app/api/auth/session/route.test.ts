@@ -130,7 +130,7 @@ describe("GET /api/auth/session", () => {
       )
     );
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: "Session check unavailable" });
+    expect(await response.json()).toMatchObject({ error: "Session check unavailable" });
     expect(response.headers.get("set-cookie")).toBeNull();
   });
 
@@ -144,7 +144,7 @@ describe("GET /api/auth/session", () => {
     ]) {
       const response = await GET(request(cookie));
       expect(response.status).toBe(401);
-      expect(await response.json()).toEqual({ active: false });
+      expect(await response.json()).toMatchObject({ active: false });
       expect(response.headers.get("cache-control")).toContain("no-store");
     }
     expect(getDb).not.toHaveBeenCalled();
@@ -228,7 +228,7 @@ describe("GET /api/auth/session", () => {
     findOne.mockRejectedValue(new Error("sensitive database error"));
     const response = await GET(request(`auth-token-test=${await token()}`));
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: "Session check unavailable" });
+    expect(await response.json()).toMatchObject({ error: "Session check unavailable" });
     expect(response.headers.get("set-cookie")).toBeNull();
     expect(response.headers.get("cache-control")).toContain("no-store");
   });

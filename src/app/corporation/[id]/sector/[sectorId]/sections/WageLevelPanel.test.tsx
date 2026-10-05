@@ -85,7 +85,7 @@ describe("WageLevelPanel", () => {
         onSave={noop}
       />
     );
-    expect(screen.queryByText("Set Wage")).toBeNull();
+    expect(screen.queryByText("Set wage")).toBeNull();
   });
 
   it("lets a CEO change the wage and save", () => {
@@ -106,7 +106,7 @@ describe("WageLevelPanel", () => {
     fireEvent.change(number, { target: { value: "1.3" } });
     expect(onWageChange).toHaveBeenCalledWith(1.3);
 
-    fireEvent.click(screen.getByText("Set Wage"));
+    fireEvent.click(screen.getByText("Set wage"));
     expect(onSave).toHaveBeenCalledOnce();
   });
 

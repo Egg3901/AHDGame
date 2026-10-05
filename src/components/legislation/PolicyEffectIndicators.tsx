@@ -408,9 +408,7 @@ export function PolicyEffectIndicators({
       {/* Metric Effects */}
       {metricEffects.length > 0 && (
         <div className="flex flex-wrap gap-x-3 gap-y-1">
-          <span className="text-[10px] uppercase tracking-wider text-muted/70 w-full mb-0.5">
-            Metric Effects
-          </span>
+          <span className="text-body-sm font-medium text-muted w-full mb-0.5">Metric effects</span>
           {metricEffects.map(({ name, direction, isGood, isMajor, inactive }) =>
             inactive ? (
               <span
@@ -438,8 +436,8 @@ export function PolicyEffectIndicators({
       {/* Archetype Approvals */}
       {archetypeEffects.length > 0 && (
         <div className="flex flex-wrap gap-x-3 gap-y-1">
-          <span className="text-[10px] uppercase tracking-wider text-muted/70 w-full mb-0.5">
-            Archetype Approvals
+          <span className="text-body-sm font-medium text-muted w-full mb-0.5">
+            Archetype approvals
           </span>
           {archetypeEffects.map(({ name, direction, isGood, isMajor }) => (
             <span

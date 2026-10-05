@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseHeapSnapshotJson } from "@/lib/observability/heapWatchdog";
 
 /*
@@ -47,10 +47,7 @@ export async function POST(request: Request) {
     const topNParam = url.searchParams.get("topN");
     const topN = topNParam ? Number(topNParam) : DEFAULT_TOP_N;
     if (!Number.isFinite(topN) || topN < 1 || topN > MAX_TOP_N) {
-      return NextResponse.json(
-        { error: `topN must be between 1 and ${MAX_TOP_N}` },
-        { status: 400 }
-      );
+      return errorResponse(400, `topN must be between 1 and ${MAX_TOP_N}`);
     }
 
     const memBefore = process.memoryUsage();

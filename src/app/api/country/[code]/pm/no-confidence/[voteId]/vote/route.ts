@@ -6,7 +6,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, CONGRESS_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getParliamentaryCountryId } from "@/lib/government/parliamentaryCountry";
 import { castNoConfidenceVote } from "@/lib/government/commands/parliamentaryGovernment";
@@ -35,7 +35,7 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, voteSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

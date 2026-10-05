@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireModerator } from "@/lib/api/requireModerator";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { createModAuditLog } from "@/lib/modAuditLog";
 
 const modViewSchema = z.object({
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, modViewSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { targetType, targetId, targetName, countryId } = parsed.data;

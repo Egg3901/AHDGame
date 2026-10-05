@@ -78,6 +78,7 @@ interface NavbarProps {
     canSeeCampaignManager?: boolean;
     patreonTier?: string | null;
     isPatronActive?: boolean;
+    sandboxTesterAccess?: boolean;
   };
   showProfile?: boolean;
   homeState?: {
@@ -1111,7 +1112,7 @@ export const Navbar = React.memo(function Navbar({
                       </Link>
                     )}
 
-                    <div className="px-3 py-1 text-xs font-medium uppercase tracking-wider text-muted/60">
+                    <div className="px-3 py-1 text-body-sm font-medium text-muted">
                       {t("menus.nation.nationalDetailsFor", {
                         country: countryName(pageCountry),
                       })}

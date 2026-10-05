@@ -7,7 +7,7 @@
 //
 // Auth: defence cabinet holder or admin. Errors: 400, 401, 403, 404
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, statusResponse } from "@/lib/api/errors";
 import { getCovertNuclearProgram } from "@/lib/db/collections/covertNuclearPrograms";
 import {
   COVERT_CAPABLE,
@@ -29,7 +29,7 @@ export async function GET(request: Request, { params }: NuclearRouteParams) {
     const gs = await loadGameStateSlice(db);
     if (!COVERT_CAPABLE.includes(countryId) || gs?.coldWarEnabled !== true) {
       // Nothing to see: no state, no stages, no hint the surface exists.
-      return NextResponse.json({ eligible: false }, { status: 404 });
+      return statusResponse(404, { eligible: false });
     }
 
     const program = await getCovertNuclearProgram(db, countryId);

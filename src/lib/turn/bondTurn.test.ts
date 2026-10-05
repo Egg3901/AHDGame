@@ -4,6 +4,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
+import type { Bond } from "@/lib/db/types/bond";
 import { ObjectId } from "mongodb";
 import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
 // Static imports on purpose: bondTurn pulls a large transitive graph whose
@@ -80,6 +81,9 @@ vi.mock("@/lib/constants/bonds", async (importOriginal) => ({
   // The real rule, so these tests exercise the same defaulted-bond skip as prod.
   bondAccruesCoupon: (await importOriginal<typeof import("@/lib/constants/bonds")>())
     .bondAccruesCoupon,
+  CORPORATE_CREDIT_MATURITY_HORIZON_TURNS: (
+    await importOriginal<typeof import("@/lib/constants/bonds")>()
+  ).CORPORATE_CREDIT_MATURITY_HORIZON_TURNS,
   BOND_DEFAULT_CREDIT_PENALTY_TURNS: 100,
   CORP_BOND_DUE_SOON_REMINDER_TURNS: [12, 4],
   calculateBondMarketPrice: vi.fn().mockReturnValue(1.02),
@@ -162,8 +166,29 @@ describe("processBondTurn", () => {
    * a holder-less doc (`bond.holders is not iterable`).
    */
   function mockBondFinds(fullDocs: unknown[], snapshotDocs: unknown[]) {
-    db.collectionMocks["bonds"]!.find.mockImplementation(() => {
-      const fullCursor = makeCursor(fullDocs);
+    // Coupon tests used to omit issued face because pricing was fully mocked.
+    // The maturity forecast reads that required field, so supply a coherent
+    // face from the synthetic holder/pool units when the fixture omits it.
+    const completeDocs = fullDocs.map((value) => {
+      const bond = value as {
+        issuerType?: string;
+        isCorporate?: boolean;
+        totalIssued?: number;
+        publicFloat?: number;
+        holders: Array<{ units: number }>;
+      };
+      if (bond.issuerType === "sovereign" || bond.isCorporate === false) return value;
+      return {
+        ...bond,
+        totalIssued:
+          bond.totalIssued ??
+          ((bond.publicFloat ?? 0) + bond.holders.reduce((sum, holder) => sum + holder.units, 0)) *
+            1000,
+      };
+    });
+    db.collectionMocks["bonds"]!.find.mockImplementation((query: { issuedAtTurn?: number }) => {
+      if (query.issuedAtTurn !== undefined) return makeCursor([]);
+      const fullCursor = makeCursor(completeDocs);
       const snapshotCursor = makeCursor(snapshotDocs);
       snapshotCursor.project = vi.fn().mockReturnValue(snapshotCursor);
       fullCursor.project = vi.fn().mockReturnValue(snapshotCursor);
@@ -173,6 +198,12 @@ describe("processBondTurn", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks retains implementations; a preceding all-corporate test
+    // must not turn the next sovereign fixture into a corporate issuer.
+    vi.mocked(isCorporateBond).mockImplementation(
+      (bond) => !!(bond as Bond & { isCorporate?: boolean }).isCorporate
+    );
+    vi.mocked(getBondCountryId).mockReturnValue("US");
     resetCorpFxRateCacheForTests();
     db = createMockDb();
     for (const name of ["bonds", "corporations", "centralBanks", "bondHistory", "characters"]) {
@@ -189,6 +220,25 @@ describe("processBondTurn", () => {
     expect(result.couponsPaid).toBe(0);
     expect(result.bondsMatured).toBe(0);
     expect(result.bondsDefaulted).toBe(0);
+  });
+
+  it("captures only actual new at-par sovereign cash when requested", async () => {
+    db.collectionMocks["bonds"]!.find.mockImplementation((query: { issuedAtTurn?: number }) =>
+      makeCursor(query.issuedAtTurn === 10 ? [{ countryId: "US", totalIssued: 25_000 }] : [])
+    );
+
+    const result = await processBondTurn(10, { captureSovereignCashProceeds: true });
+
+    expect(result.sovereignCashProceedsByCountry).toEqual({ US: 25_000 });
+    expect(result.sovereignDebtFaceIssuedByCountry).toEqual({ US: 25_000 });
+    expect(db.collectionMocks["bonds"]!.find).toHaveBeenCalledWith(
+      {
+        issuerType: "sovereign",
+        issuedAtTurn: 10,
+        reconcile: { $ne: true },
+      },
+      { projection: { countryId: 1, totalIssued: 1 } }
+    );
   });
 
   it("defers maturity while a funded bank treasury reservation is pending", async () => {
@@ -1528,6 +1578,8 @@ describe("processBondTurn", () => {
       matured: false,
       defaulted: false,
       isCorporate: false,
+      totalIssued: 10_000,
+      restructureHaircutPercent: 0.2,
       holders: [{ characterId: charHolderId, units: 3 }],
       publicFloat: 7, // 3 + 7 = 10 units × $1000
       corporationId: new ObjectId(), // schema requires it; sovereign path uses countryId
@@ -1543,7 +1595,11 @@ describe("processBondTurn", () => {
       toArray: vi.fn().mockResolvedValue([]),
     });
 
-    await processBondTurn(10);
+    const result = await processBondTurn(10, { captureSovereignCashProceeds: true });
+
+    expect(result.sovereignCouponPaidByCountry).toEqual({ US: 100 });
+    expect(result.sovereignMaturityCashPaidByCountry).toEqual({ US: 10_000 });
+    expect(result.sovereignDebtFaceRetiredByCountry).toEqual({ US: 8_000 });
 
     const allEntries = vi.mocked(emitTxBulk).mock.calls.flatMap((c) => c[1] as unknown[]);
     const govEntry = allEntries.find(

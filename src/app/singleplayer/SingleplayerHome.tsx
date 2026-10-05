@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -92,7 +93,7 @@ export function SingleplayerHome({ status }: Props) {
       setLogs(body?.logs ?? []);
       if (!res.ok) {
         setPhase("error");
-        setError(body?.error ?? `New game failed (${res.status})`);
+        setError(apiErrorText(body, `New game failed (${res.status})`));
         return;
       }
       setPhase("done");
@@ -110,9 +111,7 @@ export function SingleplayerHome({ status }: Props) {
     <main className="flex min-h-screen items-start justify-center bg-background px-4 py-16">
       <div className="w-full max-w-2xl">
         <header className="mb-10">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-            Singleplayer
-          </p>
+          <p className="mb-2 text-body-sm font-medium text-primary">Singleplayer</p>
           <h1 className="text-3xl font-bold tracking-tight">A House Divided</h1>
           <p className="mt-2 text-sm text-muted">
             The same world the multiplayer game runs, on this machine, on your clock. Turns advance

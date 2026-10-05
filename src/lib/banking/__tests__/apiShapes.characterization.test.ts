@@ -328,6 +328,8 @@ describe("GET /api/banking/corporation/[id]", () => {
         "lastBankingInterbankInterestReceived",
         "lastBankingLoanInterest",
         "lastBankingLoanOriginationFees",
+        "lastBankingSovereignCouponIncome",
+        "lastBankingTreasuryRealizedGain",
         "lastBankingUnderwritingFees",
         "lastBankingWriteoffs",
         "lendingOffset",
@@ -451,7 +453,7 @@ describe("PUT /api/character/savings-holder", () => {
       })
     );
     expect(res.status).toBe(400);
-    expect(sortedKeys(await res.json())).toEqual(["error"]);
+    expect(await res.json()).toMatchObject({ error: expect.any(String) });
   });
 });
 

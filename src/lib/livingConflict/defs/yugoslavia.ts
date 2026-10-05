@@ -1,3 +1,7 @@
+/**
+ * Yugoslav choices authorize response costs, reception and selected escalation losses.
+ * YUGOSLAVIA_DEF uses explicit civilian-loss and refugee specs independently of risk scores.
+ */
 import type { GlobalResponseOutcome } from "@/lib/db/types/crisis";
 import type {
   ConflictEvent,
@@ -9,6 +13,9 @@ import type {
 } from "../types";
 import { choiceNode, responseOpt } from "../authoring";
 import { cfx } from "../effects";
+import { YUGOSLAV_REFUGEE_RECEPTION } from "../rules/refugeeReception";
+import { YUGOSLAV_ESCALATION_CIVILIAN_LOSS } from "../rules/civilianLoss";
+import { YUGOSLAV_ESCALATION_CAPACITY_DESTRUCTION } from "../rules/capacityDestruction";
 
 // Primary historical anchors constrain sanctions, ceasefire, peacekeeping, and
 // intervention pressure without fixing borders or campaigns: UNSC Resolution
@@ -127,10 +134,11 @@ function trees(key: string): RoleDecisionTrees {
         responseOpt(
           "receive_refugees",
           "Open a humanitarian corridor",
-          "Receive displaced civilians and fund emergency relief.",
+          "Receive displaced civilians within migration limits and fund six months of initial services.",
           { aid: 4, restraint: 1 },
-          [cfx("tick", "metric", "economic", "gdpGrowth", -0.002, "Refugee reception")],
-          0.0003
+          [],
+          undefined,
+          { refugeeReception: YUGOSLAV_REFUGEE_RECEPTION }
         ),
         responseOpt(
           "neighbor_mediate",
@@ -262,6 +270,8 @@ const outcomes: GlobalResponseOutcome[] = [
     description: "Arming, coercion, and external commitments widen organized violence.",
     priority: 40,
     conditions: [{ axis: "escalation", min: 7 }],
+    civilianLoss: YUGOSLAV_ESCALATION_CIVILIAN_LOSS,
+    capacityDestruction: YUGOSLAV_ESCALATION_CAPACITY_DESTRUCTION,
     intensityDelta: 15,
     trackDeltas: {
       constitutionalCohesion: -10,

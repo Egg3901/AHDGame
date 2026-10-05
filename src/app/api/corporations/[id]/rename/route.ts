@@ -5,7 +5,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { renameCorporationSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getGameState } from "@/lib/gameState";
 import {
@@ -43,7 +43,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const parsed = await parseJsonBody(request, renameCorporationSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { name: newName } = parsed.data;
@@ -61,10 +61,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     // Same name — no-op
     if (corporation.name === newName) {
-      return NextResponse.json(
-        { error: "New name is the same as the current name" },
-        { status: 400 }
-      );
+      return errorResponse(400, "New name is the same as the current name");
     }
 
     const gameState = await getGameState();
@@ -75,9 +72,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     const cooldownEnd = lastRenameTurn + CORPORATION_RENAME_COOLDOWN_TURNS;
     if (currentTurn < cooldownEnd) {
       const remaining = cooldownEnd - currentTurn;
-      return NextResponse.json(
-        { error: `Rename on cooldown. ${remaining} turn${remaining === 1 ? "" : "s"} remaining.` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Rename on cooldown. ${remaining} turn${remaining === 1 ? "" : "s"} remaining.`
       );
     }
 
@@ -88,10 +85,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       name: { $regex: new RegExp(`^${escapedName}$`, "i") },
     });
     if (nameTaken) {
-      return NextResponse.json(
-        { error: "A corporation with that name already exists" },
-        { status: 400 }
-      );
+      return errorResponse(400, "A corporation with that name already exists");
     }
 
     // Check liquid capital covers the cost (₳ → corp home currency)
@@ -102,11 +96,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       corpFxRate
     );
     if (corpCapitalAnchor < CORPORATION_RENAME_COST) {
-      return NextResponse.json(
-        {
-          error: `Insufficient liquid capital. Need ${CORPORATION_RENAME_COST.toLocaleString()} (₳), have ${Math.round(corpCapitalAnchor).toLocaleString()} (₳).`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Insufficient liquid capital. Need ${CORPORATION_RENAME_COST.toLocaleString()} (₳), have ${Math.round(corpCapitalAnchor).toLocaleString()} (₳).`
       );
     }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_READ_LIMITS } from "@/lib/api/rateLimit";
 import { getOfficeLabel } from "@/lib/utils/politics";
@@ -18,7 +18,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://ahousedividedgame.
 export async function GET(request: Request) {
   try {
     if (!requireBotToken(request)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const rateLimit = checkRateLimit(
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     const country = url.searchParams.get("country")?.toUpperCase() || "US";
 
     if (!partyId) {
-      return NextResponse.json({ error: "Must provide id" }, { status: 400 });
+      return errorResponse(400, "Must provide id");
     }
 
     // Validate the requested country is enabled

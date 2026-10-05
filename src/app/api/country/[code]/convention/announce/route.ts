@@ -13,7 +13,7 @@
  */
 import { NextResponse } from "next/server";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { isSittingLeader } from "@/lib/governorOffice/isSittingLeader";
@@ -29,7 +29,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     const auth = await requireHumanSessionWithCharacter(request);
@@ -38,10 +38,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const db = await getDb();
     const leader = await isSittingLeader(db, countryId, auth.user.character._id);
     if (!leader) {
-      return NextResponse.json(
-        { error: "Only the sitting leader can announce a constitutional convention" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the sitting leader can announce a constitutional convention");
     }
 
     const currentTurn = await getCurrentTurn(db);
@@ -51,7 +48,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (/collapse stage|already in progress/i.test(msg)) {
-        return NextResponse.json({ error: msg }, { status: 409 });
+        return errorResponse(409, msg);
       }
       throw err;
     }

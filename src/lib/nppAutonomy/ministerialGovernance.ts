@@ -47,6 +47,7 @@ import {
 } from "@/lib/cabinet/ministerialOrderLifecycle";
 import type { GoverningAgendaItem } from "./governingAgenda";
 import { computeGoverningAgenda } from "./governingAgenda";
+import { loadElectoralMandate } from "./electoralMandateIntake";
 import { loadConditionsSignal } from "@/lib/turn/npp/billSponsorship";
 import { METRIC_TO_DOMAIN } from "./selectNppBill";
 import { deriveGoverningArchetype, governingArchetypeModifiers } from "./governingArchetype";
@@ -734,6 +735,13 @@ export async function runCaretakerMinisters(
 
   const domainHealth = await loadDomainHealth(db, countryId);
   const conditions = await loadConditionsSignal(db, countryId);
+  // Caretakers serve the elected government, so they pursue its party's
+  // electoral mandate (#2321) alongside their own ideology.
+  const gov = await getGovernmentFormationsCollection(db).findOne(
+    { _id: countryId },
+    { projection: { governingPartyId: 1, seatsByParty: 1, totalSeats: 1 } }
+  );
+  const mandate = gov ? await loadElectoralMandate(db, countryId, gov, currentTurn) : null;
   await expireMinisterialOrders(db, currentTurn);
 
   let tiersSet = 0;
@@ -788,6 +796,7 @@ export async function runCaretakerMinisters(
       conditions,
       ideology: { economic: npp.policies?.economic ?? 0, social: npp.policies?.social ?? 0 },
       personality: npp.personality,
+      ...(mandate ? { mandate: mandate.domains } : {}),
       crises: {},
       currentTurn,
     }).items;

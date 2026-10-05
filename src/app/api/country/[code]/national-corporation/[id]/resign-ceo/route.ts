@@ -9,7 +9,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { corporationQueryFromParamId } from "@/lib/api/corporations/resolveQuery";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Corporation } from "@/lib/db/types";
@@ -30,36 +30,27 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const idQuery = corporationQueryFromParamId(id);
     if (!idQuery) {
-      return NextResponse.json({ error: "Invalid corporation ID" }, { status: 400 });
+      return errorResponse(400, "Invalid corporation ID");
     }
 
     const db = await getDb();
     const corps = db.collection<Corporation>("corporations");
     const target = await corps.findOne({ ...idQuery, countryOwnerId: countryId });
     if (!target || !isStateOwned(target)) {
-      return NextResponse.json(
-        { error: "National Corporation not found for this country." },
-        { status: 404 }
-      );
+      return errorResponse(404, "National Corporation not found for this country.");
     }
 
     if (target.ceoVacant || !target.ceoId) {
-      return NextResponse.json(
-        { error: "This National Corporation has no seated CEO." },
-        { status: 400 }
-      );
+      return errorResponse(400, "This National Corporation has no seated CEO.");
     }
 
     // Only the seated CEO may resign themselves.
     if (!target.userId || target.userId.toString() !== auth.user.userId) {
-      return NextResponse.json(
-        { error: "Only the seated CEO of this National Corporation may resign." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the seated CEO of this National Corporation may resign.");
     }
 
     const now = new Date();

@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTranslations, useLocale } from "next-intl";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { currencySymbolSep } from "@/lib/currency/symbolSep";
 import { usePostHogVariant } from "@/lib/analytics/usePostHogVariant";
 import { captureProductEvent } from "@/lib/analytics/capture";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export interface OnboardingChecklistCardStep {
   id: string;
@@ -91,7 +93,7 @@ export function OnboardingChecklist({
       if (res.ok) {
         setClaimed(true);
       } else {
-        setClaimError(data?.error ?? t("claimFailed"));
+        setClaimError(apiErrorText(data, t("claimFailed")));
       }
     } catch {
       setClaimError(t("claimFailed"));
@@ -178,7 +180,7 @@ export function OnboardingChecklist({
             <Button size="sm" onClick={handleClaim} isLoading={claiming}>
               {t("claim", { reward: rewardLabel })}
             </Button>
-            {claimError && <p className="text-body-xs text-error">{claimError}</p>}
+            <InlineError error={claimError} className="text-body-xs text-error" />
           </div>
         ) : (
           <p className="text-body-xs text-muted">

@@ -130,7 +130,7 @@ export function IdentityPanel({ identity, devicesAndIps, context }: IdentityPane
           <div className="overflow-x-auto">
             <table className="w-full min-w-[480px] text-left text-xs">
               <thead>
-                <tr className="border-b border-card-border/70 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                <tr className="border-b border-card-border/70 text-sm font-semibold text-foreground">
                   <th className="py-1.5 pr-3 font-semibold">IP</th>
                   <th className="py-1.5 pr-3 font-semibold">Fingerprint</th>
                   <th className="py-1.5 pr-3 font-semibold">Tracking</th>

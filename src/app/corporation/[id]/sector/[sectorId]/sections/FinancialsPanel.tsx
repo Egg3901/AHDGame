@@ -66,7 +66,7 @@ export default function FinancialsPanel({
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
-      <h2 className="mb-1 text-lg font-bold text-foreground">Sector Financials</h2>
+      <h2 className="mb-1 text-lg font-bold text-foreground">Sector financials</h2>
       <p className="mb-4 text-xs text-muted">
         {MONEY_PERIOD_HELP} Figures below are per turn; each row&apos;s tooltip shows the daily
         amount.
@@ -147,7 +147,7 @@ export default function FinancialsPanel({
           />
         )}
         <FinRow
-          label="Growth Cost"
+          label="Growth cost"
           value={perTurn(financials.growthCost)}
           daily={fmtMoney(financials.growthCost)}
           valueClass="text-error"
@@ -164,7 +164,7 @@ export default function FinancialsPanel({
         )}
         <div className="border-t border-card-border pt-2">
           <FinRow
-            label="Net Profit"
+            label="Net profit"
             value={perTurn(financials.profit)}
             daily={fmtMoney(financials.profit)}
             valueClass={financials.profit >= 0 ? "text-success" : "text-error"}
@@ -199,7 +199,7 @@ export default function FinancialsPanel({
 
         {(financials.federalTaxRate > 0 || financials.stateTaxRate > 0) && (
           <div className="border-t border-card-border pt-3 space-y-2">
-            <div className="text-[11px] font-semibold text-muted uppercase tracking-wider">
+            <div className="text-body-sm font-medium text-muted">
               Corporate Tax (this sector&apos;s share)
             </div>
             {financials.federalTaxRate > 0 && (
@@ -231,7 +231,7 @@ export default function FinancialsPanel({
         <div className="mt-4 border-t border-card-border pt-4">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <span className="text-sm font-medium text-foreground">Growth Target</span>
+              <span className="text-sm font-medium text-foreground">Growth target</span>
               <p className="mt-1 text-[11px] leading-snug text-muted">
                 {capitalEnabled ? (
                   <>
@@ -275,7 +275,7 @@ export default function FinancialsPanel({
 
           <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-lg border border-card-border bg-background/50 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wider text-muted">Active rate</div>
+              <div className="text-body-sm font-medium text-muted">Active rate</div>
               <div className="mt-0.5 flex items-baseline gap-1">
                 <span className="text-sm font-semibold tabular-nums text-foreground">
                   {sector.currentGrowthRate.toFixed(1)}%
@@ -297,7 +297,7 @@ export default function FinancialsPanel({
               </div>
             </div>
             <div className="rounded-lg border border-card-border bg-background/50 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wider text-muted">Current cost</div>
+              <div className="text-body-sm font-medium text-muted">Current cost</div>
               <div className="mt-0.5 flex items-baseline gap-1">
                 <span className="text-sm font-semibold tabular-nums text-error">
                   {perTurn(sector.currentGrowthCost)}

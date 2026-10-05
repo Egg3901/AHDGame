@@ -1,4 +1,6 @@
 import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
+import { collectForexActivity } from "@/lib/sim/forexActivity";
+import type { ForexActivityRecord } from "@/lib/sim/rules/forexActivity";
 import type { Db } from "mongodb";
 import { accountKind } from "@/lib/ledger/accounts";
 import { US_STATES } from "@/lib/constants";
@@ -212,6 +214,8 @@ export interface EconomyTelemetry {
   eraCosts: EraCostTelemetry;
   coverage: CoverageTelemetry;
   market: MarketTelemetry;
+  /** Forex orders, trades and rate attribution (#2293); absent on older runs. */
+  forex?: ForexActivityRecord | null;
 }
 
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
@@ -870,7 +874,7 @@ export async function collectEconomyTelemetry(db: Db): Promise<EconomyTelemetry>
     .catch(() => null);
   const currentTurn = num((gs as Record<string, unknown> | null)?.["currentTurn"]);
 
-  const [reconciliation, funds, corpHealth, eraCosts, coverage, market] = await Promise.all([
+  const [reconciliation, funds, corpHealth, eraCosts, coverage, market, forex] = await Promise.all([
     collectReconciliation(db).catch((e) => emptyReconciliation(`Collector failed: ${String(e)}`)),
     collectFunds(db, currentTurn).catch((e) => emptyFunds(`Collector failed: ${String(e)}`)),
     collectCorpHealth(db).catch((e) => emptyCorpHealth(`Collector failed: ${String(e)}`)),
@@ -879,8 +883,9 @@ export async function collectEconomyTelemetry(db: Db): Promise<EconomyTelemetry>
     ),
     collectCoverage(db).catch((e) => emptyCoverage(`Collector failed: ${String(e)}`)),
     collectMarket(db).catch((e) => emptyMarket(`Collector failed: ${String(e)}`)),
+    collectForexActivity(db).catch(() => null),
   ]);
-  return { reconciliation, funds, corpHealth, eraCosts, coverage, market };
+  return { reconciliation, funds, corpHealth, eraCosts, coverage, market, forex };
 }
 
 export function emptyEconomyTelemetry(note: string): EconomyTelemetry {

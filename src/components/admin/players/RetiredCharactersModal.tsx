@@ -19,7 +19,7 @@ export function RetiredCharactersModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="mx-4 w-full max-w-lg rounded-xl border border-card-border bg-card p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold">Retired Characters — {username}</h3>
+          <h3 className="text-lg font-semibold">Retired characters — {username}</h3>
           <button
             type="button"
             aria-label="Close"

@@ -174,7 +174,8 @@ export function buildRelevantLegislation(
   countryId: CostAnchorCountryId,
   levels: ReadonlyMap<string, number>,
   base: { gdp: number; population: number },
-  fallback: (law: PoliticalLaw) => number
+  fallback: (law: PoliticalLaw) => number,
+  programCostScale = 1
 ): Map<string, MetricLegislationInfo> {
   const map = new Map<string, MetricLegislationInfo>();
   for (const law of getCatalog(countryId)) {
@@ -183,7 +184,7 @@ export function buildRelevantLegislation(
     const levelName = law.levels[level]?.name ?? "";
     if (law.kind === "primary") {
       const metricId = law.targets[0].metricId;
-      const { net } = computeLawCost(law.levels[level], base, countryId, null);
+      const { net } = computeLawCost(law.levels[level], base, countryId, null, programCostScale);
       const existing = map.get(metricId) ?? { primary: null, secondaries: [] };
       existing.primary = { lawId: law.id, title: law.title, level, levelName, annualNet: net };
       map.set(metricId, existing);
@@ -203,6 +204,8 @@ export interface ModifiersInput {
   metricId: PoliticalMetricId;
   /** National enacted levels, for the law rows. */
   nationalLevels: ReadonlyMap<string, number>;
+  /** Per-law delivered share for national contributions. Missing means 1. */
+  nationalContributionMultipliers?: ReadonlyMap<string, number>;
   /** The region's own enacted levels; an EMPTY map at national scope. */
   regionalLevels: ReadonlyMap<string, number>;
   nationalPoints: number;
@@ -219,7 +222,12 @@ export interface ModifiersInput {
 }
 
 export function buildModifiers(input: ModifiersInput): MetricModifiersInfo {
-  const laws = metricModifierRows(input.countryId, input.metricId, input.nationalLevels);
+  const laws = metricModifierRows(
+    input.countryId,
+    input.metricId,
+    input.nationalLevels,
+    input.nationalContributionMultipliers
+  );
   const regionalLaws =
     input.regionalLevels.size > 0
       ? metricModifierRows(input.countryId, input.metricId, input.regionalLevels).map((row) => ({

@@ -39,7 +39,7 @@ import {
   type ErststimmeInput,
 } from "@/lib/turn/election/ticketSplitCrossover";
 import { buildDEPartySlugToSeqId } from "@/lib/seeds/de/deStatePartyOrgCalculations";
-import { getLiveLowerChamberSeats } from "@/lib/turn/lowerChamberSeats";
+import { getLiveLowerChamberSeats } from "@/lib/legislature/lowerChamberSeats";
 import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
 import { reconcileBundestagHolderOffices } from "./bundestagHolderOffices";
 

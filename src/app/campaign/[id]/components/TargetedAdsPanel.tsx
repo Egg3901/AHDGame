@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useTranslations } from "next-intl";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Target {
   dimension: string;
@@ -80,7 +81,7 @@ export function TargetedAdsPanel({
     })
       .then(async (response) => {
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error ?? t("failed"));
+        if (!response.ok) throw new Error(apiErrorText(data, t("failed")));
         if (!controller.signal.aborted) setQuote(data);
       })
       .catch((error) => {
@@ -121,7 +122,7 @@ export function TargetedAdsPanel({
       const data = await response.json();
       if (!response.ok) {
         setRevision((value) => value + 1);
-        throw new Error(data.error ?? t("failed"));
+        throw new Error(apiErrorText(data, t("failed")));
       }
       setMessage(t("success"));
       onResourcesSpent();

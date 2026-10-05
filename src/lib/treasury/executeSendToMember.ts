@@ -21,7 +21,7 @@ import { NextResponse } from "next/server";
 import type { Db } from "mongodb";
 import { getMongoClient } from "@/lib/mongodb";
 import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
-import { badRequest, notFound } from "@/lib/api/errors";
+import { badRequest, notFound, errorResponse } from "@/lib/api/errors";
 import type { AdminLog, Character, PoliticalParty } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
@@ -99,7 +99,7 @@ export async function executeSendToMember(
       ]),
     });
     if (!cap.ok) {
-      return { ok: false, response: NextResponse.json({ error: cap.reason }, { status: 400 }) };
+      return { ok: false, response: errorResponse(400, cap.reason) };
     }
   }
 
@@ -136,7 +136,7 @@ export async function executeSendToMember(
       .collection<PoliticalParty>("politicalParties")
       .updateOne({ _id: party._id, treasury: { $gte: amount } }, partyDebit);
     if (debitResult.matchedCount === 0) {
-      return NextResponse.json({ error: "Insufficient treasury funds" }, { status: 400 });
+      return errorResponse(400, "Insufficient treasury funds");
     }
     // The debit has landed and there is no transaction to roll back, so
     // every exit from here on must either complete the credit or put the
@@ -189,7 +189,7 @@ export async function executeSendToMember(
     }
     if (creditResult.matchedCount === 0) {
       await refundDebit("recipient not found");
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
     return null;
   };

@@ -51,7 +51,7 @@ export default async function ChartersListPage() {
     <div className="mx-auto max-w-3xl px-4 py-8">
       <div className="mb-6 flex items-baseline justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Party Charters</h1>
+          <h1 className="text-2xl font-bold">Party charters</h1>
           <p className="mt-1 text-sm text-muted">
             Charters you&apos;re a founder on. Sign or reject pending drafts; track active
             ratifications.

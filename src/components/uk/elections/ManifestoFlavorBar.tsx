@@ -8,6 +8,7 @@
  */
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import type { CountryManifestos } from "@/hooks/useCountryManifestos";
 
@@ -66,7 +67,7 @@ export function ManifestoFlavorBar({
         });
         const json = await res.json().catch(() => ({}));
         if (!res.ok) {
-          setError(json?.error ?? "Could not save manifesto");
+          setError(apiErrorText(json, "Could not save manifesto"));
           return;
         }
         if (action === "lock") setLocked(true);

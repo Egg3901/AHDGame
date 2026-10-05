@@ -1,7 +1,7 @@
 import { loadCampaignPriceLevel } from "@/lib/campaigns/campaignCurrency";
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type {
@@ -76,7 +76,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { code, id, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
 
@@ -90,7 +90,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // Verify state exists
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     const statePopulation = coerceStoredNumber(state.population, 0);
@@ -98,7 +98,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // Verify party exists
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const partyKey = getPartyIdString(party);

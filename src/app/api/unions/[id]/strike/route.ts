@@ -1,7 +1,6 @@
 /** Legacy player endpoint retained as an explicit migration boundary. */
-import { NextResponse } from "next/server";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
 
@@ -15,18 +14,15 @@ export async function POST(_request: Request, _context: RouteParams) {
     if (!auth.ok) return auth.response;
 
     if (!(await isLabourFullMode())) {
-      return NextResponse.json({ error: "Player-run unions are not enabled." }, { status: 403 });
+      return errorResponse(403, "Player-run unions are not enabled.");
     }
 
     const rateLimit = checkRateLimit(auth.user.userId, 10, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
-    return NextResponse.json(
-      {
-        error:
-          "Direct union-wide strikes were retired in 1.1. Open an employer bargaining campaign and escalate its dispute.",
-      },
-      { status: 410 }
+    return errorResponse(
+      410,
+      "Direct union-wide strikes were retired in 1.1. Open an employer bargaining campaign and escalate its dispute."
     );
   } catch (error) {
     return handleRouteError(error);

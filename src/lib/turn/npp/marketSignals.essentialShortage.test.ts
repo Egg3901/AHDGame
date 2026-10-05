@@ -169,6 +169,22 @@ describe("governed fragile-market supply routing", () => {
     expect(fragileMarketCommodityForSector("media", "US", prices)).toBeNull();
   });
 
+  it("answers chronic healthcare and entertainment service shortages (#2088)", () => {
+    const hc = ratios({ healthcare_services: 5.2 });
+    expect(fragileMarketCommodityForSector("healthcare", "US", hc)).toBe("healthcare_services");
+    const ent = ratios({ advertising: 1.7, entertainment_services: 8.5 });
+    expect(fragileMarketCommodityForSector("entertainment", "US", ent)).toBe(
+      "entertainment_services"
+    );
+    const adsOnly = ratios({ advertising: 2.0, entertainment_services: 1.1 });
+    expect(fragileMarketCommodityForSector("entertainment", "US", adsOnly)).toBe("advertising");
+  });
+
+  it("keeps healthcare entry disarmed below the critical-shortage bar (#2088)", () => {
+    const prices = ratios({ healthcare_services: ESSENTIAL_SHORTAGE_SCORE - 0.01 });
+    expect(fragileMarketCommodityForSector("healthcare", "US", prices)).toBeNull();
+  });
+
   it("keeps rare-earth entry subject to deposit headroom", () => {
     const candidates = new Map([
       ["US", [us("energy", "PA", 1_000_000), us("extraction", "NY", 100_000)]],

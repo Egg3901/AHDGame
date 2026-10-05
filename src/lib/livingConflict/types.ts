@@ -275,6 +275,8 @@ export interface LivingConflictDef {
  * west/east support, so a two-sided war and a one-sided disaster share a shape.
  */
 export interface LivingConflictState {
+  /** Durable Yugoslav response trajectory identities; later outcomes do not erase replay fences. */
+  appliedResponseOutcomeIds?: string[];
   /** Authored fresh-2027 disposition, distinct from the runtime lifecycle. */
   openingDisposition?: "inherited" | "settled" | "not_applicable" | "counterfactual";
   openingProvenance?: {
@@ -315,6 +317,12 @@ export interface LivingConflictState {
   /** Persistent multi-window campaign depth. Absent legacy rows normalize on read. */
   campaign?: LivingCampaignState;
   representedActors?: ConflictActor[];
+  /**
+   * Infrastructure-track points already charged as real capital destruction.
+   * The potential-growth proxy charges only the remainder, so one outcome's
+   * damage is never paid twice.
+   */
+  realizedInfrastructureDamage?: number;
   updatedAt: Date;
 }
 

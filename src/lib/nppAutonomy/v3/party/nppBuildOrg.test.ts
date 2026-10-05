@@ -79,6 +79,34 @@ describe("nppBuildPartyOrg", () => {
         },
       ],
     } as never);
+    db.collectionMocks["statePartyOrg"]!.findOneAndUpdate.mockImplementation(async () => {
+      const rows = await db.collectionMocks["statePartyOrg"]!.find().toArray();
+      const legacyTotal = rows.reduce(
+        (sum: number, row: { organization?: number; organizationUnits?: number }) =>
+          row.organizationUnits === undefined ? sum + (row.organization ?? 0) : sum,
+        0
+      );
+      const legacyScale = Math.min(10, 100 / Math.max(1, 100 - Math.min(99, legacyTotal)));
+      const rowId = `${stateId}_${partySeq}`;
+      const current =
+        rows.find((row: { _id?: string }) => row._id === rowId) ??
+        ({
+          _id: rowId,
+          stateId,
+          partyId: String(partySeq),
+          countryId,
+          organization: 0,
+          politicalStrength: 10,
+          treasury: 10_000_000,
+          hasPresence: true,
+        } as const);
+      return {
+        ...current,
+        organizationUnits:
+          (current.organizationUnits ?? (current.organization ?? 0) * legacyScale) + 1,
+        lastOrganizationBuildTurn: 100,
+      };
+    });
 
     const { spendPoliticalStrength } =
       await import("@/lib/parties/commands/spendPoliticalStrength");
@@ -114,11 +142,15 @@ describe("nppBuildPartyOrg", () => {
       db
     );
 
-    const updateCalls = db.collectionMocks["statePartyOrg"]!.updateOne.mock.calls;
-    const ownUpdate = updateCalls.find(
-      (c: unknown[]) => (c[0] as { _id: string })._id === `${stateId}_${partySeq}`
+    expect(db.collectionMocks["statePartyOrg"]!.bulkWrite).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: { _id: `${stateId}_${partySeq}`, organizationUnits: 41 },
+          }),
+        }),
+      ])
     );
-    expect(ownUpdate).toBeDefined();
 
     const insertCalls = db.collectionMocks["orgRegLedger"]!.insertMany.mock.calls.flatMap(
       (c: unknown[]) => c[0] as unknown[]
@@ -136,24 +168,43 @@ describe("nppBuildPartyOrg", () => {
     });
   });
 
-  it("logs a poach entry against the rival when gain includes a poached share", async () => {
+  it("logs passive dilution against rivals once the bucket exceeds its baseline", async () => {
+    db.collectionMocks["statePartyOrg"]!.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: `${stateId}_${partySeq}`,
+          stateId,
+          partyId: String(partySeq),
+          countryId,
+          organization: 60,
+          organizationUnits: 60,
+        },
+        {
+          _id: `${stateId}_2`,
+          stateId,
+          partyId: "2",
+          countryId,
+          organization: 40,
+          organizationUnits: 40,
+        },
+      ],
+    } as never);
     const { nppBuildPartyOrg } = await import("./nppBuildOrg");
     await nppBuildPartyOrg(db as unknown as Db, actorNppId, countryId, stateId, partySeq, 100);
 
     const insertCalls = db.collectionMocks["orgRegLedger"]!.insertMany.mock.calls.flatMap(
       (c: unknown[]) => c[0] as unknown[]
     );
-    const poachLog = insertCalls.find((d: unknown) => (d as { source: string }).source === "poach");
-    // Pool alone (100 - 50 = 50 available) generally satisfies gain at these
-    // inputs, so a poach may or may not fire — assert shape only if it did.
-    if (poachLog) {
-      expect(poachLog).toMatchObject({
-        countryId,
-        stateId,
-        source: "poach",
-        actorId: actorNppId,
-      });
-    }
+    const dilutionLog = insertCalls.find(
+      (d: unknown) => (d as { source: string }).source === "passive"
+    );
+    expect(dilutionLog).toMatchObject({
+      countryId,
+      stateId,
+      partyId: "2",
+      source: "passive",
+      actorId: null,
+    });
   });
 
   it("returns ok:false when the party has no presence in the state", async () => {
@@ -217,7 +268,7 @@ describe("nppBuildPartyOrg", () => {
     expect(db.collectionMocks["statePartyOrg"]!.updateOne).not.toHaveBeenCalled();
   });
 
-  it("returns ok:false when there is nothing to build (pool empty, no poachable rival)", async () => {
+  it("continues building when the party currently holds the full share", async () => {
     db.collectionMocks["statePartyOrg"]!.find.mockReturnValue({
       toArray: async () => [
         {
@@ -226,6 +277,7 @@ describe("nppBuildPartyOrg", () => {
           partyId: String(partySeq),
           countryId,
           organization: 100,
+          organizationUnits: 100,
           politicalStrength: 10,
         },
       ],
@@ -241,10 +293,10 @@ describe("nppBuildPartyOrg", () => {
       100
     );
 
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
     const { spendPoliticalStrength } =
       await import("@/lib/parties/commands/spendPoliticalStrength");
-    expect(spendPoliticalStrength).not.toHaveBeenCalled();
+    expect(spendPoliticalStrength).toHaveBeenCalled();
   });
 
   // ── Treasury cost (2026-09-02) ──────────────────────────────────────────
@@ -299,7 +351,7 @@ describe("nppBuildPartyOrg", () => {
     expect(chargeOrgBuildFunds).not.toHaveBeenCalled();
   });
 
-  it("shrinks the org gain when the treasury only partly funds the click", async () => {
+  it("keeps the fixed org contribution when the treasury only partly funds the click", async () => {
     const full = await build();
     expect(full.ok).toBe(true);
     if (!full.ok) return;
@@ -313,6 +365,6 @@ describe("nppBuildPartyOrg", () => {
 
     expect(half.ok).toBe(true);
     if (!half.ok) return;
-    expect(half.orgGain).toBeCloseTo(full.orgGain * 0.5, 6);
+    expect(half.orgGain).toBeCloseTo(full.orgGain, 6);
   });
 });

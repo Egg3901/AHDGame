@@ -1,7 +1,7 @@
 // Shared plumbing for the nuclear-programme routes. Mirrors the defence-contracts
 // route's guard structure: valid country, real defence seat, caller holds it (or
 // is admin), then the programme's own three entry gates on top.
-import { NextResponse } from "next/server";
+
 import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
@@ -15,6 +15,7 @@ import { getNuclearProgram } from "@/lib/db/collections/nuclearPrograms";
 import { isAdoptedByName } from "@/lib/military/doctrineTree";
 import { NUCLEAR_CAPABLE, NUCLEAR_ENTRY_DOCTRINE_NODE } from "@/lib/military/nuclearProgram";
 import { resolveGameYear } from "@/lib/era/era";
+import { errorResponse } from "@/lib/api/errors";
 
 export interface NuclearRouteParams {
   params: Promise<{ code: string; positionId: string }>;
@@ -42,11 +43,11 @@ export async function requireDefenceHolder(
 
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) {
-    return { error: NextResponse.json({ error: "Invalid country" }, { status: 400 }) } as const;
+    return { error: errorResponse(400, "Invalid country") } as const;
   }
   if (DEFENSE_POSITION_BY_COUNTRY[countryId] !== positionId) {
     return {
-      error: NextResponse.json({ error: "Not a defense cabinet position" }, { status: 404 }),
+      error: errorResponse(404, "Not a defense cabinet position"),
     } as const;
   }
 
@@ -65,14 +66,11 @@ export async function requireDefenceHolder(
   const permitted = intent === "read" ? canView : canAct;
   if (!permitted) {
     return {
-      error: NextResponse.json(
-        {
-          error:
-            intent === "read"
-              ? "This office's records are not published outside the office."
-              : "Only the defence minister may manage the nuclear programme.",
-        },
-        { status: 403 }
+      error: errorResponse(
+        403,
+        intent === "read"
+          ? "This office's records are not published outside the office."
+          : "Only the defence minister may manage the nuclear programme."
       ),
     } as const;
   }
@@ -143,24 +141,18 @@ export async function requireEligible(db: Db, countryId: CountryId) {
   const gs = (await loadGameStateSlice(db)) ?? {};
   if (gs.coldWarEnabled !== true) {
     return {
-      error: NextResponse.json({ error: "Cold War subsystem disabled" }, { status: 404 }),
+      error: errorResponse(404, "Cold War subsystem disabled"),
     } as const;
   }
   const eligibility = await resolveEligibility(db, countryId, true);
   if (!eligibility.capable) {
     return {
-      error: NextResponse.json(
-        { error: "This nation cannot open a nuclear programme in this era." },
-        { status: 403 }
-      ),
+      error: errorResponse(403, "This nation cannot open a nuclear programme in this era."),
     } as const;
   }
   if (!eligibility.doctrineAdopted) {
     return {
-      error: NextResponse.json(
-        { error: `Adopt the ${NUCLEAR_ENTRY_DOCTRINE_NODE} doctrine node first.` },
-        { status: 409 }
-      ),
+      error: errorResponse(409, `Adopt the ${NUCLEAR_ENTRY_DOCTRINE_NODE} doctrine node first.`),
     } as const;
   }
   const year = resolveGameYear(gs);

@@ -1,6 +1,49 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import {
+  freezeAndApplyDemographicFlowPlan,
+  type DemographicFlowRegionProjection,
+} from "./flowJournal";
+
+// These tests inspect demographic formulas in the frozen plan. Journal tests
+// and the real-Mongo replay harness cover durable materialization separately.
+vi.mock("./worldEpoch", () => ({
+  ensureDemographicWorldEpoch: vi.fn(async () => "formula-test-world"),
+}));
+vi.mock("./flowJournal", () => ({
+  resumeDemographicFlowReceipt: vi.fn(async () => null),
+  freezeAndApplyDemographicFlowPlan: vi.fn(
+    async (_db: Db, plan: Parameters<typeof freezeAndApplyDemographicFlowPlan>[1]) => plan.stats
+  ),
+}));
+
+function plannedRegions(db: MockDb): DemographicFlowRegionProjection[] {
+  const calls = vi.mocked(freezeAndApplyDemographicFlowPlan).mock.calls;
+  const call = calls.findLast(([target]) => target === (db as unknown as Db));
+  return call?.[1].regions ?? [];
+}
+
+function projectionWrites(
+  db: MockDb,
+  collection: "states" | "macroMetrics" | "regionDemographics"
+) {
+  return plannedRegions(db).map((region) => {
+    const fields =
+      collection === "states"
+        ? region.stateAfter
+        : collection === "regionDemographics"
+          ? { ages: region.agesAfter }
+          : Object.fromEntries(
+              Object.entries(region.metricsAfter).map(([key, value]) => [
+                `population.${key}.value`,
+                value,
+              ])
+            );
+    return { updateOne: { filter: { _id: region.regionId }, update: { $set: fields } } };
+  });
+}
+import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
 
 function vec(pop: number) {
   // simple vector summing to `pop`: spread across working ages 20-59 (40 ages),
@@ -59,15 +102,94 @@ describe("runDemographicFlows", () => {
     const { runDemographicFlows } = await import("./phase");
     const result = await runDemographicFlows(db as unknown as Db, 1);
     expect(result.regionsProcessed).toBe(1);
-    expect(db.collectionMocks.states!.bulkWrite).toHaveBeenCalled();
-    expect(db.collectionMocks.regionDemographics!.bulkWrite).toHaveBeenCalled();
-    expect(db.collectionMocks.macroMetrics!.bulkWrite).toHaveBeenCalled();
+    const [region] = plannedRegions(db);
+    expect(region.agesAfter.male).toHaveLength(101);
+    expect(region.stateAfter.population).toBeGreaterThan(0);
+    expect(region.metricsAfter).toHaveProperty("populationGrowth");
+    expect(plannedRegions(db)[0]!.resetCohortReadingAfter).toBeUndefined();
+  });
+
+  it("writes raw realized cohort outcomes only for a seed-verified v2 world", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      currentTurn: 1,
+      resetWorldId: "test-reset-world",
+      metricsSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "test-reset-world",
+          revision: RESET_V2_SEED_REVISION.metrics,
+          sourceTurn: 1,
+          completedAt: "2026-09-30T00:00:00.000Z",
+          verificationHash: "verified",
+        },
+      },
+    });
+    db.collection("resetMetricSnapshots").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "US:CA",
+          worldId: "test-reset-world",
+          countryId: "US",
+          regionId: "CA",
+          asOfTurn: 1,
+          observations: { "19": { value: 250 } },
+        },
+      ]),
+    });
+    const { runDemographicFlows } = await import("./phase");
+    await runDemographicFlows(db as unknown as Db, 2, undefined, {
+      metrics: true,
+      legislation: false,
+      cabinet: false,
+    });
+    expect(plannedRegions(db)[0]!.resetCohortReadingAfter).toMatchObject({
+      asOfTurn: 2,
+      realizedTfr: expect.any(Number),
+      dependencyBurden15To64: expect.any(Number),
+      populationGrowthAnnualized: expect.any(Number),
+      periodLifeExpectancy: expect.any(Number),
+    });
+    expect(db.collectionMocks.resetMetricSnapshots!.find).toHaveBeenCalledWith(
+      expect.objectContaining({ worldId: "test-reset-world", scope: "regional" }),
+      expect.objectContaining({
+        projection: expect.objectContaining({ "observations.19.value": 1 }),
+      })
+    );
+  });
+
+  it("refuses stale or missing v2 health ownership rather than reverting to political inputs", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      currentTurn: 1,
+      resetWorldId: "test-reset-world",
+      metricsSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "test-reset-world",
+          revision: RESET_V2_SEED_REVISION.metrics,
+          sourceTurn: 1,
+          completedAt: "2026-09-30T00:00:00.000Z",
+          verificationHash: "verified",
+        },
+      },
+    });
+    db.collection("resetMetricSnapshots").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    const { runDemographicFlows } = await import("./phase");
+    await expect(
+      runDemographicFlows(db as unknown as Db, 2, undefined, {
+        metrics: true,
+        legislation: false,
+        cabinet: false,
+      })
+    ).rejects.toThrow("V2 cohorts lack current health inputs");
+    expect(plannedRegions(db)).toEqual([]);
   });
 
   it("writes a population SSOT equal to the Σ of the advanced vector", async () => {
     const { runDemographicFlows } = await import("./phase");
     await runDemographicFlows(db as unknown as Db, 1);
-    const call = db.collectionMocks.states!.bulkWrite.mock.calls[0][0] as Array<{
+    const call = projectionWrites(db, "states") as Array<{
       updateOne: { filter: { _id: string }; update: { $set: { population: number } } };
     }>;
     expect(call[0].updateOne.update.$set.population).toBeGreaterThan(0);
@@ -92,13 +214,13 @@ describe("runDemographicFlows", () => {
     const { runDemographicFlows } = await import("./phase");
     await runDemographicFlows(db as unknown as Db, 1);
     const set = (
-      db.collectionMocks.macroMetrics!.bulkWrite.mock.calls[0][0] as Array<{
+      projectionWrites(db, "macroMetrics") as Array<{
         updateOne: { update: { $set: Record<string, number> } };
       }>
     )[0].updateOne.update.$set;
     expect(set["population.populationGrowth.value"]).toBeLessThanOrEqual(5); // saturates bound
     expect(set).not.toHaveProperty("population.migrationRate.value"); // policy input untouched
-    const stateCall = db.collectionMocks.states!.bulkWrite.mock.calls[0][0] as Array<{
+    const stateCall = projectionWrites(db, "states") as Array<{
       updateOne: { update: { $set: { population: number } } };
     }>;
     // un-clamped flow still grew the real stock past a +5%/yr-capped level
@@ -122,7 +244,7 @@ describe("runDemographicFlows", () => {
     const { runDemographicFlows } = await import("./phase");
     await runDemographicFlows(db as unknown as Db, 1);
     const set = (
-      db.collectionMocks.macroMetrics!.bulkWrite.mock.calls[0][0] as Array<{
+      projectionWrites(db, "macroMetrics") as Array<{
         updateOne: { update: { $set: Record<string, number> } };
       }>
     )[0].updateOne.update.$set;
@@ -166,12 +288,12 @@ describe("runDemographicFlows", () => {
       const { runDemographicFlows } = await import("./phase");
       await runDemographicFlows(target as unknown as Db, 1);
       const population = (
-        target.collectionMocks.states!.bulkWrite.mock.calls[0][0] as Array<{
+        projectionWrites(target, "states") as Array<{
           updateOne: { update: { $set: { population: number } } };
         }>
       )[0].updateOne.update.$set.population;
       const metrics = (
-        target.collectionMocks.macroMetrics!.bulkWrite.mock.calls[0][0] as Array<{
+        projectionWrites(target, "macroMetrics") as Array<{
           updateOne: { update: { $set: Record<string, number> } };
         }>
       )[0].updateOne.update.$set;
@@ -189,7 +311,7 @@ describe("runDemographicFlows", () => {
     const { runDemographicFlows } = await import("./phase");
     await runDemographicFlows(db as unknown as Db, 1);
     const set = (
-      db.collectionMocks.states!.bulkWrite.mock.calls[0][0] as Array<{
+      projectionWrites(db, "states") as Array<{
         updateOne: { update: { $set: { population: number; votingEligiblePopulation: number } } };
       }>
     )[0].updateOne.update.$set;
@@ -226,7 +348,7 @@ describe("runDemographicFlows", () => {
 
     const { runDemographicFlows } = await import("./phase");
     await runDemographicFlows(db as unknown as Db, 1);
-    const writes = db.collectionMocks.states!.bulkWrite.mock.calls[0][0] as Array<{
+    const writes = projectionWrites(db, "states") as Array<{
       updateOne: {
         filter: { _id: string };
         update: { $set: { votingEligiblePopulation: number } };
@@ -243,7 +365,7 @@ describe("runDemographicFlows", () => {
     const { runDemographicFlows } = await import("./phase");
     await runDemographicFlows(db as unknown as Db, 1);
     const set = (
-      db.collectionMocks.states!.bulkWrite.mock.calls[0][0] as Array<{
+      projectionWrites(db, "states") as Array<{
         updateOne: {
           update: { $set: { workingAgePopulation: number; votingEligiblePopulation: number } };
         };
@@ -297,7 +419,7 @@ describe("runDemographicFlows", () => {
     });
     const { runDemographicFlows } = await import("./phase");
     await runDemographicFlows(db as unknown as Db, 1);
-    const writes = db.collectionMocks.states!.bulkWrite.mock.calls[0][0] as Array<{
+    const writes = projectionWrites(db, "states") as Array<{
       updateOne: { filter: { _id: string }; update: { $set: { population: number } } };
     }>;
     const nationalAfter = writes.reduce((s, w) => s + w.updateOne.update.$set.population, 0);
@@ -308,7 +430,7 @@ describe("runDemographicFlows", () => {
     const txPop = writes.find((w) => w.updateOne.filter._id === "TX")!.updateOne.update.$set
       .population;
     expect(caPop).toBeGreaterThan(txPop); // internal migration favored the attractive region
-    const metricWrites = db.collectionMocks.macroMetrics!.bulkWrite.mock.calls[0][0] as Array<{
+    const metricWrites = projectionWrites(db, "macroMetrics") as Array<{
       updateOne: {
         filter: { _id: string };
         update: { $set: Record<string, number> };
@@ -351,7 +473,7 @@ describe("runDemographicFlows", () => {
     });
     const { runDemographicFlows } = await import("./phase");
     await runDemographicFlows(db as unknown as Db, 1);
-    const liveWrites = db.collectionMocks.states!.bulkWrite.mock.calls[0][0] as Array<{
+    const liveWrites = projectionWrites(db, "states") as Array<{
       updateOne: { filter: { _id: string }; update: { $set: { population: number } } };
     }>;
     const live = Object.fromEntries(
@@ -359,10 +481,10 @@ describe("runDemographicFlows", () => {
     );
     expect(memberships.find).toHaveBeenCalledWith({ organizationId: "EU" }, expect.anything());
 
-    db.collectionMocks.states!.bulkWrite.mockClear();
+    vi.mocked(freezeAndApplyDemographicFlowPlan).mockClear();
     memberships.find.mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
     await runDemographicFlows(db as unknown as Db, 1);
-    const closedWrites = db.collectionMocks.states!.bulkWrite.mock.calls[0][0] as typeof liveWrites;
+    const closedWrites = projectionWrites(db, "states") as typeof liveWrites;
     const closed = Object.fromEntries(
       closedWrites.map((op) => [op.updateOne.filter._id, op.updateOne.update.$set.population])
     );
@@ -412,7 +534,7 @@ describe("runDemographicFlows", () => {
 
     const { runDemographicFlows } = await import("./phase");
     await runDemographicFlows(db as unknown as Db, 1);
-    const writes = db.collectionMocks.states!.bulkWrite.mock.calls[0][0] as Array<{
+    const writes = projectionWrites(db, "states") as Array<{
       updateOne: { filter: { _id: string }; update: { $set: { population: number } } };
     }>;
     const caPopulation = writes.find((write) => write.updateOne.filter._id === "CA")!.updateOne
@@ -431,7 +553,7 @@ describe("runDemographicFlows", () => {
     const { runDemographicFlows } = await import("./phase");
     await runDemographicFlows(db as unknown as Db, 1);
     const set = (
-      db.collectionMocks.states!.bulkWrite.mock.calls[0][0] as Array<{
+      projectionWrites(db, "states") as Array<{
         updateOne: { update: { $set: { militaryServicePopulation: number } } };
       }>
     )[0].updateOne.update.$set;
@@ -496,7 +618,7 @@ describe("Bridge A — political inputs drive the cohort engine", () => {
 
   /** Σ population written to `states` after one turn. */
   function populationWritten(db: MockDb): number {
-    const ops = db.collectionMocks.states!.bulkWrite.mock.calls[0][0] as Array<{
+    const ops = projectionWrites(db, "states") as Array<{
       updateOne: { update: { $set: { population: number } } };
     }>;
     return ops.reduce((sum, op) => sum + op.updateOne.update.$set.population, 0);

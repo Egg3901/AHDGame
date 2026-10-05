@@ -8,6 +8,7 @@ import noSilentFetchCatch from "./eslint-rules/no-silent-fetch-catch.js";
 import noImplicitLocaleDatetime from "./eslint-rules/no-implicit-locale-datetime.js";
 import noUnawaitedAuthGuard from "./eslint-rules/no-unawaited-auth-guard.js";
 import noDottedBoardPath from "./eslint-rules/no-dotted-board-path.js";
+import noUncodedErrorResponse from "./eslint-rules/no-uncoded-error-response.js";
 
 const require = createRequire(import.meta.url);
 
@@ -73,6 +74,7 @@ const eslintConfig = defineConfig([
           "no-implicit-locale-datetime": noImplicitLocaleDatetime,
           "no-unawaited-auth-guard": noUnawaitedAuthGuard,
           "no-dotted-board-path": noDottedBoardPath,
+          "no-uncoded-error-response": noUncodedErrorResponse,
         },
       },
     },
@@ -129,6 +131,9 @@ const eslintConfig = defineConfig([
       // unauthenticated. Error, not warn: zero existing violations, and the
       // failure mode (auth/validation bypass) fails open — worth blocking.
       "local/no-unawaited-auth-guard": "error",
+      // Error bodies must carry the shared { error, code, ref } envelope so a
+      // player-quoted code maps to an event. Use errorResponse/statusResponse.
+      "local/no-uncoded-error-response": "error",
       // The political board's values/residuals maps are keyed by literal dotted
       // strings, so a dotted Mongo path silently creates a nested object instead
       // of touching the key — the write is lost, or the projection matches
@@ -171,6 +176,8 @@ const eslintConfig = defineConfig([
       // A defaulted `preset` on a local test helper cannot corrupt a live
       // world, which is the whole point of the rule. Keep it on for src/scripts.
       "no-restricted-syntax": "off",
+      // Test doubles stub upstream responses and need not carry the envelope.
+      "local/no-uncoded-error-response": "off",
     },
   },
   // Migration/seed scripts: any is unavoidable for raw MongoDB document operations; ts-nocheck allowed for one-off runners

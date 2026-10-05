@@ -67,6 +67,7 @@ function flow(
     shippingPerUnit: 0.1,
     tariffRatePct: 0,
     tariffPaid: 0,
+    deliveredTariffPaid: 0,
     landedPrice: 1.1,
     freightTeuConsumed: 1,
   };

@@ -13,7 +13,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { code } = await params;
   const id = code.toUpperCase() as CountryId;
   const config = COUNTRY_CONFIGS[id];
-  if (!config) return { title: "Supreme Court Not Found | A House Divided" };
+  if (!config) return { title: "Supreme Court not found | A House Divided" };
   return {
     title: `Supreme Court | ${config.name} | A House Divided`,
     description: `${config.name} Supreme Court composition, nominations, and docket history.`,

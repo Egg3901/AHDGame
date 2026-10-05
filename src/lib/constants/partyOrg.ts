@@ -34,33 +34,39 @@ export const CYCLE_TURNS = {
 export const DOLLARS_PER_ORG = 75000;
 
 /**
- * Org decay per turn applied to every party row with Org > 0.
+ * Organization bucket tuning.
  *
- * 0.03125 pp / turn (1 turn = 1 real-time hour) ≈ 0.75 pp / IRL day or
- * 1.5 pp / game-year (48 turns). Quartered from the prior 0.125 pp / turn
- * after playtest feedback that the old rate forced players to click Build Org
- * too often just to tread water. At 0.03125 a player has ~8 IRL days of grace
- * between defensive clicks before a party in a neutral state visibly bleeds.
- *
- * Decayed Org returns implicitly to the state's Unaffiliated pool
- * (`Unaffiliated Org = 100 − Σ partyOrg`, derived).
+ * A successful Build Org action always deposits one unit. A region begins with
+ * a permanent 100-unit Unaffiliated stake which is always included in the
+ * denominator and never decays. Org shares are each party's fraction of that
+ * stake plus all party contributions.
  */
-export const ORG_DECAY_RATE = 0.03125;
+export const ORG_BUCKET_BASELINE_UNITS = 100;
+export const ORG_BUILD_UNITS_PER_CLICK = 1;
 
 /**
- * Floor below which passive Org decay will NOT push a state party that has
- * genuine regional PRESENCE (`hasPresence: true`). Matches the seed floor the
- * per-country org seeders use (e.g. ukStatePartyOrgCalculations `MIN_ORG = 5`).
- *
- * Decay is the ONLY turn-pipeline Org mover (growth is player-click-only via
- * /build-org), so in an all-NPP world a present party's Org bleeds to 0 and it
- * is permanently locked out of every race there (Org 0 → ~0 vote weight). The
- * seed-disadvantaged major party (e.g. 1953 Republicans, seeded ~16) hits 0
- * first, producing runaway one-party blowouts. With this floor, present parties
- * bleed down to a viable minimum and stay contestable; parties WITHOUT presence
- * still decay to 0 (a dead party should release its Org to the Unaffiliated pool).
+ * Legacy percentages need enough starting units to coexist with the permanent
+ * Unaffiliated stake without a severe one-time visible drop. Conversion chooses
+ * the exact regional scale when possible and caps it here near saturation so a
+ * historical 100% region still leaves room for the permanent stake.
  */
-export const MIN_PRESENCE_ORG = 5;
+export const ORG_LEGACY_UNITS_PER_PERCENT_MAX = 10;
+
+/**
+ * A party gets 96 turns without investment before its accumulated units begin
+ * to decay. At the standard hourly cadence, this is four real-time days. Any
+ * successful Build Org action resets this clock for that party in that region.
+ */
+export const ORG_DECAY_GRACE_TURNS = 96;
+
+/**
+ * Proportional unit decay once the inactivity grace period is reached. At 1%
+ * per turn, an inactive balance loses about 21.4% per real-time day and has a
+ * half-life of roughly 69 turns, or 2.9 days, after decay starts. Decaying
+ * units, instead of percentage points, preserves the bucket's accumulated-
+ * investment semantics.
+ */
+export const ORG_UNIT_DECAY_RATE = 0.01;
 
 // ─── Default Tax Rates ─────────────────────────────────────────────────────────
 

@@ -14,6 +14,8 @@
  * Deleting a guard row would corrupt derived state, so it is never removed.
  */
 
+import { RESEARCH_TELEMETRY_RETENTION_TURNS } from "@/lib/telemetry/research/rules";
+
 export enum RetentionMode {
   /** Archive old rows to R2, then delete them. No reader depends on them. */
   ARCHIVE_DELETE = "ARCHIVE_DELETE",
@@ -81,6 +83,21 @@ export const RETENTION_POLICIES: RetentionPolicy[] = [
     mode: RetentionMode.ARCHIVE_DELETE,
     createdAtFallback: "ts",
     note: "Unified forensics/alt-detection audit spine. TTL backstop on expiresAt; archive-before-delete.",
+  },
+  // ── Research telemetry panels (#2331, #2332): export window + 1 day ───────
+  {
+    collection: "countryTurnTelemetry",
+    timeKey: "turn",
+    windowTurns: RESEARCH_TELEMETRY_RETENTION_TURNS,
+    mode: RetentionMode.ARCHIVE_DELETE,
+    note: "Research country-turn panel. Export span cap is 480 turns; the export rejects windows older than this live boundary.",
+  },
+  {
+    collection: "securityTelemetry",
+    timeKey: "turn",
+    windowTurns: RESEARCH_TELEMETRY_RETENTION_TURNS,
+    mode: RetentionMode.ARCHIVE_DELETE,
+    note: "Research whole-market securities rows (about 600 B per security). Same window as the country panel.",
   },
   // ── Archive + delete WITH a protected guard row ───────────────────────────
   {

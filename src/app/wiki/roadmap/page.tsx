@@ -31,7 +31,7 @@ const PHASES = [
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   planned: { label: "Planned", className: "bg-zinc-500/20 text-zinc-400" },
-  "in-progress": { label: "In Progress", className: "bg-yellow-500/20 text-yellow-400" },
+  "in-progress": { label: "In progress", className: "bg-yellow-500/20 text-yellow-400" },
   completed: { label: "Completed", className: "bg-green-500/20 text-green-400" },
 };
 
@@ -124,7 +124,7 @@ export default function WikiRoadmapPage() {
       </nav>
 
       <header className="mb-10">
-        <h1 className="mb-2 text-3xl font-bold tracking-tight text-foreground">Product Roadmap</h1>
+        <h1 className="mb-2 text-3xl font-bold tracking-tight text-foreground">Product roadmap</h1>
         <p className="text-lg text-muted">
           Track what&apos;s planned, in progress, and completed across each release phase.
         </p>

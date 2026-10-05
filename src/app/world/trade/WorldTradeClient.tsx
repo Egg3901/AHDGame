@@ -39,11 +39,11 @@ import RestrictionsView from "./components/RestrictionsView";
 type View = "nations" | "commodities" | "bilateral" | "matrix" | "map" | "restrictions";
 
 const TABS: Array<{ id: View; label: string }> = [
-  { id: "nations", label: "By Nation" },
-  { id: "commodities", label: "By Commodity" },
+  { id: "nations", label: "By nation" },
+  { id: "commodities", label: "By commodity" },
   { id: "bilateral", label: "Bilateral" },
-  { id: "matrix", label: "Trade Matrix" },
-  { id: "map", label: "World Map" },
+  { id: "matrix", label: "Trade matrix" },
+  { id: "map", label: "World map" },
   { id: "restrictions", label: "Restrictions" },
 ];
 

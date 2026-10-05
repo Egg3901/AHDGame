@@ -277,13 +277,11 @@ export function ReferralLeaderboardPanel() {
               <thead className="bg-background/50">
                 <tr>
                   <th className="w-10 px-2 py-3" aria-hidden />
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                    #
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-body-sm font-medium text-muted">#</th>
+                  <th className="px-4 py-3 text-left text-body-sm font-medium text-muted">
                     Player
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-body-sm font-medium text-muted">
                     Referrals
                   </th>
                 </tr>
@@ -419,15 +417,11 @@ export function ReferralLeaderboardPanel() {
                       />
                       <div className="min-w-0 flex-1 space-y-3">
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-xs font-medium text-muted uppercase tracking-wider">
-                            Rank
-                          </span>
+                          <span className="text-body-sm font-medium text-muted">Rank</span>
                           <span className="tabular-nums font-medium text-muted">{rank}</span>
                         </div>
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-xs font-medium text-muted uppercase tracking-wider">
-                            Player
-                          </span>
+                          <span className="text-body-sm font-medium text-muted">Player</span>
                           <div>
                             <p className="truncate font-medium text-foreground">
                               {row.displayName}
@@ -436,9 +430,7 @@ export function ReferralLeaderboardPanel() {
                           </div>
                         </div>
                         <div className="flex flex-col gap-0.5">
-                          <span className="text-xs font-medium text-muted uppercase tracking-wider">
-                            Referrals
-                          </span>
+                          <span className="text-body-sm font-medium text-muted">Referrals</span>
                           <span className="tabular-nums font-semibold text-foreground">
                             {row.count}
                           </span>

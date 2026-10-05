@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { adminPartyOrgPatchSchema } from "@/lib/api/schemas/admin";
 import type { StatePartyOrg, State, PoliticalParty } from "@/lib/db/types";
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
       // Get the state for political lean
       const state = await db.collection<State>("states").findOne({ _id: upperStateId, countryId });
       if (!state) {
-        return NextResponse.json({ error: "State not found" }, { status: 404 });
+        return errorResponse(404, "State not found");
       }
 
       // Get existing party org records
@@ -96,7 +96,7 @@ export async function PATCH(request: Request) {
 
     const parsed = await parseJsonBody(request, adminPartyOrgPatchSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { stateId, countryId, partyId, organization } = parsed.data;
 
@@ -108,7 +108,7 @@ export async function PATCH(request: Request) {
       countryId: countryId.toUpperCase() as CountryId,
     });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     // Validate party exists — scope by the state's country so a partyId that
@@ -118,15 +118,12 @@ export async function PATCH(request: Request) {
       countryId: state.countryId,
     });
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     // Validate values
     if (organization !== undefined && !validateOrganization(organization)) {
-      return NextResponse.json(
-        { error: "Organization must be between 0 and 100" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Organization must be between 0 and 100");
     }
 
     // Build update object
@@ -146,6 +143,14 @@ export async function PATCH(request: Request) {
       { _id: compoundId },
       {
         $set: updateData,
+        ...(organization !== undefined
+          ? {
+              // A manual percentage override becomes a fresh legacy snapshot.
+              // The next bucket read converts it into units using the complete
+              // regional context instead of retaining a stale durable balance.
+              $unset: { organizationUnits: "", lastOrganizationBuildTurn: "" },
+            }
+          : {}),
         $setOnInsert: {
           _id: compoundId,
           countryId: state.countryId,

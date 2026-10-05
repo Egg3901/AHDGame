@@ -1,7 +1,9 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface AdRow {
   _id: string;
@@ -53,7 +55,7 @@ export function PlayerAdsModTab() {
       const data = await res.json();
 
       if (data.error) {
-        setError(data.error);
+        setError(apiErrorText(data, "Request failed. Try again."));
       } else {
         if (append) {
           setAds((prev) => [...prev, ...data.ads]);
@@ -129,7 +131,7 @@ export function PlayerAdsModTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-base font-semibold text-foreground">Player Banner Ads</h3>
+          <h3 className="text-base font-semibold text-foreground">Player banner ads</h3>
           <p className="mt-0.5 text-xs text-muted">
             {ads.length} ad{ads.length !== 1 ? "s" : ""} total ·{" "}
             {ads.filter((a) => a.isActive).length} active
@@ -137,7 +139,7 @@ export function PlayerAdsModTab() {
         </div>
       </div>
 
-      {actionError && <p className="text-sm text-error">{actionError}</p>}
+      <InlineError error={actionError} className="text-sm text-error" />
 
       {ads.length === 0 ? (
         <p className="text-sm text-muted py-4">No player ads have been submitted yet.</p>

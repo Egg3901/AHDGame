@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { clearCommodity } from "./clearing";
 import type { ClearingInput } from "./types";
+import type { CountryId } from "@/lib/constants/countries";
+import { buildTradeAffinity } from "./tradeAffinity";
+import type { Tariff } from "@/lib/db/types/tariff";
+import type { TradeEmbargo } from "@/lib/db/types/tradeEmbargo";
 
 /** Sum every cell of a flow matrix. */
 function totalFlow(flow: Record<string, Record<string, number>>): number {
@@ -165,5 +169,209 @@ describe("clearCommodity", () => {
     const a = clearCommodity(input);
     const b = clearCommodity(input);
     expect(b).toEqual(a);
+  });
+});
+
+describe("tariff-inclusive import budgets", () => {
+  it.each([0, 5, 20, 50, 100])(
+    "limits sole-source imports to the fixed pre-duty budget at %i percent",
+    (pct) => {
+      const tariffs = [{ countryId: "CN", scopeType: "economy_wide", rate: pct } as Tariff];
+      const policy = buildTradeAffinity({
+        ftaPairs: new Set(),
+        blocsByCountry: new Map(),
+        tariffs,
+        embargoes: [],
+      });
+      const result = clearCommodity({
+        countries: ["US", "CN"],
+        supply: { US: 100, CN: 0 },
+        demand: { US: 0, CN: 100 },
+        affinity: (e, i) => policy.affinityFor("steel", e, i),
+        importCostMultiplier: (e, i) => policy.importCostMultiplierFor("steel", e, i),
+      });
+      const expected = 100 / (1 + pct / 100);
+      expect(result.flow.US.CN).toBeCloseTo(expected, 8);
+      expect(result.flow.US.CN * policy.importCostMultiplierFor("steel", "US", "CN")).toBeCloseTo(
+        100
+      );
+    }
+  );
+
+  it.each([25, 50, 75])(
+    "keeps imports within a seller's %i-unit available surplus",
+    (available) => {
+      const result = clearCommodity({
+        countries: ["US", "CN"],
+        supply: { US: available, CN: 0 },
+        demand: { US: 0, CN: 100 },
+        affinity: () => 1,
+        importCostMultiplier: () => 1.2,
+      });
+      expect(result.flow.US.CN).toBeCloseTo(Math.min(available, 100 / 1.2), 8);
+    }
+  );
+
+  it("keeps raw deficits in residual reporting and treats missing or invalid costs as neutral", () => {
+    const taxed = clearCommodity({
+      countries: ["US", "CN"],
+      supply: { US: 100, CN: 0 },
+      demand: { US: 0, CN: 100 },
+      affinity: () => 1,
+      importCostMultiplier: () => 1.5,
+    });
+    expect(taxed.perCountry.CN.uncleared).toBeCloseTo(-100 / 3);
+    for (const value of [undefined, 0, 0.99, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const result = clearCommodity({
+        countries: ["US", "CN"],
+        supply: { US: 100, CN: 0 },
+        demand: { US: 0, CN: 100 },
+        affinity: () => 1,
+        importCostMultiplier: () => value,
+      });
+      expect(result.flow.US.CN).toBeCloseTo(100);
+    }
+  });
+
+  it("keeps differentiated competing suppliers and satisfies weighted spend and physical margins", () => {
+    const result = clearCommodity({
+      countries: ["US", "DE", "CN"],
+      supply: { US: 60, DE: 60, CN: 0 },
+      demand: { US: 0, DE: 0, CN: 100 },
+      affinity: (e) => (e === "DE" ? 2 : 1),
+      importCostMultiplier: (_e, i) => (i === "CN" ? 1.2 : 1),
+    });
+    expect(result.flow.DE.CN).toBeGreaterThan(result.flow.US.CN);
+    expect((result.flow.US.CN + result.flow.DE.CN) * 1.2).toBeLessThanOrEqual(100 + 1e-8);
+    expect(result.perCountry.US.exports).toBeLessThanOrEqual(60);
+    expect(result.perCountry.DE.exports).toBeLessThanOrEqual(60);
+    expect(result.perCountry.CN.imports).toBeCloseTo(result.clearedVolume);
+  });
+
+  it("shifts flow from a taxed origin to an untaxed alternative within seller limits", () => {
+    const common = {
+      countries: ["US", "DE", "CN"] as CountryId[],
+      supply: { US: 100, DE: 100, CN: 0 },
+      demand: { US: 0, DE: 0, CN: 100 },
+    };
+    const baselinePolicy = buildTradeAffinity({
+      ftaPairs: new Set(),
+      blocsByCountry: new Map(),
+      tariffs: [],
+      embargoes: [],
+    });
+    const baseline = clearCommodity({
+      ...common,
+      affinity: (e, i) => baselinePolicy.affinityFor("steel", e, i),
+    });
+    const tariff: Tariff = {
+      countryId: "CN",
+      scopeType: "origin_country",
+      targetOriginCountryId: "US",
+      rate: 20,
+    } as Tariff;
+    const policy = buildTradeAffinity({
+      ftaPairs: new Set(),
+      blocsByCountry: new Map(),
+      tariffs: [tariff],
+      embargoes: [],
+    });
+    const treatment = clearCommodity({
+      ...common,
+      affinity: (e, i) => policy.affinityFor("steel", e, i),
+      importCostMultiplier: (e, i) => policy.importCostMultiplierFor("steel", e, i),
+    });
+    expect(treatment.flow.DE.CN).toBeGreaterThan(baseline.flow.DE.CN);
+    expect(treatment.flow.US.CN * 1.2 + treatment.flow.DE.CN).toBeLessThanOrEqual(100 + 1e-8);
+
+    const limitedAlternative = clearCommodity({
+      ...common,
+      supply: { US: 100, DE: 25, CN: 0 },
+      affinity: (e, i) => policy.affinityFor("steel", e, i),
+      importCostMultiplier: (e, i) => policy.importCostMultiplierFor("steel", e, i),
+    });
+    expect(limitedAlternative.flow.DE.CN).toBeLessThanOrEqual(25 + 1e-8);
+    expect(limitedAlternative.perCountry.CN.imports).toBeLessThan(100);
+    expect(limitedAlternative.flow.US.CN * 1.2 + limitedAlternative.flow.DE.CN).toBeLessThanOrEqual(
+      100 + 1e-8
+    );
+  });
+
+  it("enforces independent spending ceilings and physical conservation for multiple importers", () => {
+    const result = clearCommodity({
+      countries: ["US", "DE", "CN", "FR"],
+      supply: { US: 100, DE: 70, CN: 0, FR: 0 },
+      demand: { US: 0, DE: 0, CN: 100, FR: 80 },
+      affinity: () => 1,
+      importCostMultiplier: (_e, i) => (i === "CN" ? 1.2 : i === "FR" ? 1.5 : 1),
+    });
+    const spendCn = (result.flow.US.CN + result.flow.DE.CN) * 1.2;
+    const spendFr = (result.flow.US.FR + result.flow.DE.FR) * 1.5;
+    expect(spendCn).toBeLessThanOrEqual(100 + 1e-8);
+    expect(spendFr).toBeLessThanOrEqual(80 + 1e-8);
+    expect(result.perCountry.US.exports).toBeLessThanOrEqual(100 + 1e-8);
+    expect(result.perCountry.DE.exports).toBeLessThanOrEqual(70 + 1e-8);
+    expect(result.perCountry.CN.imports).toBeLessThanOrEqual(100 + 1e-8);
+    expect(result.perCountry.FR.imports).toBeLessThanOrEqual(80 + 1e-8);
+    expect(result.perCountry.US.exports + result.perCountry.DE.exports).toBeCloseTo(
+      result.clearedVolume
+    );
+    expect(result.perCountry.CN.imports + result.perCountry.FR.imports).toBeCloseTo(
+      result.clearedVolume
+    );
+  });
+
+  it("keeps embargo caps stricter than tariff budgets and blocked routes closed", () => {
+    const capped = clearCommodity({
+      countries: ["US", "CN"],
+      supply: { US: 100, CN: 0 },
+      demand: { US: 0, CN: 100 },
+      affinity: () => 1,
+      capUnits: () => 20,
+      importCostMultiplier: () => 1.2,
+    });
+    expect(capped.flow.US.CN).toBeLessThanOrEqual(20);
+
+    const tariffs = [{ countryId: "CN", scopeType: "economy_wide", rate: 20 } as Tariff];
+    const embargoes: TradeEmbargo[] = [
+      {
+        sourceCountry: "US",
+        targetCountry: "CN",
+        commodity: "all",
+        direction: "export",
+        mode: "block",
+        origin: "minister",
+        createdTurn: 1,
+      } as TradeEmbargo,
+    ];
+    const policy = buildTradeAffinity({
+      ftaPairs: new Set(),
+      blocsByCountry: new Map(),
+      tariffs,
+      embargoes,
+    });
+    const blocked = clearCommodity({
+      countries: ["US", "CN"],
+      supply: { US: 100, CN: 0 },
+      demand: { US: 0, CN: 100 },
+      affinity: (e, i) => policy.affinityFor("steel", e, i),
+      importCostMultiplier: (e, i) => policy.importCostMultiplierFor("steel", e, i),
+    });
+    expect(blocked.perCountry.CN.imports).toBe(0);
+  });
+
+  it("evaluates route cost metadata once per solve despite repeated IPF passes", () => {
+    let reads = 0;
+    clearCommodity({
+      countries: ["US", "CN"],
+      supply: { US: 100, CN: 0 },
+      demand: { US: 0, CN: 100 },
+      affinity: () => 1,
+      importCostMultiplier: () => {
+        reads++;
+        return 1.2;
+      },
+    });
+    expect(reads).toBe(1);
   });
 });

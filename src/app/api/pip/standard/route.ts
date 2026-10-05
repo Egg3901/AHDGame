@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { calculateFullFundDistribution } from "@/lib/utils/fundGeneration";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { unionContributionIncomePerTurn } from "@/lib/unions/unionContributionIncome";
@@ -35,7 +35,7 @@ export async function GET() {
       .collection<Character>("characters")
       .findOne({ userId: new ObjectId(auth.user.userId) });
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const userId = new ObjectId(auth.user.userId);

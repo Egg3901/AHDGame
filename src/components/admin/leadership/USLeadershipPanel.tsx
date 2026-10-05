@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { EmptyState } from "@/components/ui";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Candidate {
   id: string;
@@ -33,8 +34,8 @@ const STATUS_COLORS: Record<string, string> = {
 
 const TABS = [
   { id: "speaker", label: "Speaker" },
-  { id: "house_leadership", label: "House Leadership" },
-  { id: "senate_leadership", label: "Senate Leadership" },
+  { id: "house_leadership", label: "House leadership" },
+  { id: "senate_leadership", label: "Senate leadership" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -88,7 +89,7 @@ export function USLeadershipPanel() {
       }),
     });
     const d = await res.json();
-    setMessage(res.ok ? d.message : `Error: ${d.error}`);
+    setMessage(res.ok ? d.message : `Error: ${apiErrorText(d, "Request failed")}`);
     if (res.ok) {
       setPassTarget(null);
       setSelectedWinner("");

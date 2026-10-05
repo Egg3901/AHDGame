@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseFormData } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import type { Character } from "@/lib/db/types";
@@ -31,22 +31,19 @@ export async function POST(request: Request) {
 
     const parsed = await parseFormData(request);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const formData = parsed.data;
     const file = formData.get("file");
 
     if (!file || !(file instanceof Blob)) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+      return errorResponse(400, "No file uploaded");
     }
     if (!ALLOWED_TYPES.has(file.type)) {
-      return NextResponse.json(
-        { error: "Only JPEG, PNG, WebP, and GIF images are allowed." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Only JPEG, PNG, WebP, and GIF images are allowed.");
     }
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: "File must be under 2 MB." }, { status: 400 });
+      return errorResponse(400, "File must be under 2 MB.");
     }
 
     const db = await getDb();
@@ -62,7 +59,7 @@ export async function POST(request: Request) {
         .collection<ImperialCharacter>("imperialCharacters")
         .findOne({ _id: user.activeImperialCharacterId, userId: new ObjectId(authUser.userId) });
       if (!imperial) {
-        return NextResponse.json({ error: "No imperial character found" }, { status: 400 });
+        return errorResponse(400, "No imperial character found");
       }
       targetId = imperial._id;
       targetCollection = "imperialCharacters";
@@ -73,7 +70,7 @@ export async function POST(request: Request) {
         : { userId: new ObjectId(authUser.userId) };
       const character = await db.collection<Character>("characters").findOne(characterQuery);
       if (!character) {
-        return NextResponse.json({ error: "No character found" }, { status: 400 });
+        return errorResponse(400, "No character found");
       }
       targetId = character._id;
       targetCollection = "characters";
@@ -86,12 +83,9 @@ export async function POST(request: Request) {
       !isAdmin &&
       !canUploadGifAvatar(user?.patreonTier ?? null, user?.patreonExpiresAt ?? null)
     ) {
-      return NextResponse.json(
-        {
-          error:
-            "Animated GIF profile pictures require an active Supporter or Supporter+ subscription.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Animated GIF profile pictures require an active Supporter or Supporter+ subscription."
       );
     }
 

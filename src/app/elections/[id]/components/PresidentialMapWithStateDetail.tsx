@@ -160,7 +160,7 @@ export function PresidentialMapWithStateDetail({
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
-        {showHeading ? <h3 className="text-sm font-semibold">Electoral Map</h3> : <span />}
+        {showHeading ? <h3 className="text-sm font-semibold">Electoral map</h3> : <span />}
         <div className="flex items-center gap-2">
           {/* EV/Popular vote toggle */}
           <div className="flex items-center rounded-lg border border-card-border bg-card">

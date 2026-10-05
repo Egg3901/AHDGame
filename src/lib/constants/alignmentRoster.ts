@@ -1869,6 +1869,12 @@ void _countryIdsAreRostered;
 
 /** Colonial entities superseded by an emergent twin: present BEFORE this year. */
 const ENDS: Record<string, number> = {
+  // Southern Rhodesia became Zimbabwe in April 1980 and British Honduras became
+  // Belize in September 1981. The successors are simulated under their own ids
+  // (ZW, BZ in the background roster), so the colonial rows end here instead of
+  // rendering both names on the same map feature.
+  SRH: 1980,
+  BHN: 1982,
   ADN: 1967,
   BC: 1960,
   BRG: 1966,
@@ -1972,6 +1978,68 @@ const INDEP: Record<string, number> = {
   UV: 1960,
   WS: 1962,
 };
+
+/**
+ * Later official names, keyed by the first January the name applies. The roster
+ * `name` is the 1953 spelling; a later world must not label Burkina Faso
+ * "Upper Volta". Independence renames use the same year as `INDEP`, so the name
+ * and the sovereign status change together. Mid-year renames take effect the
+ * following January (Benin, November 1975, reads "Benin" from 1976).
+ */
+const ERA_NAMES: Readonly<Record<string, ReadonlyArray<readonly [number, string]>>> = {
+  BAS: [[1966, "Lesotho"]],
+  BCU: [[1966, "Botswana"]],
+  CD: [
+    [1972, "Zaire"],
+    [1998, "Democratic Republic of the Congo"],
+  ],
+  CE: [[1973, "Sri Lanka"]],
+  DY: [[1976, "Benin"]],
+  EQG: [[1968, "Equatorial Guinea"]],
+  ESH2: [[1976, "Western Sahara"]],
+  FSD: [[1960, "Mali"]],
+  FSOM: [
+    [1968, "French Territory of the Afars and the Issas"],
+    [1977, "Djibouti"],
+  ],
+  GN: [[1958, "Guinea"]],
+  GW: [[1974, "Guinea-Bissau"]],
+  MCG: [[1960, "Republic of the Congo"]],
+  MM: [[1990, "Myanmar"]],
+  NRH: [[1964, "Zambia"]],
+  NYA: [[1964, "Malawi"]],
+  OM: [[1971, "Oman"]],
+  PNG: [[1975, "Papua New Guinea"]],
+  SB: [[1978, "Solomon Islands"]],
+  SD: [[1956, "Sudan"]],
+  SUR: [[1975, "Suriname"]],
+  SWZ: [[2018, "Eswatini"]],
+  TP: [[1975, "East Timor"]],
+  UB: [[1960, "Central African Republic"]],
+  UV: [[1985, "Burkina Faso"]],
+  WS: [[1997, "Samoa"]],
+  BLR: [[1992, "Belarus"]],
+  // Background-roster successor polities, not alignment rows.
+  MK: [[2019, "North Macedonia"]],
+};
+
+/**
+ * Display name for an entity in a given year. Falls back to `fallback` (the
+ * caller's own name, usually the roster's 1953 spelling) before any rename.
+ */
+export function nameAt(key: string, year: number, fallback: string): string {
+  let name = fallback;
+  for (const [from, label] of ERA_NAMES[key] ?? []) {
+    if (year >= from) name = label;
+  }
+  return name;
+}
+
+/** Roster display name in a given year; undefined for an unrostered id. */
+export function rosterNameAt(entityId: string, year: number): string | undefined {
+  const entry = ROSTER_BY_KEY[entityId as AlignmentCountryKey];
+  return entry ? nameAt(entityId, year, entry.name) : undefined;
+}
 
 /** Whether an entity exists at all in a given year. */
 export function existsAt(key: AlignmentCountryKey, year: number): boolean {

@@ -4,6 +4,7 @@
  * For serverless/multi-instance, consider @upstash/ratelimit + Redis.
  */
 import { NextResponse } from "next/server";
+import { errorResponse } from "@/lib/api/errors";
 
 const DEFAULT_WINDOW_MS = 60_000; // 1 minute
 const DEFAULT_MAX_REQUESTS = 100;
@@ -113,13 +114,10 @@ export function rateLimitResponse(
   const sec = retryAfter ?? 60;
   const headers: Record<string, string> = { "Retry-After": String(sec) };
   if (meta) Object.assign(headers, rateLimitHeaders(meta));
-  return NextResponse.json(
-    {
-      error: message ?? "You’re sending requests too quickly. Please wait a moment and try again.",
-      code: "rate_limited",
-      retryAfterSeconds: sec,
-    },
-    { status: 429, headers }
+  return errorResponse(
+    429,
+    message ?? "You’re sending requests too quickly. Please wait a moment and try again.",
+    { code: "rate_limited", extra: { retryAfterSeconds: sec }, headers }
   );
 }
 

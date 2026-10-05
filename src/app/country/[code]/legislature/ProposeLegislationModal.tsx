@@ -57,13 +57,15 @@ import {
   BillFiscalImpactStrip,
   LawProvisionComparison,
 } from "@/components/bills/LawProvisionComparison";
-import { type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getNationalStateId } from "@/lib/policy/nationalStateId";
 import { TaxRateSliderControl } from "@/components/legislation/TaxRateSliderControl";
 import { useEnabledCountryIds } from "@/lib/hooks/useEnabledCountryIds";
 import type { BillProposalAutoFailWarning } from "@/lib/legislature/billAutoFailWarning";
 import { fetchJson } from "@/lib/observability/fetchJson";
+import { GuidedLegislationModal } from "@/components/legislation/GuidedLegislationModal";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface LegislationTypeOption {
   _id: string;
@@ -143,7 +145,7 @@ const EMPTY_SUBSIDY = {
  *   - `proposalWarning` / `proposalWarnings` — single or per-chamber auto-fail warning
  * Submits to `${legislatureApiUrl(countryId)}/bills`.
  */
-export function ProposeLegislationModal({
+function LegacyProposeLegislationModal({
   countryId,
   adminOverride = false,
   blockedProvisions,
@@ -173,7 +175,8 @@ export function ProposeLegislationModal({
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [cat, setCat] = useState(BILL_CATEGORIES[0] as string);
-  const { maastrichtEligibleCountries } = useWorldFlags();
+  const worldFlags = useWorldFlags();
+  const { maastrichtEligibleCountries } = worldFlags;
   const [treatyAction, setTreatyAction] = useState<"" | "ratify" | "reject">("");
   const canDecideTreaty =
     cat === "foreign policy" && maastrichtEligibleCountries?.includes(countryId) === true;
@@ -199,7 +202,7 @@ export function ProposeLegislationModal({
   const isSubsidyCat = SUBSIDY_BILL_CATEGORIES.has(cat as BillCategory);
   const isNatCat = NATIONALIZATION_BILL_CATEGORIES.has(cat as BillCategory);
   const isElectoralCat = ELECTORAL_LAW_BILL_CATEGORIES.has(cat as BillCategory);
-  const { euroAdoptionEligibleCountries = [] } = useWorldFlags();
+  const { euroAdoptionEligibleCountries = [] } = worldFlags;
   const canProposeEuro = cat === "economy" && euroAdoptionEligibleCountries.includes(countryId);
   const [includeEuroAdoption, setIncludeEuroAdoption] = useState(false);
   const isCentralBankCat = CENTRAL_BANK_INDEPENDENCE_BILL_CATEGORIES.has(cat as BillCategory);
@@ -215,10 +218,30 @@ export function ProposeLegislationModal({
   const [unionLawBias, setUnionLawBias] = useState(0);
   // Electoral law — franchise and registration access, each opt-in separately so
   // a bill touching one axis does not silently reset the other.
-  const [includeVotingAge, setIncludeVotingAge] = useState(false);
-  const [votingAge, setVotingAge] = useState(18);
-  const [includeRegAccess, setIncludeRegAccess] = useState(false);
-  const [registrationAccess, setRegistrationAccess] = useState(0);
+  const [electoralLaw, setElectoralLaw] = useState({
+    includeVotingAge: false,
+    votingAge: 18,
+    includeRegAccess: false,
+    registrationAccess: 0,
+    includeJapanShugiinReform: false,
+  });
+  const {
+    includeVotingAge,
+    votingAge,
+    includeRegAccess,
+    registrationAccess,
+    includeJapanShugiinReform,
+  } = electoralLaw;
+  function updateElectoralLaw<K extends keyof typeof electoralLaw>(
+    key: K,
+    value: (typeof electoralLaw)[K]
+  ) {
+    setElectoralLaw((current) => ({ ...current, [key]: value }));
+  }
+  const canProposeJapanShugiinReform =
+    countryId === COUNTRY_CONFIGS.JP.id &&
+    worldFlags.preset === "1991-default" &&
+    (worldFlags.currentYear ?? 0) >= 1994;
   // Central bank independence — opt-in, economy category. grant hands
   // rate-setting to the bank; revoke returns it to the government.
   const [includeCbIndependence, setIncludeCbIndependence] = useState(false);
@@ -436,11 +459,12 @@ export function ProposeLegislationModal({
         social: r.social,
         ...(r.proposedRate !== undefined ? { proposedRate: r.proposedRate } : {}),
       }));
-      if (isElectoralCat && (includeVotingAge || includeRegAccess)) {
+      if (isElectoralCat && (includeVotingAge || includeRegAccess || includeJapanShugiinReform)) {
         provisionsPayload.push({
           type: "electoral_law",
           ...(includeVotingAge ? { votingAge } : {}),
           ...(includeRegAccess ? { registrationAccess } : {}),
+          ...(includeJapanShugiinReform ? { japanShugiinReform: true } : {}),
         });
       }
       if (canProposeEuro && includeEuroAdoption) {
@@ -486,7 +510,7 @@ export function ProposeLegislationModal({
         return;
       }
       if (!res.ok) {
-        showToast(data.error ?? "Failed to propose bill.", "error");
+        showToast(apiErrorText(data, "Failed to propose bill."), "error");
       } else {
         showToast("Bill proposed and opened for voting.", "success");
         void captureProductEvent("bill_drafted");
@@ -541,7 +565,7 @@ export function ProposeLegislationModal({
       <div className="my-auto w-full max-w-lg space-y-5 rounded-2xl border border-card-border bg-card p-6 shadow-modal">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold">Propose Legislation</h2>
+            <h2 className="text-lg font-semibold">Propose legislation</h2>
             <p className="text-xs text-muted">
               Costs {BILL_PROPOSE_ACTION_COST} action points and {npiCost} national influence.
             </p>
@@ -601,7 +625,7 @@ export function ProposeLegislationModal({
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-muted">
-                Originating Chamber
+                Originating chamber
               </label>
               <select
                 value={billChamber}
@@ -633,7 +657,7 @@ export function ProposeLegislationModal({
             <div className="space-y-3">
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted">
-                  Restriction Type
+                  Restriction type
                 </label>
                 <div
                   role="tablist"
@@ -677,7 +701,7 @@ export function ProposeLegislationModal({
           ) : isSubsidyCat ? (
             <div className="space-y-3">
               <div className="mb-2 flex items-center justify-between">
-                <label className="block text-xs text-muted">Subsidy Provisions</label>
+                <label className="block text-xs text-muted">Subsidy provisions</label>
                 {subsidyProvisions.length < MAX_PROVISIONS && (
                   <button
                     type="button"
@@ -708,8 +732,8 @@ export function ProposeLegislationModal({
                       }
                       className="flex-1 rounded-lg border border-card-border bg-card px-2 py-1.5 text-sm"
                     >
-                      <option value="subsidy">Grant Subsidy</option>
-                      <option value="end_subsidy">End Subsidy</option>
+                      <option value="subsidy">Grant subsidy</option>
+                      <option value="end_subsidy">End subsidy</option>
                     </select>
                     {subsidyProvisions.length > 1 && (
                       <button
@@ -739,7 +763,7 @@ export function ProposeLegislationModal({
                     className="w-full rounded-lg border border-card-border bg-card px-2 py-1.5 text-sm"
                   >
                     <option value="economy_wide">Economy-wide</option>
-                    <option value="sector">Specific Sector</option>
+                    <option value="sector">Specific sector</option>
                   </select>
                   {sp.scopeType === "sector" && (
                     <SubsidySectorSelect
@@ -818,7 +842,7 @@ export function ProposeLegislationModal({
                   <option value="ban">Ban unions nationally</option>
                   <option value="repeal_ban">Repeal the union ban</option>
                 </select>
-                <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted/70">
+                <div className="flex items-center justify-between text-body-sm font-medium text-muted">
                   <span>← Right-to-work</span>
                   <span>Neutral (0)</span>
                   <span>Collective bargaining →</span>
@@ -866,7 +890,7 @@ export function ProposeLegislationModal({
                   disabled={rows.length >= maxPolicyRows}
                   className="rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
                 >
-                  + Add Provision
+                  + Add provision
                 </button>
               </div>
               {hasStandaloneProvision && rows.some((r) => !r.legislationTypeId) && (
@@ -893,7 +917,7 @@ export function ProposeLegislationModal({
                     className="space-y-2 rounded-lg border border-card-border bg-background/40 p-3"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+                      <span className="text-body-sm font-medium text-muted">
                         Provision {idx + 1}
                       </span>
                       {(rows.length > 1 || hasStandaloneProvision) && (
@@ -1127,7 +1151,7 @@ export function ProposeLegislationModal({
                   <input
                     type="checkbox"
                     checked={includeVotingAge}
-                    onChange={(e) => setIncludeVotingAge(e.target.checked)}
+                    onChange={(e) => updateElectoralLaw("includeVotingAge", e.target.checked)}
                     className="rounded"
                   />
                   Set the voting age
@@ -1140,7 +1164,9 @@ export function ProposeLegislationModal({
                     step={1}
                     value={votingAge}
                     disabled={!includeVotingAge}
-                    onInput={(e) => setVotingAge(Number((e.target as HTMLInputElement).value))}
+                    onInput={(e) =>
+                      updateElectoralLaw("votingAge", Number((e.target as HTMLInputElement).value))
+                    }
                     className="flex-1 accent-sky-500 disabled:opacity-40"
                   />
                   <span className="min-w-[48px] rounded-md border border-card-border bg-card-elevated px-2 py-1 text-right font-mono text-xs">
@@ -1153,12 +1179,12 @@ export function ProposeLegislationModal({
                   <input
                     type="checkbox"
                     checked={includeRegAccess}
-                    onChange={(e) => setIncludeRegAccess(e.target.checked)}
+                    onChange={(e) => updateElectoralLaw("includeRegAccess", e.target.checked)}
                     className="rounded"
                   />
                   Set registration access
                 </label>
-                <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted/70">
+                <div className="flex items-center justify-between text-body-sm font-medium text-muted">
                   <span>&larr; Restricted</span>
                   <span>Neutral (0)</span>
                   <span>Automatic &rarr;</span>
@@ -1172,7 +1198,10 @@ export function ProposeLegislationModal({
                     value={registrationAccess}
                     disabled={!includeRegAccess}
                     onInput={(e) =>
-                      setRegistrationAccess(Number((e.target as HTMLInputElement).value))
+                      updateElectoralLaw(
+                        "registrationAccess",
+                        Number((e.target as HTMLInputElement).value)
+                      )
                     }
                     className="flex-1 accent-sky-500 disabled:opacity-40"
                   />
@@ -1181,8 +1210,25 @@ export function ProposeLegislationModal({
                   </span>
                 </div>
               </div>
+              {canProposeJapanShugiinReform && (
+                <label className="flex cursor-pointer items-start gap-2 rounded-md border border-amber-500/30 p-2 text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    checked={includeJapanShugiinReform}
+                    onChange={(event) =>
+                      updateElectoralLaw("includeJapanShugiinReform", event.target.checked)
+                    }
+                    className="mt-0.5 rounded"
+                  />
+                  <span>
+                    Propose Japan&apos;s 1994 Shūgiin transition: 300 single-member districts and
+                    200 regional party-list seats. Sitting members keep their mandates until a later
+                    election.
+                  </span>
+                </label>
+              )}
               <p className="text-[11px] italic text-muted/60">
-                {!includeVotingAge && !includeRegAccess
+                {!includeVotingAge && !includeRegAccess && !includeJapanShugiinReform
                   ? "No electoral-law provision will be included in this bill."
                   : [
                       includeVotingAge ? `Voting age set to ${votingAge}.` : null,
@@ -1193,6 +1239,7 @@ export function ProposeLegislationModal({
                             ? `Registration access +${registrationAccess} — voters reach the rolls faster and fewer lapse.`
                             : `Registration access ${registrationAccess} — the rolls grow slower and lapse faster.`
                         : null,
+                      includeJapanShugiinReform ? "Japan Shugiin reform requires passage." : null,
                     ]
                       .filter(Boolean)
                       .join(" ")}
@@ -1228,11 +1275,36 @@ export function ProposeLegislationModal({
               disabled={submitDisabled}
               className="flex-1 rounded-lg bg-primary py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
-              {submitting ? "Proposing…" : "Propose Bill"}
+              {submitting ? "Proposing…" : "Propose bill"}
             </button>
           </div>
         </form>
       </div>
     </div>
   );
+}
+
+export function ProposeLegislationModal(
+  props: Parameters<typeof LegacyProposeLegislationModal>[0]
+) {
+  const flags = useWorldFlags();
+  const useV2 =
+    flags.loaded &&
+    !flags.failed &&
+    flags.resetSystemVersions.legislation === "v2" &&
+    flags.resetV2Countries.includes(props.countryId);
+  if (useV2) {
+    return (
+      <GuidedLegislationModal
+        countryId={props.countryId}
+        endpoint={`${legislatureApiUrl(props.countryId)}/bills`}
+        chambers={props.chambers}
+        initialChamber={props.defaultChamber ?? props.chambers[0]?.value ?? ""}
+        adminOverride={props.adminOverride}
+        onClose={props.onClose}
+        onSuccess={props.onSuccess}
+      />
+    );
+  }
+  return <LegacyProposeLegislationModal {...props} />;
 }

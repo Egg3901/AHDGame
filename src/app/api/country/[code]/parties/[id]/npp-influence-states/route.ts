@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError, forbidden, notFound } from "@/lib/api/errors";
+import { handleRouteError, forbidden, notFound, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
@@ -18,7 +18,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();

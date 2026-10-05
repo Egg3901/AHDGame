@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect } from "react";
 import { ladderBounds } from "@/lib/legislature/policyLadder";
 import { fetchJson } from "@/lib/observability/fetchJson";
@@ -27,8 +28,10 @@ import {
 import { SubsidySectorSelect } from "@/components/bills/SubsidySectorSelect";
 import { TaxRateSliderControl } from "@/components/legislation/TaxRateSliderControl";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import { useWorldFlags } from "@/hooks/useWorldFlags";
+import { GuidedLegislationModal } from "@/components/legislation/GuidedLegislationModal";
 
-export function ProposeStateBillModal({
+function LegacyProposeStateBillModal({
   stateId,
   countryId,
   adminOverride,
@@ -253,7 +256,7 @@ export function ProposeStateBillModal({
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to propose bill");
+        setError(apiErrorText(data, "Failed to propose bill"));
         return;
       }
 
@@ -299,7 +302,7 @@ export function ProposeStateBillModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs text-muted mb-1">Bill Title</label>
+            <label className="block text-xs text-muted mb-1">Bill title</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -345,7 +348,7 @@ export function ProposeStateBillModal({
           ) : isSubsidyCat ? (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs text-muted">Subsidy Provisions</label>
+                <label className="block text-xs text-muted">Subsidy provisions</label>
                 {subsidyProvisions.length < MAX_PROVISIONS && (
                   <button
                     type="button"
@@ -403,7 +406,7 @@ export function ProposeStateBillModal({
                         className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
                       >
                         <option value="subsidy">Grant Subsidy (+7.5% margin)</option>
-                        <option value="end_subsidy">End Subsidy</option>
+                        <option value="end_subsidy">End subsidy</option>
                       </select>
                       <select
                         value={sp.scopeType}
@@ -421,7 +424,7 @@ export function ProposeStateBillModal({
                         className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
                       >
                         <option value="economy_wide">Economy-Wide</option>
-                        <option value="sector">Specific Sector</option>
+                        <option value="sector">Specific sector</option>
                       </select>
                       {sp.scopeType === "sector" && (
                         <SubsidySectorSelect
@@ -725,11 +728,37 @@ export function ProposeStateBillModal({
                 adminOverride ? "bg-error hover:bg-error/90" : "bg-primary hover:bg-primary/90"
               }`}
             >
-              {loading ? "Proposing..." : "Propose Bill"}
+              {loading ? "Proposing..." : "Propose bill"}
             </button>
           </div>
         </form>
       </div>
     </div>
   );
+}
+
+export function ProposeStateBillModal(props: Parameters<typeof LegacyProposeStateBillModal>[0]) {
+  const flags = useWorldFlags();
+  const countryId = props.countryId.toUpperCase() as CountryId;
+  const useV2 =
+    flags.loaded &&
+    !flags.failed &&
+    flags.resetSystemVersions.legislation === "v2" &&
+    flags.resetV2Countries.includes(countryId);
+  if (useV2) {
+    return (
+      <GuidedLegislationModal
+        countryId={countryId}
+        endpoint={`/api/country/${countryId}/region/${encodeURIComponent(props.stateId)}/legislature/bills`}
+        scope="regional"
+        regionId={props.stateId}
+        chambers={[]}
+        initialChamber="regional"
+        adminOverride={props.adminOverride}
+        onClose={props.onClose}
+        onSuccess={props.onSuccess}
+      />
+    );
+  }
+  return <LegacyProposeStateBillModal {...props} />;
 }

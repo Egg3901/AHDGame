@@ -9,7 +9,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, forbidden, notFound, badRequest } from "@/lib/api/errors";
+import { handleRouteError, forbidden, notFound, badRequest, errorResponse } from "@/lib/api/errors";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildPersonalBalanceInc, getPersonalBalance } from "@/lib/currency/characterFunds";
 import {
@@ -51,7 +51,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, actionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { action } = parsed.data;
@@ -208,12 +208,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       gameTime.effectiveNow.getTime()
     );
     if (barrier.blocked) {
-      return NextResponse.json(
-        {
-          error: `New characters cannot trade currency directly for their first ${NEW_CHARACTER_TRANSFER_BARRIER_TURNS} turns. You can trade in ${barrier.remainingTurns} turn(s).`,
-          remainingTurns: barrier.remainingTurns,
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        `New characters cannot trade currency directly for their first ${NEW_CHARACTER_TRANSFER_BARRIER_TURNS} turns. You can trade in ${barrier.remainingTurns} turn(s).`,
+        { extra: { remainingTurns: barrier.remainingTurns } }
       );
     }
 

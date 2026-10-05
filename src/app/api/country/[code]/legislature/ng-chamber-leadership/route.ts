@@ -21,7 +21,7 @@ import { getPartyMap } from "@/lib/db/partyMap";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getAuthUser } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getGameTime } from "@/lib/time/gameTime";
 import { isLeadershipElectionClosed } from "@/lib/congress/leadershipElections";
@@ -64,7 +64,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
   try {
     const { code } = await params;
     if (!isNgRequest(code)) {
-      return NextResponse.json({ error: "This endpoint is NG-only" }, { status: 400 });
+      return errorResponse(400, "This endpoint is NG-only");
     }
     const db = await getDb();
     const partyMap = await getPartyMap(db, "NG");
@@ -192,7 +192,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   try {
     const { code } = await params;
     if (!isNgRequest(code)) {
-      return NextResponse.json({ error: "This endpoint is NG-only" }, { status: 400 });
+      return errorResponse(400, "This endpoint is NG-only");
     }
 
     const auth = await requireBasicAuth();
@@ -203,7 +203,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     const parsed = await parseJsonBody(request, actionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { role, action, nominationId } = parsed.data;
 
@@ -223,7 +223,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     });
 
     if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
     return NextResponse.json({ message: result.message });
   } catch (error) {

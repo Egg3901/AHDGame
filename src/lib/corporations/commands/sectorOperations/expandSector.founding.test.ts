@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { expandSector } from "./expandSector";
 import {
   CAPACITY_ANCHOR_YEAR,
   CAPACITY_BUILD_TURNS,
@@ -13,7 +14,6 @@ import {
   getNationalDominanceGrowthCostMultiplier,
 } from "@/lib/constants/corporations";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
-import { expandSector } from "./expandSector";
 
 /**
  * P3b: founding a sector under plants is a FIRST BUILD.

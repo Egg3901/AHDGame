@@ -53,6 +53,10 @@ import { TALLY_WITH_SNAPSHOT_TURNS_ONLY } from "./tallyProjections";
 import { accumulateHuBallots } from "@/lib/countries/hu/rules/accumulateBallots2014";
 import { allocateHuListTurnVotes } from "@/lib/countries/hu/rules/listBallots2014";
 import {
+  accumulateJapanBallots,
+  allocateJapanListTurnVotes,
+} from "@/lib/countries/jp/rules/shugiinBallotMath";
+import {
   isHeadOfGovernmentRace,
   resolvePresidentApproval,
   buildPresidentialModifierByParty,
@@ -470,6 +474,11 @@ export async function accumulateVoteTurn(
     (preset === "1991-default" &&
       election.countryId === "HU" &&
       (election.hungarianModernByElection != null || election.hungarianModernAssembly != null));
+  const isJapanMixed =
+    preset === "1991-default" &&
+    election.countryId === "JP" &&
+    (election.electionType === "shugiin" || election.electionType === "snap_shugiin") &&
+    election.japanShugiinRules?.ruleVersion === "mixed-1994-v1";
   const isBgFounding =
     election.countryId === "BG" &&
     election.electionType === "nationalAssembly" &&
@@ -834,7 +843,7 @@ export async function accumulateVoteTurn(
         (tally.totalVotes[candidate.candidateId] ?? 0) + (increments[candidate.candidateId] ?? 0);
   }
 
-  if (isBgOrdinary || isHuBound || isBgFounding)
+  if (isBgOrdinary || isHuBound || isBgFounding || isJapanMixed)
     for (const [id, votes] of Object.entries(tally.totalVotes)) {
       if (!activeCandidateIds.has(id)) newTotals[id] = votes;
     }
@@ -905,6 +914,43 @@ export async function accumulateVoteTurn(
           tally.huListVotes
         )
       : null;
+  const japanMixedBallots =
+    electionCountryId === "JP" &&
+    (election.electionType === "shugiin" || election.electionType === "snap_shugiin") &&
+    election.japanShugiinRules?.ruleVersion === "mixed-1994-v1" &&
+    preset === "1991-default"
+      ? accumulateJapanBallots({
+          regionId: stateId,
+          candidates: enriched.map((candidate) => {
+            const filing = candidates.find((row) => row._id.toString() === candidate.candidateId);
+            return {
+              candidateId: candidate.candidateId,
+              partyId: candidate.party,
+              constituencyId: filing?.constituencyId,
+              isNPP: filing?.isNPP,
+              votes: Math.max(
+                0,
+                newTotals[candidate.candidateId] - (tally.totalVotes[candidate.candidateId] ?? 0)
+              ),
+            };
+          }),
+          listVoteIncrements: allocateJapanListTurnVotes(
+            Math.round(effEffectiveTurnPool),
+            [...new Set(enriched.map((candidate) => candidate.party))]
+              .filter((partyId) => partyId !== "independent")
+              .map((partyId) => {
+                const org = statePartyOrgs.find((row) => row.partyId === partyId);
+                return {
+                  partyId,
+                  registration: org?.registration,
+                  organization: org?.organization,
+                };
+              })
+          ),
+          previousDistricts: tally.japanShugiinConstituencyVotes,
+          previousLists: tally.japanShugiinListVotes,
+        })
+      : null;
   let councilTotals: ReturnType<typeof russianCouncilVoteTotals> | null = null;
   if (isBoundCouncil) {
     const rawVotes = Object.fromEntries(
@@ -946,7 +992,7 @@ export async function accumulateVoteTurn(
   // Uses largest-remainder method (Hamilton method) to ensure total seats = totalSeats exactly
   // Applies minimum vote share threshold to match election resolution logic
   const seatsEstimate: Record<string, number> | undefined = (() => {
-    if (isBgOrdinary || isHuBound || isBgFounding) return undefined;
+    if (isBgOrdinary || isHuBound || isBgFounding || isJapanMixed) return undefined;
     if (councilTotals) {
       const result = resolveRussianCouncilBallot({
         ...councilTotals.ballot,
@@ -1090,6 +1136,7 @@ export async function accumulateVoteTurn(
       !isBoundCouncil &&
       !isBgOrdinary &&
       !isHuBound &&
+      !isJapanMixed &&
       !isBgFounding
     ) {
       delete cleanedNames[key];
@@ -1104,7 +1151,7 @@ export async function accumulateVoteTurn(
   }
 
   const tallyUpdate = {
-    ...(isBgOrdinary || isHuBound || isBgFounding
+    ...(isBgOrdinary || isHuBound || isBgFounding || isJapanMixed
       ? { $unset: { seatsEstimate: "" as const } }
       : {}),
     $set: {
@@ -1117,6 +1164,12 @@ export async function accumulateVoteTurn(
             huConstituencyVotes: huBallots.constituencyVotes,
             huListVotes: huBallots.listVotes,
             huDistrictSlate: huBallots.districtSlate,
+          }
+        : {}),
+      ...(japanMixedBallots
+        ? {
+            japanShugiinConstituencyVotes: japanMixedBallots.constituencyVotes,
+            japanShugiinListVotes: japanMixedBallots.listVotes,
           }
         : {}),
       candidateNames: cleanedNames,

@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
 import { useLiveResultsPoll } from "@/hooks/useLiveResultsPoll";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export type ElectionNightLoadState =
   | { kind: "loading" }
@@ -21,7 +22,7 @@ async function fetchElectionNight(electionId: string): Promise<ElectionNightLoad
     if (res.status === 403) return { kind: "disabled" };
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      return { kind: "error", message: body?.error ?? "Failed to load results" };
+      return { kind: "error", message: apiErrorText(body, "Failed to load results") };
     }
     return { kind: "ready", data: (await res.json()) as ElectionResultsResponse };
   } catch {

@@ -55,7 +55,7 @@ export function QuickActionsPanel({
         {/* Live actions — deep-link to State Party page where mutation lives. */}
         <DeepLinkButton
           href={liveDisabled ? null : partyUrl}
-          label="Org Building"
+          label="Org building"
           subLabel="Set budget"
           disabledSubLabel="No presence yet"
           disabledTitle={liveTitle}
@@ -71,7 +71,7 @@ export function QuickActionsPanel({
         />
         <DeepLinkButton
           href={liveDisabled ? null : partyUrl}
-          label="GOTV Drive"
+          label="GOTV drive"
           subLabel="Set budget + target"
           disabledSubLabel="No presence yet"
           disabledTitle={liveTitle}
@@ -127,6 +127,7 @@ type OrgBuildPreview =
       ok: true;
       effectiveCost: number;
       projectedGain: number;
+      contributionUnits: number;
       /** Cash price of the next click. Absent on a pre-2026-09-02 response. */
       cashPrice?: number;
     }
@@ -164,7 +165,7 @@ function OrgBuildEstimate({
               }
             : undefined
         }
-        gain={{ sign: "+", value: preview.projectedGain, unit: "Org" }}
+        gain={{ sign: "+", value: preview.projectedGain, unit: "% Org share" }}
       />
     </span>
   );

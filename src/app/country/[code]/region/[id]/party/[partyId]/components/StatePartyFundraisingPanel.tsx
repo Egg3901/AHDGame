@@ -215,7 +215,7 @@ export function StatePartyFundraisingPanel({
 
       {canManageTreas && (
         <TreasuryPlanningCard
-          title="State Treasurer Dashboard"
+          title="State treasurer dashboard"
           description="The State Treasurer sets soft reserve targets for transfers, member support, and NPP recruiting. State and national leadership still keep emergency spending access, but sends and transfers that pierce the reserve are flagged as override actions."
           canEdit={canManageTreasuryPlan}
           treasury={stateParty.treasury}
@@ -251,7 +251,7 @@ export function StatePartyFundraisingPanel({
 
       {canManageTreas && insights && (
         <TreasuryOverrideHistoryCard
-          title="State Leadership Override Log"
+          title="State leadership override log"
           description="Recent sends and transfers that pierced the Treasurer reserve target for this state party. Leadership keeps emergency spending access, and those override actions are surfaced here."
           currencyCode={currencyCode}
           items={insights.overrideHistory}
@@ -288,9 +288,7 @@ export function StatePartyFundraisingPanel({
                   d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Donate to State Party
-              </div>
+              <div className="text-body-sm font-medium text-muted">Donate to state party</div>
             </div>
             <p className="mb-3 text-[11px] text-muted/60">
               Contribute your campaign funds to the state party treasury. Funds support GOTV,

@@ -163,6 +163,18 @@ export interface PoliticalMediaSettlementPlan {
   unfilledAnchor: number;
   deliveredUnits: number;
   sellers: PoliticalMediaSellerReceiptPlan[];
+  /** Funded weak-effect spend credited to the target country's treasury when no outlet exists. */
+  fallbackSpend?: {
+    amountAnchor: number;
+    countryId: string;
+    budgetId: string;
+    currencyCode: string;
+    currencyCodePresent: boolean;
+    rawCurrencyCode?: string | null;
+    localPerAnchor: number;
+    amountLocal: number;
+    balancePath: "treasuryCashLocal" | "treasuryBalance";
+  };
 }
 
 interface PoliticalMediaOrderRecord {
@@ -212,6 +224,31 @@ function validateSettlementPlan(
   const allocationIds = new Set<string>();
   let sellerAnchor = 0;
   let sellerUnits = 0;
+  const fallbackAnchor = plan.fallbackSpend?.amountAnchor ?? 0;
+  if (
+    !Number.isFinite(fallbackAnchor) ||
+    fallbackAnchor < 0 ||
+    (fallbackAnchor > 0 &&
+      (!plan.fallbackSpend?.countryId ||
+        plan.fallbackSpend.countryId !== identity.countryId ||
+        !plan.fallbackSpend.budgetId ||
+        !plan.fallbackSpend.currencyCode ||
+        (plan.fallbackSpend.currencyCodePresent &&
+          plan.fallbackSpend.rawCurrencyCode === undefined) ||
+        (!plan.fallbackSpend.currencyCodePresent &&
+          plan.fallbackSpend.rawCurrencyCode !== undefined) ||
+        !Number.isFinite(plan.fallbackSpend.localPerAnchor) ||
+        plan.fallbackSpend.localPerAnchor <= 0 ||
+        !Number.isFinite(plan.fallbackSpend.amountLocal) ||
+        plan.fallbackSpend.amountLocal <= 0 ||
+        (plan.fallbackSpend.balancePath !== "treasuryCashLocal" &&
+          plan.fallbackSpend.balancePath !== "treasuryBalance") ||
+        Math.abs(
+          plan.fallbackSpend.amountLocal - fallbackAnchor * plan.fallbackSpend.localPerAnchor
+        ) >
+          epsilon * Math.max(1, plan.fallbackSpend.amountLocal)))
+  )
+    throw new Error(`Political media order ${identity.orderId} has an invalid fallback receipt.`);
   for (const seller of plan.sellers) {
     if (
       !seller.allocationId ||
@@ -237,7 +274,7 @@ function validateSettlementPlan(
     sellerUnits += seller.units;
   }
   if (
-    Math.abs(sellerAnchor - plan.deliveredAnchor) > epsilon ||
+    Math.abs(sellerAnchor + fallbackAnchor - plan.deliveredAnchor) > epsilon ||
     Math.abs(sellerUnits - plan.deliveredUnits) > epsilon
   )
     throw new Error(
@@ -548,6 +585,68 @@ export async function settlePoliticalMediaOrder(
     const payout = await finishOrResumeMove(db, payoutKey, payoutAttempt);
     results.push(payout);
     if (payout.status !== "applied" && payout.status !== "replayed") return results;
+  }
+
+  const fallback = plan.fallbackSpend;
+  if (fallback && fallback.amountAnchor > 0) {
+    const fallbackKey = `political-media-no-outlet:${orderId}`;
+    const rawCurrencyGuard = fallback.currencyCodePresent
+      ? [{ currencyCode: { $exists: true } }, { currencyCode: fallback.rawCurrencyCode }]
+      : [{ currencyCode: { $exists: false } }];
+    const fallbackIdentity = {
+      orderId,
+      countryId: fallback.countryId,
+      targetStateId: saved.identity.targetStateId,
+      amountAnchor: fallback.amountAnchor,
+      budgetId: fallback.budgetId,
+      currencyCode: fallback.currencyCode,
+      currencyCodePresent: fallback.currencyCodePresent,
+      rawCurrencyCode: fallback.rawCurrencyCode ?? null,
+      localPerAnchor: fallback.localPerAnchor,
+      amountLocal: fallback.amountLocal,
+      balancePath: fallback.balancePath,
+    };
+    const fallbackAttempt = await applyMoneyMove(db, {
+      key: fallbackKey,
+      kind: "political-media-no-outlet-fallback",
+      turn: plan.plannedTurn,
+      quoteIdentity: fallbackIdentity,
+      record: { politicalMediaOrderIdentity: fallbackIdentity },
+      legs: [
+        {
+          kind: "debit",
+          amount: fallback.amountAnchor,
+          valuation: {
+            currencyCode: POLITICAL_MEDIA_ESCROW_CURRENCY,
+            localPerAnchor: POLITICAL_MEDIA_ESCROW_RATE,
+          },
+          collection: MONEY_MOVE_COLLECTION,
+          filter: { _id: key, kind: POLITICAL_MEDIA_ORDER_KIND, status: "applied" },
+          path: "politicalMediaOrder.escrowBalanceAnchor",
+          note: `spend funded local fallback for political advertising order ${orderId}`,
+        },
+        {
+          kind: "credit",
+          amount: fallback.amountLocal,
+          valuation: {
+            currencyCode: fallback.currencyCode,
+            localPerAnchor: fallback.localPerAnchor,
+          },
+          collection: "federalBudget",
+          filter: {
+            _id: fallback.budgetId,
+            countryId: fallback.countryId,
+            $and: rawCurrencyGuard,
+          },
+          path: fallback.balancePath,
+          note: `credit local no-outlet broadcaster fund for political advertising order ${orderId}`,
+        },
+      ],
+    });
+    const fallbackReceipt = await finishOrResumeMove(db, fallbackKey, fallbackAttempt);
+    results.push(fallbackReceipt);
+    if (fallbackReceipt.status !== "applied" && fallbackReceipt.status !== "replayed")
+      return results;
   }
 
   const payer = saved.identity.payer;

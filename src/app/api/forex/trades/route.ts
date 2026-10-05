@@ -3,7 +3,7 @@
 // Errors: 403 (forex disabled)
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import type { TradeHistoryEntry } from "@/lib/db/types/tradeHistory";
 import type { GameState } from "@/lib/db/types";
@@ -12,7 +12,7 @@ export async function GET() {
   try {
     const forexActive = await isForexEnabled();
     if (!forexActive) {
-      return NextResponse.json({ error: "Currency exchange is not yet enabled" }, { status: 403 });
+      return errorResponse(403, "Currency exchange is not yet enabled");
     }
 
     const db = await getDb();

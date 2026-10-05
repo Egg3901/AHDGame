@@ -157,6 +157,149 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
     expect(db.collectionMocks.unownedSectors?.deleteMany).toHaveBeenCalledWith({});
   });
 
+  it("clears embedded political runtime channels after teardown and before the new seed", async () => {
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
+    const order: string[] = [];
+    vi.mocked(resetGameWorld).mockImplementation(async () => {
+      order.push("teardown");
+      return okTeardown as never;
+    });
+    db.collection("politicalMetrics").updateMany.mockImplementation(async () => {
+      order.push("clear-political-runtime");
+      return { modifiedCount: 14 } as never;
+    });
+    vi.mocked(bootstrapGameWorld).mockImplementation(async () => {
+      order.push("bootstrap");
+      return {} as never;
+    });
+
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    await resetAndBootstrapGameWorld({
+      db: db as unknown as Db,
+      preset: "1991-default",
+      resetReference: false,
+      startingParties: "none",
+    });
+
+    expect(order).toEqual(["teardown", "clear-political-runtime", "bootstrap"]);
+    expect(db.collectionMocks.politicalMetrics?.updateMany).toHaveBeenCalledWith(
+      {},
+      {
+        $unset: {
+          appliedEventEffects: "",
+          cabinetResiduals: "",
+          cabinetResidualsBySource: "",
+          labourResiduals: "",
+          livingConflictResiduals: "",
+        },
+      }
+    );
+  });
+
+  it("clears embedded macro runtime channels and national rollups after teardown and before bootstrap", async () => {
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
+    const order: string[] = [];
+    vi.mocked(resetGameWorld).mockImplementation(async () => {
+      order.push("teardown");
+      return okTeardown as never;
+    });
+    db.collection("macroMetrics").updateMany.mockImplementation(async () => {
+      order.push("clear-macro-runtime");
+      return { modifiedCount: 81 } as never;
+    });
+    db.collection("macroMetrics").deleteMany.mockImplementation(async () => {
+      order.push("delete-national-rollups");
+      return { deletedCount: 9 } as never;
+    });
+    db.collection("states").updateMany.mockImplementation(async () => {
+      order.push("clear-state-runtime");
+      return { modifiedCount: 226 } as never;
+    });
+    vi.mocked(bootstrapGameWorld).mockImplementation(async () => {
+      order.push("bootstrap");
+      return {} as never;
+    });
+
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    const result = await resetAndBootstrapGameWorld({
+      db: db as unknown as Db,
+      preset: "1991-default",
+      resetReference: false,
+      startingParties: "none",
+    });
+
+    expect(order).toEqual([
+      "teardown",
+      "clear-state-runtime",
+      "clear-macro-runtime",
+      "delete-national-rollups",
+      "bootstrap",
+    ]);
+    expect(db.collectionMocks.macroMetrics?.updateMany).toHaveBeenCalledOnce();
+    expect(db.collectionMocks.macroMetrics?.deleteMany).toHaveBeenCalledWith({
+      _id: { $in: expect.arrayContaining(["federal", "uk_national", "su_national"]) },
+    });
+    expect(result.logs.join(" ")).toContain("removed 9 derived national rollup(s)");
+    expect(db.collectionMocks.states?.updateMany).toHaveBeenCalledOnce();
+  });
+
+  it("aborts before bootstrap when preserve-reference state cleanup fails", async () => {
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
+    const order: string[] = [];
+    vi.mocked(resetGameWorld).mockImplementation(async () => {
+      order.push("teardown");
+      return okTeardown as never;
+    });
+    db.collection("states").updateMany.mockImplementation(async () => {
+      order.push("clear-state-runtime");
+      throw new Error("state cleanup failed");
+    });
+
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    await expect(
+      resetAndBootstrapGameWorld({
+        db: db as unknown as Db,
+        preset: "1991-default",
+        resetReference: false,
+        startingParties: "none",
+      })
+    ).rejects.toThrow("state cleanup failed");
+
+    expect(order).toEqual(["teardown", "clear-state-runtime"]);
+    expect(vi.mocked(bootstrapGameWorld)).not.toHaveBeenCalled();
+    expect(closeUpdate().$set["resetRun.status"]).toBe("failed");
+  });
+
+  it("aborts before bootstrap when macro runtime cleanup fails", async () => {
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
+    const order: string[] = [];
+    vi.mocked(resetGameWorld).mockImplementation(async () => {
+      order.push("teardown");
+      return okTeardown as never;
+    });
+    db.collection("macroMetrics").updateMany.mockImplementation(async () => {
+      order.push("clear-macro-runtime");
+      throw new Error("macro cleanup failed");
+    });
+
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    await expect(
+      resetAndBootstrapGameWorld({
+        db: db as unknown as Db,
+        preset: "1991-default",
+        startingParties: "none",
+      })
+    ).rejects.toThrow("macro cleanup failed");
+
+    expect(order).toEqual(["teardown", "clear-macro-runtime"]);
+    expect(vi.mocked(bootstrapGameWorld)).not.toHaveBeenCalled();
+    expect(closeUpdate().$set["resetRun.status"]).toBe("failed");
+  });
+
   it("preserves unowned markets when reset does not request a 1991 reference rebuild", async () => {
     const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
     await resetAndBootstrapGameWorld({
@@ -179,6 +322,35 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
       })
     ).rejects.toThrow("1991-default");
     expect(Object.keys(db.collectionMocks)).toHaveLength(0);
+  });
+
+  it("rejects a v2 bootstrap whose fresh world identity was not seeded", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      resetSystemSelections: { metrics: "v2" },
+    });
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    const { enableMaintenanceMode } = await import("@/lib/maintenanceStatus");
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    await expect(
+      resetAndBootstrapGameWorld({ db: db as unknown as Db, preset: "1991-default" })
+    ).rejects.toThrow("Fresh reset state is missing the metrics v2 world identity");
+    expect(vi.mocked(enableMaintenanceMode)).toHaveBeenCalled();
+    expect(db.collectionMocks.gameState.updateOne).toHaveBeenCalled();
+    expect(vi.mocked(resetGameWorld)).toHaveBeenCalledOnce();
+  });
+
+  it("passes the pre-seal version snapshot into teardown", async () => {
+    const selection = {
+      _id: "current",
+      resetSystemSelections: { metrics: "v1", legislation: "v1", cabinet: "v1" },
+    };
+    db.collection("gameState").findOne.mockResolvedValue(selection);
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    await run();
+    expect(vi.mocked(resetGameWorld).mock.calls[0]?.[1]).toMatchObject({
+      versionSelectionSnapshot: selection,
+    });
   });
 
   it.each(["AUTH_SECRET", "ADMIN_REGISTRATION_KEY", "CRON_SECRET"] as const)(

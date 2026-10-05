@@ -284,7 +284,7 @@ export function SpeakerSection({
             disabled={declaring}
             className="w-full rounded-xl border border-dashed border-primary/40 bg-primary/5 py-3 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-50 transition-colors"
           >
-            {declaring ? "Declaring…" : "+ Declare Your Candidacy for Speaker"}
+            {declaring ? "Declaring…" : "+ Declare your candidacy for speaker"}
           </button>
         )}
       {data?.isHouseMember && !data?.canRunForSpeaker && data?.election?.status === "voting" && (

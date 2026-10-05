@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { clampPricingPosture } from "@/lib/market/clearing";
 import { isMarketSystemMode, marketAtLeast, getMarketSystemMode } from "@/lib/market/featureFlag";
@@ -33,16 +33,13 @@ export async function setSectorPricing(request: Request, { params }: RouteParams
 
     const mode = await getMarketSystemMode();
     if (!isMarketSystemMode(mode) || !marketAtLeast(mode, "clearing")) {
-      return NextResponse.json(
-        { error: "Market clearing is not enabled on this world" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Market clearing is not enabled on this world");
     }
 
     const { id, sectorId } = await params;
     const parsed = await parseJsonBody(request, setSectorPricingSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { pricingPosture, pricingMode } = parsed.data;
@@ -56,7 +53,7 @@ export async function setSectorPricing(request: Request, { params }: RouteParams
     if (ceoCheck) return ceoCheck;
 
     if (!ObjectId.isValid(sectorId)) {
-      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+      return errorResponse(400, "Invalid sector ID");
     }
 
     const config =
@@ -77,7 +74,7 @@ export async function setSectorPricing(request: Request, { params }: RouteParams
     );
 
     if (!sector) {
-      return NextResponse.json({ error: "Sector not found" }, { status: 404 });
+      return errorResponse(404, "Sector not found");
     }
 
     if (pricingMode === "costPlus") {
@@ -86,22 +83,16 @@ export async function setSectorPricing(request: Request, { params }: RouteParams
         !marketAtLeast(mode, "plants") ||
         !supportsCostPlusPricing(sector.sectorType)
       ) {
-        return NextResponse.json(
-          { error: "Cost-plus pricing is not available for this sector" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Cost-plus pricing is not available for this sector");
       }
       if (!validCostPlusBasis(sector.costPlusCostBasis)) {
-        return NextResponse.json(
-          { error: "Cost-plus pricing needs a producing turn with recorded operating costs" },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "Cost-plus pricing needs a producing turn with recorded operating costs"
         );
       }
       if (pricingPosture === null) {
-        return NextResponse.json(
-          { error: "Choose a markup for cost-plus pricing" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Choose a markup for cost-plus pricing");
       }
     }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useMemo, useState } from "react";
 import type { MilitaryCommand, CommanderRef } from "@/lib/military/types";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
@@ -93,7 +94,7 @@ export function CommandingGeneralClient({
         });
         if (!res.ok) {
           const body = (await res.json().catch(() => null)) as { error?: string } | null;
-          setError(body?.error ?? "Could not save postings.");
+          setError(apiErrorText(body, "Could not save postings."));
           return;
         }
         setSaved(true);
@@ -134,7 +135,7 @@ export function CommandingGeneralClient({
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
       <div className="rounded-xl border border-card-border bg-card p-5">
-        <div className="dossier-label text-muted">Commanding General</div>
+        <div className="dossier-label text-muted">Commanding general</div>
         <h1 className="text-lg font-semibold text-foreground">{command.name}</h1>
         <p className="mt-1 text-[12px] text-muted">
           Post your generals to Conflicts and designate who is in charge of each front. The units
@@ -146,7 +147,7 @@ export function CommandingGeneralClient({
             exists, and THEATER_COMMAND.bonusShare spreads their edge front-wide. */}
         <p className="mt-2 text-[12px] text-muted">
           One general at each conflict can be its{" "}
-          <strong className="text-foreground">Theater Commander (TC)</strong>. Only the TC may
+          <strong className="text-foreground">Theater commander (TC)</strong>. Only the TC may
           declare offensives at that front — naming one takes that authority out of the Secretary of
           Defense&rsquo;s hands. {Math.round(THEATER_COMMAND.bonusShare * 100)}% of the edge their
           own traits would give the units they personally lead also carries to every one of your
@@ -223,7 +224,7 @@ export function CommandingGeneralClient({
                         type="button"
                         onClick={() => setInCharge(g.id)}
                         aria-label={`Put ${g.name} in charge of ${theaterName(posting.theaterId)}`}
-                        title="Make Theater Commander — only they may declare offensives at this front"
+                        title="Make theater commander — only they may declare offensives at this front"
                         className="shrink-0 rounded-md border border-card-border px-2.5 py-1.5 text-[11px] font-semibold text-muted hover:text-foreground"
                       >
                         MAKE TC

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -44,12 +44,12 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const { code, id: partyId, txnId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
     if (authResult.user.isBanned) {
-      return NextResponse.json({ error: "Account is banned" }, { status: 403 });
+      return errorResponse(403, "Account is banned");
     }
     const { user } = authResult;
 
@@ -60,7 +60,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     try {
       txnOid = new ObjectId(txnId);
     } catch {
-      return NextResponse.json({ error: "Invalid transaction ID" }, { status: 400 });
+      return errorResponse(400, "Invalid transaction ID");
     }
 
     const db = await getDb();
@@ -69,25 +69,19 @@ export async function POST(_request: Request, { params }: RouteParams) {
     if (transferGuard) return transferGuard;
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
 
     const pending = await db
       .collection<PendingTreasuryTransaction>("pendingTreasuryTransactions")
       .findOne({ _id: txnOid });
     if (!pending) {
-      return NextResponse.json({ error: "Pending transaction not found" }, { status: 404 });
+      return errorResponse(404, "Pending transaction not found");
     }
     if (!pending.partyId.equals(party._id) || pending.countryId !== countryId) {
-      return NextResponse.json(
-        { error: "Transaction does not belong to this party" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Transaction does not belong to this party");
     }
     if (pending.status !== "open") {
-      return NextResponse.json(
-        { error: `Transaction is ${pending.status}, not open.` },
-        { status: 400 }
-      );
+      return errorResponse(400, `Transaction is ${pending.status}, not open.`);
     }
 
     // A row queued before the leadership handover window must not pay out
@@ -95,7 +89,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     // leave the row carrying an approval that never executed.
     const { currentTurn: freezeTurn } = await getGameTime();
     if (await isLeadershipElectionFreezeActive(db, party, freezeTurn)) {
-      return NextResponse.json({ error: LEADERSHIP_FREEZE_MESSAGE }, { status: 400 });
+      return errorResponse(400, LEADERSHIP_FREEZE_MESSAGE);
     }
 
     // Resolve which slot this character would fill on this row.
@@ -105,20 +99,18 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const slot = getApproverSlotForRow(party, pending, characterId);
     if (slot == null) {
       const isSelfRequest = pending.type === "request" && pending.proposedBy.equals(characterId);
-      return NextResponse.json(
-        {
-          error: isSelfRequest
-            ? "You can't approve your own Request Funds."
-            : "Only an officer (Treasurer / Chair / Vice-Chair) who has not already signed this transaction can approve it.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        isSelfRequest
+          ? "You can't approve your own Request Funds."
+          : "Only an officer (Treasurer / Chair / Vice-Chair) who has not already signed this transaction can approve it."
       );
     }
 
     const slotField = approvalFieldForSlot(slot);
     const alreadyFilled = !!pending[slotField];
     if (alreadyFilled) {
-      return NextResponse.json({ error: "That approval slot is already filled." }, { status: 400 });
+      return errorResponse(400, "That approval slot is already filled.");
     }
 
     // ─── Fill the matching slot atomically ───────────────────────────────
@@ -143,10 +135,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
         { $set: { [slotField]: { characterId, approvedAt: now } } }
       );
     if (claim.matchedCount === 0) {
-      return NextResponse.json(
-        { error: "Transaction is no longer available to approve." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Transaction is no longer available to approve.");
     }
 
     /**
@@ -181,10 +170,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       .collection<PendingTreasuryTransaction>("pendingTreasuryTransactions")
       .findOne({ _id: txnOid });
     if (!ready || ready.status !== "open") {
-      return NextResponse.json(
-        { error: "Transaction state changed unexpectedly." },
-        { status: 409 }
-      );
+      return errorResponse(409, "Transaction state changed unexpectedly.");
     }
 
     // For double-mode Request when only one slot is filled, the row is
@@ -262,10 +248,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
         .collection<PendingTreasuryTransaction>("pendingTreasuryTransactions")
         .findOne({ _id: txnOid });
       if (current?.status === "cancelled" || current?.status === "expired") {
-        return NextResponse.json(
-          { error: `Transaction is ${current.status}, not open.` },
-          { status: 400 }
-        );
+        return errorResponse(400, `Transaction is ${current.status}, not open.`);
       }
       return NextResponse.json({
         success: true,
@@ -284,17 +267,13 @@ export async function POST(_request: Request, { params }: RouteParams) {
         // Both flows execute via the same send-to-member path — for
         // "request" the recipient is the proposer themselves.
         if (!ready.targetCharacterId) {
-          return releaseSlot(
-            NextResponse.json({ error: "Pending row missing target character" }, { status: 500 })
-          );
+          return releaseSlot(errorResponse(500, "Pending row missing target character"));
         }
         const targetCharacter = await db
           .collection<Character>("characters")
           .findOne({ _id: ready.targetCharacterId });
         if (!targetCharacter) {
-          return releaseSlot(
-            NextResponse.json({ error: "Recipient character no longer exists." }, { status: 404 })
-          );
+          return releaseSlot(errorResponse(404, "Recipient character no longer exists."));
         }
         const result = await executeSendToMember({
           db,
@@ -311,17 +290,13 @@ export async function POST(_request: Request, { params }: RouteParams) {
         if (!result.ok) return releaseSlot(result.response);
       } else if (ready.type === "transfer") {
         if (!ready.targetStateId) {
-          return releaseSlot(
-            NextResponse.json({ error: "Pending row missing target state" }, { status: 500 })
-          );
+          return releaseSlot(errorResponse(500, "Pending row missing target state"));
         }
         const state = await db
           .collection<State>("states")
           .findOne({ _id: ready.targetStateId, countryId });
         if (!state) {
-          return releaseSlot(
-            NextResponse.json({ error: "Region no longer exists." }, { status: 404 })
-          );
+          return releaseSlot(errorResponse(404, "Region no longer exists."));
         }
         const result = await executeTransferToStateParty({
           db,
@@ -337,9 +312,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
         });
         if (!result.ok) return releaseSlot(result.response);
       } else {
-        return releaseSlot(
-          NextResponse.json({ error: `Unknown pending txn type: ${ready.type}` }, { status: 500 })
-        );
+        return releaseSlot(errorResponse(500, `Unknown pending txn type: ${ready.type}`));
       }
     } catch (executionError) {
       // A throw strands the signature exactly as a refusal would, so the

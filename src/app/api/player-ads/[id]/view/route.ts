@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getPlayerBannerAdsCollection } from "@/lib/db/collections/playerBannerAds";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getAuthUser } from "@/lib/auth";
 import {
   PLAYER_AD_IMPRESSION_WINDOW_MS,
@@ -27,7 +27,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid ad ID." }, { status: 400 });
+      return errorResponse(400, "Invalid ad ID.");
     }
 
     const authUser = await getAuthUser().catch(() => null);

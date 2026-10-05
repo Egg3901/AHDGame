@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import type { JusticeActionDef } from "@/lib/constants/justiceActions";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface JusticeActionPanelProps {
   actions: JusticeActionDef[];
@@ -50,7 +51,11 @@ export function JusticeActionPanel({
       });
       const json = (await response.json()) as { error?: string; message?: string };
       if (!response.ok) {
-        setFeedback({ actionId, type: "error", message: json.error ?? "Failed to take action" });
+        setFeedback({
+          actionId,
+          type: "error",
+          message: apiErrorText(json, "Failed to take action"),
+        });
         return;
       }
       setFeedback({ actionId, type: "success", message: json.message ?? "Action taken." });
@@ -66,7 +71,7 @@ export function JusticeActionPanel({
     <div className="rounded-xl border border-card-border bg-card p-6">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Judicial Actions</h2>
+          <h2 className="text-lg font-semibold text-foreground">Judicial actions</h2>
           <p className="mt-0.5 text-sm text-muted">
             Use the office between Docket cases to build your own standing.
           </p>
@@ -110,7 +115,7 @@ export function JusticeActionPanel({
                     isLoading={isActingThis}
                     onClick={() => handleAct(action.id)}
                   >
-                    Take Action
+                    Take action
                   </Button>
                 </div>
               </div>

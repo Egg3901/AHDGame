@@ -47,7 +47,7 @@ import { frozenNativeCampaignTurns1991 } from "@/lib/elections/rules/nativeCampa
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getGameState } from "@/lib/gameState";
 import { invalidateGameTimeCache } from "@/lib/time/gameTime";
 import {
@@ -201,7 +201,7 @@ export async function POST() {
     const db = await getDb();
     const gameState = await getGameState();
     if (!gameState) {
-      return NextResponse.json({ error: "Game state not found" }, { status: 404 });
+      return errorResponse(404, "Game state not found");
     }
 
     const currentTurn = gameState.currentTurn;

@@ -117,12 +117,12 @@ export function ExecutiveTabsClient({
         )}
         {canSeePrivateTabs && conflictsEnabled && (
           <TabButton active={active === "foreign"} onClick={() => setActive("foreign")}>
-            Foreign Affairs
+            Foreign affairs
           </TabButton>
         )}
         {canSeePrivateTabs && isOnePartyState && (
           <TabButton active={active === "regime"} onClick={() => setActive("regime")}>
-            Regime Health
+            Regime health
           </TabButton>
         )}
         {viewerIsAdmin && (

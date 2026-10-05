@@ -1,5 +1,6 @@
 import type { CountryId } from "../../constants/countries";
 import type { CorporationType } from "../../constants/corporations";
+import type { ConflictCapacityApplied } from "./conflictCapacity";
 
 export type RegionType = "state" | "constituency" | "nation" | "province" | "region";
 
@@ -45,6 +46,12 @@ export interface State {
    * `≈ 3 × gdp`; cold-starts from `gdp` when absent on un-seeded worlds.
    */
   capitalStock?: number;
+  /**
+   * Conflict destruction and repair already folded into `capitalStock`, per
+   * obligation id. Written by the metric engine in the same update as the stock
+   * so a replayed turn never applies the same damage or repair twice.
+   */
+  conflictCapacityApplied?: ConflictCapacityApplied;
   /**
    * Per-region cyclical OUTPUT GAP (%, actual vs potential output, §5.2). The
    * GDP engine accumulates the sector signal's deviation from potential into this

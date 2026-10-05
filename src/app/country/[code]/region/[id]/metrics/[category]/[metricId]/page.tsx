@@ -208,16 +208,12 @@ export default function MetricDetailPage({
           {/* Stats row */}
           <div className="grid grid-cols-1 divide-y divide-card-border bg-card sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             <div className="px-6 py-4">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-                Current Value
-              </p>
+              <p className="text-body-sm font-medium text-muted">Current value</p>
               <p className="mt-1 text-3xl font-bold tabular-nums text-foreground">{fmt(value)}</p>
             </div>
             {comparisonValue !== undefined && (
               <div className="px-6 py-4">
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-                  {comparisonLabel}
-                </p>
+                <p className="text-body-sm font-medium text-muted">{comparisonLabel}</p>
                 <p className="mt-1 text-3xl font-bold tabular-nums text-muted">
                   {fmt(comparisonValue)}
                 </p>
@@ -238,9 +234,7 @@ export default function MetricDetailPage({
               </div>
             )}
             <div className="px-6 py-4">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-                Active Policy Effect
-              </p>
+              <p className="text-body-sm font-medium text-muted">Active policy effect</p>
               {hasTickRate ? (
                 <>
                   <p
@@ -270,7 +264,7 @@ export default function MetricDetailPage({
         <div className="rounded-2xl border border-card-border bg-card p-6">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold">
-              {hasHistory ? "Historical + Projected Trend" : "48-Turn Forward Projection"}
+              {hasHistory ? "Historical + projected trend" : "48-Turn forward projection"}
             </h2>
             <div className="flex items-center gap-3 text-xs text-muted">
               {hasHistory && <span>{history.length} turns of history</span>}
@@ -304,11 +298,11 @@ export default function MetricDetailPage({
         {/* Trend analysis */}
         {hasTickRate && (
           <div className="space-y-4 rounded-2xl border border-card-border bg-card p-6">
-            <h2 className="text-sm font-semibold">Trend Analysis</h2>
+            <h2 className="text-sm font-semibold">Trend analysis</h2>
             <div className="grid grid-cols-2 gap-3">
               {[
                 {
-                  label: "Per Turn",
+                  label: "Per turn",
                   value: `${tickRate! > 0 ? "+" : ""}${tickRate!.toFixed(tickDecimals)}${def.formatSuffix ?? ""}`,
                   color: tickIsGood ? "text-success" : "text-error",
                 },
@@ -328,9 +322,7 @@ export default function MetricDetailPage({
                   key={label}
                   className="rounded-xl border border-card-border/30 bg-card-muted px-4 py-3"
                 >
-                  <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-muted/70">
-                    {label}
-                  </p>
+                  <p className="mb-1 text-body-sm font-medium text-muted">{label}</p>
                   <p className={`text-lg font-bold tabular-nums ${color}`}>{v}</p>
                 </div>
               ))}
@@ -352,7 +344,7 @@ export default function MetricDetailPage({
         {/* Affecting Policies */}
         {affectingPolicies && affectingPolicies.length > 0 && (
           <div className="space-y-4 rounded-2xl border border-card-border bg-card p-6">
-            <h2 className="text-sm font-semibold">Policies Influencing This Metric</h2>
+            <h2 className="text-sm font-semibold">Policies influencing this metric</h2>
             <ul className="space-y-2">
               {affectingPolicies.map((p, i) => {
                 const isGoodPush = def.isHigherBetter ? p.pushesMetricUp : !p.pushesMetricUp;

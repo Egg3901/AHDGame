@@ -10,7 +10,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import type { Bond } from "@/lib/db/types";
 
 const schema = z.object({ couponRate: z.number().min(0).max(100) });
@@ -22,8 +22,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const { id } = await params;
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const result = await db

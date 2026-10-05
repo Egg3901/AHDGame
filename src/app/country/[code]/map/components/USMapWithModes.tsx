@@ -85,7 +85,7 @@ function PresidentialResultsPanel({
   return (
     <div className="mt-6 rounded-xl border border-card-border bg-card p-4 sm:p-6">
       <div className="flex items-baseline justify-between mb-4">
-        <h3 className="text-base sm:text-lg font-semibold">Presidential Results</h3>
+        <h3 className="text-base sm:text-lg font-semibold">Presidential results</h3>
         <span className="text-xs sm:text-sm text-muted">
           {totalEV} votes · {evNeeded} to win
         </span>

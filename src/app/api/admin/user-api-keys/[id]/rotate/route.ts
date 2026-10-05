@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { withAdminAuth } from "@/lib/api/withAdminAuth";
 import { generateUserApiToken, type UserApiScope } from "@/lib/api/userApiAuth";
 import { getDb } from "@/lib/mongodb";
@@ -18,7 +18,7 @@ export const POST = withAdminAuth(
     try {
       const { id } = await ctx.params;
       if (!ObjectId.isValid(id)) {
-        return NextResponse.json({ error: "Invalid key id" }, { status: 400 });
+        return errorResponse(400, "Invalid key id");
       }
 
       const db = await getDb();
@@ -30,7 +30,7 @@ export const POST = withAdminAuth(
         revokeAt: { $not: { $lte: now } },
       });
       if (!existing) {
-        return NextResponse.json({ error: "Key not found or already revoked" }, { status: 404 });
+        return errorResponse(404, "Key not found or already revoked");
       }
 
       const scope: UserApiScope = existing.scope;

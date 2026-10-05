@@ -55,7 +55,7 @@ export function MaintenancePartialBanner() {
           !
         </span>
         <p className="text-sm">
-          <span className="font-semibold text-warning">Limited Maintenance:</span>{" "}
+          <span className="font-semibold text-warning">Limited maintenance:</span>{" "}
           {status.reason || DEFAULT_REASON}
           {status.expectedEnd ? (
             <span className="ml-1 text-warning/80">

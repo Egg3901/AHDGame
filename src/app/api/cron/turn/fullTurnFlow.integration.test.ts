@@ -144,6 +144,7 @@ describe("processTurn() — full turn flow", () => {
 
   const mockGameState = {
     _id: "current",
+    worldEpochId: "full-turn-fixture-world",
     currentTurn: 99,
     isActive: true,
     isProcessing: false,
@@ -169,7 +170,10 @@ describe("processTurn() — full turn flow", () => {
     db.collection("gameState");
     db.collectionMocks["gameState"].findOne.mockResolvedValue(mockGameState);
     db.collectionMocks["gameState"].findOneAndUpdate.mockResolvedValue(mockGameState);
-    db.collectionMocks["gameState"].updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks["gameState"].updateOne.mockResolvedValue({
+      modifiedCount: 1,
+      matchedCount: 1,
+    });
 
     // Characters collection — empty is fine for this test
     db.collection("characters");

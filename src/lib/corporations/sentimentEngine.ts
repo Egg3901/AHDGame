@@ -1,5 +1,6 @@
 import type { SentimentPulse } from "@/lib/db/types/sentimentPulse";
 import { isFtaActive, type FtaPairSet } from "@/lib/tariffs/ftaOverrides";
+import { hasOperatingSentimentSector } from "./rules/sentimentSectorMatch";
 
 /** 15 minutes in milliseconds */
 export const PRICE_UPDATE_INTERVAL_MS = 15 * 60 * 1_000;
@@ -72,7 +73,7 @@ export function pulseAppliesToCorp(
     case "sector": {
       if (pulse.sectorType == null) return false;
       const matchesSector = pulse.countryId
-        ? operatingSectorKeys.has(`${pulse.countryId}:${pulse.sectorType}`)
+        ? hasOperatingSentimentSector(operatingSectorKeys, pulse.countryId, pulse.sectorType)
         : sectorTypes.includes(pulse.sectorType);
       if (!matchesSector) return false;
       if (pulse.hqRelation === "domestic") {

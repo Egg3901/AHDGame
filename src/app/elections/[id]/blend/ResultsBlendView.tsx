@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BLEND, FONT } from "@/components/blend/tokens";
+import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import { BlendShell, BlendSection } from "@/components/blend/BlendShell";
 import { BlendRail, BlendChipRail } from "@/components/blend/BlendRail";
 import { BlendVitals } from "@/components/blend/BlendVitals";
@@ -204,13 +204,9 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
   };
 
   const headStyle = (active: boolean, right = false): React.CSSProperties => ({
+    ...BLEND_LABEL,
     cursor: "pointer",
     textAlign: right ? "right" : "left",
-    fontFamily: FONT.mono,
-    fontSize: 9.5,
-    letterSpacing: ".12em",
-    textTransform: "uppercase",
-    color: active ? BLEND.ink : BLEND.mutedDimmer,
     background: "none",
     border: 0,
     padding: 0,
@@ -327,7 +323,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
             color: BLEND.muted,
           }}
         >
-          {route === "concluded" ? "Final Edition" : "Live Results"}
+          {route === "concluded" ? "Final edition" : "Live results"}
         </div>
         <div style={{ fontFamily: FONT.mono, fontSize: 10.5, color: BLEND.mutedDim }}>
           {vm.headerReadout}
@@ -397,7 +393,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
               color: BLEND.muted,
             }}
           >
-            <span>{route === "concluded" ? "Final Edition" : "Live Results"}</span>
+            <span>{route === "concluded" ? "Final edition" : "Live results"}</span>
             <span style={{ fontFamily: FONT.mono, letterSpacing: ".06em" }}>
               {vm.certifiedText}
             </span>
@@ -547,33 +543,13 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
               }}
             >
               <div>
-                <div
-                  style={{
-                    fontFamily: FONT.mono,
-                    fontSize: 9.5,
-                    letterSpacing: ".16em",
-                    textTransform: "uppercase",
-                    color: BLEND.mutedDimmer,
-                  }}
-                >
-                  {route === "concluded" ? "Final tickets" : "Tickets"}
-                </div>
+                <div style={BLEND_LABEL}>{route === "concluded" ? "Final tickets" : "Tickets"}</div>
                 <TicketRows vm={vm} />
               </div>
 
               {vm.closest.length > 0 ? (
                 <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
-                  <div
-                    style={{
-                      fontFamily: FONT.mono,
-                      fontSize: 9.5,
-                      letterSpacing: ".16em",
-                      textTransform: "uppercase",
-                      color: BLEND.mutedDimmer,
-                    }}
-                  >
-                    Closest states
-                  </div>
+                  <div style={BLEND_LABEL}>Closest states</div>
                   <ClosestRows vm={vm} />
                 </div>
               ) : null}

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { findPartyBySequentialId, getStatePartyOrgDocumentId } from "@/lib/db/partyLookup";
@@ -39,7 +39,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: stateId, partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -48,18 +48,18 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, stateCampaignerSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
     if (!state) {
-      return NextResponse.json({ error: "State not found" }, { status: 404 });
+      return errorResponse(404, "State not found");
     }
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const statePartyKey = getStatePartyOrgDocumentId(stateId, party);
@@ -67,7 +67,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .collection<StatePartyOrg>("statePartyOrg")
       .findOne({ _id: statePartyKey });
     if (!stateParty) {
-      return NextResponse.json({ error: "Party has no presence in this state" }, { status: 404 });
+      return errorResponse(404, "Party has no presence in this state");
     }
 
     // Chair-only auth: state chair OR national chair OR admin.
@@ -75,12 +75,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     const isStateChair = stateParty.chairId?.equals(authUser.character._id);
     const isNationalChair = party.chairId?.equals(authUser.character._id);
     if (!isAdmin && !isStateChair && !isNationalChair) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the state chair, national chair, or an admin can assign the state campaigner",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the state chair, national chair, or an admin can assign the state campaigner"
       );
     }
 
@@ -89,27 +86,22 @@ export async function POST(request: Request, { params }: RouteParams) {
       try {
         campaignerObjectId = new ObjectId(parsed.data.campaignerId);
       } catch {
-        return NextResponse.json({ error: "Malformed campaigner id" }, { status: 400 });
+        return errorResponse(400, "Malformed campaigner id");
       }
 
       const character = await db
         .collection<Character>("characters")
         .findOne({ _id: campaignerObjectId });
       if (!character) {
-        return NextResponse.json({ error: "Character not found" }, { status: 400 });
+        return errorResponse(400, "Character not found");
       }
       if (character.party !== String(party.sequentialId) || character.countryId !== countryId) {
-        return NextResponse.json(
-          { error: `${character.name} is not a current member of this party` },
-          { status: 400 }
-        );
+        return errorResponse(400, `${character.name} is not a current member of this party`);
       }
       if (character.homeState !== stateId) {
-        return NextResponse.json(
-          {
-            error: `${character.name} is not based in ${state.name} — state campaigners must be in-state`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `${character.name} is not based in ${state.name} — state campaigners must be in-state`
         );
       }
 
@@ -126,12 +118,10 @@ export async function POST(request: Request, { params }: RouteParams) {
           STATE_LEADERSHIP_RELOCATION_DELAY_TURNS
         );
         if (!relocTenure.eligible) {
-          return NextResponse.json(
-            {
-              error: `${character.name} relocated recently and can't be made state campaigner for ${relocTenure.turnsRemaining} more turn${relocTenure.turnsRemaining === 1 ? "" : "s"}.`,
-              turnsRemaining: relocTenure.turnsRemaining,
-            },
-            { status: 403 }
+          return errorResponse(
+            403,
+            `${character.name} relocated recently and can't be made state campaigner for ${relocTenure.turnsRemaining} more turn${relocTenure.turnsRemaining === 1 ? "" : "s"}.`,
+            { extra: { turnsRemaining: relocTenure.turnsRemaining } }
           );
         }
       }

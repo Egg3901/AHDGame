@@ -12,7 +12,7 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps) {
   const { role } = await params;
   const data = await getLeadershipData(role);
-  if (!data) return { title: "Not Found" };
+  if (!data) return { title: "Not found" };
   return {
     title: `${data.label} | Wiki | A House Divided`,
     description: `Current holder of ${data.label} in Congress`,
@@ -50,9 +50,9 @@ export default async function WikiLeadershipPage({ params }: PageProps) {
 
       {flavor && (
         <section className="mb-8 rounded-xl border border-card-border bg-card/60 p-6">
-          <h2 className="mb-3 text-lg font-semibold text-foreground">About This Role</h2>
+          <h2 className="mb-3 text-lg font-semibold text-foreground">About this role</h2>
           <p className="text-muted leading-relaxed">{flavor.blurb}</p>
-          <h3 className="mt-4 mb-2 text-sm font-medium text-foreground">Key Responsibilities</h3>
+          <h3 className="mt-4 mb-2 text-sm font-medium text-foreground">Key responsibilities</h3>
           <ul className="list-inside list-disc space-y-1 text-sm text-muted">
             {flavor.responsibilities.map((r, i) => (
               <li key={i}>{r}</li>
@@ -62,7 +62,7 @@ export default async function WikiLeadershipPage({ params }: PageProps) {
       )}
 
       <section className="rounded-xl border border-card-border bg-card/60 p-6">
-        <h2 className="mb-4 text-xl font-semibold text-foreground">Current Holder</h2>
+        <h2 className="mb-4 text-xl font-semibold text-foreground">Current holder</h2>
         <div className="flex items-center gap-4 rounded-lg border border-card-border bg-card/40 p-4">
           <Avatar
             url={holder.avatarUrl}

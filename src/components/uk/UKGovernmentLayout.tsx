@@ -136,7 +136,7 @@ export function UKGovernmentLayout({
             chips={
               <>
                 <MastheadChip>
-                  {config?.executiveTitle ?? "Prime Minister"}:{" "}
+                  {config?.executiveTitle ?? "Prime minister"}:{" "}
                   {pmSummary.name && pmSummary.profileHref ? (
                     <Link
                       href={pmSummary.profileHref}

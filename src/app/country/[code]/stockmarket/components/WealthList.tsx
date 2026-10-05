@@ -9,7 +9,7 @@ import { getCountryIdByName } from "@/lib/constants/countries";
 import type { WealthEntry, WealthSortField, WealthSortDir } from "../types";
 
 const WEALTH_SORT_OPTIONS: { field: WealthSortField; label: string }[] = [
-  { field: "totalWealth", label: "Net Worth" },
+  { field: "totalWealth", label: "Net worth" },
   { field: "stockValue", label: "Stocks" },
   { field: "bondValue", label: "Bonds" },
   { field: "portfolioValue", label: "Portfolio" },
@@ -109,7 +109,7 @@ export function WealthList({ entries }: { entries: WealthEntry[] }) {
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-foreground">Wealth Leaderboard</h2>
+            <h2 className="text-xl font-bold text-foreground">Wealth leaderboard</h2>
             <div
               className="flex items-center gap-1 rounded-lg border border-card-border bg-card p-0.5"
               title="Net subtracts line-of-credit debt; gross compares wealth before borrowing"
@@ -212,12 +212,8 @@ export function WealthList({ entries }: { entries: WealthEntry[] }) {
           <table className="w-full text-left text-sm">
             <thead className="bg-card-elevated border-b border-card-border">
               <tr>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider w-10">
-                  #
-                </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider">
-                  Player
-                </th>
+                <th className="px-4 py-3 text-muted text-body-sm font-medium w-10">#</th>
+                <th className="px-4 py-3 text-muted text-body-sm font-medium">Player</th>
                 {WEALTH_SORT_OPTIONS.map((opt, i) => {
                   const hidden =
                     i >= 1 && i <= 2
@@ -239,8 +235,8 @@ export function WealthList({ entries }: { entries: WealthEntry[] }) {
                     </th>
                   );
                 })}
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">
-                  6M Change
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden sm:table-cell">
+                  6M change
                 </th>
               </tr>
             </thead>

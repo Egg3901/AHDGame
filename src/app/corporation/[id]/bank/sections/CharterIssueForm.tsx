@@ -1,6 +1,7 @@
 "use client";
 
 import { useReducer } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import type { BankCharterType } from "@/lib/db/types/bank";
 import type { ConsolePayload, ShowToast } from "../types";
@@ -41,7 +42,10 @@ export function CharterIssueForm({
         reasons?: string[];
       };
       if (!res.ok) {
-        showToast(json.reasons?.join("; ") ?? json.error ?? "Could not issue charter", "error");
+        showToast(
+          json.reasons?.join("; ") ?? apiErrorText(json, "Could not issue charter"),
+          "error"
+        );
         return;
       }
       showToast("Bank charter issued", "success");

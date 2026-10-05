@@ -5,6 +5,7 @@ import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import { useRouter } from "next/navigation";
 import { StatePickerModal } from "./StatePickerModal";
 import type { StateTravelOption } from "@/lib/elections/dto/campaignStatePresence";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface TravelControlsProps {
   electionId: string;
@@ -56,7 +57,7 @@ export function TravelControls({
         router.refresh();
         onChanged?.();
       } else {
-        setMessage(`✗ ${data.error}`);
+        setMessage(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMessage("✗ Network error");
@@ -77,7 +78,7 @@ export function TravelControls({
 
       <div className="flex items-center flex-wrap gap-3">
         <div className="flex-1 min-w-[200px]">
-          <div className="text-[10px] uppercase tracking-wider text-muted">Currently in</div>
+          <div className="text-body-sm font-medium text-muted">Currently in</div>
           {currentStateId ? (
             <div className="mt-1">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-sm font-semibold text-amber-400">

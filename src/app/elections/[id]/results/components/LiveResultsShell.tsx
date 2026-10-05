@@ -65,7 +65,7 @@ export function LiveResultsShell({
         <div className="flex items-center gap-2 text-sm">
           <BackButton fallbackLabel="Back to Election" fallbackHref={`/elections/${election.id}`} />
           <span className="text-card-border">/</span>
-          <span className="font-medium">Live Results</span>
+          <span className="font-medium">Live results</span>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

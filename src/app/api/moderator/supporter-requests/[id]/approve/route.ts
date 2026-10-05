@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { createModAuditLog } from "@/lib/modAuditLog";
 import { getSupporterRequestsCollection } from "@/lib/db/collections/supporterRequests";
 import type { NPP, User } from "@/lib/db/types";
@@ -25,24 +25,24 @@ export async function POST(_request: Request, { params }: RouteContext) {
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid request ID." }, { status: 400 });
+      return errorResponse(400, "Invalid request ID.");
     }
 
     const db = await getDb();
     const requestsCol = await getSupporterRequestsCollection(db);
     const req = await requestsCol.findOne({ _id: new ObjectId(id) });
     if (!req) {
-      return NextResponse.json({ error: "Request not found." }, { status: 404 });
+      return errorResponse(404, "Request not found.");
     }
     if (req.status !== "pending") {
-      return NextResponse.json({ error: "Request has already been decided." }, { status: 409 });
+      return errorResponse(409, "Request has already been decided.");
     }
 
     const requester = await db
       .collection<User>("users")
       .findOne({ _id: req.userId }, { projection: { username: 1, nppRenameUsedAt: 1 } });
     if (!requester) {
-      return NextResponse.json({ error: "Requesting user not found." }, { status: 404 });
+      return errorResponse(404, "Requesting user not found.");
     }
 
     const now = new Date();
@@ -51,7 +51,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
 
     if (req.kind === "wall-name") {
       if (!req.proposedName) {
-        return NextResponse.json({ error: "Request is missing a proposed name." }, { status: 400 });
+        return errorResponse(400, "Request is missing a proposed name.");
       }
       await db
         .collection<User>("users")
@@ -59,14 +59,11 @@ export async function POST(_request: Request, { params }: RouteContext) {
       summary = `"${req.proposedName}"`;
     } else {
       if (!req.nppId || !req.proposedNppName) {
-        return NextResponse.json({ error: "Request is missing rename details." }, { status: 400 });
+        return errorResponse(400, "Request is missing rename details.");
       }
       const npp = await db.collection<NPP>("npps").findOne({ _id: req.nppId });
       if (!npp || npp.retiredAt) {
-        return NextResponse.json(
-          { error: "The target politician no longer exists or is retired." },
-          { status: 409 }
-        );
+        return errorResponse(409, "The target politician no longer exists or is retired.");
       }
       // Re-check uniqueness at decision time to close the submit/approve race.
       const exact = new RegExp(`^${escapeRegex(req.proposedNppName)}$`, "i");
@@ -77,9 +74,9 @@ export async function POST(_request: Request, { params }: RouteContext) {
           { projection: { _id: 1 } }
         );
       if (taken || (await nameCollidesWithUser(db, req.proposedNppName, req.userId))) {
-        return NextResponse.json(
-          { error: "The proposed name is no longer unique. Reject the request instead." },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "The proposed name is no longer unique. Reject the request instead."
         );
       }
 

@@ -14,6 +14,7 @@ import {
 import { loadOverride, clearOverride } from "@/lib/positionEditor/storage";
 import { stateConfigToCsv, downloadCsv } from "@/lib/positionEditor/csv";
 import type { EraId, EditorStateConfig } from "@/lib/positionEditor/types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Layer 1 is the only authoring surface left. The "Archetype Composition
@@ -118,7 +119,7 @@ export function StateEditor({
       setToast(
         res.ok
           ? { message: data.note ?? "Saved as global seed defaults.", variant: "success" }
-          : { message: data.error ?? "Failed to save.", variant: "error" }
+          : { message: apiErrorText(data, "Failed to save."), variant: "error" }
       );
     } catch {
       setToast({ message: "Failed to save.", variant: "error" });

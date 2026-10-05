@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import {
@@ -38,13 +38,13 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const { code, positionId, unitId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (DEFENSE_POSITION_BY_COUNTRY[countryId] !== positionId) {
-      return NextResponse.json({ error: "Not a defense cabinet position" }, { status: 404 });
+      return errorResponse(404, "Not a defense cabinet position");
     }
     if (!ObjectId.isValid(unitId)) {
-      return NextResponse.json({ error: "Invalid unit id" }, { status: 400 });
+      return errorResponse(400, "Invalid unit id");
     }
 
     const db = await getDb();
@@ -56,36 +56,33 @@ export async function POST(_request: Request, { params }: RouteParams) {
       auth.user.character &&
       member.characterId.toString() === auth.user.character._id.toString();
     if (!isHolder && !auth.user.isAdmin) {
-      return NextResponse.json(
-        { error: "Only the defence minister may upgrade units." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the defence minister may upgrade units.");
     }
 
     const unitsCol = getMilitaryUnitsCollection(db);
     const unit = await unitsCol.findOne({ _id: new ObjectId(unitId), countryId });
     if (!unit) {
-      return NextResponse.json({ error: "Unit not found" }, { status: 404 });
+      return errorResponse(404, "Unit not found");
     }
     // Range-check rather than `>= 3`: a legacy doc with a missing or non-numeric tier
     // would slip past that, reach pricing as NaN, and be refused with an unrelated
     // "no usable GDP" message. Fail closed here, and say what is actually wrong.
     if (!Number.isInteger(unit.techTier) || unit.techTier < 0 || unit.techTier > 3) {
-      return NextResponse.json({ error: "This unit has no valid tech tier" }, { status: 409 });
+      return errorResponse(409, "This unit has no valid tech tier");
     }
     if (unit.techTier >= 3) {
-      return NextResponse.json({ error: "Unit is already cutting-edge" }, { status: 400 });
+      return errorResponse(400, "Unit is already cutting-edge");
     }
 
     // Shared UK pool: both offices of a dual holder spend one balance (issue #2049).
     const actions = await resolveMinisterialRemaining(db, countryId, member!);
     if (actions < 1) {
-      return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 400 });
+      return errorResponse(400, "No ministerial actions remaining");
     }
 
     const spend = await spendMinisterialAction(db, countryId, member!);
     if (!spend.ok) {
-      return NextResponse.json({ error: "No ministerial actions remaining" }, { status: 409 });
+      return errorResponse(409, "No ministerial actions remaining");
     }
     const refundAction = () => refundMinisterialAction(db, countryId, member!);
 
@@ -107,9 +104,9 @@ export async function POST(_request: Request, { params }: RouteParams) {
     // would pass a null check and then absorb a zero-match update.
     if (!healedBudget || healedBudget.countryId !== countryId) {
       await refundAction();
-      return NextResponse.json(
-        { error: "This country has no usable national budget — modernisation is unavailable" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "This country has no usable national budget — modernisation is unavailable"
       );
     }
 
@@ -117,10 +114,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
     const archetype = getUnitArchetype(unit.domain, unit.type);
     if (!archetype) {
       await refundAction();
-      return NextResponse.json(
-        { error: "This unit's type is not in the procurement catalogue" },
-        { status: 409 }
-      );
+      return errorResponse(409, "This unit's type is not in the procurement catalogue");
     }
     const price = unitUpgradePrice(
       archetype,
@@ -131,9 +125,9 @@ export async function POST(_request: Request, { params }: RouteParams) {
     );
     if (price == null) {
       await refundAction();
-      return NextResponse.json(
-        { error: "This country has no usable GDP figure — modernisation is unavailable" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "This country has no usable GDP figure — modernisation is unavailable"
       );
     }
 
@@ -143,13 +137,10 @@ export async function POST(_request: Request, { params }: RouteParams) {
     if (!(await debitAppropriation(db, countryId, price))) {
       await refundAction();
       const { balance } = await getDefenseAppropriation(db, countryId);
-      return NextResponse.json(
-        {
-          error:
-            `Defence appropriation is short — ${price.toLocaleString("en-US")} required, ` +
-            `${Math.max(0, balance).toLocaleString("en-US")} available`,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `Defence appropriation is short — ${price.toLocaleString("en-US")} required, ` +
+          `${Math.max(0, balance).toLocaleString("en-US")} available`
       );
     }
 

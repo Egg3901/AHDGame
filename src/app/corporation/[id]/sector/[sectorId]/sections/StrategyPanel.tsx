@@ -151,7 +151,7 @@ export default function StrategyPanel({
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-6">
-      <h2 className="text-lg font-bold text-foreground mb-1">Operating Strategy</h2>
+      <h2 className="text-lg font-bold text-foreground mb-1">Operating strategy</h2>
       <p className="text-xs text-muted mb-4">
         Changes commodity inputs and outputs. Switching costs{" "}
         {formatAmount(strategy.retoolCost, liquidCode)} and takes 12 turns to complete.
@@ -212,7 +212,7 @@ export default function StrategyPanel({
               disabled={cancelTransitionLoading}
               className="rounded-lg border border-error/30 bg-error/10 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
             >
-              Cancel Transition ({formatAmount(strategy.cancelCost, liquidCode)})
+              Cancel transition ({formatAmount(strategy.cancelCost, liquidCode)})
             </button>
           ) : (
             <div className="rounded-lg border border-error/30 bg-error/10 p-3 space-y-2">
@@ -231,7 +231,7 @@ export default function StrategyPanel({
                   disabled={cancelTransitionLoading}
                   className="rounded-lg bg-error px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-error/80 disabled:opacity-50"
                 >
-                  {cancelTransitionLoading ? "Cancelling..." : "Confirm Cancel"}
+                  {cancelTransitionLoading ? "Cancelling..." : "Confirm cancel"}
                 </button>
                 <button
                   type="button"
@@ -254,7 +254,7 @@ export default function StrategyPanel({
           <div className="overflow-x-auto">
             <table className="w-full min-w-[420px] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-card-border text-[10px] uppercase tracking-widest text-muted">
+                <tr className="border-b border-card-border text-sm font-semibold text-foreground">
                   <th className="py-1.5 pr-2 text-left font-semibold">Strategy</th>
                   <th
                     className="px-2 py-1.5 text-right font-semibold"

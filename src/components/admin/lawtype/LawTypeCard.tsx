@@ -93,7 +93,7 @@ export function LawTypeCard({
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-yellow-500/20 px-2.5 py-1 text-xs font-medium text-yellow-400">
               <span className="w-2 h-2 rounded-full bg-yellow-400" />
-              This Iteration
+              This iteration
             </span>
           )}
           <span className="text-[10px] text-muted hidden sm:inline">
@@ -108,14 +108,14 @@ export function LawTypeCard({
                 onClick={onRemovePermanent}
                 className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-1.5 text-xs font-medium text-yellow-400 hover:bg-yellow-500/20 transition-colors"
               >
-                Make Temporary
+                Make temporary
               </button>
             ) : (
               <button
                 onClick={onMakePermanent}
                 className="rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-1.5 text-xs font-medium text-green-400 hover:bg-green-500/20 transition-colors"
               >
-                Make Permanent
+                Make permanent
               </button>
             )}
           </div>

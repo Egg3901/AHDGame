@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { shareHistoryQuerySchema } from "@/lib/api/schemas/shareHistory";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import type { ShareTradeHistory } from "@/lib/db/types";
@@ -24,10 +24,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       pageSize: url.searchParams.get("pageSize") ?? undefined,
     });
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.issues[0]?.message ?? "Invalid query" },
-        { status: 400 }
-      );
+      return errorResponse(400, parsed.error.issues[0]?.message ?? "Invalid query");
     }
     const { page, pageSize } = parsed.data;
 

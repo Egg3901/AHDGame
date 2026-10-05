@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { findCaucusBySlug } from "@/lib/db/caucusLookup";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -175,12 +175,12 @@ export async function GET(
     const { code, id, slug } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const memberType = new URL(request.url).searchParams.get("memberType");
     if (memberType !== "npp") {
-      return NextResponse.json({ error: "Unsupported memberType filter." }, { status: 400 });
+      return errorResponse(400, "Unsupported memberType filter.");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -189,23 +189,20 @@ export async function GET(
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const partyId = String(party.sequentialId);
 
     const resolved = await findCaucusBySlug(db, countryId, partyId, slug);
     if (!resolved) {
-      return NextResponse.json({ error: "Caucus not found" }, { status: 404 });
+      return errorResponse(404, "Caucus not found");
     }
     const { caucus } = resolved;
 
     const callerId = auth.user.character._id;
     const isChair = caucus.chairId?.toString() === callerId.toString();
     if (!isChair) {
-      return NextResponse.json(
-        { error: "Only the Caucus Chair can review recruitable NPPs." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the Caucus Chair can review recruitable NPPs.");
     }
 
     const npps = await db.collection<NPP>("npps").find({ party: partyId }).toArray();
@@ -322,7 +319,7 @@ export async function POST(
     const { code, id, slug } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -330,19 +327,19 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, joinSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const partyId = String(party.sequentialId);
 
     const resolved = await findCaucusBySlug(db, countryId, partyId, slug);
     if (!resolved) {
-      return NextResponse.json({ error: "Caucus not found" }, { status: 404 });
+      return errorResponse(404, "Caucus not found");
     }
     const { caucus } = resolved;
 
@@ -355,10 +352,7 @@ export async function POST(
     if (parsed.data.memberType === "npp") {
       // Only the chair can add NPPs.
       if (!isChair) {
-        return NextResponse.json(
-          { error: "Only the chair can recruit NPPs into the caucus." },
-          { status: 403 }
-        );
+        return errorResponse(403, "Only the chair can recruit NPPs into the caucus.");
       }
       memberType = "npp";
       memberOid = new ObjectId(parsed.data.memberId);
@@ -366,10 +360,7 @@ export async function POST(
       // Adding a Character — either chair invite or self-join.
       const targetId = parsed.data.memberId ? new ObjectId(parsed.data.memberId) : callerId;
       if (!targetId.equals(callerId) && !isChair) {
-        return NextResponse.json(
-          { error: "Only the chair can add another player to the caucus." },
-          { status: 403 }
-        );
+        return errorResponse(403, "Only the chair can add another player to the caucus.");
       }
       memberType = "character";
       memberOid = targetId;
@@ -380,39 +371,27 @@ export async function POST(
     if (memberType === "character") {
       const target = await db.collection<Character>("characters").findOne({ _id: memberOid });
       if (!target) {
-        return NextResponse.json({ error: "Character not found" }, { status: 404 });
+        return errorResponse(404, "Character not found");
       }
       if (target.party !== partyId || !isSameCountry(target, { countryId })) {
-        return NextResponse.json(
-          { error: "Character must be a member of this party to join its caucus." },
-          { status: 400 }
-        );
+        return errorResponse(400, "Character must be a member of this party to join its caucus.");
       }
       if (target.factionId && !target.factionId.equals(caucus._id)) {
-        return NextResponse.json(
-          { error: "Character is already a member of another caucus." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Character is already a member of another caucus.");
       }
     } else {
       const target = await db.collection<NPP>("npps").findOne({ _id: memberOid });
       if (!target) {
-        return NextResponse.json({ error: "NPP not found" }, { status: 404 });
+        return errorResponse(404, "NPP not found");
       }
       if (target.party !== partyId || !isSameCountry(target, { countryId })) {
-        return NextResponse.json(
-          { error: "NPP must be a member of this party to join its caucus." },
-          { status: 400 }
-        );
+        return errorResponse(400, "NPP must be a member of this party to join its caucus.");
       }
       if (target.retiredAt) {
-        return NextResponse.json({ error: "Retired NPPs cannot join caucuses." }, { status: 400 });
+        return errorResponse(400, "Retired NPPs cannot join caucuses.");
       }
       if (target.factionId && !target.factionId.equals(caucus._id)) {
-        return NextResponse.json(
-          { error: "NPP is already a member of another caucus." },
-          { status: 409 }
-        );
+        return errorResponse(409, "NPP is already a member of another caucus.");
       }
 
       const now = new Date();
@@ -449,15 +428,13 @@ export async function POST(
         now,
       });
       if (!recruitability.eligible) {
-        return NextResponse.json(
-          {
-            error: recruitability.error,
+        return errorResponse(recruitability.statusCode, recruitability.error, {
+          extra: {
             relationshipScore,
             requiredRelationship: CAUCUS_NPP_RECRUIT_MIN_RELATIONSHIP,
             cooldownUntil: recruitability.cooldownUntil?.toISOString() ?? null,
           },
-          { status: recruitability.statusCode }
-        );
+        });
       }
     }
 
@@ -468,10 +445,9 @@ export async function POST(
       .collection<CaucusMembership>("caucusMemberships")
       .findOne({ caucusId: caucus._id, memberId: memberOid });
     if (existing && existing.status === "active") {
-      return NextResponse.json(
-        { error: "Already a member of this caucus.", membershipId: existing._id.toString() },
-        { status: 409 }
-      );
+      return errorResponse(409, "Already a member of this caucus.", {
+        extra: { membershipId: existing._id.toString() },
+      });
     }
     if (existing) {
       await db.collection<CaucusMembership>("caucusMemberships").updateOne(

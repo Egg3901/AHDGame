@@ -29,7 +29,7 @@ export function CorpTimersCell({ row, currentTurn }: { row: CorpRow; currentTurn
   }
 
   if (timers.length === 0) {
-    return <span className="text-xs text-success font-medium">No Timers Active</span>;
+    return <span className="text-xs text-success font-medium">No timers active</span>;
   }
 
   return (

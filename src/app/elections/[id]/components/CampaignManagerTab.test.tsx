@@ -58,7 +58,7 @@ describe("CampaignManagerTab", () => {
     await waitFor(() => {
       expect(screen.queryByText("Loading campaign...")).toBeNull();
     });
-    expect(screen.queryByText("Your Campaign")).toBeNull();
+    expect(screen.queryByText("Your campaign")).toBeNull();
     expect(screen.queryByText("Karl Freitag")).toBeNull();
   });
 
@@ -90,9 +90,9 @@ describe("CampaignManagerTab", () => {
 
     render(<CampaignManagerTab electionId="election-1" />);
 
-    expect(await screen.findByText("Your Campaign")).toBeTruthy();
+    expect(await screen.findByText("Your campaign")).toBeTruthy();
     expect(screen.getByText("Melania Trump - Republican Party")).toBeTruthy();
-    const link = screen.getByRole("link", { name: "Manage Campaign" }) as HTMLAnchorElement;
+    const link = screen.getByRole("link", { name: "Manage campaign" }) as HTMLAnchorElement;
     expect(link.getAttribute("href")).toBe("/campaign/mine");
   });
 });

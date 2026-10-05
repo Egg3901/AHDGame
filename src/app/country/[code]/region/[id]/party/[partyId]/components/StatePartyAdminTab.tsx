@@ -6,6 +6,7 @@ import { AdminAppointmentPanel } from "./StatePartyLeadershipPanel";
 import { getMessageStyle } from "@/lib/utils/formatters";
 import { regionUrl } from "@/lib/urls";
 import type { StatePartyData } from "./types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface StatePartyAdminTabProps {
   stateParty: StatePartyData;
@@ -46,7 +47,7 @@ export function StatePartyAdminTab({ stateParty, onUpdate }: StatePartyAdminTabP
           router.push(regionUrl(stateParty.countryId ?? "US", stateParty.stateId));
         }, 1500);
       } else {
-        setMessage(`✗ ${data.error}`);
+        setMessage(`✗ ${apiErrorText(data, "Request failed")}`);
       }
     } catch {
       setMessage("✗ Network error");
@@ -74,7 +75,7 @@ export function StatePartyAdminTab({ stateParty, onUpdate }: StatePartyAdminTabP
             />
           </svg>
           <div>
-            <h3 className="font-semibold text-red-400">Admin Controls</h3>
+            <h3 className="font-semibold text-red-400">Admin controls</h3>
             <p className="text-sm text-red-300/80 mt-1">
               These controls allow direct manipulation of the state party. Changes take effect
               immediately.
@@ -114,13 +115,13 @@ export function StatePartyAdminTab({ stateParty, onUpdate }: StatePartyAdminTabP
               d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
             />
           </svg>
-          <h3 className="font-semibold text-red-400">Danger Zone</h3>
+          <h3 className="font-semibold text-red-400">Danger zone</h3>
         </div>
 
         <div className="rounded-lg border border-red-500/30 bg-background p-4">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <div className="font-medium text-sm">Delete State Party Organization</div>
+              <div className="font-medium text-sm">Delete state party organization</div>
               <div className="text-xs text-muted mt-1">
                 Permanently delete the {stateParty.stateName} {stateParty.partyName} organization.
                 This removes all leadership positions, treasury, and associated data.

@@ -60,6 +60,10 @@ export interface ElectionVoteTally {
   huListVotes?: Record<string, number>;
   /** HU post-2014: districtId -> partyId -> active nominee candidateId. */
   huDistrictSlate?: Record<string, Record<string, string>>;
+  /** JP post-1994: statutory district ID -> candidate ID -> direct-vote marks. */
+  japanShugiinConstituencyVotes?: Record<string, Record<string, number>>;
+  /** JP post-1994: second-vote party marks by the election's regional list bloc. */
+  japanShugiinListVotes?: Record<string, number>;
   candidateNames: Record<string, string>;
   candidateParties: Record<string, string>;
   /** Candidate kind at ballot time for bounded SNTV slate projections. */

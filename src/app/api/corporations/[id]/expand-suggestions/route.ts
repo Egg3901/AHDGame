@@ -1,7 +1,8 @@
+import { corpToSectorCountrySpread } from "@/lib/currency/sectorFxSpread";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import {
   SPLIT_BASE_CAPTURE_FRACTION,
@@ -103,7 +104,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const pinStateId = (url.searchParams.get("state") ?? "").trim() || null;
 
     if (!sectorType || !(CORPORATION_TYPES as readonly string[]).includes(sectorType)) {
-      return NextResponse.json({ error: "Invalid or missing sectorType" }, { status: 400 });
+      return errorResponse(400, "Invalid or missing sectorType");
     }
 
     const { id } = await params;
@@ -145,11 +146,9 @@ export async function GET(request: Request, { params }: RouteParams) {
       const currentTurn = gameState?.currentTurn ?? 0;
       if (retailCapacityExpansionPaused(transition, currentTurn)) {
         const remaining = retailDemandTransitionTurnsRemaining(transition, currentTurn);
-        return NextResponse.json(
-          {
-            error: `New Retail sectors are paused while consumer demand is rebalanced (${remaining} turns remaining). Existing stores and plant transfers still operate normally.`,
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          `New Retail sectors are paused while consumer demand is rebalanced (${remaining} turns remaining). Existing stores and plant transfers still operate normally.`
         );
       }
     }
@@ -477,29 +476,28 @@ export async function GET(request: Request, { params }: RouteParams) {
       for (const state of states) {
         starterBuildCostByState.set(
           state._id,
-          Math.round(
-            computeBuildCost({
-              sectorType,
-              industryModel,
-              units: starterUnits,
-              // A suggestion for a sector that does not exist yet, so there is
-              // no chosen production method: quote the sector-type default,
-              // which is what `expandSector` founds the sector on.
-              strategyId: null,
-              year: currentYear,
-              eraUnitScale,
-              // The local share is zero in a greenfield state, but national
-              // dominance still follows the incumbent into the new market.
-              marketSharePercent: 0,
-              nationalMarketSharePercent:
-                nationalShareByCountry.get(state.countryId as CountryId) ?? 0,
-              primeRate: primeRateByCountry.get(state.countryId) ?? 0,
-              acumen,
-              hostCostOfLivingIndex: costOfLivingByState.get(state._id) ?? null,
-              techGrowthCostMultiplier: techEffects?.growthCostMultiplier ?? 1,
-              founding: true,
-            }).totalAnchor
-          )
+          computeBuildCost({
+            sectorType,
+            industryModel,
+            units: starterUnits,
+            // A suggestion for a sector that does not exist yet, so there is
+            // no chosen production method: quote the sector-type default,
+            // which is what `expandSector` founds the sector on.
+            strategyId: null,
+            year: currentYear,
+            preset: worldPreset,
+            eraUnitScale,
+            // The local share is zero in a greenfield state, but national
+            // dominance still follows the incumbent into the new market.
+            marketSharePercent: 0,
+            nationalMarketSharePercent:
+              nationalShareByCountry.get(state.countryId as CountryId) ?? 0,
+            primeRate: primeRateByCountry.get(state.countryId) ?? 0,
+            acumen,
+            hostCostOfLivingIndex: costOfLivingByState.get(state._id) ?? null,
+            techGrowthCostMultiplier: techEffects?.growthCostMultiplier ?? 1,
+            founding: true,
+          }).totalAnchor
         );
       }
     }
@@ -551,8 +549,14 @@ export async function GET(request: Request, { params }: RouteParams) {
           : null;
         // Under plants the price of entry is fee + starter build, not the split
         // cost — so afford must be checked against what is actually charged.
-        const foundingTotalAnchor =
+        const foundingBaseAnchor =
           starterBuildCostAnchor == null ? null : foundingFeeAnchor + starterBuildCostAnchor;
+        const foundingTotalAnchor =
+          foundingBaseAnchor == null
+            ? null
+            : foundingBaseAnchor +
+              corpToSectorCountrySpread(corporation, state.countryId, foundingBaseAnchor)
+                .spreadAnchor;
         const canAfford =
           foundingTotalAnchor != null
             ? liquidCapitalAnchor >= foundingTotalAnchor
@@ -589,7 +593,8 @@ export async function GET(request: Request, { params }: RouteParams) {
           estimatedRevenueCapture,
           // Plants-tier fields; null in every other world.
           headroomUnits,
-          starterBuildCostAnchor,
+          starterBuildCostAnchor:
+            starterBuildCostAnchor == null ? null : Math.round(starterBuildCostAnchor),
           foundingTotalAnchor,
           canAfford,
           ownedSectorId,

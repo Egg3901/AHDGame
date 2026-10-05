@@ -18,6 +18,7 @@ export interface UserWithCharacter {
   isAdmin: boolean;
   isBanned: boolean;
   singleplayerEntitled: boolean;
+  sandboxAccessGranted: boolean;
   characterId: string | null;
   characterName: string | null;
   party: string | null;
@@ -124,6 +125,7 @@ export const GET = withAdminAuth(async (_auth, request: Request) => {
         isAdmin: user.isAdmin || false,
         isBanned: user.isBanned || false,
         singleplayerEntitled: Boolean(user.singleplayerEntitledAt),
+        sandboxAccessGranted: Boolean(user.sandboxAccessGrantedAt),
         characterId: character?._id?.toString() || null,
         characterName: character?.name || null,
         party: resolvePartyName(character),

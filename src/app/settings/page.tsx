@@ -1,6 +1,13 @@
 "use client";
 
-import { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
+import {
+  Suspense,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -68,6 +75,11 @@ import {
   InterfaceQuickSettings,
 } from "./components/QuickSettingsPanels";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
+import { isStoreAppDocument } from "@/lib/displayMode";
+
+const STORE_APP_HIDDEN_SECTIONS = new Set(["patreon", "supporter-perks"]);
+// The store-app marker is set once by the root layout and never changes.
+const subscribeNever = () => () => {};
 
 export function SettingsPageContent() {
   const resolveCountryName = useCountryDisplayName();
@@ -87,6 +99,9 @@ export function SettingsPageContent() {
   const characterSyncAttemptedRef = useRef(false);
   const deepLinkScrolledRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
+  // Supporter perks are bought outside the App Store, so the phone app does
+  // not show them (guideline 3.1.1). The server snapshot keeps hydration stable.
+  const storeApp = useSyncExternalStore(subscribeNever, isStoreAppDocument, () => false);
   const [oauthBannerDismissed, setOauthBannerDismissed] = useState(false);
   const discord = searchParams.get("discord");
   const google = searchParams.get("google");
@@ -660,6 +675,7 @@ export function SettingsPageContent() {
   );
   const availableSections = ALL_SECTIONS.filter(
     (section) =>
+      (!storeApp || !STORE_APP_HIDDEN_SECTIONS.has(section.id)) &&
       (!rawUser?.singleplayer ||
         ![
           "identity",
@@ -805,9 +821,7 @@ export function SettingsPageContent() {
             <header className="mb-6 md:mb-8">
               <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
                 <div>
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
-                    A House Divided
-                  </p>
+                  <p className="mb-2 text-body-sm font-medium text-primary">A House Divided</p>
                   <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-5xl">
                     {t("page.title")}
                   </h1>
@@ -928,7 +942,7 @@ export function SettingsPageContent() {
                             <BucketIcon id={bucket.id} />
                           </span>
                           <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+                            <p className="text-body-sm font-medium text-muted">
                               {t(bucket.eyebrowKey)}
                             </p>
                             <h2 className="mt-0.5 text-xl font-bold tracking-tight text-foreground">
@@ -1029,7 +1043,7 @@ export function SettingsPageContent() {
                         {advancedSections.length > 0 && (
                           <div className="rounded-2xl border border-card-border bg-card-muted/50 p-4">
                             <div className="mb-3">
-                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">
+                              <p className="text-body-sm font-medium text-muted">
                                 {t("page.advancedTitle")}
                               </p>
                               <p className="mt-1 text-xs text-muted">{t("page.advancedHint")}</p>

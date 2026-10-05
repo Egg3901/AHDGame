@@ -5,6 +5,10 @@ export type AdminLogCategory = "account" | "election" | "system";
 export type AdminLogAction =
   | "freight_settlement_activated"
   | "freight_settlement_shadowed"
+  | "sandbox_access_granted"
+  | "sandbox_access_revoked"
+  | "sandbox_tester_access_enabled"
+  | "sandbox_tester_access_disabled"
   | "account_created"
   | "account_deleted_self"
   | "account_deleted_admin"

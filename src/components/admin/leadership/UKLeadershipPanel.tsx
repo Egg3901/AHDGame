@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { EmptyState } from "@/components/ui";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ConfidenceVoteRow {
   id: string;
@@ -33,8 +34,8 @@ interface NoConfidenceVoteRow {
 type InnerTab = "confidence_vote" | "no_confidence_vote";
 
 const INNER_TABS: { id: InnerTab; label: string }[] = [
-  { id: "confidence_vote", label: "Confidence Votes" },
-  { id: "no_confidence_vote", label: "No-Confidence Votes" },
+  { id: "confidence_vote", label: "Confidence votes" },
+  { id: "no_confidence_vote", label: "No-confidence votes" },
 ];
 
 const STATUS_COLORS: Record<string, string> = {
@@ -104,7 +105,7 @@ export function UKLeadershipPanel() {
       body: JSON.stringify({ type: innerTab, action, electionId: voteId }),
     });
     const d = await res.json();
-    setMessage(res.ok ? d.message : `Error: ${d.error}`);
+    setMessage(res.ok ? d.message : `Error: ${apiErrorText(d, "Request failed")}`);
     if (res.ok) fetchVotes();
   };
 
@@ -277,7 +278,7 @@ function NoConfidenceVoteList({
               {/* Title row */}
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-sm font-semibold text-foreground">
-                  No Confidence in {v.pmName}
+                  No confidence in {v.pmName}
                 </span>
                 <StatusBadge status={v.status} />
               </div>

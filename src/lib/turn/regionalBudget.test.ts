@@ -161,12 +161,14 @@ describe("processRegionalBudgets", () => {
     regions,
     policies = [],
     legTypes = [],
+    resetPrograms = [],
     existingBudgets = [],
     budget = { _id: "UK", spending: { stateGrants: 250_000_000 } } as unknown,
   }: {
     regions: unknown[];
     policies?: unknown[];
     legTypes?: unknown[];
+    resetPrograms?: unknown[];
     existingBudgets?: unknown[];
     budget?: unknown;
   }) {
@@ -176,6 +178,7 @@ describe("processRegionalBudgets", () => {
       "states",
       "statePolicies",
       "legislationTypes",
+      "resetLawPrograms",
       "regionalBudgets",
       "federalBudget",
     ]) {
@@ -184,6 +187,7 @@ describe("processRegionalBudgets", () => {
     db.collectionMocks["states"]!.find.mockImplementation(() => cursor(regions));
     db.collectionMocks["statePolicies"]!.find.mockImplementation(() => cursor(policies));
     db.collectionMocks["legislationTypes"]!.find.mockImplementation(() => cursor(legTypes));
+    db.collectionMocks["resetLawPrograms"]!.find.mockImplementation(() => cursor(resetPrograms));
     db.collectionMocks["regionalBudgets"]!.find.mockImplementation(() => cursor(existingBudgets));
     db.collectionMocks["federalBudget"]!.findOne = vi.fn().mockResolvedValue(budget);
   }
@@ -267,6 +271,30 @@ describe("processRegionalBudgets", () => {
     expect(setData.isOverBudget).toBe(true);
     expect(setData.surplus).toBeLessThan(0);
     expect(setData.turnsOverBudget).toBe(1);
+  });
+
+  it("settles v2 regional allocations against the live regional budget", async () => {
+    wire({
+      regions: [{ _id: "LON", countryId: "UK", population: 1_000_000, gdp: 1_000 }],
+      resetPrograms: [
+        {
+          _id: "world:UK:LON:L10",
+          regionId: "LON",
+          familyId: "L10",
+          choice: "center_left",
+          annualAgencyAllocation: 1_000_000_000,
+        },
+      ],
+    });
+
+    await processRegionalBudgets(db as never, 10);
+
+    const setData = written();
+    expect(setData.enactedBillCosts).toBe(1_000_000_000);
+    expect(setData.fundedBillCosts).toBeLessThan(1_000_000_000);
+    expect(setData.unfundedBillCosts).toBeGreaterThan(0);
+    expect(setData.programSettlements["world:UK:LON:L10"].implementationFactor).toBeGreaterThan(0);
+    expect(setData.programSettlements["world:UK:LON:L10"].implementationFactor).toBeLessThan(1);
   });
 
   it("resets turnsOverBudget to 0 when in surplus", async () => {

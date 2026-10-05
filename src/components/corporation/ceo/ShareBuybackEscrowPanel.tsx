@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CorporationDetail } from "../CorporationPageTypes";
@@ -100,7 +101,7 @@ export function ShareBuybackEscrowPanel({
         setWithdrawAmount("");
         onRefresh();
       } else {
-        setWithdrawError(data.error || "Withdrawal failed.");
+        setWithdrawError(apiErrorText(data, "Withdrawal failed."));
       }
     } catch {
       setWithdrawError("Network error.");

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { getGameStateCollection } from "@/lib/db/collections";
 
@@ -17,7 +17,7 @@ export async function POST() {
     const gameState = await col.findOne({ _id: "current" });
 
     if (!gameState) {
-      return NextResponse.json({ error: "Game state not initialized" }, { status: 404 });
+      return errorResponse(404, "Game state not initialized");
     }
 
     const newValue = !(gameState.wikiDisabled ?? false);
@@ -52,7 +52,7 @@ export async function GET() {
     const gameState = await col.findOne({ _id: "current" });
 
     if (!gameState) {
-      return NextResponse.json({ error: "Game state not initialized" }, { status: 404 });
+      return errorResponse(404, "Game state not initialized");
     }
 
     return NextResponse.json({ wikiDisabled: gameState.wikiDisabled ?? false });

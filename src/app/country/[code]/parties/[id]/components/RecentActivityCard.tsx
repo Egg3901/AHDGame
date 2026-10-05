@@ -1,9 +1,11 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { PARTY_SECTION_HEADING_CLASS } from "@/components/party/partyPageStyles";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Recent activity feed - a single chronological view of treasury and slate
@@ -52,7 +54,7 @@ export function RecentActivityCard({ countryCode, partyId }: Props) {
         );
         if (!res.ok) {
           const body = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(body.error ?? `Failed to load feed (${res.status})`);
+          throw new Error(apiErrorText(body, `Failed to load feed (${res.status})`));
         }
         const json = (await res.json()) as FeedResponse;
         if (!cancelled) setItems(json.items);
@@ -91,7 +93,7 @@ export function RecentActivityCard({ countryCode, partyId }: Props) {
           ))}
         </div>
       )}
-      {error && <p className="text-body-sm text-error">{error}</p>}
+      <InlineError error={error} className="text-body-sm text-error" />
 
       {!loading && !error && items.length === 0 && (
         <p className="text-body text-muted">No activity in the last few turns.</p>
@@ -106,11 +108,7 @@ export function RecentActivityCard({ countryCode, partyId }: Props) {
                 <p className="truncate text-foreground">{item.summary}</p>
                 {item.detail && <p className="truncate text-body-sm text-muted">{item.detail}</p>}
               </div>
-              <LocalTime
-                value={item.createdAt}
-                options={{ dateStyle: "medium" }}
-                className="shrink-0 text-body-sm text-muted"
-              />
+              <GameMonthTime value={item.createdAt} className="shrink-0 text-body-sm text-muted" />
             </li>
           ))}
         </ul>

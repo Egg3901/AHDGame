@@ -14,7 +14,7 @@
  * is the failure mode that would make a conservation test pass while lying.
  */
 
-import { ObjectId } from "mongodb";
+import { MongoServerError, ObjectId } from "mongodb";
 
 type Doc = Record<string, unknown>;
 type Update = Doc | Doc[];
@@ -458,7 +458,8 @@ function applyUpdate(doc: Doc, update: Update): void {
       if (entries.length !== 1 || entries[0][0] !== "$set") {
         throw new Error(`inMemoryDb: unsupported update pipeline stage ${entries[0]?.[0]}`);
       }
-      // Mongo expressions in one stage all see the document before that stage.
+      // All expressions in one stage read the same input document. Only the
+      // following stage sees these writes, matching Mongo's pipeline semantics.
       const values = Object.entries(entries[0][1] as Doc).map(
         ([path, expression]) => [path, evalExpr(expression, doc)] as const
       );
@@ -601,6 +602,13 @@ class InMemoryCollection {
     private readonly owner?: InMemoryDb
   ) {}
 
+  /** Reference resets remove both documents and secondary indexes. */
+  async drop(): Promise<boolean> {
+    this.docs = [];
+    this.indexDescriptions = [];
+    return true;
+  }
+
   async findOne(filter: Doc = {}): Promise<Doc | null> {
     const found = this.docs.find((d) => matchesFilter(d, filter));
     return found ? clone(found) : null;
@@ -685,16 +693,18 @@ class InMemoryCollection {
     const target = this.docs.find((d) => matchesFilter(d, filter));
     if (!target) {
       if (options.upsert) {
-        if (Array.isArray(update)) {
-          throw new Error("inMemoryDb: pipeline upserts are not supported");
-        }
         const seed = seedFromFilter(filter);
-        applyUpdate(seed, {
-          ...update,
-          ...((update.$setOnInsert as Doc)
-            ? { $set: { ...(update.$set as Doc), ...(update.$setOnInsert as Doc) } }
-            : {}),
-        });
+        applyUpdate(
+          seed,
+          Array.isArray(update)
+            ? update
+            : {
+                ...update,
+                ...((update.$setOnInsert as Doc)
+                  ? { $set: { ...(update.$set as Doc), ...(update.$setOnInsert as Doc) } }
+                  : {}),
+              }
+        );
         this.docs.push(seed);
         return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1, upsertedId: seed._id };
       }
@@ -726,13 +736,17 @@ class InMemoryCollection {
       // `bootstrapGameWorld` impossible to run here.
       if (!options.upsert) return null;
       const seed = seedFromFilter(filter);
-      const u = update as Doc;
-      applyUpdate(seed, {
-        ...u,
-        ...((u.$setOnInsert as Doc)
-          ? { $set: { ...(u.$set as Doc), ...(u.$setOnInsert as Doc) } }
-          : {}),
-      });
+      applyUpdate(
+        seed,
+        Array.isArray(update)
+          ? update
+          : {
+              ...update,
+              ...((update.$setOnInsert as Doc)
+                ? { $set: { ...(update.$set as Doc), ...(update.$setOnInsert as Doc) } }
+                : {}),
+            }
+      );
       this.docs.push(seed);
       // Mongo returns null for `before` on an upsert: there was no prior doc.
       return options.returnDocument === "before" ? null : clone(seed);
@@ -1087,15 +1101,11 @@ class InMemoryCollection {
     const before = this.indexDescriptions.length;
     this.indexDescriptions = this.indexDescriptions.filter((index) => index.name !== name);
     if (this.indexDescriptions.length === before) {
-      const error = new Error(`index not found with name [${name}]`) as Error & {
-        code: number;
-        codeName: string;
-      };
-      // Match MongoDB's IndexNotFound error so migrations can distinguish an
-      // idempotent drop from a real failure.
-      error.code = 27;
-      error.codeName = "IndexNotFound";
-      throw error;
+      throw new MongoServerError({
+        message: `index not found with name [${name}]`,
+        code: 27,
+        codeName: "IndexNotFound",
+      });
     }
   }
 }

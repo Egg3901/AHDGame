@@ -146,7 +146,7 @@ export default function MarketPositionPanel({
     <div className="rounded-xl border border-card-border bg-card p-6">
       <h2 className="mb-4 text-lg font-bold text-foreground">
         {compact
-          ? "Market Position"
+          ? "Market position"
           : `Market Position: ${sector.sectorLabel} in ${sector.stateName}`}
       </h2>
 
@@ -166,7 +166,7 @@ export default function MarketPositionPanel({
           <div className="flex justify-between text-muted">
             <Tooltip content={marketCurrencyNote}>
               <span className="cursor-help border-b border-dashed border-card-border/70">
-                Total Market
+                Total market
               </span>
             </Tooltip>
             <span className="font-medium text-foreground">
@@ -302,26 +302,20 @@ export default function MarketPositionPanel({
         /* Full mode: stats grid */
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
-              Your Revenue
-            </span>
+            <span className="block text-body-sm font-medium text-muted">Your revenue</span>
             <span className="text-sm font-bold tabular-nums text-success">
               {financials ? fmtCorpSectorMoney(perTurn(financials.revenue)) : "n/a"}
               <span className="text-[10px] font-normal text-muted">/turn</span>
             </span>
           </div>
           <div>
-            <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
-              Your Share
-            </span>
+            <span className="block text-body-sm font-medium text-muted">Your share</span>
             <span className="text-sm font-bold tabular-nums text-primary">
               {market.marketShare}%
             </span>
           </div>
           <div>
-            <span className="block text-[10px] font-medium uppercase tracking-widest text-muted">
-              Competitors
-            </span>
+            <span className="block text-body-sm font-medium text-muted">Competitors</span>
             <span className="text-sm font-bold text-foreground">{market.competitors.length}</span>
           </div>
         </div>
@@ -331,7 +325,7 @@ export default function MarketPositionPanel({
           {capitalEnabled
             ? "Revenue (and therefore this sector's valuation and share price) is limited by how much your capacity produces and how much of it actually sells. "
             : "Revenue (and therefore this sector's valuation and share price) reflects how much of your output actually sold this turn, not just your list price. "}
-          See the {capitalEnabled ? "Capital and Pricing" : "Pricing"} panels for the drivers.
+          See the {capitalEnabled ? "Capital and pricing" : "Pricing"} panels for the drivers.
         </p>
       )}
     </div>

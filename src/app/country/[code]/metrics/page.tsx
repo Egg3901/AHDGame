@@ -31,6 +31,7 @@ import { formatCompactMoney } from "@/components/metrics/formatCompactMoney";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { POLITICAL_METRIC_COUNTRY_IDS } from "@/lib/politicalMetrics/types";
 import { getMetricDefinition } from "@/lib/constants/metricDefinitions";
+import { ResetMetricsPage } from "./ResetMetricsPage";
 
 /**
  * Internal simulation values (e.g. population.realizedMigrationRate) have no
@@ -154,7 +155,15 @@ export default function MetricsPage() {
   const country = config.id;
   const { config: runtime } = useRuntimeCountryConfig(country);
   const runtimeGovType = runtime?.governmentType ?? config.governmentType;
-  const { preset, eraSystemEnabled, currentYear } = useWorldFlags();
+  const {
+    preset,
+    eraSystemEnabled,
+    currentYear,
+    loaded: flagsLoaded,
+    failed: flagsFailed,
+    resetSystemVersions,
+    resetV2Countries,
+  } = useWorldFlags();
   // Live year for era-aware score bands; null while the flag is off (legacy path).
   const eraYear = eraSystemEnabled ? currentYear : null;
 
@@ -167,9 +176,37 @@ export default function MetricsPage() {
   const isPoliticalPipelineCountry = (POLITICAL_METRIC_COUNTRY_IDS as readonly string[]).includes(
     country
   );
+  const resetCountry = (["US", "UK", "JP"] as const).find((id) => id === country);
+  const v2MetadataMismatch =
+    flagsLoaded &&
+    resetCountry !== undefined &&
+    resetSystemVersions.metrics === "v2" &&
+    !resetV2Countries.includes(resetCountry);
+  const isResetV2 =
+    flagsLoaded &&
+    resetCountry !== undefined &&
+    resetSystemVersions.metrics === "v2" &&
+    resetV2Countries.includes(resetCountry);
   useEffect(() => {
-    if (isPoliticalPipelineCountry) router.replace(politicalMetricsUrl(country));
-  }, [isPoliticalPipelineCountry, router, country]);
+    if (
+      flagsLoaded &&
+      (!flagsFailed || !resetCountry) &&
+      !v2MetadataMismatch &&
+      isPoliticalPipelineCountry &&
+      !isResetV2
+    ) {
+      router.replace(politicalMetricsUrl(country));
+    }
+  }, [
+    flagsLoaded,
+    flagsFailed,
+    resetCountry,
+    v2MetadataMismatch,
+    isPoliticalPipelineCountry,
+    isResetV2,
+    router,
+    country,
+  ]);
   const visibleTabs = isPoliticalPipelineCountry
     ? CATEGORY_TABS.filter((t) => SURVIVOR_CATEGORY_IDS.has(t.id))
     : CATEGORY_TABS;
@@ -249,10 +286,25 @@ export default function MetricsPage() {
   }, [country]);
 
   useEffect(() => {
-    // SP6: playables never fetch — the redirect effect above replaces the route.
-    if (isPoliticalPipelineCountry) return;
+    // V2 reads its own world-bound board; v1 playables redirect to the registry.
+    if (
+      !flagsLoaded ||
+      (flagsFailed && resetCountry) ||
+      v2MetadataMismatch ||
+      isPoliticalPipelineCountry ||
+      isResetV2
+    )
+      return;
     fetchMetrics();
-  }, [fetchMetrics, isPoliticalPipelineCountry]);
+  }, [
+    fetchMetrics,
+    flagsLoaded,
+    flagsFailed,
+    resetCountry,
+    v2MetadataMismatch,
+    isPoliticalPipelineCountry,
+    isResetV2,
+  ]);
 
   const categoryData = data?.categories[activeCategory];
   const categoryRankings = data?.stateRankings[activeCategory];
@@ -331,8 +383,17 @@ export default function MetricsPage() {
     }
   }
 
-  // SP6: nothing to render for playables — the redirect effect replaces the
-  // route with the registry. (After all hooks, so hook order is stable.)
+  // Keep both versions behind the same URL. Only a seed-verified, supported
+  // country can reach the new board; all v1 behavior remains unchanged.
+  if (!flagsLoaded) return <p role="status">Loading world settings...</p>;
+  if (flagsFailed && resetCountry) {
+    return <p role="alert">World settings are unavailable. Refresh to try again.</p>;
+  }
+  if (v2MetadataMismatch) {
+    return <p role="alert">The metrics version for this country could not be verified.</p>;
+  }
+  if (isResetV2 && resetCountry)
+    return <ResetMetricsPage key={resetCountry} country={resetCountry} />;
   if (isPoliticalPipelineCountry) return null;
 
   return (
@@ -366,7 +427,7 @@ export default function MetricsPage() {
               onClick={fetchMetrics}
               className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
             >
-              Try Again
+              Try again
             </button>
           </div>
         )}
@@ -477,7 +538,7 @@ export default function MetricsPage() {
                       >
                         {(centralBankData.currentInflation ?? 0).toFixed(2)}%
                       </div>
-                      <p className="mt-1 text-xs text-muted">Annual — updated each fiscal year</p>
+                      <p className="mt-1 text-xs text-muted">Annual, updated each fiscal year</p>
                     </div>
                     <span className="flex items-center gap-1 text-xs font-medium text-primary">
                       Trends

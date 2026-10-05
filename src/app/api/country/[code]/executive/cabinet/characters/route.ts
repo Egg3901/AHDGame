@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId, isParliamentarySystem } from "@/lib/constants/countries";
 import { getCabinetCharactersHandler } from "@/lib/uk/cabinetApi";
 
@@ -8,7 +8,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
   const config = COUNTRY_CONFIGS[countryId];
 
   if (!config || !isParliamentarySystem(config)) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return errorResponse(404, "Not found");
   }
 
   return getCabinetCharactersHandler(request, countryId);

@@ -12,7 +12,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { getAltClustersCollection, getAltLinksCollection } from "@/lib/db/collections";
 import type {
@@ -35,14 +35,14 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     if (!/^[0-9a-f]{24}$/i.test(id)) {
-      return NextResponse.json({ error: "Invalid cluster id" }, { status: 400 });
+      return errorResponse(400, "Invalid cluster id");
     }
 
     const db = await getDb();
     const clustersCol = await getAltClustersCollection(db);
     const cluster = await clustersCol.findOne({ _id: new ObjectId(id) });
     if (!cluster) {
-      return NextResponse.json({ error: "Cluster not found" }, { status: 404 });
+      return errorResponse(404, "Cluster not found");
     }
 
     const isAdmin = auth.user.isAdmin === true;
@@ -149,22 +149,22 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     if (!/^[0-9a-f]{24}$/i.test(id)) {
-      return NextResponse.json({ error: "Invalid cluster id" }, { status: 400 });
+      return errorResponse(400, "Invalid cluster id");
     }
 
     const parsed = await parseJsonBody(request, patchBodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const body = parsed.data;
 
     const status = body.status as AltClusterStatus;
     const isAdmin = auth.user.isAdmin === true;
     if (!MOD_STATUSES.has(status) && !ADMIN_ONLY_STATUSES.has(status)) {
-      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+      return errorResponse(400, "Invalid status");
     }
     if (ADMIN_ONLY_STATUSES.has(status) && !isAdmin) {
-      return NextResponse.json({ error: "Admin required to confirm a cluster" }, { status: 403 });
+      return errorResponse(403, "Admin required to confirm a cluster");
     }
 
     const note =
@@ -186,7 +186,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       { returnDocument: "after" }
     );
     if (!updated) {
-      return NextResponse.json({ error: "Cluster not found" }, { status: 404 });
+      return errorResponse(404, "Cluster not found");
     }
 
     return NextResponse.json({

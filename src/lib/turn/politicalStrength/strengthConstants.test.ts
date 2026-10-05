@@ -5,7 +5,6 @@ import {
   PRESSURE_DECAY_PER_TURN,
   PRESSURE_LADDER_INCREMENT,
   PRESSURE_LADDER_MAX_COST,
-  PRIORITY_REGION_EFFECT_BONUS,
   PRIORITY_REGION_LOCKOUT_TURNS,
   PRIORITY_REGION_MAX_STATES,
   PS_INVESTMENT_MAX_TIERS,
@@ -14,7 +13,6 @@ import {
   STATE_PS_CAP_DEFAULT,
   TREASURY_PS_RATE_BY_COUNTRY,
   NPP_ONLY_STATE_PS_CAP_FRACTION,
-  BUILD_ORG_DIMINISHING_THRESHOLD,
   effectivePsCost,
   effectiveStatePsCap,
   nationalCapForCountry,
@@ -106,9 +104,6 @@ describe("Priority Region constants", () => {
   it("max cluster size is 3", () => {
     expect(PRIORITY_REGION_MAX_STATES).toBe(3);
   });
-  it("effect bonus is +25%", () => {
-    expect(PRIORITY_REGION_EFFECT_BONUS).toBe(0.25);
-  });
 });
 
 describe("PS_INVESTMENT_MAX_TIERS", () => {
@@ -144,11 +139,5 @@ describe("effectiveStatePsCap", () => {
 
   it("returns 25% of the state cap when only NPP / no members", () => {
     expect(effectiveStatePsCap(false)).toBe(STATE_PS_CAP_DEFAULT * 0.25); // 7.5
-  });
-});
-
-describe("BUILD_ORG_DIMINISHING_THRESHOLD", () => {
-  it("is 50% Org", () => {
-    expect(BUILD_ORG_DIMINISHING_THRESHOLD).toBe(50);
   });
 });

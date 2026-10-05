@@ -351,6 +351,8 @@ describe("last turn earnings (issue 1748)", () => {
         lastBankingIncomeTurn: 150,
         lastBankingDepositInterest: 40,
         lastBankingLoanInterest: 120,
+        lastBankingSovereignCouponIncome: 7,
+        lastBankingTreasuryRealizedGain: 12,
         lastBankingInterbankInterestPaid: 0,
         lastBankingInterbankInterestReceived: 10,
         lastBankingFacilityInterest: 5,
@@ -362,14 +364,18 @@ describe("last turn earnings (issue 1748)", () => {
 
     render(<BankConsoleTab corporationId="corp1" isCeo />);
 
-    // Overview tab is the default: earned = 120 + 10, paid = 40 + 0 + 5.
+    // Overview tab is the default: loans/interbank earn 120 + 10; coupons add 7; paid = 40 + 0 + 5.
     expect(await screen.findByText("Last turn earnings")).toBeTruthy();
     expect(screen.getByText("Interest earned")).toBeTruthy();
+    expect(screen.getByText("Sovereign bond coupons")).toBeTruthy();
+    expect(screen.getByText("Treasury realized gain / loss")).toBeTruthy();
     expect(screen.getByText("Interest paid")).toBeTruthy();
     expect(screen.getByText("Net interest")).toBeTruthy();
     expect(screen.getByText("$130")).toBeTruthy();
+    expect(screen.getByText("$7")).toBeTruthy();
+    expect(screen.getByText("$12")).toBeTruthy();
     expect(screen.getByText("$45")).toBeTruthy();
-    expect(screen.getByText("$85")).toBeTruthy();
+    expect(screen.getByText("$92")).toBeTruthy();
     // The detail lines name the ledgered components behind each total.
     expect(screen.getByText(/loans \$120/)).toBeTruthy();
     expect(screen.getByText(/deposits \$40/)).toBeTruthy();

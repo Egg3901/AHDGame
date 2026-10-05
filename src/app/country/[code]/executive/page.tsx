@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { code } = await params;
   const id = code.toUpperCase() as CountryId;
   const config = COUNTRY_CONFIGS[id];
-  if (!config) return { title: "Executive Not Found | A House Divided" };
+  if (!config) return { title: "Executive not found | A House Divided" };
   // Runtime governmentType so a post-Stage-4 conversion shows the new
   // title ("White House" appearing after a country converts to presidential).
   const db = await getDb();

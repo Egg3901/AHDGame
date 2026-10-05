@@ -33,7 +33,7 @@ import { computeDecayDeltas, planStateRegDriftDecay } from "@/lib/turn/partyOrg/
 import {
   planRegistrationDriveSourcing,
   REG_DRIVE_MAX_BOOST_PER_STATE,
-} from "@/lib/turn/partyOrg/registrationDrive";
+} from "@/lib/parties/registrationDrive";
 import type { StatePartyOrg, StateRegistrationPool } from "@/lib/db/types";
 
 dotenv.config({ path: ".env.local" });

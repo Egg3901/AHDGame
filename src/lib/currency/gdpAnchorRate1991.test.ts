@@ -9,6 +9,8 @@ import { DE_GEOGRAPHY } from "@/lib/countries/de/geography";
 import { IE_GEOGRAPHY } from "@/lib/countries/ie/geography";
 import { CN_GEOGRAPHY } from "@/lib/countries/cn/geography";
 import { US_GEOGRAPHY } from "@/lib/countries/us/geography";
+import { computeStateGdpScalars } from "@/lib/admin/seed/reconcileStateGdp";
+import { NATIVE_NOMINAL_GDP_1991 } from "@/lib/seeds/reference/nominalGdp1991";
 
 /**
  * The 1991 GDP anchor, in the shape #3498 gave 1953.
@@ -61,7 +63,14 @@ const BUNDLES: Record<string, CountryGeography> = {
 function anchoredGdpBn(countryId: string): number {
   const bundle = BUNDLES[countryId].regionBundles["1991-default"] ?? [];
   const local = bundle.reduce((total, region) => total + region.gdp, 0);
-  return (local * getGdpAnchorRate(countryId as CountryId, "1991-default")) / 1000;
+  // Seed bootstrap reconciles Ireland's authored regions to its restored native
+  // fiscal GDP before creating markets. Test the resulting world, including that
+  // production adjustment, rather than converting the unreconciled raw bundle.
+  const scalar =
+    countryId === "IE"
+      ? computeStateGdpScalars(bundle, new Map([["IE", NATIVE_NOMINAL_GDP_1991.IE]]))[0].scalar
+      : 1;
+  return (local * scalar * getGdpAnchorRate(countryId as CountryId, "1991-default")) / 1000;
 }
 
 describe("1991 GDP anchor", () => {

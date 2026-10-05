@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 
 const card = "rounded-2xl border border-card-border bg-card p-5 shadow-card";
@@ -34,7 +35,7 @@ export function DeclarePositionControl({
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data?.error ?? "Action failed.");
+        setError(apiErrorText(data, "Action failed."));
         setBusy(false);
         return;
       }
@@ -52,7 +53,7 @@ export function DeclarePositionControl({
 
   return (
     <div className={card}>
-      <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted">
+      <div className="mb-2 text-body-sm font-medium text-muted">
         Declare your party&apos;s position
       </div>
       {error && (

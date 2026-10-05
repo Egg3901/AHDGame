@@ -124,7 +124,7 @@ export function TreasuryOverview({
           <div className="flex items-center justify-between mb-2">
             <div className="text-xs font-semibold text-muted">Budget allocation</div>
             <div className="text-xs font-medium text-muted tabular-nums">
-              Total Revenue: {fmt(revenue, party.countryId)}/hr
+              Total revenue: {fmt(revenue, party.countryId)}/hr
             </div>
           </div>
 
@@ -173,7 +173,7 @@ export function TreasuryOverview({
             {psPct > 0 && (
               <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-warning/10 text-warning border border-warning/20">
                 <span className="h-2 w-2 rounded-full bg-warning" />
-                PS Investment {psPct.toFixed(0)}%
+                PS investment {psPct.toFixed(0)}%
               </span>
             )}
             <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-success/10 text-success border border-success/20">

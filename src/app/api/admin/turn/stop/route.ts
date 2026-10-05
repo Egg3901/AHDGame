@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { stopTurnSystem } from "@/lib/turnSystem";
 import { createAdminLog } from "@/lib/adminLog";
 
@@ -15,7 +15,7 @@ export async function POST() {
     const result = await stopTurnSystem();
 
     if (!result.success) {
-      return NextResponse.json({ error: result.message }, { status: 500 });
+      return errorResponse(500, result.message);
     }
 
     await createAdminLog({

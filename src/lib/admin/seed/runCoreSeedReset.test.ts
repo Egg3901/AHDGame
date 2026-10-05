@@ -9,11 +9,13 @@
  */
 import fs from "fs";
 import path from "path";
+import type { Db } from "mongodb";
 import { describe, expect, it } from "vitest";
 import {
   RESET_DROP_COLLECTIONS,
   STALE_MARKET_MODE_STAMP_UNSET,
   STALE_PER_WORLD_GAME_CONFIG_UNSET,
+  runSeed,
 } from "@/lib/admin/seed/runCoreSeed";
 import { coreGameConfigUpdate } from "./coreGameConfigUpdate";
 import { gameConfig as referenceGameConfig } from "@/lib/seeds/reference/gameConfig";
@@ -69,6 +71,59 @@ describe("runSeed reset drops", () => {
   });
 });
 
+describe("runSeed reset cleanup failures", () => {
+  function makeDb(options: { failDelete?: string; failGameConfigUnset?: boolean }): {
+    db: Db;
+    seedUpserts: string[];
+  } {
+    const seedUpserts: string[] = [];
+    const db = {
+      collection(name: string) {
+        return {
+          countDocuments: async () => (name === "achievements" ? 1 : 0),
+          find: () => ({ toArray: async () => [] }),
+          deleteMany: async () => {
+            if (name === options.failDelete) throw new Error(`delete failed: ${name}`);
+            return { deletedCount: 1 };
+          },
+          updateOne: async () => {
+            if (name === "gameConfig" && options.failGameConfigUnset) {
+              throw new Error("gameConfig unset failed");
+            }
+            seedUpserts.push(name);
+            return { acknowledged: true };
+          },
+        };
+      },
+    } as unknown as Db;
+    return { db, seedUpserts };
+  }
+
+  it("aborts after a required scoped delete fails, before seed upserts or success logging", async () => {
+    const { db, seedUpserts } = makeDb({ failDelete: "states" });
+    const logs: string[] = [];
+
+    await expect(
+      runSeed({ db, reset: true, preset: "1991-default", log: (message) => logs.push(message) })
+    ).rejects.toThrow("RESET cleanup failed while clearing states");
+
+    expect(seedUpserts).toEqual([]);
+    expect(logs.some((message) => message.startsWith("RESET mode: cleared"))).toBe(false);
+  });
+
+  it("aborts when clearing per-world gameConfig markers fails, before seed upserts or success logging", async () => {
+    const { db, seedUpserts } = makeDb({ failGameConfigUnset: true });
+    const logs: string[] = [];
+
+    await expect(
+      runSeed({ db, reset: true, preset: "1991-default", log: (message) => logs.push(message) })
+    ).rejects.toThrow("RESET cleanup failed while clearing per-world gameConfig markers");
+
+    expect(seedUpserts).toEqual([]);
+    expect(logs.some((message) => message.startsWith("RESET mode: cleared"))).toBe(false);
+  });
+});
+
 describe("reset adopts the reference market tier", () => {
   // The pair of decisions in this describe block are load-bearing together and
   // were, for a while, silently contradictory: `gameConfig` is never dropped
@@ -85,14 +140,19 @@ describe("reset adopts the reference market tier", () => {
     expect(reset.$set?.campaignEraPriceLevelEnabled).toBe(true);
     expect(topUp.$set).not.toHaveProperty("marketSystemMode");
     expect(topUp.$set).not.toHaveProperty("campaignEraPriceLevelEnabled");
-    expect(topUp.$setOnInsert).toEqual({
+    expect(topUp.$setOnInsert).toMatchObject({
       marketSystemMode: referenceGameConfig.marketSystemMode,
       campaignEraPriceLevelEnabled: true,
       privateBankingEnabled: true,
       bankPropTradingEnabled: true,
       playerAdvancedBankChartersEnabled: true,
       bankPropForexFeesEnabled: true,
+      treasuryCashLedgerEnabled: true,
     });
+    // A top-up never writes a gate on a running world, in either direction.
+    expect(topUp.$set).not.toHaveProperty("treasuryCashLedgerEnabled");
+    expect(topUp.$set).not.toHaveProperty("adminRegistrationEnabled");
+    expect(reset.$set?.treasuryCashLedgerEnabled).toBe(true);
   });
 
   it("clears the provenance stamps naming whoever set the previous world's tier", () => {

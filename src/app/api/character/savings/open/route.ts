@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, badRequest } from "@/lib/api/errors";
+import { handleRouteError, badRequest, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse, SAVINGS_WALLET_LIMITS } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, openSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { currency } = parsed.data;
 
@@ -73,10 +73,7 @@ export async function POST(request: Request) {
     if (alreadyOpened && policy.savingsAccounts === "authoritative") {
       const account = await ensureSavingsAccount(db, character._id, currency, turn);
       if (!account) {
-        return NextResponse.json(
-          { error: "Savings account could not be opened. Try again." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Savings account could not be opened. Try again.");
       }
     }
     if (alreadyOpened) {
@@ -99,10 +96,7 @@ export async function POST(request: Request) {
     if (policy.savingsAccounts === "authoritative") {
       const account = await ensureSavingsAccount(db, character._id, currency, turn);
       if (!account) {
-        return NextResponse.json(
-          { error: "Savings account could not be opened. Try again." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Savings account could not be opened. Try again.");
       }
     }
 

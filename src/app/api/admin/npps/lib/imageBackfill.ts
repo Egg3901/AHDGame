@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { readFile } from "fs/promises";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { join } from "path";
 import type { NPP } from "@/lib/db/types";
 import type { Db } from "@/lib/mongodb";
@@ -12,14 +12,14 @@ export async function handleBackfillImages(db: Db): Promise<NextResponse> {
     try {
       fileContent = await readFile(filePath, "utf-8");
     } catch {
-      return NextResponse.json({ error: "Image cache not found." }, { status: 404 });
+      return errorResponse(404, "Image cache not found.");
     }
 
     const data = JSON.parse(fileContent);
     const images = data.images || [];
 
     if (images.length === 0) {
-      return NextResponse.json({ error: "No images in cache." }, { status: 400 });
+      return errorResponse(400, "No images in cache.");
     }
 
     const nppsWithoutAvatar = await db

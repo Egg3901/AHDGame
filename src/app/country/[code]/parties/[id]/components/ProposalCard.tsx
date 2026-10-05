@@ -4,6 +4,7 @@ import { useState } from "react";
 import { partyApiUrl } from "@/lib/urls";
 import type { ProposalView } from "@/lib/parties/dto/partyView";
 import { MergerNppWarning } from "./MergerNppWarning";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 function VoteBar({ yes, no, notVoted }: { yes: number; no: number; notVoted: number }) {
   const total = yes + no + notVoted;
@@ -166,7 +167,7 @@ export function ProposalCard({
       );
       const data = await res.json();
       if (!res.ok) {
-        setMsg(data.error ?? "Failed to vote");
+        setMsg(apiErrorText(data, "Failed to vote"));
       } else {
         setMsg("");
         onVoted();

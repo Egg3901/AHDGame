@@ -1,6 +1,7 @@
 "use client";
 
 import { useReducer } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 import type { BankCharterType } from "@/lib/db/types/bank";
 import type { ConsolePayload, ShowToast } from "../types";
 import { charterLabel, mergeState, turnsToHours } from "../lib/helpers";
@@ -79,7 +80,10 @@ export function CharterSwitchForm({
         depositorsFlipped?: number;
       };
       if (!res.ok) {
-        showToast(json.reasons?.join("; ") ?? json.error ?? "Could not switch charter", "error");
+        showToast(
+          json.reasons?.join("; ") ?? apiErrorText(json, "Could not switch charter"),
+          "error"
+        );
         return;
       }
       showToast(

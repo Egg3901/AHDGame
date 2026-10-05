@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { castImpeachmentVote } from "@/lib/impeachment/castImpeachmentVote";
 
 interface RouteParams {
@@ -23,14 +23,14 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, voteSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { id } = await params;
     const db = await getDb();
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (!character) {
-      return NextResponse.json({ error: "No character" }, { status: 400 });
+      return errorResponse(400, "No character");
     }
 
     const result = await castImpeachmentVote(db, id, character, parsed.data.vote);

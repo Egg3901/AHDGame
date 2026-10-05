@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, characterNameSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const trimmedName = parsed.data.name;
 
@@ -34,10 +34,7 @@ export async function POST(request: Request) {
 
       if (diffHours < 24) {
         const remainingHours = Math.ceil(24 - diffHours);
-        return NextResponse.json(
-          { error: `You can change your name again in ${remainingHours} hours` },
-          { status: 403 }
-        );
+        return errorResponse(403, `You can change your name again in ${remainingHours} hours`);
       }
     }
 
