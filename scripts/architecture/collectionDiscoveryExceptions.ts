@@ -107,7 +107,7 @@ export const LEGACY_DYNAMIC_COLLECTION_SITES: readonly LegacyDynamicCollectionSi
     file: "src/lib/admin/seed/runCoreSeed.ts",
     owner: "runSeed",
     argument: "entry.name",
-    scopeHash: "6077ef12c970116d1ef8bf8e0c224f55b3e372cbf30cd4fe08a36ce2731685c7",
+    scopeHash: "608a3dc47d387e0099f3f2cc608ffa2d702e27450012aae433411a6e4a91e999",
     count: 1,
     reason: "Repository-owned seed and index registries select the collection.",
   },
