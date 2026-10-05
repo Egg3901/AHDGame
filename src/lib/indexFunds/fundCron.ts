@@ -17,17 +17,10 @@
 
 import { withBondPoolLedgerSnapshot } from "@/lib/bonds/marketPoolLedger";
 import { recoverAllQueuedPayouts } from "./queuedPayoutSettlement";
-import {
-  claimFundFloatPlan,
-  recoverAllFundFloatSettlements,
-  settleFundFloatPlan,
-  type SettlementFund,
-} from "./fundFloatSettlement";
-import {
-  prepareFundFloatTrade,
-  loadFloatAuditContext,
-  type FloatAuditContext,
-} from "./fundFloatTradePlan";
+import { recoverAllFundFloatSettlements } from "./fundFloatSettlement";
+import { loadFloatAuditContext, type FloatAuditContext } from "./fundFloatTradePlan";
+import { executeFundShareBuys, type FundShareBuyBatch } from "./fundFloatBuyExecution";
+export { executeFundShareBuy, type FundShareBuyBatch } from "./fundFloatBuyExecution";
 import { processQueuedRedemptions } from "./processQueuedRedemptions";
 export { processQueuedRedemptions } from "./processQueuedRedemptions";
 import { assertTransactionSupportAtBoot } from "@/lib/db/transactionSupport";
@@ -39,7 +32,6 @@ import type {
   ExchangeRate,
   GameConfig,
   IndexFund,
-  IndexFundHolding,
   IndexFundTargetConstituent,
 } from "@/lib/db/types";
 import { isIndexFundsEnabled, INDEX_FUNDS_DISABLED_MESSAGE } from "@/lib/indexFunds/featureFlag";
@@ -51,7 +43,7 @@ import {
   updateFundNav,
   updateFundConstituents,
   updateFundHoldings,
-  insertFundSnapshot,
+  insertFundSnapshotsBulk,
   setFundStatus,
   insertFundTransactionsBulk,
   insertFundTransaction,
@@ -108,14 +100,14 @@ import {
 } from "@/lib/indexFunds/fundBidPolicy";
 import { fxRateForCorpFromMap } from "@/lib/currency/corporationCapital";
 import { type CurrencyCode } from "@/lib/constants/currencies";
-import type { EquityMarketPool, IndexFundTransaction } from "@/lib/db/types";
+import type { IndexFundTransaction } from "@/lib/db/types";
 import type { ShareOrder } from "@/lib/db/types";
 import {
   loadOpenOrdersEscrowByFundId,
   loadQueuedRedemptionUnitsByFundId,
 } from "@/lib/indexFunds/fundValuation";
 import { refreshEquityLiquidityFacility } from "@/lib/indexFunds/equityLiquidityFacility";
-import { loadEquityPoolsByCurrency, loadEquityQuote } from "@/lib/equities/marketPool";
+import { loadEquityPoolsByCurrency } from "@/lib/equities/marketPool";
 import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -290,55 +282,6 @@ export function shouldRunCrossFundRebalancing(currentTurn: number): boolean {
  * Guarded refusal returns ok=false only after its proven effects are reversed.
  */
 /** Shared pool and audit inputs for a pass that executes many buys. */
-export interface FundShareBuyBatch {
-  audit?: FloatAuditContext;
-  expectedGeneration?: number;
-  /** Mutable: each credited buy advances the snapshot's cash so later quotes see it. */
-  pools?: Map<CurrencyCode, EquityMarketPool>;
-}
-
-export async function executeFundShareBuy(
-  db: Db,
-  fund: SettlementFund,
-  corp: EligibleCorpRow,
-  shares: number,
-  referencePriceAnchor: number,
-  currentTurn: number,
-  batch?: FundShareBuyBatch
-): Promise<{ ok: boolean; sharesBought: number; anchorSpent: number }> {
-  const expectedGeneration = batch?.expectedGeneration ?? fund.floatSettlementGeneration ?? 0;
-  const pools = batch?.pools ?? (await loadEquityPoolsByCurrency(db));
-  const quote = await loadEquityQuote(db, corp, { pools });
-  const executionPrice = quote.askPriceLocal;
-  const executionPriceAnchor =
-    quote.mid > 0 ? referencePriceAnchor * (executionPrice / quote.mid) : referencePriceAnchor;
-  const actualCost = shares * executionPriceAnchor;
-  const audit = batch?.audit ?? (await loadFloatAuditContext(db));
-  const prepared = await prepareFundFloatTrade(db, {
-    fund,
-    corp,
-    direction: "buy",
-    shares,
-    priceLocal: executionPrice,
-    priceAnchor: executionPriceAnchor,
-    amountAnchor: actualCost,
-    turn: currentTurn,
-    pools,
-    audit,
-    expectedGeneration,
-    holdingsAfter: (holdings) =>
-      updateHoldingAfterPurchase(holdings, corp._id, shares, executionPriceAnchor),
-  });
-  if (!prepared || !(await claimFundFloatPlan(db, prepared.fund, prepared.plan)))
-    return { ok: false, sharesBought: 0, anchorSpent: 0 };
-  if (batch) batch.expectedGeneration = (prepared.fund.floatSettlementGeneration ?? 0) + 1;
-  if (!(await settleFundFloatPlan(db, fund._id, prepared.plan)))
-    return { ok: false, sharesBought: 0, anchorSpent: 0 };
-  const pool = pools.get(prepared.currency);
-  if (pool) pool.cashLocal += prepared.poolDelta;
-  return { ok: true, sharesBought: shares, anchorSpent: actualCost };
-}
-
 // ── Pass 3: Two-sided drift rebalance ─────────────────────────────────────────
 
 export async function rebalanceFundToTarget(
@@ -347,9 +290,12 @@ export async function rebalanceFundToTarget(
   corps: EligibleCorpRow[],
   exchangeRates: Partial<Record<string, number>>,
   capRemainingByCorpId: Map<string, number>,
-  currentTurn: number
+  currentTurn: number,
+  /** Pass-level reads shared by every fund, loaded once instead of once per fund. */
+  shared?: { bondPrincipalAnchor?: number; audit?: FloatAuditContext }
 ): Promise<{ buys: number; sells: number; bidsPlaced: number; bidsCancelled: number }> {
-  const bondPrincipalAnchor = await sumFundBondHoldingsValueAnchor(db, fund, exchangeRates);
+  const bondPrincipalAnchor =
+    shared?.bondPrincipalAnchor ?? (await sumFundBondHoldingsValueAnchor(db, fund, exchangeRates));
   const plan = planFundTargetRebalance({
     fund,
     corps,
@@ -360,7 +306,9 @@ export async function rebalanceFundToTarget(
 
   let sells = 0;
   const audit =
-    plan.sells.length + plan.buys.length > 0 ? await loadFloatAuditContext(db) : undefined;
+    plan.sells.length + plan.buys.length > 0
+      ? (shared?.audit ?? (await loadFloatAuditContext(db)))
+      : undefined;
   const pools =
     plan.sells.length + plan.buys.length > 0 ? await loadEquityPoolsByCurrency(db) : undefined;
   const sellInputs =
@@ -379,25 +327,16 @@ export async function rebalanceFundToTarget(
     if (res.sharesSold > 0) sells++;
   }
 
-  let buys = 0;
   const corpMap = new Map(corps.map((c) => [c._id.toString(), c]));
-  // Quotes share pool and audit inputs. Each original settlement owns its durable receipts.
+  // Quotes share pool and audit inputs. The fund's buys settle as one recoverable
+  // batch (see executeFundShareBuys); each trade keeps its own durable receipts.
   const buyFund = sells > 0 ? ((await getFundById(db, fund._id)) ?? fund) : fund;
   const buyBatch: FundShareBuyBatch = { pools, audit };
-  for (const leg of plan.buys) {
+  const buyLegs = plan.buys.flatMap((leg) => {
     const corp = corpMap.get(leg.corporationId.toString());
-    if (!corp) continue;
-    const res = await executeFundShareBuy(
-      db,
-      buyFund,
-      corp,
-      leg.shares,
-      leg.sharePriceAnchor,
-      currentTurn,
-      buyBatch
-    );
-    if (res.ok) buys++;
-  }
+    return corp ? [{ corp, shares: leg.shares, referencePriceAnchor: leg.sharePriceAnchor }] : [];
+  });
+  const { buys } = await executeFundShareBuys(db, buyFund, buyLegs, currentTurn, buyBatch);
   // Place/refresh standing premium bids for residual deficit not satisfiable from float.
   let bidsPlaced = 0;
   let bidsCancelled = 0;
@@ -414,6 +353,7 @@ export async function rebalanceFundToTarget(
     .toArray();
 
   const now = Date.now();
+  const cancelledBidIds = new Set<string>();
   for (const order of allOpenFundBids) {
     const ageInTurns = Math.floor((now - order.createdAt.getTime()) / MS_PER_TURN);
     const corpIdStr = order.corporationId.toString();
@@ -423,6 +363,7 @@ export async function rebalanceFundToTarget(
     if (isOffBasket || isStale) {
       try {
         await cancelFundShareOrder(db, order._id, currentTurn);
+        cancelledBidIds.add(order._id.toString());
         bidsCancelled++;
       } catch (err) {
         console.error(
@@ -446,12 +387,14 @@ export async function rebalanceFundToTarget(
       .map(([code, rate]) => [code as CurrencyCode, rate as number])
   );
 
-  // Determine which corps still have open bids after cancellation (to avoid stacking).
-  const remainingOpenBids = await db
-    .collection<ShareOrder>("shareOrders")
-    .find({ placerFundId: fund._id, type: "buy", status: "open" })
-    .toArray();
-  const openBidCorpIds = new Set(remainingOpenBids.map((o) => o.corporationId.toString()));
+  // Corps that still have an open bid after the cancellations above (to avoid
+  // stacking). Nothing else touches this fund's own bids inside the pass, so
+  // the first read minus what was cancelled is the second read.
+  const openBidCorpIds = new Set(
+    allOpenFundBids
+      .filter((order) => !cancelledBidIds.has(order._id.toString()))
+      .map((order) => order.corporationId.toString())
+  );
 
   const bidTxSink: Omit<IndexFundTransaction, "_id">[] = [];
   for (const leg of plan.bids) {
@@ -495,40 +438,6 @@ export async function rebalanceFundToTarget(
   return { buys, sells, bidsPlaced, bidsCancelled };
 }
 
-/** Update the holdings array after buying shares of a constituent. */
-function updateHoldingAfterPurchase(
-  holdings: IndexFundHolding[],
-  corporationId: import("mongodb").ObjectId,
-  additionalShares: number,
-  sharePriceAnchor: number
-): IndexFundHolding[] {
-  const existing = holdings.find((h) => h.corporationId.toString() === corporationId.toString());
-  if (existing) {
-    return holdings.map((h) => {
-      if (h.corporationId.toString() !== corporationId.toString()) return h;
-      const newShares = h.shares + additionalShares;
-      const newAvg = existing.avgCostPerShareAnchor
-        ? (h.shares * h.avgCostPerShareAnchor! + additionalShares * sharePriceAnchor) / newShares
-        : sharePriceAnchor;
-      return {
-        ...h,
-        shares: newShares,
-        avgCostPerShareAnchor: newAvg,
-        lastValueAnchor: (h.lastValueAnchor ?? 0) + additionalShares * sharePriceAnchor,
-      };
-    });
-  }
-  return [
-    ...holdings,
-    {
-      corporationId,
-      shares: additionalShares,
-      avgCostPerShareAnchor: sharePriceAnchor,
-      lastValueAnchor: additionalShares * sharePriceAnchor,
-    },
-  ];
-}
-
 // ── Pass 2: Rebalance constituents (financial-day boundaries) ──────────
 
 export async function rebalanceConstituents(
@@ -538,7 +447,9 @@ export async function rebalanceConstituents(
   exchangeRates: Partial<Record<string, number>>,
   _currentTurn: number,
   /** A7 part 2: corporations holding a committee waiver this turn. */
-  waivedIds?: Set<string>
+  waivedIds?: Set<string>,
+  /** When given, the rebalance record is appended here for one bulk insert by the caller. */
+  txSink?: Omit<IndexFundTransaction, "_id">[]
 ): Promise<RebalanceOutcome> {
   const removed = findRemovedConstituentHoldings(fund, corps);
   let writeOff = { writtenOffCount: 0, writtenOffValueAnchor: 0, unsellableCount: 0 };
@@ -639,14 +550,16 @@ export async function rebalanceConstituents(
     }
   }
 
-  await insertFundTransaction(db, {
+  const rebalanceRecord: Omit<IndexFundTransaction, "_id"> = {
     fundId: fund._id,
     kind: "rebalance",
     navAnchor: fund.quotedNav,
     amountAnchor: 0,
     note: `Rebalanced: ${targetConstituents.length} constituents`,
     createdAt: new Date(),
-  });
+  };
+  if (txSink) txSink.push(rebalanceRecord);
+  else await insertFundTransaction(db, rebalanceRecord);
 
   return {
     rebalanced: true,
@@ -998,6 +911,8 @@ async function runFundCron(db: Db, options?: { currentTurn?: number }): Promise<
   }
   const waivedIds = await loadActiveWaiverIds(db, currentTurn);
 
+  // One bulk insert for every fund's rebalance record instead of one per fund.
+  const rebalanceRecords: Omit<IndexFundTransaction, "_id">[] = [];
   for (const fund of funds) {
     // Bond funds hold no equities: nothing to select or rebalance here.
     if (fund.kind === "bond") continue;
@@ -1012,7 +927,8 @@ async function runFundCron(db: Db, options?: { currentTurn?: number }): Promise<
         candidateCorps,
         exchangeRates,
         currentTurn,
-        waivedIds
+        waivedIds,
+        rebalanceRecords
       );
       if (outcome.rebalanced) {
         result.rebalances++;
@@ -1035,6 +951,12 @@ async function runFundCron(db: Db, options?: { currentTurn?: number }): Promise<
     }
   }
 
+  try {
+    await insertFundTransactionsBulk(db, rebalanceRecords);
+  } catch (err) {
+    result.errors.push(`Rebalance records: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   mark("pass2-targetWeights+absorb");
   // Pass 3: two-sided rebalance toward target weights (sell overweight, buy underweight).
   // This only runs after target weights are recomputed; otherwise funds can churn
@@ -1046,8 +968,24 @@ async function runFundCron(db: Db, options?: { currentTurn?: number }): Promise<
   );
   const capRemainingByCorpId = new Map(absorptionRemainingByCorpId); // fresh per-pass copy
   if (rebalancedFundIds.size > 0) {
-    for (const fund of funds) {
-      if (!rebalancedFundIds.has(fund._id.toString())) continue;
+    const rebalancing = funds.filter((fund) => rebalancedFundIds.has(fund._id.toString()));
+    // One bond scan and one audit-context load for the whole pass. Float trades
+    // settle equities only and the audit inputs are fixed for the turn, so
+    // neither can change between funds.
+    let bondPrincipalByFundId: Map<string, number> | undefined;
+    let sharedAudit: FloatAuditContext | undefined;
+    try {
+      [bondPrincipalByFundId, sharedAudit] = await Promise.all([
+        sumFundBondHoldingsByFundId(db, rebalancing, exchangeRates),
+        loadFloatAuditContext(db),
+      ]);
+    } catch (err) {
+      // Each fund falls back to its own reads, so a failure here changes nothing but cost.
+      result.errors.push(
+        `Rebalance shared reads: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+    for (const fund of rebalancing) {
       try {
         const r = await rebalanceFundToTarget(
           db,
@@ -1055,7 +993,11 @@ async function runFundCron(db: Db, options?: { currentTurn?: number }): Promise<
           candidateCorps,
           exchangeRates,
           capRemainingByCorpId,
-          currentTurn
+          currentTurn,
+          {
+            audit: sharedAudit,
+            bondPrincipalAnchor: bondPrincipalByFundId?.get(fund._id.toString()),
+          }
         );
         result.floatPurchases += r.buys;
       } catch (err) {
@@ -1110,6 +1052,8 @@ async function runFundCron(db: Db, options?: { currentTurn?: number }): Promise<
   mark("pass3b-crossFund");
   // Pass 3c: pay redemptions and snapshot after cross-fund market settles.
   funds = await listFundsByIds(db, redemptionServiceFundIds);
+  // Snapshots are upserts keyed by (fund, turn); one bulk write replaces one per fund.
+  const fundSnapshots: Parameters<typeof insertFundSnapshotsBulk>[1] = [];
   for (const fund of funds) {
     try {
       // `funds` was just re-read above and nothing writes between; the old
@@ -1130,7 +1074,7 @@ async function runFundCron(db: Db, options?: { currentTurn?: number }): Promise<
         const finalFund = hasQueuedRedemptions ? await getFundById(db, fund._id) : refreshedFund;
         if (finalFund) {
           const holdingValue = computeHoldingsValueAnchor(finalFund);
-          await insertFundSnapshot(db, {
+          fundSnapshots.push({
             fundId: finalFund._id,
             turn: currentTurn,
             quotedNav: finalFund.quotedNav,
@@ -1147,6 +1091,12 @@ async function runFundCron(db: Db, options?: { currentTurn?: number }): Promise<
       const message = err instanceof Error ? err.message : String(err);
       result.errors.push(`Fund ${fund.slug}: ${message}`);
     }
+  }
+
+  try {
+    await insertFundSnapshotsBulk(db, fundSnapshots);
+  } catch (err) {
+    result.errors.push(`Fund snapshots: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   mark("pass3c-redemptions+snapshot");

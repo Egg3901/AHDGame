@@ -192,6 +192,13 @@ export interface TransitionProjection {
   pipelineUpdate?: Record<string, unknown>[];
   /** The whole document for an insert. */
   insert?: Record<string, unknown>;
+  /**
+   * Several whole documents for ONE collection, written together. Every
+   * document carries a fixed `_id`, so a replay after a crash inserts only
+   * what is missing. Lets a batch of settled trades publish its receipts in
+   * one write instead of one projection per receipt.
+   */
+  inserts?: Record<string, unknown>[];
   note: string;
 }
 
