@@ -105,3 +105,35 @@ describe("world campaign pricing flag", () => {
     }
   );
 });
+
+describe("world opening flags for the tutorial", () => {
+  beforeEach(() => {
+    vi.mocked(getDb).mockResolvedValue(createMockDb() as unknown as Db);
+  });
+
+  it("publishes the founding round's closing turns while it runs", async () => {
+    const db = createMockDb();
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    db.collection("gameState").findOne.mockResolvedValue({
+      preset: "1991-default",
+      startingPartiesMode: "none",
+      preIteration: { active: true, startedTurn: 1 },
+    });
+    const flags = await (await GET()).json();
+    expect(flags.startingPartiesMode).toBe("none");
+    // Every founding race spawns on the first turn with fixed 24-turn windows.
+    expect(flags.foundingRound).toEqual({ primaryEndTurn: 25, generalEndTurn: 49 });
+  });
+
+  it("reports no founding round once it has finished, and defaults the party mode", async () => {
+    const db = createMockDb();
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    db.collection("gameState").findOne.mockResolvedValue({
+      preset: "1991-default",
+      preIteration: { active: false, startedTurn: 1, completedTurn: 49 },
+    });
+    const flags = await (await GET()).json();
+    expect(flags.foundingRound).toBeNull();
+    expect(flags.startingPartiesMode).toBe("default");
+  });
+});

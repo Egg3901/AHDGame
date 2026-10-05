@@ -34,6 +34,13 @@ export const MAINTENANCE_PUBLIC_PATHS: readonly string[] = [
   // robots.txt and a missing sitemap for the whole down-window.
   "/robots.txt",
   "/sitemap.xml",
+  // Account recovery. Login is open, so a player who forgot their password,
+  // or is confirming a new email from Settings, must be able to finish the
+  // flow during a down-window. The pages only call their own token-bearing
+  // /api/auth routes, which were never behind the gate.
+  "/forgot-password",
+  "/reset-password",
+  "/confirm-email",
 ];
 
 /** Path prefixes whose subtrees stay reachable during maintenance, in addition
