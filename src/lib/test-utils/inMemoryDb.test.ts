@@ -500,3 +500,19 @@ it("reports only newly inserted bulk ids on mixed upsert and replay", async () =
   expect(await db.collection("history").countDocuments()).toBe(3);
   expect(await db.collection("history").findOne({ _id: "existing" })).toMatchObject({ amount: 10 });
 });
+
+it("evaluates $type and $not in $expr like the server", async () => {
+  // The provider-identity index preflight counts users whose link fields hold an
+  // unexpected BSON type; a reset over a world with accounts runs it.
+  const db = createInMemoryDb();
+  db.seed("users", [
+    { _id: "a", googleId: "g-1" },
+    { _id: "b", googleId: null },
+    { _id: "c" },
+    { _id: "d", googleId: 42 },
+  ]);
+  const invalid = await db.collection("users").countDocuments({
+    $expr: { $not: { $in: [{ $type: "$googleId" }, ["string", "missing", "null"]] } },
+  });
+  expect(invalid).toBe(1);
+});
