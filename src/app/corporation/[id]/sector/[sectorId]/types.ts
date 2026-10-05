@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { StateMetricMarginContribution } from "@/lib/corporations/stateMetricMarginTypes";
 import type { PlantSectorSplitQuote } from "@/lib/corporations/plantSectorSplit";
 import type { RetoolHint } from "@/lib/corporations/retoolHint";
@@ -8,7 +8,7 @@ export interface SectorData {
   stateId: string;
   countryId?: string;
   stateName: string;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   sectorLabel: string;
   displayName?: string | null;
   /** Target growth rate (% per game year, 48 turns), player-set goal that currentGrowthRate ticks toward */

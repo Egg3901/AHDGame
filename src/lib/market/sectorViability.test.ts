@@ -18,17 +18,19 @@ describe("sector viability", () => {
   });
 
   it("separates impossible recipes from bounded stress failures", () => {
-    expect(analyzeStrategyViability("automobiles", strategy({ steel: 1.01 })).status).toBe(
-      "impossible_at_balance"
-    );
-    expect(analyzeStrategyViability("automobiles", strategy({ steel: 0.8 })).status).toBe(
-      "stress_sensitive"
-    );
-    expect(analyzeStrategyViability("automobiles", strategy({ steel: 0.4 })).status).toBe("viable");
+    expect(
+      analyzeStrategyViability("manufacturing_vehicles", strategy({ steel: 1.01 })).status
+    ).toBe("impossible_at_balance");
+    expect(
+      analyzeStrategyViability("manufacturing_vehicles", strategy({ steel: 0.8 })).status
+    ).toBe("stress_sensitive");
+    expect(
+      analyzeStrategyViability("manufacturing_vehicles", strategy({ steel: 0.4 })).status
+    ).toBe("viable");
   });
 
   it("does not invent a recipe-level utilization break-even", () => {
-    const result = analyzeStrategyViability("automobiles", strategy({ steel: 0.4 }));
+    const result = analyzeStrategyViability("manufacturing_vehicles", strategy({ steel: 0.4 }));
     expect(result.breakEvenUtilization).toBeNull();
     expect(result.balancedOutputRate).toBe(0.5);
   });

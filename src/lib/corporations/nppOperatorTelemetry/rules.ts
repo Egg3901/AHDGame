@@ -1,5 +1,5 @@
 import type { NppMarketEntryReason } from "@/lib/db/types/marketFormation";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { firstRejectingGate } from "@/lib/corporations/capacityDecisionTelemetry/rules";
 
 export const NPP_OPERATOR_TELEMETRY_SCHEMA_VERSION = 2 as const;
@@ -115,7 +115,7 @@ export function resolveNppDecisionConstraint(
 }
 
 export interface NppOperatorObservation {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   /** Decision-time cash after this decision's cash movement, before later turn income. */
   cashNegative: boolean;
   bindingGate: NppOperatorBindingGate;
@@ -137,7 +137,7 @@ export interface NppOperatorAggregate {
   corporationsObserved: number;
   sectorDiagnostics: Partial<
     Record<
-      CorporationType,
+      OperatingSectorType,
       {
         observations: number;
         cashNegative: number;
@@ -171,7 +171,7 @@ function increment<K extends string>(counts: Partial<Record<K, number>>, key: K)
 }
 
 export function buildNppOperatorObservation(args: {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   cashNegative: boolean;
   passive: boolean;
   profitable: boolean;

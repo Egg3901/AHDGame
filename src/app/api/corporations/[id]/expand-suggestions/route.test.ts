@@ -123,10 +123,17 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
       toArray: vi.fn().mockResolvedValue([]),
     } as never);
 
-    const response = await GET(makeRequest("sectorType=manufacturing&mode=unowned"), ctx());
+    const response = await GET(
+      makeRequest("sectorType=manufacturing_vehicles&mode=unowned"),
+      ctx()
+    );
 
     expect(response.status).toBe(200);
-    expect(unownedFilters[0]).toEqual({ sectorType: "manufacturing", industryModel: "vehicles" });
+    expect(unownedFilters[0]).toEqual({
+      sectorType: "manufacturing",
+      industryModel: "vehicles",
+      mediaDiscriminator: null,
+    });
   });
 
   it("surfaces the temporary Retail expansion pause before offering greenfield builds", async () => {

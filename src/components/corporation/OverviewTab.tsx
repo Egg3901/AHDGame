@@ -1,5 +1,6 @@
 "use client";
 
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -623,9 +624,11 @@ export default function OverviewTab({
             <>
               <CorpEconomicModelBadge
                 countryId={corporation.countryId}
-                sectorType={
-                  corporation.industryModel === "vehicles" ? "automobiles" : corporation.type
-                }
+                sectorType={getOperatingSectorType(
+                  corporation.type,
+                  corporation.industryModel,
+                  corporation.mediaDiscriminator
+                )}
               />
               <SmallButton onClick={() => onTabChange("sectors")}>
                 {isCeo ? "Manage" : "Details"}

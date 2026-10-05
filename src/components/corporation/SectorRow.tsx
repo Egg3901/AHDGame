@@ -10,7 +10,7 @@ import {
   STRATEGY_TRANSITION_TURNS,
   CANCEL_COST_FRACTION,
 } from "@/lib/constants/sectorStrategies";
-import { type CorporationType } from "@/lib/constants/corporations";
+import { type CorporationType, type OperatingSectorType } from "@/lib/constants/corporations";
 import { isExtractionStrategyZeroYield } from "@/lib/corporations/extractionStrategyAvailability";
 import StrategyChangeConfirm from "./StrategyChangeConfirm";
 import type { SectorDetail } from "./CorporationPageTypes";
@@ -105,7 +105,7 @@ export function SectorRow({
     sector.sectorType,
     sector.industryModel,
     sector.mediaDiscriminator
-  ) as CorporationType;
+  );
   const strategies = getSectorStrategies(
     operatingSectorType,
     mediaOperatingModelsEnabled,
@@ -189,7 +189,8 @@ export function SectorRow({
   // deleting a plant, so only fall back to the old capacity-derived count for
   // payloads served during deployment of the ledger migration.
   const plantCount = plantsMode
-    ? (sector.plantCount ?? facilitiesFromUnits(operatingSectorType, sector.capacityUnits ?? 0))
+    ? (sector.plantCount ??
+      facilitiesFromUnits(operatingSectorType as OperatingSectorType, sector.capacityUnits ?? 0))
     : 0;
   const plantNoun =
     plantCount === 1 ? facilitySingular(sector.sectorType) : facilityPlural(sector.sectorType);

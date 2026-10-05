@@ -55,8 +55,8 @@ import {
 } from "@/lib/nppAutonomy/v3/party/nppBuildOrg";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import type { Corporation } from "@/lib/db/types/corporation";
-import type { CorporationType } from "@/lib/constants/corporations";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import { resolveShareExecutionPrice } from "@/lib/corporations/marketExecution";
 import { deriveCeoArchetype } from "@/lib/turn/ceoArchetype";
 
@@ -1297,9 +1297,7 @@ export async function foundNppCorporationsSurplus(
 
     if (alreadyCeoIds.has(npp._id.toString())) continue;
 
-    const sectorType = CORPORATION_TYPES[
-      Math.floor(rng() * CORPORATION_TYPES.length)
-    ] as CorporationType;
+    const sectorType = OPERATING_SECTOR_TYPES[Math.floor(rng() * OPERATING_SECTOR_TYPES.length)];
 
     const homeCountry = (npp.countryId ?? "US") as CountryId;
     const homeCurrency = preset

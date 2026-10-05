@@ -1,7 +1,7 @@
 "use client";
 
 import type { Dispatch } from "react";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import type { CorporationsAdminAction, CorporationsAdminState } from "../useCorporationsAdminState";
 import { apiErrorText } from "@/lib/errors/catalog";
 
@@ -49,7 +49,7 @@ export function SpawnNppPanel({
             }
             className="w-full rounded border border-card-border bg-background px-2 py-1 text-sm"
           >
-            {Object.entries(CORPORATION_TYPE_LABELS).map(([key, label]) => (
+            {Object.entries(OPERATING_SECTOR_TYPE_LABELS).map(([key, label]) => (
               <option key={key} value={key}>
                 {label}
               </option>

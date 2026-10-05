@@ -1,9 +1,9 @@
 /** Input baskets qualified for the 1991 reset. Other presets keep the base recipes. */
 import type { CommodityType } from "./commodities";
-import type { CorporationType } from "./corporations";
+import type { OperatingSectorType } from "./corporations";
 
 export const DEFAULT_DEMAND_1991: Partial<
-  Record<CorporationType, Partial<Record<CommodityType, number>>>
+  Record<OperatingSectorType, Partial<Record<CommodityType, number>>>
 > = {
   manufacturing: {
     energy: 0.16,
@@ -24,7 +24,7 @@ export const DEFAULT_DEMAND_1991: Partial<
     vehicles: 0.025,
     plastics: 0.035,
   },
-  automobiles: {
+  manufacturing_vehicles: {
     steel: 0.19,
     iron: 0.08,
     electronics: 0.11,

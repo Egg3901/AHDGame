@@ -1,5 +1,5 @@
 import type { CountryId } from "../../constants/countries";
-import type { CorporationType } from "../../constants/corporations";
+import type { CorporationType, OperatingSectorType } from "../../constants/corporations";
 import type { ConflictCapacityApplied } from "./conflictCapacity";
 
 export type RegionType = "state" | "constituency" | "nation" | "province" | "region";
@@ -131,10 +131,10 @@ export interface State {
    */
   votingSystem?: "fptp" | "rcv";
   sectorSpecializations?: {
-    /** Sector receiving a +10 percentage-point regional profit margin bonus. */
-    primary: CorporationType;
-    /** Sector receiving a +5 percentage-point regional profit margin bonus. */
-    secondary: CorporationType;
+    /** Operating lane receiving a +10 percentage-point regional profit margin bonus. */
+    primary: OperatingSectorType;
+    /** Operating lane receiving a +5 percentage-point regional profit margin bonus. */
+    secondary: OperatingSectorType;
     updatedAt?: Date;
   };
   /**

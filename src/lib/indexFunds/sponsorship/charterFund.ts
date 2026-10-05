@@ -21,7 +21,7 @@ import type {
   IndexFundScope,
   IndexFundTransaction,
 } from "@/lib/db/types/indexFund";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import {
@@ -52,7 +52,7 @@ export interface CharterFundInput {
   scope: IndexFundScope;
   countryId?: CountryId;
   kind: IndexFundKind;
-  sectorType?: CorporationType;
+  sectorType?: OperatingSectorType;
   expenseRatioAnnual: number;
   seedCapitalAnchor: number;
   currentTurn: number;
@@ -77,7 +77,7 @@ export function validateCharter(
     | "expenseRatioAnnual"
     | "seedCapitalAnchor"
   >,
-  sponsorSectorTypes: CorporationType[]
+  sponsorSectorTypes: OperatingSectorType[]
 ): string | null {
   if (!sponsorSectorTypes.includes(FUND_SPONSOR_SECTOR))
     return "Only a corporation with a financial sector can sponsor a fund.";
@@ -134,9 +134,9 @@ export async function charterFund(db: Db, input: CharterFundInput): Promise<Char
   }
 
   const sectors = await db
-    .collection<{ corporationId: ObjectId; sectorType: CorporationType }>("corporateSectors")
+    .collection<{ corporationId: ObjectId; sectorType: OperatingSectorType }>("corporateSectors")
     .find({ corporationId: sponsor._id })
-    .project<{ sectorType: CorporationType }>({ sectorType: 1 })
+    .project<{ sectorType: OperatingSectorType }>({ sectorType: 1 })
     .toArray();
   const invalid = validateCharter(
     { ...input, tickerSymbol, name },

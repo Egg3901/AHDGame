@@ -18,7 +18,7 @@
  * dossier builds them itself from the same sectors.
  */
 
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { getSprawlModifier } from "@/lib/constants/corporations";
 import {
   COMMODITY_LABELS,
@@ -129,7 +129,11 @@ export function typeMarketShare(sectors: SectorDetail[]): number | null {
  * file still counted it.
  */
 export function resolveSectorStrategy(sector: SectorDetail) {
-  const type = getOperatingSectorType(sector.sectorType, sector.industryModel) as CorporationType;
+  const type = getOperatingSectorType(
+    sector.sectorType,
+    sector.industryModel,
+    sector.mediaDiscriminator
+  ) as OperatingSectorType;
   if (!SECTOR_STRATEGIES[type]?.length) return null;
   // `corporationDetail` already normalises an absent id to "standard", so this
   // only matters for a row that arrives with one; kept so the function is
@@ -276,7 +280,7 @@ type MetricKey =
 function buildMetric(
   key: MetricKey,
   sectors: SectorDetail[],
-  type: CorporationType,
+  type: OperatingSectorType,
   context: SectorTypeMetricContext
 ): SectorTypeMetric {
   const sites = facilityPlural(type);
@@ -394,7 +398,7 @@ function buildMetric(
  * Types the design never covered fall through to the generic trio, which is
  * live for every type there is.
  */
-const PLANTS_SLOTS: Partial<Record<CorporationType, readonly MetricKey[]>> = {
+const PLANTS_SLOTS: Partial<Record<OperatingSectorType, readonly MetricKey[]>> = {
   manufacturing: ["lineUtilisation", "outputMix", "jobs"],
   energy: ["capacityUsed", "fuelMix", "jobs"],
   extraction: ["depositCapacity", "outputMix", "jobs"],
@@ -418,7 +422,7 @@ const GROWTH_SLOTS: readonly MetricKey[] = ["growthTarget", "marketShare", "jobs
 
 export function sectorTypeMetrics(
   sectors: SectorDetail[],
-  type: CorporationType,
+  type: OperatingSectorType,
   context: SectorTypeMetricContext
 ): SectorTypeMetric[] {
   const keys = context.plantsMode ? (PLANTS_SLOTS[type] ?? PLANTS_FALLBACK) : GROWTH_SLOTS;

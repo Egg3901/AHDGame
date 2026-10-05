@@ -3,7 +3,7 @@ import type { CorporateSector, GameConfig, GameState } from "@/lib/db/types";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
 import type { CommodityType } from "@/lib/constants/commodities";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 import {
@@ -134,7 +134,7 @@ export function fragileReinvestmentPriority(
     sector.mediaDiscriminator
   );
   const commodity = fragileMarketCommodityForSector(
-    operatingSectorType as CorporationType,
+    operatingSectorType as OperatingSectorType,
     countryId,
     localPriceRatioOf
   );

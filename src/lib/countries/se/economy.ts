@@ -1,6 +1,6 @@
 import type { CountryEconomy } from "../contract";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 
 /**
@@ -35,7 +35,7 @@ const sectorWeightsBase = {
   healthcare: 9,
   retail: 8,
   technology: 7,
-  automobiles: 7,
+  manufacturing_vehicles: 7,
   financial: 6,
   energy: 6,
   extraction: 6,
@@ -43,17 +43,17 @@ const sectorWeightsBase = {
   logistics: 4,
   agriculture: 3,
   defense: 3,
-  entertainment: 2,
+  media_entertainment: 2,
   media: 1,
 };
 // No REP_ECON row; the folder omits `repEcon` rather than defaulting it.
 // No COST_SCALE_ANCHORS row; the folder omits `costScaleAnchors` rather than defaulting it.
 /**
  * ⚠ THE CAST IS LOAD-BEARING, for the same reason as the cabinet groups:
- * JSON.parse widens each sector name to `string`, and `CorporationType[]` is a
+ * JSON.parse widens each sector name to `string`, and `OperatingSectorType[]` is a
  * union array. Caught by typecheck alone.
  */
-const strategicSectors: CorporationType[] = [];
+const strategicSectors: OperatingSectorType[] = [];
 const treasuryPsRate = {
   national: 60000,
   state: 30000,
@@ -106,7 +106,7 @@ export const SE_ECONOMY: CountryEconomy = {
         agriculture: 8,
         construction: 8,
         financial: 7,
-        automobiles: 6,
+        manufacturing_vehicles: 6,
         logistics: 5,
         chemical_industries: 5,
         retail: 5,
@@ -116,7 +116,7 @@ export const SE_ECONOMY: CountryEconomy = {
         telecommunications: 2,
         healthcare: 3,
         extraction: 2,
-        entertainment: 1,
+        media_entertainment: 1,
         technology: 0,
       },
       "1979": {
@@ -125,7 +125,7 @@ export const SE_ECONOMY: CountryEconomy = {
         energy: 7,
         retail: 8,
         construction: 7,
-        automobiles: 6,
+        manufacturing_vehicles: 6,
         chemical_industries: 5,
         defense: 4,
         real_estate: 5,
@@ -135,7 +135,7 @@ export const SE_ECONOMY: CountryEconomy = {
         telecommunications: 4,
         technology: 3,
         media: 4,
-        entertainment: 2,
+        media_entertainment: 2,
         extraction: 2,
       },
       "1991": {
@@ -144,7 +144,7 @@ export const SE_ECONOMY: CountryEconomy = {
         healthcare: 9,
         retail: 8,
         technology: 7,
-        automobiles: 7,
+        manufacturing_vehicles: 7,
         financial: 6,
         energy: 6,
         extraction: 6,
@@ -152,7 +152,7 @@ export const SE_ECONOMY: CountryEconomy = {
         logistics: 4,
         agriculture: 3,
         defense: 3,
-        entertainment: 2,
+        media_entertainment: 2,
         media: 1,
       },
     },

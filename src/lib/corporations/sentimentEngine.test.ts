@@ -117,12 +117,16 @@ describe("pulseAppliesToCorp", () => {
 
   it("matches a vehicle's operating profile and its broader manufacturing sector", () => {
     const operatingKeys = keys("US:manufacturing:vehicles");
-    for (const sectorType of ["automobiles", "manufacturing"]) {
+    for (const sectorType of ["manufacturing_vehicles", "manufacturing"]) {
       const pulse = makePulse({ scope: "sector", countryId: "US", sectorType });
-      expect(pulseAppliesToCorp(pulse, "corp", "US", ["automobiles"], operatingKeys)).toBe(true);
+      expect(
+        pulseAppliesToCorp(pulse, "corp", "US", ["manufacturing_vehicles"], operatingKeys)
+      ).toBe(true);
     }
     const unrelated = makePulse({ scope: "sector", countryId: "US", sectorType: "energy" });
-    expect(pulseAppliesToCorp(unrelated, "corp", "US", ["automobiles"], operatingKeys)).toBe(false);
+    expect(
+      pulseAppliesToCorp(unrelated, "corp", "US", ["manufacturing_vehicles"], operatingKeys)
+    ).toBe(false);
   });
 
   it("keeps FTA exemptions with model-qualified foreign operating keys", () => {
@@ -141,7 +145,11 @@ describe("pulseAppliesToCorp", () => {
   });
 
   it("recognizes entertainment events only for the canonical entertainment lane", () => {
-    const pulse = makePulse({ scope: "sector", countryId: "US", sectorType: "entertainment" });
+    const pulse = makePulse({
+      scope: "sector",
+      countryId: "US",
+      sectorType: "media_entertainment",
+    });
     expect(
       pulseAppliesToCorp(pulse, "corp", "US", ["media"], keys("US:media::entertainment"))
     ).toBe(true);

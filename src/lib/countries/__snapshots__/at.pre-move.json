@@ -74,7 +74,7 @@
       "financial": 5,
       "real_estate": 4,
       "healthcare": 3,
-      "entertainment": 3,
+      "media_entertainment": 3,
       "media": 2,
       "telecommunications": 1,
       "defense": 1
@@ -597,13 +597,13 @@
       "financial": 8,
       "construction": 8,
       "healthcare": 7,
-      "entertainment": 7,
+      "media_entertainment": 7,
       "energy": 6,
       "logistics": 6,
       "technology": 5,
       "agriculture": 4,
       "chemical_industries": 4,
-      "automobiles": 3,
+      "manufacturing_vehicles": 3,
       "media": 2,
       "extraction": 2
     }
@@ -620,7 +620,7 @@
       "real_estate": 10,
       "construction": 9,
       "financial": 8,
-      "entertainment": 8,
+      "media_entertainment": 8,
       "energy": 7,
       "healthcare": 6,
       "logistics": 6,

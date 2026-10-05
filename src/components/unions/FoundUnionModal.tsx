@@ -4,7 +4,10 @@ import { InlineError } from "@/components/ui/InlineError";
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { Modal } from "@/components/ui";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { MAX_UNION_NAME_LENGTH, MIN_UNION_NAME_LENGTH } from "@/lib/unions/unionFounding";
 
@@ -40,7 +43,7 @@ export function FoundUnionModal({
   foundingActionCost,
 }: FoundUnionModalProps) {
   const [name, setName] = useState("");
-  const [sectorType, setSectorType] = useState<CorporationType | "">("");
+  const [sectorType, setSectorType] = useState<OperatingSectorType | "">("");
   const [founding, setFounding] = useState(false);
   const [error, setError] = useState("");
 
@@ -162,13 +165,13 @@ export function FoundUnionModal({
               <select
                 id="found-union-industry"
                 value={sectorType}
-                onChange={(e) => setSectorType(e.target.value as CorporationType | "")}
+                onChange={(e) => setSectorType(e.target.value as OperatingSectorType | "")}
                 className="w-full cursor-pointer rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none"
               >
                 <option value="" disabled>
                   Select industry…
                 </option>
-                {Object.entries(CORPORATION_TYPE_LABELS).map(([key, label]) => (
+                {Object.entries(OPERATING_SECTOR_TYPE_LABELS).map(([key, label]) => (
                   <option key={key} value={key}>
                     {label}
                   </option>

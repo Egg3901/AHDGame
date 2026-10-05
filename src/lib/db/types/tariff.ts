@@ -1,5 +1,5 @@
 import type { ObjectId } from "mongodb";
-import type { CorporationType } from "../../constants/corporations";
+import type { OperatingSectorType } from "../../constants/corporations";
 import type { CountryId } from "../../constants/countries";
 
 export type TariffScopeType = "economy_wide" | "sector" | "origin_country" | "corporation";
@@ -10,7 +10,7 @@ export interface Tariff {
   countryId: CountryId;
   scopeType: TariffScopeType;
   /** scopeType = "sector" */
-  targetSectorType?: CorporationType;
+  targetSectorType?: OperatingSectorType;
   /** scopeType = "origin_country" — corps HQ'd in this country are penalised */
   targetOriginCountryId?: CountryId;
   /** scopeType = "corporation" */

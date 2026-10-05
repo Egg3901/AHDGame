@@ -1,6 +1,6 @@
 import type { CountryEconomy } from "../contract";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 
 /**
@@ -46,11 +46,11 @@ const sectorWeightsBase = {
   construction: 6,
   media: 5,
   chemical_industries: 5,
-  entertainment: 4,
+  media_entertainment: 4,
   telecommunications: 4,
   logistics: 4,
   energy: 3,
-  automobiles: 3,
+  manufacturing_vehicles: 3,
   defense: 3,
   extraction: 3,
   agriculture: 1,
@@ -69,10 +69,10 @@ const costScaleAnchors = {
 };
 /**
  * ⚠ THE CAST IS LOAD-BEARING, for the same reason as the cabinet groups:
- * JSON.parse widens each sector name to `string`, and `CorporationType[]` is a
+ * JSON.parse widens each sector name to `string`, and `OperatingSectorType[]` is a
  * union array. Caught by typecheck alone.
  */
-const strategicSectors = ["financial", "energy"] as CorporationType[];
+const strategicSectors = ["financial", "energy"] as OperatingSectorType[];
 const treasuryPsRate = {
   national: 60000,
   state: 30000,
@@ -124,12 +124,12 @@ export const UK_ECONOMY: CountryEconomy = {
         financial: 5,
         defense: 4,
         real_estate: 4,
-        automobiles: 3,
+        manufacturing_vehicles: 3,
         telecommunications: 2,
         media: 2,
         healthcare: 2,
         extraction: 2,
-        entertainment: 2,
+        media_entertainment: 2,
         technology: 0,
       },
       "1979": {
@@ -144,12 +144,12 @@ export const UK_ECONOMY: CountryEconomy = {
         defense: 5,
         healthcare: 4,
         financial: 4,
-        automobiles: 4,
+        manufacturing_vehicles: 4,
         logistics: 4,
         telecommunications: 3,
         technology: 1,
         media: 2,
-        entertainment: 1,
+        media_entertainment: 1,
       },
       "1991": {
         manufacturing: 16,
@@ -161,12 +161,12 @@ export const UK_ECONOMY: CountryEconomy = {
         chemical_industries: 6,
         energy: 5,
         defense: 5,
-        automobiles: 4,
+        manufacturing_vehicles: 4,
         extraction: 4,
         logistics: 3,
         telecommunications: 3,
         media: 4,
-        entertainment: 2,
+        media_entertainment: 2,
         technology: 2,
         agriculture: 2,
       },

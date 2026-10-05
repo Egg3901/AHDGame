@@ -29,7 +29,7 @@
  * size stops being honest — at which point the author re-rounds it on purpose.
  */
 
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { MediaDiscriminator } from "@/lib/constants/corporations";
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
@@ -41,14 +41,14 @@ import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 export const FACILITY_TARGET_DAILY_REVENUE_ANCHOR = 25_000;
 
 /** Units per facility, per sector type. Legibly rounded, never below 1. */
-const FACILITY_SIZE_UNITS: Record<CorporationType, number> = {
+const FACILITY_SIZE_UNITS: Record<OperatingSectorType, number> = {
   financial: 6,
   media: 80,
   manufacturing: 25,
   chemical_industries: 60,
   healthcare: 5,
   retail: 80,
-  automobiles: 1,
+  manufacturing_vehicles: 1,
   technology: 25,
   energy: 250,
   agriculture: 60,
@@ -56,22 +56,18 @@ const FACILITY_SIZE_UNITS: Record<CorporationType, number> = {
   construction: 3,
   defense: 8,
   telecommunications: 12,
-  entertainment: 50,
+  media_entertainment: 50,
   logistics: 5,
   extraction: 250,
 };
 
 /** Capacity units in one facility of `sectorType`. Always a positive integer. */
 export function plantSizeUnits(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   industryModel?: string | null,
   mediaDiscriminator?: MediaDiscriminator | null
 ): number {
-  const operatingType = getOperatingSectorType(
-    sectorType,
-    industryModel,
-    mediaDiscriminator
-  ) as CorporationType;
+  const operatingType = getOperatingSectorType(sectorType, industryModel, mediaDiscriminator);
   return FACILITY_SIZE_UNITS[operatingType] ?? 1;
 }
 
@@ -81,7 +77,7 @@ export function plantSizeUnits(
  * capacity at all — a player owns "a small plant", not "0 plants".
  */
 export function facilitiesFromUnits(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   units: number,
   industryModel?: string | null,
   mediaDiscriminator?: MediaDiscriminator | null

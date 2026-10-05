@@ -6,7 +6,7 @@ Corporations are player-owned businesses that generate revenue, employ workers, 
 
 To found a corporation, you need ₳1,000,000 in personal cash. That cost is deducted immediately, and your new corporation starts with ₳1,000,000 in liquid capital. You can optionally commit up to ₳50,000,000 in additional starting capital (deducted from your personal cash).
 
-At founding you choose from **17 sector types**:
+At founding you choose from **17 sector lines**: the 15 corporation types, plus the vehicles line of manufacturing and the entertainment line of media:
 
 | Type | Label |
 | --- | --- |
@@ -17,12 +17,12 @@ At founding you choose from **17 sector types**:
 | media | Media |
 | manufacturing | Manufacturing |
 | retail | Retail |
-| automobiles | Automobiles |
+| manufacturing_vehicles | Automobiles (manufacturing, vehicles line) |
 | agriculture | Agriculture |
 | real_estate | Real Estate |
 | defense | Defense |
 | telecommunications | Telecommunications |
-| entertainment | Entertainment |
+| media_entertainment | Entertainment (media, entertainment line) |
 | logistics | Logistics |
 | extraction | Extraction & Mining |
 | chemical_industries | Chemical Industries |
@@ -215,10 +215,10 @@ Many factors adjust your sector profit margins. These are additive:
 | Power grid | -4% | No penalty above 95% uptime; linear scale to -4% at 85% or below |
 | Corruption | -3% | Linear scale to index 100 |
 | Workforce skill | ±4% | Pivot at 50; applies to technology, chemical_industries, healthcare, manufacturing, defense |
-| Crime rate | up to -5% | Applies to retail, real_estate, entertainment |
+| Crime rate | up to -5% | Applies to retail, real_estate, the media entertainment line |
 | Broadband access | up to -4% | Applies to technology, telecommunications, media, financial |
-| Road condition | ±3% | Pivot at 60; applies to manufacturing, retail, agriculture, automobiles, construction, logistics, extraction |
-| Carbon emissions | up to -3% | Applies to energy, chemical_industries, manufacturing, automobiles, extraction |
+| Road condition | ±3% | Pivot at 60; applies to manufacturing, retail, agriculture, the manufacturing vehicles line, construction, logistics, extraction |
+| Carbon emissions | up to -3% | Applies to energy, chemical_industries, manufacturing, the manufacturing vehicles line, extraction |
 | Cost of living | ±3% | Higher cost of living raises labor costs; applies to manufacturing, retail, agriculture, construction, logistics, extraction, chemical_industries |
 | Inflation | +2% to -8% | Bonus below 2%, penalty above |
 | Debt-to-GDP | up to -5% | Penalty starts at 50% D/GDP |
@@ -331,14 +331,14 @@ Computer-run corporations may automatically retool a sector onto a better strate
 | Agriculture | Vertical Farming, Precision Agriculture, Traditional, Industrial, Sustainable | 5 |
 | Chemical Industries | Specialty Chemicals, Industrial Chemicals, Fertilizer Production, Pharmaceuticals, Plastics & Polymers | 5 |
 | Healthcare | Telehealth Network, Standard, Hospital Networks, Outpatient & Preventive | 4 |
-| Automobiles | Autonomous Vehicles, Standard, EV Focus, Heavy Machinery | 4 |
+| Manufacturing (vehicles) | Autonomous Vehicles, Standard, EV Focus, Heavy Machinery | 4 |
 | Financial | Algorithmic Trading, Standard, Fintech, Traditional Banking | 4 |
 | Media | Streaming Media, Standard, Digital-First, Legacy Broadcast | 4 |
 | Defense | Directed-Energy Systems, Standard, Cyber Warfare, Heavy Armor, Munitions & Arms Export, Naval Systems, Missile & Rocket Systems, Aerospace Systems | 8 |
 | Real Estate | PropTech Platforms, Standard, Commercial Development, Green Building | 4 |
 | Construction | Modular Construction, General Contracting, Infrastructure Buildout, plus a research-gated factory-built Modular Construction method from 2019 | 4 |
 | Telecommunications | 5G/6G Networks, Standard, 5G/Infrastructure, Cloud Services | 4 |
-| Entertainment | Live-Service Platforms, Standard, Streaming/Digital, Live/Venue | 4 |
+| Media (entertainment) | Live-Service Platforms, Standard, Streaming/Digital, Live/Venue | 4 |
 | Retail | E-Commerce Fulfillment, Standard, E-Commerce, Brick & Mortar | 4 |
 | Logistics | Autonomous Freight, Standard, Automated Logistics, Full-Service | 4 |
 | Extraction & Mining | Diversified, Iron & Metals Mining, Oil & Gas, Rare Earth Minerals Mining, Coal Mining, Timber & Forestry | 6 |
@@ -349,7 +349,7 @@ For extraction sectors specifically, the **Diversified** strategy spreads output
 
 **Telecommunications** sectors produce **Network Services** (subscription-equivalent broadband/connectivity capacity) as their primary unique output alongside software. The three strategies (Standard, 5G/Infrastructure, Cloud Services) differ in how much network_services vs software they supply and in their hardware/energy input mix. Network services have background macro demand from GDP, so there is always a market even before player-built Telecom sectors are common.
 
-**Entertainment** sectors produce **Entertainment Services** (event-equivalent entertainment capacity) as their primary unique output alongside advertising. The three strategies (Standard, Streaming/Digital, Live/Venue) differ in output split and input profile. Live/Venue supplies the most entertainment_services but demands construction and real estate inputs for physical venue infrastructure.
+**Entertainment-line media** sectors produce **Entertainment Services** (event-equivalent entertainment capacity) as their primary unique output alongside advertising. The three strategies (Standard, Streaming/Digital, Live/Venue) differ in output split and input profile. Live/Venue supplies the most entertainment_services but demands construction and real estate inputs for physical venue infrastructure.
 
 ## Corporate taxes
 

@@ -51,7 +51,10 @@ import {
 } from "@/lib/nationalization/billTargetPreview";
 import { resolveActualPayoutLocal } from "@/lib/nationalization/ledger";
 import { SECTOR_SCOPE_LABELS, type SectorScope } from "@/lib/nationalization/sectorScope";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 
 // Re-exported from billTargetPreview (the shared SSOT) for existing importers.
 export type { NationalizationProvisionDetail };
@@ -363,7 +366,7 @@ export async function resolveBillProvisions(
 
         if (provision.type === "nationalize") {
           const policyOptionName = provision.targetSectorType
-            ? `Sector takeover — ${CORPORATION_TYPE_LABELS[provision.targetSectorType as CorporationType] ?? provision.targetSectorType} · ${Math.round((provision.sectorCarveFraction ?? 1) * 100)}% · ${SECTOR_SCOPE_LABELS[(provision.sectorScope ?? "all") as SectorScope] ?? provision.sectorScope}`
+            ? `Sector takeover — ${OPERATING_SECTOR_TYPE_LABELS[provision.targetSectorType as OperatingSectorType] ?? provision.targetSectorType} · ${Math.round((provision.sectorCarveFraction ?? 1) * 100)}% · ${SECTOR_SCOPE_LABELS[(provision.sectorScope ?? "all") as SectorScope] ?? provision.sectorScope}`
             : provision.targetSectorId
               ? "Sector takeover"
               : "Whole-corporation takeover";

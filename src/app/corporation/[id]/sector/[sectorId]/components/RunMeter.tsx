@@ -3,7 +3,7 @@
 import { InfoTooltip } from "@/components/InfoTooltip";
 import type { PlantIdleCause } from "../types";
 import { idleCauseMeta, TONE_FILL, fmtUnits, fmtPct } from "../lib/plants";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { facilityPlural } from "@/lib/constants/facilityVocabulary";
 
 interface RunMeterProps {
@@ -16,7 +16,7 @@ interface RunMeterProps {
   /** Named reasons the rest of the capacity did not run. Sums to the idle slice. */
   idleCauses: PlantIdleCause[];
   /** Drives the facility noun in the segment help text. */
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   /** Dim the whole meter (mothballed plants). */
   dimmed?: boolean;
 }

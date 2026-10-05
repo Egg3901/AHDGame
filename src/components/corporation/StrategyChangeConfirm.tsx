@@ -2,7 +2,7 @@
 
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useEffect, useState } from "react";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import {
   getSectorStrategies,
   getStrategy,
@@ -21,7 +21,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { fetchJson } from "@/lib/observability/fetchJson";
 
 interface StrategyChangeConfirmProps {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   mediaOperatingModelsEnabled?: boolean;
   currentStrategyId: string;
   targetStrategyId: string;

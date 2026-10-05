@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { Avatar } from "@/components/Avatar";
 import { HeroImage } from "@/components/HeroImage";
 import { STATE_FLAGS } from "@/lib/constants";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import { MONEY_PERIOD_SUFFIX, scaleMoney, type MoneyPeriod } from "@/lib/constants/moneyTimescale";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 import { loyaltyLabel } from "@/lib/market/brandLoyalty";
@@ -152,7 +152,7 @@ export function CorporationMasthead({
   const est = (text: string) => (fogged ? `~${text}` : text);
 
   const typeLabel = corporation.secondaryType
-    ? `${corporation.typeLabel} / ${CORPORATION_TYPE_LABELS[corporation.secondaryType]}`
+    ? `${corporation.typeLabel} / ${OPERATING_SECTOR_TYPE_LABELS[corporation.secondaryType]}`
     : corporation.typeLabel;
 
   const hqFlag = STATE_FLAGS[corporation.headquartersState];

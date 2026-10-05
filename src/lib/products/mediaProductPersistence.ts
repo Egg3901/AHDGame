@@ -131,7 +131,7 @@ export async function processMediaProductProjectsV1(input: {
           const sectorType =
             project.operatingSectorType ??
             (kind.modelId === "film_studio" || kind.modelId === "music_label"
-              ? "entertainment"
+              ? "media_entertainment"
               : "media");
           const node = TECH_TREE[sectorType].find(
             (candidate) => candidate.name === kind.technologyNodeName
@@ -384,7 +384,7 @@ export async function startNppMediaProductsV1(input: {
       activeDevelopmentCorporationId: corporationId,
       sectorId: selected.sectorId,
       operatingSectorType:
-        sector.mediaDiscriminator === "entertainment" ? "entertainment" : "media",
+        sector.mediaDiscriminator === "entertainment" ? "media_entertainment" : "media",
       kindId: selected.kind.id,
       title: `${selected.kind.label} ${input.currentYear}`,
       allocationShare: 0.25,

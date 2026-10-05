@@ -8,7 +8,7 @@ import {
 } from "@/lib/corporations/specialization/rules";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+
 import type { CommodityType } from "@/lib/constants/commodities";
 import { eraScaledBasePrices } from "@/lib/constants/commodities";
 import { trendProductionPolicy, getRevenueMultiplier } from "@/lib/utils/productionPolicy";
@@ -104,7 +104,7 @@ export function processSector(
     sector.sectorType,
     sector.industryModel,
     sector.mediaDiscriminator
-  ) as CorporationType;
+  );
 
   // Per-sector tech effects: Corporate-lane bonuses apply to every sector at
   // reduced strength; Sector-lane bonuses apply only to the corp's primary
@@ -551,11 +551,7 @@ export function processSector(
     ? 0
     : specializationPayrollModifier(
         operatingSectorType,
-        getOperatingSectorType(
-          corp.type,
-          corp.industryModel,
-          corp.mediaDiscriminator
-        ) as CorporationType,
+        getOperatingSectorType(corp.type, corp.industryModel, corp.mediaDiscriminator),
         corp.secondaryType
       );
   const { payrollBasis, operatingSaving } = specializationMaintenance({

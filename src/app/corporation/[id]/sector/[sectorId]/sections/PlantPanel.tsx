@@ -11,7 +11,7 @@ import { UnionEmblem } from "@/components/unions/UnionEmblem";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { Factory, Hammer, PauseCircle, PlayCircle, ShieldCheck, X } from "lucide-react";
 import type { CommodityFlow, PlantsData } from "../types";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import {
   capitalizeFacility,
   facilityPlural,
@@ -28,7 +28,7 @@ interface PlantPanelProps {
   /** Commodity-ledger output after media, embargo and other market scaling. */
   marketSupplies?: CommodityFlow[];
   /** Drives the facility noun. A retail sector says "stores", not "plants". */
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   /** The national industry union covering this workforce, vacant or led. */
   unionId?: string | null;
   unionName?: string | null;

@@ -224,13 +224,13 @@
       "real_estate": 4,
       "financial": 4,
       "retail": 4,
-      "automobiles": 2,
+      "manufacturing_vehicles": 2,
       "defense": 2,
       "chemical_industries": 2,
       "telecommunications": 1,
       "healthcare": 1,
       "media": 1,
-      "entertainment": 1,
+      "media_entertainment": 1,
       "technology": 0
     }
   },
@@ -581,7 +581,7 @@
     "value": {
       "1953": {
         "manufacturing": "National Confederation of Industrial Workers",
-        "automobiles": "National Confederation of Industrial Workers",
+        "manufacturing_vehicles": "National Confederation of Industrial Workers",
         "chemical_industries": "National Confederation of Industrial Workers",
         "extraction": "National Confederation of Industrial Workers",
         "energy": "National Confederation of Industrial Workers",
@@ -591,7 +591,7 @@
       },
       "1979": {
         "manufacturing": "National Confederation of Industrial Workers",
-        "automobiles": "National Confederation of Industrial Workers",
+        "manufacturing_vehicles": "National Confederation of Industrial Workers",
         "chemical_industries": "National Confederation of Industrial Workers",
         "extraction": "National Confederation of Industrial Workers",
         "energy": "National Confederation of Industrial Workers",
@@ -603,7 +603,7 @@
       },
       "1991": {
         "manufacturing": "CUT Metalworkers' Federation",
-        "automobiles": "CUT Metalworkers' Federation",
+        "manufacturing_vehicles": "CUT Metalworkers' Federation",
         "extraction": "CUT Mining Federation",
         "energy": "CUT Energy Federation",
         "agriculture": "CONTAG",
@@ -616,13 +616,13 @@
         "technology": "CUT Metalworkers' Federation",
         "financial": "CUT Bank Workers' Federation",
         "telecommunications": "CUT Communications Federation",
-        "entertainment": "CUT Culture Federation",
+        "media_entertainment": "CUT Culture Federation",
         "defense": "CUT Metalworkers' Federation",
         "real_estate": "CUT Construction Federation"
       },
       "1999": {
         "manufacturing": "CUT Metalworkers' Federation",
-        "automobiles": "CUT Metalworkers' Federation",
+        "manufacturing_vehicles": "CUT Metalworkers' Federation",
         "extraction": "CUT Mining Federation",
         "energy": "CUT Energy Federation",
         "agriculture": "CONTAG",
@@ -635,13 +635,13 @@
         "technology": "CUT Metalworkers' Federation",
         "financial": "CUT Bank Workers' Federation",
         "telecommunications": "CUT Communications Federation",
-        "entertainment": "CUT Culture Federation",
+        "media_entertainment": "CUT Culture Federation",
         "defense": "CUT Metalworkers' Federation",
         "real_estate": "CUT Construction Federation"
       },
       "2007": {
         "manufacturing": "CUT Metalworkers' Federation",
-        "automobiles": "CUT Metalworkers' Federation",
+        "manufacturing_vehicles": "CUT Metalworkers' Federation",
         "extraction": "CUT Mining Federation",
         "energy": "CUT Energy Federation",
         "agriculture": "CONTAG",
@@ -654,13 +654,13 @@
         "technology": "CUT Metalworkers' Federation",
         "financial": "CUT Bank Workers' Federation",
         "telecommunications": "CUT Communications Federation",
-        "entertainment": "CUT Culture Federation",
+        "media_entertainment": "CUT Culture Federation",
         "defense": "CUT Metalworkers' Federation",
         "real_estate": "CUT Construction Federation"
       },
       "2019": {
         "manufacturing": "CUT Metalworkers' Federation",
-        "automobiles": "CUT Metalworkers' Federation",
+        "manufacturing_vehicles": "CUT Metalworkers' Federation",
         "extraction": "CUT Mining Federation",
         "energy": "CUT Energy Federation",
         "agriculture": "CONTAG",
@@ -673,13 +673,13 @@
         "technology": "CUT Metalworkers' Federation",
         "financial": "CUT Bank Workers' Federation",
         "telecommunications": "CUT Communications Federation",
-        "entertainment": "CUT Culture Federation",
+        "media_entertainment": "CUT Culture Federation",
         "defense": "CUT Metalworkers' Federation",
         "real_estate": "CUT Construction Federation"
       },
       "2023": {
         "manufacturing": "CUT Metalworkers' Federation",
-        "automobiles": "CUT Metalworkers' Federation",
+        "manufacturing_vehicles": "CUT Metalworkers' Federation",
         "extraction": "CUT Mining Federation",
         "energy": "CUT Energy Federation",
         "agriculture": "CONTAG",
@@ -692,13 +692,13 @@
         "technology": "CUT Metalworkers' Federation",
         "financial": "CUT Bank Workers' Federation",
         "telecommunications": "CUT Communications Federation",
-        "entertainment": "CUT Culture Federation",
+        "media_entertainment": "CUT Culture Federation",
         "defense": "CUT Metalworkers' Federation",
         "real_estate": "CUT Construction Federation"
       },
       "2027": {
         "manufacturing": "CUT Metalworkers' Federation",
-        "automobiles": "CUT Metalworkers' Federation",
+        "manufacturing_vehicles": "CUT Metalworkers' Federation",
         "extraction": "CUT Mining Federation",
         "energy": "CUT Energy Federation",
         "agriculture": "CONTAG",
@@ -711,7 +711,7 @@
         "technology": "CUT Metalworkers' Federation",
         "financial": "CUT Bank Workers' Federation",
         "telecommunications": "CUT Communications Federation",
-        "entertainment": "CUT Culture Federation",
+        "media_entertainment": "CUT Culture Federation",
         "defense": "CUT Metalworkers' Federation",
         "real_estate": "CUT Construction Federation"
       }
@@ -1735,9 +1735,9 @@
       "healthcare": 4,
       "telecommunications": 3,
       "technology": 2,
-      "entertainment": 2,
+      "media_entertainment": 2,
       "media": 2,
-      "automobiles": 2,
+      "manufacturing_vehicles": 2,
       "defense": 1
     }
   },
@@ -1752,7 +1752,7 @@
       "retail": 7,
       "real_estate": 6,
       "chemical_industries": 5,
-      "automobiles": 5,
+      "manufacturing_vehicles": 5,
       "healthcare": 3,
       "financial": 4,
       "defense": 3,
@@ -1760,7 +1760,7 @@
       "telecommunications": 2,
       "technology": 1,
       "media": 2,
-      "entertainment": 2
+      "media_entertainment": 2
     }
   },
   "COUNTRY_SECTOR_WEIGHTS_1991": {
@@ -1775,13 +1775,13 @@
       "retail": 7,
       "construction": 8,
       "chemical_industries": 6,
-      "automobiles": 4,
+      "manufacturing_vehicles": 4,
       "logistics": 3,
       "healthcare": 3,
       "telecommunications": 1,
       "technology": 1,
       "media": 2,
-      "entertainment": 1,
+      "media_entertainment": 1,
       "defense": 1
     }
   },

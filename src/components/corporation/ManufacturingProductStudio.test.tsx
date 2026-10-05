@@ -131,7 +131,7 @@ describe("ManufacturingProductStudio", () => {
           plants: [
             {
               sectorId: "plant-1",
-              sectorType: "automobiles",
+              sectorType: "manufacturing_vehicles",
               capitalStock: 1000,
               plantCount: 4,
               eligibleKindIds: ["passenger_car"],

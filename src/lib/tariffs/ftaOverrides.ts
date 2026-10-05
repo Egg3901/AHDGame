@@ -1,3 +1,4 @@
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { europeanCommonMarketPairs } from "@/lib/internationalOrganizations/europeanIntegration/rules";
 import type { OrganizationMembership } from "@/lib/db/types/internationalOrganization";
 import type { Db } from "mongodb";
@@ -97,7 +98,8 @@ export type FtaCoverage = {
  * yield share `0` (no foreign trade → no FTA effect to apply).
  */
 export function buildFtaCoverageLookup(
-  sectors: Pick<CorporateSector, "corporationId" | "countryId" | "sectorType" | "revenue">[],
+  sectors: (Pick<CorporateSector, "corporationId" | "countryId" | "sectorType" | "revenue"> &
+    Partial<Pick<CorporateSector, "industryModel" | "mediaDiscriminator">>)[],
   corpById: Map<string, Pick<Corporation, "_id" | "countryId">>,
   pairs: FtaPairSet
 ): FtaCoverage {
@@ -123,7 +125,12 @@ export function buildFtaCoverageLookup(
       sectorCountry,
       (totalForeignByCountry.get(sectorCountry) ?? 0) + sector.revenue
     );
-    const sectorKey = `${sectorCountry}:${sector.sectorType}`;
+    // Keyed by operating lane, the same key tariffs target.
+    const sectorKey = `${sectorCountry}:${getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    )}`;
     totalForeignBySectorType.set(
       sectorKey,
       (totalForeignBySectorType.get(sectorKey) ?? 0) + sector.revenue

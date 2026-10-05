@@ -20,7 +20,7 @@ describe("manufacturing product eligibility", () => {
     {
       sectorId: "auto-1",
       corporationId: "corp-1",
-      sectorType: "automobiles",
+      sectorType: "manufacturing_vehicles",
       strategyId: "standard",
       capitalStock: 250,
       plantCount: 1,

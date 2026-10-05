@@ -76,7 +76,7 @@ describe("automobile model dual-read through commodity pricing", () => {
       createdAt: new Date(),
     };
     const legacy = buildSectorRows({
-      allSectors: [{ ...base, sectorType: "automobiles" } as unknown as CorporateSector],
+      allSectors: [{ ...base, sectorType: "manufacturing_vehicles" } as unknown as CorporateSector],
       corporationById: new Map(),
       natcorpIds: new Set(),
       fxByCurrency: new Map(),
@@ -120,7 +120,7 @@ describe("entertainment media dual-read through commodity pricing", () => {
       createdAt: new Date(),
     };
     const legacy = buildSectorRows({
-      allSectors: [{ ...base, sectorType: "entertainment" } as unknown as CorporateSector],
+      allSectors: [{ ...base, sectorType: "media_entertainment" } as unknown as CorporateSector],
       corporationById: new Map(),
       natcorpIds: new Set(),
       fxByCurrency: new Map(),
@@ -173,7 +173,7 @@ describe("entertainment media dual-read through commodity pricing", () => {
         turn: 1,
       });
 
-    const legacy = rows({ sectorType: "entertainment" });
+    const legacy = rows({ sectorType: "media_entertainment" });
     const canonical = rows({ sectorType: "media", mediaDiscriminator: "entertainment" });
     const news = rows({ sectorType: "media", mediaDiscriminator: "media", strategyId: "standard" });
 

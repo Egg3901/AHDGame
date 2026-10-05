@@ -1,3 +1,4 @@
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { ObjectId } from "mongodb";
 import type {
   ManufacturingDevelopmentCashReceiptV2,
@@ -141,7 +142,7 @@ export interface CeoTenure {
  */
 export interface SoeState {
   /** The commanding-height sector this enterprise operates. */
-  sector: CorporationType;
+  sector: OperatingSectorType;
   /** Planned productive capacity in output units/turn (the ceiling on output). */
   capacity: number;
   /** Realized output this turn, in the same units as `planTarget`. */
@@ -197,7 +198,8 @@ export interface Corporation {
   /** Preserves entertainment's legacy operating identity inside media. */
   mediaDiscriminator?: MediaDiscriminator | null;
   /** Optional secondary sector focus, halves sector match bonus, doubles base sprawl threshold */
-  secondaryType?: CorporationType | null;
+  /** Secondary specialization: an operating lane (a type, or the vehicles/entertainment lane). */
+  secondaryType?: OperatingSectorType | null;
   /** Turn when primary/secondary type was last switched (for penalty duration) */
   typeSwitchTurn?: number | null;
   /** Turn after which another type switch is allowed (cooldown) */
@@ -639,7 +641,7 @@ export interface Corporation {
    * types not claimed by a split-off). A secondary split-off carries exactly one
    * entry. (spec §24.1)
    */
-  assignedSectorTypes?: CorporationType[];
+  assignedSectorTypes?: OperatingSectorType[];
   /** CEO-set share of per-turn operating profit retained in the corp (0, 75). Absent ⇒ 0. (spec P6g §5.1) */
   profitRetentionPercent?: number;
   /** Finance-minister-set per-turn cap on the CEO's treasury draw (local). Absent ⇒ default; 0 ⇒ frozen. (P6g §5.2) */

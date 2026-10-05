@@ -1,5 +1,5 @@
 import type { ExtractableResource } from "@/lib/constants/commodities";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { computeMacroContribution } from "@/lib/world/macro/kernel";
 import { buildMacroCountryFromSpec } from "@/lib/world/macro/seedBuilder";
 import type { MacroCountryState, MacroEconomicSystem } from "@/lib/world/macro/types";
@@ -15,7 +15,7 @@ export interface SuccessorMacroTerms {
   fiscalCapacity: number;
   stability: number;
   tradeExposure: number;
-  sectorWeights: Partial<Record<CorporationType, number>>;
+  sectorWeights: Partial<Record<OperatingSectorType, number>>;
   resources: Partial<Record<ExtractableResource, number>>;
 }
 

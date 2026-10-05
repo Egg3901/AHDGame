@@ -19,7 +19,7 @@ import {
   type RevenueTrendBaseline,
 } from "@/lib/turn/gdpGrowth";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { fundingResponse } from "../spendingChannel";
 import { SOCIAL_SPEND_HALF_SAT } from "./social";
 import { advanceOutputGap, GDP_GROWTH_BOUND } from "../outputGap";
@@ -40,12 +40,12 @@ export interface SectorRevenueTaxPayload {
   owned: Array<{
     revenue: number;
     currentGrowthRate: number;
-    sectorType?: CorporationType;
+    sectorType?: OperatingSectorType;
     realizedRevenue?: number;
     hostRevenue?: number;
     hostRealizedRevenue?: number;
   }>;
-  unowned: Array<{ revenue: number; sectorType?: CorporationType }>;
+  unowned: Array<{ revenue: number; sectorType?: OperatingSectorType }>;
   federalSalesTax: number;
   stateSalesTax: number;
   countryId: string;

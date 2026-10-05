@@ -345,7 +345,7 @@ describe("commandEconomySoeSectors — Warsaw-Pact satellites (command-economy s
       "chemical_industries",
       "healthcare",
       "retail",
-      "automobiles",
+      "manufacturing_vehicles",
       "technology",
       "energy",
       "agriculture",
@@ -353,7 +353,7 @@ describe("commandEconomySoeSectors — Warsaw-Pact satellites (command-economy s
       "construction",
       "defense",
       "telecommunications",
-      "entertainment",
+      "media_entertainment",
       "logistics",
       "extraction",
     ]);
@@ -365,7 +365,7 @@ describe("commandEconomySoeSectors — Warsaw-Pact satellites (command-economy s
   });
 
   it("Eastern-bloc / USSR command countries cover every CorporationType (plants need state capacity in all sectors)", async () => {
-    const { CORPORATION_TYPES } = await import("@/lib/constants/corporations");
+    const { OPERATING_SECTOR_TYPES } = await import("@/lib/constants/corporations");
     for (const countryId of [
       "RU",
       "UKR",
@@ -379,7 +379,7 @@ describe("commandEconomySoeSectors — Warsaw-Pact satellites (command-economy s
       "RO",
       "YU",
     ] as const) {
-      expect(commandEconomySoeSectors(countryId)).toEqual([...CORPORATION_TYPES]);
+      expect(commandEconomySoeSectors(countryId)).toEqual([...OPERATING_SECTOR_TYPES]);
     }
   });
 
@@ -398,7 +398,7 @@ describe("commandEconomySoeSectors — Warsaw-Pact satellites (command-economy s
   });
 
   it("Yugoslavia has the full sector set despite not being a Warsaw-Pact member", async () => {
-    const { CORPORATION_TYPES } = await import("@/lib/constants/corporations");
-    expect(commandEconomySoeSectors("YU")).toEqual([...CORPORATION_TYPES]);
+    const { OPERATING_SECTOR_TYPES } = await import("@/lib/constants/corporations");
+    expect(commandEconomySoeSectors("YU")).toEqual([...OPERATING_SECTOR_TYPES]);
   });
 });

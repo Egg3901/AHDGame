@@ -2,7 +2,7 @@ import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { NationalizationLedgerEntry } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { loadFxRatesByCurrency, anchorToCorpCapital } from "@/lib/currency/corporationCapital";
 import { recordAudit } from "@/lib/audit/recordAudit";
@@ -74,7 +74,7 @@ export async function resolveActualPayoutLocal(
   params: {
     countryId: CountryId;
     currency: CurrencyCode;
-    sectorType?: CorporationType;
+    sectorType?: OperatingSectorType;
     corpName?: string;
   }
 ): Promise<number | undefined> {

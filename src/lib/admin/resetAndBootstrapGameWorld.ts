@@ -344,8 +344,6 @@ export async function resetAndBootstrapGameWorld(
       preset,
       skipRegionalCouncil,
       resetReference,
-      fresh1991VehicleModelSeed: preset === "1991-default" && resetReference,
-      fresh1991MediaTaxonomySeed: preset === "1991-default" && resetReference,
       seedOnly,
       preIteration,
       startingParties,

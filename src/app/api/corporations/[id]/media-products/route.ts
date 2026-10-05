@@ -148,7 +148,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
           id: sector._id.toString(),
           strategyId: sector.strategyId,
           operatingSectorType:
-            sector.mediaDiscriminator === "entertainment" ? "entertainment" : "media",
+            sector.mediaDiscriminator === "entertainment" ? "media_entertainment" : "media",
           capitalStock: sector.capitalStock ?? 0,
         })),
       },
@@ -210,7 +210,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       activeDevelopmentCorporationId: corporation._id.toString(),
       sectorId: sector._id.toString(),
       operatingSectorType:
-        sector.mediaDiscriminator === "entertainment" ? "entertainment" : "media",
+        sector.mediaDiscriminator === "entertainment" ? "media_entertainment" : "media",
       kindId: kind.id,
       title: parsed.data.title,
       allocationShare: parsed.data.allocationShare,

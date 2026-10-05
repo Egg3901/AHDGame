@@ -1,5 +1,5 @@
 import type { CountryId } from "@/lib/constants/countries";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { Tariff } from "@/lib/db/types/tariff";
 import { isFtaActive, type FtaPairSet } from "@/lib/tariffs/ftaOverrides";
 
@@ -16,7 +16,7 @@ export function importerTariffOnFlow(
   ftaPairs: FtaPairSet,
   importer: CountryId,
   exporter: CountryId,
-  sectorType: CorporationType
+  sectorType: OperatingSectorType
 ): number {
   if (isFtaActive(ftaPairs, importer, exporter)) return 0;
   let totalPct = 0;

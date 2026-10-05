@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import { getCountryConfig } from "@/lib/constants/countries";
 import type { CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { GameMonthTime } from "@/components/time/GameMonthTime";
 
 type SubsidyEntry = {
@@ -64,7 +64,7 @@ export function SubsidiesTab({ countryId }: { countryId: CountryId }) {
               {" · "}
               {s.scopeType === "economy_wide"
                 ? "Economy-wide"
-                : `Sector: ${CORPORATION_TYPE_LABELS[s.targetSectorType as CorporationType] ?? s.targetSectorType}`}
+                : `Sector: ${OPERATING_SECTOR_TYPE_LABELS[s.targetSectorType as OperatingSectorType] ?? s.targetSectorType}`}
               {s.targetStrategyId ? ` (${s.targetStrategyId})` : ""}
             </p>
             <p className="text-xs text-muted-foreground">

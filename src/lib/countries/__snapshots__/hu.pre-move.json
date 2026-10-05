@@ -94,8 +94,8 @@
       "financial": 1,
       "real_estate": 1,
       "telecommunications": 1,
-      "automobiles": 1,
-      "entertainment": 2,
+      "manufacturing_vehicles": 1,
+      "media_entertainment": 2,
       "technology": 0
     }
   },
@@ -1354,7 +1354,7 @@
         "chemical_industries": "National Council of Trade Unions",
         "healthcare": "National Council of Trade Unions",
         "retail": "National Council of Trade Unions",
-        "automobiles": "National Council of Trade Unions",
+        "manufacturing_vehicles": "National Council of Trade Unions",
         "technology": "National Council of Trade Unions",
         "energy": "National Council of Trade Unions",
         "agriculture": "National Council of Trade Unions",
@@ -1362,7 +1362,7 @@
         "construction": "National Council of Trade Unions",
         "defense": "National Council of Trade Unions",
         "telecommunications": "National Council of Trade Unions",
-        "entertainment": "National Council of Trade Unions",
+        "media_entertainment": "National Council of Trade Unions",
         "logistics": "National Council of Trade Unions",
         "extraction": "National Council of Trade Unions"
       },
@@ -1373,7 +1373,7 @@
         "chemical_industries": "National Council of Trade Unions",
         "healthcare": "National Council of Trade Unions",
         "retail": "National Council of Trade Unions",
-        "automobiles": "National Council of Trade Unions",
+        "manufacturing_vehicles": "National Council of Trade Unions",
         "technology": "National Council of Trade Unions",
         "energy": "National Council of Trade Unions",
         "agriculture": "National Council of Trade Unions",
@@ -1381,7 +1381,7 @@
         "construction": "National Council of Trade Unions",
         "defense": "National Council of Trade Unions",
         "telecommunications": "National Council of Trade Unions",
-        "entertainment": "National Council of Trade Unions",
+        "media_entertainment": "National Council of Trade Unions",
         "logistics": "National Council of Trade Unions",
         "extraction": "National Council of Trade Unions"
       },
@@ -1392,7 +1392,7 @@
         "chemical_industries": "National Confederation of Hungarian Trade Unions",
         "healthcare": "National Confederation of Hungarian Trade Unions",
         "retail": "National Confederation of Hungarian Trade Unions",
-        "automobiles": "National Confederation of Hungarian Trade Unions",
+        "manufacturing_vehicles": "National Confederation of Hungarian Trade Unions",
         "technology": "National Confederation of Hungarian Trade Unions",
         "energy": "National Confederation of Hungarian Trade Unions",
         "agriculture": "National Confederation of Hungarian Trade Unions",
@@ -1400,7 +1400,7 @@
         "construction": "National Confederation of Hungarian Trade Unions",
         "defense": "National Confederation of Hungarian Trade Unions",
         "telecommunications": "National Confederation of Hungarian Trade Unions",
-        "entertainment": "National Confederation of Hungarian Trade Unions",
+        "media_entertainment": "National Confederation of Hungarian Trade Unions",
         "logistics": "National Confederation of Hungarian Trade Unions",
         "extraction": "National Confederation of Hungarian Trade Unions"
       },
@@ -1411,7 +1411,7 @@
         "chemical_industries": "National Confederation of Hungarian Trade Unions",
         "healthcare": "National Confederation of Hungarian Trade Unions",
         "retail": "National Confederation of Hungarian Trade Unions",
-        "automobiles": "National Confederation of Hungarian Trade Unions",
+        "manufacturing_vehicles": "National Confederation of Hungarian Trade Unions",
         "technology": "National Confederation of Hungarian Trade Unions",
         "energy": "National Confederation of Hungarian Trade Unions",
         "agriculture": "National Confederation of Hungarian Trade Unions",
@@ -1419,7 +1419,7 @@
         "construction": "National Confederation of Hungarian Trade Unions",
         "defense": "National Confederation of Hungarian Trade Unions",
         "telecommunications": "National Confederation of Hungarian Trade Unions",
-        "entertainment": "National Confederation of Hungarian Trade Unions",
+        "media_entertainment": "National Confederation of Hungarian Trade Unions",
         "logistics": "National Confederation of Hungarian Trade Unions",
         "extraction": "National Confederation of Hungarian Trade Unions"
       },
@@ -1430,7 +1430,7 @@
         "chemical_industries": "National Confederation of Hungarian Trade Unions",
         "healthcare": "National Confederation of Hungarian Trade Unions",
         "retail": "National Confederation of Hungarian Trade Unions",
-        "automobiles": "National Confederation of Hungarian Trade Unions",
+        "manufacturing_vehicles": "National Confederation of Hungarian Trade Unions",
         "technology": "National Confederation of Hungarian Trade Unions",
         "energy": "National Confederation of Hungarian Trade Unions",
         "agriculture": "National Confederation of Hungarian Trade Unions",
@@ -1438,7 +1438,7 @@
         "construction": "National Confederation of Hungarian Trade Unions",
         "defense": "National Confederation of Hungarian Trade Unions",
         "telecommunications": "National Confederation of Hungarian Trade Unions",
-        "entertainment": "National Confederation of Hungarian Trade Unions",
+        "media_entertainment": "National Confederation of Hungarian Trade Unions",
         "logistics": "National Confederation of Hungarian Trade Unions",
         "extraction": "National Confederation of Hungarian Trade Unions"
       },
@@ -1449,7 +1449,7 @@
         "chemical_industries": "Hungarian Trade Union Confederation",
         "healthcare": "Hungarian Trade Union Confederation",
         "retail": "Hungarian Trade Union Confederation",
-        "automobiles": "Hungarian Trade Union Confederation",
+        "manufacturing_vehicles": "Hungarian Trade Union Confederation",
         "technology": "Hungarian Trade Union Confederation",
         "energy": "Hungarian Trade Union Confederation",
         "agriculture": "Hungarian Trade Union Confederation",
@@ -1457,7 +1457,7 @@
         "construction": "Hungarian Trade Union Confederation",
         "defense": "Hungarian Trade Union Confederation",
         "telecommunications": "Hungarian Trade Union Confederation",
-        "entertainment": "Hungarian Trade Union Confederation",
+        "media_entertainment": "Hungarian Trade Union Confederation",
         "logistics": "Hungarian Trade Union Confederation",
         "extraction": "Hungarian Trade Union Confederation"
       },
@@ -1468,7 +1468,7 @@
         "chemical_industries": "Hungarian Trade Union Confederation",
         "healthcare": "Hungarian Trade Union Confederation",
         "retail": "Hungarian Trade Union Confederation",
-        "automobiles": "Hungarian Trade Union Confederation",
+        "manufacturing_vehicles": "Hungarian Trade Union Confederation",
         "technology": "Hungarian Trade Union Confederation",
         "energy": "Hungarian Trade Union Confederation",
         "agriculture": "Hungarian Trade Union Confederation",
@@ -1476,7 +1476,7 @@
         "construction": "Hungarian Trade Union Confederation",
         "defense": "Hungarian Trade Union Confederation",
         "telecommunications": "Hungarian Trade Union Confederation",
-        "entertainment": "Hungarian Trade Union Confederation",
+        "media_entertainment": "Hungarian Trade Union Confederation",
         "logistics": "Hungarian Trade Union Confederation",
         "extraction": "Hungarian Trade Union Confederation"
       },
@@ -1487,7 +1487,7 @@
         "chemical_industries": "Hungarian Trade Union Confederation",
         "healthcare": "Hungarian Trade Union Confederation",
         "retail": "Hungarian Trade Union Confederation",
-        "automobiles": "Hungarian Trade Union Confederation",
+        "manufacturing_vehicles": "Hungarian Trade Union Confederation",
         "technology": "Hungarian Trade Union Confederation",
         "energy": "Hungarian Trade Union Confederation",
         "agriculture": "Hungarian Trade Union Confederation",
@@ -1495,7 +1495,7 @@
         "construction": "Hungarian Trade Union Confederation",
         "defense": "Hungarian Trade Union Confederation",
         "telecommunications": "Hungarian Trade Union Confederation",
-        "entertainment": "Hungarian Trade Union Confederation",
+        "media_entertainment": "Hungarian Trade Union Confederation",
         "logistics": "Hungarian Trade Union Confederation",
         "extraction": "Hungarian Trade Union Confederation"
       }
@@ -1889,7 +1889,7 @@
       "chemical_industries": 10,
       "energy": 9,
       "construction": 8,
-      "automobiles": 7,
+      "manufacturing_vehicles": 7,
       "retail": 6,
       "logistics": 5,
       "healthcare": 5,
@@ -1900,7 +1900,7 @@
       "technology": 1,
       "telecommunications": 1,
       "media": 1,
-      "entertainment": 1
+      "media_entertainment": 1
     }
   },
   "COUNTRY_SECTOR_WEIGHTS_1979": {
@@ -1916,10 +1916,10 @@
       "logistics": 5,
       "healthcare": 5,
       "retail": 5,
-      "automobiles": 3,
+      "manufacturing_vehicles": 3,
       "telecommunications": 2,
       "media": 2,
-      "entertainment": 2,
+      "media_entertainment": 2,
       "financial": 1,
       "real_estate": 0,
       "technology": 0
@@ -1933,7 +1933,7 @@
       "chemical_industries": 10,
       "energy": 9,
       "construction": 8,
-      "automobiles": 6,
+      "manufacturing_vehicles": 6,
       "retail": 6,
       "logistics": 5,
       "healthcare": 4,
@@ -1944,7 +1944,7 @@
       "technology": 1,
       "telecommunications": 1,
       "media": 1,
-      "entertainment": 1
+      "media_entertainment": 1
     }
   },
   "COUNTRY_TO_ISO_NUMERIC": {

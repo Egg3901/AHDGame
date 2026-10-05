@@ -10,7 +10,7 @@ import {
 describe("manufacturing vehicle operating model", () => {
   it("resolves vehicle recipes from a manufacturing sector without changing generic manufacturing", () => {
     const vehicle = getStrategyForOperatingModel("manufacturing", "standard", "vehicles");
-    const legacy = getStrategy("automobiles", "standard");
+    const legacy = getStrategy("manufacturing_vehicles", "standard");
     const generic = getStrategyForOperatingModel("manufacturing", "standard");
 
     expect(vehicle).toEqual(legacy);
@@ -20,10 +20,12 @@ describe("manufacturing vehicle operating model", () => {
   });
 
   it("keeps legacy automobile strategy identifiers and recipe rows readable", () => {
-    expect(getStrategy("automobiles", "ev")).toEqual(
+    expect(getStrategy("manufacturing_vehicles", "ev")).toEqual(
       getStrategyForOperatingModel("manufacturing", "ev", "vehicles")
     );
-    expect(getStrategy("automobiles", "heavy_machinery").supply).toEqual({ vehicles: 0.55 });
+    expect(getStrategy("manufacturing_vehicles", "heavy_machinery").supply).toEqual({
+      vehicles: 0.55,
+    });
   });
 
   it("uses the vehicle recipes on both sides of an in-progress strategy transition", () => {
@@ -35,7 +37,7 @@ describe("manufacturing vehicle operating model", () => {
       106,
       "vehicles"
     );
-    const legacy = getEffectiveStrategyRates("automobiles", "ev", "standard", 100, 106);
+    const legacy = getEffectiveStrategyRates("manufacturing_vehicles", "ev", "standard", 100, 106);
 
     expect(modeled).toEqual(legacy);
     expect(modeled.isTransitioning).toBe(true);
@@ -44,10 +46,10 @@ describe("manufacturing vehicle operating model", () => {
 });
 
 describe("canonical entertainment media identity", () => {
-  it("resolves strategy lookup and rates through the legacy entertainment recipe", () => {
-    expect(getOperatingSectorType("media", null, "entertainment")).toBe("entertainment");
+  it("resolves strategy lookup and rates through the entertainment lane recipe", () => {
+    expect(getOperatingSectorType("media", null, "entertainment")).toBe("media_entertainment");
     expect(getStrategyForOperatingModel("media", "film_studio", null, "entertainment")).toEqual(
-      getStrategy("entertainment", "film_studio")
+      getStrategy("media_entertainment", "film_studio")
     );
     expect(
       getEffectiveStrategyRatesForOperatingModel(
@@ -60,7 +62,13 @@ describe("canonical entertainment media identity", () => {
         "entertainment"
       )
     ).toEqual(
-      getEffectiveStrategyRatesForOperatingModel("entertainment", "film_studio", null, null, 1)
+      getEffectiveStrategyRatesForOperatingModel(
+        "media_entertainment",
+        "film_studio",
+        null,
+        null,
+        1
+      )
     );
   });
 });

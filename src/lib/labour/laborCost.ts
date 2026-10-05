@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { RepresentingUnionEffects } from "@/lib/unions/unionLookups";
 
 /**
@@ -183,11 +183,11 @@ export function clampWageLevel(value: number): number {
  * baseline: they only set how big the wage lever's bite is per sector, so they
  * are safe to refine alongside ongoing balance work.
  */
-export const SECTOR_LABOR_INTENSITY: Record<CorporationType, number> = {
+export const SECTOR_LABOR_INTENSITY: Record<OperatingSectorType, number> = {
   technology: 0.3,
   healthcare: 0.3,
   media: 0.28,
-  entertainment: 0.28,
+  media_entertainment: 0.28,
   construction: 0.28,
   financial: 0.25,
   defense: 0.24,
@@ -196,7 +196,7 @@ export const SECTOR_LABOR_INTENSITY: Record<CorporationType, number> = {
   manufacturing: 0.18,
   logistics: 0.18,
   agriculture: 0.16,
-  automobiles: 0.16,
+  manufacturing_vehicles: 0.16,
   chemical_industries: 0.15,
   energy: 0.12,
   extraction: 0.12,
@@ -233,11 +233,11 @@ export function eraLaborMultiplier(year?: number | null): number {
  * `laborShare0 = sectorIntensity × eraMultiplier`.
  */
 export function getSectorLaborShare(
-  sectorType: CorporationType | string,
+  sectorType: OperatingSectorType | string,
   year?: number | null
 ): number {
   const intensity =
-    SECTOR_LABOR_INTENSITY[sectorType as CorporationType] ?? LABOUR_DEFAULT_LABOR_SHARE;
+    SECTOR_LABOR_INTENSITY[sectorType as OperatingSectorType] ?? LABOUR_DEFAULT_LABOR_SHARE;
   return intensity * eraLaborMultiplier(year);
 }
 
@@ -253,7 +253,7 @@ export function getSectorLaborShare(
  * wage-per-worker. It does NOT change a sector's total labor cost on its own,
  * cost is intensity × revenue (see getSectorLaborShare) and stays invariant.
  */
-export const SECTOR_WAGE_LEVEL: Record<CorporationType, number> = {
+export const SECTOR_WAGE_LEVEL: Record<OperatingSectorType, number> = {
   technology: 1.8,
   financial: 1.7,
   healthcare: 1.3,
@@ -263,11 +263,11 @@ export const SECTOR_WAGE_LEVEL: Record<CorporationType, number> = {
   telecommunications: 1.2,
   extraction: 1.1,
   media: 1.1,
-  automobiles: 1.0,
+  manufacturing_vehicles: 1.0,
   manufacturing: 0.95,
   construction: 0.9,
   real_estate: 0.9,
-  entertainment: 0.85,
+  media_entertainment: 0.85,
   logistics: 0.8,
   retail: 0.6,
   agriculture: 0.55,
@@ -281,8 +281,8 @@ export const MEDIAN_SECTOR_WAGE_LEVEL = (() => {
 })();
 
 /** Pay level for a sector type, falling back to the median for unknown types. */
-export function sectorWageLevel(sectorType: CorporationType | string): number {
-  return SECTOR_WAGE_LEVEL[sectorType as CorporationType] ?? MEDIAN_SECTOR_WAGE_LEVEL;
+export function sectorWageLevel(sectorType: OperatingSectorType | string): number {
+  return SECTOR_WAGE_LEVEL[sectorType as OperatingSectorType] ?? MEDIAN_SECTOR_WAGE_LEVEL;
 }
 
 /**
@@ -295,7 +295,7 @@ export function sectorWageLevel(sectorType: CorporationType | string): number {
  * `kaitzRatio` 0 (or unset) ⇒ no minimum wage ⇒ always 1.
  */
 export function minWageFloorMultiplier(
-  sectorType: CorporationType | string,
+  sectorType: OperatingSectorType | string,
   kaitzRatio: number
 ): number {
   if (!(kaitzRatio > 0)) return 1;

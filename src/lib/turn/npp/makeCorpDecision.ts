@@ -10,7 +10,10 @@ import {
   revenuePerCapacityUnit,
 } from "@/lib/constants/capacityEconomy";
 import type { CorporationType } from "@/lib/constants/corporations";
-import { getLogisticsSupportedSectorCount } from "@/lib/constants/corporations";
+import {
+  getLogisticsSupportedSectorCount,
+  type ManufacturingIndustryModel,
+} from "@/lib/constants/corporations";
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import type { CapacityDecisionObservation } from "@/lib/corporations/capacityDecisionTelemetry/rules";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
@@ -133,7 +136,7 @@ export function makeNppCorpDecision(
     corp.type,
     corp.industryModel,
     corp.mediaDiscriminator
-  ) as CorporationType;
+  );
   const updates: Record<string, unknown> = { updatedAt: now };
   const sectorUpdates: NppCorpDecision["sectorUpdates"] = [];
   const newSectors: NppCorpDecision["newSectors"] = [];
@@ -853,6 +856,8 @@ export function makeNppCorpDecision(
           stateId: foundingTarget.stateId,
           countryId: foundingTarget.countryId,
           sectorType: foundingTarget.sectorType,
+          industryModel: (foundingTarget.industryModel ??
+            null) as ManufacturingIndustryModel | null,
           mediaDiscriminator: foundingTarget.mediaDiscriminator,
           strategyId: foundingStrategyId,
           // Written in the corp's own currency, because that is what
@@ -875,7 +880,9 @@ export function makeNppCorpDecision(
         });
         unownedDraws.push({
           stateId: foundingTarget.stateId,
-          sectorType: foundingTarget.sectorType as CorporationType,
+          sectorType: foundingTarget.sectorType,
+          industryModel: (foundingTarget.industryModel ??
+            null) as ManufacturingIndustryModel | null,
           mediaDiscriminator: foundingTarget.mediaDiscriminator,
           units: buildUnits,
           countryId: foundingTarget.countryId,
@@ -925,6 +932,9 @@ export function makeNppCorpDecision(
           stateId: foundingTarget.stateId,
           countryId: foundingTarget.countryId,
           sectorType: foundingTarget.sectorType,
+          industryModel: (foundingTarget.industryModel ??
+            null) as ManufacturingIndustryModel | null,
+          mediaDiscriminator: foundingTarget.mediaDiscriminator,
           strategyId: foundingStrategyId,
           revenue: Math.round(foundingTarget.revenue * 0.25),
           profitMargin: 35,

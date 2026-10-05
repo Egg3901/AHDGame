@@ -23,7 +23,7 @@ import {
   type FillRateBand,
 } from "@/lib/corporations/financialFogOfWar";
 import type { BuildQueueSummary } from "@/lib/corporations/sectorBuildQueue";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { capitalizeFacility, facilityPlural } from "@/lib/constants/facilityVocabulary";
 import {
   FREIGHT_CLASS_LABELS,
@@ -236,7 +236,7 @@ export function MothballedPill({
   sectorType,
 }: {
   className?: string;
-  sectorType?: CorporationType;
+  sectorType?: OperatingSectorType;
 }) {
   const sites = facilityPlural(sectorType);
   return (

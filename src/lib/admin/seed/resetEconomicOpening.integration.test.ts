@@ -19,8 +19,6 @@ beforeAll(async () => {
     preset: "1991-default",
     resetReference: true,
     log: (line) => log.push(line),
-    fresh1991VehicleModelSeed: true,
-    fresh1991MediaTaxonomySeed: true,
   });
   expect(log.filter((line) => /\bfailed\b|^error:/i.test(line))).toEqual([]);
 }, 600_000);

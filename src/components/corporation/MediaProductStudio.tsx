@@ -1,5 +1,6 @@
 "use client";
 
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import { useCallback, useEffect, useState } from "react";
 import { Button, Card, LoadingSpinner } from "@/components/ui";
 import { apiErrorText } from "@/lib/errors/catalog";
@@ -17,7 +18,7 @@ interface MediaKind {
 interface MediaSector {
   id: string;
   strategyId?: string | null;
-  operatingSectorType: "media" | "entertainment";
+  operatingSectorType: "media" | "media_entertainment";
   capitalStock: number;
 }
 
@@ -209,7 +210,7 @@ export function MediaProductStudio({
             >
               {eligibleSectors.map((sector) => (
                 <option key={sector.id} value={sector.id}>
-                  {sector.strategyId} ({sector.operatingSectorType})
+                  {sector.strategyId} ({OPERATING_SECTOR_TYPE_LABELS[sector.operatingSectorType]})
                 </option>
               ))}
             </select>

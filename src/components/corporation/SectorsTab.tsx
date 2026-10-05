@@ -2,9 +2,9 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
-  CORPORATION_TYPES,
-  CORPORATION_TYPE_LABELS,
-  type CorporationType,
+  OPERATING_SECTOR_TYPES,
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
   SPRAWL_SECTOR_THRESHOLD,
   SPRAWL_PENALTY_PER_PAIR,
   LOGISTICS_MAX_SPRAWL_EFFECT,
@@ -43,8 +43,11 @@ import type { SectorTypeMetricContext } from "./sectorTypeMetrics";
 import { DenseSection, InlineStatus, Segmented, SmallButton, signTone } from "./dense/DenseKit";
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
-function sectorIdentity(sector: Pick<SectorDetail, "sectorType" | "industryModel">): string {
-  return `${sector.sectorType}:${sector.industryModel ?? ""}`;
+function sectorIdentity(
+  sector: Pick<SectorDetail, "sectorType" | "industryModel" | "mediaDiscriminator">
+): string {
+  const base = `${sector.sectorType}:${sector.industryModel ?? ""}`;
+  return sector.mediaDiscriminator ? `${base}:${sector.mediaDiscriminator}` : base;
 }
 
 interface SectorsTabProps {
@@ -52,9 +55,9 @@ interface SectorsTabProps {
   isCeo: boolean;
   corpId: string;
   /** Primary corporation type — used for expand modal type pre-selection */
-  corporationType: CorporationType;
+  corporationType: OperatingSectorType;
   /** Secondary corporation type — may be null */
-  corporationSecondaryType?: CorporationType | null;
+  corporationSecondaryType?: OperatingSectorType | null;
   /** Corporation liquid capital — used for afford checks in expand modal */
   liquidCapital: number;
   /** Corp currency code for all per-sector money fields (v0.2.6). */
@@ -83,7 +86,7 @@ interface SectorsTabProps {
   /** Deep-link from state board: open expand modal on mount. */
   expandOnMount?: boolean;
   /** Deep-link: preselect this sector type in the expand modal. */
-  expandSectorType?: CorporationType;
+  expandSectorType?: OperatingSectorType;
   /** Deep-link: focus this state once suggestions load. */
   expandStateId?: string;
   /** Called after consuming expand deep-link params (clear URL). */
@@ -140,16 +143,16 @@ export default function SectorsTab({
   // CEO identity resolves async after /character/me. Initializing open state from
   // `expandOnMount && isCeo` on first paint drops the deep link (ticket #1004).
   const [expandModalOpen, setExpandModalOpen] = useState(false);
-  const [deepLinkType] = useState<CorporationType | undefined>(expandSectorType);
+  const [deepLinkType] = useState<OperatingSectorType | undefined>(expandSectorType);
   const [deepLinkState] = useState<string | undefined>(expandStateId);
   // Set when the expand flow is opened from a type dossier, so the modal skips
   // the type picker and opens on the division the player was already reading.
-  const [expandTypeOverride, setExpandTypeOverride] = useState<CorporationType | undefined>(
+  const [expandTypeOverride, setExpandTypeOverride] = useState<OperatingSectorType | undefined>(
     undefined
   );
   const deepLinkHandledRef = useRef(false);
 
-  const openExpandModal = (type?: CorporationType) => {
+  const openExpandModal = (type?: OperatingSectorType) => {
     setExpandTypeOverride(type);
     setExpandModalOpen(true);
   };
@@ -207,13 +210,18 @@ export default function SectorsTab({
   const sectorTypes = useMemo(() => {
     const groups = new Map<
       string,
-      { sectorType: string; industryModel: string | null; count: number }
+      { sectorType: string; industryModel: string | null; lane: string; count: number }
     >();
     for (const sector of sectors) {
       const value = sectorIdentity(sector);
       const group = groups.get(value) ?? {
         sectorType: sector.sectorType,
         industryModel: sector.industryModel ?? null,
+        lane: getOperatingSectorType(
+          sector.sectorType,
+          sector.industryModel,
+          sector.mediaDiscriminator
+        ),
         count: 0,
       };
       group.count += 1;
@@ -225,9 +233,9 @@ export default function SectorsTab({
         value,
         ...group,
         label:
-          group.sectorType === "manufacturing" && group.industryModel === "vehicles"
+          group.lane === "manufacturing_vehicles"
             ? "Vehicle manufacturing"
-            : (CORPORATION_TYPE_LABELS[group.sectorType as CorporationType] ?? group.sectorType),
+            : (OPERATING_SECTOR_TYPE_LABELS[group.lane as OperatingSectorType] ?? group.sectorType),
       }));
   }, [sectors]);
 
@@ -257,11 +265,9 @@ export default function SectorsTab({
   // onward is a compile-time string. An unowned or unknown type simply gets no
   // dossier, while the table above still filters.
   const selectedSectorGroup = sectorTypes.find((group) => group.value === activeTypeFilter) ?? null;
-  const operatingDossierType = selectedSectorGroup
-    ? getOperatingSectorType(selectedSectorGroup.sectorType, selectedSectorGroup.industryModel)
-    : null;
+  const operatingDossierType = selectedSectorGroup?.lane ?? null;
   const dossierType = operatingDossierType
-    ? (CORPORATION_TYPES.find((t) => t === operatingDossierType) ?? null)
+    ? (OPERATING_SECTOR_TYPES.find((t) => t === operatingDossierType) ?? null)
     : null;
   const dossierSectors = useMemo(
     () => (activeTypeFilter ? sectors.filter((s) => sectorIdentity(s) === activeTypeFilter) : []),
@@ -365,7 +371,7 @@ export default function SectorsTab({
           <SmallButton
             tone="primary"
             onClick={() =>
-              openExpandModal(selectedSectorGroup?.sectorType as CorporationType | undefined)
+              openExpandModal(selectedSectorGroup?.lane as OperatingSectorType | undefined)
             }
           >
             + {buildLabel}
@@ -524,7 +530,10 @@ export default function SectorsTab({
                   (sum, s) =>
                     sum +
                     (s.plantCount ??
-                      facilitiesFromUnits(s.sectorType as CorporationType, s.capacityUnits ?? 0)),
+                      facilitiesFromUnits(
+                        s.sectorType as OperatingSectorType,
+                        s.capacityUnits ?? 0
+                      )),
                   0
                 );
                 const totalProduced = sortedSectors.reduce(

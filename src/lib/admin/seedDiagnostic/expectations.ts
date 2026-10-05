@@ -32,7 +32,7 @@ import {
 } from "@/lib/admin/seed/seedCountryGameStates";
 import { ERA_COMPOSITIONS, getEraComposition } from "@/lib/seeds/demographicCategories";
 import { getStateSectorWeights } from "@/lib/seeds/reference/sectorSeedWeights";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import {
   getPresetMonetaryScope,
   type MonetaryCoverageExclusion,
@@ -244,7 +244,7 @@ export function expectedPrimeRate(countryId: CountryId, startingYear?: number): 
 export function expectedSectorShares(countryId: CountryId, preset: string): Record<string, number> {
   const weights = getStateSectorWeights("_national_", countryId, preset);
   const out: Record<string, number> = {};
-  for (const t of CORPORATION_TYPES) {
+  for (const t of OPERATING_SECTOR_TYPES) {
     out[t] = weights[t] ?? 0;
   }
   return out;

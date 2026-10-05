@@ -24,8 +24,11 @@ import type { LegislationPolicyOption, LegislationType } from "@/lib/db/types/le
 import {
   SECTOR_MARKET_GDP_FRACTION,
   SECTOR_TYPE_COUNT,
-  CORPORATION_TYPES,
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPE_LABELS,
+  OPERATING_SECTOR_TYPES,
+  operatingSectorIdentity,
+  corporationTypeOfLane,
+  type OperatingSectorType,
 } from "@/lib/constants/corporations";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
@@ -6060,7 +6063,7 @@ const RU_PUBLIC_CORPORATION_SEQUENTIAL_ID = 900_009;
 // 0x88 headroom → 0x100 bands). Placing those bands at 0x100–0xc00 collided
 // with live legacy ObjectIds (BG/RO/YU overwrote RU/CN/DD). New layout uses a
 // 4-hex suffix under a 20-char prefix, starting at 0x1000 — disjoint from every
-// legacy 3-digit SOE id. Slot index is the stable CORPORATION_TYPES ordinal.
+// legacy 3-digit SOE id. Slot index is the stable OPERATING_SECTOR_TYPES ordinal.
 const SOE_ID_BASE_BY_COUNTRY: Partial<Record<CountryId, number>> = {
   UKR: 0x1000,
   BLR: 0x1100,
@@ -6178,9 +6181,10 @@ function buildCommandSoeCorpEntries(params: {
   // exists on day one (sectorTurn would otherwise lazy-seed from revenue).
   const buildSector = (
     state: StateBudgetSeedInput,
-    sectorType: CorporationType,
+    lane: OperatingSectorType,
     corpId: ObjectId
   ) => {
+    const { sectorType, industryModel, mediaDiscriminator } = operatingSectorIdentity(lane);
     const strategyId =
       sectorType === "extraction"
         ? (extractionStrategyByState?.[state.id] ?? defaultExtractionStrategyId)
@@ -6189,7 +6193,7 @@ function buildCommandSoeCorpEntries(params: {
       gdp: state.gdp,
       countryId,
       stateId: state.id,
-      sectorType,
+      sectorType: lane,
       preset,
     });
     const revenue = Math.round(revenueAtlantic / usdRate);
@@ -6197,7 +6201,9 @@ function buildCommandSoeCorpEntries(params: {
       sectorType,
       revenueAtlantic,
       strategyId,
-      eraUnitScale
+      eraUnitScale,
+      industryModel,
+      mediaDiscriminator
     );
     return {
       _id: new ObjectId(),
@@ -6205,6 +6211,8 @@ function buildCommandSoeCorpEntries(params: {
       countryId,
       stateId: state.id,
       sectorType,
+      ...(industryModel ? { industryModel } : {}),
+      ...(mediaDiscriminator ? { mediaDiscriminator } : {}),
       targetGrowthRate: planGrowthRate,
       currentGrowthRate: planGrowthRate,
       currentGrowthCost: 0,
@@ -6219,10 +6227,12 @@ function buildCommandSoeCorpEntries(params: {
     };
   };
 
-  return soeSectors.map((sectorType) => {
-    const slot = CORPORATION_TYPES.indexOf(sectorType);
+  return soeSectors.map((lane) => {
+    const identity = operatingSectorIdentity(lane);
+    const sectorType = identity.sectorType;
+    const slot = OPERATING_SECTOR_TYPES.indexOf(lane);
     if (slot < 0) {
-      throw new Error(`command SOE sectorType ${sectorType} is not a CorporationType`);
+      throw new Error(`command SOE lane ${lane} is not an operating sector type`);
     }
     const corpId = soeObjectId(idBase + slot * 8);
     const ceoId = soeObjectId(idBase + slot * 8 + 1);
@@ -6240,9 +6250,9 @@ function buildCommandSoeCorpEntries(params: {
             return false;
           })
         : states;
-    const sectors = sectorStates.map((state) => buildSector(state, sectorType, corpId));
+    const sectors = sectorStates.map((state) => buildSector(state, lane, corpId));
     const planTarget = sectors.reduce((sum, s) => sum + s.revenue, 0);
-    const label = CORPORATION_TYPE_LABELS[sectorType];
+    const label = OPERATING_SECTOR_TYPE_LABELS[lane];
     return {
       corporation: {
         _id: corpId,
@@ -6250,6 +6260,8 @@ function buildCommandSoeCorpEntries(params: {
         name: `${namePrefix} ${label} Enterprise`,
         description: `State-owned enterprise operating the ${label.toLowerCase()} sector of the ${polityDescriptor}.`,
         type: sectorType,
+        ...(identity.industryModel ? { industryModel: identity.industryModel } : {}),
+        ...(identity.mediaDiscriminator ? { mediaDiscriminator: identity.mediaDiscriminator } : {}),
         countryId,
         ceoId,
         userId,
@@ -6271,8 +6283,8 @@ function buildCommandSoeCorpEntries(params: {
         isNationalized: false,
         isPrivate: false,
         isPrimaryNationalCorporation: false,
-        assignedSectorTypes: [sectorType],
-        soe: makeSeedSoeState(sectorType, planTarget),
+        assignedSectorTypes: [lane],
+        soe: makeSeedSoeState(lane, planTarget),
         legalStructure,
         createdAt: now,
         updatedAt: now,
@@ -6312,7 +6324,7 @@ function buildCommandSoeCorpEntries(params: {
 // (ENSIDESA/ENDESA/SEAT/RENFE) is preserved as inert reference for a possible
 // future Tier-2 migration rather than deleted outright.
 interface MarketStateEnterpriseSectorSpec {
-  type: CorporationType;
+  type: OperatingSectorType;
   /**
    * Share of the (state, sectorType) unowned-market bucket this state
    * enterprise captures, e.g. 0.9 ⇒ the state holds ~90% of that sector's
@@ -6360,6 +6372,7 @@ function buildMarketStateEnterpriseCorpEntries(params: {
 
   const sectors: CountryOwnedSeedData["sectors"] = [];
   for (const sectorSpec of spec.sectors) {
+    const identity = operatingSectorIdentity(sectorSpec.type);
     for (const state of countryStates) {
       // Canonical (state, sectorType) market size, same source of truth the
       // unowned-market seeder uses — then take only this enterprise's share.
@@ -6376,7 +6389,9 @@ function buildMarketStateEnterpriseCorpEntries(params: {
         corporationId: corpId,
         countryId: spec.countryId,
         stateId: state.id,
-        sectorType: sectorSpec.type,
+        sectorType: identity.sectorType,
+        ...(identity.industryModel ? { industryModel: identity.industryModel } : {}),
+        ...(identity.mediaDiscriminator ? { mediaDiscriminator: identity.mediaDiscriminator } : {}),
         targetGrowthRate: growthRate,
         currentGrowthRate: growthRate,
         currentGrowthCost: 0,
@@ -6399,7 +6414,7 @@ function buildMarketStateEnterpriseCorpEntries(params: {
         sequentialId: spec.sequentialId,
         name: spec.name,
         description: spec.description,
-        type: spec.sectors[0].type,
+        type: corporationTypeOfLane(spec.sectors[0].type),
         countryId: spec.countryId,
         ceoId: new ObjectId(spec.ceoOid),
         userId: new ObjectId(spec.userOid),
@@ -6459,7 +6474,7 @@ const MARKET_STATE_ENTERPRISE_SPECS: MarketStateEnterpriseSpec[] = [
       { type: "energy", marketShare: 0.9 }, // EDF + GDF: near-total electricity/gas monopoly
       { type: "extraction", marketShare: 0.85 }, // Charbonnages de France: coal monopoly
       { type: "logistics", marketShare: 0.55 }, // SNCF: dominant rail, private trucking coexists
-      { type: "automobiles", marketShare: 0.35 }, // Renault: ~1/3 of French auto output vs. private Peugeot/Citroën/Simca
+      { type: "manufacturing_vehicles", marketShare: 0.35 }, // Renault: ~1/3 of French auto output vs. private Peugeot/Citroën/Simca
       { type: "financial", marketShare: 0.45 }, // Banque de France + 4 deposit banks: ~half of French deposits
     ],
   },
@@ -6621,7 +6636,7 @@ export const DORMANT_MARKET_STATE_ENTERPRISE_SPECS: MarketStateEnterpriseSpec[] 
     sectors: [
       { type: "manufacturing", marketShare: 0.45 }, // ENSIDESA integrated steelworks
       { type: "energy", marketShare: 0.5 }, // ENDESA state electricity
-      { type: "automobiles", marketShare: 0.7 }, // SEAT: near-monopoly under autarky import bans
+      { type: "manufacturing_vehicles", marketShare: 0.7 }, // SEAT: near-monopoly under autarky import bans
       { type: "logistics", marketShare: 0.8 }, // RENFE: full rail monopoly
     ],
   },

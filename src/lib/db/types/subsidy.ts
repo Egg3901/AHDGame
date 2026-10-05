@@ -1,5 +1,5 @@
 import type { ObjectId } from "mongodb";
-import type { CorporationType } from "../../constants/corporations";
+import type { OperatingSectorType } from "../../constants/corporations";
 import type { CountryId } from "../../constants/countries";
 
 export type SubsidyScopeType = "sector" | "economy_wide";
@@ -14,7 +14,7 @@ export interface Subsidy {
   stateId?: string;
   scopeType: SubsidyScopeType;
   /** Set when scopeType = "sector" */
-  targetSectorType?: CorporationType;
+  targetSectorType?: OperatingSectorType;
   /**
    * Optional strategy filter — only sectors using this strategy qualify.
    * Only valid when scopeType = "sector". Undefined = all strategies.

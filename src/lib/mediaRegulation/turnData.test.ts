@@ -56,7 +56,7 @@ describe("loadUSMediaOutletDelivery", () => {
     expect(corporationFind).toHaveBeenCalledOnce();
     expect(find.mock.calls[0][0]).toMatchObject({
       stateId: { $in: expect.arrayContaining(["CA"]) },
-      sectorType: { $in: ["media", "entertainment"] },
+      sectorType: "media",
     });
     expect(find.mock.calls[0][1].projection).toMatchObject({
       producedUnits: 1,

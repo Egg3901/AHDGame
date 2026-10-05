@@ -3,7 +3,7 @@
  * per lane/sector/decade, not per node) and served from R2. Uploaded by
  * scripts/upload-tech-images-to-r2.mjs; a placeholder is used until art lands.
  */
-import type { CorporationType } from "../corporations";
+import type { OperatingSectorType } from "../corporations";
 import type { TechLane } from "./nodes";
 
 const CDN_TECH_BASE = "https://cdn.ahousedividedgame.com/static/tech";
@@ -17,7 +17,7 @@ export const TECH_PLACEHOLDER_IMAGE = `${CDN_TECH_BASE}/placeholder.webp`;
  */
 export function tierImageUrl(
   lane: TechLane,
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   decadeId: string
 ): string {
   return lane === "generic"

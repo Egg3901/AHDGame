@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import type { MacroCountryState, MacroSectorState } from "@/lib/world/macro/types";
 import { computeMacroContribution } from "@/lib/world/macro/kernel";
@@ -26,19 +26,19 @@ interface MacroProfile {
   fiscalCapacity: number;
   stability: number;
   tradeExposure: number;
-  sectorWeights: Partial<Record<CorporationType, number>>;
+  sectorWeights: Partial<Record<OperatingSectorType, number>>;
   resources: Partial<Record<ExtractableResource, number>>;
 }
 
 function buildSectors(
   annualGdp: number,
-  weights: Partial<Record<CorporationType, number>>
-): Partial<Record<CorporationType, MacroSectorState>> {
+  weights: Partial<Record<OperatingSectorType, number>>
+): Partial<Record<OperatingSectorType, MacroSectorState>> {
   const perTurnGdp = annualGdp / TURNS_PER_YEAR;
   const weightSum = Object.values(weights).reduce((a, b) => a + (b ?? 0), 0);
-  const sectors: Partial<Record<CorporationType, MacroSectorState>> = {};
+  const sectors: Partial<Record<OperatingSectorType, MacroSectorState>> = {};
 
-  for (const [sectorType, weight] of Object.entries(weights) as [CorporationType, number][]) {
+  for (const [sectorType, weight] of Object.entries(weights) as [OperatingSectorType, number][]) {
     if (weight <= 0) continue;
     const capacity = (perTurnGdp * weight) / weightSum;
     const demandRatio =
@@ -114,9 +114,9 @@ const ROSTER_PROFILES: Readonly<Record<string, MacroProfile>> = Object.freeze({
       healthcare: 3,
       telecommunications: 2,
       media: 2,
-      entertainment: 1,
+      media_entertainment: 1,
       defense: 4,
-      automobiles: 0,
+      manufacturing_vehicles: 0,
       chemical_industries: 0,
       technology: 0,
     },
@@ -143,9 +143,9 @@ const ROSTER_PROFILES: Readonly<Record<string, MacroProfile>> = Object.freeze({
       healthcare: 3,
       telecommunications: 2,
       media: 2,
-      entertainment: 1,
+      media_entertainment: 1,
       defense: 3,
-      automobiles: 0,
+      manufacturing_vehicles: 0,
       chemical_industries: 0,
       technology: 0,
     },
@@ -172,9 +172,9 @@ const ROSTER_PROFILES: Readonly<Record<string, MacroProfile>> = Object.freeze({
       healthcare: 3,
       telecommunications: 2,
       media: 2,
-      entertainment: 1,
+      media_entertainment: 1,
       defense: 1,
-      automobiles: 0,
+      manufacturing_vehicles: 0,
       chemical_industries: 0,
       technology: 0,
     },
@@ -201,9 +201,9 @@ const ROSTER_PROFILES: Readonly<Record<string, MacroProfile>> = Object.freeze({
       healthcare: 4,
       telecommunications: 2,
       media: 2,
-      entertainment: 2,
+      media_entertainment: 2,
       defense: 2,
-      automobiles: 0,
+      manufacturing_vehicles: 0,
       chemical_industries: 0,
       technology: 0,
     },
@@ -230,9 +230,9 @@ const ROSTER_PROFILES: Readonly<Record<string, MacroProfile>> = Object.freeze({
       healthcare: 4,
       telecommunications: 3,
       media: 2,
-      entertainment: 2,
+      media_entertainment: 2,
       defense: 6,
-      automobiles: 0,
+      manufacturing_vehicles: 0,
       chemical_industries: 0,
       technology: 0,
     },
@@ -259,9 +259,9 @@ const ROSTER_PROFILES: Readonly<Record<string, MacroProfile>> = Object.freeze({
       healthcare: 3,
       telecommunications: 2,
       media: 2,
-      entertainment: 1,
+      media_entertainment: 1,
       defense: 3,
-      automobiles: 0,
+      manufacturing_vehicles: 0,
       chemical_industries: 0,
       technology: 0,
     },
@@ -288,9 +288,9 @@ const ROSTER_PROFILES: Readonly<Record<string, MacroProfile>> = Object.freeze({
       healthcare: 4,
       telecommunications: 2,
       media: 2,
-      entertainment: 1,
+      media_entertainment: 1,
       defense: 4,
-      automobiles: 0,
+      manufacturing_vehicles: 0,
       chemical_industries: 0,
       technology: 0,
     },

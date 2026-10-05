@@ -406,7 +406,12 @@ describe("checkDuplicateTariffProvisions", () => {
       toArray: vi.fn().mockResolvedValue([
         {
           provisions: [
-            { type: "tariff", scopeType: "sector", targetSectorType: "automobiles", rate: 10 },
+            {
+              type: "tariff",
+              scopeType: "sector",
+              targetSectorType: "manufacturing_vehicles",
+              rate: 10,
+            },
           ],
         },
       ]),
@@ -415,7 +420,7 @@ describe("checkDuplicateTariffProvisions", () => {
       db as unknown as Db,
       "bills",
       { countryId: "UK", status: { $nin: ["failed"] } },
-      [{ scopeType: "sector", targetSectorType: "automobiles" }]
+      [{ scopeType: "sector", targetSectorType: "manufacturing_vehicles" }]
     );
     expect(result).not.toBeNull();
   });
@@ -426,7 +431,12 @@ describe("checkDuplicateTariffProvisions", () => {
       toArray: vi.fn().mockResolvedValue([
         {
           provisions: [
-            { type: "tariff", scopeType: "sector", targetSectorType: "automobiles", rate: 10 },
+            {
+              type: "tariff",
+              scopeType: "sector",
+              targetSectorType: "manufacturing_vehicles",
+              rate: 10,
+            },
           ],
         },
       ]),
@@ -446,7 +456,12 @@ describe("checkDuplicateTariffProvisions", () => {
       toArray: vi.fn().mockResolvedValue([
         {
           provisions: [
-            { type: "tariff", scopeType: "sector", targetSectorType: "automobiles", rate: 10 },
+            {
+              type: "tariff",
+              scopeType: "sector",
+              targetSectorType: "manufacturing_vehicles",
+              rate: 10,
+            },
           ],
         },
       ]),

@@ -4,7 +4,10 @@ import Link from "next/link";
 import type { OverviewViewModel } from "@/lib/states/overview/types";
 import { formatGDP } from "@/lib/utils/formatters";
 import { getCurrencyPrefix } from "@/lib/utils/budgetCalculations";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 
 /**
  * Economy summary for the State Overview tab's side column.
@@ -73,7 +76,7 @@ export function EconomySummary({
                 {economy.topSectors.map((s) => (
                   <li key={s.id} className="flex items-baseline justify-between gap-3 text-body">
                     <span className="font-medium text-foreground">
-                      {CORPORATION_TYPE_LABELS[s.id as CorporationType] ?? s.id}
+                      {OPERATING_SECTOR_TYPE_LABELS[s.id as OperatingSectorType] ?? s.id}
                     </span>
                     {s.specializationBonus && (
                       <span

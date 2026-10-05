@@ -49,14 +49,15 @@ for (const budget of budgetConfigs) {
   const mediaRate =
     SECTOR_SUPPLY.media?.find((flow) => flow.commodity === "advertising")?.rate ?? 0;
   const entertainmentRate =
-    SECTOR_SUPPLY.entertainment?.find((flow) => flow.commodity === "advertising")?.rate ?? 0;
+    SECTOR_SUPPLY.media_entertainment?.find((flow) => flow.commodity === "advertising")?.rate ?? 0;
   const mediaSupplyValue = planned
     ? 0
     : dailyGdp *
       (weights.media ?? 0) *
       mediaRate *
       plannedEconomyMediaSupplyFactor("media", false, null);
-  const entertainmentSupplyValue = dailyGdp * (weights.entertainment ?? 0) * entertainmentRate;
+  const entertainmentSupplyValue =
+    dailyGdp * (weights.media_entertainment ?? 0) * entertainmentRate;
   const advertisingSupplyValuePerDay = mediaSupplyValue + entertainmentSupplyValue;
 
   anchorGdpPerDay += dailyGdp;
@@ -66,7 +67,7 @@ for (const budget of budgetConfigs) {
     planned,
     anchorGdpPerDay: dailyGdp,
     mediaWeight: weights.media ?? 0,
-    entertainmentWeight: weights.entertainment ?? 0,
+    entertainmentWeight: weights.media_entertainment ?? 0,
     advertisingSupplyValuePerDay,
   });
 }

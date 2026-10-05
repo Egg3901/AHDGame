@@ -2,7 +2,7 @@
 
 import React, { type Dispatch } from "react";
 import { PlayerSelector } from "@/components/PlayerSelector";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import type {
   ConfirmAction,
   CorpRow,
@@ -110,8 +110,9 @@ export function CorporationsTable({
                     <div className="font-medium">{row.name}</div>
                     <div className="text-xs text-muted">
                       {row.countryId} ·{" "}
-                      {CORPORATION_TYPE_LABELS[row.type as keyof typeof CORPORATION_TYPE_LABELS] ??
-                        row.type}
+                      {OPERATING_SECTOR_TYPE_LABELS[
+                        row.type as keyof typeof OPERATING_SECTOR_TYPE_LABELS
+                      ] ?? row.type}
                     </div>
                   </td>
                   <td className="px-4 py-3">

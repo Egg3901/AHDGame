@@ -37,7 +37,7 @@ const expectedEffects: Record<string, Record<string, unknown[][]>> = {
         { type: "sectorOutputDemandModifier", sectorType: "retail", pct: -8, durationTurns: 8 },
         {
           type: "sectorOutputDemandModifier",
-          sectorType: "entertainment",
+          sectorType: "media_entertainment",
           pct: -5,
           durationTurns: 8,
         },
@@ -129,7 +129,7 @@ const expectedEffects: Record<string, Record<string, unknown[][]>> = {
         { type: "sectorOutputDemandModifier", sectorType: "retail", pct: -20, durationTurns: 12 },
         {
           type: "sectorOutputDemandModifier",
-          sectorType: "entertainment",
+          sectorType: "media_entertainment",
           pct: -12,
           durationTurns: 12,
         },
@@ -157,7 +157,7 @@ const expectedEffects: Record<string, Record<string, unknown[][]>> = {
         { type: "sectorOutputDemandModifier", sectorType: "retail", pct: -10, durationTurns: 8 },
         {
           type: "sectorOutputDemandModifier",
-          sectorType: "entertainment",
+          sectorType: "media_entertainment",
           pct: -6,
           durationTurns: 8,
         },
@@ -201,7 +201,7 @@ const expectedEffects: Record<string, Record<string, unknown[][]>> = {
         { type: "sectorOutputDemandModifier", sectorType: "retail", pct: -8, durationTurns: 10 },
         {
           type: "sectorOutputDemandModifier",
-          sectorType: "entertainment",
+          sectorType: "media_entertainment",
           pct: -10,
           durationTurns: 10,
         },

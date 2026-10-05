@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { MetricCategoryId, StateMetrics } from "@/lib/db/types";
 
 export type SectorMetricMarginChannel =
@@ -56,7 +56,7 @@ export interface StateMetricMarginOverride {
 }
 
 export interface StateMetricMarginInput {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   strategyId?: string | null;
   transitionFromStrategyId?: string | null;
   transitionProgress?: number | null;

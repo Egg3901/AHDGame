@@ -149,8 +149,8 @@
     "b4bd8948cbc48d70bc7c1ded0d130e21aacd851e737e67aff9397f8bc7913902": 1,
     "39a3750ad3590f6de746df6edb1a17dd3fa5af49f5ea8e1b01e808d8a5aeb0a0": 1,
     "182661ed467c3159e4fc5834505f3900deea4a44d8656b6d5b056ac5a6e73369": 1,
-    "ad2a40823bbbc16d6ad89fcbb5efb385e4caf59d9d8f4c8d488affb6ebeef188": 1,
-    "4a98a797fb7312ae31ba0926e8bbc46f235b3f6d9e6fe914c03d1c221e6c23e8": 1,
+    "a868df75bdd5a8588427c82258bf5e2c28747c8ab4b0eb7c58bbf9d15567b951": 1,
+    "386a7586dfd98a573b8cad986935e5e45487ddc15ce097e690c9aae39c46f9ba": 1,
     "c989440a28843aafe580797a222880f3e90064c76f4dca6d1946291fbbd3bc76": 1,
     "c22e3d32bc9dd24b86cbeefca4da5a60fb00ca1ee07dbc5314992f3bb62baf59": 1,
     "5f3f520a103f53d9d3ef63c0c874335bc31394974ad334d8e0e9c05c0a34edb6": 1,
@@ -445,8 +445,8 @@
     "b14cdf85c7e9fee834aafe9ce97af398cf8708c1b16d3c8dd807a09e4f9ce59d": 1,
     "bfe9b9e31e259060f1436fafbcc8d08dcd50d89cd6a3e045c539a947a82cf5a8": 1,
     "c3dc033bef544c5c8671e8a3591a8a3b7011b46f67603c32d31ffc1adbd32522": 1,
-    "c9e573a7005b15c2a54f6f8eb9f2f399bf46bdf4641fc8c563853b05c30ccd1d": 1,
-    "9187f9d9191dda4a9f2e6a80a0498199047a06e2fe943e9c01d6759e111c8e70": 1,
+    "367ebafe6d3441220b32f81c40129d8cd93bf84cd22a15ee1f5a9eda7ff44424": 1,
+    "1c4506ee0a08b0ca2de79a1f381c3c160e8ce757ab233e015cdafe4963c34489": 1,
     "e767c5f340956b963ad4e06453b25b097c0b9e479785d4aaaf96d12513d35dde": 1,
     "e5e6daff7cb93d61a8c82c61881f3566f5b813ceacaeee7a3ecf9eed3e85c0dc": 1,
     "9edf0b005e0024a70839abb4130526eb1f4090a9913fec098cbc3d8ba283b961": 1,
@@ -1729,15 +1729,15 @@
       "file": "src/lib/admin/seed/reconcileCommandEconomyUnowned.ts",
       "operation": "deleteMany",
       "owner": "reconcileCommandEconomyUnowned",
-      "expression": "db.collection<CorporateSector>(\"corporateSectors\").deleteMany({ countryId, sectorType, stateId: { $in: [...new Set(entry.sectors.map((s) => s.stateId))] }, corporationId: { $ne: corpId }, })",
-      "fingerprint": "ad2a40823bbbc16d6ad89fcbb5efb385e4caf59d9d8f4c8d488affb6ebeef188"
+      "expression": "db.collection<CorporateSector>(\"corporateSectors\").deleteMany({ countryId, ...operatingSectorFilter(sectorType), stateId: { $in: [...new Set(entry.sectors.map((s) => s.stateId))] }, corporationId: { $ne: corpId }, })",
+      "fingerprint": "a868df75bdd5a8588427c82258bf5e2c28747c8ab4b0eb7c58bbf9d15567b951"
     },
     {
       "file": "src/lib/admin/seed/reconcileCommandEconomyUnowned.ts",
       "operation": "updateOne",
       "owner": "reconcileCommandEconomyUnowned",
-      "expression": "db.collection<CorporateSector>(\"corporateSectors\").updateOne({ corporationId: corpId, stateId: sector.stateId, sectorType: sector.sectorType }, { $set: { ...sectorData, corporationId: corpId, }, }, { upsert: true })",
-      "fingerprint": "4a98a797fb7312ae31ba0926e8bbc46f235b3f6d9e6fe914c03d1c221e6c23e8"
+      "expression": "db.collection<CorporateSector>(\"corporateSectors\").updateOne({ corporationId: corpId, stateId: sector.stateId, sectorType: sector.sectorType, industryModel: sector.industryModel ?? null, mediaDiscriminator: sector.mediaDiscriminator ?? null, }, { $set: { ...sectorData, corporationId: corpId, }, }, { upsert: true })",
+      "fingerprint": "386a7586dfd98a573b8cad986935e5e45487ddc15ce097e690c9aae39c46f9ba"
     },
     {
       "file": "src/lib/turn/suspiciousDetection.ts",
@@ -3871,15 +3871,15 @@
       "file": "src/lib/turn/autoSectorSeed.ts",
       "operation": "updateMany",
       "owner": "processAutoSectorSeed",
-      "expression": "db .collection(\"corporateSectors\") .updateMany({ sectorType, industryModel, corporationId: { $in: natCorpObjectIds } }, [ { $set: { revenue: { $round: [{ $multiply: [\"$revenue\", multiplier] }, 0] }, ...(plantsEnabled ? { capitalStock: { $multiply: [{ $ifNull: [\"$capitalStock\", 0] }, multiplier], }, plantCount: { $cond: [ { $gt: [boostedStock, 0] }, { $max: [1, { $floor: [{ $divide: [boostedStock, quantum] }] }] }, 0, ], }, plantUnitRemainder: { $cond: [ { $gte: [boostedStock, quantum] }, { $subtract: [ boostedStock, { $multiply: [ { $floor: [{ $divide: [boostedStock, quantum] }] }, quantum, ], }, ], }, 0, ], }, } : {}), updatedAt: now, }, }, ])",
-      "fingerprint": "c9e573a7005b15c2a54f6f8eb9f2f399bf46bdf4641fc8c563853b05c30ccd1d"
+      "expression": "db.collection(\"corporateSectors\").updateMany({ sectorType, industryModel, mediaDiscriminator, corporationId: { $in: natCorpObjectIds }, }, [ { $set: { revenue: { $round: [{ $multiply: [\"$revenue\", multiplier] }, 0] }, ...(plantsEnabled ? { capitalStock: { $multiply: [{ $ifNull: [\"$capitalStock\", 0] }, multiplier], }, plantCount: { $cond: [ { $gt: [boostedStock, 0] }, { $max: [1, { $floor: [{ $divide: [boostedStock, quantum] }] }] }, 0, ], }, plantUnitRemainder: { $cond: [ { $gte: [boostedStock, quantum] }, { $subtract: [ boostedStock, { $multiply: [ { $floor: [{ $divide: [boostedStock, quantum] }] }, quantum, ], }, ], }, 0, ], }, } : {}), updatedAt: now, }, }, ])",
+      "fingerprint": "367ebafe6d3441220b32f81c40129d8cd93bf84cd22a15ee1f5a9eda7ff44424"
     },
     {
       "file": "src/lib/turn/autoSectorSeed.ts",
       "operation": "insertOne",
       "owner": "processAutoSectorSeed",
-      "expression": "db.collection<UnownedSector>(\"unownedSectors\").insertOne({ _id: new ObjectId(), stateId: state._id as string, countryId: state.countryId as CountryId, sectorType, industryModel, mediaDiscriminator, revenue: seedRevenue, headroomUnits: computeUnownedHeadroomUnits(sectorType as CorporationType, seedRevenue, eraUnitScale, industryModel, mediaDiscriminator), createdAt: now, updatedAt: now, })",
-      "fingerprint": "9187f9d9191dda4a9f2e6a80a0498199047a06e2fe943e9c01d6759e111c8e70"
+      "expression": "db.collection<UnownedSector>(\"unownedSectors\").insertOne({ _id: new ObjectId(), stateId: state._id as string, countryId: state.countryId as CountryId, sectorType, industryModel, mediaDiscriminator, revenue: seedRevenue, headroomUnits: computeUnownedHeadroomUnits(sectorType, seedRevenue, eraUnitScale, industryModel, mediaDiscriminator), createdAt: now, updatedAt: now, })",
+      "fingerprint": "1c4506ee0a08b0ca2de79a1f381c3c160e8ce757ab233e015cdafe4963c34489"
     },
     {
       "file": "src/lib/world/playerHandoff.ts",

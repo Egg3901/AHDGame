@@ -18,16 +18,16 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 /** Identity icon per corporation/sector type, for National Corporation surfaces. */
-const SECTOR_ICON: Partial<Record<CorporationType, LucideIcon>> = {
+const SECTOR_ICON: Partial<Record<OperatingSectorType, LucideIcon>> = {
   energy: Zap,
   telecommunications: Wifi,
   technology: Cpu,
   healthcare: HeartPulse,
   logistics: Truck,
-  automobiles: Car,
+  manufacturing_vehicles: Car,
   agriculture: Wheat,
   financial: Landmark,
   defense: Shield,
@@ -35,7 +35,7 @@ const SECTOR_ICON: Partial<Record<CorporationType, LucideIcon>> = {
   construction: HardHat,
   real_estate: Building2,
   media: Newspaper,
-  entertainment: Clapperboard,
+  media_entertainment: Clapperboard,
   extraction: Pickaxe,
   retail: ShoppingCart,
   chemical_industries: FlaskConical,
@@ -46,7 +46,13 @@ const SECTOR_ICON: Partial<Record<CorporationType, LucideIcon>> = {
  * component resolved during render), so it satisfies the static-components lint
  * rule and keeps the icon resolution in one place.
  */
-export function SectorGlyph({ type, className }: { type: CorporationType; className?: string }) {
+export function SectorGlyph({
+  type,
+  className,
+}: {
+  type: OperatingSectorType;
+  className?: string;
+}) {
   const Icon = SECTOR_ICON[type] ?? Building2;
   return <Icon className={className} />;
 }

@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { COMMODITY_LABELS } from "@/lib/constants/commodities";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import {
   SectorSpecialtyPanel,
   SectorSpecialtySummaryChips,
@@ -387,7 +387,7 @@ function ResourceCapacityPanel({ countryId }: { countryId: StartingCountryId }) 
         />
         <MiniMetric
           label="Market context"
-          value={`${CORPORATION_TYPES.length} sectors`}
+          value={`${OPERATING_SECTOR_TYPES.length} sectors`}
           detail="Resource output constrains extraction-sector supply."
         />
       </div>
@@ -883,7 +883,7 @@ function StartingStateDashboard2019() {
         <MetricCard
           icon={BarChart2}
           label="Sector markets"
-          value={String(CORPORATION_TYPES.length)}
+          value={String(OPERATING_SECTOR_TYPES.length)}
           detail="Every region starts with an unowned market pool for each corporation sector."
         />
       </div>

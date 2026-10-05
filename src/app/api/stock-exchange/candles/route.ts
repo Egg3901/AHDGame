@@ -8,7 +8,11 @@ import type { GameState, MarketCapHistory, Corporation } from "@/lib/db/types";
 import type { MarketIndexIntraday } from "@/lib/db/types/marketIndexIntraday";
 import type { ShareTradeHistory, ShareTradeKind } from "@/lib/db/types/shareTradeHistory";
 import { EXCHANGE_API_KEYS, getCountryForExchange } from "@/lib/constants/exchangeRegistry";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
+  operatingSectorIdentity,
+} from "@/lib/constants/corporations";
 import { gameDateAnchorFromState } from "@/lib/utils/gameDate";
 import { conditionalJson } from "@/lib/api/conditionalJson";
 import {
@@ -35,11 +39,12 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const exchange = searchParams.get("exchange")?.toLowerCase() ?? "global";
     const turns = Number(searchParams.get("turns") ?? 48);
-    const sector = searchParams.get("sector") as CorporationType | null;
+    const sector = searchParams.get("sector") as OperatingSectorType | null;
     if (
       !EXCHANGE_API_KEYS.has(exchange) ||
       !VALID_TURNS.has(turns) ||
-      (sector != null && (exchange !== "global" || !Object.hasOwn(CORPORATION_TYPE_LABELS, sector)))
+      (sector != null &&
+        (exchange !== "global" || !Object.hasOwn(OPERATING_SECTOR_TYPE_LABELS, sector)))
     ) {
       return errorResponse(400, "Invalid exchange, game-calendar range or global sector.");
     }
@@ -122,7 +127,13 @@ export async function GET(request: Request) {
             .collection<Corporation>("corporations")
             .find({
               ...(venueCountry ? { countryId: venueCountry } : {}),
-              ...(sector ? { type: sector } : {}),
+              ...(sector
+                ? {
+                    type: operatingSectorIdentity(sector).sectorType,
+                    industryModel: operatingSectorIdentity(sector).industryModel,
+                    mediaDiscriminator: operatingSectorIdentity(sector).mediaDiscriminator,
+                  }
+                : {}),
             })
             .project({ _id: 1 })
             .toArray()

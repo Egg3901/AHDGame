@@ -10,7 +10,10 @@ import {
   getExchangeApiKey,
   getExchangeLabel,
 } from "@/lib/constants/exchangeRegistry";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { ExchangeFilter } from "../types";
 import type { ExchangeMetaEntry } from "../stockMarketRouting";
@@ -72,7 +75,7 @@ interface CandlesResponse {
   invalidPriceTurns?: number;
 }
 
-type CompareKey = { kind: "venue"; api: string } | { kind: "sector"; sector: CorporationType };
+type CompareKey = { kind: "venue"; api: string } | { kind: "sector"; sector: OperatingSectorType };
 
 function canvasColor(color: string): string {
   const match = color.match(
@@ -478,7 +481,7 @@ export function MarketOverview({
       const info = ALL_EXCHANGES.find((e) => e.apiKey === compare.api);
       return info ? `${info.exchangeName} %` : null;
     }
-    return `${CORPORATION_TYPE_LABELS[compare.sector] ?? compare.sector} %`;
+    return `${OPERATING_SECTOR_TYPE_LABELS[compare.sector] ?? compare.sector} %`;
   }, [compare]);
 
   useEffect(() => {
@@ -570,7 +573,9 @@ export function MarketOverview({
   );
   const sectorOptions = useMemo(
     () =>
-      exchangeApi === "global" ? (Object.keys(CORPORATION_TYPE_LABELS) as CorporationType[]) : [],
+      exchangeApi === "global"
+        ? (Object.keys(OPERATING_SECTOR_TYPE_LABELS) as OperatingSectorType[])
+        : [],
     [exchangeApi]
   );
 
@@ -673,7 +678,7 @@ export function MarketOverview({
                 setCompare(
                   kind === "venue"
                     ? { kind: "venue", api: key }
-                    : { kind: "sector", sector: key as CorporationType }
+                    : { kind: "sector", sector: key as OperatingSectorType }
                 );
               }}
               className="px-2 py-1 rounded-md text-xs font-medium border bg-card-elevated border-card-border text-muted hover:text-foreground max-w-44"
@@ -689,7 +694,7 @@ export function MarketOverview({
               <optgroup label="Sectors">
                 {sectorOptions.map((s) => (
                   <option key={s} value={`sector:${s}`}>
-                    {CORPORATION_TYPE_LABELS[s]}
+                    {OPERATING_SECTOR_TYPE_LABELS[s]}
                   </option>
                 ))}
               </optgroup>

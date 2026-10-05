@@ -1,7 +1,7 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Subsidy, SubsidyProvision, EndSubsidyProvision } from "@/lib/db/types";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import { fireSubsidyCreatedPulse, fireSubsidyEndedPulse } from "@/lib/corporations/sentimentEvents";
 
@@ -21,7 +21,7 @@ export const SUBSIDY_MARGIN_BONUS = 7.5;
 export function corpQualifiesForSubsidy(
   subsidy: Subsidy,
   corpHqState: string,
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   sectorStateId: string,
   sectorStrategyId: string | undefined,
   sectorCountryId?: CountryId,
@@ -66,7 +66,7 @@ export function corpQualifiesForSubsidy(
 export function getSubsidyMarginModifier(
   subsidies: Subsidy[],
   corpHqState: string,
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   sectorStateId: string,
   sectorStrategyId: string | undefined,
   sectorCountryId?: CountryId,

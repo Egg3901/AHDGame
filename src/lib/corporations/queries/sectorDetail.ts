@@ -35,12 +35,8 @@ import {
   tariffRulesNeedSectorPresenceKeys,
 } from "@/lib/tariffs/tariffEffects";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
-import { CORPORATION_TYPE_LABELS, calculateWorkers } from "@/lib/constants/corporations";
-import type {
-  CorporationType,
-  StateMetricValues,
-  MacroEconomicValues,
-} from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS, calculateWorkers } from "@/lib/constants/corporations";
+import type { StateMetricValues, MacroEconomicValues } from "@/lib/constants/corporations";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { eraScaledBasePrices, type CommodityType } from "@/lib/constants/commodities";
 import { sectorDemandGapUnits } from "@/lib/market/sectorDemandGap";
@@ -515,7 +511,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       sector.sectorType,
       sector.industryModel,
       sector.mediaDiscriminator
-    ) as CorporationType;
+    );
     const metrics: StateMetricValues = {
       fullMetrics: stateMetrics ?? null,
       unemploymentRate: stateMetrics?.economic?.unemploymentRate?.value ?? null,
@@ -1092,7 +1088,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         sectorLabel:
           sector.sectorType === "manufacturing" && sector.industryModel === "vehicles"
             ? "Vehicle manufacturing"
-            : CORPORATION_TYPE_LABELS[sectorType],
+            : OPERATING_SECTOR_TYPE_LABELS[sectorType],
         displayName: sector.displayName ?? null,
         targetGrowthRate: sector.targetGrowthRate ?? 0,
         currentGrowthRate: sector.currentGrowthRate ?? sector.growthRate ?? 0,
@@ -1109,7 +1105,17 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         // (0 when the Kaitz floor doesn't bind this sector).
         wageLevel: sector.wageLevel ?? 1,
         payVsMedian:
-          Math.round((sectorWageLevel(sector.sectorType) / MEDIAN_SECTOR_WAGE_LEVEL) * 100) / 100,
+          Math.round(
+            (sectorWageLevel(
+              getOperatingSectorType(
+                sector.sectorType,
+                sector.industryModel,
+                sector.mediaDiscriminator
+              )
+            ) /
+              MEDIAN_SECTOR_WAGE_LEVEL) *
+              100
+          ) / 100,
         minWageUplift:
           Math.round(
             (minWageFloorMultiplier(sector.sectorType, federalBudget?.minimumWageKaitzRatio ?? 0) -
@@ -1236,7 +1242,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           techTreesEnabled,
           techCurrentYear,
           techCorpView,
-          sectorType,
+          sectorType: sector.sectorType,
           industryModel: sector.industryModel,
           mediaDiscriminator: sector.mediaDiscriminator,
         }),

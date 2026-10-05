@@ -14,7 +14,7 @@ import { bulkSectorOperationsSchema } from "@/lib/api/schemas/corporations";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { Character, CorporateSector } from "@/lib/db/types";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import { clampProductionPolicy } from "@/lib/utils/productionPolicy";
 import { clampPricingPosture } from "@/lib/market/clearing";
 import { getMarketSystemMode, isMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
@@ -257,7 +257,7 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
     });
     await db.collection<CorporateSector>("corporateSectors").bulkWrite(ops);
 
-    const typeLabel = sectorType ? CORPORATION_TYPE_LABELS[sectorType] : "all sectors";
+    const typeLabel = sectorType ? OPERATING_SECTOR_TYPE_LABELS[sectorType] : "all sectors";
     const parts: string[] = [];
     if (wageLevel !== undefined) parts.push(`wages ${wageLevel}x`);
     if (targetGrowthRate !== undefined) parts.push(`growth ${targetGrowthRate}%`);

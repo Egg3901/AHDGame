@@ -12,13 +12,13 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { batchSpawnNppCorporations } from "@/lib/admin/spawnNppCorporation";
 import type { CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES, operatingSectorIdentity } from "@/lib/constants/corporations";
 
 const batchSpawnSchema = z.object({
   countryId: z.string().min(1).max(5),
   headquartersState: z.string().min(1).max(20).optional(),
   startingCapital: z.number().int().min(0).optional(),
-  sectorTypes: z.array(z.enum(CORPORATION_TYPES)).optional(),
+  sectorTypes: z.array(z.enum(OPERATING_SECTOR_TYPES)).optional(),
 });
 
 export async function POST(request: Request) {
@@ -40,7 +40,14 @@ export async function POST(request: Request) {
     const results = await batchSpawnNppCorporations(db, parsed.data.countryId as CountryId, {
       headquartersState: parsed.data.headquartersState,
       startingCapital: parsed.data.startingCapital,
-      sectorTypes: parsed.data.sectorTypes as CorporationType[] | undefined,
+      sectorMarkets: parsed.data.sectorTypes?.map((lane) => {
+        const identity = operatingSectorIdentity(lane);
+        return {
+          type: identity.sectorType,
+          industryModel: identity.industryModel,
+          mediaDiscriminator: identity.mediaDiscriminator,
+        };
+      }),
     });
 
     return NextResponse.json(

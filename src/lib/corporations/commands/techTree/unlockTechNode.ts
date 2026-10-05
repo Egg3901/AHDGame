@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import type { Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { corpDailyGrossRevenueLocal } from "@/lib/corporations/dailyGrossRevenue";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
@@ -112,7 +112,7 @@ export async function unlockTechNode(
       corporation.type,
       corporation.industryModel,
       corporation.mediaDiscriminator
-    ) as CorporationType,
+    ),
     node
   );
 

@@ -531,13 +531,9 @@ export async function resetGameWorld(
   // (featureFlagDefaults.ts), overriding whatever the outgoing world ran with.
   // gameConfig is never dropped, so without this write a reset with
   // `resetReference: false` would inherit the dead world's gates.
-  await db.collection<GameConfig>("gameConfig").updateOne(
-    { _id: "default" },
-    {
-      $set: { ...FRESH_WORLD_GAME_CONFIG_FLAGS },
-      $unset: { fresh1991VehicleModelSeed: "", fresh1991MediaTaxonomySeed: "" },
-    }
-  );
+  await db
+    .collection<GameConfig>("gameConfig")
+    .updateOne({ _id: "default" }, { $set: { ...FRESH_WORLD_GAME_CONFIG_FLAGS } });
   log(
     `Wiped ${sweepCollections.length} runtime collections ` +
       `(${officialsResult.deletedCount} officials, ${electionsResult.deletedCount} elections, ` +

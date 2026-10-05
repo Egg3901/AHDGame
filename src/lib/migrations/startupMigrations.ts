@@ -17,6 +17,7 @@ import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-m
 import { migration as manufacturingProductProjectsV2Index } from "./entries/2026-10-04-manufacturing-product-projects-v2-index";
 import { migration as underwritingRecoveryIndexes } from "./entries/2026-10-04-underwriting-recovery-indexes";
 import { migration as advertisingAgreementIndexes } from "./entries/2026-10-05-advertising-agreement-indexes";
+import { migration as foldAutomobileEntertainmentTypes } from "./entries/2026-10-05-fold-automobile-entertainment-types";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -62,6 +63,9 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   // Original funding leases must remain discoverable even when underwriting is disabled.
   underwritingRecoveryIndexes,
   advertisingAgreementIndexes,
+  // The retired automobile and entertainment types are unreadable by this
+  // build, so their stored rows must be re-keyed before the first turn.
+  foldAutomobileEntertainmentTypes,
 ];
 
 /** Index metadata can disappear on reset even when migration markers survive. */

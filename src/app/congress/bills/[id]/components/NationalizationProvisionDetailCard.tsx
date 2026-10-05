@@ -1,6 +1,6 @@
 import { natMoney } from "@/components/national/natMoney";
 import type { NationalizationProvisionDetail } from "@/lib/congress/billEnrichment";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
 
 /**
  * Renders the affected-corporation / payout breakdown for a nationalize bill
@@ -112,7 +112,7 @@ export function NationalizationProvisionDetailCard({
           {c.sectors.map((sec, i) => (
             <li key={i} className="flex items-center justify-between gap-3">
               <span className="truncate text-foreground">
-                {CORPORATION_TYPE_LABELS[sec.sectorType as CorporationType] ?? sec.sectorType}{" "}
+                {OPERATING_SECTOR_TYPE_LABELS[sec.sectorType as CorporationType] ?? sec.sectorType}{" "}
                 <span className="text-[10px] text-muted">· {sec.stateName}</span>
               </span>
               <span className="shrink-0 font-mono text-muted">

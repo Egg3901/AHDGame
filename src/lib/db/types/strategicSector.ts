@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 /**
  * A (countryId, sectorType) the government has designated strategic. A corp
@@ -11,7 +11,7 @@ import type { CorporationType } from "@/lib/constants/corporations";
 export interface StrategicSectorDesignation {
   _id: ObjectId;
   countryId: CountryId;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   designatedAtTurn: number;
   /** What created it (audit): a bill, an executive office action, or the seed defaults. */
   source: "legislation" | "executive" | "seed";

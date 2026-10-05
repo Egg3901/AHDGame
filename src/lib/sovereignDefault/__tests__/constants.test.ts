@@ -46,7 +46,7 @@ describe("sovereignDefault constants", () => {
     const tier2 = [
       "manufacturing",
       "retail",
-      "automobiles",
+      "manufacturing_vehicles",
       "chemical_industries",
       "real_estate",
       "construction",
@@ -56,7 +56,7 @@ describe("sovereignDefault constants", () => {
       "telecommunications",
       "healthcare",
       "media",
-      "entertainment",
+      "media_entertainment",
       "logistics",
       "defense",
     ] as const;

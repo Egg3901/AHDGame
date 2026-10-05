@@ -1,3 +1,4 @@
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { NextResponse } from "next/server";
 import { loadWorkforceSkillByState } from "@/lib/politicalLegislation/workforceSkillLoader";
 import { ObjectId } from "mongodb";
@@ -29,8 +30,10 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import {
-  CORPORATION_TYPES,
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPES,
+  OPERATING_SECTOR_TYPE_LABELS,
+  operatingSectorIdentity,
+  type OperatingSectorType,
   SECTOR_MARKET_GDP_FRACTION,
   SECTOR_TYPE_COUNT,
   SPLIT_BASE_CAPTURE_FRACTION,
@@ -41,7 +44,6 @@ import {
   getDominanceAttackEaseMultiplier,
   getUnderdogAttackAmplifier,
 } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
 import { roundMarketingStrength } from "@/lib/utils/formatters";
 import {
   calculateAttackCostAnchor,
@@ -82,7 +84,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     // Optionally get current user's corporation for UI hints
     let userCorporationId: string | null = null;
-    let userCorporationSectorType: CorporationType | null = null;
+    let userCorporationSectorType: OperatingSectorType | null = null;
     let userMarketingStrength = 0;
     let userLiquidCapitalAnchor = 0;
     let userSplitEscalation = 0;
@@ -104,6 +106,8 @@ export async function GET(request: Request, { params }: RouteParams) {
         projection: {
           _id: 1,
           type: 1,
+          industryModel: 1,
+          mediaDiscriminator: 1,
           marketingStrength: 1,
           liquidCapital: 1,
           liquidCurrencyCode: 1,
@@ -143,7 +147,11 @@ export async function GET(request: Request, { params }: RouteParams) {
 
       if (corp) {
         userCorporationId = corp._id.toString();
-        userCorporationSectorType = corp.type;
+        userCorporationSectorType = getOperatingSectorType(
+          corp.type,
+          corp.industryModel,
+          corp.mediaDiscriminator
+        );
         userMarketingStrength = corp.marketingStrength ?? 0;
         userLiquidCapitalAnchor = corpLiquidCapitalToAnchor(
           corp.liquidCapital ?? 0,
@@ -227,7 +235,11 @@ export async function GET(request: Request, { params }: RouteParams) {
       .collection<UnownedSector>("unownedSectors")
       .find({ stateId })
       .toArray();
-    const unownedByType = new Map(unownedDocs.map((u) => [u.sectorType, u.revenue]));
+    // Keyed by operating lane: the vehicles and entertainment markets are their own rows.
+    const laneOf = (
+      row: Pick<UnownedSector, "sectorType" | "industryModel" | "mediaDiscriminator">
+    ) => getOperatingSectorType(row.sectorType, row.industryModel, row.mediaDiscriminator);
+    const unownedByType = new Map(unownedDocs.map((u) => [laneOf(u), u.revenue]));
     // Plants tier: the state board reframes the unowned pool as UNMET DEMAND in
     // output units, because that is the quantity a player can actually act on
     // (build against) rather than a ₳ pool they can no longer buy into. Headroom
@@ -236,10 +248,16 @@ export async function GET(request: Request, { params }: RouteParams) {
     const plantsMode = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
     const headroomUnitsByType = new Map(
       unownedDocs.map((u) => [
-        u.sectorType,
+        laneOf(u),
         u.headroomUnits != null && Number.isFinite(u.headroomUnits)
           ? u.headroomUnits
-          : computeUnownedHeadroomUnits(u.sectorType, u.revenue ?? 0, eraUnitScale),
+          : computeUnownedHeadroomUnits(
+              u.sectorType,
+              u.revenue ?? 0,
+              eraUnitScale,
+              u.industryModel,
+              u.mediaDiscriminator
+            ),
       ])
     );
 
@@ -335,11 +353,12 @@ export async function GET(request: Request, { params }: RouteParams) {
     const liveSectors = sectors.filter((s) => corpMap.has(s.corporationId.toString()));
 
     // Group sectors by type
-    const sectorsByType = new Map<CorporationType, CorporateSector[]>();
+    const sectorsByType = new Map<OperatingSectorType, CorporateSector[]>();
     for (const sector of liveSectors) {
-      const list = sectorsByType.get(sector.sectorType) ?? [];
+      const lane = laneOf(sector);
+      const list = sectorsByType.get(lane) ?? [];
       list.push(sector);
-      sectorsByType.set(sector.sectorType, list);
+      sectorsByType.set(lane, list);
     }
 
     // Build response for each sector type. Revenue aggregation + market-share
@@ -348,7 +367,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     // distort the totals. Per-row `revenue` stays ₳ too — UI layer formats
     // via wallet preference (no native corp-currency stamped per row because
     // rows can be from different-currency corps).
-    const economySectors = CORPORATION_TYPES.map((sectorType) => {
+    const economySectors = OPERATING_SECTOR_TYPES.map((sectorType) => {
       const typeSectors = sectorsByType.get(sectorType) ?? [];
       const ownedRevenue = typeSectors.reduce(
         (sum, s) => sum + (sectorRevenueAnchorById.get(s._id.toString()) ?? 0),
@@ -422,7 +441,7 @@ export async function GET(request: Request, { params }: RouteParams) {
           corporationName: corp?.name ?? "Unknown",
           corporationSequentialId: corp?.sequentialId,
           displayName: s.displayName ?? null,
-          sectorLabel: CORPORATION_TYPE_LABELS[s.sectorType as CorporationType],
+          sectorLabel: OPERATING_SECTOR_TYPE_LABELS[laneOf(s)],
           brandColor: corp?.brandColor,
           logoUrl: corp?.logoUrl ?? null,
           ceoName: ceo?.name ?? "Unknown",
@@ -549,7 +568,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
       return {
         type: sectorType,
-        label: CORPORATION_TYPE_LABELS[sectorType],
+        label: OPERATING_SECTOR_TYPE_LABELS[sectorType],
         totalMarket: effectiveTotalMarket,
         ownedRevenue: Math.round(ownedRevenue),
         unownedRevenue: Math.round(unownedRevenue),
@@ -564,7 +583,13 @@ export async function GET(request: Request, { params }: RouteParams) {
         headroomUnits: plantsMode
           ? Math.round(
               headroomUnitsByType.get(sectorType) ??
-                computeUnownedHeadroomUnits(sectorType, unownedRevenue, eraUnitScale)
+                computeUnownedHeadroomUnits(
+                  operatingSectorIdentity(sectorType).sectorType,
+                  unownedRevenue,
+                  eraUnitScale,
+                  operatingSectorIdentity(sectorType).industryModel,
+                  operatingSectorIdentity(sectorType).mediaDiscriminator
+                )
             )
           : null,
         tariffEffectiveRate,
@@ -601,10 +626,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       sectorSpecializations: state.sectorSpecializations
         ? {
             primary: state.sectorSpecializations.primary,
-            primaryLabel: CORPORATION_TYPE_LABELS[state.sectorSpecializations.primary],
+            primaryLabel: OPERATING_SECTOR_TYPE_LABELS[state.sectorSpecializations.primary],
             primaryBonus: 10,
             secondary: state.sectorSpecializations.secondary,
-            secondaryLabel: CORPORATION_TYPE_LABELS[state.sectorSpecializations.secondary],
+            secondaryLabel: OPERATING_SECTOR_TYPE_LABELS[state.sectorSpecializations.secondary],
             secondaryBonus: 5,
           }
         : null,

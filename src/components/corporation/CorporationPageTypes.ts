@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, OperatingSectorType } from "@/lib/constants/corporations";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { LoyaltyLabel } from "@/lib/market/brandLoyalty";
 import type { FillRateBand } from "@/lib/corporations/financialFogOfWar";
@@ -160,9 +160,10 @@ export interface CorporationDetail {
   description?: string;
   type: CorporationType;
   industryModel?: string | null;
+  mediaDiscriminator?: "entertainment" | null;
   /** Country where the corporation is headquartered */
   countryId: string;
-  secondaryType?: CorporationType | null;
+  secondaryType?: OperatingSectorType | null;
   typeSwitchCooldownUntilTurn?: number | null;
   typeSwitchTurn?: number | null;
   currentTurn: number;

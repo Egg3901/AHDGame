@@ -1,4 +1,4 @@
-import type { CorporationType } from "../../constants/corporations";
+import type { OperatingSectorType } from "../../constants/corporations";
 
 /**
  * Historical snapshot of total market capitalization per turn.
@@ -49,6 +49,6 @@ export interface MarketCapHistory {
     }
   >;
   /** Market cap broken down by sector type */
-  bySector: Partial<Record<CorporationType, number>>;
+  bySector: Partial<Record<OperatingSectorType, number>>;
   createdAt: Date;
 }

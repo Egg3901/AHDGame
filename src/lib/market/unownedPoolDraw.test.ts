@@ -31,7 +31,7 @@ describe("unownedPoolDeltaPipeline", () => {
       String(unownedHeadroomUnitsPerAnchor("media", SCALE, null, "entertainment"))
     );
     expect(unownedHeadroomUnitsPerAnchor("media", SCALE, null, "entertainment")).toBeCloseTo(
-      unownedHeadroomUnitsPerAnchor("entertainment", SCALE)
+      unownedHeadroomUnitsPerAnchor("media_entertainment", SCALE)
     );
   });
 

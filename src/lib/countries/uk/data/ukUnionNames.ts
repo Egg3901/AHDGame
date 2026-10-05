@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 /**
  * UK's trade-union names, by era.
@@ -12,9 +12,9 @@ import type { CorporationType } from "@/lib/constants/corporations";
  * map -- is a separate thing and stays there.
  */
 
-export const UK_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
+export const UK_UNION_NAMES_MODERN: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "Unite the Union",
-  automobiles: "Unite the Union",
+  manufacturing_vehicles: "Unite the Union",
   extraction: "National Union of Mineworkers",
   energy: "GMB",
   construction: "Unite the Union",
@@ -24,7 +24,7 @@ export const UK_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
   logistics: "Unite the Union",
   media: "National Union of Journalists",
   defense: "Unite the Union",
-  entertainment: "BECTU",
+  media_entertainment: "BECTU",
   telecommunications: "Communication Workers Union",
   chemical_industries: "Unite the Union",
   technology: "Prospect",
@@ -32,9 +32,9 @@ export const UK_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
   real_estate: "Unite the Union",
 };
 
-export const UK_UNION_NAMES_1999: Partial<Record<CorporationType, string>> = {
+export const UK_UNION_NAMES_1999: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "Amalgamated Engineering and Electrical Union",
-  automobiles: "Amalgamated Engineering and Electrical Union",
+  manufacturing_vehicles: "Amalgamated Engineering and Electrical Union",
   defense: "Amalgamated Engineering and Electrical Union",
   extraction: "National Union of Mineworkers",
   energy: "GMB",
@@ -45,25 +45,25 @@ export const UK_UNION_NAMES_1999: Partial<Record<CorporationType, string>> = {
   retail: "Usdaw",
   logistics: "Transport and General Workers' Union",
   media: "National Union of Journalists",
-  entertainment: "BECTU",
+  media_entertainment: "BECTU",
   telecommunications: "Communication Workers Union",
   technology: "Manufacturing, Science and Finance",
   financial: "Banking, Insurance and Finance Union",
   real_estate: "Union of Construction, Allied Trades and Technicians",
 };
 
-export const UK_UNION_NAMES_1991: Partial<Record<CorporationType, string>> = {
+export const UK_UNION_NAMES_1991: Partial<Record<OperatingSectorType, string>> = {
   ...UK_UNION_NAMES_1999,
   manufacturing: "Amalgamated Engineering Union",
-  automobiles: "Amalgamated Engineering Union",
+  manufacturing_vehicles: "Amalgamated Engineering Union",
   defense: "Amalgamated Engineering Union",
   healthcare: "COHSE",
   telecommunications: "National Communications Union",
 };
 
-export const UK_UNION_NAMES_1979: Partial<Record<CorporationType, string>> = {
+export const UK_UNION_NAMES_1979: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "Amalgamated Union of Engineering Workers",
-  automobiles: "Amalgamated Union of Engineering Workers",
+  manufacturing_vehicles: "Amalgamated Union of Engineering Workers",
   defense: "Amalgamated Union of Engineering Workers",
   extraction: "National Union of Mineworkers",
   energy: "General and Municipal Workers' Union",
@@ -74,16 +74,16 @@ export const UK_UNION_NAMES_1979: Partial<Record<CorporationType, string>> = {
   retail: "Union of Shop, Distributive and Allied Workers",
   logistics: "Transport and General Workers' Union",
   media: "National Union of Journalists",
-  entertainment: "Association of Cinematograph, Television and Allied Technicians",
+  media_entertainment: "Association of Cinematograph, Television and Allied Technicians",
   telecommunications: "Union of Post Office Workers",
   technology: "Association of Scientific, Technical and Managerial Staffs",
   financial: "National Union of Bank Employees",
   real_estate: "Union of Construction, Allied Trades and Technicians",
 };
 
-export const UK_UNION_NAMES_1953: Partial<Record<CorporationType, string>> = {
+export const UK_UNION_NAMES_1953: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "Amalgamated Engineering Union",
-  automobiles: "Amalgamated Engineering Union",
+  manufacturing_vehicles: "Amalgamated Engineering Union",
   extraction: "National Union of Mineworkers",
   energy: "Electrical Trades Union",
   construction: "National Federation of Building Trade Operatives",
@@ -95,7 +95,7 @@ export const UK_UNION_NAMES_1953: Partial<Record<CorporationType, string>> = {
   chemical_industries: "National Union of General and Municipal Workers",
   technology: "Amalgamated Engineering Union",
   financial: "National Union of Bank Employees",
-  entertainment: "Association of Cine-Technicians",
+  media_entertainment: "Association of Cine-Technicians",
   defense: "Amalgamated Engineering Union",
   agriculture: "National Union of Agricultural Workers",
   real_estate: "National Federation of Building Trade Operatives",

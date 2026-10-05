@@ -31,10 +31,11 @@ import {
   SECTOR_TYPE_COUNT,
   DEFAULT_PROFIT_MARGIN,
   DEFAULT_SECTOR_STARTING_WORKERS,
-  CORPORATION_TYPES,
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPES,
+  OPERATING_SECTOR_TYPE_LABELS,
+  operatingSectorIdentity,
 } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+
 import { z } from "zod";
 import { logWireEvent, wireHeadlineSectorCaptured } from "@/lib/wireEvent";
 import { logEconomicAction } from "@/lib/corporations/economicActionLog";
@@ -68,7 +69,7 @@ import {
 import { attackCostAnchorUnderPlants, resolveWorldYear } from "@/lib/corporations/capacityCapture";
 
 const splitSchema = z.object({
-  sectorType: z.enum(CORPORATION_TYPES),
+  sectorType: z.enum(OPERATING_SECTOR_TYPES),
   splitStrength: z.enum(["full", "half"]).optional().default("full"),
 });
 
@@ -138,7 +139,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       return errorResponse(parsed.status, parsed.error);
     }
 
-    const { sectorType, splitStrength } = parsed.data;
+    const { sectorType: lane, splitStrength } = parsed.data;
+    const laneIdentity = operatingSectorIdentity(lane);
+    const { sectorType, industryModel, mediaDiscriminator } = laneIdentity;
 
     // Verify state exists
     const state = await db.collection<State>("states").findOne({ _id: stateId, countryId });
@@ -189,11 +192,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     const [existingSectors, unownedDoc] = await Promise.all([
       db
         .collection<CorporateSector>("corporateSectors")
-        .find({ stateId, sectorType: sectorType as CorporationType })
+        .find({ stateId, ...laneIdentity })
         .toArray(),
-      db
-        .collection<UnownedSector>("unownedSectors")
-        .findOne({ stateId, sectorType: sectorType as CorporationType }),
+      db.collection<UnownedSector>("unownedSectors").findOne({ stateId, ...laneIdentity }),
     ]);
 
     // Normalize each sector's revenue to ₳ before summing. Sectors in a state
@@ -242,8 +243,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     // the dead branches out of it deserves its own reviewed pass.
     const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
     const unitsPerAnchor = unownedHeadroomUnitsPerAnchor(
-      sectorType as CorporationType,
-      eraUnitScale
+      sectorType,
+      eraUnitScale,
+      industryModel,
+      mediaDiscriminator
     );
     const anchorPerUnit = unitsPerAnchor > 0 ? 1 / unitsPerAnchor : 0;
     const plantsHeadroomUnits =
@@ -284,7 +287,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const tariffRate = getEffectiveTariffRate(
       allTariffs,
       sectorCountry,
-      sectorType,
+      lane,
       corpCountry,
       corporation._id,
       activeFtaPairs
@@ -324,7 +327,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       ? attackCostAnchorUnderPlants({
           legacyCostAnchor: legacySplitCostAnchor,
           unitsReceived: actualCapture * unitsPerAnchor,
-          sectorType: sectorType as CorporationType,
+          sectorType,
           // An unowned-pool draw has no defender sector and, per the comment
           // above, clears on the pool's DEFAULT mix — so the floor prices it at
           // the default strategy too. Both legs must read the same mix.
@@ -401,9 +404,11 @@ export async function POST(request: Request, { params }: RouteParams) {
       ? Math.round(
           capturedPoolUnits *
             capacityRescaleRatio(
-              sectorType as CorporationType,
+              sectorType,
               UNOWNED_HEADROOM_DEFAULT_STRATEGY_ID,
-              existingOwnSector?.strategyId
+              existingOwnSector?.strategyId,
+              industryModel,
+              mediaDiscriminator
             ) *
             100
         ) / 100
@@ -431,7 +436,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         corporationId: corporation._id,
         countryId,
         stateId,
-        sectorType: sectorType as CorporationType,
+        sectorType,
+        ...(industryModel ? { industryModel } : {}),
+        ...(mediaDiscriminator ? { mediaDiscriminator } : {}),
         targetGrowthRate: 0,
         currentGrowthRate: 0,
         currentGrowthCost: 0,
@@ -461,7 +468,7 @@ export async function POST(request: Request, { params }: RouteParams) {
               {
                 corporationId: corporation._id,
                 stateId,
-                sectorType: sectorType as CorporationType,
+                ...laneIdentity,
               },
               plantsEnabled
                 ? { $inc: { capitalStock: capitalStockDelta }, $set: { updatedAt: now } }
@@ -540,7 +547,13 @@ export async function POST(request: Request, { params }: RouteParams) {
                   0,
                   {
                     $subtract: [
-                      unownedPoolCreditBaseExpr(sectorType as CorporationType, true, eraUnitScale),
+                      unownedPoolCreditBaseExpr(
+                        sectorType,
+                        true,
+                        eraUnitScale,
+                        industryModel,
+                        mediaDiscriminator
+                      ),
                       capturedPoolUnits,
                     ],
                   },
@@ -549,7 +562,15 @@ export async function POST(request: Request, { params }: RouteParams) {
               updatedAt: now,
             },
           },
-          { $set: unownedPoolTrailingSet(sectorType as CorporationType, true, eraUnitScale) },
+          {
+            $set: unownedPoolTrailingSet(
+              sectorType,
+              true,
+              eraUnitScale,
+              industryModel,
+              mediaDiscriminator
+            ),
+          },
         ]);
       } else {
         await db
@@ -579,8 +600,8 @@ export async function POST(request: Request, { params }: RouteParams) {
           100
         : 0;
 
-    const sectorLabel = CORPORATION_TYPE_LABELS[sectorType as CorporationType] ?? sectorType;
-    const sectorHref = `${regionUrl(countryId, id)}?tab=economy&sector=${sectorType}`;
+    const sectorLabel = OPERATING_SECTOR_TYPE_LABELS[lane] ?? lane;
+    const sectorHref = `${regionUrl(countryId, id)}?tab=economy&sector=${lane}`;
 
     logWireEvent(
       "sector_captured",

@@ -1,3 +1,4 @@
+import { operatingSectorFilter } from "@/lib/constants/corporations";
 import { type Db, type Filter, ObjectId } from "mongodb";
 import type { CrisisEffect } from "@/lib/db/types/crisis";
 import { isMacroMetricPath } from "@/lib/macroMetrics/paths";
@@ -175,7 +176,7 @@ async function applyProfitMarginEffects(
 ): Promise<void> {
   for (const effect of effects) {
     const filter: Record<string, unknown> = { stateId: { $in: targetStateIds } };
-    if (effect.sectorType) filter.sectorType = effect.sectorType;
+    if (effect.sectorType) Object.assign(filter, operatingSectorFilter(effect.sectorType));
     if (effect.strategyId) filter.strategyId = effect.strategyId;
 
     await db.collection("corporateSectors").updateMany(filter, [

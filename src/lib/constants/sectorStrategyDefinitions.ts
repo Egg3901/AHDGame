@@ -1,9 +1,9 @@
-import type { CorporationType } from "./corporations";
+import type { OperatingSectorType } from "./corporations";
 import type { SectorStrategy } from "./sectorStrategyTypes";
 
 // ─── Strategy definitions ───────────────────────────────────────────────────
 
-export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
+export const SECTOR_STRATEGIES: Record<OperatingSectorType, SectorStrategy[]> = {
   // ── Energy ──────────────────────────────────────────────────────────────
   energy: [
     {
@@ -403,7 +403,7 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
   ],
 
   // ── Automobiles ───────────────────────────────────────────────────────
-  automobiles: [
+  manufacturing_vehicles: [
     {
       id: "autonomous_driving",
       requiresTechUnlock: true,
@@ -880,7 +880,7 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
   ],
 
   // ── Entertainment ─────────────────────────────────────────────────────
-  entertainment: [
+  media_entertainment: [
     {
       id: "live_service",
       requiresTechUnlock: true,
@@ -894,7 +894,7 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
     {
       id: "standard",
       name: "Standard",
-      description: "Mixed entertainment: studios, venues, and digital content.",
+      description: "Mixed media_entertainment: studios, venues, and digital content.",
       // Added entertainment_services supply 0.40 — unique output for entertainment differentiation.
       supply: { advertising: 0.2, entertainment_services: 0.4 },
       demand: { software: 0.15, electronics: 0.1, energy: 0.06, real_estate_services: 0.03 },

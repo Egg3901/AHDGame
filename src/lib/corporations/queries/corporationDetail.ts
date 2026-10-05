@@ -8,7 +8,7 @@ import { resolvePresetIdFromGameState } from "@/lib/world/countryReadinessContra
 import { getEraFounderShares } from "@/lib/constants/sectorSeedEra";
 import { caretakerReappointCooldownRemaining } from "@/lib/corporations/caretakerCeo";
 import {
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPE_LABELS,
   SHARE_STRUCTURE_COOLDOWN_TURNS,
   SHARE_CONSOLIDATION_MIN_TOTAL_SHARES,
   CEO_INITIAL_SHARES,
@@ -245,6 +245,7 @@ export async function loadCorporationDetailView(args: {
       description: corporation.description,
       type: corporation.type,
       industryModel: corporation.industryModel ?? null,
+      mediaDiscriminator: corporation.mediaDiscriminator ?? null,
       countryId: corporation.countryId,
       secondaryType: corporation.secondaryType ?? null,
       typeSwitchCooldownUntilTurn: corporation.typeSwitchCooldownUntilTurn ?? null,
@@ -267,7 +268,7 @@ export async function loadCorporationDetailView(args: {
       typeLabel:
         corporation.type === "manufacturing" && corporation.industryModel === "vehicles"
           ? "Vehicle manufacturing"
-          : CORPORATION_TYPE_LABELS[corporation.type],
+          : OPERATING_SECTOR_TYPE_LABELS[corporation.type],
       headquartersState: corporation.headquartersState,
       federationPendingHeadquartersId: corporation.federationPendingHeadquartersId,
       headquartersStateName:

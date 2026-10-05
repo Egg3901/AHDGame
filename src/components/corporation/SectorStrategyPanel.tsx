@@ -18,10 +18,14 @@
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import type { CorporationType } from "@/lib/constants/corporations";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+
+import {
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import { COMMODITY_LABELS, type CommodityType } from "@/lib/constants/commodities";
 import {
+  getOperatingSectorType,
   getSectorStrategies,
   getStrategy,
   type SectorStrategy,
@@ -37,7 +41,7 @@ import { SmallButton } from "./dense/DenseKit";
 const MAX_DEMAND_ROWS = 5;
 
 interface SectorStrategyPanelProps {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   /** Every sector of this type the corporation owns. */
   sectors: SectorDetail[];
   isCeo: boolean;
@@ -110,13 +114,22 @@ export function SectorStrategyPanel({
   mediaOperatingModelsEnabled,
 }: SectorStrategyPanelProps) {
   const { preset } = useWorldFlags();
-  const vehicleModel = sectors.some(
-    (sector) => sector.sectorType === "manufacturing" && sector.industryModel === "vehicles"
+  const laneSector = sectors.find(
+    (sector) =>
+      getOperatingSectorType(sector.sectorType, sector.industryModel, sector.mediaDiscriminator) !==
+      sector.sectorType
   );
-  const strategyType = vehicleModel ? "automobiles" : sectorType;
-  const label = vehicleModel
-    ? "Vehicle manufacturing"
-    : (CORPORATION_TYPE_LABELS[sectorType] ?? sectorType);
+  const strategyType = laneSector
+    ? getOperatingSectorType(
+        laneSector.sectorType,
+        laneSector.industryModel,
+        laneSector.mediaDiscriminator
+      )
+    : sectorType;
+  const label =
+    strategyType === "manufacturing_vehicles"
+      ? "Vehicle manufacturing"
+      : (OPERATING_SECTOR_TYPE_LABELS[strategyType as OperatingSectorType] ?? sectorType);
   const strategies: SectorStrategy[] = getSectorStrategies(
     strategyType,
     mediaOperatingModelsEnabled,

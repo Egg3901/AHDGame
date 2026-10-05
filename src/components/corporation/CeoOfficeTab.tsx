@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import {
   CEO_SALARY_MAX_REVENUE_MULTIPLE,
   CORP_OVERHEAD_MAX_REVENUE_MULTIPLE,
@@ -181,7 +181,7 @@ export default function CeoOfficeTab({
   /** Atomic bulk set for one sector type, or every type when sectorType is null, in one country. */
   async function handleBulkOperations(
     countryId: string,
-    sectorType: CorporationType | null,
+    sectorType: OperatingSectorType | null,
     body: {
       targetGrowthRate?: number;
       productionPolicy?: number; // pragma: allowlist secret

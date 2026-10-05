@@ -48,7 +48,7 @@ registerEventHandler({
             { type: "sectorOutputDemandModifier", sectorType: "retail", pct: -8, durationTurns: 8 },
             {
               type: "sectorOutputDemandModifier",
-              sectorType: "entertainment",
+              sectorType: "media_entertainment",
               pct: -5,
               durationTurns: 8,
             },
@@ -444,7 +444,7 @@ registerEventHandler({
             },
             {
               type: "sectorOutputDemandModifier",
-              sectorType: "entertainment",
+              sectorType: "media_entertainment",
               pct: -10,
               durationTurns: 10,
             },

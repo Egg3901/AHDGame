@@ -1,10 +1,11 @@
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import { collectForexActivity } from "@/lib/sim/forexActivity";
 import type { ForexActivityRecord } from "@/lib/sim/rules/forexActivity";
 import type { Db } from "mongodb";
 import { accountKind } from "@/lib/ledger/accounts";
 import { US_STATES } from "@/lib/constants";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import { PRICE_REALIZATION_MIN } from "@/lib/market/priceRealization";
 import {
   getAdvertiseActionCost,
@@ -272,7 +273,7 @@ function emptyCoverage(note: string): CoverageTelemetry {
     available: false,
     note,
     usStates: US_STATES.length,
-    sectorTypes: CORPORATION_TYPES.length,
+    sectorTypes: OPERATING_SECTOR_TYPES.length,
     presentCombos: 0,
     emptyCombos: 0,
     emptyShare: 0,
@@ -640,7 +641,19 @@ async function collectCoverage(db: Db): Promise<CoverageTelemetry> {
   const [sectors, commodities, vitalSigns] = await Promise.all([
     db
       .collection("corporateSectors")
-      .find({}, { projection: { countryId: 1, stateId: 1, sectorType: 1, soldFraction: 1 } })
+      .find(
+        {},
+        {
+          projection: {
+            countryId: 1,
+            stateId: 1,
+            sectorType: 1,
+            industryModel: 1,
+            mediaDiscriminator: 1,
+            soldFraction: 1,
+          },
+        }
+      )
       .toArray(),
     db
       .collection("commodityPrices")
@@ -676,13 +689,15 @@ async function collectCoverage(db: Db): Promise<CoverageTelemetry> {
   const present = new Set<string>();
   for (const s of sectors) {
     if (s.countryId === "US" && typeof s.stateId === "string" && typeof s.sectorType === "string") {
-      present.add(`${s.stateId}:${s.sectorType}`);
+      present.add(
+        `${s.stateId}:${getOperatingSectorType(s.sectorType, s.industryModel, s.mediaDiscriminator)}`
+      );
     }
   }
-  const universe = US_STATES.length * CORPORATION_TYPES.length;
+  const universe = US_STATES.length * OPERATING_SECTOR_TYPES.length;
   const emptyCombinations: string[] = [];
   for (const st of US_STATES) {
-    for (const t of CORPORATION_TYPES) {
+    for (const t of OPERATING_SECTOR_TYPES) {
       if (!present.has(`${st}:${t}`)) emptyCombinations.push(`${st}:${t}`);
     }
   }

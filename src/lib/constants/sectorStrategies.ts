@@ -20,7 +20,12 @@ import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
  */
 
 import * as Sentry from "@sentry/nextjs";
-import type { CorporationType, ManufacturingIndustryModel } from "./corporations";
+import {
+  isCorporationType,
+  operatingSectorTypeFor,
+  type ManufacturingIndustryModel,
+  type OperatingSectorType,
+} from "./corporations";
 import type { CommodityType } from "./commodities";
 import { COMMODITY_BASE_PRICES } from "./commodities";
 import {
@@ -69,9 +74,9 @@ const UNKNOWN_SECTOR_STRATEGY: SectorStrategy = {
  * costs remain on the ordinary strategy demand and physical-cost rails.
  */
 export function getMediaOperatingModelStrategies(sectorType: string): SectorStrategy[] {
-  if (sectorType !== "media" && sectorType !== "entertainment") return [];
+  if (sectorType !== "media" && sectorType !== "media_entertainment") return [];
   const lane = sectorType as MediaOperatingModelSector;
-  const strategies = SECTOR_STRATEGIES[sectorType as CorporationType];
+  const strategies = SECTOR_STRATEGIES[sectorType as OperatingSectorType];
   const baseline = strategies.find((strategy) => strategy.id === "standard");
   if (!baseline) return [];
 
@@ -131,7 +136,7 @@ function strategyForPreset(
 ): SectorStrategy {
   const demand =
     strategy.id === "standard" && eraForPreset(preset ?? DEFAULT_SEED_PRESET) === "1991"
-      ? DEFAULT_DEMAND_1991[sectorType as CorporationType]
+      ? DEFAULT_DEMAND_1991[sectorType as OperatingSectorType]
       : undefined;
   return demand ? { ...strategy, demand: { ...demand } } : strategy;
 }
@@ -151,7 +156,7 @@ export function getStrategy(
     }
     return UNKNOWN_SECTOR_STRATEGY;
   }
-  const strategies = SECTOR_STRATEGIES[sectorType as CorporationType];
+  const strategies = SECTOR_STRATEGIES[sectorType as OperatingSectorType];
   const strategy =
     strategies.find((s) => s.id === strategyId) ??
     getMediaOperatingModelStrategies(sectorType).find((s) => s.id === strategyId) ??
@@ -168,7 +173,7 @@ export function getSectorStrategies(
 ): SectorStrategy[] {
   const operatingType = getOperatingSectorType(sectorType, undefined, mediaDiscriminator);
   if (!Object.hasOwn(SECTOR_STRATEGIES, operatingType)) return [];
-  const strategies = SECTOR_STRATEGIES[operatingType as CorporationType].map((strategy) =>
+  const strategies = SECTOR_STRATEGIES[operatingType as OperatingSectorType].map((strategy) =>
     strategyForPreset(operatingType, strategy, preset)
   );
   return mediaOperatingModelsEnabled
@@ -176,15 +181,27 @@ export function getSectorStrategies(
     : strategies;
 }
 
-/** Resolve the legacy economic profile represented by a persisted sector. */
+/**
+ * Resolve the operating lane a persisted sector runs under. Unknown persisted
+ * types pass through unchanged so callers can report them.
+ */
+export function getOperatingSectorType(
+  sectorType: OperatingSectorType,
+  industryModel?: ManufacturingIndustryModel | string | null,
+  mediaDiscriminator?: string | null
+): OperatingSectorType;
+export function getOperatingSectorType(
+  sectorType: string,
+  industryModel?: ManufacturingIndustryModel | string | null,
+  mediaDiscriminator?: string | null
+): string;
 export function getOperatingSectorType(
   sectorType: string,
   industryModel?: ManufacturingIndustryModel | string | null,
   mediaDiscriminator?: string | null
 ): string {
-  if (sectorType === "manufacturing" && industryModel === "vehicles") return "automobiles";
-  if (sectorType === "media" && mediaDiscriminator === "entertainment") return "entertainment";
-  return sectorType;
+  if (!isCorporationType(sectorType)) return sectorType;
+  return operatingSectorTypeFor(sectorType, industryModel, mediaDiscriminator);
 }
 
 /**
@@ -331,7 +348,7 @@ export const PLANNED_ECONOMY_MEDIA_OUTPUT: CommodityType = "entertainment_servic
  * lives here rather than being inlined at either call site.
  */
 export function applyPlannedEconomyOutputMix(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   supply: Partial<Record<CommodityType, number>>,
   plannedEconomy: boolean,
   mediaDiscriminator: string | null | undefined
@@ -416,10 +433,9 @@ export const PLANNED_ECONOMY_MEDIA_SUPPLY_FACTOR = 0.25;
 export const MARKET_ECONOMY_MEDIA_SUPPLY_FACTOR = 0.1;
 
 /**
- * True only for the news and broadcast media lane. A canonical `media` row with
- * the `entertainment` discriminator keeps the entertainment economics it had as
- * a legacy `entertainment` row, so the media derate and the planned-economy
- * advertising remap never reach it. The discriminator is a required argument at
+ * True only for the news and broadcast media lane. A `media` row with the
+ * `entertainment` discriminator runs the entertainment lane's economics, so the
+ * media derate and the planned-economy advertising remap never reach it. The discriminator is a required argument at
  * every call site so the ledger and the clearing offer cannot drift apart.
  */
 export function isNewsMediaLane(
@@ -431,7 +447,7 @@ export function isNewsMediaLane(
 
 /** The derate for one sector: 1 for everything outside the news media lane. */
 export function plannedEconomyMediaSupplyFactor(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   plannedEconomy: boolean,
   mediaDiscriminator: string | null | undefined
 ): number {

@@ -1947,11 +1947,11 @@
       "construction": 6,
       "media": 5,
       "chemical_industries": 5,
-      "entertainment": 4,
+      "media_entertainment": 4,
       "telecommunications": 4,
       "logistics": 4,
       "energy": 3,
-      "automobiles": 3,
+      "manufacturing_vehicles": 3,
       "defense": 3,
       "extraction": 3,
       "agriculture": 1
@@ -1973,12 +1973,12 @@
       "chemical_industries": 6,
       "energy": 5,
       "defense": 5,
-      "automobiles": 4,
+      "manufacturing_vehicles": 4,
       "extraction": 4,
       "logistics": 3,
       "telecommunications": 3,
       "media": 4,
-      "entertainment": 2,
+      "media_entertainment": 2,
       "technology": 2,
       "agriculture": 2
     }

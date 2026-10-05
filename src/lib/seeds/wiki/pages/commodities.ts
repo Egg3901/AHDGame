@@ -10,8 +10,8 @@ import {
   COMMODITIES_NATIONAL_REGIONAL_PRICE_BLEND,
   type CommodityType,
 } from "@/lib/constants/commodities";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
+import type { CorporationType, OperatingSectorType } from "@/lib/constants/corporations";
 
 /**
  * One-line description per commodity: kept short so the page intro reads
@@ -73,7 +73,7 @@ const COMMODITY_SUMMARIES: Record<CommodityType, string> = {
 };
 
 function formatSectorList(
-  map: Partial<Record<CorporationType, { commodity: CommodityType; rate: number }[]>>,
+  map: Partial<Record<OperatingSectorType, { commodity: CommodityType; rate: number }[]>>,
   commodity: CommodityType
 ): string[] {
   const rows: { label: string; rate: number }[] = [];
@@ -83,7 +83,7 @@ function formatSectorList(
   ][]) {
     const flow = flows?.find((f) => f.commodity === commodity);
     if (!flow) continue;
-    const label = CORPORATION_TYPE_LABELS[sector] ?? sector;
+    const label = OPERATING_SECTOR_TYPE_LABELS[sector] ?? sector;
     rows.push({ label, rate: flow.rate });
   }
   rows.sort((a, b) => b.rate - a.rate);

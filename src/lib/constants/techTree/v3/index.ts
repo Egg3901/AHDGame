@@ -12,11 +12,11 @@
  * Costs are derived (entries 2×, capstones 3× the decade cost) — specs carry
  * only name, description and effects.
  */
-import type { CorporationType } from "../../corporations";
+import type { OperatingSectorType } from "../../corporations";
 import type { V3LaneContent } from "./types";
 import { CORPORATE_V3 } from "./corporate";
 import { AGRICULTURE_V3 } from "./agriculture";
-import { AUTOMOBILES_V3 } from "./automobiles";
+import { VEHICLES_V3 } from "./vehicles";
 import { CHEMICAL_INDUSTRIES_V3 } from "./chemical_industries";
 import { CONSTRUCTION_V3 } from "./construction";
 import { DEFENSE_V3 } from "./defense";
@@ -37,14 +37,14 @@ export type { V3LaneContent } from "./types";
 
 export { CORPORATE_V3 };
 
-export const SECTOR_V3: Partial<Record<CorporationType, V3LaneContent>> = {
+export const SECTOR_V3: Partial<Record<OperatingSectorType, V3LaneContent>> = {
   agriculture: AGRICULTURE_V3,
-  automobiles: AUTOMOBILES_V3,
+  manufacturing_vehicles: VEHICLES_V3,
   chemical_industries: CHEMICAL_INDUSTRIES_V3,
   construction: CONSTRUCTION_V3,
   defense: DEFENSE_V3,
   energy: ENERGY_V3,
-  entertainment: ENTERTAINMENT_V3,
+  media_entertainment: ENTERTAINMENT_V3,
   extraction: EXTRACTION_V3,
   financial: FINANCIAL_V3,
   healthcare: HEALTHCARE_V3,

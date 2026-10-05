@@ -6,7 +6,7 @@ import type { StateViewContext } from "./stateViewContext";
 import type { MarketViewContext } from "./marketViewContext";
 import type { SectorCurrencyRestatement } from "./currencyRestatement";
 import {
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPE_LABELS,
   TURNS_PER_DAY,
   TYPE_SWITCH_PENALTY_TURNS,
   computeAllMarginModifiers,
@@ -17,7 +17,7 @@ import {
   getExpropriationRiskMarginModifier,
   softCapEffectiveMargin,
 } from "@/lib/constants/corporations";
-import type { CorporationType, StateMetricValues } from "@/lib/constants/corporations";
+import type { StateMetricValues } from "@/lib/constants/corporations";
 import {
   getSectorTechEffectsForYear,
   getSectorTechEffects,
@@ -271,7 +271,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       sector.sectorType,
       sector.industryModel,
       sector.mediaDiscriminator
-    ) as CorporationType;
+    );
     const metrics = stateMetricsMap.get(sector.stateId) ?? getEmptyStateMetricValues();
 
     const stateBalances = rawStateBalances.get(sector.stateId) ?? new Map();
@@ -409,7 +409,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
         corporation.type,
         corporation.industryModel,
         corporation.mediaDiscriminator
-      ) as CorporationType,
+      ),
       sectors.length,
       macroEcon,
       corporation.logisticsStrength ?? 0,
@@ -708,7 +708,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       sectorLabel:
         sector.sectorType === "manufacturing" && sector.industryModel === "vehicles"
           ? "Vehicle manufacturing"
-          : CORPORATION_TYPE_LABELS[st],
+          : OPERATING_SECTOR_TYPE_LABELS[st],
       displayName: sector.displayName ?? null,
       targetGrowthRate:
         sector.targetGrowthRate ?? sector.currentGrowthRate ?? sector.growthRate ?? 0,

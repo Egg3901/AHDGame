@@ -1,11 +1,11 @@
 "use client";
 
-import { CORPORATION_TYPES, CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES, OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 
 /**
  * Shared sector dropdown for subsidy/end-subsidy bill provisions. Renders the
  * full <select> — placeholder option plus one option per sector — sourced from
- * the canonical {@link CORPORATION_TYPES} list with {@link CORPORATION_TYPE_LABELS}
+ * the canonical {@link OPERATING_SECTOR_TYPES} list with {@link OPERATING_SECTOR_TYPE_LABELS}
  * display names. Every country's propose-bill modal imports this so a new sector
  * (or a new country reusing this component) stays correct automatically and can't
  * reintroduce a stale hardcoded list.
@@ -24,9 +24,9 @@ export function SubsidySectorSelect({
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} className={className}>
       <option value="">{placeholderLabel}</option>
-      {CORPORATION_TYPES.map((s) => (
+      {OPERATING_SECTOR_TYPES.map((s) => (
         <option key={s} value={s}>
-          {CORPORATION_TYPE_LABELS[s]}
+          {OPERATING_SECTOR_TYPE_LABELS[s]}
         </option>
       ))}
     </select>

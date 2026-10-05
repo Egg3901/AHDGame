@@ -38,8 +38,8 @@ describe("D9 — RPU per strategy", () => {
     expect(defaultSupplyRates("media")).toEqual(
       SECTOR_STRATEGIES.media.find((strategy) => strategy.id === "standard")?.supply
     );
-    expect(defaultSupplyRates("entertainment")).toEqual(
-      SECTOR_STRATEGIES.entertainment.find((strategy) => strategy.id === "standard")?.supply
+    expect(defaultSupplyRates("media_entertainment")).toEqual(
+      SECTOR_STRATEGIES.media_entertainment.find((strategy) => strategy.id === "standard")?.supply
     );
   });
 
@@ -104,7 +104,7 @@ describe("D9 — rescaleCapacityForStrategyChange", () => {
   it.each([
     ["media", "standard", "cable_tv"],
     ["media", "standard", "publishing_house"],
-    ["entertainment", "standard", "streaming_platform"],
+    ["media_entertainment", "standard", "streaming_platform"],
   ] as Array<[CorporationType, string, string]>)(
     "keeps mixed-output model capacity and paid queue value stable for %s %s -> %s",
     (type, from, to) => {
