@@ -154,6 +154,125 @@ describe("funded bank treasury settlement", () => {
     expect(afterSell.mark).toBe(0);
   });
 
+  it("recognizes only a funded treasury sale gain above the frozen lot basis", async () => {
+    const db = world();
+    await tradeBankTreasuryBill(db as unknown as Db, {
+      bankId: BANK,
+      bondId: BOND,
+      side: "buy",
+      units: 2,
+      turn: TURN,
+      policy: POLICY,
+      tradeId: "treasury-gain-buy",
+    });
+    await db.collection("bonds").updateOne({ _id: BOND }, { $set: { marketPrice: 1.2 } });
+    const sale = await tradeBankTreasuryBill(db as unknown as Db, {
+      bankId: BANK,
+      bondId: BOND,
+      side: "sell",
+      units: 2,
+      turn: TURN,
+      policy: POLICY,
+      tradeId: "treasury-gain-sell",
+    });
+    expect(sale.status).toBe("completed");
+    const receipt = db
+      .collection("bankTreasuryTrades")
+      .docs.find((row) => row._id === "treasury-gain-sell");
+    expect(receipt?.costBasisLocal).toBeGreaterThan(0);
+    const expectedGain = receipt!.amountLocal - receipt!.costBasisLocal!;
+    expect(expectedGain).toBeGreaterThan(0);
+    expect(db.collection("corporations").docs[0].bankCharter).toMatchObject({
+      lastBankingIncome: expectedGain,
+      lastBankingIncomeTurn: TURN,
+      lastBankingTreasuryRealizedGain: expectedGain,
+    });
+  });
+
+  it("keeps an older sale receipt from rewinding a newer bank income turn", async () => {
+    const db = world();
+    await tradeBankTreasuryBill(db as unknown as Db, {
+      bankId: BANK,
+      bondId: BOND,
+      side: "buy",
+      units: 2,
+      turn: TURN,
+      policy: POLICY,
+      tradeId: "treasury-old-gain-buy",
+    });
+    await db.collection("bonds").updateOne({ _id: BOND }, { $set: { marketPrice: 1.2 } });
+    await db.collection("corporations").updateOne(
+      { _id: BANK },
+      {
+        $set: {
+          "bankCharter.lastBankingIncome": 77,
+          "bankCharter.lastBankingIncomeTurn": TURN + 1,
+          "bankCharter.lastBankingTreasuryRealizedGain": 3,
+        },
+      }
+    );
+    const sale = await tradeBankTreasuryBill(db as unknown as Db, {
+      bankId: BANK,
+      bondId: BOND,
+      side: "sell",
+      units: 2,
+      turn: TURN,
+      policy: POLICY,
+      tradeId: "treasury-old-gain-sell",
+    });
+    expect(sale.status).toBe("completed");
+    expect(db.collection("corporations").docs[0].bankCharter).toMatchObject({
+      lastBankingIncome: 77,
+      lastBankingIncomeTurn: TURN + 1,
+      lastBankingTreasuryRealizedGain: 3,
+    });
+  });
+
+  it("adds a funded sale gain to a banking pass already stamped in that turn", async () => {
+    const db = world();
+    await tradeBankTreasuryBill(db as unknown as Db, {
+      bankId: BANK,
+      bondId: BOND,
+      side: "buy",
+      units: 2,
+      turn: TURN,
+      policy: POLICY,
+      tradeId: "treasury-after-stamp-buy",
+    });
+    await db.collection("bonds").updateOne({ _id: BOND }, { $set: { marketPrice: 1.2 } });
+    await db.collection("corporations").updateOne(
+      { _id: BANK },
+      {
+        $set: {
+          "bankCharter.lastBankingIncome": 50,
+          "bankCharter.lastBankingIncomeTurn": TURN,
+          "bankCharter.lastBankingSovereignCouponIncome": 5,
+          "bankCharter.lastBankingTreasuryRealizedGain": 0,
+        },
+      }
+    );
+    const sale = await tradeBankTreasuryBill(db as unknown as Db, {
+      bankId: BANK,
+      bondId: BOND,
+      side: "sell",
+      units: 2,
+      turn: TURN,
+      policy: POLICY,
+      tradeId: "treasury-after-stamp-sell",
+    });
+    const receipt = db
+      .collection("bankTreasuryTrades")
+      .docs.find((row) => row._id === "treasury-after-stamp-sell");
+    const expectedGain = receipt!.amountLocal - receipt!.costBasisLocal!;
+    expect(sale.status).toBe("completed");
+    expect(db.collection("corporations").docs[0].bankCharter).toMatchObject({
+      lastBankingIncome: 50 + expectedGain,
+      lastBankingIncomeTurn: TURN,
+      lastBankingSovereignCouponIncome: 5,
+      lastBankingTreasuryRealizedGain: expectedGain,
+    });
+  });
+
   it("skips a negative-carry automatic bill while leaving the same bill available manually", async () => {
     const db = world();
     await db

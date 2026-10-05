@@ -149,6 +149,10 @@ export interface BankCharter {
   lastBankingIncome?: number;
   /** Turn represented by `lastBankingIncome`. */
   lastBankingIncomeTurn?: number;
+  /** Funded sovereign coupon cash actually paid to this charter in the income turn. */
+  lastBankingSovereignCouponIncome?: number;
+  /** Realized gain or loss on paid sovereign sales/redemptions with known cost basis. */
+  lastBankingTreasuryRealizedGain?: number;
   /** Actual primary underwriting fees included in lastBankingIncome. */
   lastBankingUnderwritingFees?: number;
   lastBankingUnderwritingFeesTurn?: number;
@@ -285,6 +289,10 @@ export interface BankTreasuryTradeReceipt {
   units: number;
   pricePerUnitLocal: number;
   amountLocal: number;
+  /** Complete frozen basis of allocated sale lots; absent if any lot basis is unknown. */
+  costBasisLocal?: number;
+  /** Income turn frozen when sale escrow is first paid; retries preserve it. */
+  realizedIncomeTurn?: number;
   turn: number;
   /** A failed-estate sale that must finish before depositor resolution closes. */
   resolutionSale?: true;

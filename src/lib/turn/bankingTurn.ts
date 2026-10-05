@@ -27,7 +27,7 @@ import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { computeNpcDepositShare, equityCappedDepositCeiling } from "@/lib/banking/deposits";
 import { domesticDepositRetention } from "@/lib/centralBank/marketEffects";
 import {
-  bankPremiumTurnPublicationFilter,
+  bankingTurnPublicationFilter,
   insurancePremiumBasisForTurn,
   insurancePremiumReceiptKey,
   loadInsurancePremiumReceiptsForTurn,
@@ -889,58 +889,114 @@ async function processOneBank(
   // (f) Recompute aggregates + stamp lastBankingTurn (END of bank pass)
   const finalPlayerDeposits = playerDeposits + playerInterestSettled;
   const totalDeposits = finalPlayerDeposits + npcDeposits;
-  const underwritingFeesForTurn =
-    corp.bankCharter?.lastBankingUnderwritingFeesTurn === turn
-      ? (corp.bankCharter.lastBankingUnderwritingFees ?? 0)
-      : 0;
-  const bankingIncome =
+  const baseBankingIncome =
     result.loanInterestCollected +
     result.loanOriginationFeesCollected -
     result.depositInterestPaid -
     result.insurancePremiumPaid -
-    result.defaultsWrittenOff +
-    underwritingFeesForTurn;
+    result.defaultsWrittenOff;
+  let publicationCharter = live.bankCharter;
+  let bankingIncome = baseBankingIncome;
+  let sovereignCouponIncomeForTurn = 0;
+  let treasuryRealizedGainForTurn = 0;
+  let underwritingFeesForTurn = 0;
+  let published = false;
+  let superseded = false;
+  const corporations = db.collection<Corporation>("corporations");
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    sovereignCouponIncomeForTurn =
+      publicationCharter.lastBankingIncomeTurn === turn
+        ? Math.max(0, publicationCharter.lastBankingSovereignCouponIncome ?? 0)
+        : 0;
+    treasuryRealizedGainForTurn =
+      publicationCharter.lastBankingIncomeTurn === turn
+        ? (publicationCharter.lastBankingTreasuryRealizedGain ?? 0)
+        : 0;
+    underwritingFeesForTurn =
+      publicationCharter.lastBankingUnderwritingFeesTurn === turn
+        ? (publicationCharter.lastBankingUnderwritingFees ?? 0)
+        : 0;
+    bankingIncome =
+      baseBankingIncome +
+      sovereignCouponIncomeForTurn +
+      treasuryRealizedGainForTurn +
+      underwritingFeesForTurn;
 
-  await db.collection<Corporation>("corporations").updateOne(
-    bankPremiumTurnPublicationFilter({
-      bankId: corp._id,
-      countryId: live.countryId,
-      charteredTurn: live.bankCharter.charteredTurn,
-      currency,
-      turn,
-    }),
-    {
-      $set: {
-        // Cash is deliberately absent. Every movement in this pass now applies
-        // its own guarded `$inc` through the money primitive, so writing the
-        // in-memory figure here would silently overwrite anything that moved
-        // concurrently and would resurrect money a failed leg never sent. What
-        // is left are the derived aggregates, which are recomputed from the
-        // ledgers each turn and are not balances anyone can claim.
-        "bankCharter.npcDeposits": npcDeposits,
-        "bankCharter.totalDeposits": totalDeposits,
-        "bankCharter.depositCeiling": depositCeiling,
-        "bankCharter.lastBankingTurn": turn,
-        "bankCharter.lastBankingIncome": bankingIncome,
-        "bankCharter.lastBankingIncomeTurn": turn,
-        // The per-turn split behind the net above, so the console can show
-        // interest paid vs earned from the ledger instead of estimating.
-        // Interbank / facility legs land after this stamp and $inc both the
-        // net and their own lines below, starting from zero here.
-        "bankCharter.lastBankingDepositInterest": result.depositInterestPaid,
-        "bankCharter.lastBankingLoanInterest": result.loanInterestCollected,
-        "bankCharter.lastBankingLoanOriginationFees": result.loanOriginationFeesCollected,
-        "bankCharter.lastBankingUnderwritingFees": underwritingFeesForTurn,
-        "bankCharter.lastBankingUnderwritingFeesTurn": turn,
-        "bankCharter.lastBankingInterbankInterestPaid": 0,
-        "bankCharter.lastBankingInterbankInterestReceived": 0,
-        "bankCharter.lastBankingFacilityInterest": 0,
-        "bankCharter.lastBankingInsurancePremium": result.insurancePremiumPaid,
-        "bankCharter.lastBankingWriteoffs": result.defaultsWrittenOff,
-        updatedAt: new Date(),
-      },
+    const resultWrite = await corporations.updateOne(
+      bankingTurnPublicationFilter({
+        bankId: corp._id,
+        countryId: live.countryId,
+        charteredTurn: live.bankCharter.charteredTurn,
+        currency,
+        turn,
+        observedIncomeTurn: publicationCharter.lastBankingIncomeTurn,
+        observedSovereignCouponIncome: publicationCharter.lastBankingSovereignCouponIncome,
+        observedTreasuryRealizedGain: publicationCharter.lastBankingTreasuryRealizedGain,
+      }),
+      {
+        $set: {
+          // Cash is deliberately absent. Every movement in this pass now applies
+          // its own guarded `$inc` through the money primitive, so writing the
+          // in-memory figure here would silently overwrite anything that moved
+          // concurrently and would resurrect money a failed leg never sent. What
+          // is left are the derived aggregates, which are recomputed from the
+          // ledgers each turn and are not balances anyone can claim.
+          "bankCharter.npcDeposits": npcDeposits,
+          "bankCharter.totalDeposits": totalDeposits,
+          "bankCharter.depositCeiling": depositCeiling,
+          "bankCharter.lastBankingTurn": turn,
+          "bankCharter.lastBankingIncome": bankingIncome,
+          "bankCharter.lastBankingIncomeTurn": turn,
+          // The per-turn split behind the net above, so the console can show
+          // interest paid vs earned from the ledger instead of estimating.
+          // Interbank / facility legs land after this stamp and $inc both the
+          // net and their own lines below, starting from zero here.
+          "bankCharter.lastBankingDepositInterest": result.depositInterestPaid,
+          "bankCharter.lastBankingLoanInterest": result.loanInterestCollected,
+          "bankCharter.lastBankingSovereignCouponIncome": sovereignCouponIncomeForTurn,
+          "bankCharter.lastBankingTreasuryRealizedGain": treasuryRealizedGainForTurn,
+          "bankCharter.lastBankingLoanOriginationFees": result.loanOriginationFeesCollected,
+          "bankCharter.lastBankingUnderwritingFees": underwritingFeesForTurn,
+          "bankCharter.lastBankingUnderwritingFeesTurn": turn,
+          "bankCharter.lastBankingInterbankInterestPaid": 0,
+          "bankCharter.lastBankingInterbankInterestReceived": 0,
+          "bankCharter.lastBankingFacilityInterest": 0,
+          "bankCharter.lastBankingInsurancePremium": result.insurancePremiumPaid,
+          "bankCharter.lastBankingWriteoffs": result.defaultsWrittenOff,
+          updatedAt: new Date(),
+        },
+      }
+    );
+    if (resultWrite.matchedCount === 1) {
+      published = true;
+      break;
     }
-  );
+    const current = await corporations.findOne(
+      { _id: corp._id },
+      { projection: { countryId: 1, bankCharter: 1 } }
+    );
+    const latestCharter = current?.bankCharter;
+    if (
+      !latestCharter ||
+      current?.countryId !== live.countryId ||
+      latestCharter.status !== "active" ||
+      latestCharter.charteredTurn !== live.bankCharter.charteredTurn ||
+      latestCharter.currency !== currency
+    ) {
+      superseded = true;
+      break;
+    }
+    if (latestCharter.lastBankingTurn === turn) {
+      published = true;
+      break;
+    }
+    publicationCharter = latestCharter;
+  }
+  if (!published && !superseded) {
+    throw new Error(
+      `Banking turn ${turn} could not publish for ${corp._id.toString()} after a concurrent charter update`
+    );
+  }
 
   result.bankingIncome = bankingIncome;
 

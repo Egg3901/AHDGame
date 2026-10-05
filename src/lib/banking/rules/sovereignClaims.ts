@@ -17,6 +17,34 @@ export interface BankCouponPlan {
   bondIds: string[];
 }
 
+/** Complete cost basis for one bank epoch's frozen sovereign maturity units. */
+export function bankSovereignMaturityCostBasis(
+  holders: readonly {
+    bankId: string;
+    charteredTurn: number;
+    units: number;
+    avgCostPerUnit?: number;
+    tradeId?: string;
+  }[],
+  bankId: string,
+  charteredTurn: number,
+  currencyCode: CurrencyCode
+): number | null {
+  const owned = holders.filter(
+    (holder) =>
+      holder.bankId === bankId &&
+      holder.charteredTurn === charteredTurn &&
+      !holder.tradeId &&
+      holder.units > 0
+  );
+  if (owned.length === 0 || owned.some((holder) => !Number.isFinite(holder.avgCostPerUnit)))
+    return null;
+  return roundSavingsAmount(
+    owned.reduce((sum, holder) => sum + holder.units * holder.avgCostPerUnit!, 0),
+    currencyCode
+  );
+}
+
 /** Freeze the eligible bank coupon slice from the opening sovereign bond snapshot. */
 export function bankCouponPlanForCountry(
   bonds: readonly Bond[],

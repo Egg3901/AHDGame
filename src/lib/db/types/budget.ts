@@ -463,6 +463,8 @@ export interface BankSovereignClaim {
   countryId: string;
   currencyCode: import("@/lib/constants/currencies").CurrencyCode;
   amountLocal: number;
+  /** Frozen acquisition basis; absent when any source holding basis is unknown. */
+  costBasisLocal?: number;
   turn: number;
   /** Frozen ledger timestamp so a retry recreates an identical funded witness. */
   ledgerCreatedAt?: Date;

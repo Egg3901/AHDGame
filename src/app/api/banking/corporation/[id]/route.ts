@@ -557,6 +557,8 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               // so the console can always do arithmetic.
               lastBankingDepositInterest: charter.lastBankingDepositInterest ?? 0,
               lastBankingLoanInterest: charter.lastBankingLoanInterest ?? 0,
+              lastBankingSovereignCouponIncome: charter.lastBankingSovereignCouponIncome ?? 0,
+              lastBankingTreasuryRealizedGain: charter.lastBankingTreasuryRealizedGain ?? 0,
               lastBankingLoanOriginationFees: charter.lastBankingLoanOriginationFees ?? 0,
               lastBankingUnderwritingFees: charter.lastBankingUnderwritingFees ?? 0,
               loanOriginationFeesLifetime: charter.loanOriginationFeesLifetime ?? 0,

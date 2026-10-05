@@ -14,6 +14,11 @@ import {
 import { MONEY_MOVE_COLLECTION, turnMoveKey } from "@/lib/banking/moneyMove";
 import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
 
+/**
+ * Banking-turn inputs and compare filters for the insurance premium stage.
+ * These helpers keep the turn runner on one bounded snapshot and ensure that
+ * a premium retry cannot publish over a concurrent funded income receipt.
+ */
 export type SettleInsurancePremiumInput = {
   bankId: ObjectId;
   countryId?: string | null;
@@ -83,12 +88,15 @@ export function insurancePremiumReceiptKey(
   return turnMoveKey("insurance-premium", `${bankId.toString()}:${charteredTurn}`, turn);
 }
 
-export function bankPremiumTurnPublicationFilter(input: {
+export function bankingTurnPublicationFilter(input: {
   bankId: ObjectId;
   countryId?: string | null;
   charteredTurn: number;
   currency: CurrencyCode;
   turn: number;
+  observedIncomeTurn?: number;
+  observedSovereignCouponIncome?: number;
+  observedTreasuryRealizedGain?: number;
 }): Record<string, unknown> {
   return {
     _id: input.bankId,
@@ -98,6 +106,17 @@ export function bankPremiumTurnPublicationFilter(input: {
     "bankCharter.status": "active",
     "bankCharter.charteredTurn": input.charteredTurn,
     "bankCharter.currency": input.currency,
+    ...(input.observedIncomeTurn === undefined
+      ? { "bankCharter.lastBankingIncomeTurn": { $exists: false } }
+      : { "bankCharter.lastBankingIncomeTurn": input.observedIncomeTurn }),
+    ...(input.observedSovereignCouponIncome === undefined
+      ? { "bankCharter.lastBankingSovereignCouponIncome": { $exists: false } }
+      : {
+          "bankCharter.lastBankingSovereignCouponIncome": input.observedSovereignCouponIncome,
+        }),
+    ...(input.observedTreasuryRealizedGain === undefined
+      ? { "bankCharter.lastBankingTreasuryRealizedGain": { $exists: false } }
+      : { "bankCharter.lastBankingTreasuryRealizedGain": input.observedTreasuryRealizedGain }),
     $or: [
       { "bankCharter.lastBankingTurn": { $ne: input.turn } },
       { "bankCharter.lastBankingTurn": { $exists: false } },
