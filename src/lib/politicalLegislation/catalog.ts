@@ -4,6 +4,7 @@
  */
 
 import { BASELINE_LEVEL_OVERRIDES_1991 } from "./seeds/baselineLevels1991";
+import { POST_1991_FALLBACK_YEAR } from "@/lib/politicalMetrics/seeds/baselineAnchors";
 import { DD_LAWS } from "./laws/ddLaws";
 import { DD_LAND_LAWS } from "./laws/ddLandLaws";
 import { RU_LAWS } from "./laws/ruLaws";
@@ -43,6 +44,8 @@ for (const laws of Object.values(CATALOGS)) {
       { year: 1953, level: inherited },
       { year: 1979, level: inherited },
       { year: 1991, level: BASELINE_LEVEL_OVERRIDES_1991[law.id] ?? inherited },
+      // Later presets keep their pre-1991 level until a later era is authored.
+      { year: POST_1991_FALLBACK_YEAR, level: inherited },
     ];
   }
 }

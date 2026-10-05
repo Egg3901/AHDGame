@@ -19,6 +19,9 @@ import { NATIONAL_BASELINES_1953 } from "./nationalBaselines1953";
 import { NATIONAL_BASELINES_1991 } from "./nationalBaselines1991";
 import { NATIONAL_BASELINES_1979 } from "./nationalBaselines1979";
 
+/** First preset year after 1991; years from here on use the pre-1991 board. */
+export const POST_1991_FALLBACK_YEAR = 1999;
+
 export interface BaselineAnchor {
   year: number;
   value: number;
@@ -40,6 +43,10 @@ function buildInitialTable(): AnchorTable {
         { year: 1953, value: baseline.value },
         { year: 1979, value: NATIONAL_BASELINES_1979[countryId][id] },
         { year: 1991, value: NATIONAL_BASELINES_1991[countryId][id] },
+        // No board is authored after 1991 yet. Later presets (1999 onward)
+        // keep the 1979 board they seeded before the 1991 anchor existed;
+        // an unbounded 1991 anchor would clamp them all to the 1991 board.
+        { year: POST_1991_FALLBACK_YEAR, value: NATIONAL_BASELINES_1979[countryId][id] },
       ];
     }
     out[countryId] = perFamily;
