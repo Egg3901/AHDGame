@@ -318,8 +318,8 @@ export default function PartiesPage() {
             {!loading && parties.length === 0 && (
               <div className="rounded-xl border border-card-border bg-card p-12">
                 <EmptyState
-                  title="No political parties found"
-                  description="This country has no registered political parties yet."
+                  title="No parties yet"
+                  description="Every party here is founded by players. A charter names three founders from this country who live in neighbouring areas, and the party forms once all three sign."
                   {...(isInSameCountry
                     ? {
                         actionLabel: "Create party",
