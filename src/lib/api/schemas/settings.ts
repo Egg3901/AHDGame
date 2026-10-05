@@ -36,6 +36,16 @@ export const setPasswordSchema = z.object({
   newPassword: z.string().min(6, "Password must be at least 6 characters"),
 });
 
+export const changeEmailSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Invalid email").max(254),
+  // Required by the route when the account has a password; social-only accounts omit it.
+  currentPassword: z.string().max(200).optional(),
+});
+
+export const confirmEmailChangeSchema = z.object({
+  token: z.string().min(1, "Confirmation token required").max(256),
+});
+
 export const characterNameSchema = z.object({
   name: moderatedNameSchema(
     "Name",
@@ -231,6 +241,8 @@ export const orgBuildingBudgetSchema = z.object({
 
 export type ChangePasswordBody = z.infer<typeof changePasswordSchema>;
 export type SetPasswordBody = z.infer<typeof setPasswordSchema>;
+export type ChangeEmailBody = z.infer<typeof changeEmailSchema>;
+export type ConfirmEmailChangeBody = z.infer<typeof confirmEmailChangeSchema>;
 export type CharacterNameBody = z.infer<typeof characterNameSchema>;
 export type CreateCharacterBody = z.infer<typeof createCharacterSchema>;
 export type CharacterTransferBody = z.infer<typeof characterTransferSchema>;

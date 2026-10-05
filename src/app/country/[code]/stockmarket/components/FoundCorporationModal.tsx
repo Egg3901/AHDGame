@@ -13,7 +13,7 @@ import {
   IPO_MIN_FLOAT_PCT,
   IPO_MAX_FLOAT_PCT,
 } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { FOUNDABLE_CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
 import { computeIpoIssuance } from "@/lib/corporations/ipoIssuance";
 import {
   SUPERSHARE_MIN_MULTIPLIER,
@@ -25,6 +25,10 @@ import {
   getFoundingConfidenceMultiplier,
 } from "@/lib/corporations/foundingCosts";
 import { fetchJson } from "@/lib/observability/fetchJson";
+
+const FOUNDABLE_ENTRIES = FOUNDABLE_CORPORATION_TYPES.map(
+  (key) => [key, CORPORATION_TYPE_LABELS[key]] as const
+);
 
 export function FoundCorporationModal({
   open,
@@ -422,7 +426,7 @@ export function FoundCorporationModal({
                   <option value="" disabled>
                     Select sector…
                   </option>
-                  {Object.entries(CORPORATION_TYPE_LABELS).map(([key, label]) => (
+                  {FOUNDABLE_ENTRIES.map(([key, label]) => (
                     <option key={key} value={key}>
                       {label}
                     </option>
@@ -460,13 +464,11 @@ export function FoundCorporationModal({
                   className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none cursor-pointer appearance-none"
                 >
                   <option value="">None</option>
-                  {Object.entries(CORPORATION_TYPE_LABELS)
-                    .filter(([key]) => key !== foundType)
-                    .map(([key, label]) => (
-                      <option key={key} value={key}>
-                        {label}
-                      </option>
-                    ))}
+                  {FOUNDABLE_ENTRIES.filter(([key]) => key !== foundType).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
                 </select>
                 <div className="absolute right-3 top-2.5 pointer-events-none text-muted">
                   <svg

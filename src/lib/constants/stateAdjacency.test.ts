@@ -147,7 +147,7 @@ function sharedBoundaryEdges(
 
 const NON_SEGMENT_ADJACENCIES = {
   US: [edgeKey("AK", "WA"), edgeKey("AZ", "CO"), edgeKey("NM", "UT")],
-  UK: [edgeKey("NIR", "NWE"), edgeKey("NIR", "SCO")],
+  UK: [edgeKey("NIR", "NWE"), edgeKey("NIR", "SCO"), edgeKey("NIR", "WAL")],
   JP: [edgeKey("CGK", "KYU"), edgeKey("HOK", "TOH"), edgeKey("KNS", "SHI")],
 } as const;
 
@@ -291,8 +291,8 @@ describe("STATE_ADJACENCY", () => {
     it("LON borders SEE and EAE", () => {
       expect([...adjacentStates("UK", "LON")].sort()).toEqual(["EAE", "SEE"]);
     });
-    it("NIR borders SCO and NWE via sea ferries", () => {
-      expect([...adjacentStates("UK", "NIR")].sort()).toEqual(["NWE", "SCO"]);
+    it("NIR borders NWE, SCO, and WAL across the Irish Sea", () => {
+      expect([...adjacentStates("UK", "NIR")].sort()).toEqual(["NWE", "SCO", "WAL"]);
     });
     it.each([
       ["NWE", "SCO"],
@@ -307,9 +307,9 @@ describe("STATE_ADJACENCY", () => {
       expect(adjacentStates("UK", "EAE")).not.toContain("YHU");
       expect(adjacentStates("UK", "YHU")).not.toContain("EAE");
     });
-    it("WAL does NOT border NIR (no direct ferry)", () => {
-      expect(adjacentStates("UK", "WAL")).not.toContain("NIR");
-      expect(adjacentStates("UK", "NIR")).not.toContain("WAL");
+    it("WAL and NIR are adjacent across the Irish Sea", () => {
+      expect(adjacentStates("UK", "WAL")).toContain("NIR");
+      expect(adjacentStates("UK", "NIR")).toContain("WAL");
     });
   });
 
@@ -503,7 +503,7 @@ describe("STATE_ADJACENCY", () => {
   describe("pre-existing map regression", () => {
     const expectedHashes = {
       US: "e3651f06d9a6dd0dbd46d3ce2451254238ff17d773ce7f4990a193eeec6da0fe",
-      UK: "18c861a6ea48ea2fac66c6b29fc5cd9ee9073cfb4d839081ea9fbb92f281a15d",
+      UK: "84d94ff76cbe19c26bff00acc2bb0a7e28235a8ca0650a79aa43a26a753aa7b5",
       DE: "b90125507666e35479502e98f1133036829ce08beb19118a3e61bdce26d3a057",
       JP: "e8fdc74be35036b2f81831fbe9c21dfc4122e949370b496350ee7ef1fc87cc3e",
       CN: "9dba610303f1f4d0743da4fe109d2de5bbcf4b4f24b89ccda064864280449e67",
