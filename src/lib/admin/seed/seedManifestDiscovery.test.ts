@@ -9,12 +9,18 @@ type DiscoveryFixtureDb = {
   collection(name: "fixtureLiteral" | "fixtureUnionA" | "fixtureUnionB"): unknown;
 };
 
-function discoveryFixture(db: DiscoveryFixtureDb, choice: "fixtureUnionA" | "fixtureUnionB"): void {
+export function discoveryFixture(
+  db: DiscoveryFixtureDb,
+  choice: "fixtureUnionA" | "fixtureUnionB"
+): void {
   db.collection("fixtureLiteral");
   db.collection(choice);
 }
 
-function discoveryDynamicFixture(db: { collection(name: string): unknown }, name: string): void {
+export function discoveryDynamicFixture(
+  db: { collection(name: string): unknown },
+  name: string
+): void {
   db.collection(name);
 }
 
@@ -25,7 +31,7 @@ function discoveryForwarder(
   db.collection(collectionName);
 }
 
-function discoveryForwarderCallsites(
+export function discoveryForwarderCallsites(
   db: { collection(name: string): unknown },
   dynamicCollectionName: string
 ): void {
@@ -40,7 +46,7 @@ const discoveryArrowForwarder = (
   db.collection(collectionName);
 };
 
-function discoveryArrowCallsite(db: { collection(name: string): unknown }): void {
+export function discoveryArrowCallsite(db: { collection(name: string): unknown }): void {
   discoveryArrowForwarder(db, "fixtureArrowLiteral");
 }
 

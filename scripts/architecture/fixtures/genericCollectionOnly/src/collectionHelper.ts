@@ -1,5 +1,5 @@
 type FixtureDb = {
-  collection<T>(name: string): unknown;
+  collection<_T>(name: string): unknown;
 };
 
 export function collectionHelper(db: FixtureDb, collectionName: string): void {
