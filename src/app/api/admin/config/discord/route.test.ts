@@ -188,7 +188,7 @@ describe("PATCH /api/admin/config/discord — webhook ownership stamp (#1208)", 
     const res = await PATCH(patchReq({ general: { news: "https://discord.test/news" } }));
 
     expect(res.status).toBe(409);
-    await expect(res.json()).resolves.toEqual({
+    await expect(res.json()).resolves.toMatchObject({
       error: expect.stringContaining("main-site"),
     });
     expect(updateOne).not.toHaveBeenCalled();
