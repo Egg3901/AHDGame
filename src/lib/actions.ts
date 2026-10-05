@@ -25,7 +25,7 @@ import {
   quoteDebatePrepAction,
   describeDebatePrepAction,
 } from "./actions/rules";
-import { getSharedActionPointCost, isSharedActionType } from "./actions/sharedRules";
+import { getSharedActionPointCost } from "./actions/sharedRules";
 
 export {
   FUNDRAISE_ACTION_COST,
@@ -792,10 +792,8 @@ export const BATCHABLE_ACTION_TYPES: readonly ActionType[] = [
 
 /** Tiered action-point cost for one run at current stats (used by execute route and batch simulation). */
 export function getActionPointCost(character: Character, actionType: ActionType): number {
-  if (isSharedActionType(actionType)) {
-    return getSharedActionPointCost(actionType, character);
-  }
-  return ACTIONS[actionType].baseCost;
+  // Every catalog action type is priced by the shared rules (SharedActionType covers ActionType).
+  return getSharedActionPointCost(actionType, character);
 }
 
 function applyEffectToCharacter(

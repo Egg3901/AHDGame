@@ -73,7 +73,7 @@ export default function DossierTab({
 
   return (
     <div className="mx-auto max-w-lg space-y-3 py-6">
-      <div className="text-[11px] uppercase tracking-[0.14em] text-muted">Account dossier</div>
+      <div className="text-body-sm font-medium text-muted">Account dossier</div>
       <input
         type="text"
         value={query}

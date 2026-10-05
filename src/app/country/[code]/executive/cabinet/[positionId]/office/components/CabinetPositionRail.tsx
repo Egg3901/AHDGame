@@ -93,9 +93,7 @@ export function CabinetPositionRail({
         <div className="max-h-[640px] space-y-3 overflow-y-auto pr-1">
           {grouped.map(({ group, seats }) => (
             <div key={group}>
-              <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted/70">
-                {group}
-              </div>
+              <div className="px-2 pb-1 text-body-sm font-medium text-muted">{group}</div>
               <div className="space-y-0.5">
                 {seats.map((p) => {
                   const active = p.id === activePositionId;

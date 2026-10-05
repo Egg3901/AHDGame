@@ -57,7 +57,7 @@ export function TaskFormToast({ onCreated, onClose }: TaskFormToastProps) {
       <div className="fixed bottom-0 left-0 right-0 z-50 animate-slide-up">
         <div className="mx-auto max-w-2xl rounded-t-xl border border-card-border bg-card shadow-2xl">
           <div className="flex items-center justify-between border-b border-card-border px-5 py-3">
-            <h2 className="text-sm font-semibold">New Task</h2>
+            <h2 className="text-sm font-semibold">New task</h2>
             <button
               onClick={onClose}
               className="text-muted hover:text-foreground transition-colors text-lg leading-none"
@@ -147,7 +147,7 @@ export function TaskFormToast({ onCreated, onClose }: TaskFormToastProps) {
                 disabled={submitting}
                 className="px-4 py-1.5 rounded text-sm bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity"
               >
-                {submitting ? "Saving…" : "Save Task"}
+                {submitting ? "Saving…" : "Save task"}
               </button>
             </div>
           </form>

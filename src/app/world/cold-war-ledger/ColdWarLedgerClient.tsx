@@ -86,7 +86,7 @@ export function ColdWarLedgerClient({ view }: { view: WorldAlignmentView }) {
             key={pole.id}
             className="rounded-lg border border-card-border bg-card p-3 shadow-card"
           >
-            <div className="text-body-xs uppercase tracking-wide text-muted">{pole.label}</div>
+            <div className="text-body-sm font-medium text-muted">{pole.label}</div>
             <div className={`font-mono text-heading tabular-nums ${POLE_TEXT[pole.accentToken]}`}>
               {tallies.byPole.get(pole.id) ?? 0}
             </div>
@@ -94,12 +94,12 @@ export function ColdWarLedgerClient({ view }: { view: WorldAlignmentView }) {
           </div>
         ))}
         <div className="rounded-lg border border-card-border bg-card p-3 shadow-card">
-          <div className="text-body-xs uppercase tracking-wide text-muted">Non-aligned</div>
+          <div className="text-body-sm font-medium text-muted">Non-aligned</div>
           <div className="font-mono text-heading tabular-nums text-muted">{tallies.undecided}</div>
           <div className="text-body-xs text-muted">lead within {ALIGNMENT_GATES.nonAligned}</div>
         </div>
         <div className="rounded-lg border border-card-border bg-card p-3 shadow-card">
-          <div className="text-body-xs uppercase tracking-wide text-muted">In play</div>
+          <div className="text-body-sm font-medium text-muted">In play</div>
           <div className="font-mono text-heading tabular-nums text-warning">{tallies.inPlay}</div>
           <div className="text-body-xs text-muted">contested or non-aligned</div>
         </div>
@@ -191,10 +191,10 @@ export function ColdWarLedgerClient({ view }: { view: WorldAlignmentView }) {
 function Header({ view }: { view: WorldAlignmentView }) {
   return (
     <header className="space-y-1">
-      <p className="text-body-xs uppercase tracking-wide text-muted">
+      <p className="text-body-sm font-medium text-muted">
         {view.year} · {view.poles.length} blocs · gate {view.joinGate}
       </p>
-      <h1 className="text-display font-semibold">Cold War Ledger</h1>
+      <h1 className="text-display font-semibold">Cold War ledger</h1>
       <p className="max-w-prose text-body text-muted">
         Where every nation stands between the blocs. Each holds a share per bloc plus an uncommitted
         remainder, always totalling 100.

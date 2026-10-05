@@ -190,12 +190,12 @@ export function PhaseTag({
   if (inPrimary)
     return (
       <span className="rounded-full border border-warning/30 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning">
-        Primary Phase
+        Primary phase
       </span>
     );
   return (
     <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
-      General Election
+      General election
     </span>
   );
 }

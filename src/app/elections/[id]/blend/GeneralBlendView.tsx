@@ -4,7 +4,7 @@ import { apiErrorText } from "@/lib/errors/catalog";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
-import { BLEND, FONT } from "@/components/blend/tokens";
+import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import { BlendShell, BlendHeader, BlendSection } from "@/components/blend/BlendShell";
 import { BlendRail, BlendChipRail } from "@/components/blend/BlendRail";
 import { BlendTicker } from "@/components/blend/BlendTicker";
@@ -199,13 +199,10 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
         disabled={busy === c.id}
         onClick={() => toggleEndorse(c.id, c.endorsed)}
         style={{
+          ...BLEND_LABEL,
           padding: "4px 10px",
           font: "inherit",
-          fontFamily: FONT.mono,
-          fontSize: 10.5,
-          letterSpacing: ".06em",
           fontWeight: 700,
-          textTransform: "uppercase",
           whiteSpace: "nowrap",
           cursor: busy === c.id ? "not-allowed" : "pointer",
           ...(c.endorsed
@@ -645,16 +642,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               >
                 The tickets
               </h2>
-              <p
-                style={{
-                  margin: "0 0 10px",
-                  fontFamily: FONT.mono,
-                  fontSize: 9.5,
-                  letterSpacing: ".14em",
-                  textTransform: "uppercase",
-                  color: BLEND.mutedDimmer,
-                }}
-              >
+              <p style={{ ...BLEND_LABEL, margin: "0 0 10px" }}>
                 Projected electoral votes · vote share
               </p>
               {vm.tickets.map((c) => (
@@ -808,68 +796,28 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
             >
               {vm.yourTicket ? (
                 <div>
-                  <div
-                    style={{
-                      fontFamily: FONT.mono,
-                      fontSize: 9.5,
-                      letterSpacing: ".16em",
-                      textTransform: "uppercase",
-                      color: BLEND.mutedDimmer,
-                    }}
-                  >
-                    Your ticket
-                  </div>
+                  <div style={BLEND_LABEL}>Your ticket</div>
                   <YourTicketBlock vm={vm} campaignLink={campaignLink} />
                 </div>
               ) : null}
 
               {vm.mood ? (
                 <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
-                  <div
-                    style={{
-                      fontFamily: FONT.mono,
-                      fontSize: 9.5,
-                      letterSpacing: ".16em",
-                      textTransform: "uppercase",
-                      color: BLEND.mutedDimmer,
-                    }}
-                  >
-                    National mood
-                  </div>
+                  <div style={BLEND_LABEL}>National mood</div>
                   <NationalMoodBlock vm={vm} />
                 </div>
               ) : null}
 
               {election.democraticHealth ? (
                 <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
-                  <div
-                    style={{
-                      fontFamily: FONT.mono,
-                      fontSize: 9.5,
-                      letterSpacing: ".16em",
-                      textTransform: "uppercase",
-                      color: BLEND.mutedDimmer,
-                    }}
-                  >
-                    Democratic health
-                  </div>
+                  <div style={BLEND_LABEL}>Democratic health</div>
                   <DemocraticHealthBlock data={election.democraticHealth} />
                 </div>
               ) : null}
 
               {vm.drivers.length + vm.coattailDrivers.length > 0 ? (
                 <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
-                  <div
-                    style={{
-                      fontFamily: FONT.mono,
-                      fontSize: 9.5,
-                      letterSpacing: ".16em",
-                      textTransform: "uppercase",
-                      color: BLEND.mutedDimmer,
-                    }}
-                  >
-                    Why it moved
-                  </div>
+                  <div style={BLEND_LABEL}>Why it moved</div>
                   <WhyItMovedBlock vm={vm} />
                 </div>
               ) : null}

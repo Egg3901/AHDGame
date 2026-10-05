@@ -8,7 +8,7 @@ import { HomepagePreviewClient } from "./HomepagePreviewClient";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
-  title: "Home Page Preview · Admin",
+  title: "Home page preview · admin",
   description: "Admin-only preview of a redesigned, theme-aware landing page.",
 };
 

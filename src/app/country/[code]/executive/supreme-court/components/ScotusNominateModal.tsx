@@ -67,7 +67,7 @@ export function ScotusNominateModal({
     selectedSeatNumber != null && (mode === "character" ? !!selectedCharId : !!selectedPartyId);
 
   return (
-    <Modal open={open} title="Nominate a Justice" onClose={onCancel}>
+    <Modal open={open} title="Nominate a justice" onClose={onCancel}>
       <p className="text-sm text-muted mb-4">
         Nominees require Senate confirmation. Nominate an existing player character, or request a
         generated NPP &quot;legal scholar&quot; of a party you choose.
@@ -109,7 +109,7 @@ export function ScotusNominateModal({
                 : "border-card-border bg-card text-muted hover:bg-card-elevated"
             }`}
           >
-            Player Character
+            Player character
           </button>
           <button
             type="button"
@@ -121,7 +121,7 @@ export function ScotusNominateModal({
                 : "border-card-border bg-card text-muted hover:bg-card-elevated"
             }`}
           >
-            Generate NPP Legal Scholar
+            Generate NPP legal scholar
           </button>
         </div>
       </fieldset>

@@ -67,11 +67,11 @@ Era and country art for the `/actions` screen. Every image is public domain or r
 | `1991/hero.webp` | ITAR-TASS, via Wikimedia Commons | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Boris_Yeltsin_22_August_1991-1.jpg |
 | `1999/campaign.webp` | White House Photograph Office,, via Wikimedia Commons | Public domain | https://commons.wikimedia.org/wiki/File:Bill_Clinton_1996_campaign_rally_in_Buffalo,_New_York_3f161d.jpg |
 | `1999/advertise.webp` | Anton Leddin, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Golkar_campaigners_1997.jpg |
-| `1999/fundraise.webp` | Gleyshon, via Wikimedia Commons | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Delegates_voting_at_the_Second_European_Ecumenical_Assembly,_Graz,_June_1997.jpg |
+| `1999/fundraise-v2.webp` | President (1981-1989 : Reagan). White House Photographic Office. 1981-1989, via Wikimedia Commons | Public domain | https://commons.wikimedia.org/wiki/File:President_and_Nancy_Reagan_Attending_a_Fundraising_Reception_for_The_John_F._Kennedy_Library_Foundation_(From_Left_to_Right)_Senator_Edward_Kennedy_President_Ronald_Reagan_Nancy_Rea_-_DPLA_-_cde1e4be16592924064bb6c754e0daee.jpg |
 | `1999/buildDonorBase.webp` | Vladimir Rodionov / Владимир Родионов, via Wikimedia Commons | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:RIAN_archive_858217_Boris_Yeltsin_and_Michel_Camdessus.jpg |
 | `1999/convertCash.webp` | Danny Gys / European Communities, 1998 / EC - Audiovisual Service, via Wikimedia Commons | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Launching_of_the_Euro_-_Press_conference_-_1998.jpg |
-| `1999/poll.webp` | ESO, via Wikimedia Commons | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Cameramen_during_VLT_first_light_press_conference_(vlt-fl-press-conf-3).jpg |
-| `1999/pollLarge.webp` | Vladimir Rodionov / Владимир Родионов, via Wikimedia Commons | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:RIAN_archive_858219_Boris_Yeltsin_and_Michel_Camdessus.jpg |
+| `1999/poll-v2.webp` | NBC News, via Wikimedia Commons | Public domain | https://commons.wikimedia.org/wiki/File:Blue_Collar_Voters_NBC_1980_presidential_exit_poll.png |
+| `1999/pollLarge-v2.webp` | Columbus (Ohio) Department of Development, via Wikimedia Commons | Public domain | https://commons.wikimedia.org/wiki/File:Issue_One_Exit_Polling_Results_May_6,_1986_-_DPLA_-_5637d277156ad83f90077970182b9e85_(page_4).jpg |
 | `1999/canvass.webp` | ControV4, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Ismail_Kosan_beim_Wahlkampf_der_Gr%C3%BCnen_f%C3%BCr_die_Bundestagswahl_1998.jpg |
 | `1999/flipflop.webp` | А.Н.Лукашина, via Wikimedia Commons | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Boris_Yeltsin_in_the_State_Duma_(1997-12-05).jpg |
 | `1999/debatePrep.webp` | Mark Renders, Isopress-Sénépart, via Wikimedia Commons | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Conference_%22Europe_Listens_to_the_Youth%22-_Press_conference_with_Edith_Cresson_(P-002035-01-22).jpg |
@@ -85,38 +85,38 @@ Era and country art for the `/actions` screen. Every image is public domain or r
 | `2007/pollLarge.webp` | Steven Fruitsmaak/Wikinews, via Wikimedia Commons | CC BY 2.5 | https://commons.wikimedia.org/wiki/File:2007_federal_elections_Belgium_5.jpg |
 | `2007/canvass.webp` | Punkmorten, via Wikimedia Commons | Public domain | https://commons.wikimedia.org/wiki/File:Socialist_campaign_booth_2007.JPG |
 | `2007/flipflop.webp` | Marie-Lan Nguyen (User:Jastrow), via Wikimedia Commons | CC BY 2.5 | https://commons.wikimedia.org/wiki/File:Meeting_Royal_2007_02_06_n9.jpg |
-| `2007/debatePrep.webp` | Jastrow, via Wikimedia Commons | CC BY 2.5 | https://commons.wikimedia.org/wiki/File:Meeting_Royal_2007_02_06_n6.jpg |
+| `2007/debatePrep-v2.webp` | The Israel Project, via Wikimedia Commons | CC BY-SA 2.0 | https://commons.wikimedia.org/wiki/File:HUJI_Election_Debate_(8361985738).jpg |
 | `2007/hero.webp` | Joel Gillman from Minneapolis, USA, via Wikimedia Commons | CC BY-SA 2.0 | https://commons.wikimedia.org/wiki/File:Obama_Rally_(2287720594).jpg |
-| `2019/campaign.webp` | Thomas Le Bas, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Crowd_of_protesters_on_the_main_intersection_of_Queen_Street,_Auckland,_at_the_Stand_Against_Racism_protest_in_Auckland_city,_Sunday_24_March_2019.jpg |
+| `2019/campaign-v2.webp` | Michael Vadon, via Wikimedia Commons | CC BY-SA 2.0 | https://commons.wikimedia.org/wiki/File:Election_2016-_Bernie_Sanders_NYC_Fundraiser_Draws_Campaign_Supporters_Who_Are_'Feelin'_The_Bern'_(21647292132).jpg |
 | `2019/advertise.webp` | Menacinghat, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:2019_election_in_Bournemouth.jpg |
-| `2019/fundraise.webp` | Dario Hunter, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Green_Party_Presidential_Primary_Debate_-_2019.jpg |
+| `2019/fundraise-v2.webp` | Eric Haynes for the Office of the Governor of Massachusetts, via Wikimedia Commons | Public domain | https://commons.wikimedia.org/wiki/File:Tpac-donors-dinner_16803559592_o.jpg |
 | `2019/buildDonorBase.webp` | SecretName101, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Bagels_with_Bernie_2020_20190202_113759.jpg |
 | `2019/convertCash.webp` | Bericht, via Wikimedia Commons | CC0 | https://commons.wikimedia.org/wiki/File:Euro_banknotes,_First_series.png |
 | `2019/poll.webp` | Per Meistrup, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:2019_TH-election_voting-booth_IMG_8250.jpg |
 | `2019/pollLarge.webp` | Kolforn (Kolforn) I'd appreciate if you could mail me (Kolforn@gmail.com) if you want to use this picture out of the Wik, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:-2019-12-12_Polling_station,_Trimingham_village_hall,_Norfolk_(2).JPG |
-| `2019/canvass.webp` | Becker1999 from Grove City, OH, via Wikimedia Commons | CC BY 2.0 | https://commons.wikimedia.org/wiki/File:Make_Detroit_the_Engine_of_the_Green_New_Deal!_IMG_300_(16)_(48423001132).jpg |
-| `2019/flipflop.webp` | Doha Debates, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Doha_Debates-Refugees_2019-2-26.jpg |
-| `2019/debatePrep.webp` | Mike Thompson, via Wikimedia Commons | Public domain | https://commons.wikimedia.org/wiki/File:Bipartisan_Background_Checks_Act_of_2019_press_conference_2020_01.jpg |
+| `2019/canvass-v2.webp` | Alexmar983, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:22-09-22_Campagna_elettorale_mercato_di_Cascina_24.jpg |
+| `2019/flipflop-v2.webp` | Michael Ignatieff, via Wikimedia Commons | CC BY 2.0 | https://commons.wikimedia.org/wiki/File:Le_chef_libéral_Michael_Ignatieff_lors_de_la_visite_dun_centre_de_ressources_communautaires_à_Charlesbourg.jpg |
+| `2019/debatePrep-v2.webp` | Gage Skidmore, via Wikimedia Commons | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:Republican_Presidential_debate_2016_by_Gage_Skidmore.jpg |
 | `2019/hero.webp` | Diliff, via Wikimedia Commons | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:European_Parliament_Strasbourg_Hemicycle_-_Diliff.jpg |
-| `neutral/campaign.webp` | Thomas Le Bas, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Crowd_of_protesters_on_the_main_intersection_of_Queen_Street,_Auckland,_at_the_Stand_Against_Racism_protest_in_Auckland_city,_Sunday_24_March_2019.jpg |
-| `neutral/advertise.webp` | Department of Homeland Security. Federal Emergency Management Agency. Public Affairs Division. 3/1/2, via Wikimedia Commons | Public domain | https://commons.wikimedia.org/wiki/File:Flooding_%5E_Hurricane-Tropical_Storm_-_Lodi,_N._J._,_September_20,_2011_--_September_20,_2011_--_FEMA,_along_with_state_partners,_put_up_billboards_around_the_NJ_area_to_get_people_i_-_DPLA_-_70785b9f0bd1052b0356beb0a8a9765a.jpg |
-| `neutral/fundraise.webp` | Dario Hunter, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Green_Party_Presidential_Primary_Debate_-_2019.jpg |
-| `neutral/buildDonorBase.webp` | ESO, via Wikimedia Commons | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Cameramen_during_VLT_first_light_press_conference_(vlt-fl-press-conf-3).jpg |
+| `neutral/campaign-v2.webp` | Joel Gillman from Minneapolis, USA, via Wikimedia Commons | CC BY-SA 2.0 | https://commons.wikimedia.org/wiki/File:Obama_Rally_(2286936605).jpg |
+| `neutral/advertise-v2.webp` | Martin Strachoň, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Brno,_Kníničská,_billboard_ODS_(4040).jpg |
+| `neutral/fundraise-v2.webp` | Eric Haynes for the Office of the Governor of Massachusetts, via Wikimedia Commons | Public domain | https://commons.wikimedia.org/wiki/File:Tpac-donors-dinner_16803559592_o.jpg |
+| `neutral/buildDonorBase-v2.webp` | aflcio2008, via Wikimedia Commons | CC BY 2.0 | https://commons.wikimedia.org/wiki/File:Gov._Strickland_visits_Phone_Bank.jpg |
 | `neutral/convertCash.webp` | Bericht, via Wikimedia Commons | CC0 | https://commons.wikimedia.org/wiki/File:Euro_banknotes,_First_series.png |
 | `neutral/poll.webp` | Steven Fruitsmaak/Wikinews, via Wikimedia Commons | CC BY 2.5 | https://commons.wikimedia.org/wiki/File:2007_federal_elections_Belgium_3.jpg |
 | `neutral/pollLarge.webp` | Steven Fruitsmaak/Wikinews, via Wikimedia Commons | CC BY 2.5 | https://commons.wikimedia.org/wiki/File:2007_federal_elections_Belgium_5.jpg |
 | `neutral/canvass.webp` | Punkmorten, via Wikimedia Commons | Public domain | https://commons.wikimedia.org/wiki/File:Socialist_campaign_booth_2007.JPG |
-| `neutral/flipflop.webp` | Jastrow, via Wikimedia Commons | CC BY 2.5 | https://commons.wikimedia.org/wiki/File:Meeting_Royal_2007_02_06_n6.jpg |
-| `neutral/debatePrep.webp` | Doha Debates, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Doha_Debates-Refugees_2019-2-26.jpg |
+| `neutral/flipflop-v2.webp` | Terry Ross from Corpus Christi, Texas, United States, via Wikimedia Commons | CC BY-SA 2.0 | https://commons.wikimedia.org/wiki/File:Hillary_Clinton_with_press.jpg |
+| `neutral/debatePrep-v2.webp` | The Israel Project, via Wikimedia Commons | CC BY-SA 2.0 | https://commons.wikimedia.org/wiki/File:HUJI_Election_Debate_(8367953626).jpg |
 | `neutral/hero.webp` | Diliff, via Wikimedia Commons | CC BY-SA 3.0 | https://commons.wikimedia.org/wiki/File:European_Parliament_Strasbourg_Hemicycle_-_Diliff.jpg |
-| `2023/campaign.webp` | Leonhard Lenz, via Wikimedia Commons | CC0 | https://commons.wikimedia.org/wiki/File:Crowd_at_the_stage_of_Christopher_Street_Day_Berlin_2023-07-22_02.jpg |
-| `2023/advertise.webp` | Missvain, via Wikimedia Commons | CC0 | https://commons.wikimedia.org/wiki/File:Voting_in_Sonoma_-_November_2024_-_Sarah_Stierch_03.jpg |
-| `2023/fundraise.webp` | Leonhard Lenz, via Wikimedia Commons | CC0 | https://commons.wikimedia.org/wiki/File:Climate_strike_fifth_anniversary_press_conference_in_Berlin_2023-08-20_13.jpg |
-| `2023/buildDonorBase.webp` | Daniel Cooper, via Wikimedia Commons | CC BY-SA 2.0 | https://commons.wikimedia.org/wiki/File:2023_State_Opening_of_Parliament_UK.jpg |
+| `2023/campaign-v2.webp` | BSRF, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Millet_İttifakı_İzmir_mitingi.jpg |
+| `2023/advertise-v2.webp` | Oto Zapletal, via Wikimedia Commons | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Predvolebná_kampaň,_parlamentné_voľby_2023,_Dolný_Kubín,_Slovensko_01.jpg |
+| `2023/fundraise-v2.webp` | Michael Vadon, via Wikimedia Commons | CC BY-SA 2.0 | https://commons.wikimedia.org/wiki/File:Election_2016-_Bernie_Sanders_NYC_Fundraiser_Draws_Campaign_Supporters_Who_Are_'Feelin'_The_Bern'_(21668863331).jpg |
+| `2023/buildDonorBase-v2.webp` | ElizabethForMA, via Wikimedia Commons | CC BY 2.0 | https://commons.wikimedia.org/wiki/File:Phone_bank_-_Lawrence,_MA_(31127827577).jpg |
 | `2023/convertCash.webp` | Alexas_Fotos, via Wikimedia Commons | CC0 | https://commons.wikimedia.org/wiki/File:Money_in_notes.jpg |
 | `2023/poll.webp` | Per Meistrup, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:2023_TH-election_polling-station_IMG_4072.jpg |
 | `2023/pollLarge.webp` | Jiří Sedláček, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Overview_of_Polling_station_of_Presidential_election_in_the_Czech_Republic_in_2023_in_Z%C5%A0_Ohradn%C3%AD_at_Ohradn%C3%AD_street_in_Michle,_Prague.jpg |
-| `2023/canvass.webp` | Per Meistrup, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:2023_TH-election_queue-for-voting_IMG_4056.jpg |
+| `2023/canvass-v2.webp` | Alexmar983, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:22-09-22_Campagna_elettorale_mercato_di_Cascina_18.jpg |
 | `2023/flipflop.webp` | GeoMancer448, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Polling_station_London_Mayoral_Elections_2024.jpg |
 | `2023/debatePrep.webp` | ©House of Commons, via Wikimedia Commons | CC BY 3.0 | https://commons.wikimedia.org/wiki/File:King's_Speech_Debate,_17_July_2024_01.jpg |
 | `2023/hero.webp` | Pierre Blaché, via Wikimedia Commons | CC0 | https://commons.wikimedia.org/wiki/File:Hungarian_Parliament_Building_2023-9.jpg |
@@ -127,7 +127,7 @@ Era and country art for the `/actions` screen. Every image is public domain or r
 | `2027/convertCash.webp` | Basile Morin, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Wealth_in_colorful_banknotes.jpg |
 | `2027/poll.webp` | W.carter, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:Ballot_dropped_into_ballot_box_2024_Swedish_EU_election_at_St%C3%A5ngen%C3%A4sskolan,_Brastad.jpg |
 | `2027/pollLarge.webp` | Missvain, via Wikimedia Commons | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Mendocino_County_Official_Election_Ballot_Drop_Box_-_April_2023_-_Sarah_Stierch_02.jpg |
-| `2027/canvass.webp` | Ian McCausland, via Wikimedia Commons | Public domain | https://commons.wikimedia.org/wiki/File:July_30_Bike_Protest_crowd_02.jpg |
-| `2027/flipflop.webp` | Paul Harrop, via Wikimedia Commons | CC BY-SA 2.0 | https://commons.wikimedia.org/wiki/File:Polling_station_entrance,_Hull_(geograph_7474634).jpg |
+| `2027/canvass-v2.webp` | Alexmar983, via Wikimedia Commons | CC BY-SA 4.0 | https://commons.wikimedia.org/wiki/File:22-09-22_Campagna_elettorale_mercato_di_Cascina_22.jpg |
+| `2027/flipflop-v2.webp` | Andrew Scheer, via Wikimedia Commons | CC0 | https://commons.wikimedia.org/wiki/File:Scrum_-_Mêlée_de_presse_(37100733570).jpg |
 | `2027/debatePrep.webp` | Alexis Jazz, via Wikimedia Commons | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Harris_Walz_rally_at_UNLV_Thomas_and_Mack_Center,_early_IMG_2258.jpg |
 | `2027/hero.webp` | Alexis Jazz, via Wikimedia Commons | CC BY 4.0 | https://commons.wikimedia.org/wiki/File:Kamala_Harris_rally_in_Las_Vegas_at_Thomas_&_Mack_center_panorama_01.jpg |

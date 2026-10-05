@@ -40,8 +40,8 @@ export function CodeQualityScoreGauges({ snapshot }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-center gap-8">
-        <ScoreGauge label="Overall Quality" score={snapshot.overallScore} />
-        <ScoreGauge label="Mobile Quality" score={snapshot.mobileScore} />
+        <ScoreGauge label="Overall quality" score={snapshot.overallScore} />
+        <ScoreGauge label="Mobile quality" score={snapshot.mobileScore} />
       </div>
       <div className="text-center text-xs text-muted">
         <span className="font-medium">{snapshot.environment}</span> — Build:{" "}

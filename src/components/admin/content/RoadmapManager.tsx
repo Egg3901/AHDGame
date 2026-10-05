@@ -287,7 +287,7 @@ export function RoadmapManager() {
 
   return (
     <div className="space-y-8">
-      <h2 className="text-xl font-bold text-foreground">Roadmap Manager</h2>
+      <h2 className="text-xl font-bold text-foreground">Roadmap manager</h2>
       {error && (
         <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2 text-sm text-red-400">
           {error}
@@ -303,7 +303,7 @@ export function RoadmapManager() {
           onClick={() => setCatOpen(!catOpen)}
           className="flex w-full items-center justify-between text-left"
         >
-          <h3 className="text-lg font-semibold text-foreground">Manage Categories</h3>
+          <h3 className="text-lg font-semibold text-foreground">Manage categories</h3>
           <span className="text-muted">{catOpen ? "▲" : "▼"}</span>
         </button>
 
@@ -390,7 +390,7 @@ export function RoadmapManager() {
                 disabled={!newCatName.trim()}
                 className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary/80 disabled:opacity-50"
               >
-                Add Category
+                Add category
               </button>
             </div>
           </div>

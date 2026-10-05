@@ -36,7 +36,7 @@ export function DepartmentProgramPanel({
         aria-labelledby="program-title"
       >
         <h2 id="program-title" className="text-lg font-semibold">
-          Department Programs
+          Department programs
         </h2>
         <p className="mt-2 text-sm text-muted">{program.explanation}</p>
       </section>
@@ -47,7 +47,7 @@ export function DepartmentProgramPanel({
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted">{program.departmentName}</p>
+          <p className="text-body-sm font-medium text-muted">{program.departmentName}</p>
           <h2 id="program-title" className="text-lg font-semibold">
             {program.programName}
           </h2>

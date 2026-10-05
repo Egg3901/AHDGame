@@ -53,7 +53,7 @@ export function SovereignRecoveryProgressPanel({ countryCode }: Props) {
   return (
     <div className="rounded-lg border border-amber-500 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950">
       <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-200">
-        Sovereign Recovery — In Progress
+        Sovereign recovery — In progress
       </h3>
       <div className="mt-3 space-y-3 text-xs">
         <div>

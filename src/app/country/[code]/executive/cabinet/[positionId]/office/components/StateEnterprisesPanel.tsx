@@ -96,7 +96,7 @@ export function StateEnterprisesPanel({
 
   return (
     <section className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
-      <h2 className="mb-2 text-lg font-semibold">State Enterprises</h2>
+      <h2 className="mb-2 text-lg font-semibold">State enterprises</h2>
       <p className="mb-4 text-sm text-muted">
         The country&apos;s National Corporations. Split a sector type into a new corp, or merge a
         split-off back into the primary.

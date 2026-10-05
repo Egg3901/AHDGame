@@ -155,8 +155,8 @@ export default function FundFinancialsTab({
       <div className="flex items-center gap-1 rounded-lg bg-card-elevated p-1 w-fit border border-card-border">
         {(
           [
-            { key: "income_statement" as const, label: "Income Statement" },
-            { key: "balance_sheet" as const, label: "Balance Sheet" },
+            { key: "income_statement" as const, label: "Income statement" },
+            { key: "balance_sheet" as const, label: "Balance sheet" },
           ] as const
         ).map((v) => (
           <button
@@ -176,7 +176,7 @@ export default function FundFinancialsTab({
       {view === "income_statement" && (
         <div className="rounded-xl border border-card-border bg-card overflow-hidden">
           <div className="border-b border-card-border bg-background/60 px-6 py-4">
-            <h2 className="text-lg font-bold text-foreground">Income Statement</h2>
+            <h2 className="text-lg font-bold text-foreground">Income statement</h2>
             <p className="text-xs text-muted mt-0.5">
               Fund-wide totals across all holders — based on the last 200 transactions
             </p>
@@ -185,9 +185,7 @@ export default function FundFinancialsTab({
           <div className="px-6 py-4 space-y-1">
             {incomeStatement ? (
               <>
-                <div className="text-[11px] font-semibold text-muted uppercase tracking-wider pt-1 pb-2">
-                  Revenue
-                </div>
+                <div className="text-body-sm font-medium text-muted pt-1 pb-2">Revenue</div>
                 {Array.from(incomeStatement.byKind.entries())
                   .filter(([, vals]) => vals.income > 0)
                   .map(([kind, vals]) => (
@@ -205,9 +203,7 @@ export default function FundFinancialsTab({
                 )}
 
                 <div className="border-t border-card-border mt-3" />
-                <div className="text-[11px] font-semibold text-muted uppercase tracking-wider pt-3 pb-2">
-                  Expenses
-                </div>
+                <div className="text-body-sm font-medium text-muted pt-3 pb-2">Expenses</div>
                 {Array.from(incomeStatement.byKind.entries())
                   .filter(([, vals]) => vals.expense > 0)
                   .map(([kind, vals]) => (
@@ -226,7 +222,7 @@ export default function FundFinancialsTab({
 
                 <div className="border-t-2 border-foreground/20 mt-3 pt-2">
                   <FinRow
-                    label="Net Income"
+                    label="Net income"
                     value={formatAmount(incomeStatement.netIncome, ccy)}
                     valueClass={incomeStatement.netIncome >= 0 ? "text-success" : "text-error"}
                     bold
@@ -244,14 +240,12 @@ export default function FundFinancialsTab({
       {view === "balance_sheet" && bs && (
         <div className="rounded-xl border border-card-border bg-card overflow-hidden">
           <div className="border-b border-card-border bg-background/60 px-6 py-4">
-            <h2 className="text-lg font-bold text-foreground">Balance Sheet</h2>
+            <h2 className="text-lg font-bold text-foreground">Balance sheet</h2>
             <p className="text-xs text-muted mt-0.5">Assets = Liabilities + Equity</p>
           </div>
 
           <div className="px-6 py-4 space-y-1">
-            <div className="text-[11px] font-semibold text-muted uppercase tracking-wider pt-1 pb-2">
-              Assets
-            </div>
+            <div className="text-body-sm font-medium text-muted pt-1 pb-2">Assets</div>
             <FinRow
               label="Cash & equivalents"
               value={formatAmount(bs.cashAnchor, ccy)}
@@ -268,13 +262,11 @@ export default function FundFinancialsTab({
               tooltip="Sovereign bond principal held in the fund reserve bucket."
             />
             <div className="border-t border-card-border mt-2 pt-2">
-              <FinRow label="Total Assets" value={formatAmount(bs.totalBackingAnchor, ccy)} bold />
+              <FinRow label="Total assets" value={formatAmount(bs.totalBackingAnchor, ccy)} bold />
             </div>
 
             <div className="border-t border-card-border mt-3" />
-            <div className="text-[11px] font-semibold text-muted uppercase tracking-wider pt-3 pb-2">
-              Liabilities
-            </div>
+            <div className="text-body-sm font-medium text-muted pt-3 pb-2">Liabilities</div>
             <FinRow
               label="Outstanding units (liability)"
               value={formatAmount(bs.quotedLiabilityAnchor, ccy)}
@@ -282,9 +274,7 @@ export default function FundFinancialsTab({
             />
 
             <div className="border-t border-card-border mt-3" />
-            <div className="text-[11px] font-semibold text-muted uppercase tracking-wider pt-3 pb-2">
-              Equity / Coverage
-            </div>
+            <div className="text-body-sm font-medium text-muted pt-3 pb-2">Equity / Coverage</div>
             <FinRow
               label="Backing surplus"
               value={formatAmount(bs.totalBackingAnchor - bs.quotedLiabilityAnchor, ccy)}
@@ -308,7 +298,7 @@ export default function FundFinancialsTab({
 
             <div className="border-t-2 border-foreground/20 mt-3 pt-2">
               <FinRow
-                label="Net Position"
+                label="Net position"
                 value={formatAmount(bs.totalBackingAnchor - bs.quotedLiabilityAnchor, ccy)}
                 valueClass={
                   bs.totalBackingAnchor >= bs.quotedLiabilityAnchor ? "text-success" : "text-error"
@@ -320,9 +310,7 @@ export default function FundFinancialsTab({
           </div>
 
           <div className="border-t border-card-border bg-background/40 px-6 py-4">
-            <div className="text-[11px] font-semibold text-muted uppercase tracking-wider mb-3">
-              Key Metrics
-            </div>
+            <div className="text-body-sm font-medium text-muted mb-3">Key metrics</div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div>
                 <div className="text-[11px] text-muted mb-0.5">NAV / unit</div>

@@ -46,7 +46,7 @@ export function NppV1ReadinessPanel() {
   return (
     <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
       <div className="border-b border-card-border bg-background/50 px-4 py-3">
-        <p className="text-sm font-semibold">V1 Autonomy Readiness</p>
+        <p className="text-sm font-semibold">V1 autonomy readiness</p>
         <p className="text-xs text-muted mt-0.5">
           Whether each country is seeded well enough for the V1 governing brain to produce a working
           government. Player-enabled countries are run by players (V1 does not act there).
@@ -61,10 +61,7 @@ export function NppV1ReadinessPanel() {
           <thead className="bg-background/30">
             <tr>
               {["Country", "Government", "V1 Ready", ""].map((h) => (
-                <th
-                  key={h}
-                  className="px-4 py-2 text-left text-xs font-medium text-muted uppercase tracking-wider"
-                >
+                <th key={h} className="px-4 py-2 text-left text-body-sm font-medium text-muted">
                   {h}
                 </th>
               ))}

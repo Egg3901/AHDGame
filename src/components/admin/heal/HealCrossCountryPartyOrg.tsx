@@ -67,7 +67,7 @@ export function HealCrossCountryPartyOrg() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Cross-Country Party Organization</h3>
+        <h3 className="font-semibold text-sm">Heal cross-country party organization</h3>
         <p className="mt-1 text-xs text-muted">
           Removes statePartyOrg records where a party appears in states belonging to a different
           country (e.g., US parties in UK regions). This can happen if parties were created before
@@ -88,7 +88,7 @@ export function HealCrossCountryPartyOrg() {
           disabled={loading}
           className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
         >
-          {loading ? "Deleting..." : "Delete Invalid Records"}
+          {loading ? "Deleting..." : "Delete invalid records"}
         </button>
       </div>
 
@@ -106,8 +106,8 @@ export function HealCrossCountryPartyOrg() {
                       <tr className="text-left text-muted border-b border-card-border">
                         <th className="pb-1">State</th>
                         <th className="pb-1">Party</th>
-                        <th className="pb-1">Party Country</th>
-                        <th className="pb-1">State Country</th>
+                        <th className="pb-1">Party country</th>
+                        <th className="pb-1">State country</th>
                         <th className="pb-1 text-right">Org</th>
                       </tr>
                     </thead>

@@ -135,9 +135,7 @@ export function SharePurchaseOrderbookView({
                   </div>
                 </div>
               )}
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-success">
-                For Sale: you can buy
-              </p>
+              <p className="mb-2 text-body-sm font-medium text-success">For sale: you can buy</p>
               <div className="divide-y divide-card-border/50 overflow-hidden rounded-lg border border-card-border">
                 {orderbookAsks.map((order) => (
                   <div key={order._id} className="bg-card-elevated/30 px-4 py-3 space-y-2">

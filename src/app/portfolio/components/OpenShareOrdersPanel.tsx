@@ -175,7 +175,7 @@ export function OpenShareOrdersPanel() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-xs uppercase tracking-wider text-muted">
+                    <tr className="text-left text-body-sm font-medium text-muted">
                       <th className="py-1 pr-4 font-medium">Side</th>
                       <th className="py-1 pr-4 font-medium">Shares</th>
                       <th className="py-1 pr-4 font-medium">Price</th>

@@ -119,7 +119,7 @@ export function HealBudgets() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Budgets</h3>
+        <h3 className="font-semibold text-sm">Heal budgets</h3>
         <p className="mt-1 text-xs text-muted">
           Recalculates national and regional budget revenue from tax bases and rates, then
           recalculates spending from currently enacted laws. Fixes drift from stale values without
@@ -140,7 +140,7 @@ export function HealBudgets() {
           disabled={loading}
           className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
         >
-          {loading ? "Healing…" : "Heal All Budgets"}
+          {loading ? "Healing…" : "Heal all budgets"}
         </button>
       </div>
 
@@ -154,8 +154,8 @@ export function HealBudgets() {
 
           {/* National budgets */}
           <div className="space-y-2">
-            <p className="font-semibold text-muted uppercase tracking-wider text-[10px]">
-              National Budgets ({diagnostics.national.total})
+            <p className="text-muted text-body-sm font-medium">
+              National budgets ({diagnostics.national.total})
             </p>
             {diagnostics.national.budgets.map((d) => (
               <div key={d.budgetId} className="space-y-1">
@@ -201,8 +201,8 @@ export function HealBudgets() {
 
           {/* Regional budgets summary */}
           <div className="space-y-2">
-            <p className="font-semibold text-muted uppercase tracking-wider text-[10px]">
-              Regional Budgets ({diagnostics.regional.total})
+            <p className="text-muted text-body-sm font-medium">
+              Regional budgets ({diagnostics.regional.total})
             </p>
             {Object.entries(diagnostics.regional.byCountry).map(([countryId, summary]) => (
               <div key={countryId} className="flex items-center gap-3 text-muted">

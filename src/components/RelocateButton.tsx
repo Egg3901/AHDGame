@@ -418,7 +418,7 @@ export function RelocateButton({
               <div className="mt-4 space-y-3 rounded-lg border border-card-border bg-background/50 p-4 text-sm">
                 <div>
                   <p className="font-semibold text-foreground">
-                    Your Corporation - {corp!.corpName}
+                    Your corporation - {corp!.corpName}
                   </p>
                   <p className="mt-1 text-xs text-muted">
                     What do you want to do with your corporation when you relocate?
@@ -438,7 +438,7 @@ export function RelocateButton({
                         : "border-card-border bg-card-muted hover:border-primary/40"
                     }`}
                   >
-                    <p className="font-medium text-foreground">Move Corp</p>
+                    <p className="font-medium text-foreground">Move corp</p>
                     <p className="mt-1 text-xs text-muted">
                       Relocate your character and headquarters together so the CEO role stays with
                       you.
@@ -456,7 +456,7 @@ export function RelocateButton({
                         : "border-card-border bg-card-muted hover:border-error/40"
                     }`}
                   >
-                    <p className="font-medium text-foreground">Abandon Corp</p>
+                    <p className="font-medium text-foreground">Abandon corp</p>
                     <p className="mt-1 text-xs text-muted">
                       Relocate without moving headquarters. This will vacate your CEO role.
                     </p>
@@ -488,7 +488,7 @@ export function RelocateButton({
                           onChange={() => setPayment("cash")}
                         />
                         <div className="text-xs">
-                          <div className="font-medium text-foreground">Liquid Capital</div>
+                          <div className="font-medium text-foreground">Liquid capital</div>
                           <div className="text-muted">
                             {formatAmount(corp!.liquidCapitalAnchor)} available
                             {!canPayCash && <span className="ml-1 text-error">(insufficient)</span>}
@@ -557,7 +557,7 @@ export function RelocateButton({
                     disabled={loading || (hasPlayerCeoCorp && !canMoveCorp)}
                     title={hasPlayerCeoCorp ? moveCorpDisabledReason : undefined}
                   >
-                    {loading ? "Relocating..." : "Relocate & Move Corporation"}
+                    {loading ? "Relocating..." : "Relocate & move corporation"}
                   </Button>
                 ) : choosingAbandonCorp ? (
                   <Button
@@ -565,7 +565,7 @@ export function RelocateButton({
                     onClick={() => submit("character-only")}
                     disabled={loading}
                   >
-                    {loading ? "Relocating..." : "Relocate & Abandon Corporation"}
+                    {loading ? "Relocating..." : "Relocate & abandon corporation"}
                   </Button>
                 ) : (
                   <p className="self-center text-xs text-muted">

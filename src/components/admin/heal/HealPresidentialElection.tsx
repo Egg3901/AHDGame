@@ -74,7 +74,7 @@ export function HealPresidentialElection() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Presidential Election</h3>
+        <h3 className="font-semibold text-sm">Heal presidential election</h3>
         <p className="mt-1 text-xs text-muted">
           Fixes presidential elections with wrong durations. Resets timers to 24h primary + 24h
           general and withdraws candidates so they can re-enter the fresh primary.
@@ -94,7 +94,7 @@ export function HealPresidentialElection() {
           disabled={loading}
           className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
         >
-          {loading ? "Healing…" : "Heal Now"}
+          {loading ? "Healing…" : "Heal now"}
         </button>
       </div>
 

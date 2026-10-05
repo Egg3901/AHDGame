@@ -742,9 +742,7 @@ export function LineGraph({
             transform: `${horizontal} translateY(${flipBelow ? "12px" : "calc(-100% - 12px)"})`,
           }}
         >
-          <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted">
-            {xLabel(active)}
-          </div>
+          <div className="mb-1 text-body-sm font-medium text-muted">{xLabel(active)}</div>
           {readout.length === 0 ? (
             <div className="text-xs text-muted italic">Nothing counted yet</div>
           ) : (
@@ -865,7 +863,7 @@ export function GeneralVoteCharts({
               }`}
             >
               <BarChart2 className="h-3 w-3" />
-              Electoral Votes
+              Electoral votes
             </button>
           )}
           <button
@@ -879,7 +877,7 @@ export function GeneralVoteCharts({
             } ${!hasSnapshotsChart ? "opacity-40 cursor-not-allowed pointer-events-none" : ""}`}
           >
             <Vote className="h-3 w-3" />
-            Vote Share %
+            Vote share %
           </button>
           <button
             type="button"
@@ -892,7 +890,7 @@ export function GeneralVoteCharts({
             } ${!hasSnapshotsChart ? "opacity-40 cursor-not-allowed pointer-events-none" : ""}`}
           >
             <TrendingUp className="h-3 w-3" />
-            Cumulative Votes
+            Cumulative votes
           </button>
           {hasSeatHistory && (
             <button

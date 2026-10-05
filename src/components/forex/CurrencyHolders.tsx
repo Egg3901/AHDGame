@@ -152,18 +152,12 @@ export function CurrencyHolders({ currency }: { currency: CurrencyCode }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-card-border text-left">
-                <th className="pb-2 pr-3 text-xs font-medium uppercase tracking-wider text-muted">
-                  #
-                </th>
-                <th className="pb-2 pr-3 text-xs font-medium uppercase tracking-wider text-muted">
-                  Holder
-                </th>
-                <th className="pb-2 pr-3 text-right text-xs font-medium uppercase tracking-wider text-muted">
+                <th className="pb-2 pr-3 text-body-sm font-medium text-muted">#</th>
+                <th className="pb-2 pr-3 text-body-sm font-medium text-muted">Holder</th>
+                <th className="pb-2 pr-3 text-right text-body-sm font-medium text-muted">
                   Balance
                 </th>
-                <th className="pb-2 text-right text-xs font-medium uppercase tracking-wider text-muted">
-                  Share
-                </th>
+                <th className="pb-2 text-right text-body-sm font-medium text-muted">Share</th>
               </tr>
             </thead>
             <tbody>

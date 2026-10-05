@@ -196,7 +196,7 @@ export default function CorporationPortfolioView({
     },
     {
       key: "cash",
-      label: "Liquid Capital",
+      label: "Liquid capital",
       value: formatAmount(data.cashOnHand),
       delta: deltas?.cash ?? null,
       icon: <IconCash />,
@@ -329,12 +329,12 @@ function CorpOverviewPane({
   return (
     <>
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <StatCard label="Liquid Capital" value={formatAmount(data.cashOnHand)} />
-        <StatCard label="Stock Holdings" value={formatAmount(data.totalStockValue)} />
-        <StatCard label="Bond Holdings" value={formatAmount(data.totalBondValue)} />
+        <StatCard label="Liquid capital" value={formatAmount(data.cashOnHand)} />
+        <StatCard label="Stock holdings" value={formatAmount(data.totalStockValue)} />
+        <StatCard label="Bond holdings" value={formatAmount(data.totalBondValue)} />
         <StatCard label="Liabilities" value={formatAmount(data.totalLiabilityValue)} />
         <StatCard
-          label="Bond Income"
+          label="Bond income"
           value={`+${formatAmount(data.totalCouponIncomePerTurn)}/turn`}
           accent="success"
         />
@@ -344,7 +344,7 @@ function CorpOverviewPane({
         <div className="rounded-xl border border-card-border bg-card p-4 sm:p-6 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
             <div>
-              <h2 className="text-sm font-semibold text-foreground">Portfolio Value Over Time</h2>
+              <h2 className="text-sm font-semibold text-foreground">Portfolio value over time</h2>
               <p className="text-xs text-muted">
                 {chartView === "total"
                   ? seriesView === "total"
@@ -408,9 +408,7 @@ function CorpCashPane({ cashOnHand }: { cashOnHand: number }) {
   const { formatAmount } = useCurrency();
   return (
     <div className="rounded-xl border border-card-border bg-card p-6 shadow-sm">
-      <span className="block text-[10px] uppercase tracking-wider text-muted font-bold mb-1">
-        Liquid Capital
-      </span>
+      <span className="block text-body-sm font-medium text-muted mb-1">Liquid capital</span>
       <span className="block text-2xl font-bold text-foreground tabular-nums">
         {formatAmount(cashOnHand)}
       </span>
@@ -440,24 +438,18 @@ function CorpStocksTable({
         <table className="w-full text-left text-sm">
           <thead className="bg-card-elevated border-b border-card-border">
             <tr>
-              <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider w-[40%]">
-                Corporation
+              <th className="px-4 py-3 text-muted text-body-sm font-medium w-[40%]">Corporation</th>
+              <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">Shares</th>
+              <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden sm:table-cell">
+                Avg cost
               </th>
-              <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
-                Shares
-              </th>
-              <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">
-                Avg Cost
-              </th>
-              <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
+              <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">
                 Unr. P&amp;L
               </th>
-              <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden md:table-cell">
+              <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden md:table-cell">
                 Price
               </th>
-              <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
-                Value
-              </th>
+              <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">Value</th>
               {canSell && <th className="px-4 py-3" />}
             </tr>
           </thead>
@@ -579,9 +571,7 @@ function CorpBondsTable({
       <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
         {hasImfFacility && (
           <div className="px-4 py-2 border-b border-card-border bg-primary/5">
-            <p className="text-[10px] font-semibold text-foreground tracking-wide uppercase">
-              IMF facility
-            </p>
+            <p className="text-body-sm font-medium text-foreground">IMF facility</p>
             <p className="text-[10px] text-muted mt-0.5">
               Loan receivable from restructuring. Not a tradable bond.
             </p>
@@ -591,22 +581,16 @@ function CorpBondsTable({
           <table className="w-full text-left text-sm">
             <thead className="bg-card-elevated border-b border-card-border">
               <tr>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider w-[30%]">
-                  Bond
-                </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
-                  Units
-                </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium w-[30%]">Bond</th>
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">Units</th>
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden sm:table-cell">
                   Coupon
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden sm:table-cell">
                   Maturity
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
-                  Value
-                </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">Value</th>
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">
                   <span className="sr-only">Actions</span>
                 </th>
               </tr>

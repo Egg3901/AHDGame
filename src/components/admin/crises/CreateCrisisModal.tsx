@@ -53,7 +53,7 @@ const METRIC_CATEGORIES = [
   },
   {
     id: "publicSafety",
-    label: "Public Safety",
+    label: "Public safety",
     fields: ["crimeRate", "violentCrimeRate", "policePerCapita", "incarcerationRate"],
   },
   {
@@ -97,7 +97,7 @@ const METRIC_CATEGORIES = [
   },
   {
     id: "mediaInformation",
-    label: "Media & Information",
+    label: "Media & information",
     fields: [
       "mediaPolarization",
       "disinformationRisk",
@@ -142,7 +142,7 @@ export function CreateCrisisModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-card border border-border rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold">Create Crisis</h3>
+          <h3 className="text-lg font-bold">Create crisis</h3>
           <button
             type="button"
             aria-label="Close"
@@ -202,7 +202,7 @@ export function CreateCrisisModal({
         {/* Country selector */}
         {(form.scope === "country" || form.scope === "region") && (
           <div>
-            <label className="block text-sm text-muted mb-1">Target Countries</label>
+            <label className="block text-sm text-muted mb-1">Target countries</label>
             <div className="flex flex-wrap gap-3">
               {registered.map((countryId) => (
                 <label key={countryId} className="flex items-center gap-1.5 text-sm">
@@ -347,9 +347,9 @@ export function CreateCrisisModal({
                       }
                     >
                       <option value="metric">Metric</option>
-                      <option value="approval">Government Approval</option>
-                      <option value="profitMargin">Profit Margin</option>
-                      <option value="inflation">Inflation Rate</option>
+                      <option value="approval">Government approval</option>
+                      <option value="profitMargin">Profit margin</option>
+                      <option value="inflation">Inflation rate</option>
                     </select>
                   </div>
                 </div>
@@ -410,7 +410,7 @@ export function CreateCrisisModal({
                           })
                         }
                       >
-                        <option value="">All Sectors</option>
+                        <option value="">All sectors</option>
                         {(
                           Object.entries(CORPORATION_TYPE_LABELS) as [CorporationType, string][]
                         ).map(([id, label]) => (
@@ -429,7 +429,7 @@ export function CreateCrisisModal({
                         onChange={(e) => updateEffect(i, { strategyId: e.target.value || null })}
                       >
                         <option value="">
-                          {effect.sectorType ? "All Strategies" : "— Select a sector first —"}
+                          {effect.sectorType ? "All strategies" : "— Select a sector first —"}
                         </option>
                         {effect.sectorType &&
                           SECTOR_STRATEGIES[effect.sectorType as CorporationType].map((s) => (
@@ -467,7 +467,7 @@ export function CreateCrisisModal({
               </div>
             ))}
             <button onClick={addEffect} className="text-sm text-primary hover:underline">
-              + Add Effect
+              + Add effect
             </button>
           </div>
         </div>
@@ -484,7 +484,7 @@ export function CreateCrisisModal({
             disabled={submitting}
             className="rounded border border-primary bg-primary px-4 py-1.5 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity"
           >
-            {submitting ? "Creating..." : "Create Crisis"}
+            {submitting ? "Creating..." : "Create crisis"}
           </button>
         </div>
       </div>

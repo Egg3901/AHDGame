@@ -16,7 +16,7 @@ export default function NominationError({
       description="The nomination page couldn't load. This may be a temporary issue."
       logPrefix="Nomination page error"
       navigationLinks={[
-        { href: "/congress?chamber=senate&tab=bills", label: "Back to Senate Bills" },
+        { href: "/congress?chamber=senate&tab=bills", label: "Back to Senate bills" },
         { href: "/dashboard", label: "Dashboard" },
       ]}
       fullScreen

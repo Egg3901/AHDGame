@@ -73,9 +73,7 @@ export function ActsLedger({
   return (
     <div className="overflow-hidden rounded-xl border border-card-border bg-card">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-card-border bg-card-muted px-4 py-2.5">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-muted">
-          Acts of Government
-        </span>
+        <span className="text-body-sm font-medium text-muted">Acts of government</span>
         <span className="flex gap-1.5">
           {pills.map((pill) => (
             <button

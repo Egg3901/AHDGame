@@ -135,7 +135,7 @@ export function SeedDiagnosticPanel() {
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-      <h3 className="text-sm font-semibold text-white">Seed Diagnostic</h3>
+      <h3 className="text-sm font-semibold text-white">Seed diagnostic</h3>
       <p className="text-xs text-muted">
         Conformance checks that a fresh reset matches the era seed. Drift compares live macros to
         the post-reset baseline (growth-adjusted), with tolerances that widen over turns.

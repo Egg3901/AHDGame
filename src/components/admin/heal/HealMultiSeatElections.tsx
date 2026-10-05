@@ -82,7 +82,7 @@ export function HealMultiSeatElections() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal House & State Senate Elections</h3>
+        <h3 className="font-semibold text-sm">Heal House & state Senate elections</h3>
         <p className="mt-1 text-xs text-muted">
           Fixes multi-seat elections where seats were incorrectly allocated (e.g., all seats going
           to one candidate due to vote threshold issues). Recalculates seat distribution and updates
@@ -103,7 +103,7 @@ export function HealMultiSeatElections() {
           disabled={loading}
           className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
         >
-          {loading ? "Healing…" : "Heal All"}
+          {loading ? "Healing…" : "Heal all"}
         </button>
       </div>
 

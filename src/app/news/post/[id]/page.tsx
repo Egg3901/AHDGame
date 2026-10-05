@@ -117,7 +117,7 @@ export default async function NewsPostPermalinkPage({ params }: Props) {
         </div>
 
         <header className="mb-4 border-b border-card-border pb-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted">
+          <p className="text-body-sm font-medium text-muted">
             {post.isSystem
               ? "Wire"
               : post.feedType === "advertisement"

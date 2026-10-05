@@ -60,18 +60,14 @@ export function StocksTable({
         <table className="w-full text-left text-sm">
           <thead className="bg-card-elevated border-b border-card-border">
             <tr>
-              <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider w-[40%]">
-                Corporation
-              </th>
-              <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
-                Shares
-              </th>
+              <th className="px-4 py-3 text-muted text-body-sm font-medium w-[40%]">Corporation</th>
+              <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">Shares</th>
               {showCostBasis && (
                 <>
-                  <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">
-                    Avg Cost
+                  <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden sm:table-cell">
+                    Avg cost
                   </th>
-                  <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
+                  <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">
                     Unr. P&amp;L
                   </th>
                 </>
@@ -83,9 +79,7 @@ export function StocksTable({
               >
                 Price
               </th>
-              <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
-                Value
-              </th>
+              <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">Value</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-card-border">
@@ -200,22 +194,16 @@ export function BondsTable({
           <table className="w-full text-left text-sm">
             <thead className="bg-card-elevated border-b border-card-border">
               <tr>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider w-[30%]">
-                  Bond
-                </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
-                  Units
-                </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium w-[30%]">Bond</th>
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">Units</th>
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden sm:table-cell">
                   Coupon
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right hidden sm:table-cell">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right hidden sm:table-cell">
                   Maturity
                 </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
-                  Value
-                </th>
-                <th className="px-4 py-3 font-semibold text-muted uppercase text-[10px] tracking-wider text-right">
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">Value</th>
+                <th className="px-4 py-3 text-muted text-body-sm font-medium text-right">
                   <span className="sr-only">Actions</span>
                 </th>
               </tr>

@@ -259,7 +259,7 @@ function DonutChart({
       </svg>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
         <span className="font-mono text-2xl font-bold">{rows.length}</span>
-        <span className="text-[10px] uppercase tracking-widest text-muted">holdings</span>
+        <span className="text-body-sm font-medium text-muted">holdings</span>
       </div>
     </div>
   );
@@ -311,36 +311,18 @@ function ActualHoldings({
             className="grid items-center gap-3 bg-card-elevated px-5 py-2.5"
             style={{ gridTemplateColumns: "26px minmax(0,1.5fr) 150px 90px 90px 100px 80px 90px" }}
           >
-            <span className="text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-              #
-            </span>
-            <span className="text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-              Corporation
-            </span>
-            <span className="text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-              Weight
-            </span>
-            <span className="text-right text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-              Shares
-            </span>
-            <span
-              className="text-right text-[9.5px] font-semibold uppercase tracking-wider text-muted"
-              title={AVG_COST_HELP}
-            >
+            <span className="text-body-sm font-medium text-muted">#</span>
+            <span className="text-body-sm font-medium text-muted">Corporation</span>
+            <span className="text-body-sm font-medium text-muted">Weight</span>
+            <span className="text-right text-body-sm font-medium text-muted">Shares</span>
+            <span className="text-right text-body-sm font-medium text-muted" title={AVG_COST_HELP}>
               Avg cost
             </span>
-            <span
-              className="text-right text-[9.5px] font-semibold uppercase tracking-wider text-muted"
-              title={VALUE_HELP}
-            >
+            <span className="text-right text-body-sm font-medium text-muted" title={VALUE_HELP}>
               Value
             </span>
-            <span className="text-right text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-              Return
-            </span>
-            <span className="text-right text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-              Dividends
-            </span>
+            <span className="text-right text-body-sm font-medium text-muted">Return</span>
+            <span className="text-right text-body-sm font-medium text-muted">Dividends</span>
           </div>
           {rows.length === 0 ? (
             <div className="px-5 py-8 text-center text-sm text-muted">No active holdings.</div>
@@ -556,21 +538,11 @@ function TargetHoldings({
             className="grid items-center gap-3 bg-card-elevated px-5 py-2.5"
             style={{ gridTemplateColumns: "26px minmax(0,1.5fr) 170px 110px 110px" }}
           >
-            <span className="text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-              #
-            </span>
-            <span className="text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-              Corporation
-            </span>
-            <span className="text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-              Target weight
-            </span>
-            <span className="text-right text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-              Market cap
-            </span>
-            <span className="text-right text-[9.5px] font-semibold uppercase tracking-wider text-muted">
-              Drift vs actual
-            </span>
+            <span className="text-body-sm font-medium text-muted">#</span>
+            <span className="text-body-sm font-medium text-muted">Corporation</span>
+            <span className="text-body-sm font-medium text-muted">Target weight</span>
+            <span className="text-right text-body-sm font-medium text-muted">Market cap</span>
+            <span className="text-right text-body-sm font-medium text-muted">Drift vs actual</span>
           </div>
           {rows.length === 0 ? (
             <div className="px-5 py-8 text-center text-sm text-muted">No target constituents.</div>
@@ -750,7 +722,7 @@ function MobileMetric({
 }) {
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wider text-muted">{label}</span>
+      <span className="text-body-sm font-medium text-muted">{label}</span>
       <span className={`font-mono tabular-nums ${valueClass}`} style={valueStyle}>
         {value}
       </span>

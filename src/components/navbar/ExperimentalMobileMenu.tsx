@@ -381,7 +381,7 @@ export function ExperimentalMobileMenu({
       )}
 
       {navigationVariant === "b" && (
-        <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-widest text-muted">
+        <div className="mb-2 px-1 text-body-sm font-medium text-muted">
           {t("common.mainNavigation")}
         </div>
       )}
@@ -855,7 +855,7 @@ export function MobileCharacterSwitcher({
   const t = useTranslations("nav");
   return (
     <div className="border-t border-card-border px-2 py-2">
-      <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+      <div className="px-2 pb-1 text-body-sm font-medium text-muted">
         {t("userMenu.characters")}
       </div>
       {adminCharacters?.map((char) =>

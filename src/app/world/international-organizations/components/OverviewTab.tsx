@@ -42,9 +42,7 @@ function DelegationPanel({ org, viewer }: { org: OrgSummary; viewer: OrgViewerIn
         className="rounded-xl border bg-card p-4 sm:p-5"
         style={{ borderColor: "color-mix(in srgb, var(--org) 26%, transparent)" }}
       >
-        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-          Your delegation
-        </div>
+        <div className="text-body-sm font-medium text-muted">Your delegation</div>
         <p className="mt-1 text-sm text-muted">
           You hold no foreign-affairs role. Diplomatic actions are available to a country&apos;s
           foreign minister (or head of government).
@@ -61,7 +59,7 @@ function DelegationPanel({ org, viewer }: { org: OrgSummary; viewer: OrgViewerIn
       <div className="flex flex-wrap items-center gap-4">
         <div className="text-4xl">{membership?.flagEmoji ?? "🏳️"}</div>
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
+          <div className="text-body-sm font-medium text-muted">
             Your delegation · {membership?.countryName ?? you}
           </div>
           <div className="mt-0.5 text-lg font-bold text-foreground">
@@ -279,9 +277,7 @@ export function OverviewTab({
       {org.europeanIntegration && <MaastrichtPanel org={org} />}
       {org.def.charter && (
         <div className="rounded-xl border border-card-border bg-card p-4">
-          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-            Charter
-          </div>
+          <div className="text-body-sm font-medium text-muted">Charter</div>
           <p className="mt-2 text-sm leading-relaxed text-foreground">{org.def.charter}</p>
         </div>
       )}

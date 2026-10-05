@@ -84,7 +84,7 @@ export function ChangePolicyModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-semibold">
-          Change Devolution Policy{adminOverride ? " (Admin)" : ""}
+          Change devolution policy{adminOverride ? " (Admin)" : ""}
         </h2>
         <p className="mt-1 text-sm text-muted">
           {adminOverride
@@ -111,9 +111,7 @@ export function ChangePolicyModal({
                 }`}
               >
                 <span className="font-medium">{getDevolutionPolicyLabel(stateId, p)}</span>
-                {isCurrent && (
-                  <span className="text-[10px] uppercase tracking-wider text-muted">Current</span>
-                )}
+                {isCurrent && <span className="text-body-sm font-medium text-muted">Current</span>}
               </button>
             );
           })}

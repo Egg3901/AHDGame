@@ -318,7 +318,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
     },
     {
       key: "stances",
-      label: "Legislative Stances",
+      label: "Legislative stances",
       count: new Set([
         ...actionableBills.map((bill) => bill.billId),
         ...endorsements.map((e) => e.billId),
@@ -394,7 +394,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
         {/* Stats strip */}
         <div className="flex items-center overflow-x-auto divide-x divide-card-border border-t border-card-border">
           <div className="flex min-w-[140px] flex-col gap-0.5 px-4 py-3 sm:px-5">
-            <span className="text-[11px] uppercase tracking-wider text-muted">President</span>
+            <span className="text-body-sm font-medium text-muted">President</span>
             {presidentHref && leader ? (
               <Link
                 href={presidentHref}
@@ -436,7 +436,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
             hint="The union's war chest. Dues flow in each turn based on how organized it is; recruitment drives and strikes are paid out of it."
           />
           <StatCell
-            label="Open Campaigns"
+            label="Open campaigns"
             value={String(
               bargainingCampaigns.filter(
                 (campaign) => campaign.status === "negotiating" || campaign.status === "dispute"
@@ -542,7 +542,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
               onClick={() => runAction("organize")}
               className="w-fit rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
             >
-              Run Organize Drive
+              Run organize drive
             </button>
             <span className="text-[11px] text-muted">
               Costs {organizeActionCost} action points
@@ -635,7 +635,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
                 onClick={() => runAction("leader/accept")}
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
               >
-                Accept Presidency
+                Accept presidency
               </button>
               <button
                 type="button"
@@ -674,7 +674,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
               as the per-local gap column below and as a callout on the CEO's
               own wage panel, and does nothing else. */}
           <div className="space-y-2 border-t border-card-border pt-3">
-            <p className="text-[11px] uppercase tracking-wider text-muted">Public wage claim</p>
+            <p className="text-body-sm font-medium text-muted">Public wage claim</p>
             <p className="text-xs text-muted">
               The wage level this union says the industry should pay. Employers see it on their own
               wage panel and every local&apos;s shortfall is listed below. It binds nobody: to make
@@ -682,7 +682,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
             </p>
             <div className="flex flex-wrap items-end gap-2">
               <label className="flex flex-col gap-1">
-                <span className="text-[11px] uppercase tracking-wider text-muted">Wage level</span>
+                <span className="text-body-sm font-medium text-muted">Wage level</span>
                 <input
                   type="number"
                   step={0.05}
@@ -707,7 +707,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
                 }
                 className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
               >
-                Set Demand
+                Set demand
               </button>
               {union.demandedWageLevel != null && (
                 <button
@@ -716,7 +716,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
                   onClick={() => runAction("demand-wage", { demandedWageLevel: null })}
                   className="rounded-lg border border-card-border px-3 py-2 text-xs font-medium transition-colors hover:bg-card-elevated disabled:opacity-50"
                 >
-                  Withdraw Demand
+                  Withdraw demand
                 </button>
               )}
             </div>
@@ -750,7 +750,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
               }}
               className="text-xs font-medium text-muted transition-colors hover:text-error disabled:opacity-50"
             >
-              Resign Leadership
+              Resign leadership
             </button>
           </div>
         </section>
@@ -846,9 +846,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
                 {canVote && (
                   <div className="flex flex-wrap items-end gap-2">
                     <label className="flex flex-col gap-1">
-                      <span className="text-[11px] uppercase tracking-wider text-muted">
-                        Candidate
-                      </span>
+                      <span className="text-body-sm font-medium text-muted">Candidate</span>
                       <select
                         value={candidateDraft}
                         onChange={(e) => setCandidateDraft(e.target.value)}
@@ -871,7 +869,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
                       }
                       className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
                     >
-                      Cast Vote
+                      Cast vote
                     </button>
                     {myVote && <span className="text-xs text-muted">Your vote is recorded.</span>}
                   </div>
@@ -946,7 +944,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
               <div className="overflow-x-auto rounded-xl border border-card-border bg-card">
                 <table className="w-full min-w-[760px] text-sm">
                   <thead>
-                    <tr className="border-b border-card-border bg-card-elevated text-left text-[11px] uppercase tracking-wider text-muted">
+                    <tr className="border-b border-card-border bg-card-elevated text-left text-sm font-semibold text-foreground">
                       <th className="px-4 py-3 font-medium">Corporation</th>
                       <th className="px-4 py-3 font-medium">State</th>
                       <th className="px-4 py-3 text-right font-medium">Workers</th>

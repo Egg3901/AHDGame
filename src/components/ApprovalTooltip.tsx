@@ -151,7 +151,7 @@ export function ApprovalTooltip({
       />
 
       {/* Title */}
-      <p className="mb-2.5 font-semibold text-foreground">Government Approval</p>
+      <p className="mb-2.5 font-semibold text-foreground">Government approval</p>
 
       {/* Base row (omitted in summary mode — value isn't a base+modifiers sum) */}
       {!summary && baseApproval != null && (
@@ -163,7 +163,7 @@ export function ApprovalTooltip({
         </div>
       )}
       {summary && hasModifiers && (
-        <p className="mb-1.5 text-[10px] uppercase tracking-wider text-muted/70">Key factors</p>
+        <p className="mb-1.5 text-body-sm font-medium text-muted">Key factors</p>
       )}
 
       {/* Positive modifiers */}

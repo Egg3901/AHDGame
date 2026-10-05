@@ -805,9 +805,7 @@ export function SettingsPageContent() {
             <header className="mb-6 md:mb-8">
               <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
                 <div>
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
-                    A House Divided
-                  </p>
+                  <p className="mb-2 text-body-sm font-medium text-primary">A House Divided</p>
                   <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-5xl">
                     {t("page.title")}
                   </h1>
@@ -928,7 +926,7 @@ export function SettingsPageContent() {
                             <BucketIcon id={bucket.id} />
                           </span>
                           <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">
+                            <p className="text-body-sm font-medium text-muted">
                               {t(bucket.eyebrowKey)}
                             </p>
                             <h2 className="mt-0.5 text-xl font-bold tracking-tight text-foreground">
@@ -1029,7 +1027,7 @@ export function SettingsPageContent() {
                         {advancedSections.length > 0 && (
                           <div className="rounded-2xl border border-card-border bg-card-muted/50 p-4">
                             <div className="mb-3">
-                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">
+                              <p className="text-body-sm font-medium text-muted">
                                 {t("page.advancedTitle")}
                               </p>
                               <p className="mt-1 text-xs text-muted">{t("page.advancedHint")}</p>

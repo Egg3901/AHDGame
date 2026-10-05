@@ -262,7 +262,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
     { id: "overview", label: "Overview" },
     { id: "parties", label: `Parties (${coalition?.partyCount ?? 0})` },
     { id: "priorities", label: "Priorities" },
-    ...(isCoalitionChair ? [{ id: "chair-office" as TabId, label: "Chair's Office" }] : []),
+    ...(isCoalitionChair ? [{ id: "chair-office" as TabId, label: "Chair's office" }] : []),
     ...(isAdmin ? [{ id: "admin" as TabId, label: "Admin", className: "text-red-400" }] : []),
   ];
 
@@ -426,7 +426,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
             href={`/country/${effectiveCountry}/parties`}
             className="text-primary hover:underline text-sm"
           >
-            Back to Parties
+            Back to parties
           </Link>
         </div>
       </div>
@@ -589,7 +589,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                 onClick={handleAcceptInvite}
                 className="rounded-lg bg-success px-4 py-2 text-sm font-medium text-white hover:bg-success/90 transition-colors"
               >
-                Accept Invite
+                Accept invite
               </button>
               <button
                 onClick={handleDeclineInvite}
@@ -660,7 +660,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                         : "border border-red-500/50 text-red-400 hover:bg-red-500/20"
                     }`}
                   >
-                    Vote Yes (Disband)
+                    Vote yes (disband)
                   </button>
                   <button
                     onClick={() => handleDisbandVote("no")}
@@ -670,7 +670,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                         : "border border-success/50 text-success hover:bg-success/20"
                     }`}
                   >
-                    Vote No (Keep)
+                    Vote no (keep)
                   </button>
                 </div>
                 {userPartyDisbandVote && (
@@ -681,7 +681,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                         userPartyDisbandVote.vote === "yes" ? "text-red-400" : "text-success"
                       }
                     >
-                      {userPartyDisbandVote.vote === "yes" ? "Yes (Disband)" : "No (Keep)"}
+                      {userPartyDisbandVote.vote === "yes" ? "Yes (disband)" : "No (keep)"}
                     </span>
                   </p>
                 )}
@@ -717,7 +717,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                           <span className="text-xs text-muted">({member.abbreviation})</span>
                           {member.isCoalitionChair && (
                             <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary border border-primary/20">
-                              Coalition Chair
+                              Coalition chair
                             </span>
                           )}
                         </div>
@@ -774,7 +774,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                         <PartyRegimeBadge regimeStatus={member.regimeStatus} />
                         {member.isCoalitionChair && (
                           <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary border border-primary/20">
-                            Chair Party
+                            Chair party
                           </span>
                         )}
                       </div>
@@ -830,10 +830,10 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                   {savingDiscordLink
                     ? "Saving..."
                     : trimmedDiscordInviteUrl
-                      ? "Save Link"
+                      ? "Save link"
                       : coalition.discordInviteUrl
-                        ? "Clear Link"
-                        : "Save Link"}
+                        ? "Clear link"
+                        : "Save link"}
                 </button>
               </div>
               <p
@@ -1022,7 +1022,7 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
                 disabled={!!disbandVote}
                 className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition-colors"
               >
-                {disbandVote ? "Disband Vote Already Active" : "Initiate Disband Vote"}
+                {disbandVote ? "Disband vote already active" : "Initiate disband vote"}
               </button>
             </div>
           </div>

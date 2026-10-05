@@ -557,7 +557,7 @@ export function BondTradeModal({
         <div className="flex items-start justify-between border-b border-card-border px-6 py-4">
           <div>
             <h2 id={titleId} className="text-base font-semibold text-foreground">
-              Trade Bond
+              Trade bond
             </h2>
             <p className="mt-0.5 text-sm text-muted">
               {bond.corporationName}
@@ -677,7 +677,7 @@ export function BondTradeModal({
                       : "bg-card-elevated text-muted hover:text-foreground"
                 }`}
               >
-                <div className="font-semibold">As Corporation</div>
+                <div className="font-semibold">As corporation</div>
                 <div
                   className={`mt-0.5 tabular-nums ${account === "corporation" ? "text-primary/70" : "text-muted/60"}`}
                 >

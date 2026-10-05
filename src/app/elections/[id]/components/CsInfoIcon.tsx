@@ -109,7 +109,7 @@ export function CsInfoIcon({ campaignId }: { campaignId: string | undefined | nu
             ) : data ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between border-b border-card-border pb-2">
-                  <div className="font-semibold text-foreground">Campaign Strength</div>
+                  <div className="font-semibold text-foreground">Campaign strength</div>
                   <div className="text-lg font-bold tabular-nums text-primary">
                     {data.currentCS.toFixed(0)}
                   </div>
@@ -134,7 +134,7 @@ export function CsInfoIcon({ campaignId }: { campaignId: string | undefined | nu
                 </div>
 
                 <div>
-                  <div className="text-muted font-medium mb-1.5">Top Contributors</div>
+                  <div className="text-muted font-medium mb-1.5">Top contributors</div>
                   <div className="space-y-1.5">
                     {data.topContributors.length === 0 ? (
                       <div className="text-muted/60 italic">No contributions yet</div>

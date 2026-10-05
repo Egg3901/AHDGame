@@ -78,7 +78,7 @@ export function StatReallocateControl() {
           />
           <div className="relative z-10 w-full max-w-lg rounded-xl border border-card-border bg-card shadow-2xl">
             <div className="relative px-5 pt-5 pb-4">
-              <h2 className="text-lg font-semibold text-foreground">Reallocate Your Stats</h2>
+              <h2 className="text-lg font-semibold text-foreground">Reallocate your stats</h2>
               <p className="mt-1 text-xs text-muted">
                 This is your <span className="font-semibold text-foreground">one free change</span>.
                 It rewrites your stat sheet from scratch and{" "}
@@ -113,7 +113,7 @@ export function StatReallocateControl() {
                   isLoading={submitting}
                   className="min-w-[160px]"
                 >
-                  {remaining === 0 ? "Confirm Reallocation" : `${remaining} points left`}
+                  {remaining === 0 ? "Confirm reallocation" : `${remaining} points left`}
                 </Button>
               </div>
             </div>

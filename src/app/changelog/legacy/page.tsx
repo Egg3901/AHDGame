@@ -6,7 +6,7 @@ import { parsePublicChangelog } from "../changelogUtils";
 import { LegacyChangelogClient } from "./LegacyChangelogClient";
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "Legacy Changelog | A House Divided",
+  title: "Legacy changelog | A House Divided",
   description:
     "Archived player-facing release notes for A House Divided before the v0.4.0 post-style feed.",
   pathname: "/changelog/legacy",

@@ -37,31 +37,31 @@ const SEED_TARGETS: SeedTarget[] = [
   },
   {
     id: "gameConfig",
-    label: "Game Config",
+    label: "Game config",
     description: "Core game configuration (turn duration, starting year, etc.)",
     destructiveWarning: "Drops and recreates game configuration",
   },
   {
     id: "parties",
-    label: "Political Parties",
+    label: "Political parties",
     description: "Default US parties (Democrat, Republican) with positions and colors",
     destructiveWarning: "Drops and recreates all political parties (custom parties lost)",
   },
   {
     id: "statePartyOrg",
-    label: "State Party Orgs",
+    label: "State party orgs",
     description: "State-level party organization records (org %, caps, leadership slots)",
     destructiveWarning: "Drops and recreates all state party org records",
   },
   {
     id: "regionMetrics",
-    label: "Region Metrics",
+    label: "Region metrics",
     description: "Per-region economic and population metrics (macroMetrics)",
     destructiveWarning: "Drops and recreates all region metrics — drift from turns will be lost",
   },
   {
     id: "legislationTypes",
-    label: "Legislation Types",
+    label: "Legislation types",
     description: "US federal and state legislation type definitions with policy options",
     destructiveWarning: "Drops and recreates all US legislation types",
   },
@@ -72,20 +72,20 @@ const SEED_TARGETS: SeedTarget[] = [
   },
   {
     id: "statePolicies",
-    label: "State Policies",
+    label: "State policies",
     description: "Base policy positions per state (economic/social lean per legislation type)",
     destructiveWarning: "Drops and recreates all state policy records",
   },
   {
     id: "politicalLegislation",
-    label: "Political Legislation Baseline",
+    label: "Political legislation baseline",
     description:
       "US/UK/RU/DD enacted law book and metric residuals for the world's year. Run alongside State Policies — those exclude the superseded old catalogs for these four countries.",
     destructiveWarning: "Rewrites national enacted laws and policy records for US/UK/RU/DD",
   },
   {
     id: "budgets",
-    label: "US Budgets",
+    label: "US budgets",
     description: "US federal budget, state budgets, enacted laws, formula grants, and US corp",
     destructiveWarning: "Drops and re-seeds US budget data",
     scope: "US",
@@ -97,7 +97,7 @@ const SEED_TARGETS: SeedTarget[] = [
   ...INDEX_TARGETS.map((t) => ({ id: t.id, label: t.label, description: t.description })),
   {
     id: "forex",
-    label: "Forex Layer",
+    label: "Forex layer",
     description:
       "Exchange rates, central banks for every forex-active country, forex indexes, and the gameState.forexEnabled flag",
   },
@@ -110,7 +110,7 @@ const SEED_TARGETS: SeedTarget[] = [
   },
   {
     id: "countyMapData",
-    label: "County/CD Map Data",
+    label: "County/CD map data",
     description: "County boundaries and congressional district GeoJSON for the interactive map",
     destructiveWarning: "Drops and re-imports all map geometry data",
   },
@@ -122,65 +122,65 @@ const SEED_TARGETS: SeedTarget[] = [
   },
   {
     id: "partyBudgets",
-    label: "Party Budgets",
+    label: "Party budgets",
     description: "Ensures party budget documents exist for all default parties",
   },
   {
     id: "unownedSectors",
-    label: "Unowned Sectors",
+    label: "Unowned sectors",
     description: "Corporate sectors not owned by any corporation (market baseline)",
   },
   {
     id: "stateSectorSpecializations",
-    label: "State Sector Bonuses",
+    label: "State sector bonuses",
     description:
       "Primary (+10pp) and secondary (+5pp) sector profit margin bonuses per state/region",
   },
   // UK targets
   {
     id: "ukRegions",
-    label: "UK Regions",
+    label: "UK regions",
     description: "12 UK regions with population, GDP, constituencies, and political lean",
     destructiveWarning: "Drops and recreates UK region records in the states collection",
     scope: "UK",
   },
   {
     id: "ukParties",
-    label: "UK Parties",
+    label: "UK parties",
     description: "Default UK parties (Labour, Conservative, Lib Dems, SNP, etc.)",
     scope: "UK",
   },
   {
     id: "ukDemographics",
-    label: "UK Demographics",
+    label: "UK demographics",
     description: "Demographic categories and region-level group weights for UK regions",
     destructiveWarning: "Drops and recreates UK demographic data",
     scope: "UK",
   },
   {
     id: "ukStatePartyOrg",
-    label: "UK Region Party Orgs",
+    label: "UK region party orgs",
     description: "Party organization records for UK regions",
     destructiveWarning: "Drops and recreates UK region party org records",
     scope: "UK",
   },
   {
     id: "ukStateMetrics",
-    label: "UK Region Metrics",
+    label: "UK region metrics",
     description: "Regional metrics for UK regions (calibrated to ONS 2021 data)",
     destructiveWarning: "Drops and recreates UK metrics — drift from turns will be lost",
     scope: "UK",
   },
   {
     id: "ukBaselines",
-    label: "UK Baselines",
+    label: "UK baselines",
     description: "Baseline snapshots for UK region metrics",
     destructiveWarning: "Drops and recreates UK baseline records",
     scope: "UK",
   },
   {
     id: "ukElections",
-    label: "UK Elections",
+    label: "UK elections",
     description:
       "Spawns missing UK Commons and Regional Council elections, updates RC seat counts, and populates NPP officials",
     destructiveWarning:
@@ -189,14 +189,14 @@ const SEED_TARGETS: SeedTarget[] = [
   },
   {
     id: "ukLegislation",
-    label: "UK Legislation",
+    label: "UK legislation",
     description: "55 UK-scoped legislation types (countryScope: uk) — refreshes UK types only",
     destructiveWarning: "Deletes and re-inserts all UK legislation types",
     scope: "UK",
   },
   {
     id: "ukBudgets",
-    label: "UK Budgets",
+    label: "UK budgets",
     description: "UK national budget, regional budgets, enacted laws, and NHS corporation",
     destructiveWarning: "Deletes and re-seeds UK budget data",
     scope: "UK",
@@ -204,54 +204,54 @@ const SEED_TARGETS: SeedTarget[] = [
   // JP targets
   {
     id: "jpRegions",
-    label: "JP Regions",
+    label: "JP regions",
     description: "8 Japan game regions with population, GDP, Shugiin/Sangiin seats",
     destructiveWarning: "Drops and recreates JP region records in the states collection",
     scope: "JP",
   },
   {
     id: "jpParties",
-    label: "JP Parties",
+    label: "JP parties",
     description: "Default JP parties (LDP, CDP, Komeito, JCP, Ishin, DPFP)",
     scope: "JP",
   },
   {
     id: "jpDemographics",
-    label: "JP Demographics",
+    label: "JP demographics",
     description: "10 voter archetypes, 8 region demographics, and turnout modifiers",
     destructiveWarning: "Drops and recreates JP demographic data",
     scope: "JP",
   },
   {
     id: "jpStatePartyOrg",
-    label: "JP Region Party Orgs",
+    label: "JP region party orgs",
     description: "Party organization records for JP regions (8 regions x 6 parties)",
     destructiveWarning: "Drops and recreates JP region party org records",
     scope: "JP",
   },
   {
     id: "jpStateMetrics",
-    label: "JP Region Metrics",
+    label: "JP region metrics",
     description: "Regional metrics for JP regions including 6 Japan-specific metrics",
     destructiveWarning: "Drops and recreates JP metrics",
     scope: "JP",
   },
   {
     id: "jpBaselines",
-    label: "JP Baselines",
+    label: "JP baselines",
     description: "Baseline snapshots for JP region metrics",
     destructiveWarning: "Drops and recreates JP baseline records",
     scope: "JP",
   },
   {
     id: "jpGovernmentFormation",
-    label: "JP Government",
+    label: "JP government",
     description: "Japan government formation document (pending status, ready for PM appointment)",
     scope: "JP",
   },
   {
     id: "jpBudgets",
-    label: "JP Budgets",
+    label: "JP budgets",
     description: "JP national budget, regional budgets, enacted laws, and sovereign issuer corp",
     destructiveWarning: "Deletes and re-seeds JP budget data",
     scope: "JP",
@@ -259,67 +259,67 @@ const SEED_TARGETS: SeedTarget[] = [
   // DE targets
   {
     id: "deRegions",
-    label: "DE Regions",
+    label: "DE regions",
     description: "16 German Länder with population, GDP, Bundestag direct mandates",
     destructiveWarning: "Drops and recreates DE region records in the states collection",
     scope: "DE",
   },
   {
     id: "deParties",
-    label: "DE Parties",
+    label: "DE parties",
     description: "Default DE parties (SPD, CDU, Greens, FDP, AfD, BSW, Linke)",
     scope: "DE",
   },
   {
     id: "deDemographics",
-    label: "DE Demographics",
+    label: "DE demographics",
     description: "8 voter archetypes, 16 Land demographics, and turnout modifiers",
     destructiveWarning: "Drops and recreates DE demographic data",
     scope: "DE",
   },
   {
     id: "deStatePartyOrg",
-    label: "DE Land Party Orgs",
+    label: "DE land party orgs",
     description: "Party organization records for each Land × party",
     destructiveWarning: "Drops and recreates DE Land party org records",
     scope: "DE",
   },
   {
     id: "deStateMetrics",
-    label: "DE Land Metrics",
+    label: "DE land metrics",
     description: "Economic and social metrics for each of the 16 Länder",
     destructiveWarning: "Drops and recreates DE metrics — drift from turns will be lost",
     scope: "DE",
   },
   {
     id: "deBaselines",
-    label: "DE Baselines",
+    label: "DE baselines",
     description: "Metric decay baselines for each German Land",
     destructiveWarning: "Drops and recreates DE baseline records",
     scope: "DE",
   },
   {
     id: "deGovernmentFormation",
-    label: "DE Government",
+    label: "DE government",
     description: "Germany government formation document for Chancellor appointment",
     scope: "DE",
   },
   {
     id: "deLegislation",
-    label: "DE Legislation",
+    label: "DE legislation",
     description: "DE-scoped legislation types (tax, labor, energy, immigration)",
     destructiveWarning: "Deletes and re-inserts all DE legislation types",
     scope: "DE",
   },
   {
     id: "deElections",
-    label: "DE Elections",
+    label: "DE elections",
     description: "Spawn missing Bundestag elections for every Land",
     scope: "DE",
   },
   {
     id: "deBudgets",
-    label: "DE Budgets",
+    label: "DE budgets",
     description: "DE national budget, regional budgets, enacted laws, and sovereign issuer corp",
     destructiveWarning: "Deletes and re-seeds DE budget data",
     scope: "DE",
@@ -345,27 +345,27 @@ const SEED_TARGETS: SeedTarget[] = [
   // IE targets
   {
     id: "ieRegions",
-    label: "IE Regions",
+    label: "IE regions",
     description: "8 Ireland NUTS III regions with population, GDP, Dáil/Seanad seats",
     destructiveWarning: "Drops and recreates IE region records in the states collection",
     scope: "IE",
   },
   {
     id: "ieParties",
-    label: "IE Parties",
+    label: "IE parties",
     description: "Default IE parties (Fine Gael, Fianna Fáil, Sinn Féin, Labour, Greens)",
     scope: "IE",
   },
   {
     id: "ieDemographics",
-    label: "IE Demographics",
+    label: "IE demographics",
     description: "8 voter archetypes, 8 region demographics, and turnout modifiers",
     destructiveWarning: "Drops and recreates IE demographic data",
     scope: "IE",
   },
   {
     id: "ieStatePartyOrg",
-    label: "IE State Party Org",
+    label: "IE state party org",
     description:
       "Per-region party organization levels for Ireland (8 regions × 5 default parties, derived from per-preset vote-share tables)",
     destructiveWarning: "Drops and recreates IE statePartyOrg rows",
@@ -373,27 +373,27 @@ const SEED_TARGETS: SeedTarget[] = [
   },
   {
     id: "ieStateMetrics",
-    label: "IE Region Metrics",
+    label: "IE region metrics",
     description: "Economic and social metrics for each Ireland region",
     destructiveWarning: "Drops and recreates IE metrics — drift from turns will be lost",
     scope: "IE",
   },
   {
     id: "ieBaselines",
-    label: "IE Baselines",
+    label: "IE baselines",
     description: "Metric decay baselines for each Ireland region",
     destructiveWarning: "Drops and recreates IE baseline records",
     scope: "IE",
   },
   {
     id: "ieGovernmentFormation",
-    label: "IE Government",
+    label: "IE government",
     description: "Ireland government formation document for Taoiseach appointment",
     scope: "IE",
   },
   {
     id: "ieBudgets",
-    label: "IE Budgets",
+    label: "IE budgets",
     description: "IE national budget, regional budgets, enacted laws, and sovereign issuer corp",
     destructiveWarning: "Deletes and re-seeds IE budget data",
     scope: "IE",
@@ -401,47 +401,47 @@ const SEED_TARGETS: SeedTarget[] = [
   // BR targets
   {
     id: "brRegions",
-    label: "BR Regions",
+    label: "BR regions",
     description: "5 Brazil macro-regions with population, GDP, Chamber/Senate seats",
     destructiveWarning: "Drops and recreates BR region records in the states collection",
     scope: "BR",
   },
   {
     id: "brParties",
-    label: "BR Parties",
+    label: "BR parties",
     description: "Default BR parties (PT, PL, MDB, UNIÃO, PSD)",
     scope: "BR",
   },
   {
     id: "brDemographics",
-    label: "BR Demographics",
+    label: "BR demographics",
     description: "8 voter archetypes, 5 region demographics, and turnout modifiers",
     destructiveWarning: "Drops and recreates BR demographic data",
     scope: "BR",
   },
   {
     id: "brStateMetrics",
-    label: "BR Region Metrics",
+    label: "BR region metrics",
     description: "Economic and social metrics for each Brazil macro-region",
     destructiveWarning: "Drops and recreates BR metrics — drift from turns will be lost",
     scope: "BR",
   },
   {
     id: "brBaselines",
-    label: "BR Baselines",
+    label: "BR baselines",
     description: "Metric decay baselines for each Brazil region",
     destructiveWarning: "Drops and recreates BR baseline records",
     scope: "BR",
   },
   {
     id: "brGovernmentFormation",
-    label: "BR Government",
+    label: "BR government",
     description: "Brazil government formation document for President appointment",
     scope: "BR",
   },
   {
     id: "brBudgets",
-    label: "BR Budgets",
+    label: "BR budgets",
     description: "BR national budget, regional budgets, enacted laws, and sovereign issuer corp",
     destructiveWarning: "Deletes and re-seeds BR budget data",
     scope: "BR",
@@ -449,54 +449,54 @@ const SEED_TARGETS: SeedTarget[] = [
   // NG targets
   {
     id: "ngRegions",
-    label: "NG Regions",
+    label: "NG regions",
     description: "6 Nigeria geopolitical zones with population, GDP, Senate/House seats",
     destructiveWarning: "Drops and recreates NG region records in the states collection",
     scope: "NG",
   },
   {
     id: "ngParties",
-    label: "NG Parties",
+    label: "NG parties",
     description: "Nigeria political parties (APC, PDP, LP, NNPP, APGA)",
     scope: "NG",
   },
   {
     id: "ngDemographics",
-    label: "NG Demographics",
+    label: "NG demographics",
     description: "Nigeria voter archetypes, region demographics, and turnout modifiers",
     destructiveWarning: "Drops and recreates NG demographic data",
     scope: "NG",
   },
   {
     id: "ngStatePartyOrg",
-    label: "NG Party Org",
+    label: "NG party org",
     description: "Party organization records for each NG zone x party",
     destructiveWarning: "Drops and recreates NG statePartyOrg rows",
     scope: "NG",
   },
   {
     id: "ngStateMetrics",
-    label: "NG Zone Metrics",
+    label: "NG zone metrics",
     description: "Zone-level economic and social metrics for Nigeria",
     destructiveWarning: "Drops and recreates NG metrics — drift from turns will be lost",
     scope: "NG",
   },
   {
     id: "ngBaselines",
-    label: "NG Baselines",
+    label: "NG baselines",
     description: "Metric decay baselines for each Nigeria zone",
     destructiveWarning: "Drops and recreates NG baseline records",
     scope: "NG",
   },
   {
     id: "ngGovernmentFormation",
-    label: "NG Government",
+    label: "NG government",
     description: "Nigeria government formation document for President/House appointment",
     scope: "NG",
   },
   {
     id: "ngBudgets",
-    label: "NG Budgets",
+    label: "NG budgets",
     description: "NG national budget, regional budgets, enacted laws, and sovereign issuer corp",
     destructiveWarning: "Deletes and re-seeds NG budget data",
     scope: "NG",
@@ -504,60 +504,60 @@ const SEED_TARGETS: SeedTarget[] = [
   // CN targets
   {
     id: "cnRegions",
-    label: "CN Regions",
+    label: "CN regions",
     description: "7 China geographic macro-regions with population, GDP, NPC seats",
     destructiveWarning: "Drops and recreates CN region records in the states collection",
     scope: "CN",
   },
   {
     id: "cnParties",
-    label: "CN Parties",
+    label: "CN parties",
     description: "Default CN parties (CCP, CDL, CNDCA)",
     scope: "CN",
   },
   {
     id: "cnDemographics",
-    label: "CN Demographics",
+    label: "CN demographics",
     description: "7 voter archetypes, 7 region demographics, and turnout modifiers",
     destructiveWarning: "Drops and recreates CN demographic data",
     scope: "CN",
   },
   {
     id: "cnStateMetrics",
-    label: "CN Region Metrics",
+    label: "CN region metrics",
     description: "Economic and social metrics for each China geographic region",
     destructiveWarning: "Drops and recreates CN metrics — drift from turns will be lost",
     scope: "CN",
   },
   {
     id: "cnBaselines",
-    label: "CN Baselines",
+    label: "CN baselines",
     description: "Metric decay baselines for each China region",
     destructiveWarning: "Drops and recreates CN baseline records",
     scope: "CN",
   },
   {
     id: "cnGovernmentFormation",
-    label: "CN Government",
+    label: "CN government",
     description: "China government formation document for President appointment",
     scope: "CN",
   },
   {
     id: "ruGovernmentFormation",
-    label: "RU Government",
+    label: "RU government",
     description: "Soviet Union government formation document (formed, NPC Premier linked)",
     scope: "RU",
   },
   {
     id: "ruStatePartyOrg",
-    label: "RU Party Org",
+    label: "RU party org",
     description: "CPSU regional organization + registration across the 17 RU regions",
     destructiveWarning: "Overwrites RU statePartyOrg rows",
     scope: "RU",
   },
   {
     id: "cnBudgets",
-    label: "CN Budgets",
+    label: "CN budgets",
     description: "CN national budget, regional budgets, enacted laws, and sovereign issuer corp",
     destructiveWarning: "Deletes and re-seeds CN budget data",
     scope: "CN",
@@ -735,7 +735,7 @@ export function UniversalSeeder() {
     <div className="space-y-6">
       {/* ── Year Tabs ──────────────────────────────────────────────── */}
       <div className="rounded-xl border border-card-border bg-card p-5 sm:p-6 shadow-sm">
-        <h3 className="mb-3 text-lg font-semibold">Seed Data</h3>
+        <h3 className="mb-3 text-lg font-semibold">Seed data</h3>
         <p className="mb-4 text-sm text-muted">
           Select a year baseline and seed mode. Each year tab contains reference data calibrated to
           that historical starting point.
@@ -776,7 +776,7 @@ export function UniversalSeeder() {
                 : "text-muted hover:text-foreground hover:bg-card-elevated"
             }`}
           >
-            Full Seed
+            Full seed
           </button>
           <button
             type="button"
@@ -787,7 +787,7 @@ export function UniversalSeeder() {
                 : "text-muted hover:text-foreground hover:bg-card-elevated"
             }`}
           >
-            Partial Seed
+            Partial seed
           </button>
         </div>
 
@@ -852,7 +852,7 @@ export function UniversalSeeder() {
               disabled={loading}
               className="min-h-[44px] rounded-lg bg-green-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 transition-colors"
             >
-              {loading ? "Seeding..." : "Run Full Seed"}
+              {loading ? "Seeding..." : "Run full seed"}
             </button>
           </div>
         )}
@@ -876,7 +876,7 @@ export function UniversalSeeder() {
                     : "border-card-border text-muted hover:text-foreground"
                 }`}
               >
-                All Countries
+                All countries
               </button>
               {registered.map((cid) => {
                 const hasTargets = SEED_TARGETS.some((t) => targetMatchesCountry(t.scope, cid));
@@ -909,7 +909,7 @@ export function UniversalSeeder() {
                 onClick={selectAll}
                 className="rounded-md border border-card-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground transition-colors"
               >
-                Select All
+                Select all
               </button>
               <button
                 type="button"
@@ -937,9 +937,7 @@ export function UniversalSeeder() {
                 .filter(({ key }) => !partialFilter || partialFilter === key)
                 .map(({ key, label, targets }) => (
                   <div key={key}>
-                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted">
-                      {label}
-                    </h4>
+                    <h4 className="mb-2 text-body-sm font-medium text-muted">{label}</h4>
                     <div className="grid gap-2 sm:grid-cols-2">
                       {targets.map((target) => {
                         const checked = selectedTargets.has(target.id);

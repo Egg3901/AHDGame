@@ -134,7 +134,7 @@ export function LowerTierPrimaryShell({
                     ? "Gubernatorial primaries"
                     : "House primaries"}
             </h2>
-            <span className="text-[10px] uppercase tracking-wider text-muted">
+            <span className="text-body-sm font-medium text-muted">
               {totalActiveContests} active
             </span>
           </div>
@@ -152,7 +152,7 @@ export function LowerTierPrimaryShell({
                     {selectedContest.totalSeats === 1 ? "" : "s"})
                   </span>
                 </h3>
-                <span className="text-[10px] uppercase tracking-wider text-muted">
+                <span className="text-body-sm font-medium text-muted">
                   {selectedContest.hasResults ? "Live tally" : "No votes yet"}
                 </span>
               </div>
@@ -201,12 +201,12 @@ export function LowerTierPrimaryShell({
 
       {stateLeaderRows.length > 0 && (
         <div className="rounded-xl border border-card-border bg-card overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-card-border bg-background text-xs font-medium uppercase tracking-wider text-muted">
+          <div className="px-4 py-2.5 border-b border-card-border bg-background text-sm font-semibold text-foreground">
             State-by-state leaders
           </div>
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-card-border bg-background text-left text-xs font-medium uppercase tracking-wider text-muted">
+              <tr className="border-b border-card-border bg-background text-left text-sm font-semibold text-foreground">
                 <th className="px-3 py-2">State</th>
                 <th className="px-3 py-2">Leader</th>
                 <th className="px-3 py-2 text-right">Seats</th>
@@ -248,7 +248,7 @@ export function LowerTierPrimaryShell({
                   <td className="px-3 py-2 text-right tabular-nums text-muted">
                     {row.leader ? `${row.leader.sharePct.toFixed(1)}%` : "—"}
                   </td>
-                  <td className="px-3 py-2 text-right text-[10px] uppercase tracking-wider text-muted">
+                  <td className="px-3 py-2 text-right text-body-sm font-medium text-muted">
                     {row.hasResults ? "live" : "projected"}
                   </td>
                 </tr>

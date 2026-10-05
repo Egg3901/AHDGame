@@ -98,7 +98,7 @@ export function PlannedEconomyPanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-bold text-foreground">Planned Economy</h3>
+            <h3 className="text-sm font-bold text-foreground">Planned economy</h3>
             <Badge color={view.regime === "command" ? "warning" : "info"} variant="subtle">
               {view.regimeLabel}
             </Badge>
@@ -111,7 +111,7 @@ export function PlannedEconomyPanel({
       <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
         {metrics.map((m) => (
           <div key={m.key}>
-            <div className="flex items-center text-[10px] font-bold uppercase tracking-wide text-muted">
+            <div className="flex items-center text-body-sm font-medium text-muted">
               {m.label}
               <Tooltip
                 content={PLANNED_ECONOMY_METRIC_TOOLTIPS[m.key]}

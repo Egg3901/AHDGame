@@ -159,7 +159,7 @@ export function SovereignCrisisDecisionPanel({ countryCode }: Props) {
   const options: { choice: Choice; label: string; accentClass: string; disabled: boolean }[] = [
     {
       choice: "bailout",
-      label: "IMF Bailout",
+      label: "IMF bailout",
       accentClass: "border-emerald-600/40 bg-emerald-500/5",
       disabled: submitting !== null,
     },
@@ -189,7 +189,7 @@ export function SovereignCrisisDecisionPanel({ countryCode }: Props) {
     <div className="rounded-lg border border-rose-500/60 bg-rose-500/5 p-4">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">Sovereign Debt Crisis</h3>
+          <h3 className="text-sm font-semibold text-foreground">Sovereign debt crisis</h3>
           <p className="mt-0.5 text-xs text-muted">
             Bond auctions have failed three times. Choose a resolution path.
           </p>
@@ -304,7 +304,7 @@ function LegislativeVotingPanel({
   return (
     <div className="rounded-lg border border-amber-500/60 bg-amber-500/5 p-4">
       <h3 className="text-sm font-semibold text-foreground">
-        Legislative Ratification — {phase.chamberKey} chamber
+        Legislative ratification — {phase.chamberKey} chamber
       </h3>
       <p className="mt-1 text-xs text-muted">
         Executive proposed: <span className="font-medium text-foreground">{executiveLabel}</span>
@@ -341,7 +341,7 @@ function LegislativeVotingPanel({
           disabled={submitting !== null}
           className="rounded-md border border-emerald-600 bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          {submitting === "for" ? "Submitting…" : "Vote For"}
+          {submitting === "for" ? "Submitting…" : "Vote for"}
         </button>
         <button
           type="button"
@@ -349,7 +349,7 @@ function LegislativeVotingPanel({
           disabled={submitting !== null}
           className="rounded-md border border-rose-600 bg-rose-600 px-3 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
         >
-          {submitting === "against" ? "Submitting…" : "Vote Against"}
+          {submitting === "against" ? "Submitting…" : "Vote against"}
         </button>
       </div>
       {error ? <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">{error}</p> : null}

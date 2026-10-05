@@ -68,9 +68,7 @@ export default function BilateralView({ ledger }: { ledger: WorldTradeLedger }) 
               align="left"
             />
             <div className="flex flex-col items-center gap-0.5">
-              <span className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-muted">
-                net balance
-              </span>
+              <span className="text-body-sm font-medium text-muted">net balance</span>
               <span
                 className={`inline-flex items-center gap-1.5 font-mono text-lg font-bold tabular-nums ${directionToneClass(
                   net
@@ -98,7 +96,7 @@ export default function BilateralView({ ledger }: { ledger: WorldTradeLedger }) 
 
       <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
         <div className="mb-2 flex items-baseline justify-between gap-2">
-          <h3 className="text-sm font-bold text-foreground">Balance by Commodity</h3>
+          <h3 className="text-sm font-bold text-foreground">Balance by commodity</h3>
           <span className="text-[10px] text-muted">
             {partner} surplus ◀ · ▶ {reporter} surplus
           </span>
@@ -164,9 +162,7 @@ function Picker({
 }) {
   return (
     <div className="rounded-xl border border-card-border bg-card p-3">
-      <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-        {label}
-      </div>
+      <div className="mb-2 text-body-sm font-medium text-muted">{label}</div>
       <div className="flex flex-wrap gap-1.5">
         {countries.map((c) => {
           const active = value === c.code;

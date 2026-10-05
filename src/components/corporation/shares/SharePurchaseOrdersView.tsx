@@ -56,9 +56,7 @@ export function SharePurchaseOrdersView({
         <>
           {openBuyOrders.length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-success">
-                Buy Orders
-              </p>
+              <p className="mb-2 text-body-sm font-medium text-success">Buy orders</p>
               <div className="divide-y divide-card-border/50 overflow-hidden rounded-lg border border-card-border">
                 {openBuyOrders.map((o) => (
                   <div
@@ -105,7 +103,7 @@ export function SharePurchaseOrdersView({
           {openSellOrders.length > 0 && (
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-error">
-                Sell Orders
+                Sell orders
               </p>
               <div className="divide-y divide-card-border/50 overflow-hidden rounded-lg border border-card-border">
                 {openSellOrders.map((o) => (

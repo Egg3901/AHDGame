@@ -14,9 +14,7 @@ export default function DemandDriverBanner({ demandDriver, unit }: DemandDriverB
   return (
     <div className="rounded-xl border border-primary/20 bg-primary/5 px-5 py-3 mb-4">
       <div className="flex items-center gap-2 mb-1">
-        <span className="text-xs font-bold text-primary uppercase tracking-wider">
-          {demandDriver.label}
-        </span>
+        <span className="text-body-sm font-medium text-primary">{demandDriver.label}</span>
       </div>
       <p className="text-sm text-muted">{demandDriver.description}</p>
       {demandDriver.sourceUnits != null && demandDriver.sourceUnits > 0 && (

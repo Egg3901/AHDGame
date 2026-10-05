@@ -299,7 +299,7 @@ export function NPPManagement() {
       <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h3 className="text-lg text-foreground">NPP Autonomy</h3>
+            <h3 className="text-lg text-foreground">NPP autonomy</h3>
             <p className="mt-0.5 max-w-xl text-sm text-muted">
               When on, NPPs in disabled or econ-only countries govern themselves — an autonomous
               technocrat runs the central bank toward the dual mandate (and, as later phases ship,
@@ -316,7 +316,7 @@ export function NPPManagement() {
             disabled={togglingNppAutonomy || nppAutonomyEnabled === null}
             title="NPP Autonomy (disabled/econ-only countries)"
           >
-            NPP Autonomy: {nppAutonomyEnabled === null ? "…" : nppAutonomyEnabled ? "On" : "Off"}
+            NPP autonomy: {nppAutonomyEnabled === null ? "…" : nppAutonomyEnabled ? "On" : "Off"}
           </button>
         </div>
       </div>
@@ -336,13 +336,13 @@ export function NPPManagement() {
             <div className="mt-1 text-3xl font-bold tabular-nums">{stats.totalNPPs}</div>
           </div>
           <div className="rounded-lg border border-card-border bg-card p-4">
-            <div className="text-sm text-muted">In Elections</div>
+            <div className="text-sm text-muted">In elections</div>
             <div className="mt-1 text-3xl font-bold tabular-nums text-blue-400">
               {stats.nppCandidates}
             </div>
           </div>
           <div className="rounded-lg border border-card-border bg-card p-4 sm:col-span-3">
-            <div className="text-sm text-muted mb-3">By Party</div>
+            <div className="text-sm text-muted mb-3">By party</div>
             {stats.nppsByPartyGrouped ? (
               <div className="space-y-4">
                 {Object.entries(stats.nppsByPartyGrouped)
@@ -386,11 +386,11 @@ export function NPPManagement() {
 
       {/* Target selection */}
       <div className="rounded-xl border border-card-border bg-card p-5">
-        <h3 className="mb-4 font-semibold">Target Selection</h3>
+        <h3 className="mb-4 font-semibold">Target selection</h3>
 
         {/* Country scope */}
         <div className="mb-4">
-          <label className="mb-2 block text-sm font-medium">Country Scope</label>
+          <label className="mb-2 block text-sm font-medium">Country scope</label>
           <div className="flex flex-wrap gap-2">
             {["all" as const, ...registered].map((scope) => (
               <button
@@ -477,7 +477,7 @@ export function NPPManagement() {
             <div className="mt-3 space-y-3">
               {(countryScope === "US" || countryScope === "all") && (
                 <div>
-                  <p className="mb-1.5 text-xs font-medium text-muted">US States</p>
+                  <p className="mb-1.5 text-xs font-medium text-muted">US states</p>
                   <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-card-border bg-background p-3 sm:grid-cols-4 md:grid-cols-6">
                     {US_STATES.map((state) => (
                       <button
@@ -497,7 +497,7 @@ export function NPPManagement() {
               )}
               {(countryScope === "UK" || countryScope === "all") && (
                 <div>
-                  <p className="mb-1.5 text-xs font-medium text-muted">UK Regions</p>
+                  <p className="mb-1.5 text-xs font-medium text-muted">UK regions</p>
                   <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-card-border bg-background p-3 sm:grid-cols-4 md:grid-cols-6">
                     {UK_REGION_IDS.map((state) => (
                       <button
@@ -517,7 +517,7 @@ export function NPPManagement() {
               )}
               {(countryScope === "JP" || countryScope === "all") && (
                 <div>
-                  <p className="mb-1.5 text-xs font-medium text-muted">JP Regions</p>
+                  <p className="mb-1.5 text-xs font-medium text-muted">JP regions</p>
                   <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-card-border bg-background p-3 sm:grid-cols-4 md:grid-cols-6">
                     {JP_REGION_IDS.map((state) => (
                       <button
@@ -561,7 +561,7 @@ export function NPPManagement() {
 
         {/* Party selector */}
         <div>
-          <label className="mb-2 block text-sm font-medium">Parties to Generate</label>
+          <label className="mb-2 block text-sm font-medium">Parties to generate</label>
           <div className="flex flex-wrap gap-2">
             {parties.map((party) => {
               const key = partyKey(party);
@@ -592,12 +592,12 @@ export function NPPManagement() {
         disabled={loading || selectedParties.length === 0}
         className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
       >
-        {loading ? "Generating..." : "Generate NPPs for Elections"}
+        {loading ? "Generating..." : "Generate NPPs for elections"}
       </button>
 
       {/* Spawn free NPPs */}
       <div className="rounded-xl border border-card-border bg-card p-5">
-        <h3 className="mb-2 font-semibold">Spawn Free-Floating NPPs</h3>
+        <h3 className="mb-2 font-semibold">Spawn free-floating NPPs</h3>
         <p className="mb-4 text-xs text-muted">
           Creates NPPs not tied to any election. State selection is weighted by party ideology
           alignment, existing party presence, or both.
@@ -636,15 +636,15 @@ export function NPPManagement() {
             </select>
           </div>
           <div>
-            <label className="mb-2 block text-sm font-medium">State Preference</label>
+            <label className="mb-2 block text-sm font-medium">State preference</label>
             <select
               value={spawnMode}
               onChange={(e) => setSpawnMode(e.target.value as "lean" | "members" | "both")}
               className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
             >
               <option value="both">Both (lean + members)</option>
-              <option value="lean">Party Lean Match</option>
-              <option value="members">Existing Members</option>
+              <option value="lean">Party lean match</option>
+              <option value="members">Existing members</option>
             </select>
           </div>
         </div>
@@ -694,35 +694,35 @@ export function NPPManagement() {
             disabled={loading}
             className="w-full rounded-lg bg-yellow-500/20 px-4 py-2 text-sm font-medium text-yellow-400 border border-yellow-500/50 transition-colors hover:bg-yellow-500/30 disabled:opacity-50"
           >
-            {loading ? "..." : "Remove NPP Candidates"}
+            {loading ? "..." : "Remove NPP candidates"}
           </button>
           <button
             onClick={() => handleDeleteAllNPPs("candidates_only")}
             disabled={loading}
             className="w-full rounded-lg bg-orange-500/20 px-4 py-2 text-sm font-medium text-orange-400 border border-orange-500/50 transition-colors hover:bg-orange-500/30 disabled:opacity-50"
           >
-            {loading ? "..." : "Clear Election Entries Only"}
+            {loading ? "..." : "Clear election entries only"}
           </button>
           <button
             onClick={() => handleDeleteAllNPPs("vacate_seats")}
             disabled={loading}
             className="w-full rounded-lg bg-purple-500/20 px-4 py-2 text-sm font-medium text-purple-400 border border-purple-500/50 transition-colors hover:bg-purple-500/30 disabled:opacity-50"
           >
-            {loading ? "..." : "Vacate Retired NPP Seats"}
+            {loading ? "..." : "Vacate retired NPP seats"}
           </button>
           <button
             onClick={() => handleDeleteAllNPPs("independents_only")}
             disabled={loading}
             className="w-full rounded-lg bg-cyan-500/20 px-4 py-2 text-sm font-medium text-cyan-400 border border-cyan-500/50 transition-colors hover:bg-cyan-500/30 disabled:opacity-50"
           >
-            {loading ? "..." : "Retire Independent NPPs Only"}
+            {loading ? "..." : "Retire independent NPPs only"}
           </button>
           <button
             onClick={() => handleDeleteAllNPPs("retire_all")}
             disabled={loading}
             className="w-full rounded-lg bg-red-500/20 px-4 py-2 text-sm font-medium text-red-400 border border-red-500/50 transition-colors hover:bg-red-500/30 disabled:opacity-50"
           >
-            {loading ? "..." : "Retire All NPPs"}
+            {loading ? "..." : "Retire all NPPs"}
           </button>
         </div>
       </details>
@@ -730,7 +730,7 @@ export function NPPManagement() {
       {/* Recent NPPs */}
       {stats?.recentNPPs && stats.recentNPPs.length > 0 && (
         <div>
-          <h3 className="mb-3 font-semibold">Recently Active NPPs</h3>
+          <h3 className="mb-3 font-semibold">Recently active NPPs</h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {stats.recentNPPs.map((npp) => (
               <div
@@ -786,7 +786,7 @@ export function NPPManagement() {
             disabled={loading}
             className="rounded-lg border border-card-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-card disabled:opacity-50"
           >
-            {loading ? "..." : "Backfill Missing Avatars"}
+            {loading ? "..." : "Backfill missing avatars"}
           </button>
         </div>
       </details>

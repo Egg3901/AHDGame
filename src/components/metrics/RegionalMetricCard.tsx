@@ -167,9 +167,7 @@ export function RegionalMetricCard({
               <div className="flex items-center gap-3">
                 {score !== null && <HealthRing score={score} size={58} label="/100" />}
                 <div className="min-w-0 flex-1">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-                    Quality score
-                  </div>
+                  <div className="text-body-sm font-medium text-muted">Quality score</div>
                   <div className="mt-1 text-[12px] text-foreground">
                     {isHigherBetter ? "↑ Higher is better" : "↓ Lower is better"}
                   </div>
@@ -199,9 +197,7 @@ export function RegionalMetricCard({
               </div>
               <div className="mt-3 flex items-center justify-between border-t border-card-border pt-3">
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-                    Recent trend
-                  </div>
+                  <div className="text-body-sm font-medium text-muted">Recent trend</div>
                   <div className="mt-0.5">
                     <TrendChip trend={trend} isHigherBetter={isHigherBetter} />
                   </div>
@@ -218,7 +214,7 @@ export function RegionalMetricCard({
             {/* vs other regions */}
             {ranked.length > 0 ? (
               <div className="rounded-lg border border-card-border bg-card p-3.5">
-                <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
+                <div className="mb-2 text-body-sm font-medium text-muted">
                   Versus other {regionLabelPlural}
                 </div>
                 <RegionRankingList

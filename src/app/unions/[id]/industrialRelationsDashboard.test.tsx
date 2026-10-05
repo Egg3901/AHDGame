@@ -108,8 +108,8 @@ describe("union industrial-relations dashboard", () => {
     expect(screen.queryByRole("button", { name: "Call Strike" })).toBeNull();
     // The public wage claim is back as a leader control: it is the only thing
     // that can make the gap column below say anything at all.
-    expect(screen.getByRole("button", { name: "Set Demand" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Withdraw Demand" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Set demand" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Withdraw demand" })).toBeTruthy();
     expect(screen.getByText("0.10× short")).toBeTruthy();
     expect(screen.getByText("Strike ready")).toBeTruthy();
     expect(screen.getByText("Needs organizing")).toBeTruthy();
@@ -237,7 +237,7 @@ describe("union industrial-relations dashboard", () => {
     expect(candidateSelect.textContent).toMatch(/Alex Organizer #42/);
     expect(screen.queryByPlaceholderText(/paste character id/i)).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /^Legislative Stances/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Legislative stances/i }));
     const endorseButton = await screen.findByRole("button", { name: "Endorse" });
     fireEvent.click(endorseButton);
 
@@ -352,12 +352,12 @@ describe("union industrial-relations dashboard", () => {
     render(<UnionPage params={PARAMS} />);
 
     await screen.findByText(/Unions are banned under current law in United States/);
-    expect(screen.queryByRole("button", { name: "Run Organize Drive" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Run organize drive" })).toBeNull();
     expect(screen.getByText(/Underground cell details are available to characters/i)).toBeTruthy();
     // The recruitment drive is retired under union dues v1: growth happens by
     // organizing a sector from that sector's page, so there is no button here.
     expect(screen.queryByRole("button", { name: "Run Recruitment Drive" })).toBeNull();
-    expect((screen.getByRole("button", { name: "Set Demand" }) as HTMLButtonElement).disabled).toBe(
+    expect((screen.getByRole("button", { name: "Set demand" }) as HTMLButtonElement).disabled).toBe(
       true
     );
   });
@@ -416,7 +416,7 @@ describe("union industrial-relations dashboard", () => {
 
     await screen.findByText("This union has no standing wage claim.");
     fireEvent.change(screen.getByPlaceholderText("1.15"), { target: { value: "1.2" } });
-    fireEvent.click(screen.getByRole("button", { name: "Set Demand" }));
+    fireEvent.click(screen.getByRole("button", { name: "Set demand" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(

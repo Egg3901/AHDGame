@@ -63,7 +63,7 @@ export function GotvDriveCard({
         href={url}
         className="mt-3 inline-block text-xs font-medium underline opacity-80 hover:opacity-100"
       >
-        Adjust on State Party page →
+        Adjust on state party page →
       </Link>
     </div>
   );

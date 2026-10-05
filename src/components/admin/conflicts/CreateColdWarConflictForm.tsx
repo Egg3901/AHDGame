@@ -79,7 +79,7 @@ export function CreateColdWarConflictForm() {
 
   return (
     <section className="mt-6 rounded-xl border border-card-border bg-card p-4 shadow-card">
-      <h3 className="text-lg text-foreground">Create Cold War Conflict</h3>
+      <h3 className="text-lg text-foreground">Create Cold War conflict</h3>
       <p className="mt-0.5 max-w-xl text-sm text-muted">
         A proxy war fought on third-party soil. Both sides are factions backed by a bloc; host
         entities are the countries that change bloc when it resolves.

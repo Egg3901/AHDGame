@@ -183,7 +183,7 @@ export function WhiteHouseEndorsementsTab({ countryId }: Props) {
         </h2>
         {!canEndorse && data.viewerIsLeader && (
           <p className="mb-2 text-xs text-warning">
-            Insufficient Office AP — endorsements require {data.actionCost} AP.
+            Insufficient office AP — endorsements require {data.actionCost} AP.
           </p>
         )}
         <RaceList

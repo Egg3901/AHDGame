@@ -147,7 +147,7 @@ export function OrdersTab(props: Props) {
                 : ""
             }
           >
-            + Admin Override
+            + Admin override
           </button>
         </section>
       )}

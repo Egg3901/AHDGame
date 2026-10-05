@@ -210,7 +210,7 @@ function GeneralBlock({
             className={`h-1.5 w-1.5 rounded-full ${result.finalized ? "bg-green-400" : "bg-blue-400"}`}
           />
           <span className="text-xs font-medium">
-            {result.finalized ? "Final Results" : "Live Tally"}
+            {result.finalized ? "Final results" : "Live tally"}
           </span>
           {totalSeats && (
             <span className="text-[10px] text-muted">
@@ -352,9 +352,7 @@ function ElectionCard({ entry }: { entry: ElectionLogEntry }) {
         {/* Primary results */}
         {hasPrimary && (
           <div>
-            <div className="text-[10px] font-medium text-muted uppercase tracking-wide mb-2">
-              Primary
-            </div>
+            <div className="text-body-sm font-medium text-muted mb-2">Primary</div>
             <div className="space-y-2">
               {entry.primaryResults.map((r) => (
                 <PrimaryBlock key={r.party} result={r} />
@@ -366,9 +364,7 @@ function ElectionCard({ entry }: { entry: ElectionLogEntry }) {
         {/* General results */}
         {hasGeneral && entry.generalResult && (
           <div>
-            <div className="text-[10px] font-medium text-muted uppercase tracking-wide mb-2">
-              General Election
-            </div>
+            <div className="text-body-sm font-medium text-muted mb-2">General election</div>
             <GeneralBlock result={entry.generalResult} totalSeats={entry.totalSeats} />
           </div>
         )}

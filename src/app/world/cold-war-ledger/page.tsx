@@ -5,7 +5,7 @@ import { loadWorldAlignment } from "@/lib/alignment/queries/worldAlignment";
 import { ColdWarLedgerClient } from "./ColdWarLedgerClient";
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "Cold War Ledger | A House Divided",
+  title: "Cold War ledger | A House Divided",
   description:
     "Where every nation stands between the blocs — each holds a share per bloc plus an uncommitted remainder, with the contested states the two sides are still fighting over.",
   pathname: "/world/cold-war-ledger",

@@ -258,7 +258,7 @@ export function StateOrganizationTab({
     <div>
       <div className="mb-4 rounded-lg border border-card-border bg-card p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          {showHeading ? <h3 className="font-medium">Campaign Presence</h3> : <span />}
+          {showHeading ? <h3 className="font-medium">Campaign presence</h3> : <span />}
           {showHubLink && (
             <Link
               href="/political-operations"
@@ -281,7 +281,7 @@ export function StateOrganizationTab({
         </p>
         {racePresence.length > 0 && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs uppercase tracking-wide text-muted">Showing</span>
+            <span className="text-body-sm font-medium text-muted">Showing</span>
             <button
               type="button"
               onClick={() => setViewingCharacterId(null)}

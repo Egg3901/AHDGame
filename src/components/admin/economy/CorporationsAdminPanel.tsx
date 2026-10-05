@@ -409,7 +409,7 @@ export function CorporationsAdminPanel() {
             }
             className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-background/60 transition-colors"
           >
-            Reset All Timers
+            Reset all timers
           </button>
           <button
             onClick={() =>
@@ -420,7 +420,7 @@ export function CorporationsAdminPanel() {
             }
             className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-background/60 transition-colors"
           >
-            Resume All Suspended
+            Resume all suspended
           </button>
           <button
             onClick={() =>
@@ -431,7 +431,7 @@ export function CorporationsAdminPanel() {
             }
             className="text-xs px-3 py-1.5 rounded border border-card-border hover:bg-background/60 transition-colors"
           >
-            Spawn Unowned (20% Boost)
+            Spawn unowned (20% boost)
           </button>
           <button
             onClick={() =>
@@ -442,7 +442,7 @@ export function CorporationsAdminPanel() {
             }
             className="text-xs px-3 py-1.5 rounded border border-primary/40 text-primary hover:bg-primary/10 transition-colors"
           >
-            Spawn NPP Corp
+            Spawn NPP corp
           </button>
         </div>
       </div>

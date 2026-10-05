@@ -438,9 +438,7 @@ function PriorityStat({ label, value, sub, tone, onClick }: PriorityStatProps) {
         onClick ? "hover:bg-white/5" : ""
       }`}
     >
-      <span className="text-[10px] font-semibold tracking-widest text-muted uppercase">
-        {label}
-      </span>
+      <span className="text-body-sm font-medium text-muted">{label}</span>
       <span className={`mt-1 text-xl leading-none font-bold sm:text-2xl ${valueColor}`}>
         {value}
       </span>

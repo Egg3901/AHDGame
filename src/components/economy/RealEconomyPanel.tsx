@@ -121,7 +121,7 @@ export function RealEconomyPanel({
   return (
     <div className="rounded-xl border border-card-border bg-card px-5 py-4 shadow-sm">
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-sm font-bold text-foreground">Real Economy</h3>
+        <h3 className="text-sm font-bold text-foreground">Real economy</h3>
         <span className="text-[10px] text-muted">
           budget factors + {regionWord}-weighted metrics
         </span>

@@ -19,7 +19,7 @@ export default function ProductionFlow({ suppliers, consumers }: ProductionFlowP
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between px-6 py-4 hover:bg-card-elevated/50 transition-colors"
       >
-        <h2 className="text-lg font-bold text-foreground">Production Flow</h2>
+        <h2 className="text-lg font-bold text-foreground">Production flow</h2>
         <svg
           className={`w-5 h-5 text-muted transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
           fill="none"

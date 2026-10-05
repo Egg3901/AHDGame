@@ -7,7 +7,7 @@ import type { LegacyLeaderboardScope, LegacyRankBy } from "@/lib/world/legacyLea
 import LegacyLeaderboardClient from "./LegacyLeaderboardClient";
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "Hall of Fame | A House Divided",
+  title: "Hall of fame | A House Divided",
   description:
     "Every player ranked by their single best-scoring life ever played, across every game iteration.",
   pathname: "/world/legacy",

@@ -25,7 +25,7 @@ export function ModNoteModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="mx-4 w-full max-w-md rounded-xl border border-card-border bg-card p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold">Mod Note — {username}</h3>
+          <h3 className="text-lg font-semibold">Mod note — {username}</h3>
           <button
             type="button"
             aria-label="Close"
@@ -44,9 +44,7 @@ export function ModNoteModal({
         </div>
         {isModeratorContext && existingNote && (
           <div className="mb-3 rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-muted">
-            <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">
-              Latest Note
-            </div>
+            <div className="mb-1 text-body-sm font-medium text-muted">Latest note</div>
             <div className="whitespace-pre-wrap">{existingNote}</div>
           </div>
         )}
@@ -75,7 +73,7 @@ export function ModNoteModal({
             disabled={saving}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
-            {saving ? "Saving..." : isModeratorContext ? "Add Note" : "Save"}
+            {saving ? "Saving..." : isModeratorContext ? "Add note" : "Save"}
           </button>
         </div>
       </div>

@@ -377,8 +377,8 @@ describe("processNppGovernment", () => {
       atLeastMock.mockResolvedValue(true);
       conditionsMock.mockResolvedValue({ weakDomains: {} });
       setup({ gov, headNpp: neutralHead });
-      db.collectionMocks["parties"] = {
-        ...db.collection("parties"),
+      db.collectionMocks["politicalParties"] = {
+        ...db.collection("politicalParties"),
         findOne: vi.fn().mockResolvedValue(party),
       } as MockDb["collectionMocks"][string];
       db.collectionMocks["manifestos"] = {

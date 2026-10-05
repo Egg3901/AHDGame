@@ -53,7 +53,7 @@ export function CountryReadinessPanel() {
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-      <h3 className="text-sm font-semibold text-white">Country Readiness Diagnostic</h3>
+      <h3 className="text-sm font-semibold text-white">Country readiness diagnostic</h3>
       <p className="text-xs text-muted">
         Run the seed/collection readiness checks for a country. Reads only — never writes. Lists
         per-check status (regions, parties, statePartyOrg, seats, NPPs, elected officials,

@@ -72,7 +72,7 @@ export function ElectionCycleTable({
                 disabled={loading}
                 className="rounded bg-red-500/20 px-2 py-1 text-xs font-medium text-red-400 hover:bg-red-500/30"
               >
-                Delete Cycle
+                Delete cycle
               </button>
             </div>
           </div>

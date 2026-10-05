@@ -76,14 +76,14 @@ export function StatePartyLeadershipManager({
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold">Appoint State Chair</h3>
+      <h3 className="text-lg font-semibold">Appoint state chair</h3>
 
       {message && (
         <div className={`rounded-lg p-3 text-sm ${getMessageStyle(message)}`}>{message}</div>
       )}
 
       <div className="rounded-lg border border-card-border bg-card p-4">
-        <div className="text-sm font-medium mb-2">State Chair</div>
+        <div className="text-sm font-medium mb-2">State chair</div>
         <div className="space-y-2">
           <select
             value={selectedChar}

@@ -148,9 +148,7 @@ export default function PlantPanel({
           mothballed ? "opacity-70" : ""
         }`}
       >
-        <p className="text-body-xs font-semibold uppercase tracking-wider text-muted">
-          Installed capacity
-        </p>
+        <p className="text-body-sm font-medium text-muted">Installed capacity</p>
         <p className="mt-1 flex items-baseline gap-2">
           <span className="text-display font-bold tabular-nums text-foreground">
             {fmtUnits(ownedPlantCount)}
@@ -161,9 +159,7 @@ export default function PlantPanel({
           </span>
         </p>
 
-        <p className="mb-2 mt-5 text-body-xs font-semibold uppercase tracking-wider text-muted">
-          Today&apos;s run
-        </p>
+        <p className="mb-2 mt-5 text-body-sm font-medium text-muted">Today&apos;s run</p>
         {hasRun ? (
           <>
             <RunMeter
@@ -281,9 +277,7 @@ export default function PlantPanel({
       {/* Build queue ───────────────────────────────────────────────────────*/}
       {plants.buildQueue.length > 0 && (
         <div className="mt-4">
-          <p className="mb-2 text-body-xs font-semibold uppercase tracking-wider text-muted">
-            Under construction
-          </p>
+          <p className="mb-2 text-body-sm font-medium text-muted">Under construction</p>
           <ul className="space-y-2">
             {plants.buildQueue.map((o) => {
               // Smooth orders deliver a linear slice of capacity every turn
@@ -414,7 +408,7 @@ function Stat({
       <InfoTooltip
         width={260}
         trigger={
-          <span className="cursor-help border-b border-dotted border-muted/40 text-body-xs font-semibold uppercase tracking-wider text-muted">
+          <span className="cursor-help border-b border-dotted border-muted/40 text-sm font-semibold text-foreground">
             {label}
           </span>
         }

@@ -210,7 +210,7 @@ export function CharacterStateManager({ context = "admin" }: CharacterStateManag
     <div className="space-y-6">
       {/* State Update Card */}
       <div className="rounded-xl border border-card-border bg-card p-6 shadow-sm">
-        <h3 className="text-base font-semibold text-foreground mb-1">Change Home Region</h3>
+        <h3 className="text-base font-semibold text-foreground mb-1">Change home region</h3>
         <p className="text-sm text-muted mb-5">
           Update a character&apos;s home region by their username. Regions are per-country — US
           states, UK regions, Soviet republics and so on.
@@ -260,7 +260,7 @@ export function CharacterStateManager({ context = "admin" }: CharacterStateManag
 
           <div>
             <label className="block text-xs font-medium text-muted mb-1.5" htmlFor="cs-state">
-              New Home Region
+              New home region
             </label>
             <select
               id="cs-state"
@@ -289,7 +289,7 @@ export function CharacterStateManager({ context = "admin" }: CharacterStateManag
             disabled={!username.trim() || !homeState || loading}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {loading ? "Updating…" : "Update State"}
+            {loading ? "Updating…" : "Update state"}
           </button>
         </form>
 
@@ -303,7 +303,7 @@ export function CharacterStateManager({ context = "admin" }: CharacterStateManag
 
       {/* Country Update Card */}
       <div className="rounded-xl border border-card-border bg-card p-6 shadow-sm">
-        <h3 className="text-base font-semibold text-foreground mb-1">Change Home Country</h3>
+        <h3 className="text-base font-semibold text-foreground mb-1">Change home country</h3>
         <p className="text-sm text-muted mb-5">
           Relocate a character to a different country by their username.
         </p>
@@ -327,7 +327,7 @@ export function CharacterStateManager({ context = "admin" }: CharacterStateManag
 
           <div>
             <label className="block text-xs font-medium text-muted mb-1.5" htmlFor="cc-country">
-              New Country
+              New country
             </label>
             <select
               id="cc-country"
@@ -351,7 +351,7 @@ export function CharacterStateManager({ context = "admin" }: CharacterStateManag
           {(countryRegionsLoading || countryRegions.length > 0) && (
             <div>
               <label className="block text-xs font-medium text-muted mb-1.5" htmlFor="cc-state">
-                Home Region
+                Home region
               </label>
               <select
                 id="cc-state"
@@ -388,7 +388,7 @@ export function CharacterStateManager({ context = "admin" }: CharacterStateManag
             }
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {countryLoading ? "Updating…" : "Update Country"}
+            {countryLoading ? "Updating…" : "Update country"}
           </button>
         </form>
 
@@ -404,7 +404,7 @@ export function CharacterStateManager({ context = "admin" }: CharacterStateManag
 
       {/* Positions Update Card */}
       <div className="rounded-xl border border-card-border bg-card p-6 shadow-sm">
-        <h3 className="text-base font-semibold text-foreground mb-1">Change Policy Positions</h3>
+        <h3 className="text-base font-semibold text-foreground mb-1">Change policy positions</h3>
         <p className="text-sm text-muted mb-5">
           Adjust a character&apos;s economic and/or social policy positions. Values range from
           &minus;5 (far left/liberal) to +5 (far right/traditional). Leave an axis unchanged by
@@ -446,7 +446,7 @@ export function CharacterStateManager({ context = "admin" }: CharacterStateManag
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-medium text-muted" htmlFor="pos-economic">
-                Economic Position
+                Economic position
               </label>
               {economic !== null && (
                 <button
@@ -496,7 +496,7 @@ export function CharacterStateManager({ context = "admin" }: CharacterStateManag
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-medium text-muted" htmlFor="pos-social">
-                Social Position
+                Social position
               </label>
               {social !== null && (
                 <button
@@ -547,7 +547,7 @@ export function CharacterStateManager({ context = "admin" }: CharacterStateManag
             disabled={!posCharacter || (economic === null && social === null) || posLoading}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {posLoading ? "Updating…" : "Update Positions"}
+            {posLoading ? "Updating…" : "Update positions"}
           </button>
         </form>
 

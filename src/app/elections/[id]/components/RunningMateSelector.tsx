@@ -163,7 +163,7 @@ export function RunningMateSelector({
         {currentRunningMateCharacterId ? "Change" : "Select"}
       </Button>
 
-      <Modal open={open} title="Select Running Mate" onClose={() => setOpen(false)}>
+      <Modal open={open} title="Select running mate" onClose={() => setOpen(false)}>
         <div className="space-y-4">
           <div className="rounded-lg border border-info/30 bg-info/10 p-3 text-sm text-info">
             Choose any eligible player from your country, regardless of party. Search by player name
@@ -287,7 +287,7 @@ export function RunningMateSelector({
           </div>
 
           <div className="rounded-lg border border-card-border bg-card-elevated p-3">
-            <p className="text-xs uppercase tracking-wide text-muted">Selected running mate</p>
+            <p className="text-body-sm font-medium text-muted">Selected running mate</p>
             <p className="mt-1 text-sm font-medium text-foreground">
               {selectedCharacter?.name ?? currentRunningMateName ?? "None selected"}
             </p>

@@ -102,7 +102,7 @@ function ScotusNominationDetailContent() {
           href="/congress?chamber=senate&tab=bills"
           className="text-sm text-primary hover:underline"
         >
-          ← Back to Senate Bills
+          ← Back to Senate bills
         </Link>
       </div>
     );
@@ -133,7 +133,7 @@ function ScotusNominationDetailContent() {
           <div className="flex flex-wrap items-center gap-2">
             {nom.status === "active" ? (
               <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-3 py-1 text-xs font-semibold text-yellow-400">
-                Voting Open
+                Voting open
               </span>
             ) : nom.status === "confirmed" ? (
               <span className="rounded-full border border-success/30 bg-success/10 px-3 py-1 text-xs font-semibold text-success">
@@ -149,7 +149,7 @@ function ScotusNominationDetailContent() {
               </span>
             )}
             <span className="rounded-full border border-card-border px-2 py-0.5 text-[10px] text-muted">
-              Senate · Supreme Court Nomination
+              Senate · Supreme Court nomination
             </span>
           </div>
 
@@ -194,7 +194,7 @@ function ScotusNominationDetailContent() {
 
         <div className="rounded-xl border border-card-border bg-card shadow-panel p-5 space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <h3 className="text-sm font-semibold">Senate Vote</h3>
+            <h3 className="text-sm font-semibold">Senate vote</h3>
             {nom.votingEndsAt && nom.status === "active" && (
               <span
                 className={`text-xs tabular-nums font-mono ${countdown === "Expired" ? "text-error" : "text-yellow-400"}`}

@@ -77,7 +77,7 @@ export function RegionalTargetPanel({
             htmlFor="regional-target-select"
             className="block text-xs font-medium text-muted mb-1"
           >
-            Target Region
+            Target region
           </label>
           <select
             id="regional-target-select"
@@ -108,7 +108,7 @@ export function RegionalTargetPanel({
             isLoading={saving}
             onClick={handleSave}
           >
-            Set Target
+            Set target
           </Button>
           {feedback && (
             <span

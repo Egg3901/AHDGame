@@ -608,7 +608,7 @@ export async function POST(request: Request) {
       const reviewed = await validateBillProvisions(db, rawResetLawProvisions, category, "US");
       if (!reviewed.ok) {
         logRequest("POST", path, reviewed.status, Date.now() - start);
-        return NextResponse.json({ error: reviewed.error }, { status: reviewed.status });
+        return errorResponse(reviewed.status, reviewed.error);
       }
       validatedResetLawProvisions.push(...reviewed.resetLawProvisions);
     }
@@ -960,9 +960,9 @@ export async function POST(request: Request) {
     });
     if (!administrationValidation.ok) {
       logRequest("POST", path, 400, Date.now() - start);
-      return NextResponse.json(
-        { error: administrationValidation.error ?? "Invalid administration metadata." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        administrationValidation.error ?? "Invalid administration metadata."
       );
     }
 
@@ -976,11 +976,9 @@ export async function POST(request: Request) {
       );
       if (conflict) {
         logRequest("POST", path, 409, Date.now() - start);
-        return NextResponse.json(
-          {
-            error: `This bill conflicts with active law ${conflict.existingLegislationTypeId} through ${conflict.conflictSetId}. Repeal or replace that regime first.`,
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          `This bill conflicts with active law ${conflict.existingLegislationTypeId} through ${conflict.conflictSetId}. Repeal or replace that regime first.`
         );
       }
     }
@@ -1005,7 +1003,7 @@ export async function POST(request: Request) {
     );
     if (resetLawDuplicateCheck) {
       logRequest("POST", path, 409, Date.now() - start);
-      return NextResponse.json({ error: resetLawDuplicateCheck.error }, { status: 409 });
+      return errorResponse(409, resetLawDuplicateCheck.error);
     }
 
     const tariffDuplicateCheck = await checkDuplicateTariffProvisions(

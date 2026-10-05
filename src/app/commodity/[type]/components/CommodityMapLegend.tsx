@@ -25,9 +25,7 @@ export default function CommodityMapLegend({
     const gradient = `linear-gradient(to right, ${stops.map((s) => s.color).join(", ")})`;
     return (
       <div className="flex items-center gap-2 bg-card px-3 py-2 rounded-lg border border-card-border shadow-sm">
-        <span className="text-[10px] font-semibold text-muted uppercase tracking-wider whitespace-nowrap">
-          Reachable
-        </span>
+        <span className="text-body-sm font-medium text-muted whitespace-nowrap">Reachable</span>
         <div className="flex items-center gap-1">
           <span className="text-[9px] text-muted">{stops[0].label}</span>
           <div className="h-2 w-16 rounded-full" style={{ background: gradient }} />
@@ -69,9 +67,7 @@ export default function CommodityMapLegend({
 
   return (
     <div className="flex items-center gap-2 bg-card px-3 py-2 rounded-lg border border-card-border shadow-sm">
-      <span className="text-[10px] font-semibold text-muted uppercase tracking-wider whitespace-nowrap">
-        {modeLabel}
-      </span>
+      <span className="text-body-sm font-medium text-muted whitespace-nowrap">{modeLabel}</span>
       <div className="flex items-center gap-1">
         <span className="text-[9px] text-muted">{stops[0].label}</span>
         <div className={`w-16 h-2 rounded-full bg-gradient-to-r ${gradientColors}`} />

@@ -123,7 +123,7 @@ export default async function CampaignPage() {
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
       <div className="max-w-lg w-full">
         <div className="rounded-xl border border-card-border bg-card p-8 text-center space-y-4">
-          <h1 className="text-2xl font-bold text-foreground">No Presidential Campaign</h1>
+          <h1 className="text-2xl font-bold text-foreground">No presidential campaign</h1>
           <p className="text-muted">
             The campaign manager is a presidential-race feature. You are not currently running in a
             presidential race or managing a presidential campaign.
@@ -136,7 +136,7 @@ export default async function CampaignPage() {
             href="/elections"
             className="inline-block mt-4 px-6 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors"
           >
-            View Elections
+            View elections
           </Link>
         </div>
       </div>

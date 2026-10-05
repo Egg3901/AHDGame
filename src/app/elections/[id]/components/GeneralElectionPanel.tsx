@@ -383,7 +383,7 @@ export function GeneralElectionPanel({
   const supportModal = (
     <Modal
       open={!!supportingCampaignId}
-      title="Support Campaign"
+      title="Support campaign"
       onClose={() => {
         if (!supporting) {
           setSupportingCampaignId(null);
@@ -423,7 +423,7 @@ export function GeneralElectionPanel({
         ) : (
           <>
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted">Amount</div>
+              <div className="text-body-sm font-medium text-muted">Amount</div>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {supportClickOptions.map((opt) => {
                   const isActive =
@@ -638,7 +638,7 @@ export function GeneralElectionPanel({
         {/* Charts */}
         {showTrends && (
           <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
-            <div className="text-sm font-semibold mb-3">Election Trends</div>
+            <div className="text-sm font-semibold mb-3">Election trends</div>
             <GeneralVoteCharts
               snapshots={tally.turnSnapshots}
               series={lineSeries}

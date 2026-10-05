@@ -351,7 +351,7 @@ export function InboxClient() {
         <div>
           {/* Eyebrow */}
           {eyebrow && (
-            <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-widest text-muted">
+            <p className="mb-0.5 text-body-sm font-medium text-muted">
               {eyebrow.name}
               {eyebrow.seat ? <span className="mx-1.5 opacity-40">·</span> : null}
               {eyebrow.seat}
@@ -473,7 +473,7 @@ export function InboxClient() {
           >
             <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-card-border bg-card/95 px-4 py-3 backdrop-blur">
               <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted">
+                <p className="text-body-sm font-medium text-muted">
                   {showHistory ? "Full history" : "Working set"}
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
@@ -507,9 +507,7 @@ export function InboxClient() {
             {thisTurn.length > 0 && (
               <>
                 <div className="border-b border-card-border bg-card-elevated/25 px-4 py-2">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-foreground/70">
-                    This turn
-                  </p>
+                  <p className="text-body-sm font-medium text-foreground/70">This turn</p>
                 </div>
                 {thisTurn.map((item) => (
                   <RailItem
@@ -526,9 +524,7 @@ export function InboxClient() {
             {earlier.length > 0 && (
               <>
                 <div className="border-b border-card-border bg-card-elevated/25 px-4 py-2">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-foreground/70">
-                    Earlier
-                  </p>
+                  <p className="text-body-sm font-medium text-foreground/70">Earlier</p>
                 </div>
                 {earlier.map((item) => (
                   <RailItem

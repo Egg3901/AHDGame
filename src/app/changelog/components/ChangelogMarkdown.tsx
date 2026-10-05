@@ -121,7 +121,7 @@ export function ChangelogMarkdown({ content, compact = false }: ChangelogMarkdow
           </div>
         ),
         th: ({ children }) => (
-          <th className="border-b border-card-border px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-muted">
+          <th className="border-b border-card-border px-2 py-1.5 text-left text-sm font-semibold text-foreground">
             {children}
           </th>
         ),

@@ -66,7 +66,7 @@ export default function ResourceCapacityPanel({
     <section className="rounded-xl border border-card-border bg-card p-6 shadow-card">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-lg font-bold text-foreground">Resource Availability</h2>
+          <h2 className="text-lg font-bold text-foreground">Resource availability</h2>
           <p className="text-xs text-muted mt-0.5">
             Extractable deposits in this state. Zero-capacity resources produce no output regardless
             of sector revenue.
@@ -126,7 +126,7 @@ export default function ResourceCapacityPanel({
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-muted text-xs uppercase tracking-widest">
+            <tr className="text-muted text-body-sm font-medium">
               <th className="text-left font-medium pb-2">Resource</th>
               <th className="text-right font-medium pb-2">Capacity / turn</th>
               {showHeadroom && <th className="text-right font-medium pb-2">Wanted / turn</th>}
@@ -194,9 +194,7 @@ export default function ResourceCapacityPanel({
 
       {canProspect && (
         <div className="mt-5 border-t border-card-border pt-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted">
-            Geological surveys
-          </p>
+          <p className="mb-2 text-body-sm font-medium text-muted">Geological surveys</p>
           <ProspectingSurveyList
             surveys={surveys}
             currentTurn={currentTurn}

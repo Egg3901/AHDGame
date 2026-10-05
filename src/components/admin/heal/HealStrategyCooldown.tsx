@@ -86,7 +86,7 @@ export function HealStrategyCooldown() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Strategy Cooldowns</h3>
+        <h3 className="font-semibold text-sm">Heal strategy cooldowns</h3>
         <p className="mt-1 text-xs text-muted">
           Diagnoses and clears operating strategy cooldown timers on corporate sectors. Expired
           cooldowns are safe to clear. Force-clear removes active cooldowns too (use only to fix
@@ -107,14 +107,14 @@ export function HealStrategyCooldown() {
           disabled={loading}
           className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs font-medium text-warning transition-colors hover:bg-warning/20 disabled:opacity-50"
         >
-          {loading ? "Clearing…" : "Clear Expired"}
+          {loading ? "Clearing…" : "Clear expired"}
         </button>
         <button
           onClick={() => runHeal(true)}
           disabled={loading}
           className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
         >
-          {loading ? "Clearing…" : "Force Clear All"}
+          {loading ? "Clearing…" : "Force clear all"}
         </button>
       </div>
 

@@ -194,7 +194,7 @@ export default function AltDetectionView({ context = "admin" }: AltDetectionView
     <SuspectPeekProvider context={context} onMemberBanned={handleMemberBanned} notify={notify}>
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-semibold tracking-tight">Alt Detection</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Alt detection</h2>
           <span className="rounded-md border border-card-border/70 bg-card-elevated/60 px-2 py-0.5 text-[11px] font-medium text-muted">
             Ranked by confidence
           </span>

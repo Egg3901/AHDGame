@@ -93,7 +93,7 @@ export function NppEconomyPanel() {
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-sm">NPP Action Economy</h3>
+        <h3 className="font-semibold text-sm">NPP action economy</h3>
         <span
           className="rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider"
           style={{
@@ -132,7 +132,7 @@ export function NppEconomyPanel() {
       {/* Key Stats */}
       {data && (
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-muted uppercase tracking-wider">Key Stats</p>
+          <p className="text-body-sm font-medium text-muted">Key stats</p>
           <div className="rounded-lg border border-card-border bg-background divide-y divide-card-border/50">
             <div className="flex items-center justify-between px-3 py-2">
               <span className="text-xs text-muted">Total NPPs</span>
@@ -141,31 +141,31 @@ export function NppEconomyPanel() {
               </span>
             </div>
             <div className="flex items-center justify-between px-3 py-2">
-              <span className="text-xs text-muted">NPPs with Funds</span>
+              <span className="text-xs text-muted">NPPs with funds</span>
               <span className="text-xs font-medium tabular-nums">
                 {data.stats.nppsWithFunds.toLocaleString()}
               </span>
             </div>
             <div className="flex items-center justify-between px-3 py-2">
-              <span className="text-xs text-muted">Total NPP Funds</span>
+              <span className="text-xs text-muted">Total NPP funds</span>
               <span className="text-xs font-medium tabular-nums">
                 {formatFunds(data.stats.totalFunds)}
               </span>
             </div>
             <div className="flex items-center justify-between px-3 py-2">
-              <span className="text-xs text-muted">Action Points Pooled</span>
+              <span className="text-xs text-muted">Action points pooled</span>
               <span className="text-xs font-medium tabular-nums">
                 {data.stats.totalActionPoints.toLocaleString()}
               </span>
             </div>
             <div className="flex items-center justify-between px-3 py-2">
-              <span className="text-xs text-muted">Avg Donor Base Level</span>
+              <span className="text-xs text-muted">Avg donor base level</span>
               <span className="text-xs font-medium tabular-nums">
                 {data.stats.avgDonorBaseLevel.toFixed(1)}
               </span>
             </div>
             <div className="flex items-center justify-between px-3 py-2">
-              <span className="text-xs text-muted">Next Action Processing</span>
+              <span className="text-xs text-muted">Next action processing</span>
               <span className="text-xs font-medium tabular-nums">
                 Turn {data.nextProcessingTurn}
               </span>

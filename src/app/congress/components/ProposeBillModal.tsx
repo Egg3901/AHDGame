@@ -680,7 +680,7 @@ function LegacyProposeBillModal({
         aria-label="Propose a bill"
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Propose Legislation</h2>
+          <h2 className="text-lg font-semibold">Propose legislation</h2>
           <button
             type="button"
             onClick={onClose}
@@ -712,7 +712,7 @@ function LegacyProposeBillModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="bill-title" className="block text-xs text-muted mb-1">
-              Bill Title
+              Bill title
             </label>
             <input
               id="bill-title"
@@ -765,7 +765,7 @@ function LegacyProposeBillModal({
               )}
             </div>
             <div>
-              <label className="block text-xs text-muted mb-1">Originating Chamber</label>
+              <label className="block text-xs text-muted mb-1">Originating chamber</label>
               <select
                 value={billChamber}
                 onChange={(e) => setBillChamber(e.target.value as "house" | "senate" | "joint")}
@@ -811,7 +811,7 @@ function LegacyProposeBillModal({
               /* ── Trade restriction editor: tariff or embargo ── */
               <div className="space-y-3">
                 <div>
-                  <label className="mb-1 block text-xs text-muted">Restriction Type</label>
+                  <label className="mb-1 block text-xs text-muted">Restriction type</label>
                   <div
                     role="tablist"
                     aria-label="Trade restriction type"
@@ -855,7 +855,7 @@ function LegacyProposeBillModal({
               /* ── Subsidy provision builder ── */
               <div className="space-y-3">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs text-muted">Subsidy Provisions</label>
+                  <label className="block text-xs text-muted">Subsidy provisions</label>
                   {subsidyProvisions.length < MAX_PROVISIONS && (
                     <button
                       type="button"
@@ -897,8 +897,8 @@ function LegacyProposeBillModal({
                         }
                         className="flex-1 rounded-lg border border-card-border bg-background px-2 py-1.5 text-sm"
                       >
-                        <option value="subsidy">Grant Subsidy</option>
-                        <option value="end_subsidy">End Subsidy</option>
+                        <option value="subsidy">Grant subsidy</option>
+                        <option value="end_subsidy">End subsidy</option>
                       </select>
                       {subsidyProvisions.length > 1 && (
                         <button
@@ -928,7 +928,7 @@ function LegacyProposeBillModal({
                       className="w-full rounded-lg border border-card-border bg-background px-2 py-1.5 text-sm"
                     >
                       <option value="economy_wide">Economy-wide</option>
-                      <option value="sector">Specific Sector</option>
+                      <option value="sector">Specific sector</option>
                     </select>
                     {sp.scopeType === "sector" && (
                       <SubsidySectorSelect
@@ -1005,7 +1005,7 @@ function LegacyProposeBillModal({
                     <option value="ban">Ban unions nationally</option>
                     <option value="repeal_ban">Repeal the union ban</option>
                   </select>
-                  <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted/70">
+                  <div className="flex items-center justify-between text-body-sm font-medium text-muted">
                     <span>← Right-to-work</span>
                     <span>Neutral (0)</span>
                     <span>Collective bargaining →</span>
@@ -1321,7 +1321,7 @@ function LegacyProposeBillModal({
                         />
                         Set registration access
                       </label>
-                      <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted/70">
+                      <div className="flex items-center justify-between text-body-sm font-medium text-muted">
                         <span>&larr; Restricted</span>
                         <span>Neutral (0)</span>
                         <span>Automatic &rarr;</span>
@@ -1445,7 +1445,7 @@ function LegacyProposeBillModal({
               disabled={loading || !canAfford || (hasActiveBill && !adminOverride)}
               className="flex-1 rounded-lg bg-primary py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >
-              {loading ? "Proposing…" : "Propose Bill"}
+              {loading ? "Proposing…" : "Propose bill"}
             </button>
           </div>
         </form>

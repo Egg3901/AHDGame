@@ -36,6 +36,7 @@ function makeInput(overrides: Partial<ClearingPrePassInput> = {}): ClearingPrePa
     brandLoyaltyEnabled: false,
     brandLoyaltySliceEnabled: false,
     qualityPremiumPricingEnabled: false,
+    treasuryCashLedgerEnabled: false,
     ...overrides,
   };
 }

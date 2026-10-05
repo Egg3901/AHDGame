@@ -63,7 +63,7 @@ export function DebtOperationPanel({
 
   return (
     <MonetaryCard
-      title="Debt Management Operation"
+      title="Debt management operation"
       hint="Costs 1 ministerial action. Accelerates investor-confidence recovery, lowering the sovereign premium."
     >
       <ActingLockNote reason={actingLockReason} />
@@ -84,7 +84,7 @@ export function DebtOperationPanel({
       )}
       <div className="mt-3 flex items-center gap-3">
         <Button variant="primary" disabled={disabled} isLoading={submitting} onClick={launch}>
-          Launch Operation
+          Launch operation
         </Button>
         {feedback && (
           <span

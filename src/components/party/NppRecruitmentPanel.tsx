@@ -257,7 +257,7 @@ export function NppRecruitmentPanel({
       {hasCooldown && status.cooldownUntil && (
         <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span className="font-medium">Recruitment on Cooldown</span>
+            <span className="font-medium">Recruitment on cooldown</span>
             <span className="text-muted">
               {cooldownHours} hour{cooldownHours !== 1 ? "s" : ""} remaining
             </span>
@@ -330,9 +330,9 @@ export function NppRecruitmentPanel({
       {/* Cost display (state panel only — national uses the recruit segment above) */}
       {!isNational && (
         <div className="rounded-xl border border-card-border bg-card p-4 space-y-1 text-sm">
-          <p className="font-medium mb-2">Recruitment Cost</p>
+          <p className="font-medium mb-2">Recruitment cost</p>
           <div className="flex justify-between">
-            <span className="text-muted">Action Points</span>
+            <span className="text-muted">Action points</span>
             <span>{stateActionCost}</span>
           </div>
           <div className="flex justify-between">
@@ -343,7 +343,7 @@ export function NppRecruitmentPanel({
           </div>
           <div className="border-t border-card-border pt-1 mt-1" />
           <div className="flex justify-between text-muted">
-            <span>State party Action Points</span>
+            <span>State party action points</span>
             <span>
               {status.nppActionPoints ?? 0}
               {status.nppActionPointCap != null && ` / ${status.nppActionPointCap}`}
@@ -370,7 +370,7 @@ export function NppRecruitmentPanel({
             ? "Recruiting..."
             : hasCooldown
               ? `On Cooldown (${cooldownHours}h remaining)`
-              : "Recruit NPP Candidate"}
+              : "Recruit NPP candidate"}
         </button>
       )}
 

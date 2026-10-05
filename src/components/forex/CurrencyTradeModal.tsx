@@ -190,7 +190,7 @@ export function CurrencyTradeModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-card-border">
           <h2 id={titleId} className="text-base font-bold text-foreground">
-            Exchange Currency
+            Exchange currency
           </h2>
           <button
             onClick={onClose}
@@ -224,9 +224,7 @@ export function CurrencyTradeModal({
           {/* Currency pair */}
           <div className="flex items-center gap-2">
             <div className="flex-1">
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1 block">
-                From
-              </label>
+              <label className="text-body-sm font-medium text-muted mb-1 block">From</label>
               <select
                 value={from}
                 onChange={(e) => {
@@ -259,9 +257,7 @@ export function CurrencyTradeModal({
             </button>
 
             <div className="flex-1">
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1 block">
-                To
-              </label>
+              <label className="text-body-sm font-medium text-muted mb-1 block">To</label>
               <select
                 value={to}
                 onChange={(e) => setTo(e.target.value as CurrencyCode)}
@@ -286,7 +282,7 @@ export function CurrencyTradeModal({
             <div className="flex items-center justify-between mb-1">
               <label
                 htmlFor={`${idBase}-amount`}
-                className="text-[10px] font-semibold uppercase tracking-wider text-muted block"
+                className="text-body-sm font-medium text-muted block"
               >
                 Amount ({from})
               </label>
@@ -321,9 +317,9 @@ export function CurrencyTradeModal({
             <div>
               <label
                 htmlFor={`${idBase}-limit-rate`}
-                className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1 block"
+                className="text-body-sm font-medium text-muted mb-1 block"
               >
-                Limit Rate ({to}/{from})
+                Limit rate ({to}/{from})
               </label>
               <input
                 id={`${idBase}-limit-rate`}
@@ -392,7 +388,7 @@ export function CurrencyTradeModal({
             disabled={submitting || !amt || amt <= 0}
             className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
-            {submitting ? "Processing…" : method === "market" ? "Exchange Now" : "Place Order"}
+            {submitting ? "Processing…" : method === "market" ? "Exchange now" : "Place order"}
           </button>
         </form>
       </div>

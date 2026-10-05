@@ -95,7 +95,9 @@ describe.runIf(REAL_MONGO_ENABLED)(
         },
       }) as unknown as Db;
 
-      const frozen = await db.collection("federalBudget").findOne({ _id: "federal" });
+      const frozen = await db
+        .collection<{ _id: string }>("federalBudget")
+        .findOne({ _id: "federal" });
       await expect(settleBankSovereignClaims(crashDb, frozen as never, 13)).rejects.toThrow(
         "injected lost Mongo acknowledgment after paired bank credit"
       );
@@ -111,7 +113,9 @@ describe.runIf(REAL_MONGO_ENABLED)(
       expect(afterReplay?.bankCharter?.cashReserves).toBe(15);
       expect(afterReplay?.bankCharter?.sovereignCouponIncomePaidLifetime).toBe(10);
       expect(
-        await db.collection("bankMoneyMoves").countDocuments({ _id: `${CLAIM_ID}:bank:13` })
+        await db
+          .collection<{ _id: string }>("bankMoneyMoves")
+          .countDocuments({ _id: `${CLAIM_ID}:bank:13` })
       ).toBe(1);
       expect(
         await db.collection("federalBudget").countDocuments({ "bankSovereignClaims.id": CLAIM_ID })

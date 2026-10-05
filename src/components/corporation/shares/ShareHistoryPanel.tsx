@@ -86,7 +86,7 @@ function StructureChangeDetail({ entry }: { entry: ShareHistoryEntry }) {
   return (
     <div className="mt-3 grid gap-4 rounded-md border border-card-border/50 bg-card-elevated/40 p-3 md:grid-cols-2">
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+        <p className="mb-2 text-body-sm font-medium text-muted">
           Before: {sc.oldTotalShares.toLocaleString("en-US")} shares
           {ccy && ` @ ${sc.oldSharePriceLocal.toLocaleString("en-US")} ${ccy}`}
         </p>
@@ -99,7 +99,7 @@ function StructureChangeDetail({ entry }: { entry: ShareHistoryEntry }) {
         </table>
       </div>
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+        <p className="mb-2 text-body-sm font-medium text-muted">
           After: {sc.newTotalShares.toLocaleString("en-US")} shares
           {ccy && ` @ ${sc.newSharePriceLocal.toLocaleString("en-US")} ${ccy}`}
         </p>
@@ -116,7 +116,7 @@ function StructureChangeDetail({ entry }: { entry: ShareHistoryEntry }) {
 }
 
 function PartyLink({ party }: { party: ShareHistoryEntry["from"] }) {
-  if (!party) return <span className="text-muted italic">Public Float</span>;
+  if (!party) return <span className="text-muted italic">Public float</span>;
   if (party.characterId) {
     return (
       <Link

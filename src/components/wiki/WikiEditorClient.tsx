@@ -568,7 +568,7 @@ export function WikiEditorClient({
           disabled={state.isSaving}
           className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {state.isSaving ? "Saving..." : mode === "create" ? "Create Page" : "Save Changes"}
+          {state.isSaving ? "Saving..." : mode === "create" ? "Create page" : "Save changes"}
         </button>
       </div>
     </form>

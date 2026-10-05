@@ -41,25 +41,25 @@ export function ElectionStatsCards({ elections, currentTurn }: ElectionStatsCard
 
   const cards = [
     {
-      label: "Active Elections",
+      label: "Active elections",
       value: active.toLocaleString("en-US"),
       sub: `${elections.length} total`,
       color: "text-foreground",
     },
     {
-      label: "In Primary Phase",
+      label: "In primary phase",
       value: inPrimary.toLocaleString("en-US"),
       sub: `${primaryPct}% of active`,
       color: "text-amber-500",
     },
     {
-      label: "In General Phase",
+      label: "In general phase",
       value: inGeneral.toLocaleString("en-US"),
       sub: `${generalPct}% of active`,
       color: "text-green-500",
     },
     {
-      label: "Total Candidates",
+      label: "Total candidates",
       value: totalCandidates.toLocaleString("en-US"),
       sub: `avg ${avgCandidates} per race`,
       color: "text-foreground",
@@ -70,9 +70,7 @@ export function ElectionStatsCards({ elections, currentTurn }: ElectionStatsCard
     <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
       {cards.map((c) => (
         <div key={c.label} className="rounded-lg border border-card-border bg-card p-3">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-muted">
-            {c.label}
-          </div>
+          <div className="text-body-sm font-medium text-muted">{c.label}</div>
           <div className={`mt-1 text-xl font-bold tabular-nums ${c.color}`}>{c.value}</div>
           <div className="mt-0.5 text-[10px] text-muted">{c.sub}</div>
         </div>

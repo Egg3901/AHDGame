@@ -205,10 +205,10 @@ describe("linking to the defence office", () => {
   });
 });
 
-describe("explaining what a Theater Commander does", () => {
+describe("explaining what a Theater commander does", () => {
   it("binds the TC acronym, so the button label is not two bare letters", () => {
     const { container } = render(<CommandingGeneralClient {...base} />);
-    expect(container.textContent).toMatch(/Theater Commander \(TC\)/);
+    expect(container.textContent).toMatch(/Theater commander \(TC\)/);
   });
 
   it("titles the MAKE TC button with what it does", () => {

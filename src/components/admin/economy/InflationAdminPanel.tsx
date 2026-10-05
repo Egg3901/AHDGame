@@ -266,7 +266,7 @@ export function InflationAdminPanel() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Inflation Diagnostics</h2>
+          <h2 className="text-lg font-semibold">Inflation diagnostics</h2>
           <p className="text-xs text-muted">
             Per-country stored vs. recomputed inflation, with the signed contribution of every
             driver. Use to identify which channel is pushing a country to the floor.
@@ -312,14 +312,14 @@ export function InflationAdminPanel() {
 
       <div className="overflow-x-auto rounded-md border border-card-border">
         <table className="min-w-full divide-y divide-card-border text-sm">
-          <thead className="bg-card-elevated text-left text-xs font-medium uppercase tracking-wide text-muted">
+          <thead className="bg-card-elevated text-left text-body-sm font-medium text-muted">
             <tr>
               <th className="px-3 py-2">Country</th>
               <th className="px-3 py-2 text-right">Stored</th>
               <th className="px-3 py-2 text-right">Recomputed</th>
               <th className="px-3 py-2 text-right">Δ</th>
               <th className="px-3 py-2">Recent</th>
-              <th className="px-3 py-2">Dominant Drag</th>
+              <th className="px-3 py-2">Dominant drag</th>
               <th className="px-3 py-2 text-right">Prime</th>
               <th className="px-3 py-2 text-right">Eff. Rate</th>
               <th className="px-3 py-2 text-right">FX rate</th>

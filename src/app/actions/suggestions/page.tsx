@@ -27,12 +27,12 @@ interface ExecuteActionPayload {
 const TOP_COUNT = 5;
 
 const CATEGORY_CONFIG: Record<RecommendationCategory, { label: string; defaultOpen: boolean }> = {
-  "getting-started": { label: "Getting Started", defaultOpen: true },
-  "stat-recovery": { label: "Stat Recovery", defaultOpen: false },
-  "resource-opt": { label: "Resource Optimization", defaultOpen: false },
-  "market-opportunity": { label: "Market Opportunities", defaultOpen: false },
+  "getting-started": { label: "Getting started", defaultOpen: true },
+  "stat-recovery": { label: "Stat recovery", defaultOpen: false },
+  "resource-opt": { label: "Resource optimization", defaultOpen: false },
+  "market-opportunity": { label: "Market opportunities", defaultOpen: false },
   competitive: { label: "Competitive", defaultOpen: false },
-  party: { label: "Party Actions", defaultOpen: false },
+  party: { label: "Party actions", defaultOpen: false },
 };
 
 const CATEGORY_ORDER: RecommendationCategory[] = [
@@ -264,7 +264,7 @@ export default function SuggestedActionsPage() {
             </div>
             <div className="pointer-events-none absolute inset-0 flex flex-col justify-end px-6 pb-5 sm:px-8 sm:pb-7">
               <h1 className="text-2xl font-bold tracking-tight text-white drop-shadow-md sm:text-3xl">
-                Action Suggestions
+                Action suggestions
               </h1>
               <p className="mt-1.5 text-sm text-white/80 drop-shadow max-w-xl">
                 Personalized recommendations based on your stats and opportunities.
@@ -277,18 +277,14 @@ export default function SuggestedActionsPage() {
             {character && (
               <>
                 <div className="flex flex-col px-5 py-3 min-w-max">
-                  <span className="text-[10px] uppercase tracking-widest text-muted font-bold">
-                    Actions
-                  </span>
+                  <span className="text-body-sm font-medium text-muted">Actions</span>
                   <span className="text-base font-bold tabular-nums text-foreground">
                     {character.actions}
                     <span className="text-xs font-normal text-muted ml-1">AP</span>
                   </span>
                 </div>
                 <div className="flex flex-col px-5 py-3 min-w-max">
-                  <span className="text-[10px] uppercase tracking-widest text-muted font-bold">
-                    Funds
-                  </span>
+                  <span className="text-body-sm font-medium text-muted">Funds</span>
                   <span className="text-base font-bold tabular-nums text-success">
                     {formatCurrencyFaceAmount(
                       character.currencyBalances?.campaign ?? character.funds ?? 0,
@@ -297,17 +293,13 @@ export default function SuggestedActionsPage() {
                   </span>
                 </div>
                 <div className="flex flex-col px-5 py-3 min-w-max">
-                  <span className="text-[10px] uppercase tracking-widest text-muted font-bold">
-                    Influence
-                  </span>
+                  <span className="text-body-sm font-medium text-muted">Influence</span>
                   <span className="text-base font-bold tabular-nums text-foreground">
                     {(character.politicalInfluence ?? 0).toFixed(1)}%
                   </span>
                 </div>
                 <div className="flex flex-col px-5 py-3 min-w-max">
-                  <span className="text-[10px] uppercase tracking-widest text-muted font-bold">
-                    Favorability
-                  </span>
+                  <span className="text-body-sm font-medium text-muted">Favorability</span>
                   <span
                     className={`text-base font-bold tabular-nums ${(character.favorability ?? 0) < 40 ? "text-error" : (character.favorability ?? 0) < 60 ? "text-warning" : "text-success"}`}
                   >
@@ -369,7 +361,7 @@ export default function SuggestedActionsPage() {
                 />
               </svg>
             </div>
-            <h2 className="text-lg font-semibold text-foreground">All Clear</h2>
+            <h2 className="text-lg font-semibold text-foreground">All clear</h2>
             <p className="text-muted mt-2 max-w-sm mx-auto text-sm">
               No recommendations right now. Check back after taking actions or as conditions change.
             </p>
@@ -377,7 +369,7 @@ export default function SuggestedActionsPage() {
               href="/actions"
               className="inline-block mt-6 text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
             >
-              Go to Actions
+              Go to actions
             </Link>
           </div>
         )}
@@ -385,7 +377,7 @@ export default function SuggestedActionsPage() {
         {/* Top 5 */}
         {topFive.length > 0 && (
           <section>
-            <h2 className="text-sm font-semibold text-foreground mb-3">Top Priorities</h2>
+            <h2 className="text-sm font-semibold text-foreground mb-3">Top priorities</h2>
             <div className="space-y-2.5">
               {topFive.map((rec) => (
                 <RecommendationCard
@@ -405,7 +397,7 @@ export default function SuggestedActionsPage() {
         {grouped.length > 0 && (
           <section className="space-y-2">
             {topFive.length > 0 && (
-              <h2 className="text-sm font-semibold text-foreground mb-1">More Suggestions</h2>
+              <h2 className="text-sm font-semibold text-foreground mb-1">More suggestions</h2>
             )}
             {grouped.map(({ category, label, items }) => {
               const isOpen = openCategories.has(category);

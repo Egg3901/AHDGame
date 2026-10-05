@@ -15,13 +15,13 @@ export function BillProposalChip({
   if (category === "reunification") {
     return (
       <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-        Referendum Passed
+        Referendum passed
       </span>
     );
   }
   return (
     <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
-      Admin Proposed
+      Admin proposed
     </span>
   );
 }

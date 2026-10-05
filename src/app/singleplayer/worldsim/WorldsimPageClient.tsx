@@ -88,7 +88,7 @@ export function WorldsimPageClient() {
   return (
     <main className="mx-auto min-h-screen w-full max-w-5xl px-4 py-12 sm:px-6">
       <header className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+        <p className="text-body-sm font-medium text-primary">
           Worldsim{" "}
           <span className="ml-2 rounded border border-primary/50 px-1.5 py-0.5 text-[10px] tracking-[0.12em]">
             Beta
@@ -111,7 +111,7 @@ export function WorldsimPageClient() {
       <section className="rounded border border-card-border bg-card-muted p-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-wide text-muted">Current turn</p>
+            <p className="text-body-sm font-medium text-muted">Current turn</p>
             <p className="mt-1 text-3xl font-bold">{headline?.turn ?? "..."}</p>
           </div>
           <div className="flex items-end gap-2">

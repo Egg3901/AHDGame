@@ -23,7 +23,7 @@ const SERIES_CONFIG: Record<
   { label: string; color: string; unit: string; refLine?: number }
 > = {
   rate: {
-    label: "Interest Rate",
+    label: "Interest rate",
     color: "var(--color-primary, #ef4444)",
     unit: "%",
     refLine: 3.0,
@@ -35,13 +35,13 @@ const SERIES_CONFIG: Record<
     refLine: 2.0,
   },
   gdpGrowth: {
-    label: "GDP Growth",
+    label: "GDP growth",
     color: "var(--color-success, #22c55e)",
     unit: "%",
     refLine: 0,
   },
   savings: {
-    label: "Savings Flow",
+    label: "Savings flow",
     color: "var(--color-secondary, #06b6d4)",
     unit: "%",
     refLine: 0,

@@ -23,7 +23,7 @@ export function LegacyChangelogClient({ entries }: { entries: ChangelogEntry[] }
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 p-6">
-            <h1 className="mb-1 text-2xl font-bold tracking-tight text-white">Legacy Changelog</h1>
+            <h1 className="mb-1 text-2xl font-bold tracking-tight text-white">Legacy changelog</h1>
             <p className="text-sm text-white/70">
               Player-facing updates before the v0.4.0 post-style feed.
             </p>
@@ -31,17 +31,17 @@ export function LegacyChangelogClient({ entries }: { entries: ChangelogEntry[] }
         </div>
         <HeroStatsStrip>
           <div className="flex flex-col px-5 py-3 min-w-max">
-            <span className="text-[10px] uppercase tracking-widest text-muted">Newest here</span>
+            <span className="text-body-sm font-medium text-muted">Newest here</span>
             <span className="text-base font-bold tabular-nums text-primary">{latestVersion}</span>
           </div>
           <div className="flex flex-col px-5 py-3 min-w-max">
-            <span className="text-[10px] uppercase tracking-widest text-muted">Versions</span>
+            <span className="text-body-sm font-medium text-muted">Versions</span>
             <span className="text-base font-bold tabular-nums text-foreground">
               {entries.length}
             </span>
           </div>
           <div className="flex flex-col px-5 py-3 min-w-max">
-            <span className="text-[10px] uppercase tracking-widest text-muted">Changes</span>
+            <span className="text-body-sm font-medium text-muted">Changes</span>
             <span className="text-base font-bold tabular-nums text-foreground">{totalChanges}</span>
           </div>
         </HeroStatsStrip>

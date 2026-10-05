@@ -2,7 +2,7 @@ import type { CreateIndexesOptions, Db, IndexSpecification } from "mongodb";
 import { ensureIndex } from "./helpers";
 
 export type TelemetryIndexPlan = {
-  collection: "approvalTelemetry" | "macroTelemetry";
+  collection: "approvalTelemetry" | "macroTelemetry" | "countryTurnTelemetry" | "securityTelemetry";
   keys: IndexSpecification;
   options: CreateIndexesOptions & { name: string; unique: true };
 };

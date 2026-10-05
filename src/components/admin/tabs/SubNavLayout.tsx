@@ -53,15 +53,13 @@ export function SubNavLayout<T extends string>({
         className="hidden lg:sticky lg:top-[113px] lg:flex lg:flex-col lg:gap-3 lg:rounded-lg lg:border lg:border-card-border lg:bg-card lg:px-2 lg:py-3 lg:shadow-card"
         aria-label={`${tabLabel} sections`}
       >
-        <div className="px-2.5 text-[10px] font-bold tracking-widest text-muted uppercase">
+        <div className="px-2.5 text-body-sm font-medium text-muted">
           {tabLabel} · {subTabs.length} sections
         </div>
         {groups.map((group, gi) => (
           <div key={group.label ?? gi} className="flex flex-col gap-0.5">
             {group.label && (
-              <div className="px-2.5 pb-1 text-[10px] font-semibold tracking-widest text-muted/80 uppercase">
-                {group.label}
-              </div>
+              <div className="px-2.5 pb-1 text-body-sm font-medium text-muted">{group.label}</div>
             )}
             {group.ids.map((id) => {
               const isActive = active === id;

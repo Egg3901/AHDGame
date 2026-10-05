@@ -59,7 +59,7 @@ export function OverviewTab(props: Props) {
       <Card title={getExecutiveOrderNamePlural(props.countryId)}>
         <ExecutiveOrdersSummary activeOrders={props.activeOrders} currentTurn={props.currentTurn} />
       </Card>
-      <Card title="State of the State">
+      <Card title="State of the state">
         <AddressSummary
           mostRecentAddress={props.mostRecentAddress}
           addressAvailableAtTurn={props.addressAvailableAtTurn}

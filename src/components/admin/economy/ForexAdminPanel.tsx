@@ -375,13 +375,13 @@ function RateHistoryChart({
                 {currencies.find((c) => c.currencyCode === s.code)?.countryId === "INT"
                   ? "Internal"
                   : s.code === "USD"
-                    ? "US Dollar"
+                    ? "US dollar"
                     : s.code === "GBP"
-                      ? "British Pound"
+                      ? "British pound"
                       : s.code === "JPY"
                         ? "Japanese Yen"
                         : s.code === "CAD"
-                          ? "Canadian Dollar"
+                          ? "Canadian dollar"
                           : s.code === "EUR"
                             ? "Euro"
                             : s.code}
@@ -532,7 +532,7 @@ export function ForexAdminPanel() {
             }}
             className="rounded border border-card-border bg-card-elevated px-3 py-1 text-sm hover:bg-card-elevated/80 disabled:opacity-50"
           >
-            {seedRunning ? "Seeding…" : "Seed FX Reserves"}
+            {seedRunning ? "Seeding…" : "Seed FX reserves"}
           </button>
           <label className="text-muted">History turns:</label>
           <input
@@ -589,10 +589,7 @@ export function ForexAdminPanel() {
               <thead className="bg-background/50">
                 <tr>
                   {["Currency", "Rate", "Base Rate", "Deviation", "Trend", "Actions"].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider"
-                    >
+                    <th key={h} className="px-4 py-3 text-left text-body-sm font-medium text-muted">
                       {h}
                     </th>
                   ))}
@@ -734,7 +731,7 @@ export function ForexAdminPanel() {
                               disabled={actionLoading === row.countryId}
                               className="text-xs px-3 py-1 rounded bg-warning text-warning-foreground hover:opacity-90 transition-opacity"
                             >
-                              Set Peg
+                              Set peg
                             </button>
                             <button
                               onClick={() => {

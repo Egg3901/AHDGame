@@ -309,7 +309,7 @@ export default async function CrisisDetailPage({ params }: { params: Promise<{ i
                     d="M15 19l-7-7 7-7"
                   />
                 </svg>
-                Back to Crises
+                Back to crises
               </Link>
               <div>
                 <p
@@ -365,8 +365,8 @@ export default async function CrisisDetailPage({ params }: { params: Promise<{ i
                 }`}
                 aria-hidden
               />
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-2 flex items-center gap-1">
-                The Situation
+              <p className="text-body-sm font-medium text-muted mb-2 flex items-center gap-1">
+                The situation
                 <Tooltip content={CRISIS_TOOLTIPS.wire} />
               </p>
               <p className="text-[15px] text-foreground/85 leading-relaxed">{description}</p>
@@ -377,7 +377,7 @@ export default async function CrisisDetailPage({ params }: { params: Promise<{ i
               <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 px-5 py-4">
                 <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-orange-400 mb-1.5">
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-400" aria-hidden />
-                  Breaking Wire
+                  Breaking wire
                   <Tooltip content={CRISIS_TOOLTIPS.wire} />
                 </p>
                 <p className="text-sm italic text-foreground/80 leading-relaxed">
@@ -387,9 +387,7 @@ export default async function CrisisDetailPage({ params }: { params: Promise<{ i
             )}
             {crisis.status === "resolved" && wireOnEnd && (
               <div className="rounded-xl border border-card-border bg-card px-5 py-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1.5">
-                  Resolution Wire
-                </p>
+                <p className="text-body-sm font-medium text-muted mb-1.5">Resolution wire</p>
                 <p className="text-sm italic text-muted leading-relaxed">
                   &ldquo;{wireOnEnd}&rdquo;
                 </p>
@@ -547,9 +545,7 @@ export default async function CrisisDetailPage({ params }: { params: Promise<{ i
           <aside className="space-y-4 lg:sticky lg:top-6">
             <div className="rounded-xl border border-card-border bg-card shadow-card overflow-hidden">
               <div className="px-4 py-3 border-b border-card-border">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted">
-                  Key Facts
-                </p>
+                <p className="text-body-sm font-medium text-muted">Key facts</p>
               </div>
               <dl className="divide-y divide-card-border/60">
                 <Fact label="Status" tooltip={CRISIS_TOOLTIPS.status}>

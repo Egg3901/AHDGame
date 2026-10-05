@@ -62,7 +62,7 @@ export function HealCrossCountryCandidates() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Cross-Country Candidates</h3>
+        <h3 className="font-semibold text-sm">Heal cross-country candidates</h3>
         <p className="mt-1 text-xs text-muted">
           Finds and withdraws NPP candidates who are in elections from a different country than
           their home country.
@@ -82,7 +82,7 @@ export function HealCrossCountryCandidates() {
           disabled={loading}
           className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
         >
-          {loading ? "Healing…" : "Heal Now"}
+          {loading ? "Healing…" : "Heal now"}
         </button>
       </div>
 

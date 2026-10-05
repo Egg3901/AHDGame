@@ -225,7 +225,7 @@ export function MigrationsTab() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Database Migrations</h2>
+        <h2 className="text-lg font-semibold">Database migrations</h2>
         <p className="mt-1 text-sm text-muted">
           Run one-time database migrations. Each migration should only be run once.
         </p>
@@ -299,7 +299,7 @@ export function MigrationsTab() {
                     onClick={() => deleteMigrationRecord(migration.id)}
                     className="min-h-[44px] rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/20"
                   >
-                    Delete Record
+                    Delete record
                   </button>
                 )}
                 <button
@@ -317,7 +317,7 @@ export function MigrationsTab() {
                     ? "Running..."
                     : migration.status === "completed"
                       ? "Completed"
-                      : "Run Migration"}
+                      : "Run migration"}
                 </button>
               </div>
             </div>
@@ -328,7 +328,7 @@ export function MigrationsTab() {
       {orphanRecords.length > 0 && (
         <div className="space-y-4">
           <div>
-            <h3 className="text-md font-semibold">Old Migration Records</h3>
+            <h3 className="text-md font-semibold">Old migration records</h3>
             <p className="mt-1 text-sm text-muted">
               These migration records exist in the database but are no longer defined. You can
               delete them to clean up.
@@ -348,7 +348,7 @@ export function MigrationsTab() {
                   onClick={() => deleteMigrationRecord(record.id)}
                   className="min-h-[44px] rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/20"
                 >
-                  Delete Record
+                  Delete record
                 </button>
               </div>
             </div>

@@ -330,7 +330,7 @@ export function PrivateLoanModal({
         </div>
 
         <div className="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-5">
-          <label className="block space-y-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+          <label className="block space-y-1.5 text-body-sm font-medium text-muted">
             Lending bank
             <select
               className="h-10 w-full rounded-lg border border-card-border bg-background px-3 text-sm font-normal normal-case tracking-normal text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -396,7 +396,7 @@ export function PrivateLoanModal({
           )}
 
           {borrowerType === "corporation" && (
-            <label className="block space-y-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+            <label className="block space-y-1.5 text-body-sm font-medium text-muted">
               Borrowing corporation
               {eligibleCorporations.length > 0 ? (
                 <select
@@ -442,7 +442,7 @@ export function PrivateLoanModal({
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            <label className="block space-y-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+            <label className="block space-y-1.5 text-body-sm font-medium text-muted">
               Principal
               <Input
                 value={principal}
@@ -453,7 +453,7 @@ export function PrivateLoanModal({
                 aria-label="Loan principal"
               />
             </label>
-            <label className="block space-y-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+            <label className="block space-y-1.5 text-body-sm font-medium text-muted">
               Term (turns)
               <Input
                 value={termTurns}

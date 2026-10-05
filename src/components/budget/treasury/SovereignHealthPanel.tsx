@@ -90,7 +90,7 @@ const TONE_BADGE: Record<NodeTone, string> = {
 function Signal({ label, value, gold }: { label: string; value: string; gold?: boolean }) {
   return (
     <div className="rounded-md bg-card-muted px-2.5 py-1.5">
-      <div className="text-[8px] font-bold uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div
         className={`mt-0.5 font-mono text-body-xs font-bold tabular-nums ${gold ? "text-gold" : "text-foreground"}`}
       >

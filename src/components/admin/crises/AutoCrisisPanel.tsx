@@ -65,7 +65,7 @@ export function AutoCrisisPanel({
         onClick={() => setShowAuto((v) => !v)}
         className="flex w-full items-center justify-between px-3 py-2 text-sm font-semibold hover:bg-accent/40"
       >
-        <span>Auto Crisis System</span>
+        <span>Auto crisis system</span>
         <span className="text-muted">{showAuto ? "▾" : "▸"}</span>
       </button>
       {showAuto && (

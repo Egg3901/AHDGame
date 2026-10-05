@@ -68,7 +68,7 @@ export function Masthead({ view }: { view: DossierView }) {
             STANDING CRISIS · NO EXPIRY · GAME-WIDE
           </p>
           <h1 className="text-display font-bold leading-none text-foreground">
-            The German Question
+            The German question
           </h1>
           <p className="mt-2.5 max-w-[600px] text-pretty text-body leading-relaxed text-muted">
             Bonn will not choose for itself. Four institutions decide whether West Germany stays

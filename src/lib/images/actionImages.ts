@@ -18,7 +18,8 @@
  * (era, country, slug) triples were uploaded, so a miss falls back to the
  * era-generic file rather than 404ing. Adding art therefore means uploading the
  * WebP *and* listing the slug here. Sources and licences are recorded in
- * `scripts/action-image-sources.json`.
+ * `scripts/action-image-sources.json`. Replaced art is served under a versioned
+ * name (see `ACTION_ART_REVISIONS`) so the CDN cache never shows the old image.
  */
 
 const CDN_ACTIONS_BASE = "https://cdn.ahousedividedgame.com/static/actions";
@@ -81,6 +82,44 @@ const ERA_COUNTRY_SLUGS: Record<string, Record<string, readonly ActionImageSlug[
   },
 };
 
+/**
+ * Replaced art. The CDN serves action art with `immutable` year-long caching,
+ * so a replaced image is uploaded under a versioned name (`<slug>-v<n>.webp`)
+ * instead of overwriting the old object, and the key here points the resolver
+ * at it. Keys are `<era>/<slug>` (era-generic) or `neutral/<slug>`. Mirrors the
+ * `revision` field in `scripts/action-image-sources.json`; a test keeps them equal.
+ */
+export const ACTION_ART_REVISIONS: Readonly<Record<string, number>> = {
+  "1999/fundraise": 2,
+  "1999/poll": 2,
+  "1999/pollLarge": 2,
+  "2007/debatePrep": 2,
+  "2019/campaign": 2,
+  "2019/canvass": 2,
+  "2019/debatePrep": 2,
+  "2019/flipflop": 2,
+  "2019/fundraise": 2,
+  "2023/advertise": 2,
+  "2023/buildDonorBase": 2,
+  "2023/campaign": 2,
+  "2023/canvass": 2,
+  "2023/fundraise": 2,
+  "2027/canvass": 2,
+  "2027/flipflop": 2,
+  "neutral/advertise": 2,
+  "neutral/buildDonorBase": 2,
+  "neutral/campaign": 2,
+  "neutral/debatePrep": 2,
+  "neutral/flipflop": 2,
+  "neutral/fundraise": 2,
+};
+
+/** CDN URL of one generic or neutral art file, honouring its revision. */
+function artUrl(folder: string, slug: ActionImageSlug): string {
+  const rev = ACTION_ART_REVISIONS[`${folder}/${slug}`];
+  return `${CDN_ACTIONS_BASE}/${folder}/${slug}${rev ? `-v${rev}` : ""}.webp`;
+}
+
 export interface ActionImageContext {
   /** Era id from `eraForPreset(preset)` — e.g. "1953". Undefined until flags load. */
   era?: string | null;
@@ -103,11 +142,11 @@ export function getActionImage(slug: ActionImageSlug, ctx: ActionImageContext = 
       return `${CDN_ACTIONS_BASE}/${era}/${countryId}/${slug}.webp`;
     }
     if (ERAS_WITH_GENERIC_SET.has(era)) {
-      return `${CDN_ACTIONS_BASE}/${era}/${slug}.webp`;
+      return artUrl(era, slug);
     }
   }
 
-  return `${CDN_ACTIONS_BASE}/${NEUTRAL_ART_FOLDER}/${slug}.webp`;
+  return artUrl(NEUTRAL_ART_FOLDER, slug);
 }
 
 /** Eras with a complete generic set, for tests and tooling. */

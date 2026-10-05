@@ -55,7 +55,7 @@ export default function PoliticalOperationsPage() {
   if (forbidden || !data) {
     return (
       <div className="mx-auto max-w-6xl p-6">
-        <h1 className="text-2xl font-semibold">Political Operations</h1>
+        <h1 className="text-2xl font-semibold">Political operations</h1>
         <p className="mt-4 text-muted">
           Political Operations is currently available only to US characters.
         </p>
@@ -66,7 +66,7 @@ export default function PoliticalOperationsPage() {
   return (
     <div className="mx-auto max-w-6xl p-6">
       <header className="mb-4">
-        <h1 className="text-2xl font-semibold">Political Operations</h1>
+        <h1 className="text-2xl font-semibold">Political operations</h1>
         <p className="text-sm text-muted">{data.character.name}</p>
       </header>
       <PoliticalOperationsTabs activeTab={activeTab} onChange={setActiveTab} />

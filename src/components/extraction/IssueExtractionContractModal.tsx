@@ -142,7 +142,7 @@ export function IssueExtractionContractModal({
   }
 
   return (
-    <Modal open title="Issue Extraction Contract" onClose={onClose} maxWidthClass="max-w-lg">
+    <Modal open title="Issue extraction contract" onClose={onClose} maxWidthClass="max-w-lg">
       <form onSubmit={submit} className="space-y-4">
         {!fixedStateId && stateOptions && (
           <div>
@@ -278,7 +278,7 @@ export function IssueExtractionContractModal({
 
         {!authorityAllowed && (
           <p className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
-            The Resource Extraction Authority Act currently reserves {level} issuance for a
+            The resource extraction authority act currently reserves {level} issuance for a
             different level of government in this country.
           </p>
         )}
@@ -287,7 +287,7 @@ export function IssueExtractionContractModal({
 
         <div className="flex gap-3 pt-1">
           <Button type="submit" disabled={submitting || !authorityAllowed} className="flex-1">
-            {submitting ? "Sending..." : "Send Offer"}
+            {submitting ? "Sending..." : "Send offer"}
           </Button>
           <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel

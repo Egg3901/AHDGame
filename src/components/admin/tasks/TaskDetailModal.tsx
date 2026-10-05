@@ -8,7 +8,7 @@ import { LocalTime } from "@/components/time/LocalTime";
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
   { value: "pending", label: "Pending" },
-  { value: "in_progress", label: "In Progress" },
+  { value: "in_progress", label: "In progress" },
   { value: "completed", label: "Completed" },
 ];
 
@@ -213,7 +213,7 @@ export function TaskDetailModal({ task, onClose, onStatusChange, onDelete }: Tas
               >
                 <option value="">No status change</option>
                 <option value="pending">→ Pending</option>
-                <option value="in_progress">→ In Progress</option>
+                <option value="in_progress">→ In progress</option>
                 <option value="completed">→ Completed</option>
               </select>
               <button

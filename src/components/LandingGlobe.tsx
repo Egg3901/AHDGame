@@ -1502,9 +1502,7 @@ export function LandingGlobe({
           )}
           <span className="text-xs font-semibold tracking-wide text-foreground">{gameDate}</span>
           {!hideLiveIndicator && (
-            <span className="ml-auto text-[10px] uppercase tracking-widest text-muted font-medium">
-              Live
-            </span>
+            <span className="ml-auto text-body-sm font-medium text-muted">Live</span>
           )}
         </div>
       )}

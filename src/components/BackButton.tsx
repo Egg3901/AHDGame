@@ -13,13 +13,13 @@ interface BackButtonProps {
 }
 
 const ROUTE_LABELS: { pattern: RegExp; label: string }[] = [
-  { pattern: /\/map/, label: "Back to Map" },
-  { pattern: /\/elections/, label: "Back to Elections" },
-  { pattern: /\/state\//, label: "Back to State" },
+  { pattern: /\/map/, label: "Back to map" },
+  { pattern: /\/elections/, label: "Back to elections" },
+  { pattern: /\/state\//, label: "Back to state" },
   { pattern: /\/congress/, label: "Back to Congress" },
   { pattern: /\/country\/uk/, label: "Back to United Kingdom" },
   { pattern: /\/uk(\/|$)/, label: "Back to United Kingdom" },
-  { pattern: /\/world/, label: "Back to World" },
+  { pattern: /\/world/, label: "Back to world" },
 ];
 
 export default function BackButton({

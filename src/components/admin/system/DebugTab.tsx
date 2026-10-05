@@ -281,7 +281,7 @@ export function DebugTab() {
     <div className="space-y-6">
       {/* Stock Exchange Snapshot Diagnostics */}
       <div className="rounded-lg border border-card-border bg-card p-6">
-        <h2 className="mb-4 text-lg font-semibold">Stock Exchange Snapshot Diagnostics</h2>
+        <h2 className="mb-4 text-lg font-semibold">Stock exchange snapshot diagnostics</h2>
         <p className="mb-4 text-sm text-muted">
           Diagnose stock exchange snapshot state or manually trigger snapshot generation. Snapshots
           are normally generated once per turn for fast Discord bot responses.
@@ -293,7 +293,7 @@ export function DebugTab() {
             disabled={snapshotLoading}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
-            {snapshotLoading ? "Diagnosing..." : "Diagnose Snapshots"}
+            {snapshotLoading ? "Diagnosing..." : "Diagnose snapshots"}
           </button>
 
           <button
@@ -301,7 +301,7 @@ export function DebugTab() {
             disabled={snapshotGenerating}
             className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
           >
-            {snapshotGenerating ? "Generating..." : "Generate Snapshots Now"}
+            {snapshotGenerating ? "Generating..." : "Generate snapshots now"}
           </button>
 
           {snapshotData && (
@@ -345,18 +345,18 @@ export function DebugTab() {
           <div className="mt-4 space-y-4">
             {/* Collection counts */}
             <div className="rounded border border-card-border/50 p-3">
-              <h4 className="mb-2 text-sm font-medium">Collection Counts</h4>
+              <h4 className="mb-2 text-sm font-medium">Collection counts</h4>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted">Corporations:</span>
                   <span>{snapshotData.collections.corporations}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted">Corporate Sectors:</span>
+                  <span className="text-muted">Corporate sectors:</span>
                   <span>{snapshotData.collections.corporateSectors}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted">Exchange Snapshots:</span>
+                  <span className="text-muted">Exchange snapshots:</span>
                   <span
                     className={
                       snapshotData.collections.stockExchangeSnapshots === 0
@@ -368,7 +368,7 @@ export function DebugTab() {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted">Investor Snapshots:</span>
+                  <span className="text-muted">Investor snapshots:</span>
                   <span
                     className={
                       snapshotData.collections.investorRankingSnapshots === 0
@@ -384,7 +384,7 @@ export function DebugTab() {
 
             {/* Snapshot status */}
             <div className="rounded border border-card-border/50 p-3">
-              <h4 className="mb-2 text-sm font-medium">Snapshot Status</h4>
+              <h4 className="mb-2 text-sm font-medium">Snapshot status</h4>
               <div className="space-y-2 text-sm">
                 {(["nyse", "ftse", "global"] as const).map((exchange) => {
                   const snap = snapshotData.snapshots[exchange];
@@ -402,7 +402,7 @@ export function DebugTab() {
                   );
                 })}
                 <div className="flex justify-between">
-                  <span className="text-muted">Investor Rankings:</span>
+                  <span className="text-muted">Investor rankings:</span>
                   {snapshotData.snapshots.investorRanking ? (
                     <span className="text-green-400">
                       Turn {snapshotData.snapshots.investorRanking.turn},{" "}
@@ -419,7 +419,7 @@ export function DebugTab() {
             {snapshotData.sampleCorporations.length > 0 && (
               <div className="rounded border border-card-border/50 p-3">
                 <h4 className="mb-2 text-sm font-medium">
-                  Sample Corporations ({snapshotData.sampleCorporations.length})
+                  Sample corporations ({snapshotData.sampleCorporations.length})
                 </h4>
                 <div className="max-h-48 overflow-y-auto text-xs">
                   {snapshotData.sampleCorporations.map((corp) => (
@@ -444,7 +444,7 @@ export function DebugTab() {
       </div>
 
       <div className="rounded-lg border border-card-border bg-card p-6">
-        <h2 className="mb-4 text-lg font-semibold">NPP Election Entry Diagnostics</h2>
+        <h2 className="mb-4 text-lg font-semibold">NPP election entry diagnostics</h2>
         <p className="mb-4 text-sm text-muted">
           Run diagnostics to understand why NPPs may not be entering primaries. This checks game
           time vs real time, open primaries, NPP availability, and state matching.
@@ -456,7 +456,7 @@ export function DebugTab() {
             disabled={loading}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
-            {loading ? "Running..." : "Run NPP Entry Debug"}
+            {loading ? "Running..." : "Run NPP entry debug"}
           </button>
 
           {data && (
@@ -478,7 +478,7 @@ export function DebugTab() {
 
       {/* Clear Cooldowns */}
       <div className="rounded-lg border border-card-border bg-card p-6">
-        <h2 className="mb-4 text-lg font-semibold">Clear NPP Cooldowns</h2>
+        <h2 className="mb-4 text-lg font-semibold">Clear NPP cooldowns</h2>
         <p className="mb-4 text-sm text-muted">
           If NPPs are blocked from entering primaries due to stale cooldowns, clear them here. This
           removes all election-specific cooldowns from NPP records, allowing them to enter any open
@@ -490,7 +490,7 @@ export function DebugTab() {
           disabled={clearingCooldowns}
           className="rounded-md bg-yellow-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-yellow-700 disabled:opacity-50"
         >
-          {clearingCooldowns ? "Clearing..." : "Clear All NPP Cooldowns"}
+          {clearingCooldowns ? "Clearing..." : "Clear all NPP cooldowns"}
         </button>
 
         {cooldownResult && (
@@ -502,7 +502,7 @@ export function DebugTab() {
 
       {/* Vacate Primaries */}
       <div className="rounded-lg border border-card-border bg-card p-6">
-        <h2 className="mb-4 text-lg font-semibold">Vacate NPP Primaries</h2>
+        <h2 className="mb-4 text-lg font-semibold">Vacate NPP primaries</h2>
         <p className="mb-4 text-sm text-muted">
           Withdraw all NPPs from active primaries. Use this after fixing eligibility bugs so NPPs
           can re-enter based on the updated rules (country/region restrictions, incumbent priority,
@@ -514,7 +514,7 @@ export function DebugTab() {
           disabled={vacatingPrimaries}
           className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
         >
-          {vacatingPrimaries ? "Withdrawing..." : "Vacate All NPP Primaries"}
+          {vacatingPrimaries ? "Withdrawing..." : "Vacate all NPP primaries"}
         </button>
 
         {vacateResult && (
@@ -527,7 +527,7 @@ export function DebugTab() {
 
       {/* Re-enter Primaries */}
       <div className="rounded-lg border border-card-border bg-card p-6">
-        <h2 className="mb-4 text-lg font-semibold">Re-enter NPP Primaries</h2>
+        <h2 className="mb-4 text-lg font-semibold">Re-enter NPP primaries</h2>
         <p className="mb-4 text-sm text-muted">
           Force NPPs to enter open primaries now based on current eligibility rules (country/region
           restrictions, incumbent priority, party slots). This runs the same entry logic as the turn
@@ -540,7 +540,7 @@ export function DebugTab() {
             disabled={reenteringPrimaries}
             className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
           >
-            {reenteringPrimaries ? "Processing..." : "Re-enter NPP Primaries"}
+            {reenteringPrimaries ? "Processing..." : "Re-enter NPP primaries"}
           </button>
           <label className="flex items-center gap-2 text-sm text-muted">
             <input
@@ -568,23 +568,23 @@ export function DebugTab() {
             <h3 className="mb-3 font-semibold">Timestamps</h3>
             <div className="grid gap-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted">Real Time:</span>
+                <span className="text-muted">Real time:</span>
                 <span className="font-mono">{data.timestamps.realNow}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted">Game Time:</span>
+                <span className="text-muted">Game time:</span>
                 <span className="font-mono">{data.timestamps.gameNow}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted">Last Turn Processed:</span>
+                <span className="text-muted">Last turn processed:</span>
                 <span className="font-mono">{data.timestamps.lastTurnProcessed}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted">Current Turn:</span>
+                <span className="text-muted">Current turn:</span>
                 <span>{data.timestamps.currentTurn}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted">Turn System Active:</span>
+                <span className="text-muted">Turn system active:</span>
                 <span className={data.timestamps.isActive ? "text-green-400" : "text-yellow-400"}>
                   {data.timestamps.isActive ? "Yes" : "No"}
                 </span>
@@ -597,7 +597,7 @@ export function DebugTab() {
             <h3 className="mb-3 font-semibold">Summary</h3>
             <div className="grid gap-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted">Open Primaries:</span>
+                <span className="text-muted">Open primaries:</span>
                 <span
                   className={data.summary.openPrimaries === 0 ? "text-red-400" : "text-green-400"}
                 >
@@ -605,11 +605,11 @@ export function DebugTab() {
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted">All Active Elections:</span>
+                <span className="text-muted">All active elections:</span>
                 <span>{data.summary.allActiveElections}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted">Active Elections with Expired Primary:</span>
+                <span className="text-muted">Active elections with expired primary:</span>
                 <span className="text-yellow-400">
                   {data.summary.activeElectionsWithExpiredPrimary}
                 </span>
@@ -619,11 +619,11 @@ export function DebugTab() {
                 <span>{data.summary.totalNPPs}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted">NPPs Already in Candidacies:</span>
+                <span className="text-muted">NPPs already in candidacies:</span>
                 <span>{data.summary.nppsAlreadyInCandidacies}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted">Matching States:</span>
+                <span className="text-muted">Matching states:</span>
                 <span
                   className={data.summary.matchingStates === 0 ? "text-red-400" : "text-green-400"}
                 >
@@ -634,13 +634,13 @@ export function DebugTab() {
 
             <div className="mt-4 space-y-2 text-sm">
               <div>
-                <span className="text-muted">Election States: </span>
+                <span className="text-muted">Election states: </span>
                 <span className="font-mono text-xs">
                   {data.summary.electionStates.join(", ") || "(none)"}
                 </span>
               </div>
               <div>
-                <span className="text-muted">NPP Home States: </span>
+                <span className="text-muted">NPP home states: </span>
                 <span className="font-mono text-xs">
                   {data.summary.nppHomeStates.join(", ") || "(none)"}
                 </span>
@@ -651,15 +651,15 @@ export function DebugTab() {
           {/* Sample Primaries */}
           {data.samplePrimaries.length > 0 && (
             <div className="rounded-lg border border-card-border bg-card p-6">
-              <h3 className="mb-3 font-semibold">Sample Open Primaries</h3>
+              <h3 className="mb-3 font-semibold">Sample open primaries</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-card-border text-left text-muted">
                       <th className="pb-2">Type</th>
                       <th className="pb-2">State</th>
-                      <th className="pb-2">Primary Ends</th>
-                      <th className="pb-2">Election Ends</th>
+                      <th className="pb-2">Primary ends</th>
+                      <th className="pb-2">Election ends</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -681,7 +681,7 @@ export function DebugTab() {
           {data.sampleAnalysis && (
             <div className="rounded-lg border border-card-border bg-card p-6">
               <h3 className="mb-3 font-semibold">
-                Sample State Analysis: {data.sampleAnalysis.state}
+                Sample state analysis: {data.sampleAnalysis.state}
               </h3>
               <div className="mb-4 text-sm">
                 <span className="text-muted">NPPs in state: </span>
@@ -689,7 +689,7 @@ export function DebugTab() {
               </div>
 
               <div className="mb-4">
-                <span className="text-sm text-muted">Party Counts:</span>
+                <span className="text-sm text-muted">Party counts:</span>
                 <div className="mt-1 flex flex-wrap gap-2">
                   {Object.entries(data.sampleAnalysis.partyCounts).map(([party, count]) => (
                     <span key={party} className="rounded bg-card-hover px-2 py-1 text-xs font-mono">
@@ -729,7 +729,7 @@ export function DebugTab() {
           {data.entrySimulation && (
             <div className="rounded-lg border border-card-border bg-card p-6">
               <h3 className="mb-3 font-semibold">
-                Entry Simulation: {data.entrySimulation.party} in {data.entrySimulation.state}
+                Entry simulation: {data.entrySimulation.party} in {data.entrySimulation.state}
               </h3>
               <p className="mb-4 text-sm text-muted">
                 Step-by-step trace of why an NPP would or would not enter the first available
@@ -765,7 +765,7 @@ export function DebugTab() {
 
               {data.entrySimulation.sampleNPPs.length > 0 && (
                 <div>
-                  <h4 className="mb-2 text-sm font-medium">Sample Available NPPs:</h4>
+                  <h4 className="mb-2 text-sm font-medium">Sample available NPPs:</h4>
                   <div className="space-y-2">
                     {data.entrySimulation.sampleNPPs.map((npp) => (
                       <div

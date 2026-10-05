@@ -4,7 +4,7 @@ import Image from "next/image";
 import { getDb } from "@/lib/mongodb";
 
 export const metadata: Metadata = {
-  title: "Random Events | Wiki | A House Divided",
+  title: "Random events | wiki | A House Divided",
   description:
     "Every random event in A House Divided — browse hero images, eligibility, and how each event plays out.",
 };
@@ -53,11 +53,11 @@ export default async function RandomEventsWikiPage() {
           Wiki
         </Link>
         <span>/</span>
-        <span className="text-foreground">Random Events</span>
+        <span className="text-foreground">Random events</span>
       </nav>
 
       <header className="mb-8 border-b border-card-border pb-6">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Random Events</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Random events</h1>
         <p className="mt-3 max-w-2xl text-muted">
           Each turn, eligible characters may receive a random event from the PREE (Player Random
           Event Engine). Events are weighted by eligibility — some require holding office, running a
@@ -70,7 +70,7 @@ export default async function RandomEventsWikiPage() {
         <div className="rounded-xl border border-dashed border-card-border bg-card/40 p-12 text-center">
           <p className="font-medium text-muted">No approved events found.</p>
           <p className="mt-1 text-sm text-muted">
-            Run <strong>Reseed &amp; Approve All</strong> from Admin → World → Random Events to
+            Run <strong>Reseed &amp; approve all</strong> from Admin → World → Random Events to
             populate this page.
           </p>
         </div>

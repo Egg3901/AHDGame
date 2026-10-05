@@ -277,7 +277,7 @@ function CurrencyDetailInner({ params }: { params: Promise<{ code: string; curre
                     className="rounded-md shadow-lg"
                   />
                   <div>
-                    <p className="text-xs text-white/70 italic mb-0.5">Currency Exchange</p>
+                    <p className="text-xs text-white/70 italic mb-0.5">Currency exchange</p>
                     <h1 className="text-xl font-bold text-white drop-shadow-md sm:text-3xl tabular-nums">
                       {sym} {currencyCode}
                     </h1>

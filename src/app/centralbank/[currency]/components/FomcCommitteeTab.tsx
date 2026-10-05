@@ -518,7 +518,7 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
       )}
 
       {/* Board roster */}
-      <CentralBankSection title="Board of Governors">
+      <CentralBankSection title="Board of governors">
         <ul className="max-w-2xl divide-y divide-card-border/60">
           {board.map((seat) => (
             <li key={seat.seatId} className="flex items-center gap-3 py-2.5">

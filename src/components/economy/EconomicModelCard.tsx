@@ -70,9 +70,7 @@ export function EconomicModelCard({ countryId, regionId, scopeLabel }: EconomicM
   if (state === "loading" || !model) {
     return (
       <div className="rounded-xl border border-card-border bg-card p-4">
-        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-          {heading}
-        </div>
+        <div className="text-body-sm font-medium text-muted">{heading}</div>
         <div className="mt-2 h-5 w-40 animate-pulse rounded bg-card-muted" />
       </div>
     );
@@ -82,7 +80,7 @@ export function EconomicModelCard({ countryId, regionId, scopeLabel }: EconomicM
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4">
-      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">{heading}</div>
+      <div className="text-body-sm font-medium text-muted">{heading}</div>
 
       <div className="mt-1 flex items-baseline justify-between gap-3">
         <h3 className="text-lg font-bold text-foreground">{model.currentName}</h3>
@@ -120,9 +118,7 @@ export function EconomicModelCard({ countryId, regionId, scopeLabel }: EconomicM
 
       {model.drivers && (
         <div className="mt-3 space-y-1 border-t border-card-border pt-3">
-          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">
-            What&apos;s driving this
-          </div>
+          <div className="text-body-sm font-medium text-muted">What&apos;s driving this</div>
           <DriverBar label="Sectors" value={model.drivers.sector} />
           <DriverBar label="Spending" value={model.drivers.spend} />
           <DriverBar label="Laws" value={model.drivers.law} />

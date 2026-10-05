@@ -166,7 +166,7 @@ function CoverageSummary({ coverage }: { coverage: PartyAnalyticsSlateCoverageIt
   if (!coverage) {
     return (
       <div className="rounded-xl border border-card-border bg-card p-4">
-        <h3 className="text-sm font-semibold text-foreground">Coverage Summary</h3>
+        <h3 className="text-sm font-semibold text-foreground">Coverage summary</h3>
         <p className="mt-4 text-sm text-muted">
           No active local races are on the Slate board right now.
         </p>
@@ -179,7 +179,7 @@ function CoverageSummary({ coverage }: { coverage: PartyAnalyticsSlateCoverageIt
     <div className="rounded-xl border border-card-border bg-card p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-foreground">Coverage Summary</h3>
+          <h3 className="text-sm font-semibold text-foreground">Coverage summary</h3>
           <p className="mt-1 text-body-sm text-muted">{coverage.state}</p>
         </div>
         <Badge color={uncovered > 0 ? "warning" : "success"}>
@@ -187,10 +187,10 @@ function CoverageSummary({ coverage }: { coverage: PartyAnalyticsSlateCoverageIt
         </Badge>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryMetric label="Active Races" value={coverage.totalRaces} />
+        <SummaryMetric label="Active races" value={coverage.totalRaces} />
         <SummaryMetric label="Covered" value={coverage.coveredRaces} tone="success" />
         <SummaryMetric label="Filed" value={coverage.filedRaces} tone="secondary" />
-        <SummaryMetric label="Likely Declines" value={coverage.likelyDeclines} tone="warning" />
+        <SummaryMetric label="Likely declines" value={coverage.likelyDeclines} tone="warning" />
       </div>
     </div>
   );
@@ -333,37 +333,37 @@ export function StatePartyAnalyticsTab({
         />
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
           <SummaryMetric
-            label="Low Loyalty"
+            label="Low loyalty"
             value={data.discipline.lowLoyaltyCount}
             tone="warning"
           />
           <SummaryMetric
-            label="Likely Whip Breakers"
+            label="Likely whip breakers"
             value={data.discipline.likelyWhipBreakers}
             tone="error"
           />
           <SummaryMetric
-            label="Caution Pool"
+            label="Caution pool"
             value={data.discipline.cautionCount}
             tone="secondary"
           />
           <SummaryMetric
-            label="Active Defiance"
+            label="Active defiance"
             value={data.discipline.activeDefianceCount}
             tone="error"
           />
           <SummaryMetric
-            label="Caucus Risk"
+            label="Caucus risk"
             value={data.discipline.caucusRiskCount}
             tone="warning"
           />
           <SummaryMetric
-            label="Critical Risk"
+            label="Critical risk"
             value={data.discipline.criticalRiskCount}
             tone="error"
           />
           <SummaryMetric
-            label="Elevated Risk"
+            label="Elevated risk"
             value={data.discipline.elevatedRiskCount}
             tone="secondary"
           />
@@ -381,24 +381,24 @@ export function StatePartyAnalyticsTab({
         </div>
         <div className="grid gap-4 md:grid-cols-3">
           <SummaryMetric
-            label="Players Defying"
+            label="Players defying"
             value={data.discipline.playerDefianceCount}
             tone="warning"
           />
           <SummaryMetric
-            label="NPPs Defying"
+            label="NPPs defying"
             value={data.discipline.nppDefianceCount}
             tone="error"
           />
           <SummaryMetric
-            label="Whip Room Watch"
+            label="Whip room watch"
             value={data.discipline.activeDefianceCount > 0 ? "Attention" : "Clear"}
             tone={data.discipline.activeDefianceCount > 0 ? "warning" : "success"}
           />
         </div>
         <div className="grid gap-4 xl:grid-cols-3">
           <div className="rounded-xl border border-card-border bg-card p-4">
-            <h3 className="text-sm font-semibold text-foreground">Discipline Watch</h3>
+            <h3 className="text-sm font-semibold text-foreground">Discipline watch</h3>
             <div className="mt-4 space-y-3">
               {data.discipline.disciplineWatch.length === 0 ? (
                 <p className="text-sm text-muted">
@@ -412,7 +412,7 @@ export function StatePartyAnalyticsTab({
             </div>
           </div>
           <div className="rounded-xl border border-card-border bg-card p-4">
-            <h3 className="text-sm font-semibold text-foreground">Stubbornness Risk</h3>
+            <h3 className="text-sm font-semibold text-foreground">Stubbornness risk</h3>
             <div className="mt-4 space-y-3">
               {data.discipline.highStubbornness.length === 0 ? (
                 <p className="text-sm text-muted">
@@ -426,7 +426,7 @@ export function StatePartyAnalyticsTab({
             </div>
           </div>
           <div className="rounded-xl border border-card-border bg-card p-4">
-            <h3 className="text-sm font-semibold text-foreground">Caucus Exit Risk</h3>
+            <h3 className="text-sm font-semibold text-foreground">Caucus exit risk</h3>
             <div className="mt-4 space-y-3">
               {data.discipline.caucusRisk.length === 0 ? (
                 <p className="text-sm text-muted">
@@ -449,16 +449,16 @@ export function StatePartyAnalyticsTab({
           link={data.links.slate}
         />
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 xl:grid-cols-5">
-          <SummaryMetric label="Active Races" value={data.slate.activeRaceCount} />
-          <SummaryMetric label="No Coverage" value={data.slate.uncoveredRaceCount} tone="warning" />
+          <SummaryMetric label="Active races" value={data.slate.activeRaceCount} />
+          <SummaryMetric label="No coverage" value={data.slate.uncoveredRaceCount} tone="warning" />
           <SummaryMetric
-            label="Awaiting Resolution"
+            label="Awaiting resolution"
             value={data.slate.awaitingResolutionCount}
             tone="secondary"
           />
           <SummaryMetric label="Filed" value={data.slate.filedCount} tone="success" />
           <SummaryMetric
-            label="Likely Declines"
+            label="Likely declines"
             value={data.slate.likelyDeclineCount}
             tone="warning"
           />
@@ -477,7 +477,7 @@ export function StatePartyAnalyticsTab({
         <CoverageSummary coverage={data.slate.coverage} />
         <div className="grid gap-4 xl:grid-cols-2">
           <div className="rounded-xl border border-card-border bg-card p-4">
-            <h3 className="text-sm font-semibold text-foreground">Open Races</h3>
+            <h3 className="text-sm font-semibold text-foreground">Open races</h3>
             <div className="mt-4 space-y-3">
               {data.slate.noCoverage.length === 0 ? (
                 <p className="text-sm text-muted">
@@ -491,7 +491,7 @@ export function StatePartyAnalyticsTab({
             </div>
           </div>
           <div className="rounded-xl border border-card-border bg-card p-4">
-            <h3 className="text-sm font-semibold text-foreground">Likely Declines</h3>
+            <h3 className="text-sm font-semibold text-foreground">Likely declines</h3>
             <div className="mt-4 space-y-3">
               {data.slate.atRiskAssignments.length === 0 ? (
                 <p className="text-sm text-muted">

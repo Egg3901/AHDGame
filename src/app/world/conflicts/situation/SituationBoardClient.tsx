@@ -154,7 +154,7 @@ export function SituationBoardClient({
               >
                 Back a side with your bloc&apos;s combat power. What{" "}
                 <Link href="/world/conflicts/combat" style={{ color: FRS }}>
-                  Combat Command ▸
+                  Combat command ▸
                 </Link>{" "}
                 commits to each front decides the front line — and how far the superpowers escalate.
               </p>

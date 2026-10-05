@@ -360,9 +360,7 @@ function MemberActionDialog({
       <h3 className={`mb-4 text-base font-semibold ${destructive ? "text-red-400" : ""}`}>
         {title}
       </h3>
-      <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
-        Member
-      </label>
+      <label className="mb-1.5 block text-body-sm font-medium text-muted">Member</label>
       <select
         value={selectedId}
         onChange={(e) => setSelectedId(e.target.value)}

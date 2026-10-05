@@ -220,7 +220,7 @@ export function ResourceGrantManager({ context = "admin" }: ResourceGrantManager
         {/* Resource Inputs */}
         <div className="mb-6 grid gap-4 sm:grid-cols-3">
           <div>
-            <label className="mb-2 block text-sm font-medium">Action Points</label>
+            <label className="mb-2 block text-sm font-medium">Action points</label>
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -254,7 +254,7 @@ export function ResourceGrantManager({ context = "admin" }: ResourceGrantManager
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium">Campaign Funds (₳)</label>
+            <label className="mb-2 block text-sm font-medium">Campaign funds (₳)</label>
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -292,7 +292,7 @@ export function ResourceGrantManager({ context = "admin" }: ResourceGrantManager
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium">Cash on Hand (₳)</label>
+            <label className="mb-2 block text-sm font-medium">Cash on hand (₳)</label>
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -384,7 +384,7 @@ export function ResourceGrantManager({ context = "admin" }: ResourceGrantManager
       {!grantToAll && (
         <div className="rounded-xl border border-card-border bg-card p-6">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Select Players</h3>
+            <h3 className="text-lg font-semibold">Select players</h3>
             <span className="text-sm text-muted">
               {selectedIds.size} of {filteredCharacters.length} selected
             </span>
@@ -411,7 +411,7 @@ export function ResourceGrantManager({ context = "admin" }: ResourceGrantManager
               onChange={handleSelectAll}
               className="h-4 w-4 rounded border-gray-600 bg-gray-700"
             />
-            <span className="text-sm font-medium">Select All Visible</span>
+            <span className="text-sm font-medium">Select all visible</span>
           </div>
 
           {/* Player List */}

@@ -108,7 +108,7 @@ export function AdminRegistrationPanel() {
             </svg>
           </div>
           <div>
-            <h3 className="text-sm font-semibold">Admin Registration</h3>
+            <h3 className="text-sm font-semibold">Admin registration</h3>
             <p className="text-xs text-muted">
               {isEnabled
                 ? "Anyone with the admin key can register as an admin"
@@ -207,8 +207,8 @@ export function AdminRegistrationPanel() {
         {toggling
           ? "Updating..."
           : isEnabled
-            ? "Close Admin Registration"
-            : "Open Admin Registration"}
+            ? "Close admin registration"
+            : "Open admin registration"}
       </button>
     </div>
   );

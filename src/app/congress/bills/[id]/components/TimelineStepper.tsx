@@ -99,7 +99,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-1">
-      <h3 className="text-sm font-semibold mb-4">Legislative Timeline</h3>
+      <h3 className="text-sm font-semibold mb-4">Legislative timeline</h3>
       <div className="relative">
         {steps.map((step, i) => {
           const date = bill[step.dateField as keyof BillDetail] as string | null;
@@ -235,7 +235,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                     <p
                       className={`text-xs font-medium ${isActive ? "text-amber-400" : isPast ? "text-foreground" : "text-muted"}`}
                     >
-                      Override Vote
+                      Override vote
                     </p>
                     {bill.overrideVotingEndsAt && isActive && (
                       <p className="text-[10px] text-muted mt-0.5">
@@ -254,7 +254,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                   ✗
                 </div>
                 <div className="flex-1 pt-0.5">
-                  <p className="text-xs font-medium text-error">Veto Sustained</p>
+                  <p className="text-xs font-medium text-error">Veto sustained</p>
                   {bill.overrideFailedAt && (
                     <p className="text-[10px] text-muted mt-0.5">
                       <GameMonthTime value={bill.overrideFailedAt} />
@@ -271,7 +271,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                   ✓
                 </div>
                 <div className="flex-1 pt-0.5">
-                  <p className="text-xs font-medium text-emerald-400">Enacted (Override)</p>
+                  <p className="text-xs font-medium text-emerald-400">Enacted (override)</p>
                   {bill.overrideEnactedAt && (
                     <p className="text-[10px] text-muted mt-0.5">
                       <GameMonthTime value={bill.overrideEnactedAt} />
@@ -298,7 +298,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                 ✗
               </div>
               <div className="flex-1 pt-0.5">
-                <p className="text-xs font-medium text-error">Sangiin Rejected</p>
+                <p className="text-xs font-medium text-error">Sangiin rejected</p>
                 {bill.otherChamberVotingEndsAt && (
                   <p className="text-[10px] text-muted mt-0.5">
                     <GameMonthTime value={bill.otherChamberVotingEndsAt} />
@@ -332,7 +332,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                     <p
                       className={`text-xs font-medium ${isActive ? "text-amber-400" : isPast ? "text-foreground" : "text-muted"}`}
                     >
-                      Shugiin Override Vote (2/3)
+                      Shugiin override vote (2/3)
                     </p>
                     {bill.votingEndsAt && isActive && (
                       <p className="text-[10px] text-muted mt-0.5">
@@ -351,7 +351,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                   ✗
                 </div>
                 <div className="flex-1 pt-0.5">
-                  <p className="text-xs font-medium text-error">Override Failed</p>
+                  <p className="text-xs font-medium text-error">Override failed</p>
                   {bill.failedAt && (
                     <p className="text-[10px] text-muted mt-0.5">
                       <GameMonthTime value={bill.failedAt} />
@@ -368,7 +368,7 @@ export function TimelineStepper({ bill }: { bill: BillDetail }) {
                   ✓
                 </div>
                 <div className="flex-1 pt-0.5">
-                  <p className="text-xs font-medium text-emerald-400">Enacted (Override)</p>
+                  <p className="text-xs font-medium text-emerald-400">Enacted (override)</p>
                   {bill.enactedAt && (
                     <p className="text-[10px] text-muted mt-0.5">
                       <GameMonthTime value={bill.enactedAt} />

@@ -73,7 +73,7 @@ export function PresidentialElectoralMap({
     <div className="rounded-xl border border-card-border bg-card p-3 sm:p-6 overflow-hidden shadow-panel">
       {evSorted.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-4 px-2">
-          <span className="text-xs text-muted uppercase tracking-wider">
+          <span className="text-body-sm font-medium text-muted">
             Electoral votes — who&apos;s leading:
           </span>
           {evSorted.map(([candidateId, ev], i) => {
@@ -124,7 +124,7 @@ export function PresidentialElectoralMap({
       )}
       {legendEntries.size > 0 && (
         <div className="mt-4 flex flex-wrap items-center gap-3 px-2">
-          <span className="text-xs text-muted uppercase tracking-wider">Legend:</span>
+          <span className="text-body-sm font-medium text-muted">Legend:</span>
           {[...legendEntries.entries()].map(([label, color]) => (
             <div key={label} className="flex items-center gap-1.5">
               <span

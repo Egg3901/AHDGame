@@ -8,19 +8,19 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 const presets = [
   {
     id: "1991-default",
-    name: "1991 Start Date - Default Parties",
+    name: "1991 Start date - Default parties",
     description: "1991 data",
     countries: ["US"],
   },
   {
     id: "2019-default",
-    name: "2019 Start Date - Default Parties",
+    name: "2019 Start date - Default parties",
     description: "2019 data",
     countries: ["US"],
   },
   {
     id: "2019-no-parties",
-    name: "2019 Start Date - No Parties",
+    name: "2019 Start date - No Parties",
     description: "No parties",
     countries: [],
   },
@@ -72,7 +72,7 @@ describe("1991 no starting parties picker", () => {
     expect(
       screen.getByText(/Background countries keep their modeled parties and governments/)
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Reset + No Parties" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset + no parties" }));
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(requests[0].url).toContain("preset=1991-default");
     expect(requests[0].body.startingParties).toBe("none");
@@ -85,8 +85,8 @@ describe("1991 no starting parties picker", () => {
   it("switches back to default parties without carrying over the empty-party choice", async () => {
     await pick1991();
     fireEvent.click(screen.getByRole("button", { name: "No Parties" }));
-    fireEvent.click(screen.getByRole("button", { name: "Default Parties" }));
-    fireEvent.click(screen.getByRole("button", { name: "Reset + Historical" }));
+    fireEvent.click(screen.getByRole("button", { name: "Default parties" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset + historical" }));
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(requests[0].body.startingParties).toBe("default");
   });
@@ -95,7 +95,7 @@ describe("1991 no starting parties picker", () => {
     await pick1991();
     fireEvent.click(screen.getByRole("button", { name: "No Parties" }));
     fireEvent.click(screen.getByRole("button", { name: "2019" }));
-    fireEvent.click(screen.getByRole("button", { name: "Reset + Historical" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset + historical" }));
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(requests[0].url).toContain("preset=2019-no-parties");
     expect(requests[0].body.startingParties).toBeUndefined();
@@ -110,7 +110,7 @@ describe("1991 no starting parties picker", () => {
       },
     };
     await pick1991();
-    fireEvent.click(screen.getByRole("button", { name: "Reset + Historical" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset + historical" }));
     const message = await screen.findByText(/Reset completed with blocked readiness/);
     expect(message.textContent).toContain("partyRoster.RU: missing roster");
     expect(message.className).toContain("text-red-400");

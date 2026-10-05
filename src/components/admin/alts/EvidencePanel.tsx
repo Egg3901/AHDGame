@@ -56,9 +56,7 @@ export function EvidencePanel({
   return (
     <div className="space-y-2">
       <div className="mb-2 flex items-baseline justify-between gap-3">
-        <h4 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
-          Evidence by pair
-        </h4>
+        <h4 className="text-body-sm font-medium text-muted">Evidence by pair</h4>
         <span className="text-xs text-muted">
           {links.length} link{links.length === 1 ? "" : "s"}
           {isAdmin ? " · un-redacted (admin)" : " · network details masked"}

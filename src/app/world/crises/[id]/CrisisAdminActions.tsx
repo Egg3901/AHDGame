@@ -41,7 +41,7 @@ export default function CrisisAdminActions({
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-amber-500">Admin</span>
+      <span className="text-body-sm font-medium text-amber-500">Admin</span>
       {status === "active" ? (
         <button
           onClick={resolve}

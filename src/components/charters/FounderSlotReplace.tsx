@@ -127,7 +127,7 @@ export function FounderSlotReplace({
                 className="flex w-full items-center justify-between rounded-md border border-card-border bg-card px-3 py-2 text-left text-sm hover:border-primary/50 disabled:opacity-50"
               >
                 <span className="font-medium">{r.name}</span>
-                <span className="text-[10px] uppercase tracking-wide text-muted">
+                <span className="text-body-sm font-medium text-muted">
                   {r.username ?? r.homeState ?? ""}
                 </span>
               </button>
