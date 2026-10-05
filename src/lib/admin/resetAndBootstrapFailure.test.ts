@@ -197,6 +197,75 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
     );
   });
 
+  it("clears embedded macro runtime channels and national rollups after teardown and before bootstrap", async () => {
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
+    const order: string[] = [];
+    vi.mocked(resetGameWorld).mockImplementation(async () => {
+      order.push("teardown");
+      return okTeardown as never;
+    });
+    db.collection("macroMetrics").updateMany.mockImplementation(async () => {
+      order.push("clear-macro-runtime");
+      return { modifiedCount: 81 } as never;
+    });
+    db.collection("macroMetrics").deleteMany.mockImplementation(async () => {
+      order.push("delete-national-rollups");
+      return { deletedCount: 9 } as never;
+    });
+    vi.mocked(bootstrapGameWorld).mockImplementation(async () => {
+      order.push("bootstrap");
+      return {} as never;
+    });
+
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    const result = await resetAndBootstrapGameWorld({
+      db: db as unknown as Db,
+      preset: "1991-default",
+      resetReference: false,
+      startingParties: "none",
+    });
+
+    expect(order).toEqual([
+      "teardown",
+      "clear-macro-runtime",
+      "delete-national-rollups",
+      "bootstrap",
+    ]);
+    expect(db.collectionMocks.macroMetrics?.updateMany).toHaveBeenCalledOnce();
+    expect(db.collectionMocks.macroMetrics?.deleteMany).toHaveBeenCalledWith({
+      _id: { $in: expect.arrayContaining(["federal", "uk_national", "su_national"]) },
+    });
+    expect(result.logs.join(" ")).toContain("removed 9 derived national rollup(s)");
+  });
+
+  it("aborts before bootstrap when macro runtime cleanup fails", async () => {
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
+    const order: string[] = [];
+    vi.mocked(resetGameWorld).mockImplementation(async () => {
+      order.push("teardown");
+      return okTeardown as never;
+    });
+    db.collection("macroMetrics").updateMany.mockImplementation(async () => {
+      order.push("clear-macro-runtime");
+      throw new Error("macro cleanup failed");
+    });
+
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    await expect(
+      resetAndBootstrapGameWorld({
+        db: db as unknown as Db,
+        preset: "1991-default",
+        startingParties: "none",
+      })
+    ).rejects.toThrow("macro cleanup failed");
+
+    expect(order).toEqual(["teardown", "clear-macro-runtime"]);
+    expect(vi.mocked(bootstrapGameWorld)).not.toHaveBeenCalled();
+    expect(closeUpdate().$set["resetRun.status"]).toBe("failed");
+  });
+
   it("preserves unowned markets when reset does not request a 1991 reference rebuild", async () => {
     const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
     await resetAndBootstrapGameWorld({

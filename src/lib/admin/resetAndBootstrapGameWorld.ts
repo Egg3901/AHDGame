@@ -65,6 +65,7 @@ import {
 import { getValidatedEnv } from "@/lib/env";
 import { assertResetDatabaseMatchesApplication } from "@/lib/admin/resetPreflight";
 import { resetPoliticalMetricsRuntimeState } from "@/lib/admin/seed/resetPoliticalMetricsRuntimeState";
+import { resetMacroMetricsRuntimeState } from "@/lib/admin/seed/resetMacroMetricsRuntimeState";
 
 export interface ResetAndBootstrapOptions {
   /** 1991 only: leave political offices vacant for player-created parties. */
@@ -313,6 +314,11 @@ export async function resetAndBootstrapGameWorld(
     const politicalRuntimeFieldsCleared = await resetPoliticalMetricsRuntimeState(db);
     collect(
       `Cleared embedded political runtime fields from ${politicalRuntimeFieldsCleared} region(s)`
+    );
+    const macroRuntimeReset = await resetMacroMetricsRuntimeState(db);
+    collect(
+      `Cleared embedded macro runtime fields from ${macroRuntimeReset.documentsModified} row(s); ` +
+        `removed ${macroRuntimeReset.nationalRollupsDeleted} derived national rollup(s)`
     );
 
     // 2) BUILD. `seedOnly` short-circuits before election + officials spawn.
