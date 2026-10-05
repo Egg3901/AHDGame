@@ -186,7 +186,8 @@ export interface CorporationDetail {
   ceoSalary: number;
   brandColor?: string;
   marketingStrength: number;
-  marketingStrengthGrowth: number;
+  /** Absent for outside viewers of a private corporation (redacted). */
+  marketingStrengthGrowth?: number;
   /**
    * Brand loyalty (Package A) player-facing 5-label scale. Present for everyone
    * when the feature is on for this corp; absent ⇒ hide the indicator. The RAW
@@ -201,10 +202,12 @@ export interface CorporationDetail {
   averageQuality?: number;
   logisticsBudget: number;
   logisticsStrength: number;
-  logisticsStrengthNetChange: number;
+  /** Absent for outside viewers of a private corporation (redacted). */
+  logisticsStrengthNetChange?: number;
   rdBudget: number;
   rdScore: number;
-  rdScoreNetChange: number;
+  /** Absent for outside viewers of a private corporation (redacted). */
+  rdScoreNetChange?: number;
   marketCapitalization: number;
   logoUrl?: string;
   headerImageUrl?: string;
