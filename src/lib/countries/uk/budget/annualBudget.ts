@@ -9,7 +9,7 @@ import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
 import { budgetKeyForLaw } from "@/lib/politicalLegislation/budgetKeys";
 import { applyEraRevenueCap } from "@/lib/budget/revenue";
 import { getEraContext } from "@/lib/era/context";
-import { programCostScaleOrDefault } from "@/lib/politicalLegislation/programCostScale";
+import { programCostScaleForLaw } from "@/lib/politicalLegislation/programCostScale";
 
 export interface AnnualBudgetMeasures {
   /** Political-law id to the Chancellor's target effective rate. */
@@ -162,7 +162,7 @@ export async function previewAnnualBudget(
     if (!law?.levels || law.kind === "tax") continue;
     const currentLevel = currentLevels.get(lawId) ?? law.baselineLevel ?? 0;
     if (currentLevel === targetLevel) continue;
-    const scale = programCostScaleOrDefault(budget.programCostScaleBaseline);
+    const scale = programCostScaleForLaw(budget, law);
     const currentFiscal = computeLawCost(law.levels[currentLevel], fiscalBase, "UK", null, scale);
     const targetFiscal = computeLawCost(law.levels[targetLevel], fiscalBase, "UK", null, scale);
     const costDelta = targetFiscal.cost - currentFiscal.cost;
