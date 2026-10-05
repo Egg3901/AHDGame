@@ -33,7 +33,9 @@ import {
 } from "./nationalPartyElectionNotifications";
 import { applyOptionalCountryScope } from "./nationalPartyElectionScope";
 
-export { applyQuorumAcceleration } from "./nationalPartyQuorum";
+import { applyQuorumAcceleration } from "./nationalPartyQuorum";
+
+export { applyQuorumAcceleration };
 
 export {
   notifyNationalLeadershipAppointed,

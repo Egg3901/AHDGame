@@ -1,4 +1,5 @@
 import type { CommodityType } from "./commodities";
+import type { MediaOperatingModelId } from "@/lib/mediaOperatingModels/catalog";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 

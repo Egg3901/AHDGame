@@ -40,7 +40,7 @@
  *   (`scripts/heal-*`, etc.). Never part of the normal bootstrap or reset
  *   path.
  */
-import type { CollectionEntry } from "./seedManifestTypes";
+import type { CollectionCategory, CollectionEntry } from "./seedManifestTypes";
 import { RUNTIME } from "./seedManifestRuntime";
 import { PRESERVED } from "./seedManifestPreserved";
 

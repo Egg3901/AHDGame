@@ -1,7 +1,7 @@
-import { ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { createNotification, createNotifications } from "@/lib/notifications";
-import type { NationalPartyElectionPosition, Character } from "@/lib/db/types";
+import type { NationalPartyElectionPosition, Character, PoliticalParty } from "@/lib/db/types";
 import { type CountryId } from "@/lib/constants/countries";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
 
