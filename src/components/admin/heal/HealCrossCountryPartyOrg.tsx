@@ -56,7 +56,7 @@ export function HealCrossCountryPartyOrg() {
     try {
       const res = await fetch("/api/admin/heal/cross-country-party-org", { method: "POST" });
       const data = await res.json();
-      setResult({ ok: res.ok, message: data.message ?? data.error ?? "Unknown response" });
+      setResult({ ok: res.ok, message: data.message ?? apiErrorText(data, "Unknown response") });
     } catch {
       setResult({ ok: false, message: "Network error" });
     } finally {

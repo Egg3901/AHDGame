@@ -24,6 +24,28 @@ function propName(p) {
   return null;
 }
 
+function pinnedErrorStatus(init) {
+  if (!init || init.type !== "ObjectExpression") return false;
+  const status = init.properties.find((p) => propName(p) === "status");
+  return (
+    !!status &&
+    status.value.type === "Literal" &&
+    typeof status.value.value === "number" &&
+    status.value.value >= 400
+  );
+}
+
+// `x.toJson()`, `errorResponse(...)`-style helpers and `...Envelope` identifiers.
+function isCodedSource(node) {
+  if (node.type === "CallExpression") {
+    const c = node.callee;
+    if (c.type === "MemberExpression" && c.property.name === "toJson") return true;
+    if (c.type === "Identifier" && /error|envelope|body/i.test(c.name)) return true;
+  }
+  if (node.type === "Identifier" && /error|envelope|body|json/i.test(node.name)) return true;
+  return false;
+}
+
 module.exports = {
   meta: {
     type: "problem",
@@ -48,7 +70,15 @@ module.exports = {
           return;
         }
         const body = node.arguments[0];
-        if (!body || body.type !== "ObjectExpression") return;
+        if (!body) return;
+        if (body.type !== "ObjectExpression") {
+          // A non-literal body pinned to a literal error status must come from
+          // a coded source (`toJson()`, `errorResponse`, a typed envelope).
+          if (!pinnedErrorStatus(node.arguments[1])) return;
+          if (isCodedSource(body)) return;
+          context.report({ node, messageId: "uncoded" });
+          return;
+        }
         const names = body.properties.map(propName);
         if (names.includes("error")) {
           context.report({ node, messageId: "uncoded" });

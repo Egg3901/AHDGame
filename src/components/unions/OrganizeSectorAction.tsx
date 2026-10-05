@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { organizeSectorTreasuryCost } from "@/lib/unions/organizeSectorEconomy";
 
 interface MyUnion {
@@ -116,7 +117,7 @@ export function OrganizeSectorAction({
         ok: res.ok,
         text: res.ok
           ? (data.message ?? (isRaid ? "Raid succeeded." : "Sector organized."))
-          : (data.error ?? (isRaid ? "The raid failed." : "Failed to organize this sector.")),
+          : apiErrorText(data, isRaid ? "The raid failed." : "Failed to organize this sector."),
       });
       if (res.ok) onOrganized?.();
     } catch {

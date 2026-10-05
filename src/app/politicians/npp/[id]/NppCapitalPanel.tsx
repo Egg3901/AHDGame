@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useRouter } from "next/navigation";
 
 type ActionType =
@@ -148,7 +149,7 @@ export function NppCapitalPanel({ nppId, nppName }: { nppId: string; nppName: st
       if (!res.ok || "error" in data) {
         setMessage({
           tone: "err",
-          text: "error" in data ? data.error : "Action rejected.",
+          text: apiErrorText(data, "Action rejected."),
         });
       } else {
         setMessage({

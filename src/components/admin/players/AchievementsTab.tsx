@@ -160,7 +160,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
         setActionMsg({ text: data.message, ok: true });
         fetchData();
       } else {
-        setActionMsg({ text: data.message ?? data.error ?? "Sync failed", ok: false });
+        setActionMsg({ text: data.message ?? apiErrorText(data, "Sync failed"), ok: false });
       }
     } catch {
       setActionMsg({ text: "Network error", ok: false });
@@ -179,7 +179,7 @@ export function AchievementsTab({ context = "admin" }: AchievementsTabProps) {
         setActionMsg({ text: data.message, ok: true });
         fetchData();
       } else {
-        setActionMsg({ text: data.message ?? data.error ?? "Seed failed", ok: false });
+        setActionMsg({ text: data.message ?? apiErrorText(data, "Seed failed"), ok: false });
       }
     } catch {
       setActionMsg({ text: "Network error", ok: false });

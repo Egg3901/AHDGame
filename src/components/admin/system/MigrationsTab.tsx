@@ -200,11 +200,15 @@ export function MigrationsTab() {
         setMigrations((prev) =>
           prev.map((m) =>
             m.id === migration.id
-              ? { ...m, status: "failed", result: data.message || data.error || "Migration failed" }
+              ? {
+                  ...m,
+                  status: "failed",
+                  result: data.message || apiErrorText(data, "Migration failed"),
+                }
               : m
           )
         );
-        setMessage({ type: "error", text: data.message || data.error || "Migration failed" });
+        setMessage({ type: "error", text: data.message || apiErrorText(data, "Migration failed") });
       }
     } catch {
       setMigrations((prev) =>

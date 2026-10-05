@@ -101,7 +101,7 @@ export function HealBudgets() {
       const data = await res.json();
       setResult({
         ok: res.ok,
-        message: data.message ?? data.error ?? "Unknown response",
+        message: data.message ?? apiErrorText(data, "Unknown response"),
         nationalHealed: data.nationalHealed,
         regionalHealed: data.regionalHealed,
         lawsUpdated: data.lawsUpdated,

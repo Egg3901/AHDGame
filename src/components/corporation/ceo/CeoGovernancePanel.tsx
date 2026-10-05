@@ -192,7 +192,7 @@ export default function CeoGovernancePanel({
         if (!ok) {
           dispatch({
             type: "SET_RELOCATE_ERROR",
-            value: (data.error as string) || "Could not choose headquarters",
+            value: apiErrorText(data, "Could not choose headquarters"),
           });
           return;
         }
@@ -219,9 +219,10 @@ export default function CeoGovernancePanel({
       if (!ok) {
         dispatch({
           type: "SET_RELOCATE_ERROR",
-          value:
-            (data.error as string) ||
-            (corporation.isPrivate ? "Failed to relocate" : "Failed to open vote"),
+          value: apiErrorText(
+            data,
+            corporation.isPrivate ? "Failed to relocate" : "Failed to open vote"
+          ),
         });
         return;
       }
@@ -258,7 +259,7 @@ export default function CeoGovernancePanel({
         dispatch({ type: "SET_RESIGN_SUCCESS", value: "You have resigned as CEO." });
         onRefresh();
       } else {
-        dispatch({ type: "SET_RESIGN_ERROR", value: (data.error as string) || "Failed to resign" });
+        dispatch({ type: "SET_RESIGN_ERROR", value: apiErrorText(data, "Failed to resign") });
       }
     } catch {
       dispatch({ type: "SET_RESIGN_ERROR", value: "Network error" });
@@ -279,7 +280,7 @@ export default function CeoGovernancePanel({
         }
         dispatch({
           type: "SET_ACTION_ERROR",
-          value: (data.error as string) || "Failed to dissolve",
+          value: apiErrorText(data, "Failed to dissolve"),
         });
       } else {
         const { ok, data } = await postJson(`/api/corporations/${corpId}/votes`, {
@@ -292,7 +293,7 @@ export default function CeoGovernancePanel({
         } else {
           dispatch({
             type: "SET_ACTION_ERROR",
-            value: (data.error as string) || "Failed to open vote",
+            value: apiErrorText(data, "Failed to open vote"),
           });
         }
       }
@@ -329,9 +330,10 @@ export default function CeoGovernancePanel({
       } else {
         dispatch({
           type: "SET_LEGAL_STRUCTURE_ERROR",
-          value:
-            (data.error as string) ??
-            (corporation.isPrivate ? "Failed to change legal structure" : "Failed to open vote"),
+          value: apiErrorText(
+            data,
+            corporation.isPrivate ? "Failed to change legal structure" : "Failed to open vote"
+          ),
         });
       }
     } catch {

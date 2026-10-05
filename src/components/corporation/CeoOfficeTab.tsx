@@ -122,7 +122,7 @@ export default function CeoOfficeTab({
         set({ dividendSuccess: "Dividend updated." });
         onRefresh();
       } else {
-        set({ dividendError: (data.error as string) || "Failed to update the dividend" });
+        set({ dividendError: apiErrorText(data, "Failed to update the dividend") });
       }
     } catch {
       set({ dividendError: "Network error" });
@@ -142,7 +142,7 @@ export default function CeoOfficeTab({
           `/api/corporations/${corpId}/sectors/${sectorId}/${path}`,
           body
         );
-        if (!ok) return { ok: false, error: (data.error as string) ?? "Failed to save" };
+        if (!ok) return { ok: false, error: apiErrorText(data, "Failed to save") };
         onRefresh();
         return { ok: true };
       } catch {
@@ -165,7 +165,7 @@ export default function CeoOfficeTab({
           ...(body?.preview ? { preview: true } : {}),
         }
       );
-      if (!ok) return { ok: false, error: (data.error as string) ?? "Failed to apply" };
+      if (!ok) return { ok: false, error: apiErrorText(data, "Failed to apply") };
       if (!body?.preview) onRefresh();
       return {
         ok: true,
@@ -196,7 +196,7 @@ export default function CeoOfficeTab({
         ...(sectorType ? { sectorType } : {}),
         ...body,
       });
-      if (!ok) return { ok: false, error: (data.error as string) ?? "Failed to apply" };
+      if (!ok) return { ok: false, error: apiErrorText(data, "Failed to apply") };
       if (!body.preview) onRefresh();
       return {
         ok: true,

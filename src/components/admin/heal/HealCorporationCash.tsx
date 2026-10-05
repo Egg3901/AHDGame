@@ -57,7 +57,7 @@ export function HealCorporationCash() {
         body: JSON.stringify({ liquidCapital: parsed }),
       });
       const data = await res.json();
-      setResult({ ok: res.ok, message: data.message ?? data.error ?? "Unknown response" });
+      setResult({ ok: res.ok, message: data.message ?? apiErrorText(data, "Unknown response") });
     } catch {
       setResult({ ok: false, message: "Network error" });
     } finally {

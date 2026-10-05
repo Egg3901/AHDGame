@@ -44,7 +44,7 @@ export function HealOrphanVoteTallies() {
     try {
       const res = await fetch("/api/admin/elections/heal-orphan-tallies", { method: "POST" });
       const data = await res.json();
-      setResult({ ok: res.ok, message: data.message ?? data.error ?? "Unknown response" });
+      setResult({ ok: res.ok, message: data.message ?? apiErrorText(data, "Unknown response") });
     } catch {
       setResult({ ok: false, message: "Network error" });
     } finally {

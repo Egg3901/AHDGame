@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   countryCode: string;
@@ -66,7 +67,7 @@ export function CabinetBannerUploader({ countryCode, positionId, onUploaded }: P
         setProgress
       );
       if (!result.ok) {
-        setError(result.body.error ?? "Failed to upload banner");
+        setError(apiErrorText(result.body, "Failed to upload banner"));
       } else {
         onUploaded();
       }
