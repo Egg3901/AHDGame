@@ -7,9 +7,7 @@ import {
   FUNDRAISE_ACTION_COST,
   fundraiseYieldAnchor,
   quoteFundraiseAction,
-  getCampaignActionCost,
   quoteCampaignAction,
-  getAdvertiseActionCost,
   quoteAdvertiseAction,
   getBuildDonorBaseActionCost,
   quoteBuildDonorBaseAction,
@@ -18,7 +16,6 @@ import {
   convertCashConversion,
   POLL_ACTION_COST,
   POLL_LARGE_ACTION_COST,
-  getPollActionCost,
   quotePollAction,
   type PollTier,
   REST_ACTION_COST,
@@ -28,6 +25,7 @@ import {
   quoteDebatePrepAction,
   describeDebatePrepAction,
 } from "./actions/rules";
+import { getSharedActionPointCost, isSharedActionType } from "./actions/sharedRules";
 
 export {
   FUNDRAISE_ACTION_COST,
@@ -794,29 +792,10 @@ export const BATCHABLE_ACTION_TYPES: readonly ActionType[] = [
 
 /** Tiered action-point cost for one run at current stats (used by execute route and batch simulation). */
 export function getActionPointCost(character: Character, actionType: ActionType): number {
-  const action = ACTIONS[actionType];
-  if (actionType === "campaign") {
-    return getCampaignActionCost(character.politicalInfluence ?? 0);
+  if (isSharedActionType(actionType)) {
+    return getSharedActionPointCost(actionType, character);
   }
-  if (actionType === "advertise") {
-    return getAdvertiseActionCost(character.favorability ?? 0);
-  }
-  if (actionType === "rest") {
-    return REST_ACTION_COST;
-  }
-  if (actionType === "poll") {
-    return getPollActionCost("small");
-  }
-  if (actionType === "pollLarge") {
-    return getPollActionCost("large");
-  }
-  if (actionType === "fundraise") {
-    return getDonorActionCost(character.donorBaseLevel ?? 0, "fundraise");
-  }
-  if (actionType === "buildDonorBase") {
-    return getDonorActionCost(character.donorBaseLevel ?? 0, "buildDonorBase");
-  }
-  return action.baseCost;
+  return ACTIONS[actionType].baseCost;
 }
 
 function applyEffectToCharacter(
