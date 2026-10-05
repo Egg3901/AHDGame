@@ -26,6 +26,7 @@ async function main() {
   for (const cc of ["US", "UK", "JP"] as const) {
     const geography = cc === "US" ? US_GEOGRAPHY : cc === "UK" ? UK_GEOGRAPHY : JP_GEOGRAPHY;
     const regions = geography.regionBundles["1991-default"];
+    if (!regions?.length) throw new Error(`Missing ${cc} 1991 regions`);
     const metrics = new Map(
       loadSeededStateMetrics(cc, "1991-default").map((metric) => [String(metric._id), metric])
     );

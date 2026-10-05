@@ -10,9 +10,9 @@ export function deriveRegionalTexture1991() {
   const result: Record<string, Record<string, Partial<Record<PoliticalMetricId, number>>>> = {};
   for (const cc of ["US", "UK"] as const) {
     const geography = cc === "US" ? US_GEOGRAPHY : UK_GEOGRAPHY;
-    const populations = new Map(
-      geography.regionBundles["1991-default"].map((region) => [region._id, region.population])
-    );
+    const regions = geography.regionBundles["1991-default"];
+    if (!regions?.length) throw new Error(`Missing ${cc} 1991 regions`);
+    const populations = new Map(regions.map((region) => [region._id, region.population]));
     const boards = loadSeededStateMetrics(cc, "1991-default")
       .filter((metrics) => populations.has(String(metrics._id)))
       .map((metrics) => {
@@ -38,6 +38,7 @@ export function deriveRegionalTexture1991() {
           board: deriveCountryBoard({ countryId: cc, legacy: flat, macro: flat, year: 1991 }),
         };
       });
+    if (!boards.length) throw new Error(`Missing ${cc} 1991 metric inputs`);
     const country: Record<string, Partial<Record<PoliticalMetricId, number>>> = {};
     for (const region of boards) country[region.id] = {};
     for (const id of Object.keys(boards[0].board.values) as PoliticalMetricId[]) {
