@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import { reportReceivedMail } from "./playerMail";
+import { reportReceivedMail, sendPlayerMail } from "./playerMail";
 
 vi.mock("@/lib/notifications", () => ({ createNotifications: vi.fn() }));
 
@@ -50,5 +50,16 @@ describe("reportReceivedMail", () => {
       body: "the reported words",
       createdAt: mail.createdAt,
     });
+  });
+});
+
+describe("sendPlayerMail", () => {
+  it("refuses a message that trips the slur filter before touching the database", async () => {
+    const sender = { _id: new ObjectId(), name: "Sender", sequentialId: 7, userId: new ObjectId() };
+
+    await expect(
+      sendPlayerMail(db as unknown as Db, sender, new ObjectId().toString(), "hello", "you chink")
+    ).rejects.toThrow("prohibited language");
+    expect(db.collectionMocks.playerMail?.insertOne).toBeUndefined();
   });
 });

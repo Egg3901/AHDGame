@@ -485,6 +485,21 @@ export default function LoginPageClient({
               </button>
             </div>
 
+            <p className="mt-3 text-center text-body-sm leading-relaxed text-muted">
+              {t.rich("socialTerms", {
+                terms: (chunks) => (
+                  <Link href="/terms" target="_blank" className="text-primary hover:underline">
+                    {chunks}
+                  </Link>
+                ),
+                privacy: (chunks) => (
+                  <Link href="/privacy" target="_blank" className="text-primary hover:underline">
+                    {chunks}
+                  </Link>
+                ),
+              })}
+            </p>
+
             {maintenanceMode ? (
               <p className="mt-8 text-center text-body-sm text-muted">
                 {t.rich("maintenanceRegistrationClosed", {

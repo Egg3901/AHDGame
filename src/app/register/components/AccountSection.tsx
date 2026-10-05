@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Input, Label, Modal, Button, SectionLabel } from "@/components/ui";
 import { normalizeReferralCode } from "@/lib/auth/normalizeReferralCode";
@@ -194,6 +195,22 @@ export function AccountSection({
           <p className="mt-2 text-center text-body-sm leading-relaxed text-muted">
             {bothBlocked ? t("socialHintBlocked") : t("socialHint")}
           </p>
+          {!bothBlocked && (
+            <p className="text-center text-body-sm leading-relaxed text-muted">
+              {t.rich("socialTerms", {
+                terms: (chunks) => (
+                  <Link href="/terms" target="_blank" className="text-primary hover:underline">
+                    {chunks}
+                  </Link>
+                ),
+                privacy: (chunks) => (
+                  <Link href="/privacy" target="_blank" className="text-primary hover:underline">
+                    {chunks}
+                  </Link>
+                ),
+              })}
+            </p>
+          )}
         </div>
 
         <div className="relative my-6">
