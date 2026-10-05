@@ -165,8 +165,9 @@ describe("POST /api/corporations/[id]/sectors", () => {
 
     const response = await POST(request, { params: Promise.resolve({ id: "1" }) });
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       error: "You already have operations in this state",
+      code: "BAD_REQUEST",
     });
     expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
   });
