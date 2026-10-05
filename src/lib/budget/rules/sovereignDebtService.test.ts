@@ -29,7 +29,7 @@ describe("sovereign coupon book", () => {
       bond(9_999, 9, { matured: true }),
       bond(9_999, 9, { defaulted: true }),
       bond(9_999, Number.NaN),
-      { ...bond(9_999, 9), issuerType: "corporate" as const },
+      { ...bond(9_999, 9), issuerType: "corporation" as const },
     ]);
     expect(book.face).toBe(1_300);
     expect(book.annualCoupon).toBeCloseTo(30 + 300 * 0.05, 9);

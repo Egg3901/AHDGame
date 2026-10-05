@@ -61,7 +61,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       candidacyId: parsed.data.candidacyId,
     });
 
-    if ("error" in result) {
+    if (result.error !== undefined) {
       return errorResponse(result.status, result.error, {
         extra: { ...(result.failure ? { failure: result.failure } : {}) },
       });
@@ -94,7 +94,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       characterId: auth.user.character._id,
       nppId: new ObjectId(id),
     });
-    if ("error" in result) {
+    if (result.error !== undefined) {
       return errorResponse(result.status, result.error);
     }
 

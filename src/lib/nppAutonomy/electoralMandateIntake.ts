@@ -6,7 +6,7 @@
  */
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type { Party } from "@/lib/db/types";
+import type { PoliticalParty } from "@/lib/db/types";
 import type {
   GovernmentFormation,
   PersistedElectoralMandate,
@@ -46,7 +46,7 @@ export async function loadElectoralMandate(
   if (!Number.isFinite(sequentialId)) return null;
 
   const party = await db
-    .collection<Party>("parties")
+    .collection<PoliticalParty>("politicalParties")
     .findOne(
       { countryId, sequentialId },
       { projection: { economicPosition: 1, socialPosition: 1 } }
