@@ -101,6 +101,8 @@ export function bankingTurnPublicationFilter(input: {
   observedSovereignCouponBookedLifetime?: number;
   observedTreasuryGainPaidLifetime?: number;
   observedTreasuryGainBookedLifetime?: number;
+  observedUnderwritingFeesTurn?: number;
+  observedUnderwritingFees?: number;
 }): Record<string, unknown> {
   return {
     _id: input.bankId,
@@ -142,6 +144,12 @@ export function bankingTurnPublicationFilter(input: {
           "bankCharter.treasuryRealizedGainBookedLifetime":
             input.observedTreasuryGainBookedLifetime,
         }),
+    ...(input.observedUnderwritingFeesTurn === undefined
+      ? { "bankCharter.lastBankingUnderwritingFeesTurn": { $exists: false } }
+      : { "bankCharter.lastBankingUnderwritingFeesTurn": input.observedUnderwritingFeesTurn }),
+    ...(input.observedUnderwritingFees === undefined
+      ? { "bankCharter.lastBankingUnderwritingFees": { $exists: false } }
+      : { "bankCharter.lastBankingUnderwritingFees": input.observedUnderwritingFees }),
     $or: [
       { "bankCharter.lastBankingTurn": { $ne: input.turn } },
       { "bankCharter.lastBankingTurn": { $exists: false } },

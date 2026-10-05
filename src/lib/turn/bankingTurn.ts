@@ -933,6 +933,8 @@ async function processOneBank(
           publicationCharter.sovereignCouponIncomeBookedLifetime,
         observedTreasuryGainPaidLifetime: publicationCharter.treasuryRealizedGainPaidLifetime,
         observedTreasuryGainBookedLifetime: publicationCharter.treasuryRealizedGainBookedLifetime,
+        observedUnderwritingFeesTurn: publicationCharter.lastBankingUnderwritingFeesTurn,
+        observedUnderwritingFees: publicationCharter.lastBankingUnderwritingFees,
       }),
       {
         $set: {
@@ -1106,47 +1108,88 @@ async function processLoanBookOnlyBank(
     serviceNamedLoanBook(db, turn, corp, currency, charter.charteredTurn)
   );
 
-  await db.collection<Corporation>("corporations").updateOne(
-    {
-      _id: corp._id,
-      "bankCharter.status": "active",
-      $or: [
-        { "bankCharter.lastBankingTurn": { $ne: turn } },
-        { "bankCharter.lastBankingTurn": { $exists: false } },
-      ],
-    },
-    {
-      $set: {
-        // Cash and the loan book moved through their original receipts. An
-        // end-of-pass snapshot must not overwrite a concurrent origination,
-        // repayment or collateral recovery.
-        "bankCharter.lastBankingTurn": turn,
-        "bankCharter.lastBankingIncome":
-          serviced.interestCollected -
-          serviced.writtenOff +
-          (charter.lastBankingUnderwritingFeesTurn === turn
-            ? (charter.lastBankingUnderwritingFees ?? 0)
-            : 0),
-        "bankCharter.lastBankingIncomeTurn": turn,
-        // No deposit base, so no deposit interest and no premium; the loan
-        // split still applies for the console breakdown.
-        "bankCharter.lastBankingDepositInterest": 0,
-        "bankCharter.lastBankingLoanInterest": serviced.interestCollected,
-        "bankCharter.lastBankingUnderwritingFees":
-          charter.lastBankingUnderwritingFeesTurn === turn
-            ? (charter.lastBankingUnderwritingFees ?? 0)
-            : 0,
-        "bankCharter.lastBankingUnderwritingFeesTurn": turn,
-        "bankCharter.lastBankingInterbankInterestPaid": 0,
-        "bankCharter.lastBankingInterbankInterestReceived": 0,
-        "bankCharter.lastBankingFacilityInterest": 0,
-        "bankCharter.lastBankingInsurancePremium": 0,
-        "bankCharter.lastBankingWriteoffs": serviced.writtenOff,
-        updatedAt: new Date(),
-      },
+  const corporations = db.collection<Corporation>("corporations");
+  let publicationCharter = charter;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0) {
+      const latest = await corporations.findOne(
+        { _id: corp._id },
+        { projection: { countryId: 1, bankCharter: 1 } }
+      );
+      if (
+        !isNamedLendingCharter(latest?.bankCharter) ||
+        latest.bankCharter.charteredTurn !== charter.charteredTurn ||
+        latest.bankCharter.currency !== charter.currency
+      ) {
+        return serviced;
+      }
+      if (latest.bankCharter.lastBankingTurn === turn) return serviced;
+      publicationCharter = latest.bankCharter;
     }
-  );
-  return serviced;
+
+    const unbooked = unbookedSovereignAssetIncome(publicationCharter);
+    const underwritingFeesForTurn =
+      publicationCharter.lastBankingUnderwritingFeesTurn === turn
+        ? (publicationCharter.lastBankingUnderwritingFees ?? 0)
+        : 0;
+    const publication = await corporations.updateOne(
+      bankingTurnPublicationFilter({
+        bankId: corp._id,
+        countryId: corp.countryId,
+        charteredTurn: charter.charteredTurn,
+        currency,
+        turn,
+        observedIncomeTurn: publicationCharter.lastBankingIncomeTurn,
+        observedSovereignCouponIncome: publicationCharter.lastBankingSovereignCouponIncome,
+        observedTreasuryRealizedGain: publicationCharter.lastBankingTreasuryRealizedGain,
+        observedSovereignCouponPaidLifetime:
+          publicationCharter.sovereignCouponIncomePaidLifetime,
+        observedSovereignCouponBookedLifetime:
+          publicationCharter.sovereignCouponIncomeBookedLifetime,
+        observedTreasuryGainPaidLifetime: publicationCharter.treasuryRealizedGainPaidLifetime,
+        observedTreasuryGainBookedLifetime:
+          publicationCharter.treasuryRealizedGainBookedLifetime,
+        observedUnderwritingFeesTurn: publicationCharter.lastBankingUnderwritingFeesTurn,
+        observedUnderwritingFees: publicationCharter.lastBankingUnderwritingFees,
+      }),
+      {
+        $set: {
+          // Cash and the loan book moved through their original receipts. An
+          // end-of-pass snapshot must not overwrite a concurrent origination,
+          // repayment or collateral recovery.
+          "bankCharter.lastBankingTurn": turn,
+          "bankCharter.lastBankingIncome":
+            serviced.interestCollected -
+            serviced.writtenOff +
+            unbooked.couponIncome +
+            unbooked.realizedGain +
+            underwritingFeesForTurn,
+          "bankCharter.lastBankingIncomeTurn": turn,
+          // No deposit base, so no deposit interest and no premium; the loan
+          // split still applies for the console breakdown.
+          "bankCharter.lastBankingDepositInterest": 0,
+          "bankCharter.lastBankingLoanInterest": serviced.interestCollected,
+          "bankCharter.lastBankingSovereignCouponIncome": unbooked.couponIncome,
+          "bankCharter.lastBankingTreasuryRealizedGain": unbooked.realizedGain,
+          "bankCharter.sovereignCouponIncomeBookedLifetime":
+            publicationCharter.sovereignCouponIncomePaidLifetime ?? 0,
+          "bankCharter.treasuryRealizedGainBookedLifetime":
+            publicationCharter.treasuryRealizedGainPaidLifetime ?? 0,
+          "bankCharter.lastBankingLoanOriginationFees": 0,
+          "bankCharter.lastBankingUnderwritingFees": underwritingFeesForTurn,
+          "bankCharter.lastBankingUnderwritingFeesTurn": turn,
+          "bankCharter.lastBankingInterbankInterestPaid": 0,
+          "bankCharter.lastBankingInterbankInterestReceived": 0,
+          "bankCharter.lastBankingFacilityInterest": 0,
+          "bankCharter.lastBankingInsurancePremium": 0,
+          "bankCharter.lastBankingWriteoffs": serviced.writtenOff,
+          updatedAt: new Date(),
+        },
+      }
+    );
+    if (publication.matchedCount > 0) return serviced;
+  }
+  throw new Error(`Bank ${corp._id.toHexString()} income publication changed too often`);
 }
 
 async function servicePlayerLoan(
