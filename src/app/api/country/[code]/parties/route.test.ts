@@ -67,6 +67,18 @@ describe("GET /api/country/[code]/parties", () => {
     expect(party.playerCount).toBe(0);
   });
 
+  it("optionally includes the live frontier for creation, with null for empty parties", async () => {
+    const { GET } = await import("./route");
+    const response = await GET(makeRequest("?includeFrontier=1"), {
+      params: Promise.resolve({ code: "us" }),
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()).parties[0]).toMatchObject({
+      frontierRegions: null,
+      membershipMode: "open",
+    });
+  });
+
   it("excludes defunct (merged-away) parties from the active listing", async () => {
     const { GET } = await import("./route");
     await GET(makeRequest(), { params: Promise.resolve({ code: "us" }) });

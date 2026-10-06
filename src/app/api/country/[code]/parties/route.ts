@@ -11,6 +11,7 @@ import { getPartyHex } from "@/lib/utils/politics";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { draftCharter } from "@/lib/charters/draftCharter";
+import { getPartyFrontiers } from "@/lib/parties/partyFrontier";
 
 // GET /api/country/[code]/parties — Return all political parties in the country with member counts and leadership
 // Auth: public
@@ -39,6 +40,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
       .toArray();
 
     const partyIdStrings = parties.map((p) => String(p.sequentialId));
+    const frontiers =
+      searchParams.get("includeFrontier") === "1"
+        ? await getPartyFrontiers(db, countryId, partyIdStrings)
+        : null;
 
     // Get character names for leadership positions
     const leaderIds = parties
@@ -140,6 +145,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
       const nppCount = nppCountMap.get(partyIdStr) ?? 0;
       return {
         id: partyIdStr,
+        ...(frontiers
+          ? {
+              frontierRegions: frontiers.get(partyIdStr),
+              membershipMode: party.membershipMode ?? "open",
+            }
+          : {}),
         // Mongo _id as a 24-char hex string. The merge-proposal form sends
         // this as `targetPartyId` (schemas.objectId). Dropped during the
         // charters Phase-6 route rewrite (6c316287c); restoring it fixes the

@@ -10,6 +10,9 @@ export type PartyOption = {
   memberCount: number;
   playerCount: number;
   isDefault: boolean;
+  /** Null means no established presence; absent means not loaded. */
+  frontierRegions?: string[] | null;
+  membershipMode?: "open" | "approval";
   /**
    * Platform position on the shared −5..+5 ruler, as served by
    * `GET /api/country/[code]/parties`. Optional because older cached responses
