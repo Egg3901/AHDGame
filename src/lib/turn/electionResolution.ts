@@ -62,6 +62,7 @@ import {
   type ElectionNewsOutcome,
 } from "@/lib/turn/election/electionNotifications";
 import { resolveOneGeneralElection } from "@/lib/turn/election/generalResolution";
+import { loadFirstMinisterBonusContexts } from "@/lib/turn/election/independenceDesireHook";
 import { logger } from "../observability/logger";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
@@ -117,10 +118,13 @@ export async function resolveGeneralElections(
   if (completedElections.length === 0) return 0;
 
   const electionIds = completedElections.map((e) => e._id);
+  const ukDevolutionRegions = completedElections
+    .filter((e) => e.countryId === "UK" && e.state)
+    .map((e) => e.state.toUpperCase());
   const genericElectionIds = completedElections
     .filter((e) => !isNativeRussianAssemblyElection(e))
     .map((e) => e._id);
-  const [tallies, completedCandidates, gameStateDoc] = await Promise.all([
+  const [tallies, completedCandidates, gameStateDoc, devolutionBonusContexts] = await Promise.all([
     db
       .collection<ElectionVoteTally>("electionVoteTallies")
       .find({ electionId: { $in: electionIds } }, { projection: TALLY_WITH_LATEST_SNAPSHOT_ONLY })
@@ -136,6 +140,7 @@ export async function resolveGeneralElections(
           .catch(() => [])
       : Promise.resolve([]),
     db.collection<GameState>("gameState").findOne({ _id: "current" }),
+    loadFirstMinisterBonusContexts(db, ukDevolutionRegions),
   ]);
   const currentTurn = gameStateDoc?.currentTurn ?? 0;
   const tallyMap = new Map(tallies.map((t) => [t.electionId.toString(), t]));
@@ -698,7 +703,11 @@ export async function resolveGeneralElections(
               currentTurn,
               now,
               null,
-              isHuMixed ? huPlan?.candidateSeatsByElection[election._id.toString()] : undefined
+              isHuMixed ? huPlan?.candidateSeatsByElection[election._id.toString()] : undefined,
+              undefined,
+              election.state
+                ? (devolutionBonusContexts.get(election.state.toUpperCase()) ?? null)
+                : null
             );
             return { election, result };
           } catch (err) {

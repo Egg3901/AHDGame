@@ -1,6 +1,7 @@
 import { NG_1991_NOMINAL_GDP_NGN } from "@/lib/countries/ng/data/ngGdp1991";
 import { rebaseBudgetNominals } from "./rules/rebaseBudgetNominals";
 import { anchorBudget1991 } from "./rules/anchorBudget1991";
+import { calibrateOpeningInflation1991 } from "./openingInflation1991";
 import {
   FISCAL_ANCHORS_1991,
   FISCAL_ANCHOR_COUNTRIES_1991,
@@ -2398,7 +2399,7 @@ const NATIONAL_BUDGET_SEED_CONFIGS_1991: NationalBudgetSeedConfig[] = [
     economicFactors: {
       gdpGrowth: 1.0, // post-Collor stabilization attempt
       wageGrowth: 50.0, // indexed against hyperinflation
-      inflationRate: 480.0, // 1991 IPCA — actual; game treats this as a starting condition
+      inflationRate: 480.0, // 1991 IPCA, historical provenance; seeded via openingInflation1991
       tradeGrowth: 0.5,
       lastUpdated: new Date(),
     },
@@ -5785,11 +5786,20 @@ function getUncalibratedNationalBudgetSeedConfigsForPreset(
   return NATIONAL_BUDGET_SEED_CONFIGS;
 }
 
+/**
+ * The authored 1991 central-government composition (HM Treasury FY1991/92 for
+ * the UK) before any envelope fit, keyed by the v2 law book's budget keys.
+ */
+export function getAuthoredNationalSpending1991(countryId: string): Record<string, number> | null {
+  const config = NATIONAL_BUDGET_SEED_CONFIGS_1991.find((row) => row.countryId === countryId);
+  return config ? { ...config.baselineSpendingByCategory } : null;
+}
+
 /** 1991 player budgets resize active programs while preserving receipts and historic debt. */
 export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalBudgetSeedConfig[] {
   const configs = getUncalibratedNationalBudgetSeedConfigsForPreset(preset);
   if (preset !== "1991-default") return configs;
-  return configs.map((config) => {
+  return configs.map(calibrateOpeningInflation1991).map((config) => {
     if (!["US", "UK", "JP"].includes(config.countryId)) {
       // The shared primary-source anchors own both nominal GDP and any
       // available historical debt/expenditure totals. Pin their authored

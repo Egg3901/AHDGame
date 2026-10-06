@@ -703,6 +703,12 @@ export interface FederalBudget {
   /** Founding-world program expense scale shared by catalog quotes and seeded v2 options. */
   programCostScaleBaseline?: number;
   /**
+   * Founding expense scale per national budget category. Set when a law book
+   * priced on another era's anchors is refit to an authored historical
+   * composition; overrides `programCostScaleBaseline` for national laws.
+   */
+  programCostScaleByCategoryBaseline?: Record<string, number>;
+  /**
    * Fiscal-divergence guardrail (refs #fiscal-divergence-audit): each tax
    * base's share of national GDP at the turn this field was first populated
    * (self-healed once, on this country's first `fiscalBaseGrowth` pass —

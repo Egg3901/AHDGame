@@ -48,7 +48,17 @@ describe("purgeAbsentCountryRegions", () => {
     const { db, handles } = fakeDb({ states: 3, stateDemographics: 3 });
     const result = await purgeAbsentCountryRegions(db, "1991-default");
     expect(result.deleted).toEqual({ states: 3, stateDemographics: 3 });
-    expect([...handles.keys()].sort()).toEqual([...ABSENT_COUNTRY_REGION_COLLECTIONS].sort());
+    expect([...handles.keys()].sort()).toEqual(
+      [...ABSENT_COUNTRY_REGION_COLLECTIONS, "counters"].sort()
+    );
+    // Party rows and their sequence counters go with the absent country.
+    expect(ABSENT_COUNTRY_REGION_COLLECTIONS).toEqual(
+      expect.arrayContaining(["politicalParties", "partyBudget", "stateRegistrationPool"])
+    );
+    const counterFilter = (handles.get("counters")!.deleteMany as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as { _id: { $in: string[] } };
+    expect(counterFilter._id.$in).toEqual(expect.arrayContaining(["party_UKR", "party_DD"]));
+    expect(counterFilter._id.$in).not.toContain("party_UK");
     const filter = (handles.get("states")!.deleteMany as ReturnType<typeof vi.fn>).mock
       .calls[0][0] as { countryId: { $in: string[] } };
     expect(filter.countryId.$in).toEqual(expect.arrayContaining(["UKR", "BLR", "BAL"]));

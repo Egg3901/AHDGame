@@ -53,7 +53,10 @@ import { getGameStateCollection } from "@/lib/db/collections";
 import { maybeReconcileBundestag } from "@/lib/turn/election/germanyAMS";
 import { updatePartyPresence } from "@/lib/turn/partyOrg";
 import { notifyGovernorOfSenateVacancy } from "@/lib/governors/senateVacancy";
-import { maybeApplyIndependenceDesireHook } from "@/lib/turn/election/independenceDesireHook";
+import {
+  maybeApplyIndependenceDesireHook,
+  type FirstMinisterBonusContext,
+} from "@/lib/turn/election/independenceDesireHook";
 import {
   buildJapanMixedRegionalList,
   countJapanMixedShugiin,
@@ -181,7 +184,8 @@ export async function resolveOneGeneralElection(
   now: Date,
   bgEligibleParties: ReadonlySet<string> | null = null,
   huMixedCandidateSeats?: Readonly<Record<string, number>>,
-  bgOrdinaryCandidateSeats?: Readonly<Record<string, number>>
+  bgOrdinaryCandidateSeats?: Readonly<Record<string, number>>,
+  devolutionBonusContext?: FirstMinisterBonusContext | null
 ): Promise<OneElectionResult> {
   if (
     isNativeRussianAssemblyElection(election) ||
@@ -561,10 +565,11 @@ export async function resolveOneGeneralElection(
       );
     }
 
-    // Phase 5 soft electoral hook: UK SCO/WAL/NIR commons/regionalCouncil/governor
-    // elections get a small ±5pp vote-share nudge driven by independenceDesire.
-    // Applies to votes BEFORE ranking so the resolver picks winners from the
-    // adjusted tally. No-op for any other (countryId, electionType, state) combo.
+    // Phase 5 devolution electoral hook: UK SCO/WAL/NIR
+    // commons/regionalCouncil/governor elections get the legacy soft vote-share
+    // nudge plus any qualifying high-desire First Minister party bonus. Applies
+    // before ranking so the resolver picks winners from the adjusted tally.
+    // No-op for any other (countryId, electionType, state) combination.
     const hookResult = await maybeApplyIndependenceDesireHook(db, {
       countryId: election.countryId ?? "",
       electionType: election.electionType,
@@ -574,20 +579,22 @@ export async function resolveOneGeneralElection(
         .filter((c) => !retiredNppCandidateIds.has(c._id.toString()))
         .map((c) => ({ _id: c._id, party: c.party })),
       totalVotes: totalVotesCast,
+      bonusContext: devolutionBonusContext,
     });
-    if (hookResult.nudgeApplied !== 0 || hookResult.proIndyBonusApplied !== 0) {
+    if (hookResult.nudgeApplied !== 0 || hookResult.firstMinisterBonusApplied !== 0) {
       effectiveVotes = hookResult.adjustedVotes;
       // The transfer nudge preserves the grand total, but the multiplicative
-      // pro-indy bonus inflates it. Refresh totalVotesCast so the downstream
-      // share-eligibility check in allocateSeats (votes / totalVotesCast) uses
-      // the new denominator instead of the stale pre-hook total.
-      if (hookResult.proIndyBonusApplied !== 0) {
+      // First Minister party bonus inflates it. Refresh totalVotesCast so the
+      // downstream share-eligibility check in allocateSeats
+      // (votes / totalVotesCast) uses the new denominator instead of the stale
+      // pre-hook total.
+      if (hookResult.firstMinisterBonusApplied !== 0) {
         totalVotesCast = Object.values(effectiveVotes).reduce((s, v) => s + v, 0);
       }
       console.log(
         `[Turn] Election ${election._id} (${election.electionType}/${election.state}): ` +
           `Devolution hook applied nudge=${hookResult.nudgeApplied.toFixed(3)}, ` +
-          `proIndyBonus=${hookResult.proIndyBonusApplied.toFixed(3)}`
+          `firstMinisterBonus=${hookResult.firstMinisterBonusApplied.toFixed(3)}`
       );
     }
 

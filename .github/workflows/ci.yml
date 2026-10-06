@@ -10,37 +10,170 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # These checks are independent. Running them as separate jobs makes the CI
-  # critical path track the slowest check instead of the sum of all three.
-  lint:
+  # Keep the stable `verify` check for every pull request, but avoid spending
+  # the full matrix on changes that can only affect prose or changelog data.
+  changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
+    outputs:
+      full_suite: ${{ steps.scope.outputs.full_suite }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Lint
-        run: npm run lint
-      - name: Architecture audit
-        run: npm run architecture:audit
+          # Pull-request checkouts are merge commits. The first parent is the
+          # base revision, so depth two is enough to classify the whole change.
+          fetch-depth: 2
+      - name: Classify the change
+        id: scope
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
+            echo "full_suite=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-  format:
+          mapfile -d '' changed_files < <(
+            # Disable rename detection so both sides of a rename are classified.
+            # Otherwise code renamed to a Markdown path could look content-only.
+            git diff --no-renames --name-only -z --diff-filter=ACDMRT HEAD^1 HEAD
+          )
+
+          if (( ${#changed_files[@]} == 0 )); then
+            echo "full_suite=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          for path in "${changed_files[@]}"; do
+            if [[ "$path" =~ ^content/changelog/.*\.md$ ||
+                  "$path" =~ ^docs/.*\.md$ ||
+                  "$path" =~ ^[^/]+\.md$ ]]; then
+              continue
+            fi
+
+            echo "full_suite=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          done
+
+          echo "full_suite=false" >> "$GITHUB_OUTPUT"
+
+  content-checks:
+    needs: changes
+    if: needs.changes.outputs.full_suite != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
+      - uses: actions/cache@v4
+        with:
+          path: .cache/prettier
+          key: prettier-${{ runner.os }}-${{ hashFiles('package-lock.json', '.editorconfig', '.prettierignore', '.prettierrc*', 'prettier.config.*') }}-${{ github.sha }}
+          restore-keys: |
+            prettier-${{ runner.os }}-${{ hashFiles('package-lock.json', '.editorconfig', '.prettierignore', '.prettierrc*', 'prettier.config.*') }}-
+      - name: Check changed files
+        shell: bash
+        run: |
+          git diff --name-only -z --diff-filter=ACMRT HEAD^1 HEAD \
+            | xargs -0 --no-run-if-empty npx prettier --check --ignore-unknown \
+                --cache --cache-strategy content \
+                --cache-location .cache/prettier/.prettier-cache --
+      - name: Validate changelog entries
+        run: npm run changelog:check
+      - name: Test changelog loading and release invariants
+        run: npm run test:run -- src/lib/changelog/entryFiles.test.ts
+
+  # These checks are independent. Running them as separate jobs makes the CI
+  # critical path track the slowest check instead of the sum of all three.
+  lint:
+    needs: changes
+    if: needs.changes.outputs.full_suite == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - uses: actions/cache@v4
+        with:
+          path: .cache/eslint
+          key: eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', '.eslintignore', '.eslintrc*', 'eslint.config.*', 'eslint-rules/**') }}-${{ github.sha }}
+          restore-keys: |
+            eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', '.eslintignore', '.eslintrc*', 'eslint.config.*', 'eslint-rules/**') }}-
+      - name: Lint
+        shell: bash
+        run: |
+          changed_file_list="$RUNNER_TEMP/lint-changed-files"
+          git diff --no-renames --name-only -z --diff-filter=ACDMRT \
+            HEAD^1 HEAD > "$changed_file_list"
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]] &&
+             ! grep -zEq '^(\.eslintignore|\.eslintrc($|\.)|eslint\.config\.|eslint-rules/|package(-lock)?\.json$|tsconfig.*\.json$)' \
+               "$changed_file_list"; then
+            lint_file_list="$RUNNER_TEMP/lint-files"
+            git diff --name-only -z --diff-filter=ACMRT \
+              HEAD^1 HEAD > "$lint_file_list"
+            mapfile -d '' lint_files < <(
+              grep -zE '\.(cjs|cts|js|jsx|mjs|mts|ts|tsx)$' \
+                "$lint_file_list" || true
+            )
+            if (( ${#lint_files[@]} > 0 )); then
+              npx eslint --cache --cache-strategy content \
+                --cache-location .cache/eslint/.eslintcache -- "${lint_files[@]}"
+            fi
+          else
+            npm run lint
+          fi
+      - name: Architecture audit
+        run: npm run architecture:audit
+
+  format:
+    needs: changes
+    if: needs.changes.outputs.full_suite == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - uses: actions/cache@v4
+        with:
+          path: .cache/prettier
+          key: prettier-${{ runner.os }}-${{ hashFiles('package-lock.json', '.editorconfig', '.prettierignore', '.prettierrc*', 'prettier.config.*') }}-${{ github.sha }}
+          restore-keys: |
+            prettier-${{ runner.os }}-${{ hashFiles('package-lock.json', '.editorconfig', '.prettierignore', '.prettierrc*', 'prettier.config.*') }}-
       - name: Format check
-        run: npm run format:check
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]] &&
+             ! git diff --no-renames --name-only -z --diff-filter=ACDMRT HEAD^1 HEAD \
+               | grep -zEq '^(\.editorconfig$|\.prettierignore$|\.prettierrc($|\.)|prettier\.config\.|package(-lock)?\.json$)'; then
+            git diff --name-only -z --diff-filter=ACMRT HEAD^1 HEAD \
+              | xargs -0 --no-run-if-empty npx prettier --check --ignore-unknown \
+                  --cache --cache-strategy content \
+                  --cache-location .cache/prettier/.prettier-cache --
+          else
+            npm run format:check
+          fi
 
   typecheck:
+    needs: changes
+    if: needs.changes.outputs.full_suite == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -49,19 +182,26 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
+      - uses: actions/cache@v4
+        with:
+          path: tsconfig.tsbuildinfo
+          key: typecheck-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-${{ github.sha }}
+          restore-keys: |
+            typecheck-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-
       - name: Typecheck
-        run: npx tsc --noEmit -p tsconfig.json
+        run: npm run typecheck
         env:
           # The clean program can exceed 6.5 GiB during final type serialization.
           # Keep enough heap headroom for the hosted runner to finish reliably.
           NODE_OPTIONS: --max-old-space-size=12288
 
   # Split out of `verify` and sharded: the suite is ~3,500 files and its cost is
-  # dominated by per-file module loading, so wall time tracks file count almost
-  # linearly. Four shards balanced to within 8% of each other and cut a single
-  # job from 770s to 201s when measured locally at CI-like worker counts.
+  # dominated by per-file module loading. Architecture contracts are excluded
+  # here because the lint job runs the same files as a dedicated hard gate.
   test:
+    needs: changes
+    if: needs.changes.outputs.full_suite == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -74,15 +214,17 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       # job-total rather than a hard-coded 4, so adding or removing a shard in
       # the matrix above cannot silently desync the divisor and drop test files.
       - name: Unit tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
-        run: npm run test:run -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        run: npm run test:ci -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
         env:
           NODE_OPTIONS: --max-old-space-size=6144
 
   build:
+    needs: changes
+    if: needs.changes.outputs.full_suite == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -91,7 +233,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       - name: Next build
         # env.ts validates lazily, so the build compiles without secrets; the
         # Sentry sourcemap upload is skipped when SENTRY_AUTH_TOKEN is absent.
@@ -101,6 +243,8 @@ jobs:
           CI: "true"
 
   federation-transactions:
+    needs: changes
+    if: needs.changes.outputs.full_suite == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -109,7 +253,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       - name: Start isolated Mongo replica set
         run: |
           docker run --detach --name federation-mongo --publish 27991:27017 mongo:8.0 --replSet federationQualification --bind_ip_all
@@ -139,12 +283,15 @@ jobs:
   # above has completed successfully.
   verify:
     if: always()
-    needs: [lint, format, typecheck, test, build, federation-transactions]
+    needs: [changes, content-checks, lint, format, typecheck, test, build, federation-transactions]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Require every CI gate
         env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          FULL_SUITE: ${{ needs.changes.outputs.full_suite }}
+          CONTENT_RESULT: ${{ needs.content-checks.result }}
           LINT_RESULT: ${{ needs.lint.result }}
           FORMAT_RESULT: ${{ needs.format.result }}
           TYPECHECK_RESULT: ${{ needs.typecheck.result }}
@@ -152,6 +299,22 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           FEDERATION_RESULT: ${{ needs['federation-transactions'].result }}
         run: |
+          printf 'changes=%s full-suite=%s content=%s\n' \
+            "$CHANGES_RESULT" "$FULL_SUITE" "$CONTENT_RESULT"
+
+          if [[ "$CHANGES_RESULT" != "success" ]]; then
+            exit 1
+          fi
+
+          if [[ "$FULL_SUITE" != "true" && "$FULL_SUITE" != "false" ]]; then
+            exit 1
+          fi
+
+          if [[ "$FULL_SUITE" == "false" ]]; then
+            test "$CONTENT_RESULT" = "success"
+            exit $?
+          fi
+
           printf 'lint=%s format=%s typecheck=%s test=%s build=%s\n' \
             "$LINT_RESULT" "$FORMAT_RESULT" "$TYPECHECK_RESULT" \
             "$TEST_RESULT" "$BUILD_RESULT"

@@ -104,6 +104,14 @@ export const LEGACY_DYNAMIC_COLLECTION_SITES: readonly LegacyDynamicCollectionSi
     reason: "Repository-owned seed and index registries select the collection.",
   },
   {
+    file: "src/lib/admin/seed/referenceRebuildClear.ts",
+    owner: "clearReferenceForRebuild",
+    argument: "name",
+    scopeHash: "e36502ec4823f82fae3e947f38dd3108ebc043f174fb604cc0bd17a5d65f0da5",
+    count: 1,
+    reason: "Repository-owned seed and index registries select the collection.",
+  },
+  {
     file: "src/lib/admin/seed/runCoreSeed.ts",
     owner: "runSeed",
     argument: "entry.name",

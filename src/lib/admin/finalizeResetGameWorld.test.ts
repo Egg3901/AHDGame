@@ -312,7 +312,12 @@ describe("finalizeResetGameWorld", () => {
     });
 
     expect(db.collectionMocks.unownedSectors?.deleteMany).not.toHaveBeenCalled();
-    expect(db.collectionMocks.regionDemographics?.deleteMany).not.toHaveBeenCalled();
+    // The absent-country purge may still scope a delete to countries the preset
+    // does not have at all; what must never run is a roster-relative sweep.
+    for (const [filter] of db.collectionMocks.regionDemographics?.deleteMany.mock.calls ?? []) {
+      expect(filter).toHaveProperty("countryId.$in");
+      expect(filter).not.toHaveProperty("_id");
+    }
   });
 
   it("routes preset-mismatched party removal to the sink, not only to stdout", async () => {

@@ -11,7 +11,13 @@ import { isShippingPreset, tierFor } from "@/lib/world/eraRoster";
  * Ukraine, Byelorussia and the Baltic republics as separate `states` rows with
  * 1953 demographics, alongside the same republics modelled as Soviet regions.
  *
- * Parties are left to the default-party reconciliation, which owns them.
+ * The party rows go too. The default-party reconciliation only removes parties
+ * whose seed entry is preset-mismatched, so a Ukrainian or East German default
+ * party from an older world survived a 1991 reset, and `seedPartyBudgets`
+ * re-funded it. The reset runs a reference rebuild for 1991 (see
+ * REFERENCE_REBUILD_CLEARED_COLLECTIONS), which empties several of the
+ * collections below first; listing them here also covers a preserve-reference
+ * reset of another preset.
  */
 export const ABSENT_COUNTRY_REGION_COLLECTIONS = [
   "states",
@@ -25,6 +31,14 @@ export const ABSENT_COUNTRY_REGION_COLLECTIONS = [
   "stateResourceCapacity",
   "congressionalDistricts",
   "stateSectorSpecializations",
+  "stateDemographicTurnout",
+  "stateRegistrationPool",
+  "regionDemographics",
+  "stateMetrics",
+  "strategicSectorDesignations",
+  "politicalParties",
+  "partyBudget",
+  "partyCharters",
 ] as const;
 
 /** Countries the era roster says are not present in this preset at all. */
@@ -52,6 +66,11 @@ export async function purgeAbsentCountryRegions(
       const result = await db.collection(name).deleteMany({ countryId: { $in: countryIds } });
       if (result.deletedCount > 0) deleted[name] = result.deletedCount;
     }
+    // Party sequence counters for those countries; a fresh world has none.
+    const counters = await db
+      .collection<{ _id: string }>("counters")
+      .deleteMany({ _id: { $in: countryIds.map((id) => `party_${id}`) } });
+    if (counters.deletedCount > 0) deleted.counters = counters.deletedCount;
   }
 
   // `politicalMetrics` is keyed by region id, and some retired RU rows have a
