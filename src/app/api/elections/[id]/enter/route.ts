@@ -25,6 +25,7 @@ import {
 import { getCountryState } from "@/lib/countryState";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
 import { findBlockingActiveCandidacy } from "@/lib/elections/activeCandidacy";
+import { findVoluntaryWithdrawals } from "@/lib/elections/voluntaryWithdrawal";
 import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaFactors";
 import { removeWithdrawnCandidateFromTally } from "@/lib/electionEngine/tallyCleaner";
 import { createInitialCampaign } from "@/lib/campaigns/createInitialCampaign";
@@ -490,6 +491,17 @@ export async function POST(request: Request, { params }: RouteParams) {
       } else if (existingCandidate.party === character.party) {
         logRequest("POST", path, 400, Date.now() - start);
         return errorResponse(400, "You are already entered in this race");
+      }
+    }
+
+    // Withdrawing bars re-entry into the same election (ticket #1391). The
+    // Hungarian and Bulgarian district filings are exempt: they reactivate the
+    // withdrawn row so a candidate can refile until filing closes.
+    if (!existingCandidate && !hu1991 && !bgFounding) {
+      const withdrew = await findVoluntaryWithdrawals(db, character._id, [electionObjectId]);
+      if (withdrew.size > 0) {
+        logRequest("POST", path, 403, Date.now() - start);
+        return errorResponse(403, "You withdrew from this race and cannot re-enter it.");
       }
     }
 
