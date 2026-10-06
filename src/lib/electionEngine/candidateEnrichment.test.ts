@@ -14,8 +14,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type { ElectionCandidate } from "@/lib/db/types";
+import type { Election, ElectionCandidate } from "@/lib/db/types";
 import { DEFAULT_OPS_VOTE_MULTIPLIERS } from "@/lib/constants/countries";
+import { loadEnrichmentCountryConfigsByElection } from "@/lib/turn/electionEnrichmentPreload";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -642,7 +643,7 @@ describe("fetchEnrichedCandidates — regime multiplier", () => {
     expect(enriched.regimeMult).toBe(0);
   });
 
-  it("honest-by-election flag overrides every multiplier with atMultiplier (1.0) and clears the flag", async () => {
+  it("honest-by-election flag overrides every multiplier without mutating country state", async () => {
     const candidate = makePlayerCandidate({ party: "1" });
     setupCharacters(db, [
       {
@@ -655,8 +656,7 @@ describe("fetchEnrichedCandidates — regime multiplier", () => {
     ]);
     setupParties(db, [{ sequentialId: 1, countryId: "CN", regimeStatus: "ruling" }]);
     setupEndorsements(db, []);
-    // Stub a countryState row WITH the honest-by-election flag and the
-    // findOneAndUpdate the helper will use to clear it.
+    // Stub a countryState row WITH the honest-by-election flag.
     db.collection("countryState");
     db.collectionMocks["countryState"]!.findOne.mockResolvedValue({
       _id: "CN",
@@ -671,7 +671,17 @@ describe("fetchEnrichedCandidates — regime multiplier", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    db.collectionMocks["countryState"]!.findOneAndUpdate.mockResolvedValue({
+    const { fetchEnrichedCandidates } = await import("./candidateEnrichment");
+    const [enriched] = await fetchEnrichedCandidates([candidate], { countryId: "CN" });
+
+    // Ruling candidate normally gets 3.0; with override, gets 1.0.
+    expect(enriched.regimeMult).toBe(1.0);
+
+    expect(db.collectionMocks["countryState"]!.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it("the turn shell consumes an honest override once and assigns it to one election", async () => {
+    const runtime = {
       _id: "CN",
       countryId: "CN",
       governmentType: "onePartyState",
@@ -680,27 +690,31 @@ describe("fetchEnrichedCandidates — regime multiplier", () => {
       hasLeaderConfidenceModel: true,
       reformCooldowns: {},
       popularBoostModifiers: [],
+      pendingHonestByElection: { atMultiplier: 1.0 },
       createdAt: new Date(),
       updatedAt: new Date(),
+    };
+    db.collection("countryState");
+    db.collectionMocks["countryState"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([runtime]),
     });
-
-    const { fetchEnrichedCandidates } = await import("./candidateEnrichment");
-    const [enriched] = await fetchEnrichedCandidates([candidate], { countryId: "CN" });
-
-    // Ruling candidate normally gets 3.0; with override, gets 1.0.
-    expect(enriched.regimeMult).toBe(1.0);
-
-    // The flag was cleared via updateCountryState.
-    const writes = db.collectionMocks["countryState"]!.findOneAndUpdate.mock.calls;
-    const clearCall = writes.find((c) => {
-      const op = c[1] as { $set?: { pendingHonestByElection?: unknown } };
-      return (
-        op.$set &&
-        "pendingHonestByElection" in op.$set &&
-        op.$set.pendingHonestByElection === undefined
-      );
+    db.collectionMocks["countryState"]!.findOneAndUpdate.mockResolvedValue({
+      ...runtime,
+      pendingHonestByElection: undefined,
     });
-    expect(clearCall).toBeDefined();
+    const first = { _id: new ObjectId(), countryId: "CN" } as Election;
+    const second = { _id: new ObjectId(), countryId: "CN" } as Election;
+
+    const configs = await loadEnrichmentCountryConfigsByElection(db as unknown as Db, [
+      first,
+      second,
+    ]);
+
+    expect(configs.get(first._id.toString())?.opsVoteMultipliers?.ruling).toBe(1);
+    expect(configs.get(second._id.toString())?.opsVoteMultipliers?.ruling).toBe(
+      DEFAULT_OPS_VOTE_MULTIPLIERS.ruling
+    );
+    expect(db.collectionMocks["countryState"]!.findOneAndUpdate).toHaveBeenCalledTimes(1);
   });
 
   it("attaches regimeMult=1.0 for a US candidate regardless of party regimeStatus", async () => {
