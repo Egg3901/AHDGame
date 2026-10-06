@@ -10,12 +10,10 @@ import type { DemographicCategory, StateDemographics } from "@/lib/db/types";
 import { calcAppeal, approvalScalar } from "@/lib/utils/demographicAppeal";
 import { normalizeNPI, normalizeNationalReachPresidentialPrimary } from "@/lib/utils/normalizeNPI";
 import { infamyPenaltyMultiplier } from "@/lib/utils/infamy";
-import { partitionMajorParties } from "./majorParties";
-import { getMajorPartiesForRegion, COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { calcEffectiveFavorability } from "./voteCalculations";
 import { splitGroupPoolBySlate } from "./slateAllocation";
 import {
-  FPTP_SPOILER_RATE,
   NPP_GENERAL_WEIGHT_MULTIPLIER,
   PRIMARY_PARTY_FIT_WEIGHT,
   MAX_STATE_ORG_BONUS_PRIMARY,
@@ -35,19 +33,7 @@ import {
 import type { EnrichedCandidate, DistributeVotesOptions } from "./types";
 import { normalizePartyInfluencePresidentialPrimary } from "@/lib/utils/normalizeNPI";
 import { effectivePartyInfluenceForPresidentialPrimary } from "@/lib/primaryScore";
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-function spoilerOrgFactor(
-  thirdPartyOrg: number | undefined,
-  nearestMajorOrg: number | undefined
-): number {
-  const third = clamp(thirdPartyOrg ?? 0, 0, 100);
-  const major = clamp(nearestMajorOrg ?? 0, 0, 100);
-  return clamp(1 + (third - major) / 100, 0.25, 2);
-}
+import { applyFptpSpoilerTransfers } from "./rules/spoilerTransfers";
 
 // ─── Group-level competitive allocation (Phase 1 realism) ───────────────────
 //
@@ -311,46 +297,7 @@ export function distributeVotesByGroupLevelAllocation(
     options?.isOnePartyState ??
     (options?.countryId && COUNTRY_CONFIGS[options.countryId]?.governmentType === "onePartyState");
   if (options?.isGeneralElection && options?.votingSystem !== "rcv" && !skipSpoilerForOps) {
-    const majorPartySet = getMajorPartiesForRegion(
-      options?.countryId ?? "US",
-      options?.parentRegionId
-    );
-    const { major: majorParties, third: thirdParties } = partitionMajorParties(
-      enriched,
-      majorPartySet,
-      (ec) => votesPerCandidate[ec.candidateId] ?? 0
-    );
-
-    if (thirdParties.length > 0 && majorParties.length > 0) {
-      const rate = options?.spoilerRate ?? FPTP_SPOILER_RATE;
-      for (const tp of thirdParties) {
-        // Find the ideologically nearest major-party candidate to draw votes from.
-        let nearest = majorParties[0];
-        let minDist = Infinity;
-        for (const mp of majorParties) {
-          const dist = Math.abs(tp.charEP - mp.charEP) + Math.abs(tp.charSP - mp.charSP);
-          if (dist < minDist) {
-            minDist = dist;
-            nearest = mp;
-          }
-        }
-
-        // Amount to spoil scales with the third party's own strength. When
-        // enabled, local party organization further gates the transfer: a
-        // high-org third party can disrupt a weak local major party, while a
-        // low-org third party has less power to bleed a mature state machine.
-        const localOrgFactor = options?.useOrgAwareSpoiler
-          ? spoilerOrgFactor(partyOrgByParty.get(tp.party), partyOrgByParty.get(nearest.party))
-          : 1;
-        const spoiled = votesPerCandidate[tp.candidateId] * rate * localOrgFactor;
-
-        // Draw from the major party; cap at their available votes (no negatives).
-        const available = votesPerCandidate[nearest.candidateId];
-        const actualSpoiled = Math.min(spoiled, available);
-        votesPerCandidate[nearest.candidateId] -= actualSpoiled;
-        votesPerCandidate[tp.candidateId] += actualSpoiled;
-      }
-    }
+    applyFptpSpoilerTransfers(enriched, votesPerCandidate, partyOrgByParty, options);
   }
 
   const sharesPct: Record<string, number> = {};

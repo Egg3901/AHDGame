@@ -299,7 +299,6 @@ function runGeneralScenario(sc: GeneralScenario): GeneralResult {
       fundsByParty,
       incumbentSeatShareByParty,
       presidentialModifierByParty,
-      useSwingFlowModel: true,
     };
 
     const { votesPerCandidate, sharesPct } = distributeVotesBySwingFlow(
@@ -426,7 +425,6 @@ function runPrimaryScenario(sc: PrimaryScenario): PrimaryResult {
       isGeneralElection: false, // primary — no Reg/swing
       countryId: "US",
       hasPlayerInRace: true,
-      useSwingFlowModel: false, // primaries don't use swing-flow
     };
 
     // Note: swing-flow only fires on general (Step 1 short-circuits when

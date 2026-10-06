@@ -12,6 +12,7 @@ import {
   buildPartyChairMaps,
   resolvePartyChairPrimaryRole,
   buildPartyChairIdSet,
+  scorePrimaryCandidate,
 } from "./primaryScore";
 
 describe("calcPrimaryScore", () => {
@@ -108,6 +109,62 @@ describe("calcPrimaryScore", () => {
     const hiven = calcPrimaryScore(1, 1.75, 2, 2, 97.7, 84.2, 12.6, stateEcon, stateSocial);
     const noem = calcPrimaryScore(1, 1.0, 2, 2, 98.0, 92.1, 0.0, stateEcon, stateSocial);
     expect(noem).toBeGreaterThan(hiven);
+  });
+});
+
+describe("scorePrimaryCandidate", () => {
+  it("matches the state formula and applies the shared NPP penalty once", () => {
+    const base = calcPrimaryScore(1, -1, 2, -2, 70, 45, 10, 0, 0);
+    const player = scorePrimaryCandidate({
+      isPresidential: false,
+      isNPP: false,
+      hasPlayerInParty: true,
+      candidateEcon: 1,
+      candidateSocial: -1,
+      partyEcon: 2,
+      partySocial: -2,
+      favorability: 70,
+      politicalInfluence: 45,
+      infamy: 10,
+      stateEconLean: 0,
+      stateSocialLean: 0,
+    });
+    const npp = scorePrimaryCandidate({
+      isPresidential: false,
+      isNPP: true,
+      hasPlayerInParty: true,
+      candidateEcon: 1,
+      candidateSocial: -1,
+      partyEcon: 2,
+      partySocial: -2,
+      favorability: 70,
+      politicalInfluence: 45,
+      infamy: 10,
+      stateEconLean: 0,
+      stateSocialLean: 0,
+    });
+    expect(player).toBe(base);
+    expect(npp).toBeLessThan(base);
+  });
+
+  it("matches the presidential formula with national and party influence", () => {
+    const expected = calcPresidentPrimaryScore(1, -1, 2, -2, 70, 80, 60, 10);
+    expect(
+      scorePrimaryCandidate({
+        isPresidential: true,
+        isNPP: false,
+        hasPlayerInParty: true,
+        candidateEcon: 1,
+        candidateSocial: -1,
+        partyEcon: 2,
+        partySocial: -2,
+        favorability: 70,
+        politicalInfluence: 45,
+        nationalInfluence: 80,
+        partyInfluence: 60,
+        infamy: 10,
+      })
+    ).toBe(expected);
   });
 });
 
