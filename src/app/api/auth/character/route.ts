@@ -52,6 +52,8 @@ import {
   unplayableTerritoryHomeError,
 } from "@/lib/elections/usPoliticalHome";
 import { isUsResidentPoliticalRegion } from "@/lib/elections/statehoodAdmission";
+import { findPartyBySequentialId } from "@/lib/db/partyLookup";
+import { canCharacterJoinParty } from "@/lib/parties/partyFrontier";
 
 const MIN_STARTING_DONOR_BASE_LEVEL = 1;
 
@@ -247,6 +249,28 @@ export async function POST(request: Request) {
     // Block character creation in disabled countries (admins bypass for testing)
     if (!isAdmin && !countryAccess.enabledForPlayers) {
       return errorResponse(403, "This country is not currently available for new characters.");
+    }
+
+    // Validate BEFORE insertion: the new member must not create the very
+    // presence that would make their otherwise out-of-reach party eligible.
+    if (selectedParty !== "independent") {
+      if (!/^[1-9]\d*$/.test(selectedParty)) {
+        return errorResponse(400, "Invalid starting party");
+      }
+      const party = await findPartyBySequentialId(db, selectedParty, countryId);
+      if (!party || party.isDefunct) {
+        return errorResponse(400, "Starting party is not available in this country");
+      }
+      if (!isAdmin) {
+        if (party.membershipMode === "approval") {
+          return errorResponse(
+            403,
+            "This party requires approval. Start as Independent and apply to join."
+          );
+        }
+        const frontier = await canCharacterJoinParty(db, { homeState }, party, countryId);
+        if (!frontier.ok) return errorResponse(403, frontier.error);
+      }
     }
 
     const character: Omit<Character, "_id"> = {

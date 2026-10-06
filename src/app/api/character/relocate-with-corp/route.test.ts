@@ -66,6 +66,7 @@ function stubAuth(user: {
   characterId: ObjectId;
   countryId: string;
   homeState: string;
+  party?: string;
   isAdmin?: boolean;
 }) {
   return {
@@ -78,6 +79,7 @@ function stubAuth(user: {
         userId: new ObjectId(user.userId),
         homeState: user.homeState,
         countryId: user.countryId,
+        party: user.party,
         lastRelocatedAt: null,
       },
     },
@@ -184,61 +186,78 @@ describe("POST /api/character/relocate-with-corp", () => {
     expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
   });
 
-  it("same-country cash move: runs performRelocation with skipCeoResignForCorpId", async () => {
-    await setupDb();
-    const userId = new ObjectId().toString();
-    const charId = new ObjectId();
-    const corpId = new ObjectId();
+  it.each([false, true])(
+    "same-country cash move preserves CEO and passes confirmed party departure %s",
+    async (leaveParty) => {
+      await setupDb();
+      const userId = new ObjectId().toString();
+      const charId = new ObjectId();
+      const corpId = new ObjectId();
 
-    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
-    vi.mocked(requireAuthWithCharacter).mockResolvedValue(
-      stubAuth({ userId, characterId: charId, countryId: "US", homeState: "CA" }) as never
-    );
-    const { checkRateLimit } = await import("@/lib/api/rateLimit");
-    vi.mocked(checkRateLimit).mockReturnValue({
-      ok: true,
-      limit: 100,
-      remaining: 99,
-      resetAt: Date.now() + 60_000,
-    });
-    const { getGameState } = await import("@/lib/gameState");
-    vi.mocked(getGameState).mockResolvedValue({ currentTurn: 100 } as never);
-    db.collectionMocks.states.findOne.mockResolvedValue({
-      _id: "TX",
-      name: "Texas",
-      countryId: "US",
-    });
-    db.collectionMocks.corporations.findOne.mockResolvedValue({
-      _id: corpId,
-      name: "TestCorp",
-      countryId: "US",
-      headquartersState: "CA",
-      ceoId: charId,
-      ceoType: "character",
-      ceoVacant: false,
-      liquidCapital: 100_000_000,
-      liquidCurrencyCode: "USD",
-      sharePrice: 10,
-      totalShares: 1_000_000,
-    });
+      const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+      vi.mocked(requireAuthWithCharacter).mockResolvedValue(
+        stubAuth({
+          userId,
+          characterId: charId,
+          countryId: "US",
+          homeState: "CA",
+          party: leaveParty ? "7" : undefined,
+        }) as never
+      );
+      const { checkRateLimit } = await import("@/lib/api/rateLimit");
+      vi.mocked(checkRateLimit).mockReturnValue({
+        ok: true,
+        limit: 100,
+        remaining: 99,
+        resetAt: Date.now() + 60_000,
+      });
+      const { getGameState } = await import("@/lib/gameState");
+      vi.mocked(getGameState).mockResolvedValue({ currentTurn: 100 } as never);
+      db.collectionMocks.states.findOne.mockResolvedValue({
+        _id: "TX",
+        name: "Texas",
+        countryId: "US",
+      });
+      db.collectionMocks.states.find.mockReturnValue({
+        toArray: async () => [{ _id: "CA" }, { _id: "TX" }],
+      });
+      db.collection("characters").distinct.mockResolvedValue(["CA"]);
+      db.collectionMocks.corporations.findOne.mockResolvedValue({
+        _id: corpId,
+        name: "TestCorp",
+        countryId: "US",
+        headquartersState: "CA",
+        ceoId: charId,
+        ceoType: "character",
+        ceoVacant: false,
+        liquidCapital: 100_000_000,
+        liquidCurrencyCode: "USD",
+        sharePrice: 10,
+        totalShares: 1_000_000,
+      });
 
-    const { POST } = await import("./route");
-    const req = new Request("http://localhost/api/character/relocate-with-corp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ targetStateId: "TX", paymentMethod: "cash" }),
-    });
-    const res = await POST(req);
-    expect(res.status).toBe(200);
-    const data = await res.json();
-    expect(data.corporation.cost).toBe(700_000);
-    expect(data.corporation.crossCountry).toBe(false);
-    expect(data.character.homeState).toBe("TX");
-    const { performRelocation } = await import("@/lib/character/performRelocation");
-    expect(vi.mocked(performRelocation)).toHaveBeenCalled();
-    const call = vi.mocked(performRelocation).mock.calls[0];
-    expect(call[3]).toMatchObject({ skipCeoResignForCorpId: corpId });
-  });
+      const { POST } = await import("./route");
+      const req = new Request("http://localhost/api/character/relocate-with-corp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetStateId: "TX",
+          paymentMethod: "cash",
+          confirmPartyDeparture: leaveParty,
+        }),
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.corporation.cost).toBe(700_000);
+      expect(data.corporation.crossCountry).toBe(false);
+      expect(data.character.homeState).toBe("TX");
+      const { performRelocation } = await import("@/lib/character/performRelocation");
+      expect(vi.mocked(performRelocation)).toHaveBeenCalled();
+      const call = vi.mocked(performRelocation).mock.calls[0];
+      expect(call[3]).toMatchObject({ skipCeoResignForCorpId: corpId, leaveParty });
+    }
+  );
 
   it("cross-country cash move: doubles cost, updates countryId", async () => {
     await setupDb();

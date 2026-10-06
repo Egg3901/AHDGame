@@ -11,6 +11,18 @@ vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
 }));
 
+// Membership validation is exercised with the real frontier in character.partyFrontier.test.ts.
+vi.mock("@/lib/db/partyLookup", () => ({
+  findPartyBySequentialId: vi.fn(async (_db, id, countryId) => ({
+    sequentialId: Number(id),
+    countryId,
+    name: "Synthetic Party",
+  })),
+}));
+vi.mock("@/lib/parties/partyFrontier", () => ({
+  canCharacterJoinParty: vi.fn().mockResolvedValue({ ok: true }),
+}));
+
 vi.mock("next/headers", () => ({
   cookies: vi.fn(),
 }));
@@ -154,7 +166,7 @@ describe("POST /api/auth/character - Character Creation", () => {
         name: "John Smith",
         homeState: "CA",
         countryId: "US",
-        party: "democrat",
+        party: "1",
         policies: {
           economic: -2,
           social: -1,
@@ -184,7 +196,7 @@ describe("POST /api/auth/character - Character Creation", () => {
     expect(insertCall).toMatchObject({
       name: "John Smith",
       homeState: "CA",
-      party: "democrat",
+      party: "1",
       countryId: "US",
       // Ticket 1107: per-character starting nationality, stamped from the state
       // document's country at creation. `users.accountCountryId` is account-level
@@ -310,7 +322,7 @@ describe("POST /api/auth/character - Character Creation", () => {
         name: "Jane Smith",
         homeState: "CA",
         countryId: "US",
-        party: "democrat",
+        party: "1",
         policies: {
           economic: -1,
           social: 0,
@@ -416,7 +428,7 @@ describe("POST /api/auth/character - Character Creation", () => {
         name: "John Smith",
         homeState: "CA",
         countryId: "US",
-        party: "democrat",
+        party: "1",
         policies: { economic: -2, social: -1 },
         demographics: {
           race: "white",
@@ -544,7 +556,7 @@ describe("POST /api/auth/character - Character Creation", () => {
         name: "Danica Roem",
         homeState: "CA",
         countryId: "US",
-        party: "democrat",
+        party: "1",
         policies: { economic: -2, social: -1 },
         demographics: {
           race: "white",
@@ -678,7 +690,7 @@ describe("POST /api/auth/character - Character Creation", () => {
         name: "Danica Roem",
         homeState: "CA",
         countryId: "US",
-        party: "democrat",
+        party: "1",
         policies: { economic: -2, social: -1 },
         demographics: {
           race: "white",
@@ -799,7 +811,7 @@ describe("POST /api/auth/character - Character Creation", () => {
         name: "Danica Roem",
         homeState: "CA",
         countryId: "US",
-        party: "democrat",
+        party: "1",
         policies: { economic: -2, social: -1 },
         demographics: {
           race: "white",
@@ -833,7 +845,7 @@ describe("POST /api/auth/character - Character Creation", () => {
         name: "John Smith",
         homeState: "CA",
         countryId: "US",
-        party: "democrat",
+        party: "1",
         policies: { economic: -2, social: -1 },
         demographics: {
           race: "white",
@@ -881,7 +893,7 @@ describe("POST /api/auth/character - Character Creation", () => {
         name: "John Smith",
         homeState: "CA",
         countryId: "US",
-        party: "democrat",
+        party: "1",
         policies: { economic: -2, social: -1 },
         demographics: {
           race: "white",

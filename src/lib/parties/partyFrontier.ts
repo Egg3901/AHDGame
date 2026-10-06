@@ -69,13 +69,11 @@ export async function getCountryRegionIds(db: Db, countryId: CountryId): Promise
 /**
  * Live presence set for one party.
  *
- * Scoped by REGION SET, not by `countryId`: `NPP.countryId` and
- * `ElectedOfficial.countryId` are both optional, so a countryId filter would
- * silently drop legacy rows and wrongly shrink the frontier. Region scoping is
- * correct either way, and it also excludes national offices (president, prime
- * minister) that carry no `state`. It is load-bearing for correctness too —
- * party `sequentialId` is per-country, so party "1" exists in both the US and
- * the UK and an unscoped read would merge their presence.
+ * Scope by region set AND country, accepting legacy rows without countryId.
+ * Party sequentialIds and region IDs can both collide across countries, so
+ * region scoping alone can import a foreign party's presence. The legacy
+ * fallback keeps optional NPP/official country fields backward-compatible.
+ * National offices without a state do not establish regional presence.
  */
 export async function getPartyPresenceStates(
   db: Db,
@@ -86,17 +84,21 @@ export async function getPartyPresenceStates(
   const regions = regionIds ?? (await getCountryRegionIds(db, countryId));
   const regionSet = new Set(regions);
   const inCountry = { $in: [...regions] };
+  const countryScope = { $or: [{ countryId }, { countryId: { $exists: false } }] };
 
   const [memberStates, officialStates, nppStates] = await Promise.all([
     db
       .collection<Character>("characters")
-      .distinct("homeState", { party: partyId, homeState: inCountry }),
+      .distinct("homeState", { ...countryScope, party: partyId, homeState: inCountry }),
     db
       .collection<ElectedOfficial>("electedOfficials")
-      .distinct("state", { party: partyId, state: inCountry }),
-    db
-      .collection<NPP>("npps")
-      .distinct("homeState", { party: partyId, retiredAt: null, homeState: inCountry }),
+      .distinct("state", { ...countryScope, party: partyId, state: inCountry }),
+    db.collection<NPP>("npps").distinct("homeState", {
+      ...countryScope,
+      party: partyId,
+      retiredAt: null,
+      homeState: inCountry,
+    }),
   ]);
 
   const presence = new Set<string>();
@@ -115,6 +117,49 @@ export async function getPartyFrontier(
 ): Promise<{ presence: Set<string>; frontier: Set<string> }> {
   const presence = await getPartyPresenceStates(db, countryId, partyId, regionIds);
   return { presence, frontier: expandFrontier(countryId, presence) };
+}
+
+/** Batch the same live-presence reads for the character creation party picker. */
+export async function getPartyFrontiers(
+  db: Db,
+  countryId: CountryId,
+  partyIds: string[]
+): Promise<Map<string, string[] | null>> {
+  if (partyIds.length === 0) return new Map();
+  const regions = await getCountryRegionIds(db, countryId);
+  const party = { $in: partyIds };
+  const homeState = { $in: regions };
+  const countryScope = { $or: [{ countryId }, { countryId: { $exists: false } }] };
+  const [members, officials, npps] = await Promise.all([
+    db
+      .collection<Character>("characters")
+      .find({ ...countryScope, party, homeState }, { projection: { party: 1, homeState: 1 } })
+      .toArray(),
+    db
+      .collection<ElectedOfficial>("electedOfficials")
+      .find({ ...countryScope, party, state: homeState }, { projection: { party: 1, state: 1 } })
+      .toArray(),
+    db
+      .collection<NPP>("npps")
+      .find(
+        { ...countryScope, party, homeState, retiredAt: null },
+        { projection: { party: 1, homeState: 1 } }
+      )
+      .toArray(),
+  ]);
+  const presence = new Map(partyIds.map((id) => [id, new Set<string>()]));
+  for (const row of [...members, ...npps]) {
+    if (row.homeState) presence.get(row.party)?.add(row.homeState);
+  }
+  for (const row of officials) {
+    if (row.party && row.state) presence.get(row.party)?.add(row.state);
+  }
+  return new Map(
+    [...presence].map(([id, states]) => [
+      id,
+      states.size === 0 ? null : [...expandFrontier(countryId, states)].sort(),
+    ])
+  );
 }
 
 /**

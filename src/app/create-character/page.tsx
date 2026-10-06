@@ -35,11 +35,13 @@ import { HomeStatePicker } from "./HomeStatePicker";
 import { PartyPicker } from "./PartyPicker";
 import { CandidateFile, type CandidateFileRequirement } from "./CandidateFile";
 import { OnePartyStateNotice } from "./OnePartyStateNotice";
-import { useImagePick, uploadCharacterImage } from "./useImagePick";
+import { useImagePick, uploadCharacterImage, settleWithin } from "./useImagePick";
 import { EDUCATION_OPTIONS, GENDER_OPTIONS, RACE_OPTIONS, labelFor } from "./creatorOptions";
 import { generateUniqueNPPNameAndGender } from "@/lib/npp/nameGenerator";
 import { buildConversationSteps, type ConversationStepId } from "./conversationSteps";
 import { ConversationShell } from "./ConversationShell";
+import { useStartingPartyOptions } from "./useStartingPartyOptions";
+import { isStartingPartyEligible } from "@/lib/registration/rules/startingParty";
 
 const JP_REGION_ID_SET = new Set(JP_REGIONS.map((r) => r.id));
 
@@ -61,23 +63,6 @@ function pick<T>(arr: readonly T[]): T {
 /** Upload budget for the optional portrait/header, in ms. */
 const IMAGE_UPLOAD_BUDGET_MS = 15_000;
 
-/**
- * Resolves when `work` settles or `ms` elapses, whichever comes first. Rejections
- * are swallowed. Used for best-effort steps that must never block navigation:
- * without a bound, one hung request leaves the player on a spinning button.
- */
-function settleWithin(work: Promise<unknown>, ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    void work
-      .catch(() => {})
-      .then(() => {
-        clearTimeout(timer);
-        resolve();
-      });
-  });
-}
-
 /** Region wording differs by country — the UK and Japan have no "states". */
 function regionNounFor(countryId: string): string {
   return countryId === "uk" || countryId === "jp" ? "region" : "state";
@@ -92,6 +77,7 @@ export default function CreateCharacterPage() {
   const [states, setStates] = useState<State[]>([]);
   const [partyOptions, setPartyOptions] = useState<PartyOption[]>([]);
   const [partyOptionsLoadedFor, setPartyOptionsLoadedFor] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [creationInfo, setCreationInfo] = useState<GameCreationInfo | null>(null);
   const [countryOptions, setCountryOptions] = useState<CountryCreationInfo[] | undefined>(
     undefined
@@ -185,8 +171,13 @@ export default function CreateCharacterPage() {
     () => (partyOptionsLoadedFor === country ? partyOptions : []),
     [partyOptionsLoadedFor, country, partyOptions]
   );
-  const majorParties = useMemo(() => parties.filter((p) => p.isDefault), [parties]);
-  const communityParties = useMemo(() => parties.filter((p) => !p.isDefault), [parties]);
+  const { eligibleParties, majorParties, communityParties } = useStartingPartyOptions(
+    parties,
+    formData,
+    isAdmin,
+    setFormData,
+    setPartyTouched
+  );
 
   // Scroll to error when it appears
   useEffect(() => {
@@ -213,6 +204,7 @@ export default function CreateCharacterPage() {
         // creation screen — send them into the app. (Admins retain multi-character
         // support and may create additional characters here.) This also prevents
         // anyone getting stuck here from a stale character-gate hint cookie.
+        setIsAdmin(data.user.isAdmin === true);
         if (data.user.hasCharacter && !data.user.isAdmin) {
           // Straight to /profile, avoiding the /dashboard redirect stub during a
           // client-side navigation (see the note on the post-create push below).
@@ -288,7 +280,7 @@ export default function CreateCharacterPage() {
     let cancelled = false;
     const fetchParties = async () => {
       try {
-        const res = await fetch(partiesApiUrl(country));
+        const res = await fetch(`${partiesApiUrl(country)}?includeFrontier=1`);
         if (res.ok) {
           const data = await res.json();
           // Guard against out-of-order responses when the country selection
@@ -342,7 +334,10 @@ export default function CreateCharacterPage() {
     const randomState = cStates.length > 0 ? pick(cStates)._id : "";
 
     // Pick a random party from default parties (fallback to independent)
-    const defaultParties = parties.filter((p) => p.isDefault);
+    const defaultParties =
+      cId === country
+        ? parties.filter((p) => p.isDefault && isStartingPartyEligible(p, randomState, isAdmin))
+        : [];
     const randomParty = defaultParties.length > 0 ? pick(defaultParties).id : "independent";
 
     // Pick random policy positions
@@ -368,7 +363,7 @@ export default function CreateCharacterPage() {
         wealth: pick(WEALTH_LEVELS).value,
       },
     });
-  }, [countryOptions, states, parties]);
+  }, [countryOptions, states, parties, country, isAdmin]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -389,6 +384,12 @@ export default function CreateCharacterPage() {
 
     if (!formData.homeState) {
       setError(`Please select a home ${regionNounFor(country)}`);
+      setIsLoading(false);
+      return;
+    }
+
+    if (formData.party !== "independent" && !eligibleParties.some((p) => p.id === formData.party)) {
+      setError("Choose an eligible party for your home region, or start as Independent.");
       setIsLoading(false);
       return;
     }
@@ -872,7 +873,7 @@ export default function CreateCharacterPage() {
     <StepPanel
       step={5}
       title="Party"
-      subtitle="A party gives you ballot access, a primary, and a machine. Independent is a real choice, not a default, so pick one deliberately."
+      subtitle="Choose a home region first. Available parties must have a presence there or nearby. Parties requiring approval can be joined by application after starting as Independent."
       complete={partyTouched}
       disabled={!country}
     >
