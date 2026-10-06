@@ -31,7 +31,7 @@ import {
   clearIneligibleHouseLeadershipNominations,
 } from "@/lib/congress/leadershipElections";
 import {
-  buildLeadershipElectionState,
+  buildLeadershipElectionStates,
   type LeaderDisplay,
   type CandidacyDisplay,
 } from "@/lib/congress/leadershipState";
@@ -122,32 +122,28 @@ export async function GET() {
       { role: "majority_whip", partyLabel: "Majority Party" },
       { role: "minority_whip", partyLabel: "Non-Majority Parties" },
     ];
-    const [majorityLeader, minorityLeader, majorityWhip, minorityWhip] = await Promise.all(
-      roles.map(({ role, partyLabel }) => {
-        const leaderRole = houseElectionRoleToLeader(role);
-        const policy = POLICY_BY_ROLE[leaderRole];
-        const eligibleSlugs = eligiblePartySlugsFor(policy, chamberCtx);
-        const partySeats =
-          policy.kind === "any-seated"
-            ? house.totalSeats
-            : policy.kind === "largest-single-party"
-              ? majorityPartySeats
-              : Math.max(0, house.totalSeats - house.majoritySeats);
-        return buildLeadershipElectionState(
-          db,
-          role,
-          leaderRole,
-          "house",
-          eligibleSlugs,
-          partySeats,
-          partyLabel,
-          partyMap,
-          myCharacterId,
-          myParty,
-          isHouseMember
-        );
-      })
-    );
+    const [majorityLeader, minorityLeader, majorityWhip, minorityWhip] =
+      await buildLeadershipElectionStates(
+        db,
+        "house",
+        roles.map(({ role, partyLabel }) => {
+          const leaderRole = houseElectionRoleToLeader(role);
+          const policy = POLICY_BY_ROLE[leaderRole];
+          return {
+            role,
+            leaderRole,
+            eligiblePartySlugs: eligiblePartySlugsFor(policy, chamberCtx),
+            partySeats:
+              policy.kind === "any-seated"
+                ? house.totalSeats
+                : policy.kind === "largest-single-party"
+                  ? majorityPartySeats
+                  : Math.max(0, house.totalSeats - house.majoritySeats),
+            partyLabel,
+          };
+        }),
+        { partyMap, myCharacterId, myParty, isMember: isHouseMember }
+      );
 
     return NextResponse.json({
       majorityLeader,

@@ -31,7 +31,7 @@ import {
   vacateLeadershipForLostSeats,
   resolveLeadershipElection,
 } from "@/lib/congress/leadershipElections";
-import { buildLeadershipElectionState } from "@/lib/congress/leadershipState";
+import { buildLeadershipElectionStates } from "@/lib/congress/leadershipState";
 import { serializeBloc } from "@/lib/congress/blocs";
 import {
   buildChamberLeadershipContext,
@@ -126,31 +126,26 @@ export async function GET() {
       { role: "minority_whip", partyLabel: "Non-Majority Parties" },
     ];
     const [proTempore, majorityLeader, minorityLeader, majorityWhip, minorityWhip] =
-      await Promise.all(
+      await buildLeadershipElectionStates(
+        db,
+        "senate",
         roles.map(({ role, partyLabel }) => {
           const leaderRole = senateElectionRoleToLeader(role);
           const policy = POLICY_BY_ROLE[leaderRole];
-          const eligibleSlugs = eligiblePartySlugsFor(policy, chamberCtx);
-          const partySeats =
-            policy.kind === "any-seated"
-              ? senate.totalSeats
-              : policy.kind === "largest-single-party"
-                ? majorityPartySeats
-                : Math.max(0, senate.totalSeats - senate.majoritySeats);
-          return buildLeadershipElectionState(
-            db,
+          return {
             role,
             leaderRole,
-            "senate",
-            eligibleSlugs,
-            partySeats,
+            eligiblePartySlugs: eligiblePartySlugsFor(policy, chamberCtx),
+            partySeats:
+              policy.kind === "any-seated"
+                ? senate.totalSeats
+                : policy.kind === "largest-single-party"
+                  ? majorityPartySeats
+                  : Math.max(0, senate.totalSeats - senate.majoritySeats),
             partyLabel,
-            partyMap,
-            myCharacterId,
-            myParty,
-            isMember
-          );
-        })
+          };
+        }),
+        { partyMap, myCharacterId, myParty, isMember }
       );
 
     const senateTotal = senate.totalSeats;
