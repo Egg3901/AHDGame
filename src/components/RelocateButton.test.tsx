@@ -36,6 +36,94 @@ function jsonResponse(body: Record<string, unknown>): Response {
 }
 
 describe("RelocateButton", () => {
+  it("allows a cross-country move between regions with the same ID", async () => {
+    render(
+      <RelocateButton
+        targetStateId="HB"
+        targetName="Hubei"
+        userHomeState="HB"
+        userCountryId="DE"
+        targetCountryId="CN"
+        redirectPath="/country/cn/region/HB"
+      />
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Relocate here" }));
+    expect(screen.getByRole("dialog").textContent).toContain("Hubei");
+  });
+
+  it("warns and explicitly confirms an out-of-frontier party departure", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ...readyStatus,
+          hasParty: true,
+          partyCountryId: "US",
+          partyFrontierRegions: ["WA", "OR", "ID"],
+        })
+      )
+      .mockResolvedValueOnce(jsonResponse({ success: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <RelocateButton
+        targetStateId="NY"
+        targetName="New York"
+        targetCountryId="US"
+        userCountryId="US"
+        userHomeState="WA"
+        redirectPath="/country/us/region/NY"
+      />
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Relocate here" }));
+    expect(screen.getByRole("dialog").textContent).toMatch(/become Independent/);
+    expect(screen.getByRole("dialog").textContent).toMatch(/does not start a new cooldown/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: /^Relocate$/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({
+      confirmPartyDeparture: true,
+      targetStateId: "NY",
+    });
+  });
+
+  it("handles a changed frontier by requiring another click after the server warning", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ...readyStatus,
+          hasParty: true,
+          partyCountryId: "US",
+          partyFrontierRegions: ["NY"],
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ error: "Confirm party departure", partyDepartureRequired: true }),
+          { status: 409 }
+        )
+      )
+      .mockResolvedValueOnce(jsonResponse({ success: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <RelocateButton
+        targetStateId="NY"
+        targetName="New York"
+        targetCountryId="US"
+        userHomeState="WA"
+        redirectPath="/country/us/region/NY"
+      />
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Relocate here" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Relocate$/ }));
+    await waitFor(() =>
+      expect(screen.getByRole("dialog").textContent).toMatch(/become Independent/)
+    );
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).confirmPartyDeparture).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: /^Relocate$/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body).confirmPartyDeparture).toBe(true);
+  });
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(readyStatus)));
   });
