@@ -89,6 +89,12 @@ export interface InfluenceTarget {
    * or no rival; a second play in the same turn carries its own cap.
    */
   playCapCostLocal: number | null;
+  /**
+   * The rival pole's standing push on this nation: its pull on the most recent
+   * turn it played here, in the same units a play's pull is netted in. Points
+   * only, never money. Null when no rival has played here in the last two turns.
+   */
+  rivalPressure: { poleId: AlignmentPoleId; points: number } | null;
   /** True when this target resists at half strength (lead within the band). */
   resistsAtHalfStrength: boolean;
   shares: Partial<Record<AlignmentPoleId, number>>;
@@ -232,6 +238,8 @@ export interface OrgInfluenceView {
 const RECENT_LIMIT = 20;
 /** How far back the dossier reports rival activity. */
 const INTEL_WINDOW_TURNS = 12;
+/** A rival counts as still pushing if it played within this many turns. */
+const RIVAL_PRESSURE_TURNS = 2;
 
 export async function loadOrgInfluence(
   db: Db,
@@ -449,6 +457,7 @@ export async function loadOrgInfluence(
           : pointCostLocal * (crisis?.movementCap ?? PER_NATION_TURN_CAP),
       playMaxPoints,
       playCapCostLocal: pointCostLocal === null ? null : Math.round(pointCostLocal * playMaxPoints),
+      rivalPressure: null,
       // Null, not zero: a nation already past the gate has nothing left to buy,
       // and a zero would sort it to the top of "cheapest to flip".
       costToGate:
@@ -485,6 +494,9 @@ export async function loadOrgInfluence(
     .toArray();
 
   const rivalIntel: Record<string, RivalIntelEntry[]> = {};
+  // Raw pull per target, resolved turn and pole. Opposing pulls cancel before the
+  // turn ceiling, so a rival who plays every turn silently eats a same-size play.
+  const rivalPull = new Map<string, Map<number, Map<AlignmentPoleId, number>>>();
   for (const doc of intelDocs) {
     if (doc.organizationId === organizationId) continue;
     const intelChannel = topology.channels.find((c) => c.organizationId === doc.organizationId);
@@ -503,6 +515,30 @@ export async function loadOrgInfluence(
       turnsAgo: Math.max(0, currentTurn - (doc.resolvedTurn ?? currentTurn)),
     };
     rivalIntel[doc.targetEntityId] = [...(rivalIntel[doc.targetEntityId] ?? []), entry];
+
+    if (doc.resolvedTurn == null || doc.appliedPoints == null) continue;
+    if (intelPoleId === channelDef.poleId) continue; // an ally adds, it does not oppose
+    const byTurn = rivalPull.get(doc.targetEntityId) ?? new Map();
+    const byPole = byTurn.get(doc.resolvedTurn) ?? new Map();
+    byPole.set(intelPoleId, (byPole.get(intelPoleId) ?? 0) + doc.appliedPoints);
+    byTurn.set(doc.resolvedTurn, byPole);
+    rivalPull.set(doc.targetEntityId, byTurn);
+  }
+  for (const target of targets) {
+    const byTurn = rivalPull.get(target.entityId);
+    if (!byTurn) continue;
+    const latest = Math.max(...byTurn.keys());
+    if (currentTurn - latest > RIVAL_PRESSURE_TURNS) continue;
+    let strongest: { poleId: AlignmentPoleId; points: number } | null = null;
+    for (const [poleId, points] of byTurn.get(latest) ?? []) {
+      if (!strongest || points > strongest.points) strongest = { poleId, points };
+    }
+    if (strongest) {
+      target.rivalPressure = {
+        poleId: strongest.poleId,
+        points: roundToShareGrid(strongest.points),
+      };
+    }
   }
 
   const recent: InfluencePlayRow[] = recentDocs.map((p) => ({
