@@ -40,6 +40,8 @@ export interface RelocationOutcome {
 }
 
 export interface PerformRelocationOptions {
+  /** Player route has confirmed departure for an out-of-frontier destination. */
+  leaveParty?: boolean;
   /** If set, the CEO auto-resign step is skipped when the active corp matches this id. */
   skipCeoResignForCorpId?: ObjectId;
 }
@@ -75,6 +77,7 @@ export async function performRelocation(
   const oldCountryId = character.countryId;
   const newCountryId = targetState.countryId;
   const countryChanged = oldCountryId !== newCountryId;
+  const leaveParty = countryChanged || options.leaveParty === true;
   const now = new Date();
   // lastRelocatedAt anchors the relocation cooldown, so write it on the game
   // clock — the comparison side in the relocate routes is on game time too.
@@ -265,14 +268,14 @@ export async function performRelocation(
     }
   }
 
-  // 6. Cross-country party cleanup: capture the party name + decrement
+  // 6. Party departure cleanup: capture the party name + decrement
   //    memberCount, then delegate leadership clearing, state-org stripping,
   //    committee removal, and coalition chair sync to the shared helper.
   //    cleanupPartyPositionsOnSwitch reads the party fresh, so running it
   //    first (before we mutate chairId) is required for coalition sync to
   //    detect that chair was cleared.
   let leftPartyName: string | null = null;
-  if (countryChanged && character.party && character.party !== "independent") {
+  if (leaveParty && character.party && character.party !== "independent") {
     const oldPartyId = character.party;
     const oldParty = await db
       .collection<PoliticalParty>("politicalParties")
@@ -293,11 +296,23 @@ export async function performRelocation(
         .collection<PoliticalParty>("politicalParties")
         .updateOne({ _id: oldParty._id }, { $inc: { memberCount: -1 }, $set: { updatedAt: now } });
     }
+    if (!countryChanged) {
+      await cleanupCaucusParticipationForCharacters(db, [characterId], {
+        removeMembership: true,
+        membershipStatus: "left",
+        now,
+      });
+      // A national office may survive a domestic move, but its party label must not.
+      await db
+        .collection("electedOfficials")
+        .updateMany({ characterId }, { $set: { party: "independent", updatedAt: now } });
+    }
   }
 
   // 7. Build the character update. Reset policy:
   //    - ALWAYS reset to 0: politicalInfluence, donorBaseLevel, groupFavorability
-  //    - Only reset on country change: nationalInfluence, partyInfluence, party
+  //    - Only reset on country change: nationalInfluence
+  //    - Party departure (including confirmed domestic moves): partyInfluence, party
   //    - currentOffice cleared if they held one
   //    - homeState always updated; countryId always set to target
   const update: Partial<Character> = {
@@ -307,17 +322,27 @@ export async function performRelocation(
     lastRelocatedTurn,
     updatedAt: now,
     ...(resignedFromOffice ? { currentOffice: null } : {}),
-    ...(countryChanged
+    ...(leaveParty
       ? {
           party: "independent",
-          nationalInfluence: 0,
           partyInfluence: 0,
         }
       : {}),
+    ...(countryChanged ? { nationalInfluence: 0 } : {}),
     politicalInfluence: 0,
     donorBaseLevel: 0,
     groupFavorability: {},
   };
+  // Keep the existing cooldown anchor before removing membership tenure. New
+  // characters may only have partyJoinedAt, without a lastPartySwitchAt yet.
+  if (
+    leaveParty &&
+    character.partyJoinedAt instanceof Date &&
+    (!(character.lastPartySwitchAt instanceof Date) ||
+      character.partyJoinedAt > character.lastPartySwitchAt)
+  ) {
+    update.lastPartySwitchAt = character.partyJoinedAt;
+  }
 
   // 8. Append a careerHistory entry and persist the character update.
   const relocationEvent: CareerEvent = {
@@ -329,18 +354,20 @@ export async function performRelocation(
     date: now,
   };
 
-  // A cross-country move drops the character to independent, which ends party
+  // A party-departing move drops the character to independent, which ends party
   // membership just as leave/purge/ban-strip do — so it clears the same two
   // membership anchors. Leaving `foundedPartyId` behind would let a later
   // re-add into the founded party revive the leadership tenure exemption
-  // (see lib/parties/leadershipTenure.ts). Same-country moves keep the party,
-  // so neither field is touched.
+  // (see lib/parties/leadershipTenure.ts). Moves retaining the party leave
+  // these fields untouched. Existing lastPartySwitchAt is never rearmed.
   await db.collection<Character>("characters").updateOne(
     { _id: characterId },
     {
       $set: update,
       $push: { careerHistory: relocationEvent },
-      ...(countryChanged ? { $unset: { partyJoinedTurn: "", foundedPartyId: "" } } : {}),
+      ...(leaveParty
+        ? { $unset: { partyJoinedAt: "", partyJoinedTurn: "", foundedPartyId: "" } }
+        : {}),
     }
   );
 
@@ -365,12 +392,10 @@ export async function performRelocation(
 
   // 9. Update party presence in the old and new states. Runs AFTER the
   //     character update so the headcount reflects the new homeState.
-  //     For cross-country moves the character is now independent in the new
-  //     country, so we only recompute the new state's presence when the
-  //     party is preserved (same-country move).
+  //     Recompute destination presence only when membership is preserved.
   if (character.party && character.party !== "independent") {
     await updatePartyPresence(db, oldStateId, character.party);
-    if (!countryChanged) {
+    if (!leaveParty) {
       await updatePartyPresence(db, newStateId, character.party);
     }
   }
