@@ -1,10 +1,11 @@
 import type { RegionalOpeningClaim } from "./regionalOpeningAllocation";
+import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 
 /** Regional opening claims are seed allocations, not ministerial treasuries. */
 export interface ResetRegionalOpeningBoard {
   _id: string;
   worldId: string;
-  countryId: "US" | "UK" | "JP";
+  countryId: ResetCountry;
   regionId: string;
   sourceTurn: number;
   annualSpending: number;
@@ -56,7 +57,7 @@ export function regionalOpeningBoardPayload(boards: readonly ResetRegionalOpenin
       throw new Error(`Regional opening claims do not reconcile in ${board._id}`);
     }
   }
-  if (boards.length !== 71) throw new Error("1991 regional opening must contain 71 regions");
+  if (boards.length === 0) throw new Error("Regional opening must contain regions");
   return JSON.stringify(
     [...boards]
       .sort((a, b) => a._id.localeCompare(b._id))

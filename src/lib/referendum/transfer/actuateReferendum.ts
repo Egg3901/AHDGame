@@ -24,6 +24,8 @@ import {
 import { recordWireEvent } from "@/lib/referendum/wire";
 import { transferRegion } from "./transferRegion";
 import { secedeRegion } from "@/lib/referendum/secede/secedeRegion";
+import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
+import { enterCountryForPlayers } from "@/lib/world/playerHandoff";
 
 /** Province grouping for NI under Ireland. */
 const NIR_PROVINCE = "Ulster";
@@ -32,7 +34,7 @@ const NIR_IE_NAME = "Ulster";
 /** Where NI's evacuated NPP politicians (+ their corporations) relocate in the UK. */
 const NIR_RELOCATE_REGION = "LON";
 
-/** Withdraw the referendum's consent bills (Westminster + Dáil) if either is
+/** Withdraw the referendum's consent bills (Westminster and, when present, Dáil) if either is
  *  still being voted on (moot once the conversion resolves another way). A
  *  signed/failed bill is left as the historical record. */
 async function withdrawActiveConsentBills(db: Db, ref: Referendum): Promise<void> {
@@ -51,7 +53,7 @@ async function withdrawActiveConsentBills(db: Db, ref: Referendum): Promise<void
 /**
  * Cancel a passed referendum's conversion (the region does NOT transfer).
  * `cooldown` gates whether a new referendum is blocked for a while: admin block
- * applies a cooldown; a Dáil-bill rejection does not (the popular vote stands).
+ * applies a cooldown; a parliamentary rejection does not (the popular vote stands).
  */
 export async function cancelReferendum(
   db: Db,
@@ -120,6 +122,7 @@ export async function runReferendumActuation(
   if (ref.kind !== "reunification" || !ref.targetCountryId) {
     return { ok: false, error: "Only reunification referendums can be actuated in this phase." };
   }
+  const targetWasPlayerEnabled = await isCountryEnabledForPlayers(db, ref.targetCountryId);
   const result = await transferRegion(db, {
     regionId: ref.regionId,
     fromCountryId: ref.countryId,
@@ -132,12 +135,18 @@ export async function runReferendumActuation(
   if (!result.ok) {
     return { ok: false, error: `Transfer did not run (${result.skipped ?? "unknown"}).` };
   }
+  if (!targetWasPlayerEnabled) {
+    await enterCountryForPlayers(db, ref.targetCountryId, {
+      now: new Date(),
+      status: "active",
+    });
+  }
   await getReferendumCollection(db).updateOne(
     { _id: ref._id },
     { $set: { status: "completed", updatedAt: new Date() } }
   );
-  // If an admin force-resolved while the Dáil bill was still voting, that bill
-  // is now moot — withdraw it. (A bill that PASSED is already `signed`.)
+  // If an admin force-resolved while a consent bill was still voting, that bill
+  // is now moot. A bill that passed is already `signed`.
   await withdrawActiveConsentBills(db, ref);
   await announceReunificationComplete(ref).catch(() => {});
   await recordWireEvent(db, {
@@ -154,7 +163,7 @@ export async function runReferendumActuation(
 
 /**
  * Admin blocks a passed referendum's conversion — the region does NOT transfer.
- * Sets `cancelled` + a cooldown, and withdraws the Dáil consent bill.
+ * Sets `cancelled` + a cooldown, and withdraws any active consent bill.
  */
 export async function blockReferendumConversion(
   db: Db,

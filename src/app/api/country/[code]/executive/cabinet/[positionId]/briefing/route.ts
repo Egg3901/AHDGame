@@ -136,7 +136,8 @@ import {
 } from "@/lib/governmentFinance/departmentCatalog";
 import type { LegislationType } from "@/lib/db/types/legislation";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
-import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { isResetV2Country, resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 import type { ResetDepartmentAccountSnapshot } from "@/lib/resetFinance/rules/liveDepartmentAccount";
 import { buildResetDepartmentFinanceReadModel } from "@/lib/resetCabinet/readModel";
 import { resetActionsForSeat } from "@/lib/resetCabinet/catalog";
@@ -763,7 +764,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
           })
         : undefined;
     const departmentDefinitions =
-      (generalizedDepartmentFinanceEnabled || cabinetV2) && ["US", "UK", "JP"].includes(countryId)
+      (generalizedDepartmentFinanceEnabled || cabinetV2) && isResetV2Country(countryId)
         ? getDepartmentDefinitions(
             countryId as DepartmentCountryId,
             liveYear,
@@ -776,18 +777,18 @@ export async function GET(_request: Request, { params }: RouteParams) {
             .collection<ResetDepartmentAccountSnapshot>("resetDepartmentAccounts")
             .find({
               worldId: gameState?.resetWorldId,
-              countryId: countryId as "US" | "UK" | "JP",
+              countryId: countryId as ResetCountry,
               controllingSeatId: positionId,
             })
             .toArray(),
           db
             .collection<ResetCabinetActionState>("resetCabinetActionStates")
-            .findOne({ _id: countryId as "US" | "UK" | "JP", worldId: gameState?.resetWorldId }),
+            .findOne({ _id: countryId as ResetCountry, worldId: gameState?.resetWorldId }),
           db
             .collection<ResetLawProgramDocument>("resetLawPrograms")
             .find({
               worldId: gameState?.resetWorldId,
-              country: countryId as "US" | "UK" | "JP",
+              country: countryId as ResetCountry,
               scope: "national",
             })
             .toArray(),
@@ -888,7 +889,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
               return {
                 charges: actor.charges,
                 nextRechargeTurn: actor.nextRechargeTurn,
-                actions: resetActionsForSeat(countryId as "US" | "UK" | "JP", positionId).map(
+                actions: resetActionsForSeat(countryId as ResetCountry, positionId).map(
                   (action) => ({
                     ...action,
                     operatingCost: actionOperatingCost(action, budget?.gdp ?? 0),

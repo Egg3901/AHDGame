@@ -37,7 +37,7 @@ import { stampTaxSliderProvisions } from "@/lib/politicalLegislation/taxSlider";
 import { snapshotPolicyProvisionsInPlace } from "@/lib/legislature/provisionEnrichment";
 import type { GameState } from "@/lib/db/types/gameState";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
-import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { isResetV2Country, resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 import { loadReviewedLawCatalog } from "@/lib/resetLegislation/loadReviewedCatalog";
 import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 import type { LawChoice } from "@/lib/resetLegislation/rules/eligibility";
@@ -168,7 +168,7 @@ export async function proposeStateBill(
   );
   const validatedResetLawProvisions: ResetLawProvision[] = [];
   if (rawResetSelections.length > 0) {
-    if (!["US", "UK", "JP"].includes(countryId)) {
+    if (!isResetV2Country(countryId)) {
       return { status: 400, body: { error: "Legislation v2 is unavailable in this country." } };
     }
     const gameState = await db.collection<GameState>("gameState").findOne(

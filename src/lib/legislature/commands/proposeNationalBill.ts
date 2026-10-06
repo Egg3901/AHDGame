@@ -51,6 +51,7 @@ import {
 import { hasBillLifecycle } from "@/lib/legislature/hasBillLifecycle";
 import { mayRuleByDecree } from "@/lib/singleplayerHeadOfState";
 import { enactSingleplayerDecree } from "./enactSingleplayerDecree";
+import { isResetV2Country } from "@/lib/resetVersions/rules";
 
 const VOTING_DURATION_HOURS = 24;
 const VOTING_DURATION_MS = VOTING_DURATION_HOURS * 60 * 60 * 1000;
@@ -397,7 +398,7 @@ export async function proposeNationalBill(
 
   const enabledCountryIds = new Set(await getEnabledCountryIds());
   const administrationEnabled =
-    gameState?.lawAdministrationEnabled === true && ["US", "UK", "JP"].includes(countryId);
+    gameState?.lawAdministrationEnabled === true && isResetV2Country(countryId);
   const validation = await validateBillProvisions(db, rawProvisions, category, countryId, {
     enabled: administrationEnabled,
   });

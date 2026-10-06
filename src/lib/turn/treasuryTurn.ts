@@ -36,6 +36,8 @@ import {
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import type { SovereignCouponCorporationQuote } from "@/lib/banking/rules/sovereignCoupons";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 
 /**
  * Per-turn fiscal accrual (spec §4). For each country's federalBudget, move a
@@ -58,7 +60,18 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       .collection<CentralBank>("centralBanks")
       .find({}, { projection: { countryId: 1 } })
       .toArray(),
-    db.collection<GameState>("gameState").findOne({ _id: "current" }),
+    db.collection<GameState>("gameState").findOne(
+      { _id: "current" },
+      {
+        projection: {
+          preset: 1,
+          resetWorldId: 1,
+          metricsSystemVersion: 1,
+          cabinetSystemVersion: 1,
+          resetVersionSeeds: 1,
+        },
+      }
+    ),
   ]);
   const preset = gameStateDoc?.preset ?? DEFAULT_SEED_PRESET;
   // Shared banks (ECB) cover multiple member countries; heal every member's
@@ -247,6 +260,13 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       const revenue = b.revenue?.total ?? 0;
       const spendingTotal = b.spending?.total ?? 0;
       const debtInterest = b.spending?.debtInterest ?? 0;
+      const countryId = String(b.countryId ?? b._id);
+      // A Cabinet-v2 country settles its revenue and department authority in
+      // resetFinance. Keep this legacy shell for debt service, enforcement,
+      // bank claims, and tax phase-in only. Accruing its primary fiscal slice
+      // here as well would spend the same revenue and appropriations twice.
+      const primaryFiscalSliceOwnedByV2 =
+        resetSystemVersionsForCountry(gameStateDoc, RESET_V2_READY, countryId).cabinet === "v2";
 
       // Live debt-service on the bond-owned stock (the per-turn cash leg of coupon
       // service). Uses the PRE-slice stock so the rate reflects this turn's opening
@@ -288,8 +308,8 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
         currencyCode,
         ...valuation,
         ledgerShadow,
-        annualRevenue: revenue,
-        annualPrimarySpending: spendingTotal - debtInterest,
+        annualRevenue: primaryFiscalSliceOwnedByV2 ? 0 : revenue,
+        annualPrimarySpending: primaryFiscalSliceOwnedByV2 ? 0 : spendingTotal - debtInterest,
         debtService: debtServiceTurn,
         enforcement: enforcementCost,
       };

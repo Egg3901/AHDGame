@@ -27,7 +27,9 @@ describe("v2 national treasury opening", () => {
 
   it("rejects cross-world and already-spent opening receipts", () => {
     const rows = openingNationalTreasurySnapshots("world-a", 1, books);
-    expect(() => openingNationalTreasuryPayload([...rows, rows[0]!])).toThrow("three countries");
+    expect(() => openingNationalTreasuryPayload([...rows, rows[0]!])).toThrow(
+      "Invalid national treasury opening"
+    );
     expect(() =>
       openingNationalTreasuryPayload([{ ...rows[0]!, cash: 1 }, ...rows.slice(1)])
     ).toThrow("Invalid national treasury opening");

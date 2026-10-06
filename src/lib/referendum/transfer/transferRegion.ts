@@ -29,6 +29,8 @@ import { reapportionNationalBudget } from "./reapportionNationalBudget";
 import { convertTransferredResidentsCurrency } from "./convertTransferredResidentsCurrency";
 import { reseedJoinedRegionElections } from "./reseedJoinedRegionElections";
 import { rescaleRegionDelegations } from "@/lib/country/apportionChamber";
+import { transferResetV2RegionToIreland } from "./transferResetV2Region";
+import { ensureIrelandResetV2ForReunification } from "@/lib/countries/ie/resetV2/ensureForReunification";
 
 export interface TransferRegionArgs {
   regionId: string;
@@ -99,7 +101,17 @@ export async function transferRegion(
   // Idempotency: bail if the region doesn't exist or already belongs to target.
   const region = await db.collection<State>("states").findOne({ _id: regionId });
   if (!region) return { ok: false, skipped: "region-not-found" };
-  if (region.countryId === toCountryId) return { ok: true, skipped: "already-transferred" };
+  if (region.countryId === toCountryId) {
+    if (fromCountryId === "UK" && toCountryId === "IE") {
+      await ensureIrelandResetV2ForReunification(db);
+      await transferResetV2RegionToIreland(db, regionId);
+    }
+    return { ok: true, skipped: "already-transferred" };
+  }
+
+  if (fromCountryId === "UK" && toCountryId === "IE") {
+    await ensureIrelandResetV2ForReunification(db);
+  }
 
   const evacuated = await evacuateRegionPolitics(db, {
     regionId,
@@ -109,6 +121,9 @@ export async function transferRegion(
   });
   const rescoped = await rescopeRegionToCountry(db, regionId, fromCountryId, toCountryId);
   await convertRegionDoc(db, { regionId, toCountryId, province, displayName, votingSystem });
+  if (fromCountryId === "UK" && toCountryId === "IE") {
+    await transferResetV2RegionToIreland(db, regionId);
+  }
 
   // A delegation carried in by a DISSOLVING source is sized for the chamber it
   // left, not the one it joined: East Germany's Saxony holds 151 Volkskammer

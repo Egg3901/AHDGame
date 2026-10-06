@@ -1022,7 +1022,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
 
         const resetLawReconciliation = await runtime.runPhase(
           "resetLawEnactmentReconciliation",
-          () => reconcileResetLawEnactments(db, newTurn)
+          () => reconcileResetLawEnactments(db, newTurn, gameState)
         );
         if (resetLawReconciliation) {
           phaseResultsRecord.resetLawEnactmentReconciliation = resetLawReconciliation;

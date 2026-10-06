@@ -1,11 +1,12 @@
 import { primaryMetrics } from "../catalog";
 import type { OpeningMetricObservation } from "./openingObservation";
 import { openingMetricHistory, validateMetricHistory, type ResetMetricHistory } from "./history";
+import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 
 export interface ResetMetricSnapshot {
   _id: string;
   worldId: string;
-  countryId: "US" | "UK" | "JP";
+  countryId: ResetCountry;
   scope: "national" | "regional";
   regionId?: string;
   sourceTurn: number;

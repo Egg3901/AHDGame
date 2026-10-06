@@ -3,15 +3,11 @@
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { ResetMetricsPage } from "../metrics/ResetMetricsPage";
 import PoliticalMetricsClient from "./PoliticalMetricsClient";
-
-const RESET_COUNTRIES = new Set(["US", "UK", "JP"] as const);
-type ResetCountry = "US" | "UK" | "JP";
+import { isResetV2Country, type ResetV2Country } from "@/lib/resetVersions/rules";
 
 export function PoliticalMetricsGate({ code }: { code: string }) {
   const countryId = code.toUpperCase();
-  const resetCountry = RESET_COUNTRIES.has(countryId as ResetCountry)
-    ? (countryId as ResetCountry)
-    : null;
+  const resetCountry: ResetV2Country | null = isResetV2Country(countryId) ? countryId : null;
   const { loaded, failed, resetSystemVersions, resetV2Countries } = useWorldFlags();
 
   if (!resetCountry) {

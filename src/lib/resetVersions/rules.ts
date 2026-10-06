@@ -8,7 +8,21 @@ export const RESET_SYSTEMS = ["metrics", "legislation", "cabinet"] as const;
 
 export type ResetSystem = (typeof RESET_SYSTEMS)[number];
 export type ResetSystemVersion = "v1" | "v2";
-export const RESET_V2_COUNTRIES = ["US", "UK", "JP"] as const;
+/** Countries with reviewed v2 boards at the 1991 reset. */
+export const RESET_V2_OPENING_COUNTRIES = ["US", "UK", "JP", "IE"] as const;
+
+/** Countries whose reviewed v2 boards are created only when independence occurs. */
+export const RESET_V2_SUCCESSOR_COUNTRIES = ["SCO", "WAL"] as const;
+
+export const RESET_V2_COUNTRIES = [
+  ...RESET_V2_OPENING_COUNTRIES,
+  ...RESET_V2_SUCCESSOR_COUNTRIES,
+] as const;
+export type ResetV2Country = (typeof RESET_V2_COUNTRIES)[number];
+
+export function isResetV2Country(countryId: string): countryId is ResetV2Country {
+  return (RESET_V2_COUNTRIES as readonly string[]).includes(countryId);
+}
 
 /** Bump a revision when the verified opening representation changes incompatibly. */
 export const RESET_V2_SEED_REVISION: Readonly<Record<ResetSystem, number>> = {
@@ -27,6 +41,18 @@ export interface ResetSystemSeedReceipt {
   sourceTurn: number;
   completedAt: string;
   verificationHash: string;
+  /** Countries whose boards were verified under this receipt. Missing means the original trio. */
+  countries?: string[];
+}
+
+const LEGACY_V2_COUNTRIES = ["US", "UK", "JP"] as const;
+
+/** Preserve the original verified trio when a live-world promotion adds coverage. */
+export function mergeResetReceiptCountries(
+  existing: readonly string[] | undefined,
+  additions: readonly string[]
+): string[] {
+  return [...new Set([...LEGACY_V2_COUNTRIES, ...(existing ?? []), ...additions])].sort();
 }
 
 export interface ResetVersionState {
@@ -92,10 +118,21 @@ export function resetSystemVersionsForCountry(
   v2Ready: Record<ResetSystem, boolean>,
   countryId: string
 ): Record<ResetSystem, ResetSystemVersion> {
-  if (!(RESET_V2_COUNTRIES as readonly string[]).includes(countryId)) {
+  if (!isResetV2Country(countryId)) {
     return { metrics: "v1", legislation: "v1", cabinet: "v1" };
   }
-  return resetSystemVersionsFrom(state, v2Ready);
+  const versions = resetSystemVersionsFrom(state, v2Ready);
+  if ((["US", "UK", "JP"] as const).includes(countryId as "US" | "UK" | "JP")) {
+    return versions;
+  }
+  const included = (system: ResetSystem) =>
+    state?.resetVersionSeeds?.[system]?.countries?.includes(countryId) === true;
+  return {
+    metrics: versions.metrics === "v2" && included("metrics") ? "v2" : "v1",
+    legislation:
+      versions.legislation === "v2" && included("metrics") && included("legislation") ? "v2" : "v1",
+    cabinet: versions.cabinet === "v2" && included("metrics") && included("cabinet") ? "v2" : "v1",
+  };
 }
 
 /** Admin choices target the next reset, not a live-world conversion. */

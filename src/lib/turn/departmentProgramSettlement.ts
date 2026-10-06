@@ -19,6 +19,7 @@ import {
 import { buildCountryDepartmentSettlementPlan } from "@/lib/governmentFinance/generalizedSettlementPlan";
 import { withLawAdministration } from "@/lib/governmentFinance/lawAdministrationCatalog";
 import type { DepartmentCountryId } from "@/lib/governmentFinance/departmentCatalog";
+import { RESET_V2_COUNTRIES } from "@/lib/resetVersions/rules";
 import { includedAuthorityPerTurn } from "@/lib/governmentFinance/rules/appropriation";
 import { settleCapacity } from "@/lib/governmentFinance/rules/capacity";
 import { settleProgramAccount } from "@/lib/governmentFinance/rules/implementation";
@@ -195,7 +196,7 @@ export async function processDepartmentProgramSettlement(
   throw new Error("department settlement could not commit after concurrent budget changes");
 }
 
-const GENERALIZED_COUNTRIES: DepartmentCountryId[] = ["US", "UK", "JP"];
+const GENERALIZED_COUNTRIES: DepartmentCountryId[] = [...RESET_V2_COUNTRIES];
 const GENERALIZED_BUDGET_PROJECTION = {
   _id: 1,
   countryId: 1,

@@ -137,7 +137,7 @@ A 2019-start Ireland begins as a **tech innovation** economy: the same modern mo
 - [Core Systems](/wiki/core-systems): Turn structure, action economy
 - [Player Progression](/wiki/player-progression): Career ladder details
 - [International Organizations](/wiki/international-organizations): EU / ECB shared institutions
-- [Referendums](/wiki/referendums): the Northern Ireland reunification path and its Dáil consent bill
+- [Referendums](/wiki/referendums): the Northern Ireland reunification path and its conditional Dáil consent bill
 
 ---
 
