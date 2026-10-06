@@ -4,6 +4,7 @@ import {
   resetSelectionPreflight,
   resetSystemVersionsFrom,
   resetSystemVersionsForCountry,
+  mergeResetReceiptCountries,
   resetSystemSelectionsFrom,
   resetVersionSelectionEligibility,
   resolveResetSystemVersion,
@@ -126,6 +127,11 @@ describe("reset-era system versions", () => {
         cabinet: "v1",
       });
     }
+  });
+
+  it("preserves legacy receipt coverage while adding promoted countries", () => {
+    expect(mergeResetReceiptCountries(undefined, ["SCO"])).toEqual(["JP", "SCO", "UK", "US"]);
+    expect(mergeResetReceiptCountries(["SCO"], ["IE"])).toEqual(["IE", "JP", "SCO", "UK", "US"]);
   });
 
   it("separates next-reset selections from effective live versions", () => {

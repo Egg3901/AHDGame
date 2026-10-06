@@ -23,8 +23,9 @@ import {
 } from "@/lib/resetMetrics/presentation";
 import { ResetMetricCompare } from "./ResetMetricCompare";
 import { ResetMetricHistoryChart, type ResetMetricDetailResponse } from "./ResetMetricHistoryChart";
+import type { ResetV2Country } from "@/lib/resetVersions/rules";
 
-export type ResetMetricCountry = "US" | "UK" | "JP";
+export type ResetMetricCountry = ResetV2Country;
 
 export type ResetMetricRow = PrimaryMetricDefinition & {
   observation: OpeningMetricObservation;
@@ -85,6 +86,21 @@ const COUNTRY_CHROME: Record<
     registry: "Cabinet Office · Statistics Bureau",
     seal: "Statistics Bureau of Japan",
     glyph: "日",
+  },
+  IE: {
+    registry: "Government of Ireland · National Situation Registry",
+    seal: "Central Statistics Office",
+    glyph: "IE",
+  },
+  SCO: {
+    registry: "Scottish Government · National Situation Registry",
+    seal: "National Records of Scotland",
+    glyph: "SC",
+  },
+  WAL: {
+    registry: "Welsh Government · National Situation Registry",
+    seal: "Statistics for Wales",
+    glyph: "CY",
   },
 };
 

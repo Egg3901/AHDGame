@@ -2,6 +2,7 @@
 
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
+import { LegislationSystemGate } from "@/components/legislation/LegislationSystemGate";
 import { EuropeanTreatyProvisionEditor } from "@/components/bills/EuropeanTreatyProvisionEditor";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -1456,9 +1457,10 @@ function LegacyProposeBillModal({
 
 export function ProposeBillModal(props: Parameters<typeof LegacyProposeBillModal>[0]) {
   const flags = useWorldFlags();
+  if (!flags.loaded || flags.failed) {
+    return <LegislationSystemGate failed={flags.failed} onClose={props.onClose} />;
+  }
   const useV2 =
-    flags.loaded &&
-    !flags.failed &&
     flags.resetSystemVersions.legislation === "v2" &&
     flags.resetV2Countries.includes(props.countryId);
   if (useV2) {

@@ -82,7 +82,7 @@ import type { TurnPhaseAdapter } from "@/simulation/engine/types";
 import { regionalBudgetPhaseDue, resolveRegionalBudgetCadence } from "./regionalBudgetCadence";
 import type { LegislationType } from "@/lib/db/types/legislation";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
-import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { RESET_V2_COUNTRIES, resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 
 export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
   key: "stateEffectsAndNationalAggregation",
@@ -181,7 +181,9 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
         db,
         newTurn,
         regionalBudgetCadence,
-        gameState.regionalLegislationFinanceEnabled === true
+        gameState.regionalLegislationFinanceEnabled === true,
+        resetSystemVersionsForCountry(gameState, RESET_V2_READY, "UK").legislation === "v2",
+        typeof gameState.resetWorldId === "string" ? gameState.resetWorldId : undefined
       )
     );
     const jpRegionalBudgetPromise = runRegionalBudgetPhase("jpRegionalBudgetProcessing", () =>
@@ -189,7 +191,9 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
         db,
         newTurn,
         gameState.regionalLegislationFinanceEnabled === true,
-        regionalBudgetCadence
+        regionalBudgetCadence,
+        resetSystemVersionsForCountry(gameState, RESET_V2_READY, "JP").legislation === "v2",
+        typeof gameState.resetWorldId === "string" ? gameState.resetWorldId : undefined
       )
     );
     const policyEffectsPromise = (async () => {
@@ -672,7 +676,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // only from complete, owner-produced observations. While the reset release
     // gate is closed this is a zero-query skip and v1 remains authoritative.
     if (
-      (["US", "UK", "JP"] as const).some(
+      RESET_V2_COUNTRIES.some(
         (country) =>
           resetSystemVersionsForCountry(gameState, RESET_V2_READY, country).metrics === "v2"
       )

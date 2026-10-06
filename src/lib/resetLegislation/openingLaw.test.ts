@@ -7,16 +7,17 @@ import { generateDefaultEnactedLaws } from "@/lib/seeds/reference/budgets";
 import { states1991 } from "@/lib/countries/us/data/usStates1991";
 import { ukRegions1991 } from "@/lib/countries/uk/data/ukRegions1991";
 import { jpRegions1991 } from "@/lib/countries/jp/data/jpRegions1991";
+import { ieRegions1991 } from "@/lib/countries/ie/data/ieRegions1991";
 
 describe("1991 current-law references", () => {
-  it("covers every family and tax type for all three countries at both scopes", () => {
-    expect(openingLawReferences).toHaveLength(360);
-    expect(new Set(openingLawReferences.map((row) => row.key)).size).toBe(360);
+  it("covers every family and tax type for all four opening countries at both scopes", () => {
+    expect(openingLawReferences).toHaveLength(480);
+    expect(new Set(openingLawReferences.map((row) => row.key)).size).toBe(480);
     const ids = [
       ...resetLawFamilies.map((family) => family.id),
       ...new Set(resetTaxes.map((tax) => tax.id)),
     ];
-    for (const country of ["US", "UK", "JP"] as const) {
+    for (const country of ["US", "UK", "JP", "IE"] as const) {
       for (const scope of ["national", "regional"] as const) {
         for (const id of ids)
           expect(
@@ -116,15 +117,15 @@ describe("1991 current-law references", () => {
     }
   });
 
-  it("matches every regional source component to each of the 71 actual 1991 region policy seeds", async () => {
+  it("matches every regional source component to each of the 79 actual 1991 region policy seeds", async () => {
     const policies = await getBasePolicies("1991-default");
     const byRegionAndSource = new Map(
       policies
         .filter((policy) => policy.scope === "state")
         .map((policy) => [`${policy.stateId}:${policy.legislationTypeId}`, policy])
     );
-    const regions = { US: states1991, UK: ukRegions1991, JP: jpRegions1991 };
-    for (const country of ["US", "UK", "JP"] as const) {
+    const regions = { US: states1991, UK: ukRegions1991, JP: jpRegions1991, IE: ieRegions1991 };
+    for (const country of ["US", "UK", "JP", "IE"] as const) {
       for (const region of regions[country]) {
         for (const reference of openingLawReferences.filter(
           (row) => row.country === country && row.scope === "regional"

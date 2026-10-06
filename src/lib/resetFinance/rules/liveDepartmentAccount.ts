@@ -84,9 +84,9 @@ function activeDefinition(
 export function buildOpeningDepartmentFundingPartition(
   boards: readonly ResetDepartmentOpeningBoard[],
   definitions: readonly DepartmentDefinition[],
-  grantEnvelope: Readonly<Record<ResetDepartmentOpeningBoard["countryId"], number>>,
+  grantEnvelope: Readonly<Partial<Record<ResetDepartmentOpeningBoard["countryId"], number>>>,
   namedGrantByFamily: Readonly<
-    Record<ResetDepartmentOpeningBoard["countryId"], Readonly<Record<string, number>>>
+    Partial<Record<ResetDepartmentOpeningBoard["countryId"], Readonly<Record<string, number>>>>
   >
 ): OpeningDepartmentFundingPartition {
   const accounts = new Map<string, ResetDepartmentAccountSnapshot>();
@@ -143,7 +143,7 @@ export function buildOpeningDepartmentFundingPartition(
   const result = [...accounts.values()];
   const continuity: ResetDepartmentContinuitySnapshot[] = [];
   for (const board of boards) {
-    let remainingGrant = grantEnvelope[board.countryId];
+    let remainingGrant = grantEnvelope[board.countryId] ?? 0;
     if (!Number.isSafeInteger(remainingGrant) || remainingGrant < 0) {
       throw new Error(`Invalid opening grant reserve ${board.countryId}`);
     }
@@ -168,7 +168,7 @@ export function buildOpeningDepartmentFundingPartition(
     // Explicitly named transfers are reserved against their actual fiscal
     // family. Unattributed grants remain in continuity and cannot be released
     // by an unrelated law-family replacement.
-    for (const [familyId, amount] of Object.entries(namedGrantByFamily[board.countryId])) {
+    for (const [familyId, amount] of Object.entries(namedGrantByFamily[board.countryId] ?? {})) {
       const owner = countryAccounts.find((account) => account.familyAnnualDemand[familyId]);
       if (!owner || owner.externallySettled || amount > remainingGrant) {
         throw new Error(`Invalid named grant owner ${board.countryId}:${familyId}`);
@@ -189,7 +189,10 @@ export function buildOpeningDepartmentFundingPartition(
       annualAuthority: netContinuity,
     });
     const owned = countryAccounts.reduce((sum, account) => sum + account.annualAuthority, 0);
-    if (Math.abs(owned + netContinuity + grantEnvelope[board.countryId] - board.operating) > 0.01) {
+    if (
+      Math.abs(owned + netContinuity + (grantEnvelope[board.countryId] ?? 0) - board.operating) >
+      0.01
+    ) {
       throw new Error(`Live 1991 accounts do not reconcile ${board.countryId}`);
     }
     // Ordinary departments open with one year of working capital. This is a

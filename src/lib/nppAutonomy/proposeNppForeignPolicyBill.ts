@@ -4,10 +4,13 @@ import { getNationalDocId } from "@/lib/constants/nationalScope";
 import { NATIONAL_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
 import type { Bill, BillChamber, BillStatus, ElectedOfficial, NPP } from "@/lib/db/types";
 import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
+import type { GameState } from "@/lib/db/types/gameState";
 import type { Tariff } from "@/lib/db/types/tariff";
 import { getLowerChamberOfficeType } from "@/lib/legislature/chamberOfficeType";
 import { buildActiveNationalBillFilter } from "@/lib/legislature/nationalBillScope";
 import { NPP_BILL_VOTING_DURATION_HOURS } from "./constants";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 
 export type NppTradeBillIntent = "raise_tariff" | "lower_tariff";
 
@@ -34,11 +37,25 @@ export async function proposeNppForeignPolicyBill(
   }
 
   const [gameState, government] = await Promise.all([
-    db.collection<{ _id: string; preset?: string }>("gameState").findOne({ _id: "current" }),
+    db.collection<GameState>("gameState").findOne(
+      { _id: "current" },
+      {
+        projection: {
+          preset: 1,
+          resetWorldId: 1,
+          metricsSystemVersion: 1,
+          legislationSystemVersion: 1,
+          resetVersionSeeds: 1,
+        },
+      }
+    ),
     db.collection<GovernmentFormation>("governmentFormations").findOne({ _id: countryId }),
   ]);
   if (!government || government.status !== "formed") {
     return { ok: false, reason: "No formed government can introduce the trade bill." };
+  }
+  if (resetSystemVersionsForCountry(gameState, RESET_V2_READY, countryId).legislation === "v2") {
+    return { ok: false, reason: "Autonomous legacy bills are disabled under legislation v2." };
   }
 
   const lowerOfficeType = getLowerChamberOfficeType(countryId, gameState?.preset);

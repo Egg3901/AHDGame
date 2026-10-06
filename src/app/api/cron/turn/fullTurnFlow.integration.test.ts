@@ -447,13 +447,21 @@ describe("processTurn() — full turn flow", () => {
       currentTurn: expect.any(Number),
       currentYear: expect.any(Number),
     });
-    expect(processBillLifecycle).toHaveBeenCalledWith(realNow);
-    expect(mockUKBillLifecycle).toHaveBeenCalledWith(realNow);
-    expect(processStateBillTimers).toHaveBeenCalledWith(realNow);
+    const expectedBillContext = expect.objectContaining({
+      db,
+      currentTurn: expect.any(Number),
+    });
+    expect(processBillLifecycle).toHaveBeenCalledWith(realNow, expectedBillContext);
+    expect(mockUKBillLifecycle).toHaveBeenCalledWith(realNow, expectedBillContext);
+    expect(processStateBillTimers).toHaveBeenCalledWith(realNow, undefined, expectedBillContext);
     expect(processCabinetNominationLifecycle).toHaveBeenCalledWith(realNow);
-    expect(processBillLifecycle).not.toHaveBeenCalledWith(expectedGameNow);
-    expect(mockUKBillLifecycle).not.toHaveBeenCalledWith(expectedGameNow);
-    expect(processStateBillTimers).not.toHaveBeenCalledWith(expectedGameNow);
+    expect(processBillLifecycle).not.toHaveBeenCalledWith(expectedGameNow, expect.anything());
+    expect(mockUKBillLifecycle).not.toHaveBeenCalledWith(expectedGameNow, expect.anything());
+    expect(processStateBillTimers).not.toHaveBeenCalledWith(
+      expectedGameNow,
+      undefined,
+      expect.anything()
+    );
     expect(processCabinetNominationLifecycle).not.toHaveBeenCalledWith(expectedGameNow);
   });
 

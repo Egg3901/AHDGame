@@ -35,7 +35,7 @@ function mockRegionRoster(db: ReturnType<typeof createMockDb>) {
 }
 
 describe("1991 v2 current-law seed", () => {
-  it("writes and verifies 74 full boards without changing v1 policies or laws", async () => {
+  it("writes and verifies 83 full boards without changing v1 policies or laws", async () => {
     const db = createMockDb();
     const boards = mockRegionRoster(db);
     db.collection("resetLawOpeningBoards").find.mockReturnValue({
@@ -51,9 +51,9 @@ describe("1991 v2 current-law seed", () => {
       sourceTurn: 1,
       verificationHash: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
-    expect(db.collectionMocks.resetLawOpeningBoards!.bulkWrite.mock.calls[0]![0]).toHaveLength(74);
+    expect(db.collectionMocks.resetLawOpeningBoards!.bulkWrite.mock.calls[0]![0]).toHaveLength(83);
     expect(db.collectionMocks.resetRegionalOpeningBoards!.bulkWrite.mock.calls[0]![0]).toHaveLength(
-      71
+      79
     );
     expect(db.collectionMocks.policies).toBeUndefined();
     expect(db.collectionMocks.enactedLaws).toBeUndefined();

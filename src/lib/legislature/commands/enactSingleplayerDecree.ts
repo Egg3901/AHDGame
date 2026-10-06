@@ -1,6 +1,5 @@
 import type { Bill } from "@/lib/db/types";
-import { onBillEnacted } from "@/lib/billEnactment";
-import { applyLegislationEffect } from "@/lib/legislationEffects";
+import { applyEnactedBillEffects } from "@/lib/legislature/commands/applyEnactedBillEffects";
 import { getGameState } from "@/lib/gameState";
 import type { Db } from "mongodb";
 import { captureBillStatusChanged } from "@/lib/analytics/billStatusAnalytics";
@@ -27,9 +26,6 @@ export async function enactSingleplayerDecree(db: Db, bill: Bill): Promise<boole
   );
   if (claimed.modifiedCount !== 1) return false;
   const enacted = { ...bill, status: "signed", presidentAction: "signed", enactedAt: now } as Bill;
-  await applyLegislationEffect(db, enacted).catch((error) =>
-    console.error("Singleplayer decree effect failed:", error)
-  );
   const turn = (await getGameState(db))?.currentTurn ?? 0;
   await captureBillStatusChanged({
     db,
@@ -43,9 +39,10 @@ export async function enactSingleplayerDecree(db: Db, bill: Bill): Promise<boole
     nationId: bill.countryId ?? "US",
     turn,
   });
-  await onBillEnacted(db, enacted, turn).catch((error) =>
-    console.error("Singleplayer decree enactment hook failed:", error)
-  );
+  await applyEnactedBillEffects(db, enacted, turn, {
+    effect: "Singleplayer decree effect failed:",
+    enactment: "Singleplayer decree enactment hook failed:",
+  });
   await flushServerPosthog();
   return true;
 }

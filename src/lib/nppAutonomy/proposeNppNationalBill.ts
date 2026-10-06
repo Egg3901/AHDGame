@@ -31,6 +31,9 @@ import { CATEGORY_TO_POLICY_DOMAINS } from "@shared/constants/legislation";
 import { NPP_BILL_VOTING_DURATION_HOURS } from "./constants";
 import type { NppBillSelection } from "./selectNppBill";
 import type { BillStatus } from "@/lib/db/types/legislation";
+import type { GameState } from "@/lib/db/types/gameState";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 
 const VOTING_DURATION_HOURS = NPP_BILL_VOTING_DURATION_HOURS;
 
@@ -74,7 +77,23 @@ export async function proposeNppNationalBill(
   now: Date
 ): Promise<ProposeNppBillResult | ProposeNppBillError> {
   // ── One-party-state banned-party guard ─────────────────────────────────────
-  const runtimeState = await getCountryState(db, countryId);
+  const [runtimeState, resetState] = await Promise.all([
+    getCountryState(db, countryId),
+    db.collection<GameState>("gameState").findOne(
+      { _id: "current" },
+      {
+        projection: {
+          resetWorldId: 1,
+          metricsSystemVersion: 1,
+          legislationSystemVersion: 1,
+          resetVersionSeeds: 1,
+        },
+      }
+    ),
+  ]);
+  if (resetSystemVersionsForCountry(resetState, RESET_V2_READY, countryId).legislation === "v2") {
+    return { ok: false, reason: "Autonomous legacy bills are disabled under legislation v2." };
+  }
   if (runtimeState.governmentType === "onePartyState" && npp.party) {
     const sponsorParty = await db
       .collection<PoliticalParty>("politicalParties")

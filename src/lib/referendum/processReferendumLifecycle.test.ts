@@ -182,6 +182,39 @@ describe("processReferendumLifecycle", () => {
     expect(r!.transitions.some((t) => t.to === "cancelled")).toBe(true);
   });
 
+  it("actuating completes on Westminster consent when no Dáil bill was required", async () => {
+    setup(db, [
+      refDoc({
+        status: "actuating",
+        kind: "reunification",
+        westminsterBillId: BILL_ID,
+        dailBillId: null,
+      }),
+    ]);
+    db.collection("bills").findOne.mockResolvedValue({ status: "signed" });
+    const r = await processReferendumLifecycle(db as unknown as Db, 200);
+    expect(runReferendumActuation).toHaveBeenCalledOnce();
+    expect(db.collection("bills").findOne).toHaveBeenCalledTimes(1);
+    expect(r!.transitions.some((transition) => transition.to === "completed")).toBe(true);
+  });
+
+  it("actuating cancels when the sole Westminster consent bill fails", async () => {
+    setup(db, [
+      refDoc({
+        status: "actuating",
+        kind: "reunification",
+        westminsterBillId: BILL_ID,
+        dailBillId: null,
+      }),
+    ]);
+    db.collection("bills").findOne.mockResolvedValue({ status: "failed" });
+    const r = await processReferendumLifecycle(db as unknown as Db, 200);
+    expect(cancelReferendum).toHaveBeenCalledWith(expect.anything(), expect.anything(), 200, {
+      cooldown: false,
+    });
+    expect(r!.transitions.some((transition) => transition.to === "cancelled")).toBe(true);
+  });
+
   it("seeds an opening poll point on granted → campaigning", async () => {
     setup(db, [
       refDoc({

@@ -7,7 +7,7 @@ import { primaryMetricById } from "../catalog";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import type { OpeningMetricObservation } from "./openingObservation";
 
-export type OpeningCountry = "US" | "UK" | "JP";
+export type OpeningCountry = "US" | "UK" | "JP" | "IE";
 
 export interface ProvisionalRegionInput {
   regionId: string;
@@ -37,6 +37,7 @@ export const opening1991Anchors: Record<
   US: { lifeYears: 75.5, growthPercent: 1.33626074073779 },
   UK: { lifeYears: 76.0829268292683, growthPercent: 0.309247932319381 },
   JP: { lifeYears: 79.0368292682927, growthPercent: 0.392819832481862 },
+  IE: { lifeYears: 74.8, growthPercent: 0.250480411451676 },
 };
 
 function valid(value: number | null | undefined): value is number {

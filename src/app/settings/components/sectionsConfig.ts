@@ -9,6 +9,7 @@ export interface CharacterData {
   profileHeaderImageUrl?: string;
   policies: { economic: number; social: number };
   actions: number;
+  positionUpdateVouchers?: number;
   infamy: number;
   politicalInfluence: number;
   nationalInfluence?: number;

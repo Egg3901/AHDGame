@@ -150,10 +150,14 @@ describe("POST /api/country/[code]/legislature/bills — trade bills", () => {
   });
 
   it("rejects trade bill with only policy provisions", async () => {
-    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
-      _id: "income_tax",
-      name: "Income Tax",
-      policyDomain: "tax",
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "income_tax",
+          name: "Income Tax",
+          policyDomain: "tax",
+        },
+      ],
     });
     const res = await postTradeBill({
       ...validBody,

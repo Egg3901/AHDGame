@@ -5,7 +5,7 @@ import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { GameState } from "@/lib/db/types/gameState";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
-import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { isResetV2Country, resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 import { loadReviewedLawCatalog } from "@/lib/resetLegislation/loadReviewedCatalog";
 import { resetTaxesFor } from "@/lib/resetLegislation/taxCatalog";
@@ -21,14 +21,12 @@ const querySchema = z
   .refine((query) => (query.scope === "regional") === Boolean(query.regionId), {
     message: "Regional catalogs require a regionId",
   });
-const supported = new Set(["US", "UK", "JP"]);
-
 export async function GET(request: Request, context: { params: Promise<{ code: string }> }) {
   try {
     const auth = await requireAuth();
     if (!auth.ok) return auth.response;
     const country = (await context.params).code.toUpperCase();
-    if (!supported.has(country)) {
+    if (!isResetV2Country(country)) {
       return errorResponse(404, "Legislation v2 is not available here");
     }
     const url = new URL(request.url);

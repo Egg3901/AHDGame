@@ -14,9 +14,10 @@ export function openingDepartmentClaims1991() {
     US: new Set(["secretary_of_education"]),
     UK: new Set<string>(),
     JP: new Set<string>(),
+    IE: new Set<string>(),
   };
   return Object.fromEntries(
-    (["US", "UK", "JP"] as const).map((country) => {
+    (["US", "UK", "JP", "IE"] as const).map((country) => {
       const book = ownership[country];
       const nationalFamilies = resetLawFamilies.filter((family) =>
         family.availability.national.includes(country)
@@ -40,5 +41,5 @@ export function openingDepartmentClaims1991() {
       }));
       return [country, groupOpeningDepartmentClaims(book.operating, claims, book.continuityOwned)];
     })
-  ) as Record<"US" | "UK" | "JP", ReturnType<typeof groupOpeningDepartmentClaims>>;
+  ) as Record<"US" | "UK" | "JP" | "IE", ReturnType<typeof groupOpeningDepartmentClaims>>;
 }

@@ -12,7 +12,14 @@ import {
 describe("1991 v2 live Cabinet account opening", () => {
   const boards = buildOpeningDepartmentBoards1991("world-1991", 1);
   const fiscal = openingFiscalBooks1991();
-  const grants = { US: fiscal.US.grants, UK: fiscal.UK.grants, JP: fiscal.JP.grants };
+  const grants = {
+    US: fiscal.US.grants,
+    UK: fiscal.UK.grants,
+    JP: fiscal.JP.grants,
+    IE: fiscal.IE.grants,
+    SCO: 0,
+    WAL: 0,
+  };
   const namedGrants = openingNamedGrantClaims1991();
 
   it("resolves funded 1991 Cabinet seats and partitions the existing operating claim", () => {

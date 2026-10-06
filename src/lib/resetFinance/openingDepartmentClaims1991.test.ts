@@ -9,7 +9,7 @@ describe("1991 department funding ownership", () => {
   it("reconciles family claims and continuity without double-booking", () => {
     const grouped = openingDepartmentClaims1991();
     const books = openingFiscalOwnership1991();
-    for (const country of ["US", "UK", "JP"] as const) {
+    for (const country of ["US", "UK", "JP", "IE"] as const) {
       const familyAllocated = grouped[country].accounts.reduce(
         (sum, account) => sum + account.annualAllocation,
         0
@@ -43,8 +43,9 @@ describe("1991 department funding ownership", () => {
       US: new Set(["secretary_of_education"]),
       UK: new Set<string>(),
       JP: new Set<string>(),
+      IE: new Set<string>(),
     };
-    for (const country of ["US", "UK", "JP"] as const) {
+    for (const country of ["US", "UK", "JP", "IE"] as const) {
       const accountSeats = new Set(grouped[country].accounts.map((account) => account.seatId));
       for (const family of resetLawFamilies.filter((candidate) =>
         candidate.availability.national.includes(country)

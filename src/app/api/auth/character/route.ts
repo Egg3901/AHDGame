@@ -357,6 +357,7 @@ export async function POST(request: Request) {
       ...(tutorialTrack ? { tutorialTrack } : {}),
       hasReadWiki: false,
       autoRunForReelection: false,
+      positionUpdateVouchers: 0,
 
       // Sequential ID for stable URLs
       sequentialId: await getNextSequentialId(db, "character"),

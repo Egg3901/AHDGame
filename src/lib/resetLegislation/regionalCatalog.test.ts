@@ -5,8 +5,8 @@ import { lawChoiceEligibility } from "./rules/eligibility";
 
 describe("1991 regional service options", () => {
   it("authors five distinct local mechanisms per country without a Cabinet wallet", () => {
-    expect(regionalLawLevels).toHaveLength(700);
-    for (const country of ["US", "UK", "JP"] as const) {
+    expect(regionalLawLevels).toHaveLength(1390);
+    for (const country of ["US", "UK", "JP", "IE", "SCO", "WAL"] as const) {
       const rows = regionalLawLevels.filter(
         (row) => row.country === country && row.familyId === "L19"
       );
@@ -31,7 +31,7 @@ describe("1991 regional service options", () => {
   it("authors exactly five local routes for every country-eligible regional family", () => {
     expect(new Set(regionalLawLevels.map((row) => row.familyId)).size).toBe(48);
     for (const family of resetLawFamilies) {
-      for (const country of ["US", "UK", "JP"] as const) {
+      for (const country of ["US", "UK", "JP", "IE", "SCO", "WAL"] as const) {
         const rows = regionalLawLevels.filter(
           (row) => row.familyId === family.id && row.country === country
         );

@@ -90,6 +90,7 @@ export function buildReferendumVoteResultEmbed(args: {
   kind: ReferendumKind;
   passed: boolean;
   finalYesShare: number;
+  dailConsentRequired?: boolean;
 }): DiscordEmbed {
   const yes = Math.round(args.finalYesShare);
   if (args.kind === "peace_agreement") {
@@ -111,7 +112,9 @@ export function buildReferendumVoteResultEmbed(args: {
         : `${args.region} Votes for Independence`;
     const tail =
       args.kind === "reunification"
-        ? ` Westminster and the Dáil must now both consent for the union to take effect.`
+        ? args.dailConsentRequired === false
+          ? ` Westminster must now consent for the union to take effect.`
+          : ` Westminster and the Dáil must now both consent for the union to take effect.`
         : ` Westminster must now consent for independence to take effect.`;
     return {
       title,
@@ -257,7 +260,7 @@ export async function announceReferendumDecision(
 
 export async function announceReferendumVoteResult(
   ref: Referendum,
-  args: { passed: boolean; finalYesShare: number }
+  args: { passed: boolean; finalYesShare: number; dailConsentRequired?: boolean }
 ): Promise<void> {
   await announceToProcessCountries(
     ref,
@@ -266,6 +269,7 @@ export async function announceReferendumVoteResult(
       kind: ref.kind,
       passed: args.passed,
       finalYesShare: args.finalYesShare,
+      dailConsentRequired: args.dailConsentRequired,
     })
   );
 }

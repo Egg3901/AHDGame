@@ -68,7 +68,8 @@ describe("takeStateBillGovernorAction — parliamentary regional assent", () => 
     const { applyLegislationEffect } = await import("@/lib/legislationEffects");
     expect(vi.mocked(applyLegislationEffect)).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ countryId: "CN", stateId: "XB" })
+      expect.objectContaining({ countryId: "CN", stateId: "XB" }),
+      214
     );
   });
 

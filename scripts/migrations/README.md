@@ -118,40 +118,6 @@ to keep the deploy registry directory uncluttered.)
 
 ---
 
-## Fresh-reset v2 promotion
-
-`2026-10-04-promote-fresh-reset-to-v2.ts` is a manual incident-response tool
-for the recently reset live world. It promotes the exact stopped, turn-one
-`1991-default` world from v1 to the reviewed v2 metrics, legislation, and
-Cabinet openings. It is intentionally absent from the deploy migration
-registry and only reads `MONGODB_URI_LIVE`; there is no local or generic URI
-fallback.
-
-Before running it, take a database backup and keep the turn processor stopped.
-The default invocation is read-only:
-
-```bash
-npx tsx scripts/migrations/2026-10-04-promote-fresh-reset-to-v2.ts
-```
-
-Review the reported world ID, prerequisites, and expected row counts. Apply
-only with the exact world ID returned by that dry-run:
-
-```bash
-npx tsx scripts/migrations/2026-10-04-promote-fresh-reset-to-v2.ts \
-  --apply --confirm-world=<resetWorldId> --actor=<operator>
-```
-
-The apply path refuses an active, processing, advanced, non-1991, partially
-promoted, or differently seeded world. It seeds and verifies all three opening
-systems before one guarded activation write. If seeding fails, v1 remains
-active and the idempotent seed can be retried. If the world changes before
-activation, the tool leaves the seeded rows inert, writes no completion marker,
-and reports that the operator must stop turns and retry. A successful rerun is
-a verified no-op.
-
----
-
 ## Unowned-sector repair tools
 
 Sector abandon, quick dissolve, and bond-default dissolve were all found to

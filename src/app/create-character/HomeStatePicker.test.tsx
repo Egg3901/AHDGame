@@ -2,21 +2,10 @@
  * @vitest-environment happy-dom
  */
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { HomeStatePicker } from "./HomeStatePicker";
 import type { State } from "@/lib/db/types";
 
-/**
- * Regression coverage for the "on registration, the UK is all C/C-lean" bug
- * report: the 1953 UK Layer-1 model keeps `cachedEconomicLean` negative and
- * `cachedSocialLean` positive in EVERY region by construction (see
- * `POSITIONS_1953` in src/lib/seeds/international/uk.ts and the calibration
- * suite at src/lib/seeds/calibration/uk1953.test.ts) — only the *magnitude*
- * of the social axis decides which axis dominates region to region. The
- * picker previously rendered `getLeanLabel(economic)` directly, so every
- * single region showed the identical "Center-Left" headline regardless of
- * its true (and historically correct) lean.
- */
 function ukRegion(id: string, name: string, economic: number, social: number): State {
   return {
     _id: id,
@@ -42,7 +31,7 @@ const LON = ukRegion("LON", "London", -1.49, 0.61); // Labour-held in 1951
 const SEE = ukRegion("SEE", "South East England", -0.53, 0.69); // Home Counties Tory shire
 
 describe("HomeStatePicker — UK 1953 lean display", () => {
-  it("does not collapse every region to the same lean headline", () => {
+  it("separates the overall lean from the two compass axes", () => {
     render(
       <HomeStatePicker
         states={[LON, SEE]}
@@ -54,11 +43,32 @@ describe("HomeStatePicker — UK 1953 lean display", () => {
       />
     );
 
-    // Both regions previously rendered the identical "Center-Left" headline
-    // (raw economic is negative in both). They must now differ: SEE reads
-    // right-of-centre once the dominant (social) axis is selected, matching
-    // the 1951 election geography (Con held the Home Counties).
-    expect(screen.getByText(/Center-Left · Center-Trad/)).toBeTruthy(); // LON
-    expect(screen.getByText(/Center-Right · Center-Trad/)).toBeTruthy(); // SEE
+    // The combined headline still distinguishes Labour London from the Tory
+    // South East, while the explicitly named axes report the coordinates that
+    // are plotted on the character-creation compass.
+    const london = within(screen.getByRole("radio", { name: /London/ }));
+    expect(london.getByText("Electoral lean: Center-Left")).toBeTruthy();
+    expect(london.getByText("Economic: Center-Left · Social: Center-Trad")).toBeTruthy();
+
+    const southEast = within(screen.getByRole("radio", { name: /South East England/ }));
+    expect(southEast.getByText("Electoral lean: Center-Right")).toBeTruthy();
+    expect(southEast.getByText("Economic: Center-Left · Social: Center-Trad")).toBeTruthy();
+  });
+
+  it("labels a centrist economic coordinate separately from a center-right electoral lean", () => {
+    render(
+      <HomeStatePicker
+        states={[ukRegion("TEST", "Reported region", 0.3, 1.2)]}
+        value=""
+        onChange={() => {}}
+        playerCounts={{}}
+        position={{ economic: 0, social: 0 }}
+        regionNoun="region"
+      />
+    );
+
+    const row = within(screen.getByRole("radio", { name: /Reported region/ }));
+    expect(row.getByText("Electoral lean: Center-Right")).toBeTruthy();
+    expect(row.getByText("Economic: Centrist · Social: Center-Trad")).toBeTruthy();
   });
 });

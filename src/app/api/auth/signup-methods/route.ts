@@ -20,8 +20,8 @@ export interface SignupMethods {
   /** Email + password. Requires the test secret while `testMode` is on. */
   email: { available: true; requiresTestSecret: boolean };
   discord: { available: boolean; reason: "not_configured" | "test_mode" | null };
-  google: { available: boolean; reason: "not_configured" | null };
-  apple: { available: boolean; reason: "not_configured" | null };
+  google: { available: boolean; reason: "not_configured" | "test_mode" | null };
+  apple: { available: boolean; reason: "not_configured" | "test_mode" | null };
 }
 
 // GET /api/auth/signup-methods — Which registration methods this deployment supports.
@@ -47,19 +47,19 @@ export async function GET() {
     const body: SignupMethods = {
       testMode,
       email: { available: true, requiresTestSecret: testMode },
+      // Test mode blocks new OAuth registrations in every callback route, and
+      // unlike email signup there is no secret-bearing path through them.
       discord: {
-        // Test mode blocks new Discord registrations in the callback route, and
-        // unlike email signup there is no secret-bearing path through it.
         available: discordConfigured && !testMode,
         reason: !discordConfigured ? "not_configured" : testMode ? "test_mode" : null,
       },
       google: {
-        available: googleConfigured,
-        reason: googleConfigured ? null : "not_configured",
+        available: googleConfigured && !testMode,
+        reason: !googleConfigured ? "not_configured" : testMode ? "test_mode" : null,
       },
       apple: {
-        available: appleConfigured,
-        reason: appleConfigured ? null : "not_configured",
+        available: appleConfigured && !testMode,
+        reason: !appleConfigured ? "not_configured" : testMode ? "test_mode" : null,
       },
     };
 

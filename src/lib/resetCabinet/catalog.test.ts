@@ -6,9 +6,9 @@ import { resetCabinetActions, resetActionsForSeat } from "./catalog";
 import { actionSecondaryTarget, actionSecondaryTargets } from "./secondaryTargets";
 
 describe("reset Cabinet action catalog", () => {
-  it("has 90 distinct, described order slots with no national concurrency gate", () => {
-    expect(resetCabinetActions).toHaveLength(90);
-    expect(new Set(resetCabinetActions.map((action) => action.id)).size).toBe(90);
+  it("has distinct, described order slots with no national concurrency gate", () => {
+    expect(resetCabinetActions).toHaveLength(172);
+    expect(new Set(resetCabinetActions.map((action) => action.id)).size).toBe(172);
     for (const action of resetCabinetActions) {
       expect(action.brief.trim()).not.toBe("");
       expect(action.description.trim()).not.toBe("");
@@ -41,7 +41,7 @@ describe("reset Cabinet action catalog", () => {
   });
 
   it("maps two orders to every 1991-active authored office", () => {
-    for (const country of ["US", "UK", "JP"] as const) {
+    for (const country of ["US", "UK", "JP", "IE", "SCO", "WAL"] as const) {
       const roster = getCabinetPositions(country);
       for (const action of resetCabinetActions.filter((row) => row.country === country)) {
         expect(

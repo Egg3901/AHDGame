@@ -12,7 +12,7 @@ export function buildOpeningDepartmentBoards1991(
 ): ResetDepartmentOpeningBoard[] {
   const claims = openingDepartmentClaims1991();
   const fiscal = openingFiscalOwnership1991();
-  const boards = (["US", "UK", "JP"] as const).map((countryId) => ({
+  const boards = (["US", "UK", "JP", "IE"] as const).map((countryId) => ({
     _id: countryId,
     worldId,
     countryId,
