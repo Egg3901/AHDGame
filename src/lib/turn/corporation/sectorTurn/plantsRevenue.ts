@@ -29,7 +29,7 @@ import type { CommodityType } from "@/lib/constants/commodities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import type { CorporationLookups } from "../types";
 import { computeContractProduction } from "../contractProduction";
-import { throttleSoldUnits } from "../demandThrottle";
+import { soldOutMarketHeadroomUnits, throttleSoldUnits } from "../demandThrottle";
 
 export interface PlantsRevenueInput {
   sector: Pick<
@@ -99,6 +99,16 @@ export interface PlantsRevenueInput {
    * demand throttle. Absent reads the world ratio.
    */
   throttleLegPriceRatio?: (commodity: CommodityType) => number | null | undefined;
+  /**
+   * Lagged supply and demand of the book one output clears in, the same book
+   * `throttleLegPriceRatio` prices. Lets a plant that sold out into a short
+   * market ramp to the unmet demand (ticket 1393). Absent means no headroom.
+   */
+  throttleLegBalance?: (
+    commodity: CommodityType
+  ) => { supply: number; demand: number } | null | undefined;
+  /** Share of one sector output unit that is this commodity, as clearing splits offers. */
+  throttleLegMixWeight?: (commodity: CommodityType) => number;
 }
 
 export interface CapacityBindingEvent {
@@ -179,6 +189,8 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     marketPlantsEnabled,
     contractProductionTargetBySectorId,
     throttleLegPriceRatio,
+    throttleLegBalance,
+    throttleLegMixWeight,
   } = input;
 
   // Launch-safety governor: the clearing price/volume leg (clearingFactor)
@@ -375,6 +387,20 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     guaranteedDemandUnits: marketPlantsEnabled
       ? contractProductionTargetBySectorId?.get(sector._id.toString())
       : undefined,
+    // A plant that sold out into a book with buyers left unserved may step up
+    // to that unmet demand instead of crawling 15% a turn (ticket 1393).
+    marketHeadroomUnits:
+      throttleLegBalance && throttleLegMixWeight
+        ? soldOutMarketHeadroomUnits({
+            soldByCommodity: sector.soldByCommodity,
+            supplyRates: strategySupply,
+            mixWeightFor: (commodity) => throttleLegMixWeight(commodity as CommodityType),
+            balanceFor: (commodity) => throttleLegBalance(commodity as CommodityType),
+            priceRatioFor: (commodity) =>
+              throttleLegPriceRatio?.(commodity as CommodityType) ??
+              priceRatioByCommodity.get(commodity as CommodityType),
+          }) * priorProductionUnitRatio
+        : undefined,
     soldFraction: clearingEnabled && clearing ? clearing.soldFraction : null,
   });
   const { producedUnits, soldUnits, contractAchievableUnits, demandThrottleFactor } = production;
