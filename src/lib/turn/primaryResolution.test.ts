@@ -29,23 +29,33 @@ vi.mock("@/lib/presidentialElectionEngine", () => ({
   initPresidentVoteTally: vi.fn(),
   accumulatePresidentVoteTurn: vi.fn(),
 }));
-vi.mock("@/lib/primaryScore", () => ({
-  PRIMARY_SHARE_SOFTMAX_TEMPERATURE: 15,
-  calcPrimaryScore: vi.fn(),
-  calcPresidentPrimaryScore: vi.fn(),
-  // Deterministic even split keeps snapshot-shape assertions stable regardless
-  // of the (mocked) raw scores; the softmax curve itself is unit-tested directly.
-  primarySharePctSoftmax: (scores: number[]) =>
-    scores.map(() => (scores.length ? Math.round(10000 / scores.length) / 100 : 0)),
-  // Chair-map helpers used by the presidential primary path (#3004/#3019). The
-  // chair boost is inert, so effective party influence is a passthrough.
-  buildPartyChairMaps: () => ({
-    nationalChairIds: new Set<string>(),
-    stateChairStatesByCharacterId: new Map<string, string[]>(),
-  }),
-  resolvePartyChairPrimaryRole: () => null,
-  effectivePartyInfluenceForPresidentialPrimary: (v: number) => Math.max(0, v),
-}));
+vi.mock("@/lib/primaryScore", () => {
+  const calcPrimaryScore = vi.fn();
+  const calcPresidentPrimaryScore = vi.fn();
+  return {
+    PRIMARY_SHARE_SOFTMAX_TEMPERATURE: 15,
+    calcPrimaryScore,
+    calcPresidentPrimaryScore,
+    scorePrimaryCandidate: vi.fn(
+      (input: { isPresidential: boolean; isNPP: boolean; hasPlayerInParty: boolean }) => {
+        const score = input.isPresidential ? calcPresidentPrimaryScore() : calcPrimaryScore();
+        return input.isNPP && input.hasPlayerInParty ? score * 0.75 : score;
+      }
+    ),
+    // Deterministic even split keeps snapshot-shape assertions stable regardless
+    // of the (mocked) raw scores; the softmax curve itself is unit-tested directly.
+    primarySharePctSoftmax: (scores: number[]) =>
+      scores.map(() => (scores.length ? Math.round(10000 / scores.length) / 100 : 0)),
+    // Chair-map helpers used by the presidential primary path (#3004/#3019). The
+    // chair boost is inert, so effective party influence is a passthrough.
+    buildPartyChairMaps: () => ({
+      nationalChairIds: new Set<string>(),
+      stateChairStatesByCharacterId: new Map<string, string[]>(),
+    }),
+    resolvePartyChairPrimaryRole: () => null,
+    effectivePartyInfluenceForPresidentialPrimary: (v: number) => Math.max(0, v),
+  };
+});
 vi.mock("@/lib/utils/getStateApprovalForElection", () => ({
   getAllStateApprovalsForElection: vi.fn().mockResolvedValue(new Map()),
 }));
