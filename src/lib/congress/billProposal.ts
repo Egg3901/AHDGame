@@ -143,6 +143,24 @@ export async function validateBillProvisions(
   const resetFamilyIds = new Set<string>();
   let reviewedNationalCatalog: Awaited<ReturnType<typeof loadReviewedLawCatalog>> | null = null;
   const isTradeCategory = TARIFF_BILL_CATEGORIES.has(category as BillCategory);
+  const requestedLegislationTypeIds = Array.from(
+    new Set(
+      rawProvisions
+        .map((provision) =>
+          String((provision as { legislationTypeId?: unknown })?.legislationTypeId ?? "").trim()
+        )
+        .filter(Boolean)
+    )
+  );
+  const legislationTypes = requestedLegislationTypeIds.length
+    ? await db
+        .collection<LegislationType>("legislationTypes")
+        .find({ _id: { $in: requestedLegislationTypeIds } })
+        .toArray()
+    : [];
+  const legislationTypeById = new Map(
+    legislationTypes.map((legislationType) => [legislationType._id, legislationType])
+  );
 
   for (const rawP of rawProvisions) {
     // A declaration of war is introduced by the EXECUTIVE, through its own route,
@@ -645,7 +663,7 @@ export async function validateBillProvisions(
     if (!ltId) {
       return { ok: false, status: 400, error: "Each provision must have a legislation type." };
     }
-    const lt = await db.collection<LegislationType>("legislationTypes").findOne({ _id: ltId });
+    const lt = legislationTypeById.get(ltId);
     if (!lt) {
       return { ok: false, status: 400, error: `Invalid legislation type: ${ltId}.` };
     }

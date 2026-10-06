@@ -16,7 +16,6 @@ import type {
   BillStatus,
   Character,
   ElectedOfficial,
-  LegislationType,
   NPP,
   PoliticalParty,
 } from "@/lib/db/types";
@@ -77,6 +76,7 @@ import {
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { mayRuleByDecree } from "@/lib/singleplayerHeadOfState";
+import { loadBillLegislationTypes } from "@/lib/legislature/queries/loadBillLegislationTypes";
 
 const BILL_PAGE_LIMIT = 50;
 
@@ -245,7 +245,7 @@ export async function listNationalLegislatureBills(
     billFilter.countryId = "__disabled__";
   }
 
-  const [bills, total, parties, legislationTypesList] = await Promise.all([
+  const [bills, total, parties] = await Promise.all([
     db
       .collection<Bill>("bills")
       .find(billFilter)
@@ -256,13 +256,12 @@ export async function listNationalLegislatureBills(
       .toArray(),
     db.collection<Bill>("bills").countDocuments(billFilter),
     db.collection<PoliticalParty>("politicalParties").find({ countryId }).toArray(),
-    db.collection<LegislationType>("legislationTypes").find({}).toArray(),
   ]);
   const lowerKey = config.legislature.lowerChamber.key;
   const upperKeyForGet = config.legislature.upperChamber?.key;
 
   const partyMap = new Map(parties.map((p) => [String(p.sequentialId), p]));
-  const legislationTypeMap = new Map(legislationTypesList.map((lt) => [lt._id, lt]));
+  const legislationTypeMap = await loadBillLegislationTypes(db, bills);
 
   // Load both chambers' CURRENT seat holders once so every card can live-scope
   // its tally. The stored votesFor/votesAgainst counters keep de-seated NPP
