@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import { runAdoptReferenceGameConfigGates } from "./adoptReferenceGameConfigGates";
 import { gameConfig as referenceGameConfig } from "../../src/lib/seeds/reference/gameConfig";
 import { MARKET_MODE_ORDER } from "../../src/lib/market/modes";
+import { NON_GAMEPLAY_GAME_CONFIG_FIELDS } from "../../src/lib/seeds/reference/featureFlagDefaults";
 
 type Doc = Record<string, unknown>;
 
@@ -116,17 +117,36 @@ describe("adoptReferenceGameConfigGates — gates", () => {
   });
 
   it("re-adopts a diverging gate on a world still in its first day", async () => {
-    // The shadow-ledger case: seeded false by an older build's reference, which
-    // is a fossil of that build rather than a decision.
-    const { db, updates } = fakeDb(fullyPopulated({ ledgerShadow: false }), 2);
+    // Seeded false by an older build's reference, which is a fossil of that
+    // build rather than a decision.
+    const { db, updates } = fakeDb(fullyPopulated({ nppCorpsAttackable: false }), 2);
     await runAdoptReferenceGameConfigGates(db, {});
-    expect(updates[0].ledgerShadow).toBe(referenceGameConfig.ledgerShadow);
+    expect(updates[0].nppCorpsAttackable).toBe(referenceGameConfig.nppCorpsAttackable);
   });
 
   it("leaves a diverging gate alone once the world is past its first day", async () => {
-    const { db, updates } = fakeDb(fullyPopulated({ ledgerShadow: false }), 500);
+    const { db, updates } = fakeDb(fullyPopulated({ nppCorpsAttackable: false }), 500);
     await runAdoptReferenceGameConfigGates(db, {});
     expect(updates).toHaveLength(0);
+  });
+
+  it("never re-adopts or fills a non-gameplay field, even on a fresh world", async () => {
+    // A 1991 world runs `commandEconomyEnabled: false` because bootstrap derives
+    // it from the preset; the reference `true` is a placeholder. Copying it here
+    // turned a re-run on a turn-1 world into a command economy.
+    const nonGameplay = Object.keys(referenceGameConfig).filter(
+      (key) => key in NON_GAMEPLAY_GAME_CONFIG_FIELDS
+    );
+    expect(nonGameplay).toEqual(
+      expect.arrayContaining(["commandEconomyEnabled", "adminRegistrationEnabled", "ledgerShadow"])
+    );
+    const reference: Record<string, unknown> = { ...referenceGameConfig };
+    const flipped = Object.fromEntries(nonGameplay.map((key) => [key, !reference[key]]));
+    for (const live of [flipped, Object.fromEntries(nonGameplay.map((key) => [key, undefined]))]) {
+      const { db, updates } = fakeDb(fullyPopulated(live), 2);
+      await runAdoptReferenceGameConfigGates(db, {});
+      for (const key of nonGameplay) expect(updates[0] ?? {}).not.toHaveProperty(key);
+    }
   });
 
   it("never touches numeric tuning, even on a fresh world", async () => {

@@ -312,6 +312,8 @@ function evalExpr(expr: unknown, doc: Doc, variables: Doc = {}): unknown {
       return args.every(Boolean);
     case "$or":
       return args.some(Boolean);
+    case "$not":
+      return !args[0];
     case "$gte":
       return (args[0] as number) >= (args[1] as number);
     case "$gt":
@@ -343,6 +345,18 @@ function evalExpr(expr: unknown, doc: Doc, variables: Doc = {}): unknown {
       return args[0] === undefined || args[0] === null ? args[1] : args[0];
     case "$abs":
       return typeof args[0] === "number" ? Math.abs(args[0]) : null;
+    case "$type": {
+      const value = args[0];
+      if (value === undefined) return "missing";
+      if (value === null) return "null";
+      if (typeof value === "string") return "string";
+      if (typeof value === "boolean") return "bool";
+      if (typeof value === "number") return Number.isInteger(value) ? "int" : "double";
+      if (value instanceof Date) return "date";
+      if (value instanceof ObjectId) return "objectId";
+      if (Array.isArray(value)) return "array";
+      return "object";
+    }
     default:
       throw new Error(`inMemoryDb: unsupported expression operator ${op}`);
   }

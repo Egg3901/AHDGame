@@ -157,6 +157,31 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
     expect(db.collectionMocks.unownedSectors?.deleteMany).toHaveBeenCalledWith({});
   });
 
+  it("empties every rebuilt reference collection before a reference rebuild of any preset", async () => {
+    const { REFERENCE_REBUILD_CLEARED_COLLECTIONS } =
+      await import("@/lib/admin/seed/referenceRebuildClear");
+    const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
+    const cleared: string[] = [];
+    for (const { name } of REFERENCE_REBUILD_CLEARED_COLLECTIONS) {
+      db.collection(name).deleteMany.mockImplementation(async (filter: unknown) => {
+        expect(filter).toEqual({});
+        expect(vi.mocked(bootstrapGameWorld)).not.toHaveBeenCalled();
+        cleared.push(name);
+        return { deletedCount: 1 } as never;
+      });
+    }
+
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    const result = await resetAndBootstrapGameWorld({
+      db: db as unknown as Db,
+      preset: "1953-default",
+    });
+
+    expect(cleared).toEqual(REFERENCE_REBUILD_CLEARED_COLLECTIONS.map(({ name }) => name));
+    expect(vi.mocked(bootstrapGameWorld)).toHaveBeenCalledOnce();
+    expect(result.logs.join(" ")).toContain("Cleared reference data for rebuild");
+  });
+
   it("clears embedded political runtime channels after teardown and before the new seed", async () => {
     const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
     const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
@@ -177,9 +202,8 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
     const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
     await resetAndBootstrapGameWorld({
       db: db as unknown as Db,
-      preset: "1991-default",
+      preset: "1953-default",
       resetReference: false,
-      startingParties: "none",
     });
 
     expect(order).toEqual(["teardown", "clear-political-runtime", "bootstrap"]);
@@ -225,9 +249,8 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
     const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
     const result = await resetAndBootstrapGameWorld({
       db: db as unknown as Db,
-      preset: "1991-default",
+      preset: "1953-default",
       resetReference: false,
-      startingParties: "none",
     });
 
     expect(order).toEqual([
@@ -262,9 +285,8 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
     await expect(
       resetAndBootstrapGameWorld({
         db: db as unknown as Db,
-        preset: "1991-default",
+        preset: "1953-default",
         resetReference: false,
-        startingParties: "none",
       })
     ).rejects.toThrow("state cleanup failed");
 
@@ -300,16 +322,33 @@ describe("resetAndBootstrapGameWorld — failure handling", () => {
     expect(closeUpdate().$set["resetRun.status"]).toBe("failed");
   });
 
-  it("preserves unowned markets when reset does not request a 1991 reference rebuild", async () => {
+  it("preserves unowned markets when a reset does not request a reference rebuild", async () => {
     const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
     await resetAndBootstrapGameWorld({
       db: db as unknown as Db,
-      preset: "1991-default",
-      startingParties: "none",
+      preset: "1953-default",
       resetReference: false,
     });
 
     expect(db.collectionMocks.unownedSectors?.deleteMany).toBeUndefined();
+  });
+
+  it("refuses a 1991 reset without a reference rebuild before sealing or touching the database", async () => {
+    // Teardown clears the 1991 taxonomy markers, and the taxonomy seeds only
+    // run on a reference rebuild, so this combination would bootstrap legacy
+    // automobile and entertainment markets into a 1991 world.
+    const { resetAndBootstrapGameWorld } = await import("./resetAndBootstrapGameWorld");
+    const { resetGameWorld } = await import("@/lib/admin/resetGameWorld");
+    await expect(
+      resetAndBootstrapGameWorld({
+        db: db as unknown as Db,
+        preset: "1991-default",
+        startingParties: "none",
+        resetReference: false,
+      })
+    ).rejects.toThrow("must rebuild reference data");
+    expect(Object.keys(db.collectionMocks)).toHaveLength(0);
+    expect(vi.mocked(resetGameWorld)).not.toHaveBeenCalled();
   });
 
   it("rejects unsupported empty starts before sealing or touching the database", async () => {
