@@ -1,26 +1,18 @@
 import { countPrStv, validateRankedBallots } from "@/lib/turn/election/rules/prStv";
 import type { PoliticalParty, PrimarySnapshot, ElectionVoteTally } from "@/lib/db/types";
-import {
-  getMultiSeatMinShare,
-  largestRemainderSeats,
-  sntvSeats,
-} from "@/lib/turn/election/seatAllocation";
+import { allocateSeats, isMultiSeatElection } from "@/lib/turn/election/seatAllocation";
 import type { PartyGroup } from "./candidateEnrichment";
 import type { PollingData } from "./electionResponseTypes";
-import { MULTI_SEAT_TYPES } from "@/lib/utils/electionLabels";
 import type { ElectionMethod } from "@/lib/constants/countries";
 
 // ---------------------------------------------------------------------------
-// Hamilton (Largest-Remainder) seat estimate helper
+// Shared seat estimate helper
 // ---------------------------------------------------------------------------
 
 /**
- * Recalculates seat estimates from active-candidate vote totals using the
- * Hamilton/Largest-Remainder method. Returns null when the election is not a
+ * Recalculates seat estimates from active-candidate vote totals using the same
+ * allocator as final resolution. Returns null when the election is not a
  * multi-seat race or there are no votes yet.
- *
- * Applies the minimum vote-share threshold from getMultiSeatMinShare() to
- * match the logic used during actual election resolution.
  */
 export function computeSeatEstimates(
   electionType: string,
@@ -28,7 +20,8 @@ export function computeSeatEstimates(
   tally: ElectionVoteTally | null,
   activeCandidateIdSet: Set<string>,
   countryId?: string,
-  allocationMethod?: ElectionMethod
+  allocationMethod?: ElectionMethod,
+  state?: string
 ): Record<string, number> | null {
   if (tally?.bgOrdinaryBallot || tally?.bulgarianFoundingBallot) return null;
   // Same gate as the engine (allocateSeats + the per-turn estimate in
@@ -37,8 +30,7 @@ export function computeSeatEstimates(
   // used to live here and had drifted to ten US/UK/JP/CN types, so the detail
   // page projected 0 seats for every Bundestag, Dail, Landtag, soviet and
   // eastern-bloc chamber the engine had already apportioned.
-  const multiSeat =
-    MULTI_SEAT_TYPES.has(electionType) || (electionType === "senate" && (totalSeats ?? 0) > 1);
+  const multiSeat = isMultiSeatElection(electionType, totalSeats ?? 0);
   if (!totalSeats || !tally || !multiSeat) {
     return null;
   }
@@ -62,39 +54,28 @@ export function computeSeatEstimates(
   }
   if (totalActiveVotes === 0) return null;
 
-  if (allocationMethod === "sntv") {
-    return sntvSeats(
-      [...activeCandidateIdSet].map((id) => ({
-        id,
-        votes: activeVotes[id] ?? 0,
-        isNPP: tally.candidateIsNPP?.[id],
-      })),
-      totalSeats
-    );
-  }
-
-  const minShare = getMultiSeatMinShare(electionType, totalSeats, countryId);
-
-  // Eligibility, the fallback and Largest Remainder come from the resolver's
-  // own implementation (#585), so the panel cannot drift from the seats the
-  // race will actually resolve to. Two divergences used to live here and both
-  // shipped to players (ticket #1032): the gate was PER-CANDIDATE while
-  // resolution pools a party's candidates, and the fallback re-admitted every
-  // candidate whenever fewer cleared the gate than min(totalSeats, candidates)
-  // — which multi-seat chambers always satisfy, so ~11 of 12 Commons regions
-  // applied no threshold at all and seated parties resolution zeroes.
-  const { seats, poolVotes } = largestRemainderSeats(
-    Object.entries(activeVotes).map(([cid, v]) => ({
+  const ranked = Object.entries(activeVotes)
+    .map(([cid, v]) => ({
       id: cid,
       votes: v,
       party: tally.candidateParties?.[cid],
-    })),
+      isNPP: tally.candidateIsNPP?.[cid],
+    }))
+    .sort((a, b) => b.votes - a.votes || a.id.localeCompare(b.id));
+  const authoritativeHouseSeats = state ? { [state]: totalSeats } : {};
+  const authoritativeCommonsSeats = state ? { [state]: totalSeats } : {};
+  return allocateSeats(
+    electionType,
+    state,
     totalSeats,
-    { minShare, totalVotesForShare: totalActiveVotes }
-  );
-  if (poolVotes === 0) return null;
-
-  return seats;
+    ranked,
+    totalActiveVotes,
+    authoritativeHouseSeats,
+    undefined,
+    authoritativeCommonsSeats,
+    countryId,
+    allocationMethod
+  ).seatsEstimate;
 }
 
 // ---------------------------------------------------------------------------

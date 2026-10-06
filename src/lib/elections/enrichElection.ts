@@ -483,7 +483,8 @@ export async function _enrichElection(
           tally,
           activeCandidateIdSet,
           election.countryId ?? "US",
-          election.allocationMethod
+          election.allocationMethod,
+          election.state
         ));
 
   // US House with redistricting on: project seats district-by-district using the

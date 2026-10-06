@@ -10,14 +10,11 @@ import type {
   State,
 } from "@/lib/db/types";
 import {
-  calcPrimaryScore,
-  calcPresidentPrimaryScore,
   primarySharePctSoftmax,
-  effectivePartyInfluenceForPresidentialPrimary,
   buildPartyChairMaps,
   resolvePartyChairPrimaryRole,
+  scorePrimaryCandidate,
 } from "@/lib/primaryScore";
-import { NPP_PRIMARY_SCORE_MULTIPLIER } from "@/lib/electionEngine/constants";
 import { parseSeatId } from "@/lib/seats/seatId";
 
 function clampPercentStat(value: number, fallback: number): number {
@@ -225,6 +222,10 @@ export function enrichElectionCandidates(deps: EnrichmentDependencies): Enriched
     });
   }
 
+  const partiesWithPlayerCandidate = new Set(
+    candidates.filter((candidate) => !candidate.isNPP).map((candidate) => candidate.party)
+  );
+
   // Enrich each candidate
   const enrichedCandidates = candidates.map((c) => {
     const cid = c._id.toString();
@@ -277,53 +278,25 @@ export function enrichElectionCandidates(deps: EnrichmentDependencies): Enriched
       ? undefined
       : (charMap.get(c.characterId.toString())?.infamy ?? 0);
 
-    let primaryScore = isPresident
-      ? (() => {
-          // Party influence (candidate's own party clout), NPPs have none. See #934.
-          // National chairs get +25% on the value used for primary calcs.
-          // State chairs get no boost on the national snapshot (geographic only).
-          const rawPartyInfluence = c.isNPP
-            ? 0
-            : (charMap.get(c.characterId.toString())?.partyInfluence ?? 0);
-          const role = c.isNPP
-            ? null
-            : resolvePartyChairPrimaryRole(c.characterId.toString(), partyChairMaps);
-          const partyInfluence = effectivePartyInfluenceForPresidentialPrimary(
-            rawPartyInfluence,
-            role
-          );
-          const nationalOrPol = nationalInfluence ?? politicalInfluence;
-          return calcPresidentPrimaryScore(
-            econ,
-            social,
-            partyEcon,
-            partySocial,
-            favorability,
-            nationalOrPol,
-            partyInfluence,
-            candidateInfamy
-          );
-        })()
-      : calcPrimaryScore(
-          econ,
-          social,
-          partyEcon,
-          partySocial,
-          favorability,
-          politicalInfluence,
-          candidateInfamy,
-          raceStateEconLean,
-          raceStateSocialLean
-        );
-
-    // NPP penalty: when a player is in the same party primary, reduce NPP score.
-    // (matches the penalty applied in primaryResolution.ts snapshot recording;
-    //  see NPP_PRIMARY_SCORE_MULTIPLIER in electionEngine/constants.ts)
-    if (c.isNPP) {
-      const partyCandidates = candidates.filter((x) => x.party === c.party);
-      const hasPlayerInParty = partyCandidates.some((x) => !x.isNPP);
-      if (hasPlayerInParty) primaryScore *= NPP_PRIMARY_SCORE_MULTIPLIER;
-    }
+    const primaryScore = scorePrimaryCandidate({
+      isPresidential: isPresident,
+      isNPP: Boolean(c.isNPP),
+      hasPlayerInParty: partiesWithPlayerCandidate.has(c.party),
+      candidateEcon: econ,
+      candidateSocial: social,
+      partyEcon,
+      partySocial,
+      favorability,
+      politicalInfluence,
+      nationalInfluence,
+      partyInfluence: charMap.get(c.characterId.toString())?.partyInfluence,
+      partyChairRole: c.isNPP
+        ? null
+        : resolvePartyChairPrimaryRole(c.characterId.toString(), partyChairMaps),
+      infamy: candidateInfamy,
+      stateEconLean: raceStateEconLean,
+      stateSocialLean: raceStateSocialLean,
+    });
 
     const char = c.isNPP ? undefined : charMap.get(c.characterId.toString());
     // Resolve npp early so avatarUrl can fall back to the NPP's own portrait

@@ -334,6 +334,49 @@ describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", ()
     });
   });
 
+  it("projects a multi-seat Nigerian Senate race with the final allocator", () => {
+    const votes = { major: 600, minor: 400 };
+    const tally = {
+      totalVotes: votes,
+      candidateParties: { major: "major", minor: "minor" },
+    } as never;
+    const projection = computeSeatEstimates(
+      "senate",
+      3,
+      tally,
+      new Set(Object.keys(votes)),
+      "NG",
+      undefined,
+      "NG-NORTH"
+    );
+    const resolution = allocateSeats(
+      "senate",
+      "NG-NORTH",
+      3,
+      [
+        { id: "major", votes: 600, party: "major" },
+        { id: "minor", votes: 400, party: "minor" },
+      ],
+      1000,
+      { "NG-NORTH": 3 },
+      undefined,
+      undefined,
+      "NG"
+    ).seatsEstimate;
+    expect(projection).toEqual(resolution);
+    expect(projection).toEqual({ major: 2, minor: 1 });
+  });
+
+  it("projects the final two-seat House winner-take-all exception", () => {
+    const tally = {
+      totalVotes: { major: 830, minor: 170 },
+      candidateParties: { major: "major", minor: "minor" },
+    } as never;
+    expect(
+      computeSeatEstimates("house", 2, tally, new Set(["major", "minor"]), "US", undefined, "US-XX")
+    ).toEqual({ major: 2, minor: 0 });
+  });
+
   /** Runs both engines over the same votes and returns per-party seat totals. */
   function bothEngines(
     region: string,

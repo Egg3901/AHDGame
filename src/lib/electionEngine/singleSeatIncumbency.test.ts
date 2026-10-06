@@ -6,6 +6,7 @@ import {
   computeConsecutiveTermsFromWinners,
   resolveSingleSeatLegislativeIncumbent,
   resolveHouseIncumbentTenures,
+  preloadLegislativeIncumbencies,
 } from "./singleSeatIncumbency";
 import type { Election } from "@/lib/db/types";
 
@@ -272,5 +273,31 @@ describe("resolveHouseIncumbentTenures", () => {
     const running = new Map([["charA", "cand-now-a"]]);
     const result = await resolveHouseIncumbentTenures(houseElection(), running, db);
     expect(result.size).toBe(0);
+  });
+
+  it("preloads the same House tenures for a whole election sweep", async () => {
+    const { db } = seedHouseStore();
+    const election = houseElection();
+    const currentCandidates = [
+      { _id: "cand-now-a", electionId: election._id, characterId: "charA", party: "dem" },
+      { _id: "cand-now-b", electionId: election._id, characterId: "charB", party: "rep" },
+      {
+        _id: "cand-now-fresh",
+        electionId: election._id,
+        characterId: "char-brand-new",
+        party: "ind",
+      },
+    ] as never;
+    const preloaded = await preloadLegislativeIncumbencies(
+      [election],
+      new Map([[election._id.toString(), currentCandidates]]),
+      db
+    );
+    expect(preloaded.houseTenuresByElection.get(election._id.toString())).toEqual(
+      new Map([
+        ["cand-now-a", 3],
+        ["cand-now-b", 2],
+      ])
+    );
   });
 });

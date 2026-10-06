@@ -100,6 +100,73 @@ describe("party anti-abuse guards", () => {
     expect(result.ok).toBe(true);
   });
 
+  describe("founding window in a no-starting-parties world", () => {
+    const epoch = new Date("2026-01-01T00:00:00Z");
+    const actor = {
+      party: "10",
+      partyJoinedAt: new Date("2026-01-03T00:00:00Z"),
+    } as Pick<Character, "party" | "partyJoinedAt" | "lastPartySwitchAt">;
+
+    function dbWithWorld(startingPartiesMode: "default" | "none") {
+      const db = createMockDb();
+      db.collection("gameState").findOne.mockResolvedValue({
+        _id: "current",
+        startingPartiesMode,
+        worldEpochStartedAt: epoch,
+      });
+      return db;
+    }
+
+    it("lifts party age and member tenure gates inside 240 hours", async () => {
+      const result = await getPartyNppControlStatus({
+        db: dbWithWorld("none") as unknown as Db,
+        countryId: "US",
+        party: makeParty({ createdAt: new Date("2026-01-03T00:00:00Z") }),
+        actor,
+        now: new Date("2026-01-03T01:00:00Z"),
+      });
+
+      expect(result.ok).toBe(true);
+    });
+
+    it("still requires current membership inside the window", async () => {
+      const result = await getPartyNppControlStatus({
+        db: dbWithWorld("none") as unknown as Db,
+        countryId: "US",
+        party: makeParty({ createdAt: new Date("2026-01-03T00:00:00Z") }),
+        actor: { ...actor, party: "11" },
+        now: new Date("2026-01-03T01:00:00Z"),
+      });
+
+      expect(result.ok).toBe(false);
+    });
+
+    it("restores the gates once 240 hours have passed", async () => {
+      const result = await getPartyNppControlStatus({
+        db: dbWithWorld("none") as unknown as Db,
+        countryId: "US",
+        party: makeParty({ createdAt: new Date("2026-01-11T00:00:00Z") }),
+        actor,
+        now: new Date("2026-01-11T01:00:00Z"),
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain("48 hours");
+    });
+
+    it("never applies to worlds that started with parties", async () => {
+      const result = await getPartyNppControlStatus({
+        db: dbWithWorld("default") as unknown as Db,
+        countryId: "US",
+        party: makeParty({ createdAt: new Date("2026-01-03T00:00:00Z") }),
+        actor,
+        now: new Date("2026-01-03T01:00:00Z"),
+      });
+
+      expect(result.ok).toBe(false);
+    });
+  });
+
   it("allows aged custom party NPPs to enter elections without the manual-control player minimum", async () => {
     const db = createMockDb();
     const keys = buildNppElectionEligiblePartyKeys(

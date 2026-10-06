@@ -1171,15 +1171,18 @@ export async function accumulatePresidentVoteTurn(
     ];
   }
 
+  const nationalTotalVotes = Object.values(newTotalVotes).reduce((sum, votes) => sum + votes, 0);
   const snapshot: VoteTurnSnapshot = {
     turn: turnNumber,
     recordedAt: now,
     cumulativeVotes: { ...newTotalVotes },
     sharesPct: Object.fromEntries(
       enriched.map((ec) => {
-        const total = Object.values(newTotalVotes).reduce((s, v) => s + v, 0);
         const votes = newTotalVotes[ec.candidateId] ?? 0;
-        return [ec.candidateId, total > 0 ? Math.round((votes / total) * 1000) / 10 : 0];
+        return [
+          ec.candidateId,
+          nationalTotalVotes > 0 ? Math.round((votes / nationalTotalVotes) * 1000) / 10 : 0,
+        ];
       })
     ),
   };

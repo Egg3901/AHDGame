@@ -21,6 +21,13 @@ export function isFreePartyMoveWindowOpen(
 export const PARTY_SWITCH_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 export const PARTY_NPP_CONTROL_TENURE_MS = 48 * 60 * 60 * 1000;
 export const PARTY_NPP_ENTRY_MIN_PARTY_AGE_MS = 48 * 60 * 60 * 1000;
+/**
+ * A world reset with no starting parties begins with every party brand new and
+ * every member freshly joined, so the 48-hour NPP control gates would lock the
+ * whole server out of slating and whipping at once. For this long after the
+ * world epoch starts, those gates are lifted in no-starting-parties worlds only.
+ */
+export const FOUNDING_NPP_CONTROL_WINDOW_MS = 240 * 60 * 60 * 1000;
 
 export interface GuardResult {
   ok: boolean;
@@ -75,6 +82,16 @@ export function getPartyPowerTenureCooldown(
   return result;
 }
 
+export function isFoundingNppControlWindowOpen(
+  gameState: Pick<GameState, "startingPartiesMode" | "worldEpochStartedAt"> | null | undefined,
+  now = new Date()
+): boolean {
+  if (gameState?.startingPartiesMode !== "none") return false;
+  const startedAt = gameState.worldEpochStartedAt;
+  if (!(startedAt instanceof Date)) return false;
+  return now.getTime() < startedAt.getTime() + FOUNDING_NPP_CONTROL_WINDOW_MS;
+}
+
 export async function getPartyNppControlStatus(args: {
   db: Db;
   countryId: CountryId;
@@ -86,7 +103,17 @@ export async function getPartyNppControlStatus(args: {
   if (args.isAdmin || args.party.isDefault) return { ok: true };
 
   const now = args.now ?? new Date();
-  const partyAge = cooldownResult(args.party.createdAt, PARTY_NPP_ENTRY_MIN_PARTY_AGE_MS, now);
+  const gameState = await args.db
+    .collection<GameState>("gameState")
+    .findOne(
+      { _id: "current" },
+      { projection: { startingPartiesMode: 1, worldEpochStartedAt: 1 } }
+    );
+  const foundingWindow = isFoundingNppControlWindowOpen(gameState, now);
+
+  const partyAge = foundingWindow
+    ? { ok: true }
+    : cooldownResult(args.party.createdAt, PARTY_NPP_ENTRY_MIN_PARTY_AGE_MS, now);
   if (!partyAge.ok) {
     return {
       ...partyAge,
@@ -98,8 +125,10 @@ export async function getPartyNppControlStatus(args: {
     if (args.actor.party !== String(args.party.sequentialId)) {
       return { ok: false, error: "You must be a current member of this party." };
     }
-    const tenure = getPartyPowerTenureCooldown(args.actor, now);
-    if (!tenure.ok) return tenure;
+    if (!foundingWindow) {
+      const tenure = getPartyPowerTenureCooldown(args.actor, now);
+      if (!tenure.ok) return tenure;
+    }
   }
 
   return { ok: true };
