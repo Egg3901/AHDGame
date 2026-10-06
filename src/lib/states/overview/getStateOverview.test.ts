@@ -50,6 +50,101 @@ describe("getStateOverview", () => {
     vi.clearAllMocks();
   });
 
+  describe("registration pool availability", () => {
+    const regions = [
+      { countryId: "US", stateId: "PA" },
+      { countryId: "UK", stateId: "SCO" },
+      { countryId: "JP", stateId: "KAN" },
+    ] as const;
+
+    it.each(regions)(
+      "shows the $countryId pool when new parties have no Reg field",
+      async (region) => {
+        const db = makeStubDb({
+          states: [{ _id: region.stateId, countryId: region.countryId }],
+          statePartyOrg: [
+            { ...region, _id: "new-party", partyId: "1", organization: 3 },
+            { ...region, _id: "zero-party", partyId: "2", organization: 2, registration: 0 },
+          ],
+          politicalParties: [
+            { countryId: region.countryId, sequentialId: 1, abbreviation: "NEW" },
+            { countryId: region.countryId, sequentialId: 2, abbreviation: "ZERO" },
+          ],
+          stateRegistrationPool: [{ ...region, independent: 90, unregistered: 10 }],
+        });
+        const result = await getStateOverview(db as never, region);
+        expect(result.registrationPool).toEqual({
+          seeded: true,
+          parties: [],
+          independent: 90,
+          unregistered: 10,
+        });
+        // Headline provenance is separate from the regional pool's existence.
+        expect(result.kpis.regSource).toBe("derived");
+        expect(result.kpis.topPartyRegPct).toBe(0);
+      }
+    );
+
+    it("keeps a smaller party's Reg visible when the Org leader lacks Reg", async () => {
+      const region = { countryId: "UK", stateId: "SCO" } as const;
+      const db = makeStubDb({
+        statePartyOrg: [
+          { ...region, partyId: "1", organization: 20, registration: null },
+          { ...region, partyId: "2", organization: 10, registration: 5 },
+        ],
+        politicalParties: [
+          { countryId: "UK", sequentialId: 1, abbreviation: "NEW" },
+          { countryId: "UK", sequentialId: 2, abbreviation: "OLD" },
+        ],
+        stateRegistrationPool: [{ ...region, independent: 85, unregistered: 10 }],
+      });
+      const result = await getStateOverview(db as never, region);
+      expect(result.registrationPool.seeded).toBe(true);
+      expect(result.registrationPool.parties).toEqual([
+        expect.objectContaining({ id: "2", regPct: 5 }),
+      ]);
+      expect(
+        result.registrationPool.independent +
+          result.registrationPool.unregistered +
+          result.registrationPool.parties.reduce((sum, p) => sum + p.regPct, 0)
+      ).toBe(100);
+    });
+
+    it("shows a non-party-only pool before any parties are created", async () => {
+      const region = { countryId: "JP", stateId: "KAN" } as const;
+      const db = makeStubDb({
+        stateRegistrationPool: [{ ...region, independent: 95, unregistered: 5 }],
+      });
+      const result = await getStateOverview(db as never, region);
+      expect(result.registrationPool).toEqual({
+        seeded: true,
+        parties: [],
+        independent: 95,
+        unregistered: 5,
+      });
+    });
+
+    it("does not infer a seeded pool from a party Reg field or another region", async () => {
+      const region = { countryId: "US", stateId: "PA" } as const;
+      const db = makeStubDb({
+        statePartyOrg: [{ ...region, partyId: "1", organization: 20, registration: 10 }],
+        politicalParties: [{ countryId: "US", sequentialId: 1, abbreviation: "ONE" }],
+        stateRegistrationPool: [
+          { countryId: "US", stateId: "NY", independent: 90, unregistered: 10 },
+          { countryId: "UK", stateId: "PA", independent: 90, unregistered: 10 },
+        ],
+      });
+      const result = await getStateOverview(db as never, region);
+      expect(result.registrationPool).toEqual({
+        seeded: false,
+        parties: [],
+        independent: 0,
+        unregistered: 0,
+      });
+      expect(result.kpis.regSource).toBe("field");
+    });
+  });
+
   it("returns the top party + sorted party org list + unaffiliated remainder", async () => {
     const db = makeStubDb({
       statePartyOrg: [
