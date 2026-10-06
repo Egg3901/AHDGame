@@ -23,6 +23,7 @@ import {
   runBillLifecycleForConfiguredCountry,
   runBillLifecycleForJP,
 } from "@/lib/turn/billLifecycle/dispatch";
+import type { BillLifecycleRuntimeContext } from "@/lib/turn/billLifecycle/types";
 import { UK_NATIONAL_CONFIG } from "@/lib/turn/billLifecycle/configs/uk";
 import { IE_NATIONAL_CONFIG } from "@/lib/turn/billLifecycle/configs/ie";
 import { DE_NATIONAL_CONFIG } from "@/lib/turn/billLifecycle/configs/de";
@@ -156,25 +157,25 @@ export interface CountryBillPhaseEntry {
     | "grBillLifecycle"
     | "brBillLifecycle"
     | "ngBillLifecycle";
-  fn: (deadlineNow: Date) => Promise<unknown>;
+  fn: (deadlineNow: Date, context?: BillLifecycleRuntimeContext) => Promise<unknown>;
   emptyResult: Record<string, number | boolean>;
 }
 
 export const COUNTRY_BILL_PHASES: Partial<Record<CountryId, CountryBillPhaseEntry>> = {
   UK: {
     phaseName: "ukBillLifecycle",
-    fn: (now) => runBillLifecycleForCountry(UK_NATIONAL_CONFIG, now),
+    fn: (now, context) => runBillLifecycleForCountry(UK_NATIONAL_CONFIG, now, context),
     emptyResult: { enacted: 0, failed: 0 },
   },
   DE: {
     phaseName: "deBillLifecycle",
-    fn: (now) => runBillLifecycleForCountry(DE_NATIONAL_CONFIG, now),
+    fn: (now, context) => runBillLifecycleForCountry(DE_NATIONAL_CONFIG, now, context),
     emptyResult: { enacted: 0, failed: 0 },
   },
   JP: { ...JP_BILL_PHASE_SHAPE, fn: runBillLifecycleForJP },
   IE: {
     phaseName: "ieBillLifecycle",
-    fn: (now) => runBillLifecycleForCountry(IE_NATIONAL_CONFIG, now),
+    fn: (now, context) => runBillLifecycleForCountry(IE_NATIONAL_CONFIG, now, context),
     emptyResult: { enacted: 0, failed: 0 },
   },
   CN: {
@@ -246,52 +247,52 @@ export const COUNTRY_BILL_PHASES: Partial<Record<CountryId, CountryBillPhaseEntr
   },
   FR: {
     phaseName: "frBillLifecycle",
-    fn: (now) => runBillLifecycleForConfiguredCountry("FR", now),
+    fn: (now, context) => runBillLifecycleForConfiguredCountry("FR", now, context),
     emptyResult: { enacted: 0, failed: 0 },
   },
   IT: {
     phaseName: "itBillLifecycle",
-    fn: (now) => runBillLifecycleForConfiguredCountry("IT", now),
+    fn: (now, context) => runBillLifecycleForConfiguredCountry("IT", now, context),
     emptyResult: { enacted: 0, failed: 0 },
   },
   ES: {
     phaseName: "esBillLifecycle",
-    fn: (now) => runBillLifecycleForConfiguredCountry("ES", now),
+    fn: (now, context) => runBillLifecycleForConfiguredCountry("ES", now, context),
     emptyResult: { enacted: 0, failed: 0 },
   },
   SE: {
     phaseName: "seBillLifecycle",
-    fn: (now) => runBillLifecycleForConfiguredCountry("SE", now),
+    fn: (now, context) => runBillLifecycleForConfiguredCountry("SE", now, context),
     emptyResult: { enacted: 0, failed: 0 },
   },
   TR: {
     phaseName: "trBillLifecycle",
-    fn: (now) => runBillLifecycleForConfiguredCountry("TR", now),
+    fn: (now, context) => runBillLifecycleForConfiguredCountry("TR", now, context),
     emptyResult: { enacted: 0, failed: 0 },
   },
   AT: {
     phaseName: "atBillLifecycle",
-    fn: (now) => runBillLifecycleForConfiguredCountry("AT", now),
+    fn: (now, context) => runBillLifecycleForConfiguredCountry("AT", now, context),
     emptyResult: { enacted: 0, failed: 0 },
   },
   FI: {
     phaseName: "fiBillLifecycle",
-    fn: (now) => runBillLifecycleForConfiguredCountry("FI", now),
+    fn: (now, context) => runBillLifecycleForConfiguredCountry("FI", now, context),
     emptyResult: { enacted: 0, failed: 0 },
   },
   GR: {
     phaseName: "grBillLifecycle",
-    fn: (now) => runBillLifecycleForConfiguredCountry("GR", now),
+    fn: (now, context) => runBillLifecycleForConfiguredCountry("GR", now, context),
     emptyResult: { enacted: 0, failed: 0 },
   },
   BR: {
     phaseName: "brBillLifecycle",
-    fn: (now) => runBillLifecycleForConfiguredCountry("BR", now),
+    fn: (now, context) => runBillLifecycleForConfiguredCountry("BR", now, context),
     emptyResult: { enacted: 0, failed: 0 },
   },
   NG: {
     phaseName: "ngBillLifecycle",
-    fn: (now) => runBillLifecycleForConfiguredCountry("NG", now),
+    fn: (now, context) => runBillLifecycleForConfiguredCountry("NG", now, context),
     emptyResult: { enacted: 0, failed: 0 },
   },
 };

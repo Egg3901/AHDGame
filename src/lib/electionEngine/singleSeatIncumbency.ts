@@ -59,13 +59,14 @@ export function computeConsecutiveTermsFromWinners(
   return terms;
 }
 
-/** Winner identity of a resolved election: highest-vote candidate in the
- *  finalized tally, mapped to its characterId/nppId. Null when unfinalized or
- *  no votes. */
-async function getElectionWinnerIdentity(election: Election, db: Db): Promise<string | null> {
-  const tally = await db
-    .collection<ElectionVoteTally>("electionVoteTallies")
-    .findOne({ electionId: election._id });
+/** Winner identity of a resolved election from sweep-preloaded history. */
+function getElectionWinnerIdentity(
+  election: Election,
+  tallyByElection: ReadonlyMap<string, ElectionVoteTally>,
+  candidatesByElection: ReadonlyMap<string, readonly ElectionCandidate[]>
+): string | null {
+  const electionId = election._id.toString();
+  const tally = tallyByElection.get(electionId);
   if (!tally || !tally.finalized) return null;
 
   let winnerCandidateId: string | undefined;
@@ -78,12 +79,83 @@ async function getElectionWinnerIdentity(election: Election, db: Db): Promise<st
   }
   if (winnerCandidateId == null) return null;
 
-  const candidates = await db
-    .collection<ElectionCandidate>("electionCandidates")
-    .find({ electionId: election._id })
-    .toArray();
+  const candidates = candidatesByElection.get(electionId) ?? [];
   const winner = candidates.find((c) => c._id.toString() === winnerCandidateId);
   return winner ? identityOf(winner) : null;
+}
+
+interface IncumbencyHistory {
+  resolvedElections: Election[];
+  tallyByElection: Map<string, ElectionVoteTally>;
+  candidatesByElection: Map<string, ElectionCandidate[]>;
+}
+
+async function loadIncumbencyHistory(
+  resolvedElections: Election[],
+  db: Db
+): Promise<Omit<IncumbencyHistory, "resolvedElections">> {
+  const electionIds = resolvedElections.map((election) => election._id);
+  if (electionIds.length === 0) {
+    return { tallyByElection: new Map(), candidatesByElection: new Map() };
+  }
+  const [tallies, candidates] = await Promise.all([
+    db
+      .collection<ElectionVoteTally>("electionVoteTallies")
+      .find(
+        { electionId: { $in: electionIds } },
+        { projection: { electionId: 1, finalized: 1, totalVotes: 1 } }
+      )
+      .toArray(),
+    db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find(
+        { electionId: { $in: electionIds } },
+        { projection: { electionId: 1, characterId: 1, nppId: 1 } }
+      )
+      .toArray(),
+  ]);
+  const candidatesByElection = new Map<string, ElectionCandidate[]>();
+  for (const candidate of candidates) {
+    const electionId = candidate.electionId.toString();
+    const rows = candidatesByElection.get(electionId) ?? [];
+    rows.push(candidate);
+    candidatesByElection.set(electionId, rows);
+  }
+  return {
+    tallyByElection: new Map(tallies.map((tally) => [tally.electionId.toString(), tally])),
+    candidatesByElection,
+  };
+}
+
+function priorElectionsForSeat(election: Election, resolvedElections: readonly Election[]) {
+  const seatKey = getElectionSeatKey(election);
+  return resolvedElections
+    .filter(
+      (prior) =>
+        (prior.countryId ?? "US") === (election.countryId ?? "US") &&
+        prior.state === election.state &&
+        prior.cycle < election.cycle &&
+        getElectionSeatKey(prior) === seatKey
+    )
+    .sort((a, b) => b.cycle - a.cycle);
+}
+
+function resolveSingleSeatFromHistory(
+  election: Election,
+  runningCandidateIdentities: ReadonlySet<string>,
+  official: ElectedOfficial | undefined,
+  history: IncumbencyHistory
+): { incumbentPartyId: string; tenureTerms: number } | null {
+  if (!isSingleSeatLegislativeRace(election) || !official?.party) return null;
+  const incumbentIdentity = identityOf(official);
+  if (!incumbentIdentity || !runningCandidateIdentities.has(incumbentIdentity)) return null;
+  const winnerIdentities = priorElectionsForSeat(election, history.resolvedElections).map((prior) =>
+    getElectionWinnerIdentity(prior, history.tallyByElection, history.candidatesByElection)
+  );
+  return {
+    incumbentPartyId: official.party,
+    tenureTerms: computeConsecutiveTermsFromWinners(incumbentIdentity, winnerIdentities),
+  };
 }
 
 /**
@@ -109,29 +181,15 @@ export async function resolveSingleSeatLegislativeIncumbent(
   const official = await db.collection<ElectedOfficial>("electedOfficials").findOne(filter);
   if (!official || !official.party) return null;
 
-  const incumbentIdentity = identityOf(official);
-  if (!incumbentIdentity) return null;
-
-  // Open-seat guard: the sitting officeholder must actually be running.
-  if (!runningCandidateIdentities.has(incumbentIdentity)) return null;
-
-  // Tenure walk: prior resolved elections on this seat, newest → oldest.
-  const seatKey = getElectionSeatKey(election);
-  const allResolved = await db
+  const resolvedElections = await db
     .collection<Election>("elections")
-    .find({ countryId, state: election.state, status: "resolved" })
+    .find({ countryId, state: election.state, electionType: "senate", status: "resolved" })
     .toArray();
-  const priorsOnSeat = allResolved
-    .filter((p) => p.cycle < election.cycle && getElectionSeatKey(p) === seatKey)
-    .sort((a, b) => b.cycle - a.cycle);
-
-  const winnerIdentities: (string | null)[] = [];
-  for (const prior of priorsOnSeat) {
-    winnerIdentities.push(await getElectionWinnerIdentity(prior, db));
-  }
-
-  const tenureTerms = computeConsecutiveTermsFromWinners(incumbentIdentity, winnerIdentities);
-  return { incumbentPartyId: official.party, tenureTerms };
+  const loaded = await loadIncumbencyHistory(resolvedElections, db);
+  return resolveSingleSeatFromHistory(election, runningCandidateIdentities, official, {
+    resolvedElections,
+    ...loaded,
+  });
 }
 
 // ─── US House (multi-seat) incumbency ───────────────────────────────────────
@@ -189,6 +247,54 @@ export async function resolveSingleSeatLegislativeIncumbent(
  *  either constant does not silently truncate the count. */
 const MAX_HOUSE_TENURE_LOOKBACK = 12;
 
+function resolveHouseFromHistory(
+  election: Election,
+  runningIdentityToCandidateId: ReadonlyMap<string, string>,
+  history: IncumbencyHistory
+): Map<string, number> {
+  const result = new Map<string, number>();
+  if (election.electionType !== "house" || runningIdentityToCandidateId.size === 0) {
+    return result;
+  }
+
+  const countryId = election.countryId ?? "US";
+  const priorsOnSeat = priorElectionsForSeat(election, history.resolvedElections).slice(
+    0,
+    MAX_HOUSE_TENURE_LOOKBACK
+  );
+  if (priorsOnSeat.length === 0) return result;
+
+  const clearedByCycle = priorsOnSeat.map((prior) => {
+    const minShare = getMultiSeatMinShare("house", prior.totalSeats, countryId);
+    const cleared = new Set<string>();
+    const electionId = prior._id.toString();
+    const tally = history.tallyByElection.get(electionId);
+    if (!tally?.finalized) return cleared;
+    const totalVotes = Object.values(tally.totalVotes).reduce(
+      (sum, votes) => sum + (typeof votes === "number" && Number.isFinite(votes) ? votes : 0),
+      0
+    );
+    if (totalVotes <= 0) return cleared;
+    for (const candidate of history.candidatesByElection.get(electionId) ?? []) {
+      const identity = identityOf(candidate);
+      if (!identity) continue;
+      const votes = tally.totalVotes[candidate._id.toString()];
+      if (typeof votes === "number" && votes / totalVotes >= minShare) cleared.add(identity);
+    }
+    return cleared;
+  });
+
+  for (const [identity, candidateId] of runningIdentityToCandidateId) {
+    let terms = 0;
+    for (const cleared of clearedByCycle) {
+      if (cleared.has(identity)) terms += 1;
+      else break;
+    }
+    if (terms > 0) result.set(candidateId, terms);
+  }
+  return result;
+}
+
 /**
  * Per-candidate consecutive-term counts for a US House race, keyed by THIS
  * CYCLE's candidateId (`ElectionCandidate._id.toString()`, matching
@@ -215,57 +321,108 @@ export async function resolveHouseIncumbentTenures(
   }
 
   const countryId = election.countryId ?? "US";
-  const seatKey = getElectionSeatKey(election);
-  const allResolved = await db
+  const resolvedElections = await db
     .collection<Election>("elections")
-    .find({ countryId, state: election.state, status: "resolved" })
+    .find({ countryId, state: election.state, electionType: "house", status: "resolved" })
     .toArray();
-  const priorsOnSeat = allResolved
-    .filter((p) => p.cycle < election.cycle && getElectionSeatKey(p) === seatKey)
-    .sort((a, b) => b.cycle - a.cycle)
-    .slice(0, MAX_HOUSE_TENURE_LOOKBACK);
-  if (priorsOnSeat.length === 0) return result;
+  const loaded = await loadIncumbencyHistory(resolvedElections, db);
+  return resolveHouseFromHistory(election, runningIdentityToCandidateId, {
+    resolvedElections,
+    ...loaded,
+  });
+}
 
-  // Newest → oldest: for each prior cycle, which identities cleared the
-  // multi-seat vote-share gate (a proxy for "held at least one seat").
-  const clearedByCycle: Set<string>[] = [];
-  for (const prior of priorsOnSeat) {
-    const minShare = getMultiSeatMinShare("house", prior.totalSeats, countryId);
-    const cleared = new Set<string>();
-    const tally = await db
-      .collection<ElectionVoteTally>("electionVoteTallies")
-      .findOne({ electionId: prior._id });
-    if (tally?.finalized) {
-      const totalVotes = Object.values(tally.totalVotes).reduce(
-        (sum, v) => sum + (typeof v === "number" && Number.isFinite(v) ? v : 0),
-        0
-      );
-      if (totalVotes > 0) {
-        const priorCandidates = await db
-          .collection<ElectionCandidate>("electionCandidates")
-          .find({ electionId: prior._id })
-          .toArray();
-        for (const c of priorCandidates) {
-          const identity = identityOf(c);
-          if (!identity) continue;
-          const votes = tally.totalVotes[c._id.toString()];
-          if (typeof votes === "number" && votes / totalVotes >= minShare) {
-            cleared.add(identity);
-          }
+export interface LegislativeIncumbencyPreload {
+  singleSeatByElection: Map<string, { incumbentPartyId: string; tenureTerms: number } | null>;
+  houseTenuresByElection: Map<string, Map<string, number>>;
+}
+
+/**
+ * Resolve every legislative incumbency input for an election sweep with four
+ * bounded reads, independent of election count and history depth.
+ */
+export async function preloadLegislativeIncumbencies(
+  elections: readonly Election[],
+  candidatesByElection: ReadonlyMap<string, readonly ElectionCandidate[]>,
+  db: Db
+): Promise<LegislativeIncumbencyPreload> {
+  const relevant = elections.filter(
+    (election) => isSingleSeatLegislativeRace(election) || election.electionType === "house"
+  );
+  const singleSeatByElection = new Map<
+    string,
+    { incumbentPartyId: string; tenureTerms: number } | null
+  >();
+  const houseTenuresByElection = new Map<string, Map<string, number>>();
+  if (relevant.length === 0) return { singleSeatByElection, houseTenuresByElection };
+
+  const countries = [...new Set(relevant.map((election) => election.countryId ?? "US"))];
+  const states = [
+    ...new Set(relevant.map((election) => election.state).filter(Boolean)),
+  ] as string[];
+  const [resolvedElections, officials] = await Promise.all([
+    db
+      .collection<Election>("elections")
+      .find({
+        countryId: { $in: countries },
+        state: { $in: states },
+        electionType: { $in: ["senate", "house"] },
+        status: "resolved",
+      })
+      .toArray(),
+    db
+      .collection<ElectedOfficial>("electedOfficials")
+      .find(
+        { countryId: { $in: countries }, state: { $in: states }, officeType: "senate" },
+        {
+          projection: {
+            countryId: 1,
+            officeType: 1,
+            state: 1,
+            senateClass: 1,
+            characterId: 1,
+            nppId: 1,
+            party: 1,
+          },
         }
+      )
+      .toArray(),
+  ]);
+  const loaded = await loadIncumbencyHistory(resolvedElections, db);
+  const history: IncumbencyHistory = { resolvedElections, ...loaded };
+
+  for (const election of relevant) {
+    const electionId = election._id.toString();
+    const runningCandidates = candidatesByElection.get(electionId) ?? [];
+    if (isSingleSeatLegislativeRace(election)) {
+      const runningIdentities = new Set(
+        runningCandidates
+          .map((candidate) => identityOf(candidate))
+          .filter((identity): identity is string => identity != null)
+      );
+      const official = officials.find(
+        (row) =>
+          row.officeType === "senate" &&
+          row.state === election.state &&
+          (row.countryId ?? "US") === (election.countryId ?? "US") &&
+          (!election.senateClass || row.senateClass === election.senateClass)
+      );
+      singleSeatByElection.set(
+        electionId,
+        resolveSingleSeatFromHistory(election, runningIdentities, official, history)
+      );
+    }
+    if (election.electionType === "house") {
+      const runningIdentityToCandidateId = new Map<string, string>();
+      for (const candidate of runningCandidates) {
+        const identity = identityOf(candidate);
+        if (identity) runningIdentityToCandidateId.set(identity, candidate._id.toString());
       }
+      houseTenuresByElection.set(
+        electionId,
+        resolveHouseFromHistory(election, runningIdentityToCandidateId, history)
+      );
     }
-    clearedByCycle.push(cleared);
   }
-
-  for (const [identity, candidateId] of runningIdentityToCandidateId) {
-    let terms = 0;
-    for (const cleared of clearedByCycle) {
-      if (cleared.has(identity)) terms += 1;
-      else break;
-    }
-    if (terms > 0) result.set(candidateId, terms);
-  }
-
-  return result;
+  return { singleSeatByElection, houseTenuresByElection };
 }

@@ -1,6 +1,10 @@
 import type { Db } from "mongodb";
 import type { BillVoteValue } from "@/lib/congress/billVoting";
-import { scopeVotesToCurrentSeatHolders } from "@/lib/legislature/stateBillVoteScope";
+import type { ScopedVoteOfficial } from "@/lib/congress/billVoting";
+import {
+  scopeStateBillVotesWithOfficials,
+  scopeVotesToCurrentSeatHolders,
+} from "@/lib/legislature/stateBillVoteScope";
 import { toVoteSnapshot } from "@/lib/legislature/voteSnapshot";
 import type { PhaseVoteResult, VoteTotals } from "./types";
 
@@ -49,6 +53,8 @@ export async function resolvePhaseVotes(
     officeType: string;
     countryId: string;
     stateId?: string;
+    /** Preloaded current holders; avoids a roster query for every closing bill. */
+    officials?: ScopedVoteOfficial[];
   },
   resolvedAtTurn: number
 ): Promise<PhaseVoteResult> {
@@ -85,11 +91,19 @@ export async function resolvePhaseVotes(
     ),
   });
 
-  const scoped = await scopeVotesToCurrentSeatHolders(db, votes, {
-    countryId: opts.countryId,
-    officeType: opts.officeType,
-    stateId: opts.stateId,
-  });
+  const scoped = opts.officials
+    ? {
+        ...scopeStateBillVotesWithOfficials(votes, opts.officials, {
+          countryId: opts.countryId,
+          officeType: opts.officeType,
+        }),
+        scoped: Object.keys(votes ?? {}).length > 0,
+      }
+    : await scopeVotesToCurrentSeatHolders(db, votes, {
+        countryId: opts.countryId,
+        officeType: opts.officeType,
+        stateId: opts.stateId,
+      });
   // `scoped: false` = no roster lookup was possible (empty map / no valid keys);
   // an empty scoped map = every voter left the seat. Both freeze the stored
   // aggregate so the snapshot headline matches the decision.

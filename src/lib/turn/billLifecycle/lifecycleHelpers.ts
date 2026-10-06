@@ -105,6 +105,7 @@ export async function notifyChambersVoteOpen(
       characterId: { $ne: null },
       isNPP: { $ne: true },
     })
+    .project<ElectedOfficial>({ characterId: 1, countryId: 1, officeType: 1 })
     .toArray();
 
   const charIds = officials
@@ -147,11 +148,14 @@ export async function notifyBillsVoteOpen(
   ];
   const officials = await db
     .collection<ElectedOfficial>("electedOfficials")
-    .find({
-      $or: chamberFilters,
-      characterId: { $ne: null },
-      isNPP: { $ne: true },
-    })
+    .find(
+      {
+        $or: chamberFilters,
+        characterId: { $ne: null },
+        isNPP: { $ne: true },
+      },
+      { projection: { characterId: 1, countryId: 1, officeType: 1 } }
+    )
     .toArray();
   const characterIds = [
     ...new Map(
@@ -168,18 +172,22 @@ export async function notifyBillsVoteOpen(
   const characterById = new Map(
     characters.map((character) => [character._id.toString(), character])
   );
+  const characterIdsByChamber = new Map<string, Set<string>>();
+  for (const official of officials) {
+    if (!official.characterId) continue;
+    const key = `${official.countryId ?? "US"}:${official.officeType}`;
+    const recipientIds = characterIdsByChamber.get(key) ?? new Set<string>();
+    recipientIds.add(official.characterId.toString());
+    characterIdsByChamber.set(key, recipientIds);
+  }
 
   await createNotifications(
     openings.flatMap(({ bill, chamberType }) => {
-      const recipients = officials.filter(
-        (official) =>
-          official.countryId === (bill.countryId ?? "US") && official.officeType === chamberType
-      );
+      const recipientIds =
+        characterIdsByChamber.get(`${bill.countryId ?? "US"}:${chamberType}`) ?? [];
       const chamberName = chamberNameForOfficeType(bill.countryId ?? "US", chamberType);
-      return recipients.flatMap((official) => {
-        const character = official.characterId
-          ? characterById.get(official.characterId.toString())
-          : undefined;
+      return [...recipientIds].flatMap((characterId) => {
+        const character = characterById.get(characterId);
         return character?.userId
           ? [
               {

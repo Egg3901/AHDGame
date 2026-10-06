@@ -166,3 +166,11 @@ export interface PhaseVoteResult {
   totals: VoteTotals;
   snapshot: BillVoteSnapshot;
 }
+
+/** Shared turn context supplied by the phase registry to avoid per-country reloads. */
+export interface BillLifecycleRuntimeContext {
+  db: Db;
+  currentTurn: number;
+  preset?: string;
+  rng?: () => number;
+}

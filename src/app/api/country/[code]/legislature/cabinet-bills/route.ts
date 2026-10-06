@@ -50,6 +50,7 @@ import { findAdministrationConflict } from "@/lib/legislature/administrationConf
 import { getGameState } from "@/lib/gameState";
 import { validateBillProvisions } from "@/lib/congress/billProposal";
 import { isResetV2Country } from "@/lib/resetVersions/rules";
+import { loadBillLegislationTypes } from "@/lib/legislature/queries/loadBillLegislationTypes";
 
 const CABINET_VOTE_DURATION_MS = 24 * 3_600_000; // 24 hours
 type BillListProvisionDisplay = NonNullable<BillDisplay["provisions"]>[number];
@@ -84,7 +85,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     }
 
     const db = await getDb();
-    const [proposalWarning, authUser, gov, bills, activeBillsForProvisions, parties, legTypes] =
+    const [proposalWarning, authUser, gov, bills, activeBillsForProvisions, parties] =
       await Promise.all([
         getBillProposalAutoFailWarning(db, countryId, "cabinet"),
         getAuthUser().catch(() => null),
@@ -106,11 +107,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
           .collection<{ sequentialId: number; name?: string; color?: string }>("politicalParties")
           .find({ countryId })
           .toArray(),
-        db.collection<LegislationType>("legislationTypes").find({}).toArray(),
       ]);
 
     const partyMap = new Map(parties.map((party) => [String(party.sequentialId), party]));
-    const legislationTypeMap = new Map(legTypes.map((lt) => [lt._id, lt]));
+    const legislationTypeMap = await loadBillLegislationTypes(db, bills);
 
     let myCharacterId: string | null = null;
     let canVoteCabinetReview = false;

@@ -40,7 +40,7 @@ describe("POST /api/admin/country/[code]/bills", () => {
       ok: true,
       admin,
     } as Awaited<ReturnType<typeof requireAdmin>>);
-    vi.mocked(applyLegislationEffect).mockResolvedValue(undefined);
+    vi.mocked(applyLegislationEffect).mockResolvedValue(new Map());
     vi.mocked(onBillEnacted).mockResolvedValue(undefined);
   });
 
@@ -88,8 +88,8 @@ describe("POST /api/admin/country/[code]/bills", () => {
     const { applyLegislationEffect } = await import("@/lib/legislationEffects");
     const { onBillEnacted } = await import("@/lib/billEnactment");
 
-    expect(applyLegislationEffect).toHaveBeenCalledWith(db, bill);
-    expect(onBillEnacted).toHaveBeenCalledWith(db, bill, 117);
+    expect(applyLegislationEffect).toHaveBeenCalledWith(db, bill, 117);
+    expect(onBillEnacted).toHaveBeenCalledWith(db, bill, 117, expect.any(Map));
 
     const retryResponse = await POST(
       new Request("http://localhost/api/admin/country/us/bills", {

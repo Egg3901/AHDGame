@@ -38,8 +38,8 @@ import {
   buildGovModifierByParty,
   resolveGovExecutiveApproval,
 } from "./govCoattail";
-import { MULTI_SEAT_TYPES, officeKeyForElectionType } from "@/lib/utils/electionLabels";
-import { getMultiSeatMinShare, sntvSeats } from "@/lib/turn/election/seatAllocation";
+import { officeKeyForElectionType } from "@/lib/utils/electionLabels";
+import { allocateSeats, isMultiSeatElection } from "@/lib/turn/election/seatAllocation";
 import { turnVoteWeight, resolveTurnWindow } from "./voteCalculations";
 import { distributeVotesByGroupLevelAllocation } from "./voteDistribution";
 import { distributeVotesBySwingFlow } from "./voteDistributionSwingFlow";
@@ -349,6 +349,9 @@ export async function accumulateVoteTurn(
       countryId: electionCountryId,
       partiesCache: memo?.partiesByCountry,
       preload: memo?.candidatePreload,
+      countryConfig: options?.preload?.enrichmentCountryConfigByElection?.get(
+        electionId.toString()
+      ),
       db: options?.preload?.db,
     }),
     memoized(memo?.partyGroupFavorabilityByCountryTurn, `${electionCountryId}:${turnNumber}`, () =>
@@ -535,17 +538,13 @@ export async function accumulateVoteTurn(
   const hasPlayerInRace = isGeneralElection && enriched.some((c) => !c.isNPP);
   // General elections use the §7.3.2 swing-flow engine. Primaries keep the
   // legacy allocator; §7.3.2 is general-only and primaryResolution.ts has its
-  // own formula. The true below is hardcoded: accumulateVoteTurn does not
-  // accept a useSwingFlowModel option.
-  //
+  // own formula.
   // Per-candidate margin vs the legacy engine is pinned at +/-10pt by
   // voteDistributionSwingFlowDiff.test.ts. Race-family coverage is in
   // voteDistributionSwingFlowFamilies.test.ts.
-  const useSwingFlowModel = true;
-  const distributeFn =
-    isGeneralElection && useSwingFlowModel
-      ? distributeVotesBySwingFlow
-      : distributeVotesByGroupLevelAllocation;
+  const distributeFn = isGeneralElection
+    ? distributeVotesBySwingFlow
+    : distributeVotesByGroupLevelAllocation;
 
   const isOwnHeadOfGovernmentRace = isHeadOfGovernmentRace(
     election.electionType as string,
@@ -648,7 +647,9 @@ export async function accumulateVoteTurn(
     // keyed to the sitting senator, decaying with tenure to a +1 floor. Null
     // (skipped) for open seats / incumbent not running / non-senate races.
     isGeneralElection
-      ? resolveSingleSeatLegislativeIncumbent(election, runningIdentities, db)
+      ? options?.preload?.legislativeIncumbentByElection
+        ? options.preload.legislativeIncumbentByElection.get(electionId.toString())
+        : resolveSingleSeatLegislativeIncumbent(election, runningIdentities, db)
       : undefined,
     wantsMidtermOppositionBoost
       ? (options?.preload?.governingPartyIdsByCountry?.get(electionCountryId) ??
@@ -700,16 +701,21 @@ export async function accumulateVoteTurn(
   // for why the House needs this different shape.
   let houseIncumbentTenureTermsByCandidateId: Map<string, number> | undefined;
   if (isGeneralElection && election.electionType === "house") {
-    const runningIdentityToCandidateId = new Map<string, string>();
-    for (const c of candidates) {
-      const identity = (c.characterId ?? c.nppId)?.toString();
-      if (identity) runningIdentityToCandidateId.set(identity, c._id.toString());
+    if (options?.preload?.houseIncumbentTenuresByElection) {
+      houseIncumbentTenureTermsByCandidateId =
+        options.preload.houseIncumbentTenuresByElection.get(electionId.toString()) ?? new Map();
+    } else {
+      const runningIdentityToCandidateId = new Map<string, string>();
+      for (const c of candidates) {
+        const identity = (c.characterId ?? c.nppId)?.toString();
+        if (identity) runningIdentityToCandidateId.set(identity, c._id.toString());
+      }
+      houseIncumbentTenureTermsByCandidateId = await resolveHouseIncumbentTenures(
+        election,
+        runningIdentityToCandidateId,
+        db
+      );
     }
-    houseIncumbentTenureTermsByCandidateId = await resolveHouseIncumbentTenures(
-      election,
-      runningIdentityToCandidateId,
-      db
-    );
   }
 
   // UK manifesto policy-popularity map (epic #856). Off by default: the
@@ -768,7 +774,6 @@ export async function accumulateVoteTurn(
       midtermOppositionModifierByParty,
       // M3 — per-state median voter for the policy-distance driver.
       medianVoter,
-      useSwingFlowModel,
     }
   );
 
@@ -875,6 +880,10 @@ export async function accumulateVoteTurn(
       ),
     });
   }
+  const filingByCandidateId = new Map(
+    candidates.map((candidate) => [candidate._id.toString(), candidate])
+  );
+  const statePartyOrgByParty = new Map(statePartyOrgs.map((row) => [row.partyId, row]));
   const huBallots =
     electionCountryId === "HU" &&
     election.electionType === "nationalAssembly" &&
@@ -883,9 +892,7 @@ export async function accumulateVoteTurn(
       ? accumulateHuBallots(
           stateId,
           enriched.map((ec) => {
-            const filing = candidates.find(
-              (candidate) => candidate._id.toString() === ec.candidateId
-            );
+            const filing = filingByCandidateId.get(ec.candidateId);
             return {
               candidateId: ec.candidateId,
               partyId: ec.party,
@@ -902,7 +909,7 @@ export async function accumulateVoteTurn(
             [...new Set(enriched.map((ec) => ec.party))]
               .filter((partyId) => partyId !== "independent")
               .map((partyId) => {
-                const org = statePartyOrgs.find((row) => row.partyId === partyId);
+                const org = statePartyOrgByParty.get(partyId);
                 return {
                   partyId,
                   registration: org?.registration,
@@ -922,7 +929,7 @@ export async function accumulateVoteTurn(
       ? accumulateJapanBallots({
           regionId: stateId,
           candidates: enriched.map((candidate) => {
-            const filing = candidates.find((row) => row._id.toString() === candidate.candidateId);
+            const filing = filingByCandidateId.get(candidate.candidateId);
             return {
               candidateId: candidate.candidateId,
               partyId: candidate.party,
@@ -939,7 +946,7 @@ export async function accumulateVoteTurn(
             [...new Set(enriched.map((candidate) => candidate.party))]
               .filter((partyId) => partyId !== "independent")
               .map((partyId) => {
-                const org = statePartyOrgs.find((row) => row.partyId === partyId);
+                const org = statePartyOrgByParty.get(partyId);
                 return {
                   partyId,
                   registration: org?.registration,
@@ -988,9 +995,7 @@ export async function accumulateVoteTurn(
     newTotals = councilTotals.votes;
   }
 
-  // For house/stateSenate races, compute per-candidate seat estimates
-  // Uses largest-remainder method (Hamilton method) to ensure total seats = totalSeats exactly
-  // Applies minimum vote share threshold to match election resolution logic
+  // Project seats with the same allocator used by final resolution.
   const seatsEstimate: Record<string, number> | undefined = (() => {
     if (isBgOrdinary || isHuBound || isBgFounding || isJapanMixed) return undefined;
     if (councilTotals) {
@@ -1008,7 +1013,7 @@ export async function accumulateVoteTurn(
     }
     const electionType = election.electionType as string;
     const totalSeats = election.totalSeats as number | undefined;
-    if (!totalSeats || !MULTI_SEAT_TYPES.has(electionType)) return undefined;
+    if (!totalSeats || !isMultiSeatElection(electionType, totalSeats)) return undefined;
     if (isPrStv) {
       if (rankedBallots!.length === 0) return undefined;
       return countPrStv(
@@ -1017,82 +1022,29 @@ export async function accumulateVoteTurn(
         rankedBallots!
       ).seats;
     }
-    // Only count active candidates' votes for seat allocation
     const totalVotesCast = enriched.reduce((s, ec) => s + (newTotals[ec.candidateId] ?? 0), 0);
     if (totalVotesCast === 0) return undefined;
-    if (election.allocationMethod === "sntv") {
-      return sntvSeats(
-        enriched.map((ec) => ({
-          id: ec.candidateId,
-          votes: newTotals[ec.candidateId] ?? 0,
-          isNPP: ec.isNPP,
-        })),
-        totalSeats
-      );
-    }
-
-    // Filter to candidates whose PARTY aggregate share meets the minimum
-    // threshold (mirrors allocateSeats). Per-candidate thresholds punished
-    // parties that split their vote across multiple candidates, and the old
-    // "re-admit everyone when eligible < min(seats, candidates)" fallback let
-    // sub-1% candidates collect largest-remainder seats in any race with more
-    // seats than candidates (e.g. 12 candidates vs 27-90 UK Commons seats).
-    const minShare = getMultiSeatMinShare(electionType, totalSeats, election.countryId ?? "US");
-    const groupKey = (ec: (typeof enriched)[number]) =>
-      ec.party && ec.party !== "independent" ? `party:${ec.party}` : `cand:${ec.candidateId}`;
-    const votesByGroup = new Map<string, number>();
-    for (const ec of enriched) {
-      const k = groupKey(ec);
-      votesByGroup.set(k, (votesByGroup.get(k) ?? 0) + (newTotals[ec.candidateId] ?? 0));
-    }
-    const eligible = enriched.filter(
-      (ec) => (votesByGroup.get(groupKey(ec)) ?? 0) / totalVotesCast >= minShare
-    );
-
-    // Degenerate fallback ONLY when nobody clears the threshold: fill from the
-    // top vote-getters in ranked order. Sub-threshold candidates are never
-    // re-admitted alongside eligible ones.
-    const pool =
-      eligible.length > 0
-        ? eligible
-        : [...enriched]
-            .sort((a, b) => (newTotals[b.candidateId] ?? 0) - (newTotals[a.candidateId] ?? 0))
-            .slice(0, Math.min(totalSeats, enriched.length));
-    const poolVotes = pool.reduce((s, ec) => s + (newTotals[ec.candidateId] ?? 0), 0);
-    if (poolVotes === 0) return undefined;
-
-    // Initialize all candidates to 0 seats
-    const seats: Record<string, number> = {};
-    for (const ec of enriched) seats[ec.candidateId] = 0;
-
-    // Calculate proportional seats with remainders for pool candidates
-    const allocations = pool.map((ec) => {
-      const votes = newTotals[ec.candidateId] ?? 0;
-      const exactSeats = (votes / poolVotes) * totalSeats;
-      return {
-        candidateId: ec.candidateId,
-        floor: Math.floor(exactSeats),
-        remainder: exactSeats - Math.floor(exactSeats),
-      };
-    });
-
-    // Give everyone their floor allocation first
-    let allocated = 0;
-    for (const a of allocations) {
-      seats[a.candidateId] = a.floor;
-      allocated += a.floor;
-    }
-
-    // Distribute remaining seats to candidates with largest remainders
-    const remaining = totalSeats - allocated;
-    if (remaining > 0) {
-      const sorted = [...allocations].sort((a, b) => b.remainder - a.remainder);
-      for (let i = 0; i < remaining && i < sorted.length; i++) {
-        seats[sorted[i].candidateId]++;
-      }
-    }
-
-    return seats;
+    const ranked = enriched
+      .map((candidate) => ({
+        id: candidate.candidateId,
+        votes: newTotals[candidate.candidateId] ?? 0,
+        party: candidate.party,
+        isNPP: candidate.isNPP,
+      }))
+      .sort((a, b) => b.votes - a.votes || a.id.localeCompare(b.id));
+    const stateId = election.state;
+    return allocateSeats(
+      electionType,
+      stateId,
+      totalSeats,
+      ranked,
+      totalVotesCast,
+      stateId ? { [stateId]: totalSeats } : {},
+      undefined,
+      stateId ? { [stateId]: totalSeats } : {},
+      election.countryId ?? "US",
+      election.allocationMethod
+    ).seatsEstimate;
   })();
 
   const nativeRussianTotal = councilTotals

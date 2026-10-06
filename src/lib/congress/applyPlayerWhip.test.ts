@@ -47,7 +47,8 @@ describe("applyPlayerWhipToBill", () => {
     const billsMock = db.collectionMocks["bills"];
     const updateCalls = billsMock!.updateOne.mock.calls;
     expect(updateCalls).toHaveLength(1);
-    const [, update] = updateCalls[0];
+    const [filter, update] = updateCalls[0];
+    expect(filter).toEqual({ _id: bill._id, status: bill.status });
     expect(update.$set[`votes.${c1.toString()}`]).toBe("for");
     expect(update.$set[`votes.${c2.toString()}`]).toBe("for");
     expect(update.$set[`whippedFromVote.${c1.toString()}`]).toBe("against");

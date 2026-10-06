@@ -22,6 +22,7 @@ import {
 } from "@/lib/utils/normalizeNPI";
 import { infamyPenaltyMultiplier } from "@/lib/utils/infamy";
 import type { CountryId } from "@/lib/constants/countries";
+import { NPP_PRIMARY_SCORE_MULTIPLIER } from "@/lib/electionEngine/constants";
 
 function clampPercentStat(value: number): number {
   return Math.min(100, Math.max(0, value));
@@ -294,4 +295,60 @@ export function calcPresidentPrimaryScore(
   const raw = alignment + partyInfluenceScore + influenceScore + favScore;
   const penalized = raw * infamyPenaltyMultiplier(infamy);
   return Math.round(penalized * 10) / 10;
+}
+
+export interface PrimaryCandidateScoreInput {
+  isPresidential: boolean;
+  isNPP: boolean;
+  hasPlayerInParty: boolean;
+  candidateEcon: number;
+  candidateSocial: number;
+  partyEcon: number;
+  partySocial: number;
+  favorability: number;
+  politicalInfluence: number;
+  nationalInfluence?: number | null;
+  partyInfluence?: number | null;
+  partyChairRole?: PartyChairPrimaryRole;
+  partyChairContext?: PartyChairPrimaryContext;
+  infamy?: number | null;
+  stateEconLean?: number | null;
+  stateSocialLean?: number | null;
+}
+
+/** Shared raw primary score pipeline for API display, snapshots and resolution. */
+export function scorePrimaryCandidate(input: PrimaryCandidateScoreInput): number {
+  let score: number;
+  if (input.isPresidential) {
+    const partyInfluence = effectivePartyInfluenceForPresidentialPrimary(
+      input.isNPP ? 0 : (input.partyInfluence ?? 0),
+      input.isNPP ? null : (input.partyChairRole ?? null),
+      input.partyChairContext
+    );
+    score = calcPresidentPrimaryScore(
+      input.candidateEcon,
+      input.candidateSocial,
+      input.partyEcon,
+      input.partySocial,
+      input.favorability,
+      input.isNPP
+        ? input.politicalInfluence
+        : (input.nationalInfluence ?? input.politicalInfluence),
+      partyInfluence,
+      input.infamy
+    );
+  } else {
+    score = calcPrimaryScore(
+      input.candidateEcon,
+      input.candidateSocial,
+      input.partyEcon,
+      input.partySocial,
+      input.favorability,
+      input.politicalInfluence,
+      input.infamy,
+      input.stateEconLean,
+      input.stateSocialLean
+    );
+  }
+  return input.isNPP && input.hasPlayerInParty ? score * NPP_PRIMARY_SCORE_MULTIPLIER : score;
 }
