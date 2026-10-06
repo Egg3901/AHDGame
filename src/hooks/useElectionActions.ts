@@ -1,10 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { ElectionDisplay, CharacterBasic } from "@/lib/db/types";
 import { useFeedback } from "@/contexts/FeedbackContext";
 import { useToast } from "@/contexts/ToastContext";
 import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 
 interface UseElectionActionsProps {
   character: CharacterBasic | null;
@@ -21,6 +22,8 @@ interface UseElectionActionsReturn {
   isInRace: (election: ElectionDisplay) => boolean;
   isInRaceOfType: (electionType: string, cycle: number) => boolean;
   isInAnyRace: () => boolean;
+  /** Enter/withdraw confirmation dialog; render it once in the consuming page. */
+  confirmDialog: ReactNode;
 }
 
 /**
@@ -35,6 +38,7 @@ export function useElectionActions({
   const router = useRouter();
   const { recordAction } = useFeedback();
   const { showToast } = useToast();
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
@@ -75,9 +79,12 @@ export function useElectionActions({
       const raceName = targetRace
         ? `${targetRace.electionType} race in ${targetRace.state}`
         : "this race";
-      if (!confirm(`Enter the ${raceName}? This will register your character as a candidate.`)) {
-        return;
-      }
+      const confirmed = await confirm({
+        title: `Enter the ${raceName}?`,
+        message: "This will register your character as a candidate.",
+        confirmLabel: "Enter race",
+      });
+      if (!confirmed) return;
 
       setActionLoading(electionId);
       setMessage("");
@@ -103,7 +110,7 @@ export function useElectionActions({
         setActionLoading(null);
       }
     },
-    [character, elections, isInAnyRace, onSuccess, recordAction, showToast, router]
+    [character, elections, isInAnyRace, onSuccess, recordAction, showToast, router, confirm]
   );
 
   const handleWithdraw = useCallback(
@@ -116,9 +123,13 @@ export function useElectionActions({
         : targetElection
           ? "general"
           : "unknown";
-      if (!confirm(buildWithdrawalConfirmMessage(phase))) {
-        return;
-      }
+      const confirmed = await confirm({
+        title: "Confirm withdrawal",
+        message: buildWithdrawalConfirmMessage(phase),
+        confirmLabel: "Withdraw",
+        destructive: true,
+      });
+      if (!confirmed) return;
 
       setActionLoading(electionId);
       setMessage("");
@@ -144,7 +155,7 @@ export function useElectionActions({
         setActionLoading(null);
       }
     },
-    [elections, onSuccess, recordAction, showToast]
+    [elections, onSuccess, recordAction, showToast, confirm]
   );
 
   const isInRace = useCallback(
@@ -185,5 +196,6 @@ export function useElectionActions({
     isInRace,
     isInRaceOfType,
     isInAnyRace,
+    confirmDialog,
   };
 }
