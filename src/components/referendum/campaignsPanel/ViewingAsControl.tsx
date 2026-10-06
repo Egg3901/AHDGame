@@ -2,8 +2,8 @@ import Link from "next/link";
 
 const ROLES: { id: string; label: string }[] = [
   { id: "auto", label: "Auto" },
-  { id: "pm", label: "Prime Minister" },
-  { id: "leader", label: "Party Leader" },
+  { id: "pm", label: "Prime minister" },
+  { id: "leader", label: "Party leader" },
   { id: "player", label: "Player" },
   { id: "spectator", label: "Spectator" },
 ];

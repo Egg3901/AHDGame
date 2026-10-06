@@ -11,7 +11,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import type { GameState } from "@/lib/db/types";
 import type { ConflictSide } from "@/lib/db/types/conflict";
@@ -64,12 +64,12 @@ export async function POST(request: Request) {
         { projection: { conflictsEnabled: 1, currentTurn: 1, preset: 1 } }
       );
     if (!gs?.conflictsEnabled) {
-      return NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 });
+      return errorResponse(404, "Conflicts subsystem disabled");
     }
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const preset = typeof gs.preset === "string" ? gs.preset : DEFAULT_SEED_PRESET;
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
       knownEntityIds,
       isCountryId: (id) => id in COUNTRY_CONFIGS,
     });
-    if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
+    if (!check.ok) return errorResponse(check.status, check.error);
 
     const currentTurn = gs.currentTurn ?? 0;
     const id = `cw_${draft.hostCountry}_${currentTurn}`.toLowerCase();
@@ -97,10 +97,7 @@ export async function POST(request: Request) {
     // the same turn would collide. `createConflict` inserts unconditionally, so without
     // this the admin gets a duplicate-key 500 instead of a sentence they can act on.
     if (await conflictExists(db, id)) {
-      return NextResponse.json(
-        { error: "A conflict was already created in that host this turn." },
-        { status: 409 }
-      );
+      return errorResponse(409, "A conflict was already created in that host this turn.");
     }
 
     const conflict = await createConflict(db, {

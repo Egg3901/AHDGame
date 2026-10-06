@@ -14,6 +14,19 @@ import { resolveGameYear } from "@/lib/era/era";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
 import { RESET_V2_COUNTRIES, resetSystemVersionsFrom } from "@/lib/resetVersions/rules";
+import { FOUNDING_GENERAL_HOURS, FOUNDING_PRIMARY_HOURS } from "@/lib/elections/canonicalCycle";
+
+/**
+ * Turns the founding round's races close on, while it runs. Every founding race
+ * is spawned on the round's first turn with the same fixed windows (see
+ * canonicalCycle's pre-iteration branch), so the dates follow from that turn.
+ */
+function foundingRound(gs: Pick<GameState, "preIteration"> | null) {
+  const round = gs?.preIteration;
+  if (!round?.active || !Number.isInteger(round.startedTurn)) return null;
+  const primaryEndTurn = round.startedTurn + FOUNDING_PRIMARY_HOURS;
+  return { primaryEndTurn, generalEndTurn: primaryEndTurn + FOUNDING_GENERAL_HOURS };
+}
 
 export async function GET() {
   const db = await getDb();
@@ -37,6 +50,8 @@ export async function GET() {
         cabinetSystemVersion: 1,
         resetWorldId: 1,
         resetVersionSeeds: 1,
+        startingPartiesMode: 1,
+        preIteration: 1,
       },
     }
   );
@@ -75,6 +90,8 @@ export async function GET() {
       liveElectionResultsEnabled: gs?.liveElectionResultsEnabled === true,
       resetV2Countries: RESET_V2_COUNTRIES,
       resetSystemVersions: resetSystemVersionsFrom(gs, RESET_V2_READY),
+      startingPartiesMode: gs?.startingPartiesMode ?? "default",
+      foundingRound: foundingRound(gs),
     },
     { headers: { "Cache-Control": "no-store" } }
   );

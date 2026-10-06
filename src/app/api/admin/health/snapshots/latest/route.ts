@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 
 /**
  * Get the most recent game health snapshot.
@@ -17,7 +17,7 @@ export async function GET() {
     const snapshot = await db.collection("gameHealthSnapshots").findOne({}, { sort: { turn: -1 } });
 
     if (!snapshot) {
-      return NextResponse.json({ error: "No snapshots available" }, { status: 404 });
+      return errorResponse(404, "No snapshots available");
     }
 
     return NextResponse.json({ snapshot });

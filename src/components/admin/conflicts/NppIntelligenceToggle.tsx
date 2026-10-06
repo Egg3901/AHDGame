@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const ENDPOINT = "/api/admin/conflicts/npp-intelligence/toggle";
 
@@ -20,13 +21,13 @@ type FlagKey = "operations" | "sabotage";
 
 const COPY: Record<FlagKey, { title: string; body: string; on: string; off: string }> = {
   operations: {
-    title: "Run Operations",
+    title: "Run operations",
     body: "Let NPP countries fund networks abroad and run collection and covert action. While off, an NPP service holds no networks and runs nothing.",
     on: "NPP governments are cleared to run intelligence operations once that behaviour ships.",
     off: "NPP governments will not run intelligence operations.",
   },
   sabotage: {
-    title: "Military Sabotage Effects",
+    title: "Military sabotage effects",
     body: "Let a successful military covert action actually cut a front's supply and wear down formations. While off the operation still runs, still costs, and still risks being traced, but lands on nothing.",
     on: "Military sabotage now has real effects. Watch the fronts.",
     off: "Military sabotage is inert again.",
@@ -75,7 +76,7 @@ export function NppIntelligenceToggle() {
         );
         load();
       } else {
-        setMessage(data.error ?? "Failed to update the switch.");
+        setMessage(apiErrorText(data, "Failed to update the switch."));
       }
     } catch {
       setMessage("Failed to update the switch.");
@@ -86,7 +87,7 @@ export function NppIntelligenceToggle() {
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-card">
-      <h3 className="text-lg text-foreground">NPP Intelligence Operations</h3>
+      <h3 className="text-lg text-foreground">NPP intelligence operations</h3>
       <p className="mt-0.5 max-w-xl text-sm text-muted">
         Whether countries run by the NPP engine build intelligence networks and run operations of
         their own. Counter-intelligence is automatic for every country either way, so a country

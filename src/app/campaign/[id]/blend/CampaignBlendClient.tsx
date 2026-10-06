@@ -1,9 +1,10 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CampaignData } from "@/lib/campaigns/dto/campaignView";
 import type { UpgradeCategory } from "@/lib/campaigns/upgradeCosts";
-import { BLEND, FONT } from "@/components/blend/tokens";
+import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import { BlendShell, BlendHeader } from "@/components/blend/BlendShell";
 import { BlendRail, BlendChipRail } from "@/components/blend/BlendRail";
 import { BlendTicker } from "@/components/blend/BlendTicker";
@@ -169,7 +170,7 @@ export function CampaignBlendClient({
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          setError(data.error || "That did not work. Try again.");
+          setError(apiErrorText(data, "That did not work. Try again."));
           return false;
         }
         onRefresh();
@@ -246,7 +247,7 @@ export function CampaignBlendClient({
 
   const body = (
     <>
-      <BlendTicker tag="WIRE" items={vm.wire} />
+      <BlendTicker tag="Wire" items={vm.wire} />
       <BlendVitals cells={vm.vitals} />
 
       {error ? (
@@ -356,7 +357,7 @@ export function CampaignBlendClient({
               color: BLEND.muted,
             }}
           >
-            <span>Campaign Desk</span>
+            <span>Campaign desk</span>
             <span style={{ fontFamily: FONT.mono, letterSpacing: ".06em" }}>
               {currentTurn != null ? `T${currentTurn}` : ""}
             </span>
@@ -378,7 +379,7 @@ export function CampaignBlendClient({
             onSelect={(id) => setRail(id as CampaignRail)}
           />
         </div>
-        <BlendTicker tag="WIRE" items={vm.wire} />
+        <BlendTicker tag="Wire" items={vm.wire} />
         <BlendVitals cells={vm.vitals} variant="mobile" />
         {/* Every failed action sets `error`, but the banner that shows it lives
             in `body`, which only the desktop shell renders. Without this copy a
@@ -402,18 +403,7 @@ export function CampaignBlendClient({
             disappears below the breakpoint. */}
         {vm.support ? (
           <div style={{ padding: "18px 16px 0" }}>
-            <div
-              style={{
-                paddingBottom: 4,
-                fontFamily: FONT.mono,
-                fontSize: 9.5,
-                letterSpacing: ".16em",
-                textTransform: "uppercase",
-                color: BLEND.mutedDimmer,
-              }}
-            >
-              Your ticket
-            </div>
+            <div style={{ ...BLEND_LABEL, paddingBottom: 4 }}>Your ticket</div>
             <RunningMateBlock
               vm={vm}
               canManageTicket={canManage}
@@ -456,17 +446,7 @@ export function CampaignBlendClient({
             the other immediate campaign actions. */}
         {vm.strength ? (
           <div style={{ padding: "22px 16px 0" }}>
-            <div
-              style={{
-                fontFamily: FONT.mono,
-                fontSize: 9.5,
-                letterSpacing: ".16em",
-                textTransform: "uppercase",
-                color: BLEND.mutedDimmer,
-              }}
-            >
-              Campaign strength
-            </div>
+            <div style={BLEND_LABEL}>Campaign strength</div>
             <div
               style={{
                 marginTop: 10,
@@ -567,18 +547,7 @@ export function CampaignBlendClient({
 
         {presencePanel ? (
           <div style={{ padding: "18px 16px 0" }}>
-            <div
-              style={{
-                paddingBottom: 10,
-                fontFamily: FONT.mono,
-                fontSize: 9.5,
-                letterSpacing: ".16em",
-                textTransform: "uppercase",
-                color: BLEND.mutedDimmer,
-              }}
-            >
-              Where you are campaigning
-            </div>
+            <div style={{ ...BLEND_LABEL, paddingBottom: 10 }}>Where you are campaigning</div>
             <BlendScopeInline>
               <StatePresencePanel
                 presence={presencePanel}
@@ -710,7 +679,7 @@ export function CampaignBlendClient({
           }
         >
           <BlendHeader
-            kicker="The Campaign Desk"
+            kicker="The campaign desk"
             readout={vm.turnReadout}
             headline={vm.paneTitle}
             standfirst={vm.standfirst}

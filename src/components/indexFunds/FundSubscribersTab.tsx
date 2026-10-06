@@ -149,7 +149,7 @@ function HolderTable({
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="text-[10px] uppercase tracking-wider text-muted border-b border-card-border">
+          <thead className="text-sm font-semibold text-foreground border-b border-card-border">
             <tr>
               <th className="px-4 py-2">Holder</th>
               <th className="px-4 py-2 text-right">Units</th>

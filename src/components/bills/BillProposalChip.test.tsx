@@ -9,15 +9,15 @@ describe("BillProposalChip", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("shows 'Admin Proposed' for a normal admin bill", () => {
+  it("shows 'Admin proposed' for a normal admin bill", () => {
     render(<BillProposalChip adminProposed category="economy" />);
-    expect(screen.getByText("Admin Proposed")).toBeTruthy();
-    expect(screen.queryByText("Referendum Passed")).toBeNull();
+    expect(screen.getByText("Admin proposed")).toBeTruthy();
+    expect(screen.queryByText("Referendum passed")).toBeNull();
   });
 
-  it("shows 'Referendum Passed' for a reunification consent bill", () => {
+  it("shows 'Referendum passed' for a reunification consent bill", () => {
     render(<BillProposalChip adminProposed category="reunification" />);
-    expect(screen.getByText("Referendum Passed")).toBeTruthy();
-    expect(screen.queryByText("Admin Proposed")).toBeNull();
+    expect(screen.getByText("Referendum passed")).toBeTruthy();
+    expect(screen.queryByText("Admin proposed")).toBeNull();
   });
 });

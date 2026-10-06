@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ELECTION_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
 import type { Character, ElectionCandidate } from "@/lib/db/types";
@@ -61,28 +61,22 @@ export async function POST(request: Request, { params }: RouteParams) {
     const resolved = await resolveElectionRouteParam(db, electionId);
     if (!resolved.ok) {
       return resolved.reason === "invalid_id"
-        ? NextResponse.json({ error: "Invalid election ID" }, { status: 400 })
-        : NextResponse.json({ error: "Election not found" }, { status: 404 });
+        ? errorResponse(400, "Invalid election ID")
+        : errorResponse(404, "Election not found");
     }
 
     const election = resolved.election;
 
     if (election.electionType !== "president") {
-      return NextResponse.json(
-        { error: "Home-state surge is only available in presidential primaries" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Home-state surge is only available in presidential primaries");
     }
     if (election.status !== "active") {
-      return NextResponse.json({ error: "Election is not active" }, { status: 400 });
+      return errorResponse(400, "Election is not active");
     }
     const gameTime = await getGameTime();
     const now = gameTime.effectiveNow;
     if (isPrimaryEnded(election, gameTime.currentTurn, gameTime)) {
-      return NextResponse.json(
-        { error: "Home-state surge is only available during the primary phase" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Home-state surge is only available during the primary phase");
     }
 
     const character = auth.user.character;
@@ -93,10 +87,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       status: "active",
     });
     if (!candidate) {
-      return NextResponse.json(
-        { error: "You are not an active candidate in this election" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You are not an active candidate in this election");
     }
 
     const freshChar = await db
@@ -107,13 +98,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
 
     if (!freshChar) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
     if (!freshChar.homeState) {
-      return NextResponse.json(
-        { error: "You must have a home state to surge it" },
-        { status: 400 }
-      );
+      return errorResponse(400, "You must have a home state to surge it");
     }
     const forexEnabled = await isForexEnabled();
     const { rate: homeFxRate } = forexEnabled
@@ -134,7 +122,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // reconciles instead of charging for a surge that never landed.
     const headerKey = request.headers.get("Idempotency-Key");
     if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
-      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+      return errorResponse(400, "Invalid Idempotency-Key header");
     }
     const flowKey = headerKey ?? randomUUID();
     const fingerprint = `${character._id.toHexString()}:${candidate._id.toHexString()}:surge:${PRIMARY_HOME_SURGE_COST_ACTIONS}:${costFundsLocal}`;
@@ -157,24 +145,19 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     if (previousReceipt?.status !== "in_progress") {
       if (candidate.primarySurgeUsed) {
-        return NextResponse.json(
-          { error: "You have already used your home-state surge this primary cycle" },
-          { status: 409 }
-        );
+        return errorResponse(409, "You have already used your home-state surge this primary cycle");
       }
       if (freshChar.actions < PRIMARY_HOME_SURGE_COST_ACTIONS) {
-        return NextResponse.json(
-          { error: `Not enough actions. The surge costs ${PRIMARY_HOME_SURGE_COST_ACTIONS}.` },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Not enough actions. The surge costs ${PRIMARY_HOME_SURGE_COST_ACTIONS}.`
         );
       }
       const balanceLocal = freshChar.currencyBalances?.campaign ?? freshChar.funds ?? 0;
       if (balanceLocal < costFundsLocal) {
-        return NextResponse.json(
-          {
-            error: `Not enough personal funds. The surge costs $${PRIMARY_HOME_SURGE_COST_FUNDS.toLocaleString()}.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Not enough personal funds. The surge costs $${PRIMARY_HOME_SURGE_COST_FUNDS.toLocaleString()}.`
         );
       }
     }
@@ -236,16 +219,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     } catch (error) {
       if ((error as Error).message === "INSUFFICIENT_RESOURCES") {
-        return NextResponse.json(
-          { error: "Your actions or campaign funds changed. Please try again." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Your actions or campaign funds changed. Please try again.");
       }
       if ((error as Error).message === "SURGE_CONFLICT") {
-        return NextResponse.json(
-          { error: "You have already used your home-state surge this primary cycle" },
-          { status: 409 }
-        );
+        return errorResponse(409, "You have already used your home-state surge this primary cycle");
       }
       throw error;
     }

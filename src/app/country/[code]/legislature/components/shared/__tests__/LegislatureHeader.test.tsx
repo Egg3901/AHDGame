@@ -18,8 +18,8 @@ describe("LegislatureHeader", () => {
     stats: {
       majorityParty: { name: "Labour", color: "#E4003B", seats: 326 },
       totalSeats: 650,
-      leader: { label: "Prime Minister", name: "John Smith", id: "pm1" },
-      minorityLeader: { label: "Opposition Leader", name: "Jane Doe", id: "opp1" },
+      leader: { label: "Prime minister", name: "John Smith", id: "pm1" },
+      minorityLeader: { label: "Opposition leader", name: "Jane Doe", id: "opp1" },
     },
   };
 
@@ -37,14 +37,14 @@ describe("LegislatureHeader", () => {
     expect(img.getAttribute("src")).toContain("commons.jpg");
 
     // Check stats strip
-    expect(screen.getByText("Majority Party")).toBeTruthy();
+    expect(screen.getByText("Majority party")).toBeTruthy();
     expect(screen.getByText("Labour")).toBeTruthy();
     expect(screen.getByText("326 / 650")).toBeTruthy();
 
     // Check leaders
-    expect(screen.getByText("Prime Minister")).toBeTruthy();
+    expect(screen.getByText("Prime minister")).toBeTruthy();
     expect(screen.getByText("John Smith")).toBeTruthy();
-    expect(screen.getByText("Opposition Leader")).toBeTruthy();
+    expect(screen.getByText("Opposition leader")).toBeTruthy();
     expect(screen.getByText("Jane Doe")).toBeTruthy();
 
     // Should NOT have chamber switcher
@@ -62,7 +62,7 @@ describe("LegislatureHeader", () => {
         majorityParty: { name: "Republican", color: "#E81B23", seats: 53 },
         totalSeats: 100,
         leader: { label: "Senate Leader", name: "Mitch McConnell", id: "sen1" },
-        minorityLeader: { label: "Minority Leader", name: "Chuck Schumer", id: "sen2" },
+        minorityLeader: { label: "Minority leader", name: "Chuck Schumer", id: "sen2" },
       },
       chamberSwitcher: {
         active: "senate",
@@ -178,8 +178,8 @@ describe("LegislatureHeader", () => {
     const img = screen.getByAltText("House of Commons chamber");
     expect(img).toBeTruthy();
 
-    // Stats labels should be uppercase
-    const majorityLabel = screen.getByText("Majority Party");
-    expect(majorityLabel.className).toContain("uppercase");
+    // Stats labels use the sentence-case label style
+    const majorityLabel = screen.getByText("Majority party");
+    expect(majorityLabel.className).not.toContain("uppercase");
   });
 });

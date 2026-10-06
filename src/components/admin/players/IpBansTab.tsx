@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LocalTime } from "@/components/time/LocalTime";
 
@@ -79,7 +80,7 @@ export function IpBansTab() {
       });
       if (!res.ok) {
         const body = await res.json();
-        setError(body.error || "Failed to add ban");
+        setError(apiErrorText(body, "Failed to add ban"));
         return;
       }
       setBanIp("");
@@ -106,7 +107,7 @@ export function IpBansTab() {
       });
       if (!res.ok) {
         const body = await res.json();
-        setError(body.error || "Failed to add allowance");
+        setError(apiErrorText(body, "Failed to add allowance"));
         return;
       }
       setAllowIp("");
@@ -135,7 +136,7 @@ export function IpBansTab() {
     });
     if (!res.ok) {
       const body = await res.json();
-      setError(body.error || "Failed to convert to allowance");
+      setError(apiErrorText(body, "Failed to convert to allowance"));
       return;
     }
     await fetchAll();
@@ -150,7 +151,7 @@ export function IpBansTab() {
     });
     if (!res.ok) {
       const body = await res.json();
-      setError(body.error || "Failed to revoke allowance");
+      setError(apiErrorText(body, "Failed to revoke allowance"));
       return;
     }
     await fetchAll();
@@ -171,7 +172,7 @@ export function IpBansTab() {
     });
     if (!res.ok) {
       const body = await res.json();
-      setError(body.error || "Failed to edit cap");
+      setError(apiErrorText(body, "Failed to edit cap"));
       return;
     }
     await fetchAll();
@@ -182,7 +183,7 @@ export function IpBansTab() {
     const res = await fetch(`/api/admin/ip-bans/${row._id}`, { method: "DELETE" });
     if (!res.ok) {
       const body = await res.json();
-      setError(body.error || "Failed to delete");
+      setError(apiErrorText(body, "Failed to delete"));
       return;
     }
     await fetchAll();
@@ -204,7 +205,7 @@ export function IpBansTab() {
           {collision?.enabled ? "Enabled" : "Disabled"}
         </span>{" "}
         <a href="/admin?tab=dashboard" className="text-primary hover:underline">
-          Manage on Dashboard →
+          Manage on dashboard →
         </a>
       </div>
 

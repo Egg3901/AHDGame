@@ -94,7 +94,7 @@ export default function InputsOutputsPanel({
         <section aria-labelledby="io-inputs" className="min-w-0">
           <h3
             id="io-inputs"
-            className="mb-2 flex items-center gap-1.5 text-body-xs font-semibold uppercase tracking-wider text-muted"
+            className="mb-2 flex items-center gap-1.5 text-body-sm font-medium text-muted"
           >
             <ArrowDownToLine className="h-3.5 w-3.5" aria-hidden /> Things you buy
           </h3>
@@ -165,7 +165,7 @@ export default function InputsOutputsPanel({
         <section aria-labelledby="io-outputs" className="min-w-0">
           <h3
             id="io-outputs"
-            className="mb-2 flex items-center gap-1.5 text-body-xs font-semibold uppercase tracking-wider text-muted"
+            className="mb-2 flex items-center gap-1.5 text-body-sm font-medium text-muted"
           >
             <ArrowUpFromLine className="h-3.5 w-3.5" aria-hidden /> Things you make
           </h3>
@@ -222,7 +222,7 @@ export default function InputsOutputsPanel({
       {/* Deposits (extraction only) ─────────────────────────────────────────*/}
       {isExtraction && capacityRows && capacityRows.length > 0 && (
         <div className="mt-5 border-t border-card-border pt-4">
-          <h3 className="mb-2 flex items-center gap-1.5 text-body-xs font-semibold uppercase tracking-wider text-muted">
+          <h3 className="mb-2 flex items-center gap-1.5 text-body-sm font-medium text-muted">
             <Pickaxe className="h-3.5 w-3.5" aria-hidden /> What is left in the ground here
           </h3>
           <ul className="space-y-1.5">

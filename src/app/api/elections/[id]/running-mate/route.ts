@@ -6,7 +6,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -57,8 +57,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           .transform((v) => (v === "" ? null : v)),
       })
     );
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const runningMateId = parsed.data.runningMateId;
 
     const db = await getDb();
@@ -75,16 +74,16 @@ export async function POST(request: Request, { params }: RouteParams) {
       try {
         electionObjectId = new ObjectId(electionId);
       } catch {
-        return NextResponse.json({ error: "Invalid election ID" }, { status: 400 });
+        return errorResponse(400, "Invalid election ID");
       }
       election = await db.collection<Election>("elections").findOne({ _id: electionObjectId });
     }
     if (!election || election.electionType !== "president") {
-      return NextResponse.json({ error: "Not a presidential election" }, { status: 400 });
+      return errorResponse(400, "Not a presidential election");
     }
 
     if (election.status !== "active" && election.status !== "upcoming") {
-      return NextResponse.json({ error: "Election is not active" }, { status: 400 });
+      return errorResponse(400, "Election is not active");
     }
 
     const myCandidate = await db.collection<ElectionCandidate>("electionCandidates").findOne({
@@ -93,10 +92,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       status: "active",
     });
     if (!myCandidate) {
-      return NextResponse.json(
-        { error: "You are not a candidate in this election" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You are not a candidate in this election");
     }
 
     if (election.countryId === "RU" && election.russianPresidentialRound) {
@@ -110,11 +106,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         !Number.isSafeInteger(election.primaryEndTurn) ||
         game!.currentTurn >= election.primaryEndTurn!
       )
-        return NextResponse.json(
-          {
-            error: "The registered Russian presidential ticket cannot change after filing closes.",
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "The registered Russian presidential ticket cannot change after filing closes."
         );
     }
 
@@ -127,10 +121,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         { $unset: { runningMateId: "" }, $set: { updatedAt: new Date() } }
       );
       if (election.russianPresidentialRound && changed.matchedCount !== 1)
-        return NextResponse.json(
-          { error: "The Russian ticket was locked while you were editing it." },
-          { status: 409 }
-        );
+        return errorResponse(409, "The Russian ticket was locked while you were editing it.");
       return NextResponse.json({
         success: true,
         message: "Running mate cleared.",
@@ -141,7 +132,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     try {
       runningMateObjectId = new ObjectId(runningMateId);
     } catch {
-      return NextResponse.json({ error: "Invalid running mate ID" }, { status: 400 });
+      return errorResponse(400, "Invalid running mate ID");
     }
 
     const electionCountry = (election.countryId ?? COUNTRY_CONFIGS.US.id) as CountryId;
@@ -152,59 +143,41 @@ export async function POST(request: Request, { params }: RouteParams) {
       characterId: { $ne: null },
     });
     if (currentPresident?.characterId?.equals(runningMateObjectId)) {
-      return NextResponse.json(
-        { error: "The current President cannot be a running mate" },
-        { status: 400 }
-      );
+      return errorResponse(400, "The current President cannot be a running mate");
     }
 
     const runningMateChar = await db
       .collection<Character>("characters")
       .findOne({ _id: runningMateObjectId });
     if (!runningMateChar) {
-      return NextResponse.json({ error: "Running mate character not found" }, { status: 404 });
+      return errorResponse(404, "Running mate character not found");
     }
     if (!runningMateChar.userId || runningMateChar.federationPendingResidenceId !== undefined) {
-      return NextResponse.json(
-        { error: "That character is not eligible to be selected as running mate" },
-        { status: 400 }
-      );
+      return errorResponse(400, "That character is not eligible to be selected as running mate");
     }
 
     const runningMateUser = await db
       .collection<User>("users")
       .findOne({ _id: runningMateChar.userId }, { projection: { _id: 1, isBanned: 1 } });
     if (!runningMateUser || runningMateUser.isBanned) {
-      return NextResponse.json(
-        { error: "That character is not eligible to be selected as running mate" },
-        { status: 400 }
-      );
+      return errorResponse(400, "That character is not eligible to be selected as running mate");
     }
 
     if (runningMateChar._id.equals(character._id)) {
-      return NextResponse.json(
-        { error: "You cannot select yourself as running mate" },
-        { status: 400 }
-      );
+      return errorResponse(400, "You cannot select yourself as running mate");
     }
 
     if (!isSameCountry(runningMateChar, { countryId: electionCountry })) {
-      return NextResponse.json(
-        { error: "Your running mate must be from the same country" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Your running mate must be from the same country");
     }
 
     if (
       countryConfig.executiveTermLimit?.blocksRunningMateSelection &&
       hasReachedExecutiveTermLimit(runningMateChar, electionCountry)
     ) {
-      return NextResponse.json(
-        {
-          error:
-            "That character has already served the maximum number of presidential terms and cannot be selected as Vice President.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "That character has already served the maximum number of presidential terms and cannot be selected as Vice President."
       );
     }
 
@@ -219,10 +192,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         campaignSuspended: { $ne: true },
       });
     if (isAlreadyCandidate) {
-      return NextResponse.json(
-        { error: "That character is already a candidate in this election" },
-        { status: 400 }
-      );
+      return errorResponse(400, "That character is already a candidate in this election");
     }
 
     const changed = await db.collection<ElectionCandidate>("electionCandidates").updateOne(
@@ -234,10 +204,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     );
 
     if (election.russianPresidentialRound && changed.matchedCount !== 1)
-      return NextResponse.json(
-        { error: "The Russian ticket was locked while you were editing it." },
-        { status: 409 }
-      );
+      return errorResponse(409, "The Russian ticket was locked while you were editing it.");
     return NextResponse.json({
       success: true,
       message: `${runningMateChar.name} is now your running mate.`,

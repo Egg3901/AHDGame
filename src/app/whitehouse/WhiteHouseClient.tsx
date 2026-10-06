@@ -1,8 +1,9 @@
 ﻿"use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Avatar } from "@/components/Avatar";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { PartyChip } from "@/app/congress/components/CongressShared";
 import { WhiteHouseOrdersTab } from "./WhiteHouseOrdersTab";
@@ -10,13 +11,7 @@ import { WhiteHouseAddressTab } from "./WhiteHouseAddressTab";
 import { WhiteHouseEndorsementsTab } from "./WhiteHouseEndorsementsTab";
 import ImpeachmentPanel from "./ImpeachmentPanel";
 import { useToast } from "@/contexts/ToastContext";
-import {
-  SectionLabel,
-  Skeleton,
-  CardSkeleton,
-  TabRowSkeleton,
-  ListRowSkeleton,
-} from "@/components/ui";
+import { Skeleton, CardSkeleton, TabRowSkeleton, ListRowSkeleton } from "@/components/ui";
 import {
   InstitutionMasthead,
   MastheadChip,
@@ -34,217 +29,24 @@ import { approvalApiUrl, approvalUrl, scotusUrl } from "@/lib/urls";
 import { ApprovalTooltip } from "@/components/ApprovalTooltip";
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
 import { useSearchParams } from "next/navigation";
-
-interface ExecutiveData {
-  id: string;
-  characterId: string;
-  sequentialId?: number;
-  characterName: string;
-  party?: string;
-  partyName?: string;
-  partyColor?: string;
-  countryId?: CountryId;
-  avatarUrl?: string;
-  administrationStartDate?: string | null;
-  /** In-game week + year the official was seated (e.g. "Week 23, 1991"). */
-  administrationStartGameDate?: string | null;
-  /** True when the seat is held by an NPP (non-player politician) rather than a Character. */
-  isNPP?: boolean;
-}
-
-/**
- * Profile link for an executive holder: the NPP profile when NPP-backed,
- * otherwise the character profile (sequentialId preferred over raw id).
- */
-function holderHref(holder: {
-  isNPP?: boolean;
-  sequentialId?: number;
-  characterId: string;
-}): string {
-  return holder.isNPP
-    ? `/politicians/npp/${holder.sequentialId}`
-    : `/character/${holder.sequentialId ?? holder.characterId}`;
-}
-
-interface PendingBill {
-  id: string;
-  title: string;
-  summary: string;
-  sentToPresidentAt: string | null;
-  presidentActionDeadline: string | null;
-}
-
-interface VpNomination {
-  id: string;
-  nomineeCharacterId: string;
-  nomineeCharacterName: string;
-  nomineeParty?: string;
-  status: string;
-  votesFor: number;
-  votesAgainst: number;
-  votesAbstain: number;
-  votingEndsAt: string | null;
-  myVote: "for" | "against" | "abstain" | null;
-}
-
-interface WhiteHouseResponse {
-  president: ExecutiveData | null;
-  vicePresident: ExecutiveData | null;
-  /** Sitting president's current term (1-based), from executiveTermsServed. */
-  presidentCurrentTerm: number | null;
-  presidentOfficialId: string | null;
-  vicePresidentOfficialId: string | null;
-  isAdmin: boolean;
-  isPresident: boolean;
-  isVicePresident: boolean;
-  isSenator: boolean;
-  vpNomination: VpNomination | null;
-}
-
-interface Character {
-  _id: string;
-  name: string;
-  party: string;
-  homeState: string;
-  currentOffice: Record<string, unknown> | null;
-}
-
-function ExecutiveCard({
-  title,
-  data,
-  officialId,
-  onAppoint,
-  isAdmin,
-  onInitialize,
-  needsInit,
-  onResign,
-  resignLoading,
-  onNominateVp,
-  vpNominationPending,
-}: {
-  title: string;
-  data: ExecutiveData | null;
-  officialId: string | null;
-  onAppoint: () => void;
-  isAdmin: boolean;
-  onInitialize?: () => void;
-  needsInit?: boolean;
-  onResign?: () => void;
-  resignLoading?: boolean;
-  onNominateVp?: () => void;
-  vpNominationPending?: boolean;
-}) {
-  return (
-    <div className="rounded-2xl border border-card-border bg-card overflow-hidden transition-colors shadow-sm hover:shadow-md">
-      <div className="p-6">
-        <SectionLabel as="h3">{title}</SectionLabel>
-        {data ? (
-          <div className="flex items-center gap-4">
-            <Link href={holderHref(data)} className="shrink-0">
-              <Avatar
-                url={data.avatarUrl}
-                name={data.characterName}
-                size="h-16 w-16"
-                className="rounded-xl text-2xl ring-2 ring-card-border"
-              />
-            </Link>
-            <div className="min-w-0 flex-1">
-              <Link
-                href={holderHref(data)}
-                className="font-semibold text-foreground hover:text-primary transition-colors"
-              >
-                {data.characterName}
-              </Link>
-              <div className="mt-1">
-                <PartyChip
-                  partyName={data.partyName ?? data.party ?? "Independent"}
-                  partyColor={data.partyColor ?? "#888888"}
-                  partyId={data.party ?? "independent"}
-                  countryId={data.countryId ?? "US"}
-                />
-                {data.administrationStartGameDate && (
-                  <p className="text-xs text-muted mt-1">
-                    Since {data.administrationStartGameDate}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-col gap-2 shrink-0">
-              {onResign && officialId && (
-                <button
-                  onClick={onResign}
-                  disabled={resignLoading}
-                  className="rounded-lg border border-error/40 px-3 py-1.5 text-xs font-medium text-error hover:bg-error/10 disabled:opacity-50 transition-colors"
-                >
-                  {resignLoading ? "Resigning…" : "Resign"}
-                </button>
-              )}
-              {isAdmin && officialId && (
-                <button
-                  onClick={onAppoint}
-                  className="rounded-lg border border-card-border px-3 py-1.5 text-xs font-medium text-muted hover:bg-card-elevated hover:text-foreground transition-colors"
-                >
-                  Change
-                </button>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-4">
-            <div className="h-16 w-16 rounded-xl bg-card-elevated flex items-center justify-center text-2xl text-muted ring-2 ring-dashed ring-card-border">
-              —
-            </div>
-            <div className="flex-1">
-              <p className="text-muted italic">Vacant</p>
-              <p className="text-xs text-muted mt-0.5">
-                {needsInit
-                  ? "Initialize executive slots in Admin first"
-                  : onNominateVp
-                    ? vpNominationPending
-                      ? "Nomination pending Senate confirmation"
-                      : "President can nominate a replacement (25th Amendment)"
-                    : "Admin can appoint a player character"}
-              </p>
-            </div>
-            {isAdmin && needsInit && onInitialize && (
-              <button
-                onClick={onInitialize}
-                className="rounded-lg bg-warning/15 text-warning border border-warning/40 px-3 py-1.5 text-xs font-medium hover:bg-warning/25 transition-colors"
-              >
-                Initialize
-              </button>
-            )}
-            {isAdmin && officialId && !needsInit && (
-              <button
-                onClick={onAppoint}
-                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90 transition-colors"
-              >
-                Appoint
-              </button>
-            )}
-            {onNominateVp && !vpNominationPending && (
-              <button
-                onClick={onNominateVp}
-                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90 transition-colors"
-              >
-                Nominate VP
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-type TabKey = "overview" | "address" | "orders" | "endorsements" | "foreign" | "admin";
-
-const TAB_KEYS = ["overview", "address", "orders", "endorsements", "foreign", "admin"] as const;
-
-/** Narrows an untrusted `?tab=` value. Anything else falls back to the overview. */
-function isTabKey(value: string | null): value is TabKey {
-  return value !== null && (TAB_KEYS as readonly string[]).includes(value);
-}
+import { useGameClock } from "@/contexts/useGameClock";
+import {
+  holderHref,
+  PRESIDENCY_EXPLAINER_HREF,
+  RUNNING_GUIDE_HREF,
+  deskDeadlineLabel,
+  ExecutiveCard,
+  isTabKey,
+  type PendingBill,
+  type WhiteHouseResponse,
+  type Character,
+  type TabKey,
+} from "./WhiteHouseParts";
+export {
+  PRESIDENCY_EXPLAINER_HREF,
+  RUNNING_GUIDE_HREF,
+  deskDeadlineLabel,
+} from "./WhiteHouseParts";
 
 /**
  * Presidential executive surface. Defaults to the US White House; any other
@@ -305,6 +107,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
       : "overview";
   });
   const conflictsEnabled = useConflictsEnabled();
+  const clock = useGameClock();
   const [approval, setApproval] = useState<number | null>(null);
   const [approvalModifiers, setApprovalModifiers] = useState<ActiveModifier[]>([]);
   const [vpNominateModal, setVpNominateModal] = useState(false);
@@ -403,7 +206,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         setSelectedCharId("");
         await fetchData();
       } else {
-        showToast(json.error ?? "Failed to update appointment", "error");
+        showToast(apiErrorText(json, "Failed to update appointment"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");
@@ -432,7 +235,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         showToast(json.message ?? "You have resigned as Vice President.", "success");
         await fetchData();
       } else {
-        showToast(json.error ?? "Failed to resign", "error");
+        showToast(apiErrorText(json, "Failed to resign"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");
@@ -450,7 +253,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         showToast(json.message ?? "Executive slots initialized", "success");
         await fetchData();
       } else {
-        showToast(json.error ?? "Failed to initialize", "error");
+        showToast(apiErrorText(json, "Failed to initialize"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");
@@ -479,7 +282,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         setVpNomineeCharId("");
         await fetchData();
       } else {
-        setVpNominateError(json.error ?? "Failed to submit nomination");
+        setVpNominateError(apiErrorText(json, "Failed to submit nomination"));
       }
     } catch {
       setVpNominateError("Network error — please try again");
@@ -500,7 +303,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         showToast(json.message ?? "Nomination withdrawn", "success");
         await fetchData();
       } else {
-        showToast(json.error ?? "Failed to withdraw nomination", "error");
+        showToast(apiErrorText(json, "Failed to withdraw nomination"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");
@@ -522,7 +325,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         showToast(json.message ?? "Vote recorded", "success");
         await fetchData();
       } else {
-        showToast(json.error ?? "Failed to record vote", "error");
+        showToast(apiErrorText(json, "Failed to record vote"), "error");
       }
     } catch {
       showToast("Network error — please try again", "error");
@@ -544,7 +347,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         showToast(json.message ?? `Bill ${decision === "sign" ? "signed" : "vetoed"}`, "success");
         await fetchData();
       } else {
-        showToast(json.error ?? `Failed to ${decision} bill`, "error");
+        showToast(apiErrorText(json, `Failed to ${decision} bill`), "error");
       }
     } finally {
       setBillActionId(null);
@@ -655,6 +458,19 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                 </MastheadChip>
               )}
               {sinceChip && <MastheadChip tone="mono">{sinceChip}</MastheadChip>}
+              <MastheadChip>
+                <Link
+                  href={PRESIDENCY_EXPLAINER_HREF}
+                  className="underline-offset-2 hover:underline"
+                >
+                  presidential powers ↗
+                </Link>
+              </MastheadChip>
+              <MastheadChip>
+                <Link href={RUNNING_GUIDE_HREF} className="underline-offset-2 hover:underline">
+                  how to run ↗
+                </Link>
+              </MastheadChip>
             </>
           }
           rightSlot={
@@ -702,7 +518,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
           )}
           {(data.isPresident || data.isAdmin) && (
             <TabButton active={activeTab === "orders"} onClick={() => setActiveTab("orders")}>
-              Executive Orders
+              Executive orders
             </TabButton>
           )}
           {(data.isPresident || data.isAdmin) && (
@@ -715,7 +531,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
           )}
           {(data.isPresident || data.isAdmin) && conflictsEnabled && (
             <TabButton active={activeTab === "foreign"} onClick={() => setActiveTab("foreign")}>
-              Foreign Affairs
+              Foreign affairs
             </TabButton>
           )}
           {data.isAdmin && (
@@ -757,7 +573,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                     disabled={submitting}
                     className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-black hover:bg-amber-400 disabled:opacity-50 transition-colors"
                   >
-                    Initialize President &amp; VP Slots
+                    Initialize president &amp; VP slots
                   </button>
                 </div>
               </div>
@@ -777,7 +593,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                   needsInit={needsExecutiveInit}
                 />
                 <ExecutiveCard
-                  title="Vice President"
+                  title="Vice president"
                   data={data.vicePresident}
                   officialId={data.vicePresidentOfficialId}
                   onAppoint={() => setAppointModal("vicePresident")}
@@ -819,7 +635,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                     tenureLine: sinceChip ?? undefined,
                   },
                   {
-                    title: "Vice President",
+                    title: "Vice president",
                     sealGlyph: "VP",
                     holder: data.vicePresident
                       ? {
@@ -842,7 +658,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                     href={`/country/${countryId.toLowerCase()}/executive/vice-president`}
                     className="rounded-lg border border-primary/40 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
                   >
-                    Open VP Office
+                    Open VP office
                   </Link>
                 )}
                 {data.isVicePresident && (
@@ -851,7 +667,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                     disabled={resignLoading}
                     className="rounded-lg border border-error/40 px-3 py-1.5 text-xs font-medium text-error hover:bg-error/10 disabled:opacity-50 transition-colors"
                   >
-                    {resignLoading ? "Resigning…" : "Resign as Vice President"}
+                    {resignLoading ? "Resigning…" : "Resign as vice president"}
                   </button>
                 )}
                 {/* The 25th-Amendment VP nomination is a US mechanic; other
@@ -868,7 +684,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                       }}
                       className="rounded-lg border border-primary/40 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
                     >
-                      Nominate Vice President
+                      Nominate vice president
                     </button>
                   )}
                 {/* SCOTUS is a US-only mechanic (#3581) — other presidential
@@ -982,9 +798,13 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
             {/* Bills Awaiting Signature */}
             {data.isPresident && bills.length > 0 && (
               <section className="mb-8">
-                <h2 className="text-sm font-semibold text-muted mb-4">
+                <h2 className="text-sm font-semibold text-muted mb-1">
                   Bills awaiting your signature
                 </h2>
+                <p className="mb-4 text-xs text-muted">
+                  Sign or veto before each deadline. A bill you leave unanswered becomes law without
+                  your signature when its deadline passes.
+                </p>
                 <div className="rounded-2xl border border-card-border bg-card p-6 shadow-sm">
                   <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
                     {bills.map((b) => (
@@ -1004,6 +824,16 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                             {b.title}
                           </Link>
                           <p className="text-sm text-muted mt-0.5 line-clamp-2">{b.summary}</p>
+                          {(b.presidentActionDeadlineOnTurn != null ||
+                            b.presidentActionDeadline) && (
+                            <p className="mt-1 text-xs font-medium text-warning">
+                              {deskDeadlineLabel(
+                                b.presidentActionDeadlineOnTurn != null
+                                  ? clock.formatRemainingTurns(b.presidentActionDeadlineOnTurn)
+                                  : clock.formatRemaining(b.presidentActionDeadline)
+                              )}
+                            </p>
+                          )}
                         </div>
                         <div className="flex gap-2 shrink-0">
                           <button
@@ -1030,7 +860,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                     }
                     className="mt-4 inline-block text-sm text-primary hover:underline font-medium"
                   >
-                    View all bills â†’
+                    View all bills →
                   </Link>
                 </div>
               </section>
@@ -1087,7 +917,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
       {vpNominateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="w-full max-w-md rounded-xl border border-card-border bg-card p-6 mx-4 shadow-modal">
-            <h3 className="text-lg font-semibold mb-2">Nominate Vice President</h3>
+            <h3 className="text-lg font-semibold mb-2">Nominate vice president</h3>
             <p className="text-sm text-muted mb-4">
               Under the 25th Amendment, the President nominates a VP who must be confirmed by a
               simple majority of the Senate. The vote closes after 24 hours.
@@ -1109,7 +939,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
                 </option>
               ))}
             </select>
-            {vpNominateError && <p className="text-xs text-error mb-3">{vpNominateError}</p>}
+            <InlineError error={vpNominateError} className="text-xs text-error mb-3" />
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
@@ -1138,7 +968,7 @@ export default function WhiteHouseClient({ countryId = "US" }: { countryId?: Cou
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="w-full max-w-md rounded-xl border border-card-border bg-card p-6 mx-4 shadow-modal">
             <h3 className="text-lg font-semibold mb-4">
-              Appoint {appointModal === "president" ? "President" : "Vice President"}
+              Appoint {appointModal === "president" ? "President" : "Vice president"}
             </h3>
             <p className="text-sm text-muted mb-4">
               Only player characters can serve. NPPs cannot be appointed.

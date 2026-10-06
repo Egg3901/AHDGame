@@ -802,7 +802,15 @@ describe("processMergeProposal (transfer semantics — seats + coalition)", () =
 
   function setup(opts: {
     govDoc?: Record<string, unknown> | null;
-    orgRows?: Array<{ stateId: string; organization: number; registration?: number }>;
+    orgRows?: Array<{
+      _id?: string;
+      countryId?: string;
+      stateId: string;
+      partyId?: string;
+      organization: number;
+      organizationUnits?: number;
+      registration?: number;
+    }>;
   }) {
     const db = createMockDb();
     const parties = db.collection("politicalParties") as unknown as MockCollection;
@@ -987,6 +995,39 @@ describe("processMergeProposal (transfer semantics — seats + coalition)", () =
     const del = db.collectionMocks.statePartyOrg!.deleteMany.mock.calls[0];
     expect(del).toBeTruthy();
     expect(del![0]).toEqual({ partyId: "1", countryId: "IE" });
+  });
+
+  it("transfers half of the absorbed party's durable organization units", async () => {
+    const db = setup({
+      govDoc: null,
+      orgRows: [
+        {
+          _id: "DUB_1",
+          countryId: "IE",
+          stateId: "DUB",
+          partyId: "1",
+          organization: 40,
+          organizationUnits: 80,
+        },
+      ],
+    });
+
+    await processMergeProposal(db as unknown as Db, proposal, 120);
+
+    expect(db.collectionMocks.statePartyOrg!.bulkWrite).toHaveBeenCalledWith(
+      [
+        {
+          insertOne: {
+            document: expect.objectContaining({
+              _id: "DUB_3",
+              organizationUnits: 40,
+              lastOrganizationBuildTurn: 120,
+            }),
+          },
+        },
+      ],
+      { ordered: false }
+    );
   });
 
   it("releases the absorbed party's registration into each state's unregistered pool", async () => {

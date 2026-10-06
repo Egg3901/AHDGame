@@ -1,16 +1,13 @@
+import { loadNationalApproval } from "./nationalApproval";
 import { getDb } from "@/lib/mongodb";
 import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import type { State, MetricCategoryId, GameState } from "@/lib/db/types";
 import type { StateDemographics } from "@/lib/db/types/demographics";
 import {
   calculateStateApproval,
-  calculateApprovalFromAverages,
-  computeNationalAveragesFromMetrics,
   computeStateApprovalBase,
-  computeApprovalBaseFromAverages,
   buildFlatMetrics,
   BASE_APPROVAL,
-  PUBLIC_EXPECTATIONS_MODIFIER,
 } from "@/lib/utils/governmentApproval";
 import {
   isPoliticalApprovalCountry,
@@ -18,7 +15,7 @@ import {
 } from "@/lib/politicalLegislation/politicalApprovalProvider";
 import { evaluateModifiers, type ActiveModifier } from "@/lib/utils/approvalModifiers";
 import { resolveGameYear } from "@/lib/era/era";
-import { NATIONAL_SCOPE_IDS, getNationalDocId } from "@/lib/constants/nationalScope";
+import { getNationalDocId } from "@/lib/constants/nationalScope";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { aggregateNationalGdp } from "@/lib/utils/nationalGdp";
 import { populationWeightedAverage } from "@/lib/metrics/populationWeightedAverage";
@@ -70,6 +67,34 @@ interface NationalMetricsResponse {
     baseApproval: number;
     modifiers: ActiveModifier[];
   }[];
+}
+
+// Object.fromEntries defines own data properties, so a hostile key could never
+// reach Object.prototype here; the loader already drops them regardless.
+function toPlainDictionary<T, R>(dictionary: Record<string, T>, map: (value: T) => R) {
+  return Object.fromEntries(
+    Object.entries(dictionary).map(([key, value]) => [key, map(value)])
+  ) as Record<string, R>;
+}
+
+/**
+ * React cannot pass the loader's null-prototype dictionaries from a Server
+ * Component to a Client Component. Copy them into plain objects at that
+ * boundary; the JSON API serializes the loader result directly.
+ */
+export function serializeNationalMetricsForClient(
+  response: NationalMetricsResponse | null
+): NationalMetricsResponse | null {
+  if (!response) return null;
+  return {
+    ...response,
+    categories: toPlainDictionary(response.categories, (category) =>
+      toPlainDictionary(category, (summary) => summary)
+    ),
+    stateRankings: toPlainDictionary(response.stateRankings, (category) =>
+      toPlainDictionary(category, (rows) => rows)
+    ),
+  };
 }
 
 /**
@@ -279,51 +304,20 @@ export async function loadNationalMetrics(
     });
   }
 
-  // National approval: country's averages vs global averages (all countries combined)
-  // This avoids the structural ~50% that results from averaging relative state scores.
-  // SP5: merged two-store global read (political + macro halves).
-  const allGlobalRaw = await findMergedRegionMetricsMany(db, {});
-  // Exclude precomputed national-scope docs (e.g. "federal", "uk_national") — they are derived
-  // aggregates, not independent data points, and would double-count state data in the global average.
-  // SP4: also exclude LAW_COUNTRY_IDS regions — their political stateMetrics are demolished, so
-  // leaving their (macro-only) docs in would skew the per-metric reference composition for every
-  // non-playable country. One-time intentional shift; playables never take this path post-cutover.
-  const allGlobalMetrics = allGlobalRaw.filter(
-    (m) => !NATIONAL_SCOPE_IDS.has(String(m._id)) && !isPoliticalApprovalCountry(m.countryId)
-  );
-  const globalAverages = computeNationalAveragesFromMetrics(allGlobalMetrics);
-  const nationalBaseOverride = isPoliticalApprovalCountry(countryId)
-    ? (politicalBases?.national ?? BASE_APPROVAL)
-    : undefined;
-  response.governmentApproval = calculateApprovalFromAverages(
-    nationalAverages,
-    globalAverages,
-    preset,
+  const approval = await loadNationalApproval(
     countryId,
-    year,
-    nationalBaseOverride
-  );
-  response.governmentApproval = Math.max(
-    0,
-    response.governmentApproval + PUBLIC_EXPECTATIONS_MODIFIER.effect
-  );
-  response.governmentApprovalBase =
-    nationalBaseOverride ??
-    computeApprovalBaseFromAverages(nationalAverages, globalAverages, preset, countryId, year);
-  // preset was previously omitted here (same gap as nationalApproval) — the
-  // national conditions list skipped era-1991 patches under the 1991 preset.
-  response.governmentApprovalModifiers = [
-    PUBLIC_EXPECTATIONS_MODIFIER,
-    ...evaluateModifiers(nationalAverages, {
-      countryId,
+    {
+      allStates,
+      allMetrics,
+      nationalAverages,
       preset,
       year,
-    }).map((m) => ({
-      ...m,
-      marginEffect:
-        m.marginEffect ?? (m.source === "address" ? 0 : marginEffectForModifier(m.effect, m.id)),
-    })),
-  ];
+    },
+    politicalBases
+  );
+  response.governmentApproval = approval.governmentApproval;
+  response.governmentApprovalBase = approval.governmentApprovalBase;
+  response.governmentApprovalModifiers = approval.modifiers;
 
   response.stateApprovals = stateApprovalsList.map(
     ({ stateId, stateName, approval, baseApproval, modifiers }) => ({

@@ -60,7 +60,7 @@ export default function CommodityChart({
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-lg font-bold text-foreground">
-            {view === "price" ? "Price Over Time" : "Supply & Demand Over Time"}
+            {view === "price" ? "Price over time" : "Supply & demand over time"}
           </h2>
           {scopeLabel && <p className="text-xs text-muted mt-0.5">{scopeLabel}</p>}
         </div>

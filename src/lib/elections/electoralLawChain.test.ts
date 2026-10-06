@@ -32,6 +32,7 @@ describe("electoral law is reachable by a player", () => {
       { type: "electoral_law", votingAge: 18, registrationAccess: 30 },
       { type: "electoral_law", votingAge: 21 },
       { type: "electoral_law", registrationAccess: -25 },
+      { type: "electoral_law", japanShugiinReform: true },
     ]) {
       const parsed = proposeBillSchema.safeParse({
         title: "The Franchise Act",
@@ -54,6 +55,13 @@ describe("electoral law is reachable by a player", () => {
         registrationAccess: 30,
       });
     }
+  });
+
+  it("the country legislature composer surfaces the dated Japan reform decision", () => {
+    const source = composerSource("src/app/country/[code]/legislature/ProposeLegislationModal.tsx");
+    expect(source).toContain("canProposeJapanShugiinReform");
+    expect(source).toContain("japanShugiinReform: true");
+    expect(source).toContain("worldFlags.currentYear ?? 0) >= 1994");
   });
 
   it("rejects a provision outside the gated category", () => {

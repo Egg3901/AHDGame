@@ -18,11 +18,9 @@ import {
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { SOCI_DANGER_ZONE, CONCENTRATION_MULTIPLIER_MAX } from "./constants";
 
-/** Clamp any value into the SOCI range [0,100]; non-finite ⇒ 0. */
-export function clampConcentration(v: number): number {
-  if (!Number.isFinite(v)) return 0;
-  return Math.max(0, Math.min(100, v));
-}
+import { clampConcentration } from "./concentrationClamp";
+
+export { clampConcentration };
 
 /** SOCI from two ₳-anchor revenue sums. 0 when there is no corporate revenue. */
 export function computeStateOwnershipConcentration(input: {

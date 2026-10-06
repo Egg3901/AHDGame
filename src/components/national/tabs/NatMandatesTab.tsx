@@ -12,6 +12,7 @@ import type { NationalCorporationViewModel } from "@/lib/nationalization/nationa
 import type { NatOfficialActions } from "../NationalCorporationView";
 import { natMoney as money } from "../natMoney";
 import { SectorGlyph } from "../sectorIcons";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type MandateEntry = NationalCorporationViewModel["mandates"][number];
 
@@ -58,7 +59,7 @@ export function NatMandatesTab({
       );
       const json = await res.json();
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Update failed." });
+        setFeedback({ type: "error", message: apiErrorText(json, "Update failed.") });
       } else {
         onRefresh();
       }
@@ -219,7 +220,7 @@ function Mini({
           : "text-foreground";
   return (
     <div className="rounded-lg border border-card-border bg-card-muted px-2 py-1.5 text-center">
-      <div className="text-[9px] font-medium uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-body-sm font-medium text-muted">{label}</div>
       <div className={`mt-0.5 text-body-sm font-semibold tabular-nums ${toneClass}`}>{value}</div>
     </div>
   );

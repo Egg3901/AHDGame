@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminOrApiKey } from "@/lib/api/requireAdminOrApiKey";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { postLatestChangelog, postChangelogUpdates } from "@/lib/discordChangelog";
 import { z } from "zod";
@@ -16,8 +16,7 @@ export async function POST(request: Request) {
     if (!auth.ok) return auth.response;
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     if (parsed.data.mode === "latest") {
       const result = await postLatestChangelog();

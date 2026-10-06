@@ -8,8 +8,9 @@ describe("UK 1991 calibration — UK 1992 general (Major holds the South; Labour
   // 2026-08 level recalibration: the 1992 cell is graded on the econ LEVEL
   // (Major-era Britain econ-left of the party midpoint; the Con win realizes
   // through the social axis + kernel — see eraBalanceLadder.test.ts) and on
-  // relative geography. The small spread is the census-contrast ceiling
-  // documented in the lean-lab audit.
+  // relative geography. The regional spread comes from the published 1987 and
+  // 1992 regional vote shares (countries/uk/rules/regionalContext1991.ts); the
+  // census composition alone is capped near one point.
   it("keeps the regional gradient (South right of North)", () => {
     const mean = leans.reduce((a, l) => a + l.display, 0) / leans.length;
     for (const r of ["SEE", "SWE", "EAE"]) {

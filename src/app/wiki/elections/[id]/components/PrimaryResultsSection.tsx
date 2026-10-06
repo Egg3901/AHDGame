@@ -66,9 +66,7 @@ const PrimaryTrendChart = memo(function PrimaryTrendChart({
 
   return (
     <div className="mb-4">
-      <p className="text-xs text-muted mb-2 font-medium uppercase tracking-wide">
-        {partyName} — Share Over Time
-      </p>
+      <p className="text-body-sm font-medium text-muted mb-2">{partyName} — Share over time</p>
       <ResponsiveContainer width="100%" height={160}>
         <LineChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
@@ -204,7 +202,7 @@ export const PrimaryResultsSection = memo(function PrimaryResultsSection({
                 <thead className="bg-card-elevated">
                   <tr className="border-b border-card-border text-left">
                     <th className="pb-2 pr-4 font-medium text-foreground">Candidate</th>
-                    <th className="pb-2 pr-4 font-medium text-foreground">Primary Score</th>
+                    <th className="pb-2 pr-4 font-medium text-foreground">Primary score</th>
                     <th className="pb-2 pr-4 font-medium text-foreground">Share</th>
                     <th className="pb-2 font-medium text-foreground">Result</th>
                   </tr>

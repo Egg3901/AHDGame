@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_FINANCIAL_LIMITS } from "@/lib/api/rateLimit";
 import type { Corporation, CorporationHistory, MarketCapHistory } from "@/lib/db/types";
@@ -12,7 +12,7 @@ import { getExchangeApiKey } from "@/lib/constants/exchangeRegistry";
 export async function GET(request: Request) {
   try {
     if (!requireBotToken(request)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const rateLimit = checkRateLimit(
@@ -85,11 +85,9 @@ export async function GET(request: Request) {
 
     // --- Market-wide mode (default) ---
     if (country && !getExchangeApiKey(country.toUpperCase())) {
-      return NextResponse.json(
-        {
-          error: "Invalid country. Use a valid country code (us, uk, jp, etc.) or omit for global.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Invalid country. Use a valid country code (us, uk, jp, etc.) or omit for global."
       );
     }
 

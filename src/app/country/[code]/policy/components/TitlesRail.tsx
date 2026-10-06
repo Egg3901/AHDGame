@@ -35,7 +35,7 @@ export function TitlesRail({
       aria-label="Titles"
       className="flex gap-1.5 overflow-x-auto rounded-xl border border-card-border bg-card p-1.5 lg:sticky lg:top-24 lg:block lg:gap-0 lg:self-start lg:overflow-visible lg:p-0"
     >
-      <div className="hidden border-b border-card-border bg-card-muted px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-muted lg:block">
+      <div className="hidden border-b border-card-border bg-card-muted px-4 py-2 text-sm font-semibold text-foreground lg:block">
         Titles
       </div>
       {domains.map(({ domain, axes }) => {

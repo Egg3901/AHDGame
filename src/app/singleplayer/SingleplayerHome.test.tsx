@@ -42,7 +42,7 @@ describe("SingleplayerHome new-game rules", () => {
     fireEvent.change(screen.getByLabelText("Autonomous politicians"), { target: { value: "v5" } });
     fireEvent.click(screen.getByText("Advanced feature flags"));
     const autoSector = screen.getByLabelText("Automatic sector seeding");
-    expect((autoSector as HTMLInputElement).checked).toBe(false);
+    expect((autoSector as HTMLInputElement).checked).toBe(true);
     fireEvent.click(autoSector);
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
@@ -53,7 +53,7 @@ describe("SingleplayerHome new-game rules", () => {
       mode: "head-of-state",
       difficulty: "hard",
       autonomyLevel: "v5",
-      featureFlags: { ...DEFAULT_SINGLEPLAYER_FEATURE_FLAGS, autoSectorSeedEnabled: true },
+      featureFlags: { ...DEFAULT_SINGLEPLAYER_FEATURE_FLAGS, autoSectorSeedEnabled: false },
     });
   });
 

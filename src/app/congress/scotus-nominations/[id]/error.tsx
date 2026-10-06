@@ -16,7 +16,7 @@ export default function ScotusNominationError({
       description="The Supreme Court nomination page couldn't load. This may be a temporary issue."
       logPrefix="SCOTUS nomination page error"
       navigationLinks={[
-        { href: "/congress?chamber=senate&tab=bills", label: "Back to Senate Bills" },
+        { href: "/congress?chamber=senate&tab=bills", label: "Back to Senate bills" },
         { href: "/dashboard", label: "Dashboard" },
       ]}
       fullScreen

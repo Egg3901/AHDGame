@@ -43,7 +43,7 @@ export default function RunningForOfficeIntlPage() {
             href="/guides/running-for-office"
             className="hover:text-foreground transition-colors"
           >
-            Running for Office
+            Running for office
           </Link>
           <span>/</span>
           <span className="text-foreground">UK &amp; Japan</span>
@@ -51,7 +51,7 @@ export default function RunningForOfficeIntlPage() {
 
         {/* Page header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Running for Office: UK &amp; Japan</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Running for office: UK &amp; Japan</h1>
           <p className="mt-2 text-sm text-muted">
             Parliamentary systems, proportional elections, snap elections, and the road to becoming
             Prime Minister
@@ -79,10 +79,10 @@ export default function RunningForOfficeIntlPage() {
                   <tr className="border-b border-card-border bg-card">
                     <th className="px-4 py-2.5 text-left font-semibold text-muted">Feature</th>
                     <th className="px-4 py-2.5 text-left font-semibold text-muted">
-                      US (Presidential)
+                      US (presidential)
                     </th>
                     <th className="px-4 py-2.5 text-left font-semibold text-muted">
-                      UK &amp; Japan (Parliamentary)
+                      UK &amp; Japan (parliamentary)
                     </th>
                   </tr>
                 </thead>

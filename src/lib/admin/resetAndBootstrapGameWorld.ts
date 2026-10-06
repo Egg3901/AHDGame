@@ -64,6 +64,10 @@ import {
 } from "@/lib/resetVersions/rules";
 import { getValidatedEnv } from "@/lib/env";
 import { assertResetDatabaseMatchesApplication } from "@/lib/admin/resetPreflight";
+import { resetPoliticalMetricsRuntimeState } from "@/lib/admin/seed/resetPoliticalMetricsRuntimeState";
+import { resetMacroMetricsRuntimeState } from "@/lib/admin/seed/resetMacroMetricsRuntimeState";
+import { resetStateRuntimeFields } from "@/lib/admin/seed/resetStateRuntimeFields";
+import { clearReferenceForRebuild } from "@/lib/admin/seed/referenceRebuildClear";
 
 export interface ResetAndBootstrapOptions {
   /** 1991 only: leave political offices vacant for player-created parties. */
@@ -173,6 +177,17 @@ export async function resetAndBootstrapGameWorld(
   // cycle-0 races and `detectPreIterationComplete` (which needs at least one
   // RESOLVED founding race) could never end the phase, pinning the calendar to
   // the era start forever.
+  // The 1991 vehicle and media taxonomy seeds run only on a reference rebuild
+  // (they need the empty market pool cleared below). A 1991 reset that kept the
+  // reference collections would clear their completion markers in teardown and
+  // never re-run them, leaving legacy `automobiles`/`entertainment` markets in a
+  // world the 1991 code expects to be converted. Refuse before the seal.
+  if (preset === "1991-default" && !resetReference) {
+    throw new Error(
+      "A 1991-default reset must rebuild reference data (resetReference: true); " +
+        "the 1991 vehicle and media taxonomy seeds only run on a reference rebuild"
+    );
+  }
   const startingParties = resolveStartingPartiesMode(preset, options.startingParties);
   const foundingEligible = !seedOnly && mode === "historical";
   const atPresetAnchor = isPresetAnchorDate(preset, options.startDate);
@@ -306,18 +321,36 @@ export async function resetAndBootstrapGameWorld(
     });
     collect(reset.message);
 
+    // Political metrics are reference rows, but several fields on each row are
+    // mutable momentum from the outgoing world. Clear those fields only here,
+    // after teardown has succeeded and before bootstrap re-seeds every country.
+    const politicalRuntimeFieldsCleared = await resetPoliticalMetricsRuntimeState(db);
+    collect(
+      `Cleared embedded political runtime fields from ${politicalRuntimeFieldsCleared} region(s)`
+    );
+    const stateRuntimeFieldsCleared = await resetStateRuntimeFields(db);
+    collect(`Cleared embedded state runtime fields from ${stateRuntimeFieldsCleared} region(s)`);
+    const macroRuntimeReset = await resetMacroMetricsRuntimeState(db);
+    collect(
+      `Cleared embedded macro runtime fields from ${macroRuntimeReset.documentsModified} row(s); ` +
+        `removed ${macroRuntimeReset.nationalRollupsDeleted} derived national rollup(s)`
+    );
+
     // 2) BUILD. `seedOnly` short-circuits before election + officials spawn.
     phaseReached = "build";
-    // The 1991 taxonomy seed is authorized only for a fresh reference rebuild.
-    // `unownedSectors` is classified as reference data, so resetGameWorld's
-    // runtime sweep intentionally leaves the outgoing market pool in place.
-    // Clear that pool here, after teardown and immediately before bootstrap's
-    // empty-world preflight; seedUnownedSectors rebuilds it from the new state
-    // roster later in the same bootstrap.
-    if (preset === "1991-default" && resetReference) {
-      const cleared = await db.collection("unownedSectors").deleteMany({});
+    // A reference rebuild must start from what an empty database starts from.
+    // The reference collections below are upsert-seeded from the NEW roster,
+    // so the outgoing world's rows for regions, countries and categories the
+    // new preset does not write would otherwise survive the reset (see
+    // REFERENCE_REBUILD_CLEARED_COLLECTIONS). Cleared after teardown and
+    // immediately before bootstrap, whose 1991 taxonomy preflight also needs
+    // the unowned market pool empty; bootstrap rebuilds every one of them.
+    if (resetReference) {
+      const cleared = await clearReferenceForRebuild(db);
       collect(
-        `Cleared ${cleared.deletedCount ?? 0} stale unowned market(s) for 1991 reference rebuild`
+        `Cleared reference data for rebuild: ${Object.entries(cleared)
+          .map(([name, count]) => `${name} ${count}`)
+          .join(", ")}`
       );
     }
     const bootstrap = await bootstrapGameWorld({

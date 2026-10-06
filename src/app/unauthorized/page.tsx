@@ -41,12 +41,12 @@ function UnauthorizedContent() {
               <h1 className="text-6xl font-black tabular-nums text-warning">403</h1>
               <div className="h-px flex-1 bg-card-border" />
             </div>
-            <h2 className="text-xl font-bold text-foreground">Access Denied</h2>
+            <h2 className="text-xl font-bold text-foreground">Access denied</h2>
           </div>
 
           {/* Reason */}
           <div className="rounded-lg border border-card-border bg-card p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">Reason</p>
+            <p className="text-body-sm font-medium text-muted mb-2">Reason</p>
             <p className="text-sm text-foreground">{reason}</p>
           </div>
 
@@ -65,13 +65,13 @@ function UnauthorizedContent() {
               href={returnUrl}
               className="rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
             >
-              Go Back
+              Go back
             </Link>
             <Link
               href="/"
               className="rounded-lg border border-card-border bg-card px-6 py-2.5 text-sm font-semibold text-muted hover:text-foreground hover:bg-card-elevated transition-colors"
             >
-              Return Home
+              Return home
             </Link>
           </div>
         </div>

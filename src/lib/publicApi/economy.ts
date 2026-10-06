@@ -5,7 +5,7 @@ import type { ElectedOfficial, PoliticalParty, Bill } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
-import { getLiveLowerChamberSeats } from "@/lib/turn/lowerChamberSeats";
+import { getLiveLowerChamberSeats } from "@/lib/legislature/lowerChamberSeats";
 import { bgAssemblyName, bgAssemblyPartySeats } from "@/lib/countries/bg/rules/assemblyTransition";
 import { getCountryState } from "@/lib/countryState";
 import { getExchangeApiKey } from "@/lib/constants/exchangeRegistry";

@@ -67,10 +67,8 @@ export default function JusticeOfficePage() {
         <header className="rounded-2xl border border-card-border bg-card p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-                {countryName}
-              </div>
-              <h1 className="mt-1 text-2xl font-bold text-foreground">Justice Office</h1>
+              <div className="text-body-sm font-medium text-muted">{countryName}</div>
+              <h1 className="mt-1 text-2xl font-bold text-foreground">Justice office</h1>
             </div>
             <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-card-border bg-card-muted px-2.5 py-1 text-xs font-medium text-foreground/80">
               {data.justiceActionsRemaining}/{data.actionCap} Actions
@@ -80,17 +78,13 @@ export default function JusticeOfficePage() {
           {data.isJustice && data.seat ? (
             <div className="mt-4 space-y-2">
               <div className="flex items-center gap-3">
-                <span className="w-28 shrink-0 text-[10px] font-semibold uppercase tracking-widest text-muted">
-                  Seat
-                </span>
+                <span className="w-28 shrink-0 text-body-sm font-medium text-muted">Seat</span>
                 <span className="text-sm font-medium text-foreground">
                   #{data.seat.seatNumber} - {data.seat.justiceName}
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="w-28 shrink-0 text-[10px] font-semibold uppercase tracking-widest text-muted">
-                  Ideology
-                </span>
+                <span className="w-28 shrink-0 text-body-sm font-medium text-muted">Ideology</span>
                 <span className="text-sm text-muted">
                   Econ {leanLabel(data.seat.economicLean)} · Social{" "}
                   {leanLabel(data.seat.socialLean)}
@@ -103,7 +97,7 @@ export default function JusticeOfficePage() {
               )}
               {data.seat.deathChance && (
                 <div className="flex items-start gap-3">
-                  <span className="w-28 shrink-0 text-[10px] font-semibold uppercase tracking-widest text-muted">
+                  <span className="w-28 shrink-0 text-body-sm font-medium text-muted">
                     Death chance
                   </span>
                   <span className="text-sm text-warning">

@@ -26,7 +26,7 @@ const COUNTRY_ELECTION_TYPES: Record<string, { value: ElectionTypeFilter; label:
   ],
   UK: [
     { value: "commons", label: "Commons" },
-    { value: "regionalCouncil", label: "Regional Council" },
+    { value: "regionalCouncil", label: "Regional council" },
   ],
   JP: [
     { value: "shugiin", label: "Shūgiin" },
@@ -38,7 +38,7 @@ const COUNTRY_ELECTION_TYPES: Record<string, { value: ElectionTypeFilter; label:
     { value: "ministerPresident", label: "Minister-President" },
   ],
   CN: [
-    { value: "npcDelegate", label: "NPC Delegate" },
+    { value: "npcDelegate", label: "NPC delegate" },
     { value: "peoplesCongress", label: "People's Congress" },
     { value: "governor", label: "Governor" },
   ],
@@ -58,7 +58,7 @@ const ALL_ELECTION_TYPES: { value: ElectionTypeFilter; label: string }[] = [
   { value: "bundestag", label: "Bundestag" },
   { value: "landtag", label: "Landtag" },
   { value: "ministerPresident", label: "Minister-President" },
-  { value: "npcDelegate", label: "NPC Delegate" },
+  { value: "npcDelegate", label: "NPC delegate" },
   { value: "peoplesCongress", label: "People's Congress" },
 ];
 
@@ -143,7 +143,7 @@ export function ElectionTimerForm({
             }
             className={selectClass}
           >
-            <option value="">All Types</option>
+            <option value="">All types</option>
             {electionTypes.map((t) => (
               <option key={t.value} value={t.value}>
                 {t.label}
@@ -201,7 +201,7 @@ export function ElectionTimerForm({
         {/* Senate Class — only when Senate selected */}
         {showSenateClass && (
           <div>
-            <label className="mb-1 block text-[9px] uppercase text-muted">Senate Class</label>
+            <label className="mb-1 block text-[9px] uppercase text-muted">Senate class</label>
             <select
               value={timerForm.senateClass}
               onChange={(e) =>
@@ -223,7 +223,7 @@ export function ElectionTimerForm({
         {/* Chamber Class — only when Sangiin selected */}
         {showChamberClass && (
           <div>
-            <label className="mb-1 block text-[9px] uppercase text-muted">Chamber Class</label>
+            <label className="mb-1 block text-[9px] uppercase text-muted">Chamber class</label>
             <select
               value={timerForm.chamberClass}
               onChange={(e) =>

@@ -10,7 +10,7 @@
 
 // ─── Eligibility / lifecycle tunables (durations in turns; 48 turns = 1 yr) ──
 
-/** Min `independenceDesire` to request a referendum (= PRO_INDY_BONUS_THRESHOLD). */
+/** Min `independenceDesire` to request a referendum (= HIGH_DESIRE_BONUS_THRESHOLD). */
 export const REQUEST_THRESHOLD = 60;
 /** First Minister office AP to file a request. */
 export const REQUEST_AP_COST = 3;

@@ -13,17 +13,29 @@ describe("getPresetMonetaryScope", () => {
     );
 
     const expectedForex =
-      preset === "2019-default"
-        ? [...FOREX_ACTIVE_COUNTRIES, "PL", "HU", "RO", "BG"]
-        : preset === "2027-default"
-          ? [...FOREX_ACTIVE_COUNTRIES, "BG"]
-          : FOREX_ACTIVE_COUNTRIES;
+      preset === "1991-default"
+        ? [
+            ...FOREX_ACTIVE_COUNTRIES.filter((countryId) => countryId !== "DD"),
+            "PL",
+            "HU",
+            "RO",
+            "BG",
+            "CS",
+            "YU",
+          ]
+        : preset === "2019-default"
+          ? [...FOREX_ACTIVE_COUNTRIES, "PL", "HU", "RO", "BG"]
+          : preset === "2027-default"
+            ? [...FOREX_ACTIVE_COUNTRIES, "BG"]
+            : FOREX_ACTIVE_COUNTRIES;
     expect(scope.forexCountries).toEqual(expectedForex);
     expect(scope.centralBankCountries.every((countryId) => budgeted.has(countryId))).toBe(true);
     expect(
       new Set([
         ...scope.centralBankCountries,
-        ...scope.exclusions.map(({ countryId }) => countryId),
+        ...scope.exclusions
+          .filter(({ countryId }) => scope.forexCountries.includes(countryId))
+          .map(({ countryId }) => countryId),
       ])
     ).toEqual(new Set(expectedForex));
   });
@@ -36,7 +48,7 @@ describe("getPresetMonetaryScope", () => {
     expect(scope.exclusions).toContainEqual(
       expect.objectContaining({ countryId: "BG", reason: "shared-currency-bank" })
     );
-    expect(getPresetMonetaryScope("1991-default").forexCountries).not.toContain("BG");
+    expect(getPresetMonetaryScope("1991-default").forexCountries).toContain("BG");
   });
 
   it.each(["1953-default", "1979-default"])("models RU and DD fiscally in %s", (preset) => {
@@ -47,7 +59,7 @@ describe("getPresetMonetaryScope", () => {
     );
   });
 
-  it.each(["1991-default", "1999-default", "2007-default", "2023-default", "2027-default"])(
+  it.each(["1999-default", "2007-default", "2023-default", "2027-default"])(
     "records explicit RU/DD exclusions in %s",
     (preset) => {
       const scope = getPresetMonetaryScope(preset);
@@ -60,6 +72,19 @@ describe("getPresetMonetaryScope", () => {
       );
     }
   );
+
+  it("covers every authored 1991 transition fiscal book with its own monetary row", () => {
+    const scope = getPresetMonetaryScope("1991-default");
+    expect(scope.centralBankCountries).toEqual(
+      expect.arrayContaining(["RU", "PL", "HU", "RO", "BG", "CS", "YU"])
+    );
+    expect(scope.exclusions.map(({ countryId }) => countryId)).not.toContain("RU");
+    expect(scope.centralBankCountries).not.toContain("DD");
+    expect(scope.forexCountries).not.toContain("DD");
+    expect(scope.exclusions).toContainEqual(
+      expect.objectContaining({ countryId: "DD", reason: "absent-in-era" })
+    );
+  });
 
   it("models all five 2019 transition central banks and excludes only absent DD", () => {
     const scope = getPresetMonetaryScope("2019-default");

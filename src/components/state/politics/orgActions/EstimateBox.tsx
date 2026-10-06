@@ -1,7 +1,6 @@
 "use client";
 
 import { Tooltip } from "@/components/ui";
-import { FactorBreakdown, type BuildOrgFactors } from "@/components/state/politics/FactorBreakdown";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 
 export interface EstimateBoxProps {
@@ -20,7 +19,7 @@ export interface EstimateBoxProps {
   /**
    * Optional funds cost. Build Org charges treasury alongside PS from
    * 2026-09-02; `fundedFraction` below 1 means the treasury can only part-fund
-   * the click, and the Org gain shown has already been scaled down to match.
+   * the click. A successful Build Org click still deposits one fixed unit.
    */
   funds?: {
     amount: number;
@@ -41,7 +40,6 @@ export interface EstimateBoxProps {
     /** Contest only — true when the reduction hit the defense floor. */
     clamped?: boolean;
   };
-  factors: BuildOrgFactors;
 }
 
 /**
@@ -49,7 +47,7 @@ export interface EstimateBoxProps {
  * Leads with the two numbers that matter (cost + gain), then a quieter
  * "why this gain" factor breakdown underneath.
  */
-export function EstimateBox({ variant, tone, cost, funds, gain, factors }: EstimateBoxProps) {
+export function EstimateBox({ variant, tone, cost, funds, gain }: EstimateBoxProps) {
   const title = variant === "projection" ? "This click" : "Last click";
   const costLabel = variant === "projection" ? "Cost" : "Cost";
   const gainValueColor = tone === "build" ? "text-success" : "text-error";
@@ -59,14 +57,14 @@ export function EstimateBox({ variant, tone, cost, funds, gain, factors }: Estim
 
   return (
     <div className="rounded-lg border border-card-border/40 bg-background/50 px-4 py-3 space-y-3">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted">{title}</div>
+      <div className="text-body-sm font-medium text-muted">{title}</div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-md border border-card-border/30 bg-card/50 px-3 py-2">
-          <div className="flex items-center text-[10px] font-medium uppercase tracking-wide text-muted">
+          <div className="flex items-center text-body-sm font-medium text-muted">
             {costLabel}
             <Tooltip
-              label="About Build Org cost"
+              label="About build org cost"
               content="Base Political Strength (PS) cost plus a per-state pressure ladder that rises after each spend in this state. Higher pressure = more PS per click, and more money: the cash price scales with the PS cost and is billed to the same treasury tier that pays the Strength."
             />
           </div>
@@ -84,11 +82,11 @@ export function EstimateBox({ variant, tone, cost, funds, gain, factors }: Estim
         </div>
 
         <div className="rounded-md border border-card-border/30 bg-card/50 px-3 py-2">
-          <div className="flex items-center text-[10px] font-medium uppercase tracking-wide text-muted">
-            {gain.label.includes("Effect") ? "Effect" : "Org gain"}
+          <div className="flex items-center text-body-sm font-medium text-muted">
+            {gain.label.includes("Effect") ? "Effect" : "Org share"}
             <Tooltip
-              label="About Org gain"
-              content="Expected Org% gained this click. Sourced from the unaffiliated pool first, then by poaching rivals. Scales with open pool, growth pace, Political Strength (PS) leverage, and catch-up."
+              label="About Org share"
+              content="Expected change to your Org share after one fixed contribution unit is added to the regional bucket. Established parties keep the advantage of their accumulated units."
             />
           </div>
           <div className={`mt-1 text-lg font-bold tabular-nums leading-none ${gainValueColor}`}>
@@ -99,7 +97,7 @@ export function EstimateBox({ variant, tone, cost, funds, gain, factors }: Estim
           {gain.clamped ? (
             <div className="mt-1 text-[10px] text-muted">Floor-clamped</div>
           ) : (
-            <div className="mt-1 text-[10px] text-muted">Pool + rival poach</div>
+            <div className="mt-1 text-[10px] text-muted">Derived from bucket share</div>
           )}
         </div>
       </div>
@@ -108,7 +106,7 @@ export function EstimateBox({ variant, tone, cost, funds, gain, factors }: Estim
         <div className="space-y-1">
           <div className="flex items-center justify-between gap-3 text-xs">
             <span className="text-muted">
-              {variant === "projection" ? "Estimated Funds" : "Funds"}
+              {variant === "projection" ? "Estimated funds" : "Funds"}
             </span>
             <span className="font-bold tabular-nums">
               {fundsSymbol}
@@ -125,13 +123,11 @@ export function EstimateBox({ variant, tone, cost, funds, gain, factors }: Estim
           {funds.fundedFraction !== undefined && funds.fundedFraction < 1 ? (
             <div className="text-[10px] text-warning">
               Partly funded: the treasury covers {Math.round(funds.fundedFraction * 100)}% of this
-              click, so the Org gain above is reduced to match.
+              click.
             </div>
           ) : null}
         </div>
       ) : null}
-
-      <FactorBreakdown factors={factors} showLabel />
     </div>
   );
 }

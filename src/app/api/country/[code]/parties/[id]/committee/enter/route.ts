@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { isInNewCharacterCooldown } from "@/lib/auth/newCharacterCooldown";
 import { z } from "zod";
@@ -42,14 +42,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const db = await getDb();
 
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
     if (authResult.user.isBanned) {
-      return NextResponse.json({ error: "Account is banned" }, { status: 403 });
+      return errorResponse(403, "Account is banned");
     }
 
     const rateLimit = checkRateLimit(authResult.user.userId, 10, 60000);
@@ -57,12 +57,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     const authUser = authResult.user;
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
-    if (!party) return NextResponse.json({ error: "Party not found" }, { status: 404 });
+    if (!party) return errorResponse(404, "Party not found");
 
     // Must match both party AND country to avoid cross-country collisions
     const partyCountryId = party.countryId ?? "US";
     if (authUser.character.party !== partyId || !isSameCountry(authUser.character, party)) {
-      return NextResponse.json({ error: "You must be a member of this party" }, { status: 403 });
+      return errorResponse(403, "You must be a member of this party");
     }
 
     // 24h new-character cooldown on committee actions.
@@ -75,18 +75,15 @@ export async function POST(request: Request, { params }: RouteParams) {
       partyJoinedAt: authUser.character.partyJoinedAt,
     });
     if (cooldown.blocked) {
-      return NextResponse.json(
-        {
-          error: "New characters can't run for national committee for 24 hours. Try again later.",
-          unblockAt: cooldown.unblockAt.toISOString(),
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "New characters can't run for national committee for 24 hours. Try again later.",
+        { extra: { unblockAt: cooldown.unblockAt.toISOString() } }
       );
     }
 
     const parsed = await parseJsonBody(request, z.object({ withdraw: z.boolean().optional() }));
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
     const { withdraw } = parsed.data;
 
     // Find active election for this party in this country
@@ -98,18 +95,15 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
 
     if (!election) {
-      return NextResponse.json({ error: "No active committee election" }, { status: 400 });
+      return errorResponse(400, "No active committee election");
     }
 
     const gameTime = await getGameTime();
     if (hasTurnBackedWindowClosed(election, gameTime.currentTurn, gameTime.effectiveNow)) {
-      return NextResponse.json(
-        {
-          error:
-            "Voting for this committee election has ended. " +
-            "A new election opens automatically each turn — please refresh shortly to declare for the next cycle.",
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Voting for this committee election has ended. " +
+          "A new election opens automatically each turn — please refresh shortly to declare for the next cycle."
       );
     }
 
@@ -124,10 +118,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     if (withdraw) {
       if (!existingCandidacy || existingCandidacy.status === "withdrawn") {
-        return NextResponse.json(
-          { error: "You are not a candidate in this election" },
-          { status: 400 }
-        );
+        return errorResponse(400, "You are not a candidate in this election");
       }
 
       await db
@@ -168,21 +159,16 @@ export async function POST(request: Request, { params }: RouteParams) {
         );
         const blockingPosition = (blockingElection?.position ??
           leadershipCandidate.position) as NationalPartyElectionPosition;
-        return NextResponse.json(
-          {
-            error: `You are already running for ${getPartyRoleLabel(partyCountryId, blockingPosition)}. Withdraw first before entering the ${getPartyRoleLabel(partyCountryId, "committee")} election.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `You are already running for ${getPartyRoleLabel(partyCountryId, blockingPosition)}. Withdraw first before entering the ${getPartyRoleLabel(partyCountryId, "committee")} election.`
         );
       }
     }
 
     // Entering the race
     if (existingCandidacy && existingCandidacy.status === "active") {
-      return NextResponse.json(
-        { error: "You are already a candidate in this election" },
-        { status: 400 }
-      );
+      return errorResponse(400, "You are already a candidate in this election");
     }
 
     if (existingCandidacy && existingCandidacy.status === "withdrawn") {
@@ -214,10 +200,7 @@ export async function POST(request: Request, { params }: RouteParams) {
             .findOne({ partyId, characterId, status: "active" });
 
           if (activeCandidate) {
-            return NextResponse.json(
-              { error: "You are already a candidate in this election" },
-              { status: 400 }
-            );
+            return errorResponse(400, "You are already a candidate in this election");
           }
         }
 

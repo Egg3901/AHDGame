@@ -3,7 +3,8 @@
     "chapters": {
       "whatsNew": {
         "title": "What changed",
-        "blurb": "The five changes most likely to catch out someone who played last iteration."
+        "blurb": "The five changes most likely to catch out someone who played last iteration.",
+        "blurb1991": "What is different from the 1953 world: the map, the opening, parties and money."
       },
       "core": {
         "title": "Getting started",
@@ -64,6 +65,45 @@
         "readMore": "See the races",
         "next": "Got it"
       },
+      "whatsNew1991Intro": {
+        "title": "What is different in 1991",
+        "body": "If you played the 1953 world, these are the changes most likely to catch you out. The full list is on the changelog page whenever you want it.",
+        "next": "Show me"
+      },
+      "whatsNew1991FreshStart": {
+        "title": "Everyone starts again",
+        "body": "Characters from the 1953 world have retired, each with a season recap of their career. Nothing carries over: offices, companies, holdings and balances start from zero for everyone. You can play in the United States, the United Kingdom or Japan, which is playable for the first time.",
+        "next": "Next"
+      },
+      "whatsNew1991World": {
+        "title": "The world in January 1991",
+        "body": "The Soviet Union still exists, Germany is already unified, and the European Community has twelve members including the UK. The Soviet Union and Yugoslavia face a decision on their future this year and Czechoslovakia in 1992, and a breakup only happens through a negotiated settlement. Yugoslavia and Northern Ireland open as live crises, and every economy starts on market rules.",
+        "readMore": "See the crises",
+        "next": "Next"
+      },
+      "whatsNew1991Parties": {
+        "title": "There are no parties until players found them",
+        "body": "The playable countries start with no parties and no officeholders. A party exists only once three players found it: a charter names three founders from the same country who live in neighbouring areas, sets a platform, and the party forms when all three sign. Finding two co-founders is the first job, and the Discord is the quickest place to do it.",
+        "readMore": "See the parties",
+        "next": "Next"
+      },
+      "whatsNew1991Founding": {
+        "title": "One founding round, then the calendar starts",
+        "body": "Every elected office is filled in one founding round while the date holds at January 1991: 24 turns of primaries, then 24 of general elections. After that, each body follows its own 1991 schedule. A Commons seat or a governorship that falls vacant mid-term now gets a by-election instead of waiting for the next general.",
+        "readMore": "See the elections",
+        "next": "Next"
+      },
+      "whatsNew1991Prices": {
+        "title": "Campaign money is in 1991 prices",
+        "body": "Action costs and campaign income are set to the 1991 price level, so the figures will not match what you remember. Costs and income move together, so a campaign still costs the same share of what you earn.",
+        "next": "Next"
+      },
+      "whatsNew1991Economy": {
+        "title": "Money has to exist before it is spent",
+        "body": "Governments now pay coupons, aid and other bills out of real Treasury cash, and banks earn only what they are actually paid. Manufacturers and media companies build named products and brands that grow, mature and retire. Currency trades you make yourself pay a size fee that rises with the amount, so spread big conversions out over time.",
+        "readMore": "See the economy",
+        "next": "Got it"
+      },
       "welcome": {
         "title": "Welcome to A House Divided",
         "body": "Many of the other politicians in {countryName} are real players. The ones who do well build allies and a steady income early. This tour covers the main pages and actions. You can stop at any point and pick it up again from the tutorial page.",
@@ -72,6 +112,12 @@
       "howTurnsWork": {
         "title": "The game moves in turns",
         "body": "The world moves forward one turn at a time. Each turn the economy updates, races and bills advance, and you get at least 4 new actions, more if you hold office. Money, influence and unspent actions carry over, but if you bank more than 100 actions you lose 4 a turn.",
+        "next": "Next"
+      },
+      "foundingRound": {
+        "title": "The founding round is on",
+        "body": "Every elected office is being filled at once right now. Filing is open, primaries close on turn {primaryEndTurn}, and every general election resolves on turn {generalEndTurn}. The date stays at the start of the world until then, and the regular calendar begins after. If you want a seat early, this round is when to file.",
+        "readMore": "See the races near you",
         "next": "Next"
       },
       "joinDiscord": {
@@ -100,6 +146,12 @@
         "title": "Join a party first",
         "body": "A party gives you a shared pool of actions to draw on, better odds in a primary, a lift from whoever is at the top of the ticket, and money from the party treasury when yours runs out. Running as an independent is much harder. Pick the party closest to your platform, or a weak one you think you can take over.",
         "hint": "Open the parties page and join one.",
+        "next": "Next"
+      },
+      "foundParty": {
+        "title": "Join a party, or found one",
+        "body": "{countryName} started with no parties, so every party here was founded by players. Join one whose platform fits you, or found your own: a charter names three founders from {countryName} who live in your home {region} or one next to it, and the party exists once all three sign. A party gives you shared actions, better odds in a primary and a treasury to draw on.",
+        "hint": "Open the parties page, then join a party or start a charter.",
         "next": "Next"
       },
       "actionsWhat": {
@@ -260,7 +312,7 @@
       "goToChapter": "Go to {title}",
       "chapterProgress": "Chapter {number} of {total}",
       "stepProgress": "Step {step} of {total}",
-      "skip": "Skip",
+      "close": "Close",
       "back": "Back",
       "next": "Next",
       "takeMeThere": "Take me there"
@@ -285,8 +337,9 @@
       "interestsIntro": "Pick as many as you like. The tour covers each one in turn, and you can change your mind later.",
       "experienceNewTitle": "New to A House Divided",
       "experienceNewBlurb": "Start from the beginning. What a turn is, how power works, and what to do first.",
-      "experienceReturningTitle": "New to this iteration",
-      "experienceReturningBlurb": "You have played before. Skip the basics and see what changed this time around.",
+      "experienceReturningTitle": "Played before",
+      "experienceReturningBlurb": "You know the basics. Skip them and start with what changed in this world.",
+      "experienceReturning1991Blurb": "You know the game from the 1953 world. Start with what is different in 1991 and skip the basics.",
       "experienceSkipTitle": "Skip the tutorial",
       "experienceSkipBlurb": "Go straight in. You can start any part of it later from the tutorial page.",
       "allOfIt": "All of it",

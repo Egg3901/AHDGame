@@ -133,7 +133,7 @@ export function TradeHistoryPanel() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs uppercase tracking-wider text-muted">
+                <tr className="text-left text-body-sm font-medium text-muted">
                   <th className="pb-2 pr-4 font-semibold">Corporation</th>
                   <th className="pb-2 pr-4 font-semibold text-right">Realized</th>
                   <th className="pb-2 pr-4 font-semibold text-right">Still held</th>
@@ -177,7 +177,7 @@ export function TradeHistoryPanel() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase tracking-wider text-muted">
+              <tr className="text-left text-body-sm font-medium text-muted">
                 <th className="pb-2 pr-4 font-semibold">When</th>
                 <th className="pb-2 pr-4 font-semibold">Corporation</th>
                 <th className="pb-2 pr-4 font-semibold">Side</th>

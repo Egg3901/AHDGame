@@ -367,7 +367,7 @@ export async function OnePartyExecutiveHub({ countryId }: { countryId: CountryId
       viewerMayNominateHos = hosEligibility.eligible;
     }
     hosNomination = {
-      title: config.headOfStateTitle ?? "Head of State",
+      title: config.headOfStateTitle ?? "Head of state",
       viewerMayNominate: viewerMayNominateHos,
       vacant: hosVacant,
     };
@@ -729,9 +729,7 @@ export async function OnePartyExecutiveHub({ countryId }: { countryId: CountryId
 
               {confidencePanel.history.length > 0 && (
                 <div className="border-t border-card-border pt-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
-                    Recent drift
-                  </p>
+                  <p className="mb-2 text-body-sm font-medium text-muted">Recent drift</p>
                   <ul className="space-y-1.5 text-body-sm">
                     {confidencePanel.history.map((entry, idx) => (
                       <li
@@ -757,7 +755,7 @@ export async function OnePartyExecutiveHub({ countryId }: { countryId: CountryId
         <div className="space-y-6">
           <div className="overflow-hidden rounded-2xl border border-card-border bg-card shadow-card">
             <div className="p-6">
-              <SectionLabel as="h3">Leader of the Opposition</SectionLabel>
+              <SectionLabel as="h3">Leader of the opposition</SectionLabel>
               {oppositionLeaderChar ? (
                 <div className="flex items-center gap-4">
                   <Link href={oppositionHref!} className="shrink-0">

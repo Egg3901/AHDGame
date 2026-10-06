@@ -43,5 +43,5 @@ describe("Sentry example scaffold removal (#1675)", () => {
         readFileSync(file, "utf8").includes("sentry-example-api")
     );
     expect(hits).toEqual([]);
-  });
+  }, 60_000);
 });

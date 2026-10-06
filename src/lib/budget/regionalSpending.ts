@@ -82,7 +82,13 @@ export function computeRegionalSpendingByCategory(
     const law = getLaw(policy.legislationTypeId);
     if (law && law.kind !== "tax" && law.levels) {
       const level = Math.max(0, Math.min(4, policy.policyOptionIndex ?? 0));
-      const fiscal = computeLawCost(law.levels[level], base, law.countryId, null);
+      const model = legTypeMap.get(law.id)?.policyOptions?.[level]?.costModelV2;
+      const fiscal = computeLawCost(
+        model ? { name: "", description: "", ...model } : law.levels[level],
+        base,
+        law.countryId,
+        null
+      );
       add(budgetKeyForLaw(law), fiscal.cost - fiscal.revenue);
       continue;
     }

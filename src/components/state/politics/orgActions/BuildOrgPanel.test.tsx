@@ -27,7 +27,7 @@ function renderPanel(extra?: Partial<React.ComponentProps<typeof BuildOrgPanel>>
 }
 
 describe("BuildOrgPanel", () => {
-  it("renders a projected Cost/Org gain from the preview", async () => {
+  it("renders the fixed contribution and projected Org share gain", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string) => {
@@ -48,7 +48,8 @@ describe("BuildOrgPanel", () => {
             effectiveCost: 5,
             pressureValue: 0,
             projectedGain: 1.25,
-            factors: { base: 2, headroom: 0.5, ownDiminishing: 0.5, psLeverage: 1, catchup: 1 },
+            contributionUnits: 1,
+            projectedOrganizationUnits: 21,
             scope: "state",
           }),
         };
@@ -57,11 +58,11 @@ describe("BuildOrgPanel", () => {
     renderPanel();
     await waitFor(() => expect(screen.getByText("This click")).toBeTruthy());
     expect(screen.getByText("Cost")).toBeTruthy();
-    expect(screen.getByText("Org gain")).toBeTruthy();
+    expect(screen.getByText("Org share")).toBeTruthy();
     expect(screen.getByText(/\+1\.25/)).toBeTruthy();
   });
 
-  it("renders per-rival poach lines from the preview", async () => {
+  it("renders per-rival dilution lines from the preview", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string) => {
@@ -81,23 +82,24 @@ describe("BuildOrgPanel", () => {
             effectiveCost: 1,
             pressureValue: 0,
             projectedGain: 0.36,
-            poaches: [
+            contributionUnits: 1,
+            projectedOrganizationUnits: 61,
+            dilutions: [
               { partyId: "2", loss: 0.17 },
               { partyId: "3", loss: 0.19 },
             ],
-            factors: { base: 2, headroom: 0, ownDiminishing: 0.7, psLeverage: 1.5, catchup: 1 },
             scope: "state",
           }),
         };
       })
     );
     renderPanel();
-    await waitFor(() => expect(screen.getByText(/taken from rivals/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/share dilution/i)).toBeTruthy());
     expect(screen.getByText(/−0\.17 Org/)).toBeTruthy();
     expect(screen.getByText(/−0\.19 Org/)).toBeTruthy();
   });
 
-  it("prefers rival party names over Party #id in the poach list", async () => {
+  it("prefers rival party names over Party #id in the dilution list", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string) => {
@@ -117,11 +119,12 @@ describe("BuildOrgPanel", () => {
             effectiveCost: 1,
             pressureValue: 0,
             projectedGain: 0.36,
-            poaches: [
+            contributionUnits: 1,
+            projectedOrganizationUnits: 61,
+            dilutions: [
               { partyId: "2", loss: 0.17, partyName: "Democratic Party", abbreviation: "DEM" },
               { partyId: "3", loss: 0.19, partyName: "Green Party", abbreviation: "GRN" },
             ],
-            factors: { base: 2, headroom: 0, ownDiminishing: 0.7, psLeverage: 1.5, catchup: 1 },
             scope: "state",
           }),
         };
@@ -141,7 +144,7 @@ describe("BuildOrgPanel", () => {
     renderPanel({ canBuildOrg: false });
     await waitFor(() =>
       expect(
-        (screen.getByRole("button", { name: "Build Org" }) as HTMLButtonElement).disabled
+        (screen.getByRole("button", { name: "Build org" }) as HTMLButtonElement).disabled
       ).toBe(true)
     );
   });
@@ -166,7 +169,6 @@ describe("BuildOrgPanel", () => {
             effectiveCost: 1,
             pressureValue: 0,
             projectedGain: 0.5,
-            factors: { base: 2, headroom: 0.5, ownDiminishing: 0.5, psLeverage: 1, catchup: 1 },
             scope: "national-targeted",
           }),
         };
@@ -200,7 +202,6 @@ describe("BuildOrgPanel", () => {
             effectiveCost: 2,
             pressureValue: 1,
             projectedGain: 1.25,
-            factors: { base: 2, headroom: 0.5, ownDiminishing: 0.5, psLeverage: 1, catchup: 1 },
             scope: "state",
             ...extra,
           }),
@@ -214,7 +215,7 @@ describe("BuildOrgPanel", () => {
     renderPanel();
 
     await waitFor(() => expect(screen.getByText("This click")).toBeTruthy());
-    expect(screen.getByText("Estimated Funds")).toBeTruthy();
+    expect(screen.getByText("Estimated funds")).toBeTruthy();
     expect(screen.getByText(/5,625/)).toBeTruthy();
   });
 
@@ -261,7 +262,6 @@ describe("BuildOrgPanel", () => {
             projectedGain: 1.25,
             cashPrice: 2813,
             fundedFraction: 1,
-            factors: { base: 2, headroom: 0.5, ownDiminishing: 0.5, psLeverage: 1, catchup: 1 },
             scope: "state",
           }),
         };
@@ -301,7 +301,6 @@ describe("BuildOrgPanel", () => {
             cashPrice: 5625,
             sizeMultiplier: 2,
             fundedFraction: 1,
-            factors: { base: 2, headroom: 0.5, ownDiminishing: 0.5, psLeverage: 1, catchup: 1 },
             scope: "state",
           }),
         };
@@ -350,7 +349,6 @@ describe("BuildOrgPanel", () => {
             effectiveCost,
             pressureValue: effectiveCost - 1,
             projectedGain: 0.5,
-            factors: { base: 2, headroom: 0.5, ownDiminishing: 0.5, psLeverage: 1, catchup: 1 },
             scope: "state",
           }),
         };

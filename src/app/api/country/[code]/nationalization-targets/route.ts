@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireHumanSession } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
@@ -33,16 +33,13 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const db = await getDb();
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (!character || !(await isSittingLeader(db, countryId, character._id))) {
-      return NextResponse.json(
-        { error: "Only the head of government may view nationalization targets." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the head of government may view nationalization targets.");
     }
 
     const currentTurn = await getCurrentTurn(db);

@@ -1,10 +1,9 @@
-import { NextResponse } from "next/server";
 import { conditionalJson } from "@/lib/api/conditionalJson";
 import { loadReachableBooks, reachableBooksFor } from "@/lib/trade/queries/loadReachableBooks";
 import { getDb } from "@/lib/mongodb";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import type { CommodityFlow as CommodityFlowDoc } from "@/lib/db/types/commodityFlow";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getGameState } from "@/lib/gameState";
 import { getAuthUser } from "@/lib/auth";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
@@ -340,7 +339,7 @@ export async function getCommodityDetailData(
             .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
             .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
           db
-            .collection<{ _id: string; currentYear?: number }>("gameState")
+            .collection<{ _id: string; currentYear?: number; preset?: string }>("gameState")
             .findOne({ _id: "current" }, { projection: { currentYear: 1 } }),
           (await getStateResourceCapacityCollection(db))
             .find({}, { projection: { stateId: 1, resources: 1 } })
@@ -498,6 +497,7 @@ export async function getCommodityDetailData(
           plantsEnabled: marketAtLeast(mode, "plants"),
           eraUnitScale,
           currentYear: gameStateDoc?.currentYear ?? null,
+          preset: gameStateDoc?.preset,
           commandEconomyEnabled: gameConfigDoc?.commandEconomyEnabled === true,
           stateResourcesByState,
         },
@@ -896,7 +896,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const commodity = type as CommodityType;
 
     if (!COMMODITY_TYPES.includes(commodity)) {
-      return NextResponse.json({ error: "Invalid commodity type" }, { status: 400 });
+      return errorResponse(400, "Invalid commodity type");
     }
 
     const data = await getCommodityDetailData(commodity);

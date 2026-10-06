@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import type { Layer1Config } from "@/lib/seeds/stateDemographics";
 import { DEMOGRAPHIC_TURNOUT_RATES } from "@/lib/seeds/demographicCategories";
+import { NPP_GENERAL_WEIGHT_MULTIPLIER } from "@/lib/electionEngine/constants";
 import { stateCensusData } from "@/lib/seeds/stateCensusData";
+import { approvalScalar } from "@/lib/utils/demographicAppeal";
 import {
   buildGranularPollPayload,
   buildGranularPollPayloadForState,
@@ -94,6 +96,91 @@ describe("buildGranularPollPayload", () => {
     expect(shares.you).toBeGreaterThan(shares.opponents[0].share);
   });
 
+  it("uses the vote engine approval scalar when projecting favorability in a cell", () => {
+    const payload = buildGranularPollPayload({
+      config: ctConfig(),
+      era: "2019",
+      character: {
+        economicPosition: 0,
+        socialPosition: 0,
+        favorability: 80,
+        politicalInfluence: 50,
+      },
+      opponents: [
+        makeOpponent({
+          economicPosition: 0,
+          socialPosition: 0,
+          favorability: 20,
+          politicalInfluence: 50,
+        }),
+      ],
+      turnoutRates: DEMOGRAPHIC_TURNOUT_RATES,
+    });
+
+    const shares = payload.candidateShares[payload.cells[0].id];
+    const decidedPlayerShare = shares.you / (shares.you + shares.opponents[0].share);
+    const expectedPlayerShare = approvalScalar(80) / (approvalScalar(80) + approvalScalar(20));
+
+    expect(decidedPlayerShare).toBeCloseTo(expectedPlayerShare, 5);
+    expect(shares.undecided).toBeCloseTo(0.16, 5);
+  });
+
+  it("projects archetype approvals onto matching cell buckets before the approval curve", () => {
+    const payload = buildGranularPollPayload({
+      config: ctConfig(),
+      era: "2019",
+      character: {
+        economicPosition: 0,
+        socialPosition: 0,
+        favorability: 50,
+        archetypeApprovals: { retirees: 40 },
+        politicalInfluence: 50,
+      },
+      opponents: [makeOpponent({ economicPosition: 0, socialPosition: 0 })],
+      turnoutRates: DEMOGRAPHIC_TURNOUT_RATES,
+    });
+    const senior = payload.cells.find((cell) => cell.buckets.age === "senior");
+    const young = payload.cells.find((cell) => cell.buckets.age === "young");
+    expect(senior).toBeDefined();
+    expect(young).toBeDefined();
+
+    const decidedShare = (id: string) => {
+      const shares = payload.candidateShares[id];
+      return shares.you / (shares.you + shares.opponents[0].share);
+    };
+    const seniorExpected = approvalScalar(64) / (approvalScalar(64) + approvalScalar(50));
+
+    expect(decidedShare(senior!.id)).toBeCloseTo(seniorExpected, 5);
+    expect(decidedShare(young!.id)).toBeCloseTo(0.5, 5);
+  });
+
+  it("applies the shared general-election NPP weight when a player is in the race", () => {
+    const payload = buildGranularPollPayload({
+      config: ctConfig(),
+      era: "2019",
+      character: {
+        economicPosition: 0,
+        socialPosition: 0,
+        favorability: 50,
+        politicalInfluence: 50,
+      },
+      opponents: [
+        makeOpponent({
+          economicPosition: 0,
+          socialPosition: 0,
+          favorability: 50,
+          politicalInfluence: 50,
+          isNPP: true,
+        }),
+      ],
+      turnoutRates: DEMOGRAPHIC_TURNOUT_RATES,
+    });
+    const shares = payload.candidateShares[payload.cells[0].id];
+    const decidedPlayerShare = shares.you / (shares.you + shares.opponents[0].share);
+
+    expect(decidedPlayerShare).toBeCloseTo(1 / (1 + NPP_GENERAL_WEIGHT_MULTIPLIER), 5);
+  });
+
   it("returns deterministic output for the same input", () => {
     const config = ctConfig();
     const input = {
@@ -128,6 +215,45 @@ describe("buildGranularPollPayload", () => {
 });
 
 describe("buildGranularPollPayloadForState", () => {
+  it("applies the same personal-stat tenure retention to incumbent poll shares", () => {
+    const common = {
+      countryId: "US",
+      stateId: "CT",
+      preset: "2019-default",
+      character: {
+        candidateId: "candidate-incumbent",
+        party: "party-a",
+        economicPosition: 0,
+        socialPosition: 0,
+        favorability: 80,
+        politicalInfluence: 80,
+      },
+      opponents: [
+        makeOpponent({
+          candidateId: "candidate-challenger",
+          party: "party-b",
+          economicPosition: 0,
+          socialPosition: 0,
+          favorability: 50,
+          politicalInfluence: 80,
+        }),
+      ],
+    };
+    const baseline = buildGranularPollPayloadForState(common);
+    const tenured = buildGranularPollPayloadForState({
+      ...common,
+      incumbency: {
+        executivePartyId: "party-a",
+        executiveConsecutiveTerms: 6,
+      },
+    });
+
+    const baselineShare = baseline.candidateShares[baseline.cells[0].id].you;
+    const tenuredShare = tenured.candidateShares[tenured.cells[0].id].you;
+    expect(tenuredShare).toBeLessThan(baselineShare);
+    expect(tenuredShare).toBeGreaterThan(0);
+  });
+
   it("derives cells and candidate shares for a US state via preset", () => {
     const payload = buildGranularPollPayloadForState({
       countryId: "US",

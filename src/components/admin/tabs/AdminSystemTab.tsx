@@ -56,10 +56,10 @@ type HealCategory = "elections" | "officials" | "parties" | "corporations" | "da
 
 const HEAL_CATEGORIES: { id: HealCategory; label: string }[] = [
   { id: "elections", label: "Elections" },
-  { id: "officials", label: "Officials & Government" },
-  { id: "parties", label: "Parties & Membership" },
+  { id: "officials", label: "Officials & government" },
+  { id: "parties", label: "Parties & membership" },
   { id: "corporations", label: "Corporations" },
-  { id: "data", label: "Economy & Data" },
+  { id: "data", label: "Economy & data" },
 ];
 
 interface AdminSystemTabProps {
@@ -108,7 +108,7 @@ export function AdminSystemTab({ activeSub, onSubChange }: AdminSystemTabProps) 
             </svg>
             <div>
               <h3 className="text-sm font-semibold text-yellow-500 sm:text-base">
-                Caution: Destructive Actions
+                Caution: Destructive actions
               </h3>
               <p className="mt-0.5 text-xs text-muted sm:mt-1 sm:text-sm">
                 These actions can permanently delete data. Understand the consequences before

@@ -11,7 +11,7 @@
     },
     "map": {
       "noPollingData": "Keine Umfragedaten",
-      "competitive": "⚡ Umkämpft (Vorsprung ≤15 Pkt.)",
+      "competitive": "⚡ Knapp (Top zwei innerhalb von 15 Punkten)",
       "uncontested": "Ohne Gegenkandidat",
       "stateSenateShort": "Staatssenat"
     },

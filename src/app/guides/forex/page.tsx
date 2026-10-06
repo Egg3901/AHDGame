@@ -19,7 +19,7 @@ import {
 const pct = (rate: number) => `${(rate * 100).toFixed(2).replace(/\.?0+$/, "")}%`;
 
 export const metadata: Metadata = publicPageMetadata({
-  title: "Forex Guide | A House Divided",
+  title: "Forex guide | A House Divided",
   description:
     "How currency exchange works in A House Divided: exchange rate mechanics, trading tiers, volume pressure, macro fundamentals, and cross-currency strategies across the US, UK, and Japan.",
   pathname: "/guides/forex",
@@ -52,11 +52,11 @@ export default function ForexGuidePage() {
             Guides
           </Link>
           <span>/</span>
-          <span className="text-foreground">Currency Exchange (Forex)</span>
+          <span className="text-foreground">Currency exchange (forex)</span>
         </nav>
 
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Currency Exchange (Forex)</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Currency exchange (forex)</h1>
           <p className="mt-2 text-sm text-muted">
             Exchange rate mechanics, trading tiers, volume pressure, and cross-currency strategies
           </p>
@@ -84,7 +84,7 @@ export default function ForexGuidePage() {
               fixed. The floating-rate mechanics below apply only when neither fixed-rate rule is
               active. See{" "}
               <Link href="/guides/planned-economies" className="text-primary hover:underline">
-                Planned / Command Economies
+                Planned / Command economies
               </Link>
               .
             </Callout>
@@ -111,7 +111,7 @@ export default function ForexGuidePage() {
                 <tbody>
                   <tr>
                     <td className={TD}>United States</td>
-                    <td className={TD}>US Dollar</td>
+                    <td className={TD}>US dollar</td>
                     <td className={TD}>USD</td>
                   </tr>
                   <tr>

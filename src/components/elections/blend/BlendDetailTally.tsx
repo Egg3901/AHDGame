@@ -13,6 +13,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import type { BlendDetailModel, BlendDetailTallyRow } from "@/lib/elections/blendDetailViewModel";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 interface BlendDetailTallyProps {
   model: BlendDetailModel;
@@ -28,9 +29,7 @@ export function BlendDetailTally({ model, renderEndorse, hrefFor }: BlendDetailT
   return (
     <div className="overflow-hidden rounded-xl border border-card-border bg-card">
       <div className="flex items-center gap-2.5 border-b border-card-border px-4 py-3">
-        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-muted">
-          {model.tallyTitle}
-        </span>
+        <span className="text-body-sm font-medium font-black text-muted">{model.tallyTitle}</span>
         <div className="flex-1" />
         <span className="text-[11px] tabular-nums text-muted">{model.tallyMeta}</span>
       </div>
@@ -62,7 +61,11 @@ export function BlendDetailTally({ model, renderEndorse, hrefFor }: BlendDetailT
                 </div>
                 <div className="mt-0.5 truncate text-[11px] tracking-wide text-muted">
                   {row.partyName}
-                  {row.isNPP && <span className="ml-1.5 opacity-70">NPP</span>}
+                  {row.isNPP && (
+                    <span className="ml-1.5 opacity-70">
+                      <NppAbbr />
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -81,18 +84,14 @@ export function BlendDetailTally({ model, renderEndorse, hrefFor }: BlendDetailT
                   <div className="text-2xl font-bold tabular-nums text-foreground">
                     {row.seatsCell}
                   </div>
-                  <div className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-muted">
-                    {row.seatWord}
-                  </div>
+                  <div className="text-body-sm font-medium text-muted">{row.seatWord}</div>
                 </div>
               )}
 
               {row.isWinner && !model.showSeatCol && (
                 <div className="w-[72px] shrink-0 border-l border-card-border pl-3.5 text-right">
                   <div className="text-2xl leading-tight text-warning">★</div>
-                  <div className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-warning">
-                    Elected
-                  </div>
+                  <div className="text-body-sm font-medium text-warning">Elected</div>
                 </div>
               )}
 
@@ -111,9 +110,7 @@ export function BlendDetailTally({ model, renderEndorse, hrefFor }: BlendDetailT
                 <div className="flex flex-wrap gap-6">
                   {row.math.map((m) => (
                     <div key={m.key}>
-                      <div className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-muted">
-                        {m.key}
-                      </div>
+                      <div className="text-body-sm font-medium text-muted">{m.key}</div>
                       <div
                         className="text-lg font-bold tabular-nums"
                         style={m.color ? { color: m.color } : undefined}

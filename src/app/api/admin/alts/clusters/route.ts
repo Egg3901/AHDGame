@@ -9,7 +9,7 @@ import { NextResponse } from "next/server";
 import { ObjectId, type Filter } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getAltClustersCollection } from "@/lib/db/collections";
 import type { AltCluster, AltClusterStatus } from "@/lib/db/types/altDetection";
 import { emptyAltMember, hydrateAltMembers } from "@/lib/altDetection/hydrateMembers";
@@ -48,21 +48,21 @@ export async function GET(request: Request) {
     if (minConfidenceParam !== null) {
       const v = Number(minConfidenceParam);
       if (!Number.isFinite(v) || v < 0 || v > 1) {
-        return NextResponse.json({ error: "Invalid minConfidence" }, { status: 400 });
+        return errorResponse(400, "Invalid minConfidence");
       }
       filter.confidence = { $gte: v };
     }
 
     if (statusParam !== null) {
       if (!ALT_CLUSTER_STATUSES.has(statusParam as AltClusterStatus)) {
-        return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+        return errorResponse(400, "Invalid status");
       }
       filter.status = statusParam as AltClusterStatus;
     }
 
     if (signalParam !== null) {
       if (!isAltSignal(signalParam)) {
-        return NextResponse.json({ error: "Invalid signal" }, { status: 400 });
+        return errorResponse(400, "Invalid signal");
       }
       filter["signalSummary.type"] = signalParam;
     }
@@ -70,7 +70,7 @@ export async function GET(request: Request) {
     if (cursorParam !== null) {
       const decoded = decodeClusterCursor(cursorParam);
       if (!decoded) {
-        return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
+        return errorResponse(400, "Invalid cursor");
       }
       // Keyset pagination over the {confidence:-1,_id:-1} sort: strictly
       // lower confidence, OR equal confidence with a strictly lower _id.

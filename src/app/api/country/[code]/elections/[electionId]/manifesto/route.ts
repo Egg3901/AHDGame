@@ -21,7 +21,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -43,13 +43,13 @@ const bodySchema = z.object({
 async function resolveContext(request: Request, code: string, electionId: string) {
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) {
-    return { error: NextResponse.json({ error: "Invalid country" }, { status: 400 }) };
+    return { error: errorResponse(400, "Invalid country") };
   }
   if (countryId !== "UK") {
-    return { error: NextResponse.json({ error: "Manifestos are UK-only" }, { status: 400 }) };
+    return { error: errorResponse(400, "Manifestos are UK-only") };
   }
   if (!ObjectId.isValid(electionId)) {
-    return { error: NextResponse.json({ error: "Invalid electionId" }, { status: 400 }) };
+    return { error: errorResponse(400, "Invalid electionId") };
   }
   const auth = await requireHumanSessionWithCharacter(request);
   if (!auth.ok) return { error: auth.response };
@@ -59,7 +59,7 @@ async function resolveContext(request: Request, code: string, electionId: string
     .collection<Election>("elections")
     .findOne({ _id: new ObjectId(electionId), countryId });
   if (!election) {
-    return { error: NextResponse.json({ error: "Election not found" }, { status: 404 }) };
+    return { error: errorResponse(404, "Election not found") };
   }
   // The caller's chaired party (leaders author manifestos).
   const party = await db
@@ -89,15 +89,12 @@ export async function POST(
     if (!rl.ok) return rateLimitResponse(rl.retryAfter);
 
     if (!ctx.party) {
-      return NextResponse.json(
-        { error: "Only a party leader can author a manifesto" },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only a party leader can author a manifesto");
     }
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { pledges: pledgeIds, action } = parsed.data;
 
@@ -108,11 +105,11 @@ export async function POST(
     // exactly the full, valid set (validated inside lockManifesto too).
     if (action === "lock") {
       const v = validateManifestoPledges(pledges, validIds);
-      if (!v.ok) return NextResponse.json({ error: v.error }, { status: 400 });
+      if (!v.ok) return errorResponse(400, v.error);
     } else {
       for (const id of pledgeIds) {
         if (!validIds.has(id)) {
-          return NextResponse.json({ error: `unknown pledge: ${id}` }, { status: 400 });
+          return errorResponse(400, `unknown pledge: ${id}`);
         }
       }
     }
@@ -129,10 +126,7 @@ export async function POST(
       now,
     });
     if (!wrote) {
-      return NextResponse.json(
-        { error: "Manifesto is locked and cannot be edited" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Manifesto is locked and cannot be edited");
     }
 
     if (action === "lock") {
@@ -143,7 +137,7 @@ export async function POST(
         validCatalogIds: validIds,
         now,
       });
-      if (!locked.ok) return NextResponse.json({ error: locked.error }, { status: 400 });
+      if (!locked.ok) return errorResponse(400, locked.error);
     }
 
     return NextResponse.json({ ok: true, locked: action === "lock" });

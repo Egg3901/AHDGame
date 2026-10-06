@@ -185,9 +185,9 @@ export function CategoryDetailView({
             </div>
             <LeanStrip metrics={category.metrics} onOpenMetric={onOpenMetric} size="lg" />
             <div className="mt-1.5 flex justify-between text-body-sm text-muted">
-              <span>Strong Left</span>
+              <span>Strong left</span>
               <span>Mixed</span>
-              <span>Strong Right</span>
+              <span>Strong right</span>
             </div>
             <p className="mt-2.5 text-body-sm leading-normal text-muted">
               Position marks each metric&apos;s political association. Bar height and color mark its

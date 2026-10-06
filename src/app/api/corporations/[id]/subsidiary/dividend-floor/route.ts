@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
@@ -35,15 +35,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
     if (!(await isSubsidiaryCorporationsEnabled())) {
-      return NextResponse.json(
-        { error: "Subsidiary corporations are not enabled." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Subsidiary corporations are not enabled.");
     }
 
     const parsed = await parseJsonBody(request, bodySchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const { id } = await params;
     const subResolved = await resolveCorporation(db, id);
@@ -55,7 +51,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       floorPct: parsed.data.floorPct,
       now: new Date(),
     });
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
 
     return NextResponse.json({
       success: true,

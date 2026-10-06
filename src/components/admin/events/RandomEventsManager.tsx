@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { PlayerSelector } from "@/components/PlayerSelector";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface OutcomeEffect {
   type: string;
@@ -164,7 +165,7 @@ export function RandomEventsManager() {
       if (res.ok) {
         return data;
       }
-      setMessage(`✗ ${data.error ?? "Request failed"}`);
+      setMessage(`✗ ${apiErrorText(data, "Request failed")}`);
       return null;
     } catch {
       setMessage("✗ Network error");
@@ -334,7 +335,7 @@ export function RandomEventsManager() {
                 : "border-primary/50 text-primary hover:bg-primary/10"
             }`}
           >
-            {flagEnabled ? "Disable Events" : "Enable Events"}
+            {flagEnabled ? "Disable events" : "Enable events"}
           </button>
         </div>
         {message && <p className="mt-3 text-sm text-foreground">{message}</p>}
@@ -364,7 +365,7 @@ export function RandomEventsManager() {
               disabled={busy}
               className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
             >
-              Reseed &amp; Approve All
+              Reseed &amp; approve all
             </button>
           </div>
         </div>
@@ -379,7 +380,7 @@ export function RandomEventsManager() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-card-border text-left text-xs uppercase tracking-wider text-muted">
+                <tr className="border-b border-card-border text-left text-sm font-semibold text-foreground">
                   <th className="py-2 pr-3">Template</th>
                   <th className="py-2 pr-3">Kind</th>
                   <th className="py-2 pr-3">Status</th>
@@ -443,7 +444,7 @@ export function RandomEventsManager() {
                           <td colSpan={7} className="px-4 py-3">
                             <p className="text-sm font-semibold text-foreground">{def.headline}</p>
                             <p className="mt-1 text-sm text-muted">{def.body}</p>
-                            <p className="mt-2 text-[11px] uppercase tracking-wider text-muted">
+                            <p className="mt-2 text-body-sm font-medium text-muted">
                               Scope: <span className="text-foreground">{scope}</span>
                             </p>
                             <div className="mt-3 space-y-3">
@@ -539,9 +540,7 @@ export function RandomEventsManager() {
 
             {/* Manual trigger */}
             <div className="rounded-lg border border-card-border bg-card-elevated px-4 py-3">
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-                Manual trigger
-              </div>
+              <div className="text-body-sm font-medium text-muted">Manual trigger</div>
               <p className="mt-1 text-xs text-muted">
                 Force-offer any template to {selected.name}, bypassing weight, cooldown, and
                 eligibility. Outcome roll is random. Fails if they already have a pending event.
@@ -579,9 +578,7 @@ export function RandomEventsManager() {
 
             {activeInstance && (
               <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3">
-                <div className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">
-                  Active event
-                </div>
+                <div className="text-body-sm font-medium text-amber-600">Active event</div>
                 <div className="mt-1 flex flex-wrap items-center gap-3 text-sm">
                   <span className="font-semibold text-foreground">{activeInstance.title}</span>
                   <span className="text-xs text-muted">
@@ -600,7 +597,7 @@ export function RandomEventsManager() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-card-border text-left text-xs uppercase tracking-wider text-muted">
+                    <tr className="border-b border-card-border text-left text-sm font-semibold text-foreground">
                       <th className="py-2 pr-3">Turn</th>
                       <th className="py-2 pr-3">Event</th>
                       <th className="py-2 pr-3">Status</th>

@@ -5,7 +5,7 @@ import { getAuthUser } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 import { recordIdentitySignals } from "@/lib/identityHistory/recordObservation";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, internalError, unauthorized } from "@/lib/api/errors";
+import { handleRouteError, internalError, unauthorized, errorResponse } from "@/lib/api/errors";
 import type { User } from "@/lib/db/types";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { getClientIp } from "@/lib/utils/network";
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { fingerprint, fingerprintComponents } = parsed.data;
 

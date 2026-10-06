@@ -20,7 +20,7 @@ import {
 } from "@/lib/constants/countries";
 import { getReadinessExpectations } from "@/lib/constants/readinessExpectations";
 import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
-import { FOREX_ACTIVE_COUNTRIES } from "@/lib/constants/currencies";
+import { getPresetMonetaryScope } from "@/lib/monetaryPolicy/presetMonetaryScope";
 import { MARKETIZATION_SCHEDULE } from "@/lib/constants/commandEconomy";
 import { getNationalBudgetSeedConfigsForPreset } from "@/lib/seeds/reference/budgets";
 import { COUNTRY_BILL_PHASES, COUNTRY_ELECTION_PHASES } from "@/lib/turn/countryPhases";
@@ -593,7 +593,11 @@ function probeParties(countryId: CountryId, presetId: string): CapabilityEvidenc
   };
 }
 
-function probeEconomyModel(countryId: CountryId, planned: boolean): CapabilityEvidence {
+function probeEconomyModel(
+  countryId: CountryId,
+  planned: boolean,
+  presetId: string
+): CapabilityEvidence {
   if (planned) {
     // The marketization schedule is now the ONLY planned-economy signal: the
     // former `disallowPrivateCorporationFounding` config flag was redundant with
@@ -606,12 +610,12 @@ function probeEconomyModel(countryId: CountryId, planned: boolean): CapabilityEv
         : `Planned economy missing a marketization schedule.`,
     };
   }
-  const forex = FOREX_ACTIVE_COUNTRIES.includes(countryId);
+  const forex = getPresetMonetaryScope(presetId).forexCountries.includes(countryId);
   return {
     present: forex,
     evidence: forex
-      ? `Listed in FOREX_ACTIVE_COUNTRIES.`
-      : `Not listed in FOREX_ACTIVE_COUNTRIES (market economy probe).`,
+      ? `Currency supported in the preset monetary scope.`
+      : `No currency in the preset monetary scope (market economy probe).`,
   };
 }
 
@@ -759,7 +763,7 @@ export function collectCapabilityEvidence(
     institutionsConfigured: probeInstitutions(countryId),
     regionsAuthored: probeRegions(countryId, presetId),
     partiesAuthored: probeParties(countryId, presetId),
-    economyModel: probeEconomyModel(countryId, planned),
+    economyModel: probeEconomyModel(countryId, planned, presetId),
     budgetsAuthored: probeBudgets(countryId, presetId),
     electionCycle: probeElectionCycle(countryId),
     cabinet: probeCabinet(countryId),

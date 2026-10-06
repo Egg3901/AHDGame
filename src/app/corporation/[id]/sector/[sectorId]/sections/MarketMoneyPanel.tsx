@@ -466,7 +466,7 @@ function UnitTile({
       <InfoTooltip
         width={260}
         trigger={
-          <span className="cursor-help border-b border-dotted border-muted/40 text-body-xs font-semibold uppercase tracking-wider text-muted">
+          <span className="cursor-help border-b border-dotted border-muted/40 text-sm font-semibold text-foreground">
             {label}
           </span>
         }

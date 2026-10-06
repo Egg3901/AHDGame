@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -48,7 +48,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const authResult = await requireAuthWithCharacter();
@@ -61,30 +61,27 @@ export async function GET(request: Request, { params }: RouteParams) {
     const raw = new URL(request.url).searchParams.get("characterId");
     const parsed = querySchema.safeParse(raw == null ? {} : { characterId: raw });
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid characterId" }, { status: 400 });
+      return errorResponse(400, "Invalid characterId");
     }
     const targetId =
       parsed.data.characterId == null ? user.character._id : parseObjectId(parsed.data.characterId);
     if (!targetId) {
-      return NextResponse.json({ error: "Invalid character ID" }, { status: 400 });
+      return errorResponse(400, "Invalid character ID");
     }
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     if (!isSameCountry(user.character, { countryId })) {
-      return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+      return errorResponse(403, "Not authorized");
     }
 
     const isSelf = user.character._id.equals(targetId);
     if (!isSelf) {
       if (!isPartyOfficer(party, user.character._id)) {
-        return NextResponse.json(
-          { error: "Only an officer can read another member's payout allowance." },
-          { status: 403 }
-        );
+        return errorResponse(403, "Only an officer can read another member's payout allowance.");
       }
       // Scoped to this party's own members, matching the send route this
       // figure exists to serve. Without it an officer could read the
@@ -94,13 +91,10 @@ export async function GET(request: Request, { params }: RouteParams) {
         .collection<Character>("characters")
         .findOne({ _id: targetId }, { projection: { party: 1, countryId: 1 } });
       if (!target) {
-        return NextResponse.json({ error: "Character not found" }, { status: 404 });
+        return errorResponse(404, "Character not found");
       }
       if (target.party !== String(party.sequentialId) || !isSameCountry(target, { countryId })) {
-        return NextResponse.json(
-          { error: "Character is not a member of this party" },
-          { status: 400 }
-        );
+        return errorResponse(400, "Character is not a member of this party");
       }
     }
 

@@ -18,7 +18,7 @@ export function GlobalBondMarketDemandPanel() {
     <section>
       <h2 className="text-sm font-semibold text-muted">
         <span className="mr-2 inline-block h-3 w-0.5 bg-rose-600 align-middle" />
-        Sovereign Debt
+        Sovereign debt
       </h2>
       <div className="mt-3 grid gap-4 sm:grid-cols-2">
         {entries.map(([code, cfg]) => (

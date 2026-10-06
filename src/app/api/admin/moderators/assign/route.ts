@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, assignModSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -31,18 +31,15 @@ export async function POST(request: Request) {
     const user = await db.collection<User>("users").findOne({ _id: objectId });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     if (user.role === "admin") {
-      return NextResponse.json(
-        { error: "Cannot assign moderator role to an admin" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Cannot assign moderator role to an admin");
     }
 
     if (user.role === "moderator") {
-      return NextResponse.json({ error: "User is already a moderator" }, { status: 400 });
+      return errorResponse(400, "User is already a moderator");
     }
 
     await db.collection<User>("users").updateOne(

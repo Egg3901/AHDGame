@@ -1,6 +1,6 @@
 export const partyLeadershipAuthorityContent = `# Party Leadership & Authority
 
-Beyond the chair, vice chair, and treasurer elections covered in [Party Leadership](/wiki/party-leadership), four rules govern how party leadership authority actually works day to day: what happens when the chair seat is empty, how long a member must belong to a party before they can lead it, a shield that protects unmanned default parties from being ground down, and a gate on which UK regional parties can even appear on a given ballot.
+Beyond the chair, vice chair, and treasurer elections covered in [Party Leadership](/wiki/party-leadership), four rules govern how party leadership authority actually works day to day: what happens when the chair seat is empty, how long a member must belong to a party before they can lead it, a shield that protects unmanned default parties from suppression, and how UK regional parties compete outside their traditional areas.
 
 ## Acting chair: vice-chair inheritance
 
@@ -28,9 +28,9 @@ If your tenure clock hasn't started (for example, on an older character predatin
 
 ## Unmanned-default capture shield
 
-Default parties (the pre-seeded DEM/REP-style parties every player starts able to join, as opposed to a party a player founded) can end up with no active human chair, either because the chair seat was never filled or the sitting chair is an NPP or banned user. Without protection, a well-resourced rival could use Build Org poach and Suppression actions to grind an abandoned default party's organization and turnout to nothing, wiping out a baseline entry point that new players rely on.
+Default parties (the pre-seeded DEM/REP-style parties every player starts able to join, as opposed to a party a player founded) can end up with no active human chair, either because the chair seat was never filled or the sitting chair is an NPP or banned user. Without protection, a well-resourced rival could use Suppression actions to grind an abandoned default party's turnout to nothing, wiping out a baseline entry point that new players rely on.
 
-The shield halves the effect of attack actions (Build Org poach, Suppression) aimed at a default party with no active human chair: an unmanned default party takes half the damage a manned party would from the same attack.
+The shield halves the effect of Suppression aimed at a default party with no active human chair: an unmanned default party takes half the damage a manned party would from the same attack. Build Org now adds durable bucket units and does not directly attack another party.
 
 What counts as "unmanned":
 

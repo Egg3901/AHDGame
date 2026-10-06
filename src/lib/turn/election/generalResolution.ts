@@ -18,6 +18,7 @@ import type {
   OfficeType,
   CareerEvent,
   Character,
+  CountryGameState,
 } from "@/lib/db/types";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
 import { updatePoliticianPagesAfterElection } from "@/lib/wiki/updatePoliticianPageOnElection";
@@ -52,7 +53,15 @@ import { getGameStateCollection } from "@/lib/db/collections";
 import { maybeReconcileBundestag } from "@/lib/turn/election/germanyAMS";
 import { updatePartyPresence } from "@/lib/turn/partyOrg";
 import { notifyGovernorOfSenateVacancy } from "@/lib/governors/senateVacancy";
-import { maybeApplyIndependenceDesireHook } from "@/lib/turn/election/independenceDesireHook";
+import {
+  maybeApplyIndependenceDesireHook,
+  type FirstMinisterBonusContext,
+} from "@/lib/turn/election/independenceDesireHook";
+import {
+  buildJapanMixedRegionalList,
+  countJapanMixedShugiin,
+  remapJapanShugiinListVotes,
+} from "@/lib/countries/jp/rules/mixedShugiinCount";
 import { getExecutiveOfficeKeys } from "@/lib/elections/executiveOffice";
 import { getElectionMethod } from "@/lib/elections/electionMethod";
 import { bgDhondtSeats } from "@/lib/countries/bg/rules/ordinaryElection";
@@ -79,6 +88,66 @@ import { captureElectionWon } from "@/lib/analytics/electionAnalytics";
 import { captureOfficeTransition } from "@/lib/analytics/officeTransitionAnalytics";
 
 export type { OneElectionResult } from "./generalResolutionHelpers";
+
+async function recordJapanShugiinRegionalCapacity(
+  db: Db,
+  election: Election,
+  currentTurn: number,
+  now: Date
+): Promise<void> {
+  if (
+    election.countryId !== "JP" ||
+    (election.electionType !== "shugiin" && election.electionType !== "snap_shugiin") ||
+    !election.japanShugiinRules ||
+    !election.state
+  )
+    return;
+  try {
+    const { districtSeats, listSeats, ruleVersion } = election.japanShugiinRules;
+    const totalSeats = districtSeats + listSeats;
+    if (
+      !Number.isSafeInteger(districtSeats) ||
+      !Number.isSafeInteger(listSeats) ||
+      districtSeats < 0 ||
+      listSeats < 0 ||
+      totalSeats !== election.totalSeats
+    ) {
+      throw new Error(
+        "Resolved Japan Shugiin capacity does not match its frozen election snapshot"
+      );
+    }
+    const regionRuleKey = `jpShugiinResolvedRegionalRules.${election.state}`;
+    await db.collection<CountryGameState>("countryGameStates").updateOne(
+      {
+        _id: "JP",
+        $or: [
+          { [`${regionRuleKey}.cycle`]: { $exists: false } },
+          { [`${regionRuleKey}.cycle`]: { $lte: election.cycle } },
+        ],
+      },
+      {
+        $set: {
+          [regionRuleKey]: {
+            ruleVersion,
+            totalSeats,
+            districtSeats,
+            listSeats,
+            electionId: election._id.toString(),
+            cycle: election.cycle,
+            resolvedAtTurn: currentTurn,
+          },
+        },
+      }
+    );
+  } catch (error) {
+    // Empty-race helpers already mark the election resolved. Keep a failed
+    // capacity write eligible for retry, including the finalized-tally path.
+    await db
+      .collection<Election>("elections")
+      .updateOne({ _id: election._id }, { $set: { status: "completed", updatedAt: now } });
+    throw error;
+  }
+}
 
 /** A failed list/holder write must keep the finalized race eligible for retry. */
 async function reconcileGermanElection(db: Db, election: Election, now: Date): Promise<void> {
@@ -115,7 +184,8 @@ export async function resolveOneGeneralElection(
   now: Date,
   bgEligibleParties: ReadonlySet<string> | null = null,
   huMixedCandidateSeats?: Readonly<Record<string, number>>,
-  bgOrdinaryCandidateSeats?: Readonly<Record<string, number>>
+  bgOrdinaryCandidateSeats?: Readonly<Record<string, number>>,
+  devolutionBonusContext?: FirstMinisterBonusContext | null
 ): Promise<OneElectionResult> {
   if (
     isNativeRussianAssemblyElection(election) ||
@@ -254,6 +324,7 @@ export async function resolveOneGeneralElection(
       if (election.electionType === "house") {
         await spawnHouseElection(db, election, now);
       }
+      await recordJapanShugiinRegionalCapacity(db, election, currentTurn, now);
       await db
         .collection<Election>("elections")
         .updateOne(
@@ -271,7 +342,9 @@ export async function resolveOneGeneralElection(
     if (!tally) {
       // No votes were recorded — clear stale officials / vacate single-seat
       // incumbents and open the next race. See resolveElectionWithNoTally.
-      return await resolveElectionWithNoTally(db, election, now, currentTurn);
+      const result = await resolveElectionWithNoTally(db, election, now, currentTurn);
+      await recordJapanShugiinRegionalCapacity(db, election, currentTurn, now);
+      return result;
     }
 
     // ── President: per-country resolution (US electoral college; NG/bespoke
@@ -303,6 +376,10 @@ export async function resolveOneGeneralElection(
     // the last snapshot's cumulativeVotes. This guards against any process
     // that clears totalVotes between the final accumulation and resolution.
     const isPrStv = tally.countingMethod === "pr_stv";
+    const isJapanMixedShugiin =
+      election.countryId === "JP" &&
+      (election.electionType === "shugiin" || election.electionType === "snap_shugiin") &&
+      election.japanShugiinRules?.ruleVersion === "mixed-1994-v1";
     if (isPrStv) {
       if (election.countryId !== "IE" || !["dail", "localCouncil"].includes(election.electionType))
         throw new Error("Ranked PR-STV is supported only for Irish Dail and local council races");
@@ -321,12 +398,20 @@ export async function resolveOneGeneralElection(
     }
 
     let totalVotesCast = Object.values(effectiveVotes).reduce((s, v) => s + v, 0);
+    const japanMixedHasBallotVotes =
+      isJapanMixedShugiin &&
+      (Object.values(tally.japanShugiinConstituencyVotes ?? {}).some((votesByCandidate) =>
+        Object.values(votesByCandidate).some((votes) => votes > 0)
+      ) ||
+        Object.values(tally.japanShugiinListVotes ?? {}).some((votes) => votes > 0));
 
-    if (totalVotesCast === 0) {
+    if (totalVotesCast === 0 && !japanMixedHasBallotVotes) {
       if (isPrStv) throw new Error("PR-STV cannot resolve without cast ranked ballots");
       // Tally exists but zero votes were cast — finalize, withdraw candidates,
       // vacate stale seats and respawn. See resolveElectionWithZeroVotes.
-      return await resolveElectionWithZeroVotes(db, election, now, currentTurn);
+      const result = await resolveElectionWithZeroVotes(db, election, now, currentTurn);
+      await recordJapanShugiinRegionalCapacity(db, election, currentTurn, now);
+      return result;
     }
 
     // Closed lists can seat a registered replacement with zero personal votes.
@@ -337,14 +422,43 @@ export async function resolveOneGeneralElection(
         ...Object.fromEntries(Object.keys(bgOrdinaryCandidateSeats).map((id) => [id, 0])),
         ...effectiveVotes,
       };
-    const candidateIds = Object.keys(effectiveVotes);
+    const candidateIdsBeforeLoad = [
+      ...new Set([
+        ...Object.keys(effectiveVotes),
+        ...(isJapanMixedShugiin
+          ? Object.values(tally.japanShugiinConstituencyVotes ?? {}).flatMap((votesByCandidate) =>
+              Object.keys(votesByCandidate)
+            )
+          : []),
+      ]),
+    ];
     const candidates = await db
       .collection<ElectionCandidate>("electionCandidates")
       .find({
-        _id: { $in: candidateIds.map((id) => new ObjectId(id)) },
-        status: "active",
+        ...(isJapanMixedShugiin
+          ? {
+              electionId: election._id,
+              status: "active",
+              $or: [
+                { _id: { $in: candidateIdsBeforeLoad.map((id) => new ObjectId(id)) } },
+                { isNPP: true },
+                { japanShugiinListOrder: { $exists: true } },
+              ],
+            }
+          : {
+              _id: { $in: candidateIdsBeforeLoad.map((id) => new ObjectId(id)) },
+              status: "active",
+            }),
       })
       .toArray();
+    if (isJapanMixedShugiin) {
+      for (const candidate of candidates) {
+        if (candidate.isNPP || candidate.japanShugiinListOrder != null) {
+          effectiveVotes[candidate._id.toString()] ??= 0;
+        }
+      }
+    }
+    const candidateIds = Object.keys(effectiveVotes);
 
     // A candidacy filed under a party that has since merged away counts for,
     // and seats into, the party that absorbed it (ticket 1376).
@@ -451,10 +565,11 @@ export async function resolveOneGeneralElection(
       );
     }
 
-    // Phase 5 soft electoral hook: UK SCO/WAL/NIR commons/regionalCouncil/governor
-    // elections get a small ±5pp vote-share nudge driven by independenceDesire.
-    // Applies to votes BEFORE ranking so the resolver picks winners from the
-    // adjusted tally. No-op for any other (countryId, electionType, state) combo.
+    // Phase 5 devolution electoral hook: UK SCO/WAL/NIR
+    // commons/regionalCouncil/governor elections get the legacy soft vote-share
+    // nudge plus any qualifying high-desire First Minister party bonus. Applies
+    // before ranking so the resolver picks winners from the adjusted tally.
+    // No-op for any other (countryId, electionType, state) combination.
     const hookResult = await maybeApplyIndependenceDesireHook(db, {
       countryId: election.countryId ?? "",
       electionType: election.electionType,
@@ -464,20 +579,22 @@ export async function resolveOneGeneralElection(
         .filter((c) => !retiredNppCandidateIds.has(c._id.toString()))
         .map((c) => ({ _id: c._id, party: c.party })),
       totalVotes: totalVotesCast,
+      bonusContext: devolutionBonusContext,
     });
-    if (hookResult.nudgeApplied !== 0 || hookResult.proIndyBonusApplied !== 0) {
+    if (hookResult.nudgeApplied !== 0 || hookResult.firstMinisterBonusApplied !== 0) {
       effectiveVotes = hookResult.adjustedVotes;
       // The transfer nudge preserves the grand total, but the multiplicative
-      // pro-indy bonus inflates it. Refresh totalVotesCast so the downstream
-      // share-eligibility check in allocateSeats (votes / totalVotesCast) uses
-      // the new denominator instead of the stale pre-hook total.
-      if (hookResult.proIndyBonusApplied !== 0) {
+      // First Minister party bonus inflates it. Refresh totalVotesCast so the
+      // downstream share-eligibility check in allocateSeats
+      // (votes / totalVotesCast) uses the new denominator instead of the stale
+      // pre-hook total.
+      if (hookResult.firstMinisterBonusApplied !== 0) {
         totalVotesCast = Object.values(effectiveVotes).reduce((s, v) => s + v, 0);
       }
       console.log(
         `[Turn] Election ${election._id} (${election.electionType}/${election.state}): ` +
           `Devolution hook applied nudge=${hookResult.nudgeApplied.toFixed(3)}, ` +
-          `proIndyBonus=${hookResult.proIndyBonusApplied.toFixed(3)}`
+          `firstMinisterBonus=${hookResult.firstMinisterBonusApplied.toFixed(3)}`
       );
     }
 
@@ -566,7 +683,9 @@ export async function resolveOneGeneralElection(
       if (isPrStv) throw new Error("PR-STV cannot resolve without eligible candidates");
       // Every ranked candidate was dropped (missing docs / deleted characters)
       // — same cleanup as zero votes. See resolveElectionWithNoRankedCandidates.
-      return await resolveElectionWithNoRankedCandidates(db, election, now, currentTurn);
+      const result = await resolveElectionWithNoRankedCandidates(db, election, now, currentTurn);
+      await recordJapanShugiinRegionalCapacity(db, election, currentTurn, now);
+      return result;
     }
 
     const totalSeats = election.totalSeats ?? 1;
@@ -599,6 +718,7 @@ export async function resolveOneGeneralElection(
     if (
       !allocationMethod &&
       election.countryId === "JP" &&
+      election.japanShugiinRules?.ruleVersion !== "mixed-1994-v1" &&
       (election.electionType === "shugiin" || election.electionType === "snap_shugiin")
     ) {
       const gameState = await (await getGameStateCollection(db)).findOne({ _id: "current" });
@@ -785,6 +905,91 @@ export async function resolveOneGeneralElection(
           };
         })()
       : null;
+    const japanMixedAllocation = isJapanMixedShugiin
+      ? (() => {
+          const districtVotes = tally.japanShugiinConstituencyVotes;
+          const listVotes = tally.japanShugiinListVotes;
+          if (!districtVotes || !listVotes)
+            throw new Error("Japan mixed election lacks separate district and list ballots");
+          const counted = countJapanMixedShugiin(
+            {
+              districtVotes: Object.fromEntries(
+                Object.entries(districtVotes).map(([districtId, votesByCandidate]) => [
+                  districtId,
+                  Object.entries(votesByCandidate)
+                    .filter(
+                      ([candidateId]) =>
+                        candidateMap.has(candidateId) && !ineligibleCandidateIds.has(candidateId)
+                    )
+                    .map(([candidateId, votes]) => {
+                      const candidate = candidateMap.get(candidateId)!;
+                      const partyId = candidate.party ?? tally.candidateParties[candidateId];
+                      if (!partyId)
+                        throw new Error("Japan district ballot names a candidate without a party");
+                      return {
+                        candidateId,
+                        partyId,
+                        votes,
+                        isNPP: candidate.isNPP,
+                      };
+                    }),
+                ])
+              ),
+              listVotesByRegion: {
+                [election.state]: remapJapanShugiinListVotes(
+                  listVotes,
+                  (partyId) => survivingParty(partyId) ?? null
+                ),
+              },
+              regionalLists: {
+                [election.state]: buildJapanMixedRegionalList(
+                  candidates.flatMap((candidate) => {
+                    const candidateId = candidate._id.toString();
+                    const partyId = candidate.party;
+                    return partyId
+                      ? [
+                          {
+                            candidateId,
+                            partyId,
+                            listOrder: candidate.japanShugiinListOrder,
+                            isNPP: candidate.isNPP,
+                            enteredAt: candidate.enteredAt?.getTime(),
+                          },
+                        ]
+                      : [];
+                  }),
+                  ineligibleCandidateIds
+                ),
+              },
+            },
+            election.state
+          );
+          if (counted.totalSeats !== totalSeats)
+            throw new Error(
+              "Japan mixed election capacity does not match its frozen district/list map"
+            );
+          const seatsEstimate: Record<string, number> = Object.fromEntries(
+            ranked.map((candidate) => [candidate.id, counted.seatsByCandidate[candidate.id] ?? 0])
+          );
+          if (
+            Object.keys(counted.seatsByCandidate).some((id) => !candidateMap.has(id)) ||
+            Object.values(seatsEstimate).some((seats) => !Number.isSafeInteger(seats) || seats < 0)
+          )
+            throw new Error("Japan mixed count allocated seats to an unavailable candidate");
+          return {
+            isMultiSeat: true,
+            authoritativeSeats: counted.totalSeats,
+            seatsEstimate,
+            winners: Object.entries(seatsEstimate).filter(([, seats]) => seats > 0) as [
+              string,
+              number,
+            ][],
+            losers: Object.entries(seatsEstimate)
+              .filter(([, seats]) => seats === 0)
+              .map(([id]) => id),
+          };
+        })()
+      : null;
     // The opt-in ranked count seats individual people, not aggregate seat blocks.
     const { isMultiSeat, seatsEstimate, winners, losers } = prStvResult
       ? {
@@ -795,6 +1000,7 @@ export async function resolveOneGeneralElection(
         }
       : (bgOrdinaryAllocation ??
         bgAllocation ??
+        japanMixedAllocation ??
         huAllocation ??
         applyLegacySeatFloor(
           districted ??
@@ -1603,6 +1809,7 @@ export async function resolveOneGeneralElection(
     if (isCommonsGeneralElection(election.electionType) && election.state) {
       await spawnCommonsElection(db, election, now);
     }
+    await recordJapanShugiinRegionalCapacity(db, election, currentTurn, now);
     await db
       .collection<Election>("elections")
       .updateOne(

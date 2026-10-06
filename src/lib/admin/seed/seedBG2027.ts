@@ -10,8 +10,9 @@ import {
 import { bgRegions2027 } from "@/lib/countries/bg/data/bgRegions2027";
 import { bgParties } from "@/lib/countries/bg/data/bgParties";
 
-/** Political substrate only: economic metrics, demographic shares and fiscal
- * budget are not inferred from Soviet-era data or invented for this preset. */
+/** Political, demographic and regional metric substrate. Demographics use the
+ * modern BG Layer-1 model; metrics are authored 2027 gameplay estimates
+ * (see bgStateMetrics2027). The fiscal budget is seeded separately. */
 export async function seedBG2027(
   db: Db,
   reset: boolean,
@@ -118,6 +119,14 @@ export async function seedBG2027(
       { $set: { ...formation, updatedAt: now }, $setOnInsert: { createdAt: now } },
       { upsert: true }
     );
+  const {
+    seedModernTransitionDemographics,
+    seedModernTransitionStateMetrics,
+    seedModernTransitionBaselines,
+  } = await import("./seedModernTransitionCountries");
+  await seedModernTransitionDemographics(db, reset, log, preset, "BG");
+  await seedModernTransitionStateMetrics(db, reset, log, preset, "BG");
+  await seedModernTransitionBaselines(db, reset, log, preset, "BG");
   log(
     `Seeded BG 2027 political substrate: ${bgRegions2027.length} regions, ${seeds.length} parties, ${parties.length * bgRegions2027.length} orgs`
   );

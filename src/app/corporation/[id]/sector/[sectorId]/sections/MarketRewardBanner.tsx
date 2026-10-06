@@ -62,10 +62,10 @@ export default function MarketRewardBanner({ hasPricing, hasCapital }: MarketRew
           <p className="text-sm font-semibold text-foreground">The market just got deeper</p>
           <p className="mt-0.5 text-xs text-muted">
             {what} Look for the{" "}
-            {hasPricing && <span className="font-medium text-foreground">Pricing Posture</span>}
+            {hasPricing && <span className="font-medium text-foreground">Pricing posture</span>}
             {hasPricing && hasCapital && " and "}
             {hasCapital && (
-              <span className="font-medium text-foreground">Capital &amp; Unit Economics</span>
+              <span className="font-medium text-foreground">Capital &amp; unit economics</span>
             )}{" "}
             {hasPricing && hasCapital ? "panels" : "panel"} below. Figures fill in after the next
             turn.

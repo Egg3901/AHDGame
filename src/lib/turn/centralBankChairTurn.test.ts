@@ -26,7 +26,7 @@ vi.mock("@/lib/constants/countries", async (importOriginal) => {
         ...actual.COUNTRY_CONFIGS.US,
         id: "US",
         governmentType: "presidential",
-        centralBank: { name: "Federal Reserve", defaultPrimeRate: 2.5 },
+        centralBank: { name: "Federal Reserve", defaultPrimeRate: 3 },
       },
     },
   };
@@ -170,6 +170,125 @@ describe("processCentralBankChairTurn", () => {
     const charUpdate = charOps[0].updateOne;
     expect(charUpdate.update.$inc.nationalInfluence).toBe(0.5);
     expect(charUpdate.update.$inc.actions).toBeUndefined();
+  });
+
+  it("pays resolve relief for the modern neutral rate at target CPI", async () => {
+    testBanks = [
+      {
+        _id: "US",
+        countryId: "US",
+        chairCharacterId,
+        primeRate: 3,
+        chairInfamy: 20,
+        resolveStreak: 2,
+      },
+    ];
+
+    await processCentralBankChairTurn(mockDb as never, 100);
+
+    const [bankOps] = getCollectionMock("centralBanks").bulkWrite.mock.calls[0] as [
+      Array<{
+        updateOne: {
+          update: { $set: { chairInfamy: number; resolveStreak: number } };
+        };
+      }>,
+    ];
+    expect(bankOps[0].updateOne.update.$set.resolveStreak).toBe(0);
+    expect(bankOps[0].updateOne.update.$set.chairInfamy).toBeCloseTo(13, 2);
+  });
+
+  it("does not pay resolve relief for a below-neutral rate at target CPI", async () => {
+    testBanks = [
+      {
+        _id: "US",
+        countryId: "US",
+        chairCharacterId,
+        primeRate: 2.5,
+        chairInfamy: 20,
+        resolveStreak: 2,
+      },
+    ];
+    await processCentralBankChairTurn(mockDb as never, 101);
+    const [bankOps] = getCollectionMock("centralBanks").bulkWrite.mock.calls[0] as [
+      Array<{
+        updateOne: {
+          update: { $set: { chairInfamy: number; resolveStreak: number } };
+        };
+      }>,
+    ];
+    expect(bankOps[0].updateOne.update.$set.resolveStreak).toBe(0);
+    expect(bankOps[0].updateOne.update.$set.chairInfamy).toBeCloseTo(19, 2);
+  });
+
+  it("holds shared-authority scrutiny and streak when a currency member is missing", async () => {
+    const { getEraMonetaryBaseline } = await import("@/lib/constants/monetaryEra");
+    const { MONETARY_BASELINES } = await import("@/lib/constants/currencies");
+    const { getInflationTarget } = await import("@/lib/budget/inflation");
+    const { getGdpAnchorRate } = await import("@/lib/currency/gdpAnchorRate");
+    const { getNationalBudgetId } = await import("@/lib/bonds/sovereign");
+    const { planEuroSettlement } = await import("@/lib/currency/euro/rules");
+    const union = planEuroSettlement({
+      year: 1999,
+      turn: 385,
+      preset: "1991-default",
+      europeanMembers: ["DE", "IE"],
+      consentedCountries: ["DE", "IE"],
+      rates: { EUR: 0.85, IEP: 0.7 },
+    }).union;
+    const neutralRate =
+      getEraMonetaryBaseline("DE", 1999)?.neutralPrimeRate ??
+      MONETARY_BASELINES.DE.neutralPrimeRate;
+    const targetInflation = getInflationTarget("DE", 1999);
+    testBanks = [
+      {
+        _id: "ECB",
+        countryId: "DE",
+        chairMode: "character",
+        chairCharacterId,
+        primeRate: neutralRate,
+        chairInfamy: 30,
+        resolveStreak: 2,
+      },
+    ];
+    getCollectionMock("centralBanks").findOne.mockResolvedValue(testBanks[0]);
+    getCollectionMock("gameState").findOne.mockResolvedValue({
+      currentYear: 1999,
+      startingYear: 1991,
+      preset: "1991-default",
+      euroMonetaryUnion: union,
+    });
+    getCollectionMock("federalBudget").find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: getNationalBudgetId("DE"),
+          gdp: 100 / getGdpAnchorRate("DE", "1991-default"),
+          economicFactors: { inflationRate: targetInflation },
+        },
+      ],
+    });
+    getCollectionMock("macroMetrics").find.mockReturnValue({
+      toArray: async () => [{ _id: "de_national", economic: { gdpGrowth: { value: 2 } } }],
+    });
+
+    await processCentralBankChairTurn(mockDb as never, 385);
+
+    const [bankOps] = getCollectionMock("centralBanks").bulkWrite.mock.calls[0] as [
+      Array<{
+        updateOne: {
+          filter: { _id: string };
+          update: { $set: { chairInfamy: number; resolveStreak: number } };
+        };
+      }>,
+    ];
+    expect(bankOps).toHaveLength(1);
+    expect(bankOps[0].updateOne.filter._id).toBe("ECB");
+    expect(bankOps[0].updateOne.update.$set.chairInfamy).toBe(30);
+    expect(bankOps[0].updateOne.update.$set.resolveStreak).toBe(2);
+
+    const [charOps] = getCollectionMock("characters").bulkWrite.mock.calls[0] as [
+      Array<{ updateOne: { update: { $inc: { nationalInfluence: number; actions?: number } } } }>,
+    ];
+    expect(charOps[0].updateOne.update.$inc).toEqual({ nationalInfluence: 0.25, actions: -1.5 });
   });
 
   it("increases infamy with high inflation", async () => {
@@ -410,6 +529,42 @@ describe("processCentralBankChairTurn", () => {
     const charMock = getCollectionMock("characters");
     expect(charMock.bulkWrite).toHaveBeenCalledTimes(0);
   });
+
+  it.each([
+    { alignment: "hawk", primeRate: 8.25 },
+    { alignment: "dove", primeRate: 4.5 },
+  ] as const)(
+    "recovers credibility at the stored $alignment chair target through the projected read",
+    async ({ alignment, primeRate }) => {
+      const bank = {
+        _id: "US",
+        countryId: "US",
+        chairCharacterId: null,
+        chairMode: "npp",
+        chairAlignment: alignment,
+        primeRate,
+        chairInfamy: 20,
+        resolveStreak: 2,
+      };
+      testBudgetInflation = 5;
+      getCollectionMock("centralBanks").find.mockReturnValue({
+        project: (projection: Record<string, unknown>) => ({
+          toArray: async () => [
+            Object.fromEntries(Object.entries(bank).filter(([key]) => projection[key])),
+          ],
+        }),
+      });
+
+      await processCentralBankChairTurn(mockDb as never, 100);
+
+      const [operations] = getCollectionMock("centralBanks").bulkWrite.mock.calls[0];
+      expect(operations[0].updateOne.update.$set).toMatchObject({
+        resolveStreak: 0,
+        chairInfamy: expect.closeTo(14.5, 2),
+      });
+      expect(getCollectionMock("characters").bulkWrite).not.toHaveBeenCalled();
+    }
+  );
 
   it("does not invoke the NPP auto-rate for character-mode chairs", async () => {
     testBanks = [

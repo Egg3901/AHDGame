@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, notFound, forbidden } from "@/lib/api/errors";
+import { handleRouteError, notFound, forbidden, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { ZOD_CURRENCY_ENUM } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -33,7 +33,7 @@ export async function PUT(request: Request) {
 
     const parsed = await parseJsonBody(request, reserveSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const currency = parsed.data.currency as CurrencyCode;
@@ -55,7 +55,7 @@ export async function PUT(request: Request) {
 
     const result = await setReserveRequirement(db, currency, parsed.data.ratio);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      return errorResponse(400, result.error);
     }
 
     return NextResponse.json({

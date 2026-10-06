@@ -13,7 +13,7 @@ import { getPartyMap } from "@/lib/db/partyMap";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getAuthUser } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse, statusResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { senateLeadershipActionSchema } from "@/lib/api/schemas/congress";
 
@@ -31,7 +31,7 @@ import {
   vacateLeadershipForLostSeats,
   resolveLeadershipElection,
 } from "@/lib/congress/leadershipElections";
-import { buildLeadershipElectionState } from "@/lib/congress/leadershipState";
+import { buildLeadershipElectionStates } from "@/lib/congress/leadershipState";
 import { serializeBloc } from "@/lib/congress/blocs";
 import {
   buildChamberLeadershipContext,
@@ -126,31 +126,26 @@ export async function GET() {
       { role: "minority_whip", partyLabel: "Non-Majority Parties" },
     ];
     const [proTempore, majorityLeader, minorityLeader, majorityWhip, minorityWhip] =
-      await Promise.all(
+      await buildLeadershipElectionStates(
+        db,
+        "senate",
         roles.map(({ role, partyLabel }) => {
           const leaderRole = senateElectionRoleToLeader(role);
           const policy = POLICY_BY_ROLE[leaderRole];
-          const eligibleSlugs = eligiblePartySlugsFor(policy, chamberCtx);
-          const partySeats =
-            policy.kind === "any-seated"
-              ? senate.totalSeats
-              : policy.kind === "largest-single-party"
-                ? majorityPartySeats
-                : Math.max(0, senate.totalSeats - senate.majoritySeats);
-          return buildLeadershipElectionState(
-            db,
+          return {
             role,
             leaderRole,
-            "senate",
-            eligibleSlugs,
-            partySeats,
+            eligiblePartySlugs: eligiblePartySlugsFor(policy, chamberCtx),
+            partySeats:
+              policy.kind === "any-seated"
+                ? senate.totalSeats
+                : policy.kind === "largest-single-party"
+                  ? majorityPartySeats
+                  : Math.max(0, senate.totalSeats - senate.majoritySeats),
             partyLabel,
-            partyMap,
-            myCharacterId,
-            myParty,
-            isMember
-          );
-        })
+          };
+        }),
+        { partyMap, myCharacterId, myParty, isMember }
       );
 
     const senateTotal = senate.totalSeats;
@@ -202,7 +197,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, senateLeadershipActionSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { action, role, nominationId } = parsed.data;
 
@@ -213,7 +208,7 @@ export async function POST(request: Request) {
 
     // ── ADMIN: Start / Reset (no need to be a Senator) ──────────────────────────
     if (action === "start_election") {
-      if (!authUser.isAdmin) return NextResponse.json({ error: "Admin only" }, { status: 403 });
+      if (!authUser.isAdmin) return errorResponse(403, "Admin only");
       const opened = await openCongressLeadershipElection(db, {
         role,
         chamber: "senate",
@@ -221,10 +216,7 @@ export async function POST(request: Request) {
         now: new Date(),
       });
       if (!opened) {
-        return NextResponse.json(
-          { error: `A ${roleLabel} election is already in progress.` },
-          { status: 409 }
-        );
+        return errorResponse(409, `A ${roleLabel} election is already in progress.`);
       }
       return NextResponse.json({
         message: `${roleLabel} election started. Voting ends in 24 hours. Only ${electorateLabel} may run and vote. Plurality wins.`,
@@ -232,7 +224,7 @@ export async function POST(request: Request) {
     }
 
     if (action === "reset_election") {
-      if (!authUser.isAdmin) return NextResponse.json({ error: "Admin only" }, { status: 403 });
+      if (!authUser.isAdmin) return errorResponse(403, "Admin only");
       const now = new Date();
       await db
         .collection<SenateLeadershipNomination>("senateLeadershipNominations")
@@ -257,27 +249,27 @@ export async function POST(request: Request) {
     }
 
     if (action === "force_end") {
-      if (!authUser.isAdmin) return NextResponse.json({ error: "Admin only" }, { status: 403 });
+      if (!authUser.isAdmin) return errorResponse(403, "Admin only");
       const resolved = await resolveLeadershipElection(db, role, leaderRole, "senate", true);
-      return NextResponse.json(
+      return statusResponse(
+        resolved ? 200 : 409,
         resolved
           ? { message: `${roleLabel} election ended. Winner or vacancy is set.` }
-          : { error: "No active election to end." },
-        { status: resolved ? 200 : 409 }
+          : { error: "No active election to end." }
       );
     }
 
     const character = await db.collection<Character>("characters").findOne({
       userId: new ObjectId(authUser.userId),
     });
-    if (!character) return NextResponse.json({ error: "No character" }, { status: 400 });
+    if (!character) return errorResponse(400, "No character");
 
     const myOfficial = await db.collection<ElectedOfficial>("electedOfficials").findOne({
       characterId: character._id,
       officeType: "senate",
     });
     if (!myOfficial) {
-      return NextResponse.json({ error: "Only Senators may participate." }, { status: 403 });
+      return errorResponse(403, "Only Senators may participate.");
     }
 
     const myParty = character.party ?? "";
@@ -296,10 +288,9 @@ export async function POST(request: Request) {
       );
 
     if (action === "declare") {
-      if (!isVoting)
-        return NextResponse.json({ error: "No election open for candidacies." }, { status: 409 });
+      if (!isVoting) return errorResponse(409, "No election open for candidacies.");
       if (!isEligibleParty) {
-        return NextResponse.json({ error: `Only ${electorateLabel} may run.` }, { status: 403 });
+        return errorResponse(403, `Only ${electorateLabel} may run.`);
       }
       const existing = await db
         .collection<SenateLeadershipNomination>("senateLeadershipNominations")
@@ -308,21 +299,18 @@ export async function POST(request: Request) {
           status: { $in: ["open", "voting"] },
         });
       if (existing)
-        return NextResponse.json(
-          { error: "You already have an active candidacy for a Senate leadership role." },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "You already have an active candidacy for a Senate leadership role."
         );
       const hasSpeaker = await db.collection<SpeakerNomination>("speakerNominations").findOne({
         nomineeId: character._id,
         status: { $in: ["open", "voting"] },
       });
       if (hasSpeaker)
-        return NextResponse.json(
-          {
-            error:
-              "You can only run for one leadership position at a time. Withdraw from Speaker first.",
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "You can only run for one leadership position at a time. Withdraw from Speaker first."
         );
       const hasHouse = await db
         .collection<HouseLeadershipNomination>("houseLeadershipNominations")
@@ -331,12 +319,9 @@ export async function POST(request: Request) {
           status: { $in: ["open", "voting"] },
         });
       if (hasHouse)
-        return NextResponse.json(
-          {
-            error:
-              "You can only run for one leadership position at a time. Withdraw from the House race first.",
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "You can only run for one leadership position at a time. Withdraw from the House race first."
         );
       const now = new Date();
       const nomineeState = myOfficial.state ?? character.homeState ?? undefined;
@@ -364,7 +349,7 @@ export async function POST(request: Request) {
         now,
       });
       if (conflict) {
-        return NextResponse.json({ error: describeLeadershipConflict(conflict) }, { status: 409 });
+        return errorResponse(409, describeLeadershipConflict(conflict));
       }
       return NextResponse.json(
         {
@@ -375,7 +360,7 @@ export async function POST(request: Request) {
     }
 
     if (action === "withdraw") {
-      if (!isVoting) return NextResponse.json({ error: "No active election." }, { status: 409 });
+      if (!isVoting) return errorResponse(409, "No active election.");
       const cand = await db
         .collection<SenateLeadershipNomination>("senateLeadershipNominations")
         .findOne({
@@ -383,15 +368,11 @@ export async function POST(request: Request) {
           nomineeId: character._id,
           status: { $in: ["open", "voting"] },
         });
-      if (!cand)
-        return NextResponse.json({ error: "No active candidacy to withdraw." }, { status: 404 });
+      if (!cand) return errorResponse(404, "No active candidacy to withdraw.");
 
       // Check if user has enough NPI
       if ((character.politicalInfluence || 0) < 3) {
-        return NextResponse.json(
-          { error: "Not enough NPI to withdraw (cost: 3 NPI)." },
-          { status: 403 }
-        );
+        return errorResponse(403, "Not enough NPI to withdraw (cost: 3 NPI).");
       }
 
       const now = new Date();
@@ -415,16 +396,14 @@ export async function POST(request: Request) {
     }
 
     if (action === "vote") {
-      if (!isVoting)
-        return NextResponse.json({ error: "Voting is not open or has ended." }, { status: 409 });
+      if (!isVoting) return errorResponse(409, "Voting is not open or has ended.");
       if (!isEligibleParty) {
-        return NextResponse.json({ error: `Only ${electorateLabel} may vote.` }, { status: 403 });
+        return errorResponse(403, `Only ${electorateLabel} may vote.`);
       }
       const nomId = nominationId;
-      if (!nomId) return NextResponse.json({ error: "nominationId required" }, { status: 400 });
+      if (!nomId) return errorResponse(400, "nominationId required");
       const nominationOid = parseObjectId(nomId);
-      if (!nominationOid)
-        return NextResponse.json({ error: "Invalid nomination ID" }, { status: 400 });
+      if (!nominationOid) return errorResponse(400, "Invalid nomination ID");
       const nomination = await db
         .collection<SenateLeadershipNomination>("senateLeadershipNominations")
         .findOne({
@@ -432,8 +411,7 @@ export async function POST(request: Request) {
           role,
           status: { $in: ["open", "voting"] },
         });
-      if (!nomination)
-        return NextResponse.json({ error: "Candidacy not found or not active." }, { status: 404 });
+      if (!nomination) return errorResponse(404, "Candidacy not found or not active.");
 
       const now = new Date();
       const { previousNominationId } = await castLeadershipVoteBallot(db, {
@@ -460,7 +438,7 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+    return errorResponse(400, "Invalid action");
   } catch (error) {
     return handleRouteError(error);
   }

@@ -61,7 +61,7 @@ export function BudgetSummaryPanel({
       <div className="flex gap-x-6 overflow-x-auto pb-1">
         {stats.map((stat) => (
           <div key={stat.label} className="shrink-0">
-            <span className="block text-[10px] uppercase tracking-widest text-muted font-medium mb-0.5 whitespace-nowrap">
+            <span className="block text-body-sm font-medium text-muted mb-0.5 whitespace-nowrap">
               {stat.label}
             </span>
             <span

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
 import { gameConfig as gameConfigDefaults } from "@/lib/seeds/reference/gameConfig";
@@ -138,7 +139,7 @@ export const BOOLEAN_GATES: BooleanGate[] = [
   {
     key: "extractionAutoStrategyEnabled",
     label: "Extraction auto strategy",
-    desc: "Nudges standard miners on shortage deposits onto the matching focused mining strategy (Phase 1a of the extraction-capacity remediation). Default off.",
+    desc: "Nudges standard miners on shortage deposits onto the matching focused mining strategy (Phase 1a of the extraction-capacity remediation). On for fresh worlds.",
   },
   {
     key: "embargoTradeExposureEnabled",
@@ -156,12 +157,12 @@ export const BOOLEAN_GATES: BooleanGate[] = [
   {
     key: "intOrgAlignmentEnabled",
     label: "IntOrg alignment",
-    desc: "Cold War alignment: every nation holds a share per bloc pole plus a non-aligned remainder, drifting each turn and moved by influence plays. Adds the Cold War Ledger and the per-org Influence tab. Off by default — seeded values are written regardless, so flipping this on shows a populated map rather than blank rows. Tune drift against a live world before enabling.",
+    desc: "Cold War alignment: every nation holds a share per bloc pole plus a non-aligned remainder, drifting each turn and moved by influence plays. Adds the Cold War Ledger and the per-org Influence tab. On for fresh worlds. Seeded values are written regardless, so flipping this on shows a populated map rather than blank rows.",
   },
   {
     key: "settlementCrisisEnabled",
     label: "Settlement crises",
-    desc: "The German Question: a standing contest over whether West Germany stays sovereign in NATO or reunifies into the Warsaw Pact, fought across four weighted institutions by the GDR, USSR, USA and UK. Off by default and incomplete — the turn phase runs but nothing creates a crisis yet, so enabling this on a live world currently does nothing.",
+    desc: "The German Question: a standing contest over whether West Germany stays sovereign in NATO or reunifies into the Warsaw Pact, fought across four weighted institutions by the GDR, USSR, USA and UK. On for fresh worlds but incomplete: the turn phase runs and nothing creates a crisis yet, so the switch currently does nothing.",
   },
   {
     key: "departmentFinanceEnabled",
@@ -183,7 +184,8 @@ export const BOOLEAN_GATES: BooleanGate[] = [
 /** Default when gameConfig omits the lever (matches commandEconomyTurn). */
 const COMMAND_ECONOMY_DEFAULT_TOLERANCE = 0.3;
 
-const isDefaultOn = (key: string): boolean => key in DEFAULT_GAME_STATE_FLAGS;
+const isDefaultOn = (key: string): boolean =>
+  (DEFAULT_GAME_STATE_FLAGS as Record<string, unknown>)[key] === true;
 
 const NPP_LEVELS: { value: NppAutonomyLevel; label: string; blurb: string }[] = [
   { value: "off", label: "Off", blurb: "No NPP autonomy anywhere." },
@@ -450,7 +452,7 @@ export function FeatureGatesPanel() {
       });
       const data = (await res.json()) as Partial<GatesState> & { error?: string };
       if (!res.ok) {
-        setError(data.error || "Failed to update gate");
+        setError(apiErrorText(data, "Failed to update gate"));
         return;
       }
       if (
@@ -492,7 +494,7 @@ export function FeatureGatesPanel() {
       });
       const data = (await res.json()) as { mode?: string; error?: string };
       if (!res.ok) {
-        setError(data.error || `Failed to update ${mode.label}`);
+        setError(apiErrorText(data, `Failed to update ${mode.label}`));
         return;
       }
       setModes((prev) => ({ ...(prev ?? {}), [mode.key]: data.mode ?? value }));
@@ -517,7 +519,7 @@ export function FeatureGatesPanel() {
         });
         const data = (await res.json()) as { error?: string };
         if (!res.ok) {
-          setError(data.error || "Failed to update command economy");
+          setError(apiErrorText(data, "Failed to update command economy"));
           return;
         }
         if (typeof body.commandEconomyEnabled === "boolean") {
@@ -557,7 +559,7 @@ export function FeatureGatesPanel() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 shadow-card sm:p-6">
       <div className="mb-4">
-        <h3 className="text-sm font-semibold">Feature Gates</h3>
+        <h3 className="text-sm font-semibold">Feature gates</h3>
         <p className="text-xs leading-relaxed text-muted">
           One control surface for every game feature flag, including the graduated system modes.
           Gates marked <span className="font-semibold text-primary">seed default</span> ship enabled
@@ -584,9 +586,7 @@ export function FeatureGatesPanel() {
             >
               <div className="mb-1 flex items-center justify-between gap-2">
                 <span className="text-sm font-semibold">{gate.label}</span>
-                <span className="text-[10px] uppercase tracking-wider text-muted">
-                  {liveVersion} live
-                </span>
+                <span className="text-body-sm font-medium text-muted">{liveVersion} live</span>
               </div>
               <p className="mb-3 text-xs text-muted">{gate.desc}</p>
               <div className="inline-flex gap-1 rounded-lg border border-card-border bg-card p-1">
@@ -637,7 +637,7 @@ export function FeatureGatesPanel() {
             <span className="text-sm font-semibold">NPP autonomy</span>
             <DefaultBadge />
           </div>
-          <span className="text-[10px] uppercase tracking-wider text-muted">
+          <span className="text-body-sm font-medium text-muted">
             {NPP_LEVELS.find((l) => l.value === state.nppAutonomyLevel)?.label}
           </span>
         </div>
@@ -685,7 +685,7 @@ export function FeatureGatesPanel() {
       <div className="mb-5 rounded-lg border border-card-border bg-background/40 p-4">
         <div className="mb-1 flex items-center justify-between gap-2">
           <span className="text-sm font-semibold">NPP foreign policy</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted">
+          <span className="text-body-sm font-medium text-muted">
             {
               NPP_FOREIGN_POLICY_MODES.find((mode) => mode.value === state.nppForeignPolicyMode)
                 ?.label
@@ -731,7 +731,7 @@ export function FeatureGatesPanel() {
         <div className="mt-3 border-t border-card-border pt-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <span className="text-xs font-semibold">Active capability stage</span>
-            <span className="text-[10px] uppercase tracking-wider text-muted">
+            <span className="text-body-sm font-medium text-muted">
               {
                 NPP_FOREIGN_POLICY_STAGES.find(
                   (stage) => stage.value === state.nppForeignPolicyStage
@@ -780,7 +780,7 @@ export function FeatureGatesPanel() {
             <span className="text-sm font-semibold">NPP entry viability</span>
             <DefaultBadge />
           </div>
-          <span className="text-[10px] uppercase tracking-wider text-muted">
+          <span className="text-body-sm font-medium text-muted">
             {
               NPP_ENTRY_VIABILITY_MODES.find((mode) => mode.value === state.nppEntryViabilityMode)
                 ?.label
@@ -840,7 +840,7 @@ export function FeatureGatesPanel() {
                   <span className="text-sm font-semibold">{mode.label}</span>
                   {mode.defaultValue !== "off" ? <DefaultBadge /> : null}
                 </div>
-                <span className="text-[10px] uppercase tracking-wider text-muted">
+                <span className="text-body-sm font-medium text-muted">
                   {mode.levels.find((l) => l.value === current)?.label ?? current}
                 </span>
               </div>
@@ -921,7 +921,7 @@ export function FeatureGatesPanel() {
           </div>
           <p className="mb-3 text-xs text-muted">
             Fixed non-convertible currencies, administered prices, shortage/overhang, second
-            economy. Default off.
+            economy. Set from the era on every bootstrap.
           </p>
           <label className="block text-xs text-muted">
             <span className="mb-1 flex items-center justify-between gap-2">

@@ -7,6 +7,8 @@ import { useTranslations } from "next-intl";
 import { buildChapterTour, buildTourSteps } from "@/lib/tutorial/chapters";
 import { coachCountryContext, type CoachCharacter, type TourStep } from "@/lib/tutorial/coachSteps";
 import { parseTutorialFacts, type TutorialFacts } from "@/lib/tutorial/facts";
+import { tutorialWorldFromFlags, type TutorialWorld } from "@/lib/tutorial/world";
+import { useWorldFlags } from "@/hooks/useWorldFlags";
 import {
   DEFAULT_TUTORIAL_PLAN,
   isTutorialChapterId,
@@ -93,6 +95,16 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
   const router = useRouter();
   const pathname = usePathname();
   const t = useTranslations("tutorial");
+  const flags = useWorldFlags();
+  const liveWorld = useMemo(() => tutorialWorldFromFlags(flags), [flags]);
+  /**
+   * The world the running tour was built for. Snapshotted when the tour starts,
+   * because the step list depends on it: if the founding round ended mid-tour
+   * and the live world dropped its card, every later step would shift by one
+   * under the player.
+   */
+  const [tourWorld, setTourWorld] = useState<TutorialWorld | null>(null);
+  const world = tourWorld ?? liveWorld;
 
   // Copy fields on a step are message keys under "tutorial"; every t() call
   // shares one ICU value bag built from the character's country. The region
@@ -105,8 +117,10 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
       countryName: ctx.countryName,
       legislatureName: ctx.legislatureName,
       region: t.has(`regionNouns.${nounKey}`) ? t(`regionNouns.${nounKey}`) : ctx.region,
+      primaryEndTurn: world.founding?.primaryEndTurn ?? 0,
+      generalEndTurn: world.founding?.generalEndTurn ?? 0,
     };
-  }, [character, t]);
+  }, [character, t, world]);
 
   // A single-chapter replay swaps the step list without touching the plan.
   const [replayChapter, setReplayChapter] = useState<TutorialChapterId | null>(null);
@@ -114,9 +128,9 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
   const steps: TourStep[] = useMemo(
     () =>
       replayChapter
-        ? buildChapterTour(character, replayChapter)
-        : buildTourSteps(character, plan ?? DEFAULT_TUTORIAL_PLAN),
-    [character, plan, replayChapter]
+        ? buildChapterTour(character, replayChapter, world)
+        : buildTourSteps(character, plan ?? DEFAULT_TUTORIAL_PLAN, world),
+    [character, plan, replayChapter, world]
   );
 
   /** Chapter rail: one entry per chapter, with the step index it starts at. */
@@ -153,16 +167,30 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
   const [measured, setMeasured] = useState<AnchoredRect | null>(null);
   const [mobile, setMobile] = useState(false);
   const [facts, setFacts] = useState<TutorialFacts>({});
+  /**
+   * The activation whose server resume point has been read. Progress is not
+   * written back before then: starting at step 0 and saving it straight away
+   * raced the resume read and could overwrite the saved place with step 0.
+   */
+  const [resumeSettledFor, setResumeSettledFor] = useState<number | null>(null);
+  const [activation, setActivation] = useState(0);
   const startedRef = useRef(false);
   const savedChaptersRef = useRef(new Set<string>());
 
   const armed = active && armedPath === pathname;
+
+  // Freeze the world for the tour once the flags have landed, and release it
+  // when the tour ends so the next run picks up the current world. Adjusted
+  // during render rather than in an effect, so no frame renders the wrong list.
+  if (active && flags.loaded && tourWorld === null) setTourWorld(liveWorld);
+  if (!active && tourWorld !== null) setTourWorld(null);
 
   // Begin the tour: reset progress and go live. Idempotent.
   const begin = useCallback((from = 0) => {
     startedRef.current = true;
     setStep(from);
     setActive(true);
+    setActivation((n) => n + 1);
   }, []);
 
   // First-run auto-start + replay event wiring.
@@ -201,8 +229,11 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
   // Server-side resume point. The stored step id wins over the localStorage
   // index, so a player who reached step 6 on their phone lands on step 6 here.
   // Consulted once per activation, and only for the real tour.
+  // A replay is not the real tour: nothing to resume, nothing to protect.
+  const resumeSettled = replayChapter !== null || resumeSettledFor === activation;
   useEffect(() => {
-    if (!active || replayChapter) return;
+    // Wait for the frozen world: the saved step id may only exist in its list.
+    if (!active || resumeSettled || tourWorld === null) return;
     let cancelled = false;
     (async () => {
       try {
@@ -216,13 +247,15 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
         if (index > 0) setStep((currentStep) => (index > currentStep ? index : currentStep));
       } catch {
         /* offline: the localStorage index already covers this */
+      } finally {
+        if (!cancelled) setResumeSettledFor(activation);
       }
     })();
     return () => {
       cancelled = true;
     };
     // Deliberately not keyed on `step`: this is a one-shot resume, not a sync.
-  }, [active, replayChapter, steps]);
+  }, [active, activation, resumeSettled, steps, tourWorld]);
 
   // Live world numbers, fetched once per activation and shared by every card.
   useEffect(() => {
@@ -254,13 +287,15 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
   // flicker. Only a route change re-opens the settle window, and `step` is
   // deliberately not a dependency here. `finish` owns the teardown.
   useEffect(() => {
-    if (!active || armedPath === pathname) return;
+    // Wait for the world flags too: they decide which steps exist, so the card
+    // must not show step 3 of one list and then jump when the flags land.
+    if (!active || armedPath === pathname || tourWorld === null) return;
     const t = window.setTimeout(() => {
       setArmedPath(pathname);
       setReady(true);
     }, 450);
     return () => window.clearTimeout(t);
-  }, [active, armedPath, pathname]);
+  }, [active, armedPath, pathname, tourWorld]);
 
   // Track viewport for mobile bottom-sheet layout.
   useEffect(() => {
@@ -278,7 +313,7 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
   // tour survives a device change. A replay is not real progress, so it is not
   // written back.
   useEffect(() => {
-    if (!active || !current) return;
+    if (!active || !current || !resumeSettled) return;
     try {
       window.localStorage.setItem(TUTORIAL_STEP_KEY, String(step));
     } catch {
@@ -291,7 +326,7 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ progress: { chapterId: current.chapterId, stepId: current.id } }),
     }).catch(bestEffort("progress save"));
-  }, [active, step, current, replayChapter]);
+  }, [active, resumeSettled, step, current, replayChapter]);
 
   // Mark a chapter finished the first time the player leaves its last step.
   useEffect(() => {
@@ -391,6 +426,25 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ progress: null }),
     }).catch(bestEffort("progress clear"));
+    setActive(false);
+    setArmedPath(null);
+    setReady(false);
+    setReplayChapter(null);
+    setStep(0);
+  }, []);
+
+  /**
+   * Close mid-tour. Unlike finishing, this keeps the resume point on the
+   * character, so "Resume the tour" on the tutorial page picks up where the
+   * player left off instead of starting over. The done key still stops the
+   * tour from opening by itself again.
+   */
+  const close = useCallback(() => {
+    try {
+      window.localStorage.setItem(TUTORIAL_DONE_KEY, "1");
+    } catch {
+      /* private mode */
+    }
     setActive(false);
     setArmedPath(null);
     setReady(false);
@@ -526,7 +580,7 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
         )}
 
         <div className="mt-2 flex items-baseline justify-between gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-primary">
+          <span className="text-body-sm font-medium text-primary">
             {chapters.length > 1
               ? t("coach.chapterProgress", { number: chapterNumber, total: chapters.length })
               : t(current.chapterTitle)}
@@ -567,10 +621,10 @@ export function TutorialCoach({ character, plan, autoStart }: TutorialCoachProps
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={finish}
+              onClick={close}
               className="text-xs text-muted hover:text-foreground"
             >
-              {t("coach.skip")}
+              {t("coach.close")}
             </button>
             {step > 0 && (
               <button

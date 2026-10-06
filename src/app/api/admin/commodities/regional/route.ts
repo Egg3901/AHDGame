@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { withAdminAuth } from "@/lib/api/withAdminAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { countryIdSchema } from "@/lib/api/schemas/country";
 import type { CommodityPrice, CommodityPriceHistory, GameState, State } from "@/lib/db/types";
 import { computeCommodityPressureRatio } from "@/lib/constants/commodities";
@@ -24,7 +24,7 @@ export const GET = withAdminAuth(async (_auth, request: Request) => {
       countryId: searchParams.get("countryId"),
       stateId: searchParams.get("stateId") || undefined,
     });
-    if (!parsed.success) return NextResponse.json({ error: "Invalid countryId" }, { status: 400 });
+    if (!parsed.success) return errorResponse(400, "Invalid countryId");
 
     const { countryId, stateId } = parsed.data;
     const db = await getDb();

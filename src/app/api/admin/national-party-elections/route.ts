@@ -7,7 +7,7 @@
 
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import {
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, batchSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { action, durationTurns } = parsed.data;
 
@@ -57,10 +57,7 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json(
-      { error: "action must be batch-resolve or batch-create" },
-      { status: 400 }
-    );
+    return errorResponse(400, "action must be batch-resolve or batch-create");
   } catch (error) {
     return handleRouteError(error);
   }

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { GROUND_GAME_PRESETS } from "@/lib/constants/groundGamePresets";
 
@@ -49,7 +50,7 @@ export function GroundGameControl({
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data?.error ?? "Action failed.");
+        setError(apiErrorText(data, "Action failed."));
         setBusy(false);
         return;
       }
@@ -67,18 +68,14 @@ export function GroundGameControl({
 
   return (
     <div className={card}>
-      <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted">
-        Ground game · {mode}
-      </div>
+      <div className="mb-2 text-body-sm font-medium text-muted">Ground game · {mode}</div>
       {error && (
         <div className="mb-2 rounded-md border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-sm text-rose-500">
           {error}
         </div>
       )}
 
-      <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted">
-        You are campaigning for
-      </div>
+      <div className="mb-1 text-body-sm font-medium text-muted">You are campaigning for</div>
       <div className="mb-3 flex gap-2">
         <button
           type="button"

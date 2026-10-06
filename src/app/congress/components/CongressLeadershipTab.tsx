@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback } from "react";
 import { SpeakerSection } from "./SpeakerSection";
 import { AssignLeaderModal } from "./AssignLeaderModal";
@@ -138,7 +139,7 @@ export function CongressLeadershipTab({
     if (vacateVote) body.vacateVote = vacateVote;
     const result = await apiPost("/api/congress/speaker", body);
     if (result.ok) setMessage(result.message ?? "");
-    else setError(result.error ?? "Error");
+    else setError(apiErrorText(result, "Error"));
     fetchData();
   }
 
@@ -153,7 +154,7 @@ export function CongressLeadershipTab({
     if (nominationId) body.nominationId = nominationId;
     const result = await apiPost("/api/congress/senate-leadership", body);
     if (result.ok) setMessage(result.message ?? "");
-    else setError(result.error ?? "Error");
+    else setError(apiErrorText(result, "Error"));
     fetchData();
   }
 
@@ -168,7 +169,7 @@ export function CongressLeadershipTab({
     if (nominationId) body.nominationId = nominationId;
     const result = await apiPost("/api/congress/house-leadership", body);
     if (result.ok) setMessage(result.message ?? "");
-    else setError(result.error ?? "Error");
+    else setError(apiErrorText(result, "Error"));
     fetchData();
   }
 
@@ -229,7 +230,7 @@ export function CongressLeadershipTab({
         setAssigningRole(null);
         fetchData();
       } else {
-        setError(result.error ?? "Error");
+        setError(apiErrorText(result, "Error"));
       }
     } finally {
       setAssignLoading(false);
@@ -244,7 +245,7 @@ export function CongressLeadershipTab({
       characterId: null,
     });
     if (result.ok) setMessage(result.message ?? "");
-    else setError(result.error ?? "Error");
+    else setError(apiErrorText(result, "Error"));
     fetchData();
   }
 
@@ -296,7 +297,7 @@ export function CongressLeadershipTab({
                 action: "start_election",
               });
               if (result.ok) setMessage(result.message ?? "");
-              else setError(result.error ?? "Error");
+              else setError(apiErrorText(result, "Error"));
               fetchData();
             }}
             onForceEnd={() => handleSpeakerAction("force_end")}
@@ -306,7 +307,7 @@ export function CongressLeadershipTab({
           />
 
           <HouseLeadershipRoleSection
-            title="Majority Leader"
+            title="Majority leader"
             electionState={houseLeadData?.majorityLeader}
             isMember={houseLeadData?.majorityLeader?.isMember ?? false}
             leadersAdmin={leadersAdmin}
@@ -319,7 +320,7 @@ export function CongressLeadershipTab({
             onDeclare={() => handleHouseLeadAction("majority_leader", "declare")}
           />
           <HouseLeadershipRoleSection
-            title="Minority Leader"
+            title="Minority leader"
             electionState={houseLeadData?.minorityLeader}
             isMember={houseLeadData?.minorityLeader?.isMember ?? false}
             leadersAdmin={leadersAdmin}
@@ -332,7 +333,7 @@ export function CongressLeadershipTab({
             onDeclare={() => handleHouseLeadAction("minority_leader", "declare")}
           />
           <HouseLeadershipRoleSection
-            title="Majority Whip"
+            title="Majority whip"
             electionState={houseLeadData?.majorityWhip}
             isMember={houseLeadData?.majorityWhip?.isMember ?? false}
             leadersAdmin={leadersAdmin}
@@ -345,7 +346,7 @@ export function CongressLeadershipTab({
             onDeclare={() => handleHouseLeadAction("majority_whip", "declare")}
           />
           <HouseLeadershipRoleSection
-            title="Minority Whip"
+            title="Minority whip"
             electionState={houseLeadData?.minorityWhip}
             isMember={houseLeadData?.minorityWhip?.isMember ?? false}
             leadersAdmin={leadersAdmin}
@@ -369,7 +370,7 @@ export function CongressLeadershipTab({
       ) : (
         <>
           <SenateLeadershipRoleSection
-            title="President Pro Tempore"
+            title="President pro tempore"
             electionState={senateData?.proTempore}
             isMember={senateData?.isMember ?? false}
             leadersAdmin={leadersAdmin}
@@ -387,7 +388,7 @@ export function CongressLeadershipTab({
             declaring={senateDeclaring}
           />
           <SenateLeadershipRoleSection
-            title="Majority Leader"
+            title="Majority leader"
             electionState={senateData?.majorityLeader}
             isMember={senateData?.isMember ?? false}
             leadersAdmin={leadersAdmin}
@@ -402,7 +403,7 @@ export function CongressLeadershipTab({
             onDeclare={() => handleSenateLeadershipAction("majority_leader", "declare")}
           />
           <SenateLeadershipRoleSection
-            title="Minority Leader"
+            title="Minority leader"
             electionState={senateData?.minorityLeader}
             isMember={senateData?.isMember ?? false}
             leadersAdmin={leadersAdmin}
@@ -417,7 +418,7 @@ export function CongressLeadershipTab({
             onDeclare={() => handleSenateLeadershipAction("minority_leader", "declare")}
           />
           <SenateLeadershipRoleSection
-            title="Majority Whip"
+            title="Majority whip"
             electionState={senateData?.majorityWhip}
             isMember={senateData?.isMember ?? false}
             leadersAdmin={leadersAdmin}
@@ -430,7 +431,7 @@ export function CongressLeadershipTab({
             onDeclare={() => handleSenateLeadershipAction("majority_whip", "declare")}
           />
           <SenateLeadershipRoleSection
-            title="Minority Whip"
+            title="Minority whip"
             electionState={senateData?.minorityWhip}
             isMember={senateData?.isMember ?? false}
             leadersAdmin={leadersAdmin}
@@ -457,7 +458,7 @@ export function CongressLeadershipTab({
 
       {viewerParty && (
         <section className="mt-6 rounded-lg border border-card-border bg-card p-4">
-          <h3 className="text-sm font-semibold mb-1">Whip Room</h3>
+          <h3 className="text-sm font-semibold mb-1">Whip room</h3>
           <p className="text-xs text-muted mb-3">
             Whip your party on the leadership elections above without leaving this page.
           </p>

@@ -34,6 +34,7 @@ vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({
     formatAmount: (x: number) => `Amt${x}`,
     formatPrice: (x: number) => `Px${x}`,
+    formatListingPrice: (x: number, code?: string | null) => (code ? `${code}${x}` : `Px${x}`),
     currencySymbol: "$",
     forexEnabled: false,
     playerCountryId: undefined,

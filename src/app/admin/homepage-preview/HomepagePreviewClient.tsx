@@ -29,7 +29,7 @@ const THEME_PICKER: { value: Theme; label: string }[] = [
   { value: "oled", label: "OLED" },
   { value: "usa", label: "USA" },
   { value: "pastel", label: "Pastel" },
-  { value: "dark-pastel", label: "Dark Pastel" },
+  { value: "dark-pastel", label: "Dark pastel" },
   { value: "retro", label: "Retro" },
   { value: "solarized", label: "Solarized" },
   { value: "cloakroom", label: "Cloakroom" },

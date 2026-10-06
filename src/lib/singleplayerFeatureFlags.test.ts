@@ -29,8 +29,7 @@ describe("singleplayer creation feature catalog", () => {
       expect(option.description.trim()).not.toBe("");
       expect(option.defaultEnabled).toBe(DEFAULT_GAME_STATE_FLAGS[option.key]);
     }
-    expect(DEFAULT_SINGLEPLAYER_FEATURE_FLAGS.autoSectorSeedEnabled).toBe(false);
-    expect(DEFAULT_SINGLEPLAYER_FEATURE_FLAGS.nppOffensiveInitiationEnabled).toBe(false);
-    expect(DEFAULT_SINGLEPLAYER_FEATURE_FLAGS.nppOffensiveJoinEnabled).toBe(false);
+    // Fresh-world policy: every gameplay flag starts on.
+    expect(Object.values(DEFAULT_SINGLEPLAYER_FEATURE_FLAGS).every((value) => value)).toBe(true);
   });
 });

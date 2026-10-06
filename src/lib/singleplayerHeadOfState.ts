@@ -17,7 +17,7 @@ import { getGovernmentFormationsCollection } from "@/lib/db/collections/governme
 import {
   getLiveLowerChamberSeats,
   lowerChamberMajorityThreshold,
-} from "@/lib/turn/lowerChamberSeats";
+} from "@/lib/legislature/lowerChamberSeats";
 import { getGameState } from "@/lib/gameState";
 import { SINGLEPLAYER_USER_ID, isSingleplayer } from "@/lib/singleplayer";
 

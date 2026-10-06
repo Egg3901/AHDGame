@@ -7,6 +7,7 @@ import { formatRatePercent } from "@/components/banking/formatBankMoney";
 import type { ShowToast } from "../types";
 import { SmallButton } from "@/components/corporation/dense/DenseKit";
 import { BankPanel } from "../components/BankSection";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Customer-facing actions on a bank's own page: deposit into this bank, or open
@@ -60,7 +61,7 @@ export function CustomerBankPanel({
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        showToast(json.error ?? "Deposit failed", "error");
+        showToast(apiErrorText(json, "Deposit failed"), "error");
         return;
       }
       if (json.holderRouted === false) {

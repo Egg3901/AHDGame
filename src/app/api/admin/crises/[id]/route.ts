@@ -11,7 +11,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { logWireEvent } from "@/lib/wireEvent";
 import type { Crisis } from "@/lib/db/types/crisis";
 
@@ -25,11 +25,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
-    if (!ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+    if (!ObjectId.isValid(id)) return errorResponse(400, "Invalid ID");
 
     const parsed = await parseJsonBody(request, PatchSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const crisis = await db.collection<Crisis>("crises").findOne({ _id: new ObjectId(id) });
@@ -65,7 +64,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     if (!auth.ok) return auth.response;
 
     const { id } = await params;
-    if (!ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+    if (!ObjectId.isValid(id)) return errorResponse(400, "Invalid ID");
 
     const db = await getDb();
     const result = await db.collection("crises").deleteOne({ _id: new ObjectId(id) });

@@ -7,7 +7,7 @@ import { clearNetworkRetry } from "./routeErrorRecovery";
 
 const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
-  capture: vi.fn(),
+  capture: vi.fn(async () => undefined),
   pathname: "/country/us/approval",
 }));
 
@@ -28,6 +28,7 @@ vi.mock("next-intl", () => ({
 
 vi.mock("@/lib/observability/sentryClientLazy", () => ({
   captureClientException: mocks.capture,
+  captureClientExceptionWithId: mocks.capture,
 }));
 
 vi.mock("next/link", async () => {

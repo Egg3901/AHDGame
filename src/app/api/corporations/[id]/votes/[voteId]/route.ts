@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
@@ -22,7 +22,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     const { id, voteId } = await params;
     if (!ObjectId.isValid(voteId)) {
-      return NextResponse.json({ error: "Invalid vote ID" }, { status: 400 });
+      return errorResponse(400, "Invalid vote ID");
     }
     const db = await getDb();
     const resolved = await resolveCorporation(db, id);
@@ -33,7 +33,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       _id: new ObjectId(voteId),
       corporationId: corporation._id,
     });
-    if (!vote) return NextResponse.json({ error: "Vote not found" }, { status: 404 });
+    if (!vote) return errorResponse(404, "Vote not found");
 
     if (vote.status === "open") {
       const gameState = await getGameState();

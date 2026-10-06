@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { adminLawTypesCreateSchema } from "@/lib/api/schemas/admin";
 import type { LegislationType, Bill, BillStatus } from "@/lib/db/types";
@@ -26,14 +26,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     const parsed = await parseJsonBody(request, adminLawTypesUpdateSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const updates = parsed.data;
 
     // Check if there's anything to update
     if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: "No fields provided for update" }, { status: 400 });
+      return errorResponse(400, "No fields provided for update");
     }
 
     const db = await getDb();
@@ -43,7 +43,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const adminType = await db.collection<LegislationType>("legislationTypes").findOne({ _id: id });
 
     if (!seedType && !adminType) {
-      return NextResponse.json({ error: `Law type "${id}" not found` }, { status: 404 });
+      return errorResponse(404, `Law type "${id}" not found`);
     }
 
     const now = new Date();
@@ -133,16 +133,13 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         });
       } else {
         // Cannot delete seed types
-        return NextResponse.json(
-          { error: "Cannot delete seed-defined law types" },
-          { status: 403 }
-        );
+        return errorResponse(403, "Cannot delete seed-defined law types");
       }
     }
 
     // Admin-created type
     if (!adminType) {
-      return NextResponse.json({ error: `Law type "${id}" not found` }, { status: 404 });
+      return errorResponse(404, `Law type "${id}" not found`);
     }
 
     // Check for active bills using this legislation type
@@ -153,12 +150,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     });
 
     if (activeBillCount > 0) {
-      return NextResponse.json(
-        {
-          error: `Cannot delete law type: ${activeBillCount} active bill(s) reference it`,
-          activeBillCount,
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        `Cannot delete law type: ${activeBillCount} active bill(s) reference it`,
+        { extra: { activeBillCount } }
       );
     }
 

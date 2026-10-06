@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { buildRegionTurnoutResponse } from "@/lib/demographics/regionTurnout";
 
@@ -19,12 +19,12 @@ export async function GET(
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const stateId = id;
 
     if (!stateId) {
-      return NextResponse.json({ error: "State ID required" }, { status: 400 });
+      return errorResponse(400, "State ID required");
     }
 
     // SSOT shared with the region page's server fetch (getRegionTurnout).

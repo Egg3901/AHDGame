@@ -25,7 +25,7 @@ describe("requireCorporationActions / requireGameActive", () => {
     const { requireGameActive } = await import("./requireCorporationActions");
     const res = await requireGameActive(db as unknown as Db);
     expect(res?.status).toBe(409);
-    expect(await res?.json()).toEqual({ error: "The game is currently paused." });
+    expect(await res?.json()).toMatchObject({ error: "The game is currently paused." });
   });
 
   it("requireGameActive allows when isActive is true", async () => {
@@ -59,7 +59,7 @@ describe("requireCorporationActions / requireGameActive", () => {
     const { requireCorporationActionsEnabled } = await import("./requireCorporationActions");
     const res = await requireCorporationActionsEnabled(db as unknown as Db);
     expect(res?.status).toBe(403);
-    expect(await res?.json()).toEqual({
+    expect(await res?.json()).toMatchObject({
       error: "Corporation actions are currently paused by an admin",
     });
   });

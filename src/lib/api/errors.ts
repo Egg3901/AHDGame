@@ -5,6 +5,12 @@
 import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import { alertOps } from "@/lib/observability/alertOps";
+import {
+  defaultMessageFor,
+  errorCodeForStatus,
+  newRequestRef,
+  type ApiErrorBody,
+} from "@/lib/errors/catalog";
 
 export class ApiError extends Error {
   constructor(
@@ -17,14 +23,70 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 
-  toJson(): { error: string; code?: string; details?: unknown } {
-    const body: { error: string; code?: string; details?: unknown } = {
+  /** Shared error envelope: always carries a catalog code and a ref. */
+  toJson(ref: string = newRequestRef()): ApiErrorBody {
+    const body: ApiErrorBody = {
       error: this.message,
+      code: this.code ?? errorCodeForStatus(this.status),
+      ref,
     };
-    if (this.code) body.code = this.code;
     if (this.details !== undefined) body.details = this.details;
     return body;
   }
+}
+
+/**
+ * Build a shared-envelope error response for routes that answer with a
+ * specific status and message instead of throwing. Prefer this over a
+ * hand-rolled `NextResponse.json({ error }, { status })` so the client always
+ * gets a catalog `code` and a `ref`.
+ */
+export function errorResponse(
+  status: number,
+  message: unknown,
+  options: {
+    code?: string;
+    details?: unknown;
+    headers?: HeadersInit;
+    /** Extra top-level body fields (retry hints, counters). Never override the envelope. */
+    extra?: Record<string, unknown>;
+  } = {}
+): NextResponse {
+  // Call sites forward upstream validation results whose message can be
+  // missing; fall back to the catalog copy for the status rather than ship an
+  // empty error. Structured (non-string) messages are passed through as-is so
+  // clients that already read them keep working.
+  const text =
+    typeof message === "string" && message.length > 0
+      ? message
+      : message !== null && typeof message === "object"
+        ? message
+        : defaultMessageFor(options.code ?? errorCodeForStatus(status));
+  const envelope = new ApiError(status, "", options.code, options.details).toJson();
+  const body = { ...options.extra, ...envelope, error: text };
+  return NextResponse.json(body, { status, headers: options.headers });
+}
+
+/**
+ * Respond with a body produced by a command layer whose status is only known at
+ * runtime. Success statuses pass through untouched; error statuses (>= 400)
+ * gain the shared envelope (`code`, `ref`, and an `error` string) while every
+ * field the command already returned is preserved.
+ */
+export function statusResponse(
+  status: number,
+  body: unknown,
+  options: { headers?: HeadersInit } = {}
+): NextResponse {
+  if (status < 400 || body === null || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json(body, { status, headers: options.headers });
+  }
+  const { error, code, ...rest } = body as Record<string, unknown>;
+  return errorResponse(status, error, {
+    code: typeof code === "string" ? code : undefined,
+    extra: rest,
+    headers: options.headers,
+  });
 }
 
 /**
@@ -151,6 +213,7 @@ export function handleRouteError(error: unknown, context?: RouteErrorContext): N
     tags["http.route"] = context.route;
   }
   if (isDuplicateKeyError(error)) tags["db.duplicateKey"] = true;
+  tags["error.code"] = "INTERNAL_ERROR";
 
   console.error("[API] Unhandled error:", error);
   const eventId = Sentry.captureException(error, { tags, extra: context?.extra });
@@ -161,8 +224,9 @@ export function handleRouteError(error: unknown, context?: RouteErrorContext): N
       : "Internal server error",
     error
   );
+  const ref = eventId || newRequestRef();
   return NextResponse.json(
-    { ...apiErr.toJson(), ...(eventId ? { eventId } : {}) },
+    { ...apiErr.toJson(ref), ...(eventId ? { eventId } : {}) },
     { status: 500 }
   );
 }

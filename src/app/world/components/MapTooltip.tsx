@@ -38,7 +38,7 @@ export default function MapTooltip({
       <div className="flex items-center justify-between gap-4">
         <span className="font-bold text-sm tracking-tight">{countryLabel}</span>
         {access.tone === "active" && (
-          <span className="text-[10px] uppercase font-bold text-success tracking-wider">Live</span>
+          <span className="text-body-sm font-medium text-success">Live</span>
         )}
         {access.econOnly && (
           <span className="text-[10px] uppercase font-bold text-secondary tracking-wider">

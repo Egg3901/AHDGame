@@ -8,7 +8,7 @@ Play at [ahousedividedgame.com](https://www.ahousedividedgame.com). Docs at [doc
 
 ## The game
 
-**Eras.** Worlds seed from a historical preset (1953, 1979, 1991, 1999, 2007, 2019, or 2023) and play forward. A preset sets policies, budgets, demographics, seat maps, currencies, commodity prices, cabinet structures, franchise rules, and Supreme Court rosters. As the calendar crosses real inflection points, era checkpoints durably shift the electorate, paced by how the game's own Supreme Court rules on its docket.
+**Eras.** Worlds seed from a historical preset (1953, 1979, 1991, 1999, 2007, 2019, 2023, or 2027) and play forward. A preset sets policies, budgets, demographics, seat maps, currencies, commodity prices, cabinet structures, franchise rules, and Supreme Court rosters. As the calendar crosses real inflection points, era checkpoints durably shift the electorate, paced by how the game's own Supreme Court rules on its docket.
 
 **Countries.** 24 registered countries on both sides of the Cold War, resolved per world as playable or economy-only. Western democracies and one-party states with planned economies run their own political machinery. Scotland and Wales are authored secession configurations that stay hidden until registered.
 
@@ -24,9 +24,9 @@ Play at [ahousedividedgame.com](https://www.ahousedividedgame.com). Docs at [doc
 
 ```
 Browser (React 19 / Next.js App Router)
-  -> Next.js API routes (JWT auth, Zod validation, 1,200+ handlers)
+  -> Next.js API routes (JWT auth, Zod validation, 1,400+ route handlers)
   -> MongoDB (native driver, 100+ document types)
-  -> hourly turn processor: 120+ phases in ordered groups
+  -> hourly turn processor: 140+ phases in ordered groups
      (elections, bills, NPPs, economy, demographics, conflict, metrics)
 ```
 
@@ -34,7 +34,7 @@ Stack: Next.js 16, React 19, TypeScript, Tailwind 4, MongoDB, Vitest and Playwri
 
 ## Running it locally
 
-Requires Node 20+ and a MongoDB instance.
+Requires Node 20+ (CI runs Node 22) and a MongoDB instance.
 
 ```bash
 git clone https://github.com/Egg3901/AHDGame.git
@@ -89,11 +89,11 @@ Password login plus optional Discord and Google OAuth, optional Turnstile on reg
 npm run dev           # dev server
 npm run lint          # ESLint, with custom rules in eslint-rules/
 npm run typecheck     # tsc --noEmit
-npm run test:run      # ~27k Vitest tests
+npm run test:run      # Vitest unit and integration suite
 npm run test:e2e      # Playwright, needs the dev server running
 ```
 
-CI runs lint, format check, typecheck, the unit suite, and a Next build on pull requests and pushes to `main`. The architecture audit also runs as an advisory step because known pre-existing findings remain. CodeQL runs separately.
+CI runs on every pull request and on pushes to `main`: lint plus the architecture audit, format check, typecheck, the sharded unit suite, the Next build, and a federation-transactions job against an isolated Mongo replica set. A final `verify` job requires all of them. CodeQL, Semgrep, and dependency review run separately.
 
 Useful entry points:
 

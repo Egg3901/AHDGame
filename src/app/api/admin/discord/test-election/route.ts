@@ -8,7 +8,7 @@
  */
 import { NextResponse } from "next/server";
 import { requireAdminOrApiKey } from "@/lib/api/requireAdminOrApiKey";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import {
   sendCountryGameEventMultiple,
@@ -57,8 +57,7 @@ export async function POST(request: Request) {
     if (!auth.ok) return auth.response;
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const { electionType, countryId: requestCountryId } = parsed.data;
     const db = await getDb();
@@ -71,10 +70,7 @@ export async function POST(request: Request) {
     if (requestCountryId) {
       descriptor = descriptors.find((d) => d.countryId === requestCountryId);
       if (!descriptor) {
-        return NextResponse.json(
-          { error: `Country ${requestCountryId} is not enabled for players` },
-          { status: 400 }
-        );
+        return errorResponse(400, `Country ${requestCountryId} is not enabled for players`);
       }
     } else {
       // No country supplied — infer it from which countries broadcast this type.
@@ -82,19 +78,14 @@ export async function POST(request: Request) {
       // require the caller to disambiguate rather than guessing.
       const matches = descriptors.filter((d) => d.electionTypes.some((t) => t.id === electionType));
       if (matches.length === 0) {
-        return NextResponse.json(
-          { error: `No enabled country broadcasts election type "${electionType}"` },
-          { status: 400 }
-        );
+        return errorResponse(400, `No enabled country broadcasts election type "${electionType}"`);
       }
       if (matches.length > 1) {
-        return NextResponse.json(
-          {
-            error: `Election type "${electionType}" is shared by ${matches
-              .map((d) => d.countryId)
-              .join(", ")} — specify countryId`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Election type "${electionType}" is shared by ${matches
+            .map((d) => d.countryId)
+            .join(", ")} — specify countryId`
         );
       }
       descriptor = matches[0];
@@ -103,9 +94,9 @@ export async function POST(request: Request) {
     const inferredCountryId = descriptor.countryId;
 
     if (!descriptor.electionTypes.some((t) => t.id === electionType)) {
-      return NextResponse.json(
-        { error: `${inferredCountryId} does not broadcast election type "${electionType}"` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `${inferredCountryId} does not broadcast election type "${electionType}"`
       );
     }
 
@@ -116,10 +107,7 @@ export async function POST(request: Request) {
     const config = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
     const hasDestination = Boolean(descriptor.url || config?.discordGameWebhookUrl);
     if (!hasDestination) {
-      return NextResponse.json(
-        { error: `No ${inferredCountryId} game webhook URL configured` },
-        { status: 400 }
-      );
+      return errorResponse(400, `No ${inferredCountryId} game webhook URL configured`);
     }
 
     // Always scope by country. `Election.countryId` is a required field, and
@@ -140,10 +128,7 @@ export async function POST(request: Request) {
       .toArray();
 
     if (recentElections.length === 0) {
-      return NextResponse.json(
-        { error: `No resolved ${electionType} elections found` },
-        { status: 404 }
-      );
+      return errorResponse(404, `No resolved ${electionType} elections found`);
     }
 
     // Get the finalized tallies for these elections
@@ -213,10 +198,7 @@ export async function POST(request: Request) {
     }
 
     if (outcomes.length === 0) {
-      return NextResponse.json(
-        { error: `No election results found for ${electionType}` },
-        { status: 404 }
-      );
+      return errorResponse(404, `No election results found for ${electionType}`);
     }
 
     // Build the Discord embeds

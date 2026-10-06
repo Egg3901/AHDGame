@@ -146,6 +146,7 @@ export const REGION_ROSTERS: Partial<Record<CountryId, Partial<Record<EraId, Ros
   BG: {
     "1953": () => import("@/lib/seeds/bg/bgRegions1953").then((m) => m.bgRegions1953),
     "2019": () => import("@/lib/seeds/bg/bgRegions").then((m) => m.bgRegions),
+    "2027": () => import("@/lib/countries/bg/data/bgRegions2027").then((m) => m.bgRegions2027),
   },
   BLR: {
     "1953": () => import("@/lib/seeds/blr/blrRegions1953").then((m) => m.blrRegions1953),

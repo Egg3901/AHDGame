@@ -8,7 +8,6 @@ import type {
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { regionPartyUrl } from "@/lib/urls";
-import { ORG_DECAY_RATE } from "@/lib/turn/partyOrg/constants";
 
 export interface TreasuryStateFundingMetric {
   stateId: string;
@@ -52,9 +51,10 @@ function calculateGrowthPerTurn(
   statePartyOrg: StatePartyOrg,
   _budget: Pick<PartyBudget, "orgBuildingPercent"> | null
 ): number {
-  // Org growth is now PS-spend at request time, not a passive treasury
-  // rate. Insights show the passive decay baseline only.
-  return (statePartyOrg.organization ?? 0) > 0 ? roundToTenths(-ORG_DECAY_RATE) : 0;
+  // Bucket share changes depend on every party's units and inactivity state,
+  // so a single-row percentage rate would be misleading.
+  void statePartyOrg;
+  return 0;
 }
 
 function buildOverrideEntries(logs: AdminLog[]): TreasuryOverrideHistoryEntry[] {

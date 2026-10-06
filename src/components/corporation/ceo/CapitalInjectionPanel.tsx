@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CorporationDetail } from "../CorporationPageTypes";
@@ -52,7 +53,7 @@ export function CapitalInjectionPanel({
         setAmount("");
         onRefresh();
       } else {
-        setError(data.error || "Injection failed.");
+        setError(apiErrorText(data, "Injection failed."));
       }
     } catch {
       setError("Network error.");

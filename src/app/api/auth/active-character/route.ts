@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
@@ -46,7 +46,7 @@ async function handleGET(request: Request) {
     const url = new URL(request.url);
     const switchId = url.searchParams.get("switch");
     if (!switchId || !ObjectId.isValid(switchId)) {
-      return NextResponse.json({ error: "Invalid character ID" }, { status: 400 });
+      return errorResponse(400, "Invalid character ID");
     }
 
     const db = await getDb();
@@ -67,7 +67,7 @@ async function handleGET(request: Request) {
         outcome: "rejected",
         reason: "character_not_found",
       });
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     await db
@@ -110,8 +110,7 @@ export async function PATCH(request: Request) {
     if (!admin.ok) return admin.response;
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const userId = new ObjectId(admin.admin.userId);
@@ -132,7 +131,7 @@ export async function PATCH(request: Request) {
         outcome: "rejected",
         reason: "character_not_found",
       });
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     await db

@@ -1,33 +1,45 @@
+import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { GameState } from "@/lib/db/types/gameState";
 
 /**
- * Feature flags that ship ON for every fresh world. Mirrors the production
- * posture (2026-07): these systems have all been live on prod long enough to
- * be considered core, so new seeds start with them instead of a bare world an
- * admin has to hand-toggle after every reset.
+ * Fresh-world feature flag policy.
  *
- * Nearly the full feature set ships ON for fresh worlds. The deliberate exceptions:
- *   - `autoSectorSeedEnabled` — shipped OFF by owner decision (see below): the
- *     48-turn automatic sector reseed favours the state corp over private/spun-out
- *     corps (#2926) and re-seeds a world an admin may have deliberately shaped.
- *   - `nppOffensiveInitiationEnabled` / `nppOffensiveJoinEnabled` — shipped OFF:
- *     NPP armies attack without a Generals or military-technology system behind
- *     them, so both are an explicit admin opt-in (Admin → World → Conflicts).
- *   - `eurozoneEnabled` — NOT force-defaulted here: era-derived, seedForex sets
- *     it per preset (the euro didn't exist pre-1999).
- *   - `demographicsDemandEnabled` (gameConfig) — stays OFF: mutually exclusive
- *     with `householdConsumptionEnabled` (on); enabling both double-counts
- *     consumer demand.
- *   - `fastMode` (turn cadence, not a feature), `ledgerShadow` (internal shadow
- *     reconciliation), and the ops/security switches (testMode, IP detection,
- *     audit log, alt scoring, registration gates) are not gameplay features.
+ * Standing rule: every fresh world (first bootstrap or a reset) starts with
+ * EVERY gameplay feature flag ON, at the top of every rollout ladder, with one
+ * exclusion: NPP autonomy stays at v4 rather than v5 (see
+ * FRESH_WORLD_FLAG_EXCLUSIONS). The two presets below are that policy, one per
+ * document the flags live on.
  *
- * Applied in two places:
- *   - `initializeGameState` — baked into the very first gameState doc.
- *   - `resetGameWorld` — fills in only flags that are absent on the existing
- *     doc, so an explicit admin choice (including an explicit `false`)
- *     survives a reset.
+ * Fields that look like flags but are not gameplay features (ops kill switches,
+ * maintenance and access gates, security tooling, sim-only harness switches,
+ * runtime state, era-derived values, deprecated aliases, superseded
+ * alternatives) are listed in NON_GAMEPLAY_GAME_STATE_FIELDS and
+ * NON_GAMEPLAY_GAME_CONFIG_FIELDS with the reason each keeps its own default.
+ * featureFlagDefaults.test.ts reads the GameState and GameConfig types and fails
+ * when a flag field is in none of these lists, so a new flag cannot ship
+ * without either being on for fresh worlds or carrying a recorded exclusion.
+ *
+ * Applied by:
+ *   - `initializeGameState` (first gameState doc) and `resetGameWorld` (every
+ *     reset) for the gameState preset;
+ *   - the reference gameConfig (`seeds/reference/gameConfig.ts`), written by
+ *     the core seed, plus `resetGameWorld` for the gameConfig preset.
+ *
+ * Existing running worlds are never flipped by this policy. Non-reset seed
+ * top-ups write these keys with `$setOnInsert` only, and the startup
+ * migration that adopts reference gates leaves them alone past a world's first
+ * game day.
  */
+
+/** Gameplay flags held below their maximum on fresh worlds, and why. */
+export const FRESH_WORLD_FLAG_EXCLUSIONS = {
+  nppAutonomyLevel: {
+    value: "v4",
+    reason:
+      "NPP v5 (persistent governing goals) is the one owner-excluded flag. Fresh worlds seed v4, the top of the ladder below v5.",
+  },
+} as const;
+
 export const DEFAULT_GAME_STATE_FLAGS = {
   forexEnabled: true,
   playerRandomEventsEnabled: true,
@@ -35,113 +47,162 @@ export const DEFAULT_GAME_STATE_FLAGS = {
   autoDisastersEnabled: true,
   crisisAidBillsEnabled: true,
   rpgStatsEnabled: true,
-  // Shipped OFF for fresh worlds: the 48-turn automatic sector reseed favours
-  // the state corp over private/spun-out corps (#2926) and re-seeds a world an
-  // admin (or the game-start seeder) has deliberately shaped. This is the one
-  // feature toggle we hold off by default; every other gameplay flag is on.
-  autoSectorSeedEnabled: false,
+  autoSectorSeedEnabled: true,
   sectorTechTreesEnabled: true,
   onboardingChecklistEnabled: true,
-  // v0 seated NPPs but left them economically passive; v4 is player-parity plus
-  // global economic behaviour, which is what makes an NPP-run country behave
-  // like a real economy — and whatever NPPs cannot do, players will find broken
-  // too.
-  //
-  // NOT the top of the ladder any more: v5 adds persistent governing goals on
-  // top of v4. It stays opt-in (singleplayer / worldsim beta) rather than
-  // becoming the fresh-world seed, so hosted worlds keep the tier they have been
-  // validated at. Moving this to "v5" is the last step of the V5 rollout, not
-  // the first, and it changes NEW worlds only — an existing world's level is
-  // persisted and is never rewritten by a change here.
-  nppAutonomyLevel: "v4",
+  nppAutonomyLevel: FRESH_WORLD_FLAG_EXCLUSIONS.nppAutonomyLevel.value,
   // Kept in sync with nppAutonomyLevel for legacy readers.
   nppAutonomyEnabled: true,
-  // Autonomous diplomacy ships active at its safest rollout stage. Countries
-  // can cast scored organization votes, while proposals, trade, support, and
-  // war remain unavailable until an admin advances the stage.
   nppForeignPolicyMode: "active",
-  nppForeignPolicyStage: "votes",
-  // World Events v1 (plan-world-events-v1) — validated via worldsim A/B in
-  // Phase 4 (approval/treasury bounded, sectorDemandModifier stacking capped
-  // below market-clearing sensitivity). Seed-on for fresh worlds only; this
-  // does NOT flip the flag on any existing/live world (see
-  // missingGameStateFlagDefaults below).
+  nppForeignPolicyStage: "war",
+  nppOffensiveInitiationEnabled: true,
+  nppOffensiveJoinEnabled: true,
+  intelligenceMilitarySabotageEnabled: true,
+  nppIntelligenceOperationsEnabled: true,
   worldEventsEnabled: true,
-  // Legislation → demographics v2: lean/turnout DemographicEffect targets.
-  // Runtime helper is fail-closed (absent = off) so existing worlds stay on
-  // the legacy population-only channel until an admin flips the gate.
   legislationDemographicEffectsV2Enabled: true,
-  // The reset-era systems are staged independently. Existing and fresh worlds
-  // retain today's behavior until each complete v2 runtime path is released
-  // and an admin explicitly promotes it. These are version selectors, not the
-  // older legislation-demographics subfeature above.
+  // The reset-era systems are staged independently. These are version
+  // selectors, not the older legislation-demographics subfeature above.
   metricsSystemVersion: "v1",
   legislationSystemVersion: "v1",
   cabinetSystemVersion: "v1",
-  // Granular poll breakdowns: cross-product Layer-1 electorate cells attached
-  // to poll results. Default on for new worlds; additive to existing poll math.
+  departmentProgramSliceEnabled: true,
+  departmentFinanceEnabled: true,
+  lawAdministrationEnabled: true,
+  regionalLegislationFinanceEnabled: true,
+  canonicalPoliticalMetricsEnabled: true,
   granularPollEnabled: true,
-  // Layer-1 positions drive archetype econ/social derivation at seed/reseed
-  // (deriveGroupLeanFromLayer1) instead of the legacy ideology-net path.
-  // Default on for new worlds (1953-sim validation branch).
+  granularElectorateEnabled: true,
   demographicsLayer1PositionsEnabled: true,
-  // Era/preset cost system: era-scaled legislation costs + potential growth.
-  // Without this a fresh world silently runs the legacy per-country anchor
-  // path regardless of preset. Default on for new worlds.
   eraSystemEnabled: true,
-  // Granular-cell electorate engine: election vote shares computed over
-  // IPF-raked Layer-1 cells instead of the 12 archetypes. Default ON for new
-  // worlds on this 1953-sim validation branch; fail-closed at runtime, so
-  // flag-off (existing worlds) stays byte-identical legacy behavior.
-  // Remaining staged-rollout systems — flipped default-on (2026-07-20, product
-  // decision: fresh worlds get the full feature set). NOTE: eurozoneEnabled is
-  // intentionally NOT defaulted here — it is era-derived (seedForex sets it
-  // false for pre-1999 presets; the euro didn't exist), not a feature toggle.
+  macroGrowthV1: true,
   conflictsEnabled: true,
+  livingConflictsEnabled: true,
   coldWarEnabled: true,
+  settlementCrisisEnabled: true,
   redistrictingEnabled: true,
   subsidiaryCorporationsEnabled: true,
   embargoTradeExposureEnabled: true,
   liveElectionResultsEnabled: true,
   extractionAutoStrategyEnabled: true,
-  // Existing and fresh worlds start by recording decisions only. Promotion to
-  // enforce is an explicit admin action after the observation gate passes.
-  nppEntryViabilityMode: "observe",
-  // Frontier-entry experiment (issue #991). DISABLED for fresh worlds: no
-  // entry mechanics may activate without the controlled 48-turn trial plus
-  // largest-supplier-failure stress evidence the issue gates require. The
-  // funnel and coverage evidence layer is always on; this flag only arms the
-  // capped entry experiment defined in economy/frontierEntryExperiment.
-  frontierEntryExperimentEnabled: false,
+  nppEntryViabilityMode: "enforce",
+  frontierEntryExperimentEnabled: true,
   seasonRecapEnabled: true,
-  // Corporate M&A / deal-making subsystem (agreed corp-to-corp acquisitions).
-  // Runtime helper is fail-closed (absent = off); default on for fresh worlds.
   corpDealsEnabled: true,
-  // International-organisation alignment. Staged rollout, fail-closed at
-  // runtime; default on for fresh worlds so the full feature set ships.
   intOrgAlignmentEnabled: true,
   nppCorpStrategyEnabled: true,
-  // Release 1.3 living-conflict campaigns. The engine is in the turn loop and
-  // fresh worlds start on the persistent global-response system.
-  livingConflictsEnabled: true,
-  // The other two toggles held OFF for fresh worlds, alongside
-  // `autoSectorSeedEnabled`. NPP-run belligerents have no Generals and no military
-  // technology behind an attack, so an offensive they launch or join goes in without
-  // the command bonuses and research a player-run army brings and loses more often
-  // than it should. Listed rather than left absent so the posture is a recorded
-  // decision: the runtime readers are fail-closed either way, and a reset preserves
-  // an admin's explicit `true`.
-  nppOffensiveInitiationEnabled: false,
-  nppOffensiveJoinEnabled: false,
 } as const satisfies Partial<GameState>;
 
 export type DefaultGameStateFlagKey = keyof typeof DEFAULT_GAME_STATE_FLAGS;
 
+/** Gameplay gates and rollout modes on `gameConfig` for every fresh world. */
+export const FRESH_WORLD_GAME_CONFIG_FLAGS = {
+  nppEconomyEnabled: true,
+  nppCorpsAttackable: true,
+  nppCorporateAttacksEnabled: true,
+  nppFundRedemptionEnabled: true,
+  nppMarketCoverageEnabled: true,
+  nppFragileMarketSupplyEnabled: true,
+  lineOfCreditEnabled: true,
+  moneySupplyEnabled: true,
+  indexFundsMode: "full",
+  indexFundBondLiquidityEnabled: true,
+  equityLiquidityFacilityEnabled: true,
+  playerFundSponsorshipEnabled: true,
+  labourSystemMode: "full",
+  marketSystemMode: "plants",
+  freightSettlementMode: "active",
+  canonicalFreightBillingEnabled: true,
+  interstateMoneyWiringEnabled: true,
+  shortageResponsiveSourcingEnabled: true,
+  commodityScarcityDriftEnabled: true,
+  stockCoverCapEnabled: true,
+  extractionOutputScaleEnabled: true,
+  qualityPremiumPricingEnabled: true,
+  sectorQualityEnabled: true,
+  brandLoyaltyEnabled: true,
+  brandLoyaltySliceEnabled: true,
+  supplyAgreementsEnabled: true,
+  explicitPlantCostsEnabled: true,
+  householdConsumptionEnabled: true,
+  productLinesV2Enabled: true,
+  mediaProductSlatesEnabled: true,
+  mediaEditorialEnabled: true,
+  mediaOperatingModelsEnabled: true,
+  mediaRegulationEnabled: true,
+  politicalMediaMarketEnabled: true,
+  privateBankingEnabled: true,
+  playerAdvancedBankChartersEnabled: true,
+  bankPropTradingEnabled: true,
+  bankPropForexFeesEnabled: true,
+  bankTreasuryEnabled: true,
+  bankSovereignPrimaryEnabled: true,
+  bankUnderwritingEnabled: true,
+  bankContagionEnabled: true,
+  bankFailurePoliticsEnabled: true,
+  bankConstructionFinanceEnabled: true,
+  treasuryCashLedgerEnabled: true,
+  sovereignIssuanceConsolidationEnabled: true,
+  domesticSovereignBondCoverageEnabled: true,
+  worldTransitionsEnabled: true,
+  brettonWoodsExitEnabled: true,
+  prospectingEnabled: true,
+  contractIssuanceEnabled: true,
+  campaignEraPriceLevelEnabled: true,
+  regionalConditionsOverviewEnabled: true,
+  firstJoinerBecomesPartyChair: true,
+} as const satisfies Partial<GameConfig>;
+
+export type FreshWorldGameConfigFlagKey = keyof typeof FRESH_WORLD_GAME_CONFIG_FLAGS;
+
+/** gameState fields shaped like flags that this policy deliberately does not set. */
+export const NON_GAMEPLAY_GAME_STATE_FIELDS: Readonly<Record<string, string>> = {
+  isActive: "runtime state: the turn cron runs only after an admin starts the world",
+  isProcessing: "runtime state: turn lock",
+  startingPartiesMode: "reset option chosen per reset, not a feature",
+  wikiDisabled: "ops access gate for the wiki",
+  corporationActionsPaused: "ops kill switch for corporate actions",
+  playerTransfersPaused: "ops kill switch for player transfers",
+  defenceProcurementPaused: "ops kill switch for defence procurement",
+  autoCrisisPaused: "ops pause switch; the crisis system itself is on",
+  freePartyMovesOpen: "launch window state opened and closed by an admin",
+  fastMode: "turn cadence, not a feature",
+  eurozoneEnabled: "era-derived: seedForex sets it per preset (no euro before 1999)",
+};
+
+/** gameConfig fields shaped like flags that this policy deliberately does not set. */
+export const NON_GAMEPLAY_GAME_CONFIG_FIELDS: Readonly<Record<string, string>> = {
+  maintenanceMode: "ops maintenance switch",
+  pollBannerEnabled: "ops announcement banner",
+  sandboxTesterAccessEnabled: "ops access gate for sandbox tester grants (no supporter perks)",
+  publicReviewMode: "ops access gate for anonymous page reads",
+  publicViewingMode: "ops access gate for anonymous API reads",
+  testMode: "ops registration gate",
+  adminRegistrationEnabled: "security: admin registration side channel",
+  registrationEnabled: "ops kill switch for new registrations",
+  ipCollisionCheckEnabled: "security tooling",
+  ipDetectionEnabled: "security tooling (third-party IP lookups)",
+  auditLog: "security forensics tooling",
+  altScoringEnabled: "security forensics tooling",
+  marketGuardEnabled: "automated safety kill switch; keeps its reference default (armed)",
+  ledgerShadow: "internal reconciliation observer; keeps its reference default (on)",
+  simSandbox: "sim harness only, never set on a hosted world",
+  simTurnPhaseMode: "sim harness only, never set on a hosted world",
+  bankConstructionAdmissionClosing: "runtime state: admission close latch",
+  savingsAccountsMode:
+    "storage migration (legacy fields to account rows) driven cohort by cohort from the banking rollout route, not a gameplay feature",
+  indexFundsEnabled: "deprecated alias of indexFundsMode",
+  commandEconomyEnabled:
+    "era-derived: bootstrap sets it from the preset (on for 1953 and 1979 command regimes)",
+  demographicsDemandEnabled:
+    "superseded alternative to householdConsumptionEnabled; enabling both double-counts consumer demand",
+};
+
 /**
  * Subset of DEFAULT_GAME_STATE_FLAGS that is missing (undefined) on `existing`.
- * The NPP-autonomy pair is treated as one flag: if either the level or the
- * legacy boolean has been set, neither default is applied — a legacy explicit
- * `nppAutonomyEnabled: false` must not be resurrected to "v0" by a reset.
+ * Used by sim tooling that replays existing-world upgrades; a reset applies the
+ * full preset instead. The NPP-autonomy pair is treated as one flag: if either
+ * the level or the legacy boolean has been set, neither default is applied.
  */
 export function missingGameStateFlagDefaults(
   existing: Partial<GameState> | null | undefined
@@ -157,4 +218,24 @@ export function missingGameStateFlagDefaults(
     if (existing?.[key as keyof GameState] === undefined) out[key] = value;
   }
   return out as Partial<GameState>;
+}
+
+/**
+ * Split a gameConfig update into fields every seed run may write and the
+ * fresh-world flag fields, which a non-reset top-up must only insert so it
+ * never flips a running world.
+ */
+export function splitFreshWorldGameConfigFlags<T extends object>(
+  config: T
+): { settings: Record<string, unknown>; flags: Record<string, unknown> } {
+  const settings: Record<string, unknown> = {};
+  const flags: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config as Record<string, unknown>)) {
+    if (key in FRESH_WORLD_GAME_CONFIG_FLAGS || key in NON_GAMEPLAY_GAME_CONFIG_FIELDS) {
+      flags[key] = value;
+    } else {
+      settings[key] = value;
+    }
+  }
+  return { settings, flags };
 }

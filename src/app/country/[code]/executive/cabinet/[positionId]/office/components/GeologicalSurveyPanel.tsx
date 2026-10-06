@@ -30,14 +30,14 @@ export function GeologicalSurveyPanel({
   return (
     <section className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Geological Surveys</h2>
+        <h2 className="text-lg font-semibold">Geological surveys</h2>
         {canAct && stateOptions.length > 0 && (
           <button
             type="button"
             onClick={() => setShowModal(true)}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark transition-colors"
           >
-            Fund Geological Survey
+            Fund geological survey
           </button>
         )}
       </div>

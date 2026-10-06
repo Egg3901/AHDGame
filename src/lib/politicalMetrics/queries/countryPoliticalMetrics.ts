@@ -17,6 +17,7 @@ import {
   US_PUBLIC_HEALTH_POLITICAL_LAW_ID,
 } from "@/lib/governmentFinance/deliveryMultiplier";
 import { loadDepartmentDeliveryMultipliersByCountry } from "@/lib/governmentFinance/deliveryMultipliers";
+import { loadProgramCostScale } from "@/lib/politicalLegislation/programCostScale";
 import { lawTargets } from "@/lib/politicalLegislation/dynamics";
 import {
   CABINET_RESIDUAL_CAP_PER_SOURCE,
@@ -115,7 +116,14 @@ async function loadRelevantLegislation(
     gdp: states.reduce((sum, s) => sum + (s.gdp ?? 0), 0) * 1_000_000,
     population: states.reduce((sum, s) => sum + (s.population ?? 0), 0),
   };
-  const map = buildRelevantLegislation(countryId, levels, base, (law) => law.baselineLevel ?? 0);
+  const scale = await loadProgramCostScale(db, countryId);
+  const map = buildRelevantLegislation(
+    countryId,
+    levels,
+    base,
+    (law) => law.baselineLevel ?? 0,
+    scale
+  );
   return { map, levels };
 }
 

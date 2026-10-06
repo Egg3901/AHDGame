@@ -11,14 +11,11 @@ import {
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { orgBuildCashPrice } from "@/lib/politicalStrength/buildOrgFunding";
 import type { CountryId } from "@/lib/constants/countries";
-import {
-  FactorsExplainer,
-  type BuildOrgFactors,
-} from "@/components/state/politics/FactorBreakdown";
 import { EstimateBox } from "./EstimateBox";
 import { PsSpendButtons } from "./PsSpendButtons";
 import { usePsSpendScope } from "./usePsSpendScope";
 import { useActionPreview } from "./useActionPreview";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface BuildOrgPanelProps {
   countryCode: string;
@@ -39,10 +36,10 @@ interface BuildOrgPanelProps {
   effectiveCap?: number;
 }
 
-interface PoachLine {
+interface DilutionLine {
   partyId: string;
   loss: number;
-  /** Present on the post-click result (rival's Org after the poach); absent on preview. */
+  /** Present on the post-click result; absent on preview. */
   newOrg?: number;
   partyName?: string;
   abbreviation?: string;
@@ -52,11 +49,12 @@ interface BuildOrgResult {
   psCost: number;
   /** Cash actually debited from the paying treasury. */
   cashCost?: number;
-  /** Share of the full price the treasury covered; below 1 shrinks the gain. */
+  /** Share of the full price the treasury covered. */
   fundedFraction?: number;
+  contributionUnits: number;
+  organizationUnits: number;
   orgGain: number;
-  factors: BuildOrgFactors;
-  poaches?: PoachLine[];
+  dilutions?: DilutionLine[];
 }
 
 type BuildOrgPreview =
@@ -68,23 +66,23 @@ type BuildOrgPreview =
       cashPrice?: number;
       /** Balance of the treasury that would pay. */
       treasuryAvailable?: number;
-      /** Share of the price the treasury covers. `projectedGain` is already scaled by it. */
+      /** Share of the price the treasury covers. */
       fundedFraction?: number;
       /** Per-state size multiplier already folded into `cashPrice`. */
       sizeMultiplier?: number;
       projectedGain: number;
-      poaches?: PoachLine[];
-      factors: BuildOrgFactors;
+      contributionUnits: number;
+      projectedOrganizationUnits: number;
+      dilutions?: DilutionLine[];
       scope: "state" | "national-targeted";
     }
   | { ok: false; reason: string; message: string };
 
 /**
  * Surface-agnostic Build Org panel. Spends Political Strength to grow the
- * party's Org% in this state; gain scales with the unaffiliated pool, the
- * spender's PS reserve vs rivals, own-Org diminishing returns, and a catch-up
- * bonus. Renders on the region→party Overview (full) and the State Politics tab
- * (compact). Estimate + factor breakdown via the shared `EstimateBox`.
+ * party's regional contribution balance by one fixed unit. Org% is the party's
+ * derived share of the accumulated bucket. Renders on the region party
+ * Overview (full) and the State Politics tab (compact).
  */
 export function BuildOrgPanel({
   countryCode,
@@ -130,7 +128,7 @@ export function BuildOrgPanel({
       });
       const d = await r.json();
       if (!r.ok) {
-        showToast(d.error ?? "Build Org failed", "error");
+        showToast(apiErrorText(d, "Build Org failed"), "error");
         return;
       }
       setLastResult(d as BuildOrgResult);
@@ -145,7 +143,7 @@ export function BuildOrgPanel({
           ? ` (partly funded: the treasury covered ${Math.round((d.fundedFraction as number) * 100)}% of the price)`
           : "";
       showToast(
-        `+${(d.orgGain as number).toFixed(2)} Org for ${(d.psCost as number).toFixed(0)} PS${cash}${partly}`,
+        `+${(d.contributionUnits as number).toFixed(0)} Org unit, share ${(d.orgGain as number) >= 0 ? "+" : ""}${(d.orgGain as number).toFixed(2)}% for ${(d.psCost as number).toFixed(0)} PS${cash}${partly}`,
         "success"
       );
       onSuccess();
@@ -216,7 +214,7 @@ export function BuildOrgPanel({
       scopes={eligibleScopes}
       color={partyColor}
       busy={busy}
-      label="Build Org"
+      label="Build org"
       busyLabel="Building…"
       singleDisabled={!canBuildOrg || insufficientPs || noPresence}
       stateDisabled={!canBuildOrg || statePoolInsufficient || noPresence}
@@ -267,8 +265,7 @@ export function BuildOrgPanel({
             }
           : undefined
       }
-      gain={{ label: "Gain", value: lastResult.orgGain, sign: "+", unit: "Org" }}
-      factors={lastResult.factors}
+      gain={{ label: "Share change", value: lastResult.orgGain, sign: "+", unit: "%" }}
     />
   ) : preview && preview.ok ? (
     <EstimateBox
@@ -289,8 +286,7 @@ export function BuildOrgPanel({
             }
           : undefined
       }
-      gain={{ label: "Estimated Gain", value: preview.projectedGain, sign: "+", unit: "Org" }}
-      factors={preview.factors}
+      gain={{ label: "Estimated share", value: preview.projectedGain, sign: "+", unit: "%" }}
     />
   ) : preview && !preview.ok ? (
     <div className="rounded-lg border border-card-border/40 bg-background/30 px-4 py-3">
@@ -301,7 +297,9 @@ export function BuildOrgPanel({
       {previewLoading ? (
         <div className="text-[11px] italic text-muted">Loading projection…</div>
       ) : (
-        <FactorsExplainer />
+        <div className="text-[11px] italic text-muted">
+          Each successful click adds one fixed unit to this party&apos;s regional Org bucket.
+        </div>
       )}
     </div>
   );
@@ -327,23 +325,23 @@ export function BuildOrgPanel({
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            <h2 className={compact ? "text-sm font-semibold" : "font-semibold"}>Build Org</h2>
+            <h2 className={compact ? "text-sm font-semibold" : "font-semibold"}>Build org</h2>
             <Tooltip
-              label="About Build Org"
-              content="Spend Political Strength (PS) to grow your Org% in this state. Each click claims unaffiliated pool first, then poaches rivals. Bigger Org and lower rival PS make a rival a larger target."
+              label="About build org"
+              content="Spend Political Strength (PS) to add one fixed unit to this party's regional Org bucket. Org% is derived from each party's accumulated share of the bucket."
             />
           </div>
           {compact ? null : (
             <p className="text-xs text-muted/70 leading-relaxed max-w-lg">
-              Grow your share of the statewide Org pool. Cost rises with per-state pressure; gain
-              comes from open (unaffiliated) pool plus automatic rival poaching.
+              Build durable regional organization one unit at a time. Cost rises with per-state
+              pressure, while each successful click adds the same amount to the bucket.
             </p>
           )}
         </div>
         <div className="text-right shrink-0">
-          <div className="flex items-center justify-end text-[10px] uppercase tracking-wider text-muted">
+          <div className="flex items-center justify-end text-body-sm font-medium text-muted">
             {headerPoolLabel}
-            <Tooltip label="About Political Strength" content={headerPoolTooltip} />
+            <Tooltip label="About political strength" content={headerPoolTooltip} />
           </div>
           <div
             key={`ps-${bumpKey}`}
@@ -360,7 +358,7 @@ export function BuildOrgPanel({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm min-w-0">
             <div className="flex items-center text-muted text-xs">
-              Spend Political Strength
+              Spend political strength
               <Tooltip
                 label="About the pressure ladder"
                 content={`Each Build Org click costs a base of ${BUILD_ORG_BASE_PS_COST} PS, plus escalation from how often you've built in this state recently (the pressure ladder).`}
@@ -373,8 +371,10 @@ export function BuildOrgPanel({
           {buttons}
         </div>
         {estimate}
-        <PoachLines
-          poaches={lastResult?.poaches ?? (preview && preview.ok ? (preview.poaches ?? []) : [])}
+        <DilutionLines
+          dilutions={
+            lastResult?.dilutions ?? (preview && preview.ok ? (preview.dilutions ?? []) : [])
+          }
         />
       </div>
     </div>
@@ -382,20 +382,18 @@ export function BuildOrgPanel({
 }
 
 /**
- * Per-rival poach breakdown for the unified Build Org action — lists how much
- * Org each rival loses to the click (preview projection or last-click actuals).
- * Renders nothing when there are no rivals being poached (open-pool build).
+ * Per-rival dilution breakdown for one fixed bucket contribution.
  */
-function PoachLines({ poaches }: { poaches: PoachLine[] }) {
-  if (!poaches.length) return null;
-  const sorted = [...poaches].sort((a, b) => b.loss - a.loss);
+function DilutionLines({ dilutions }: { dilutions: DilutionLine[] }) {
+  if (!dilutions.length) return null;
+  const sorted = [...dilutions].sort((a, b) => b.loss - a.loss);
   return (
     <div className="rounded-lg border border-card-border/40 bg-background/30 px-4 py-3">
-      <div className="flex items-center text-[10px] font-semibold uppercase tracking-wide text-muted">
-        Taken from rivals
+      <div className="flex items-center text-body-sm font-medium text-muted">
+        Share dilution
         <Tooltip
-          label="About rival poaching"
-          content="When the unaffiliated pool is thin, Build Org also transfers Org from rivals. Larger rival Org and weaker rival PS both increase how much is taken."
+          label="About share dilution"
+          content="Adding a unit does not remove a rival's accumulated units. The new unit slightly reduces every other party's percentage share while the permanent Unaffiliated stake remains in the bucket."
         />
       </div>
       <ul className="mt-2 space-y-1.5">

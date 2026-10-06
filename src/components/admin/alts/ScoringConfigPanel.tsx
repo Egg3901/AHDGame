@@ -26,6 +26,7 @@ import {
   type SignalTier,
 } from "./altTypes";
 import type { ToastKind } from "./ModeratorActions";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ScoringConfigPanelProps {
   config: AltConfig;
@@ -86,7 +87,7 @@ export function ScoringConfigPanel({ config, cluster, onSaved, notify }: Scoring
         body: JSON.stringify({ weights, thresholds }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+      if (!res.ok) throw new Error(apiErrorText(data, `Request failed (${res.status})`));
       const saved: AltConfig = {
         weights: (data.weights as AltSignalWeights) ?? weights,
         thresholds: (data.thresholds as AltScoringThresholds) ?? thresholds,
@@ -114,9 +115,7 @@ export function ScoringConfigPanel({ config, cluster, onSaved, notify }: Scoring
         {cluster && preview !== null && (
           <div className="flex items-center gap-3 rounded-lg border border-card-border/70 bg-card-muted px-3 py-2">
             <div className="text-right">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-                Live preview
-              </div>
+              <div className="text-body-sm font-medium text-muted">Live preview</div>
               <div className="text-xs tabular-nums text-muted">
                 now {formatPct(cluster.confidence)} →{" "}
                 <span

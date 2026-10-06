@@ -952,7 +952,18 @@ describe("processFiscalYear", () => {
         }),
       })
     );
-    expect(calculateCountryInflation).toHaveBeenCalledWith(db, "JP", expect.anything());
+    expect(calculateCountryInflation).toHaveBeenCalledWith(
+      db,
+      "JP",
+      expect.anything(),
+      0,
+      0,
+      0,
+      0,
+      undefined,
+      undefined,
+      3
+    );
     // processFormulaGrants is US-only — non-US countries route central-to-regional
     // grants through their own enacted legislation (uk_local_government_funding,
     // jp_local_allocation_tax) marked isGrant=true, picked up by calculateFederalSpending.

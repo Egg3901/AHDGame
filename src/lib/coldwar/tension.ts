@@ -1,3 +1,9 @@
+/**
+ * Tension events and turn decay persist the world's shared pressure state.
+ * applyTensionEvent uses planTensionEvent and optional durable event identities
+ * so claimed outcome retries cannot duplicate or omit a discrete shock.
+ */
+import { planTensionEvent } from "./rules/tensionEvent";
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { ConflictType } from "@/lib/db/types/conflict";
@@ -28,7 +34,6 @@ export const WAR_ACCLIMATION_HOT_INTENSITY = 85;
 export const NUCLEAR_WAR_RESIDUAL_PRESSURE = 30;
 /** Fraction of the gap to the floor closed each turn. */
 export const TENSION_RELAXATION = 0.08;
-const LEDGER_CAP = 24;
 
 export type TensionEventKind =
   | "nuclear-test"
@@ -49,6 +54,8 @@ export interface TensionEvent {
 }
 
 export interface ColdWarTensionState {
+  /** Event identities survive the short visible ledger and ordinary turn writes. */
+  appliedEventIds?: string[];
   value: number;
   /** Last standing-pressure floor computed by the turn phase. */
   pressureFloor: number;
@@ -290,17 +297,17 @@ export async function getColdWarTension(db: Db): Promise<ColdWarTensionState> {
     updatedTurn: doc.updatedTurn ?? 0,
     events: doc.events ?? [],
     updatedAt: doc.updatedAt ?? new Date(0),
+    ...(doc.appliedEventIds ? { appliedEventIds: doc.appliedEventIds } : {}),
   };
 }
 
 async function putColdWarTension(db: Db, state: ColdWarTensionState): Promise<void> {
+  const projection = { ...state, updatedAt: new Date() };
+  // Only keyed event CAS writes this receipt list; ordinary writers may hold an older snapshot.
+  delete projection.appliedEventIds;
   await db
     .collection<StoredState>(COLD_WAR_TENSION_COLLECTION)
-    .updateOne(
-      { _id: COLD_WAR_TENSION_ID },
-      { $set: { ...state, updatedAt: new Date() } },
-      { upsert: true }
-    );
+    .updateOne({ _id: COLD_WAR_TENSION_ID }, { $set: projection }, { upsert: true });
 }
 
 /** Apply a discrete spike (or relief, negative delta) and record it. */
@@ -310,25 +317,58 @@ export async function applyTensionEvent(
   kind: TensionEventKind,
   label: string,
   delta: number,
-  options: { minimumValue?: number } = {}
+  options: { minimumValue?: number; eventId?: string } = {}
 ): Promise<ColdWarTensionState> {
-  const state = await getColdWarTension(db);
-  const minimumValue = clampTension(options.minimumValue ?? state.pressureFloor);
-  const value = clampTension(
-    delta < 0 ? Math.max(minimumValue, state.value + delta) : state.value + delta
+  let state = await getColdWarTension(db);
+  if (options.eventId === undefined) {
+    const next = planTensionEvent(
+      state,
+      turn,
+      kind,
+      label,
+      delta,
+      options.minimumValue,
+      new Date()
+    );
+    await putColdWarTension(db, next);
+    return next;
+  }
+  if (!options.eventId.trim() || options.eventId.length > 500 || !Number.isFinite(delta))
+    throw new Error("Invalid keyed tension event");
+  if (state.appliedEventIds?.includes(options.eventId)) return state;
+  const collection = db.collection<StoredState>(COLD_WAR_TENSION_COLLECTION);
+  await collection.updateOne(
+    { _id: COLD_WAR_TENSION_ID },
+    { $setOnInsert: emptyTensionState() },
+    { upsert: true }
   );
-  const appliedDelta = Math.round((value - state.value) * 10) / 10;
-  const next: ColdWarTensionState = {
-    ...state,
-    value,
-    pressureFloor: options.minimumValue == null ? state.pressureFloor : minimumValue,
-    events: [{ turn, kind, label, delta: appliedDelta, at: new Date() }, ...state.events].slice(
-      0,
-      LEDGER_CAP
-    ),
-  };
-  await putColdWarTension(db, next);
-  return next;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    state = await getColdWarTension(db);
+    if (state.appliedEventIds?.includes(options.eventId)) return state;
+    if ((state.appliedEventIds?.length ?? 0) >= 10_000)
+      throw new Error("Tension event replay ledger exceeds the safe limit");
+    const next = planTensionEvent(
+      state,
+      turn,
+      kind,
+      label,
+      delta,
+      options.minimumValue,
+      new Date()
+    );
+    next.appliedEventIds = [...(state.appliedEventIds ?? []), options.eventId];
+    const written = await collection.updateOne(
+      {
+        _id: COLD_WAR_TENSION_ID,
+        value: state.value,
+        $or: [{ events: state.events }, { events: { $exists: false } }],
+        appliedEventIds: state.appliedEventIds ?? { $exists: false },
+      },
+      { $set: { ...next, updatedAt: new Date() } }
+    );
+    if (written.matchedCount === 1) return next;
+  }
+  throw new Error("Tension state changed during event claim; retry");
 }
 
 /**

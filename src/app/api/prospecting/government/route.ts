@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, forbidden } from "@/lib/api/errors";
+import { handleRouteError, forbidden, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { loadProspectingSettings } from "@/lib/extraction/featureFlag";
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, governmentProspectSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const myChar = auth.user.character;
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     const db = await getDb();
     const settings = await loadProspectingSettings(db);
     if (!settings.prospectingEnabled) {
-      return NextResponse.json({ error: "Resource prospecting is not enabled." }, { status: 403 });
+      return errorResponse(403, "Resource prospecting is not enabled.");
     }
     const turn = await getCurrentTurn(db);
     const now = new Date();
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
       settings.treasuryCashLedgerEnabled
     );
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+      return errorResponse(result.status, result.error);
     }
 
     return NextResponse.json({

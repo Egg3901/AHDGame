@@ -3,7 +3,7 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { checkWikiDisabled } from "@/lib/api/wikiGuard";
 import { createWikiPageSchema } from "@/lib/api/schemas/wiki";
@@ -58,6 +58,7 @@ export async function GET() {
     // caller and must never be stored in a shared (CDN) cache — otherwise it can
     // be replayed to non-admins (cross-user leak, #3316). The public variant below
     // is identical for every non-admin viewer and stays share-cacheable.
+    // audit:shared-cache-safe (auth only selects the admin variant above)
     response.headers.set("Cache-Control", "private, no-store");
   } else {
     response.headers.set("Cache-Control", "s-maxage=300, stale-while-revalidate=600, no-transform");
@@ -82,7 +83,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, createWikiPageSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     // Moderators and admins bypass the player-category list and the 12 h
@@ -90,12 +91,9 @@ export async function POST(request: Request) {
     const isMod = user.isAdmin === true || user.role === "moderator";
     if (!isMod) {
       if (!parsed.data.category || !isPlayerSubmittableCategory(parsed.data.category)) {
-        return NextResponse.json(
-          {
-            error:
-              "A category is required. Choose one of: Characters, Corporations, Party profiles, Events, or Reference.",
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "A category is required. Choose one of: Characters, Corporations, Party profiles, Events, or Reference."
         );
       }
     }
@@ -108,7 +106,7 @@ export async function POST(request: Request) {
       tags: parsed.data.tags,
     });
     if (!screen.ok) {
-      return NextResponse.json({ error: screen.reason }, { status: 400 });
+      return errorResponse(400, screen.reason);
     }
 
     const db = await getDb();
@@ -118,16 +116,15 @@ export async function POST(request: Request) {
     // 12 h cooldown on new page creation (edits are always allowed).
     const cooldown = await checkWikiCreateCooldown(db, userId, { bypass: isMod });
     if (!cooldown.ok) {
-      return NextResponse.json(
-        { error: formatCooldownMessage(cooldown), retryAfterMs: cooldown.remainingMs },
-        { status: 429 }
-      );
+      return errorResponse(429, formatCooldownMessage(cooldown), {
+        extra: { retryAfterMs: cooldown.remainingMs },
+      });
     }
 
     // Check slug uniqueness
     const existing = await wikiPages.findOne({ slug: parsed.data.slug });
     if (existing) {
-      return NextResponse.json({ error: "A page with this slug already exists" }, { status: 400 });
+      return errorResponse(400, "A page with this slug already exists");
     }
 
     const now = new Date();

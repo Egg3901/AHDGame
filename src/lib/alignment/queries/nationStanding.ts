@@ -17,7 +17,11 @@ import {
   type AlignmentPoleToken,
   type AlignmentPole,
 } from "@/lib/constants/alignmentEras";
-import { ROSTER_BY_KEY, type AlignmentCountryKey } from "@/lib/constants/alignmentRoster";
+import {
+  ROSTER_BY_KEY,
+  rosterNameAt,
+  type AlignmentCountryKey,
+} from "@/lib/constants/alignmentRoster";
 import { COUNTRY_CONFIGS, getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
 import type { CountryAlignment } from "@/lib/db/types/countryAlignment";
 import { roundToShareGrid, type AlignmentShares } from "../normalize";
@@ -63,6 +67,8 @@ export interface NationStandingContext {
    * "Germany" and "Russia". Omitted, the base name is used.
    */
   preset?: string;
+  /** Game year, so a background entity reads by its name then ("Zaire" in 1991). */
+  year?: number;
 }
 
 export function projectNationStanding(
@@ -77,7 +83,9 @@ export function projectNationStanding(
   // world, and the rest of the app already says so.
   const name = config
     ? getCountryDisplayName(entityId as CountryId, ctx.preset)
-    : ROSTER_BY_KEY[entityId]?.name;
+    : ctx.year != null
+      ? rosterNameAt(entityId, ctx.year)
+      : ROSTER_BY_KEY[entityId]?.name;
   if (!name) return null; // a row for an entity that is no longer modelled
 
   const current: AlignmentShares = { shares: doc.shares, nonAligned: doc.nonAligned };

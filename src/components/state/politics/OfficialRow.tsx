@@ -5,6 +5,7 @@ import { Avatar } from "@/components/Avatar";
 import { PartyLogo } from "@/components/PartyLogo";
 import type { SerializedOfficial } from "../StatePageTabsTypes";
 import type { CountryId } from "@/lib/constants/countries";
+import { NppAbbr } from "@/components/elections/NppAbbr";
 
 function deriveAbbreviation(name?: string | null): string | undefined {
   if (!name) return undefined;
@@ -77,8 +78,8 @@ export function OfficialRow({
             <span className="truncate text-body text-muted">{displayName}</span>
           )}
           {official?.isNPP && !isVacant && (
-            <span className="shrink-0 text-body-sm text-muted" title="Non-player politician">
-              NPP
+            <span className="shrink-0 text-body-sm text-muted">
+              <NppAbbr />
             </span>
           )}
         </div>

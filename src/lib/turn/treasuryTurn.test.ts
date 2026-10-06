@@ -40,13 +40,20 @@ function mockBudgets(docs: Record<string, unknown>[]) {
 }
 
 describe("processTreasuryTurn", () => {
-  it("does not load sovereign bond or corporate quote collections while funded coupon cash is off", async () => {
+  it("reads only the coupon book, without holders or corporate quotes, while funded coupon cash is off", async () => {
     db.collection("bonds");
     db.collection("corporations");
     mockBudgets([budgetDoc({})]);
     const { processTreasuryTurn } = await import("./treasuryTurn");
     await processTreasuryTurn(10);
-    expect(db.collectionMocks.bonds.find).not.toHaveBeenCalled();
+    // Debt service prices the stock at its locked coupons in every flag
+    // posture (#2089), so one projected read happens; holder arrays do not.
+    expect(db.collectionMocks.bonds.find).toHaveBeenCalledTimes(1);
+    const projection = (
+      db.collectionMocks.bonds.find.mock.calls[0]?.[1] as { projection?: Record<string, unknown> }
+    )?.projection;
+    expect(projection).toMatchObject({ couponRate: 1, totalIssued: 1 });
+    expect(projection).not.toHaveProperty("holders");
     expect(db.collectionMocks.corporations.find).not.toHaveBeenCalled();
   });
 

@@ -55,6 +55,7 @@ export async function GET(request: Request) {
     };
 
     if (!demographics) {
+      // eslint-disable-next-line local/no-uncoded-error-response -- diagnostic payload answered with 200, not an error response
       return NextResponse.json({
         ...debug,
         error: "No demographics found for this state",
@@ -63,6 +64,7 @@ export async function GET(request: Request) {
     }
 
     if (categories.length === 0) {
+      // eslint-disable-next-line local/no-uncoded-error-response -- diagnostic payload answered with 200, not an error response
       return NextResponse.json({
         ...debug,
         error: "No demographic categories in DB (run seed:demographics)",

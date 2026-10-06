@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface StateElectionIssue {
   _id: string;
@@ -66,7 +67,7 @@ export function HealPartyElections() {
       if (res.ok) {
         setDiagnostic(data);
       } else {
-        setResult({ ok: false, message: data.error ?? "Diagnostic failed" });
+        setResult({ ok: false, message: apiErrorText(data, "Diagnostic failed") });
       }
     } catch {
       setResult({ ok: false, message: "Network error" });
@@ -89,7 +90,7 @@ export function HealPartyElections() {
     try {
       const res = await fetch("/api/admin/heal/party-elections", { method: "POST" });
       const data = await res.json();
-      setResult({ ok: res.ok, message: data.message ?? data.error ?? "Unknown response" });
+      setResult({ ok: res.ok, message: data.message ?? apiErrorText(data, "Unknown response") });
     } catch {
       setResult({ ok: false, message: "Network error" });
     } finally {
@@ -128,7 +129,7 @@ export function HealPartyElections() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Party Elections</h3>
+        <h3 className="font-semibold text-sm">Heal party elections</h3>
         <p className="mt-1 text-xs text-muted">
           Fixes state, national, and committee party elections missing required fields (startTurn,
           endTurn, durationTurns, countryId). Elections without these fields display incorrectly or
@@ -149,7 +150,7 @@ export function HealPartyElections() {
           disabled={loading}
           className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs font-medium text-warning transition-colors hover:bg-warning/20 disabled:opacity-50"
         >
-          {loading ? "Healing..." : "Heal Now"}
+          {loading ? "Healing..." : "Heal now"}
         </button>
       </div>
 

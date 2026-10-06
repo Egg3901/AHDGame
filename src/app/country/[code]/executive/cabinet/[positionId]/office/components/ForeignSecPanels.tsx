@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CurrentSettings {
   targetCountryId: string | null;
@@ -20,17 +21,17 @@ interface ForeignSecPanelsProps {
 const AID_PRIORITIES = [
   {
     id: "economic",
-    label: "Economic Development",
+    label: "Economic development",
     description: "Focus overseas aid on economic growth programmes and trade partnerships.",
   },
   {
     id: "humanitarian",
-    label: "Humanitarian Aid",
+    label: "Humanitarian aid",
     description: "Prioritise emergency relief and humanitarian assistance abroad.",
   },
   {
     id: "security",
-    label: "Security Cooperation",
+    label: "Security cooperation",
     description: "Channel aid into security partnerships and peacekeeping contributions.",
   },
 ] as const;
@@ -73,7 +74,7 @@ export function ForeignSecPanels({
     });
     if (!res.ok) {
       const json = (await res.json()) as { error?: string };
-      return { ok: false, error: json.error ?? "Failed to save" };
+      return { ok: false, error: apiErrorText(json, "Failed to save") };
     }
     return { ok: true };
   }
@@ -85,7 +86,7 @@ export function ForeignSecPanels({
     try {
       const result = await postSetting({ targetCountryId: selectedCountry || null });
       if (!result.ok) {
-        setCountryFeedback({ type: "error", message: result.error ?? "Failed to save" });
+        setCountryFeedback({ type: "error", message: apiErrorText(result, "Failed to save") });
         return;
       }
       setCountryFeedback({ type: "success", message: "Trade envoy updated." });
@@ -104,7 +105,7 @@ export function ForeignSecPanels({
     try {
       const result = await postSetting({ aidPriority: selectedPriority || null });
       if (!result.ok) {
-        setPriorityFeedback({ type: "error", message: result.error ?? "Failed to save" });
+        setPriorityFeedback({ type: "error", message: apiErrorText(result, "Failed to save") });
         return;
       }
       setPriorityFeedback({ type: "success", message: "Aid priority updated." });
@@ -120,7 +121,7 @@ export function ForeignSecPanels({
     <div className="space-y-4">
       <div className="rounded-xl border border-card-border bg-card p-6">
         <div className="mb-4">
-          <h2 className="text-lg font-semibold text-foreground">Trade Envoy</h2>
+          <h2 className="text-lg font-semibold text-foreground">Trade envoy</h2>
           <p className="mt-1 text-sm text-muted">
             Designate a bilateral trade partner to receive a focused diplomatic and trade
             relationship bonus.
@@ -133,7 +134,7 @@ export function ForeignSecPanels({
               htmlFor="trade-envoy-select"
               className="mb-1 block text-xs font-medium text-muted"
             >
-              Partner Country
+              Partner country
             </label>
             <select
               id="trade-envoy-select"
@@ -179,7 +180,7 @@ export function ForeignSecPanels({
 
       <div className="rounded-xl border border-card-border bg-card p-6">
         <div className="mb-4">
-          <h2 className="text-lg font-semibold text-foreground">Aid Priority</h2>
+          <h2 className="text-lg font-semibold text-foreground">Aid priority</h2>
           <p className="mt-1 text-sm text-muted">
             Set the strategic focus for the country&apos;s overseas development assistance.
           </p>
@@ -208,9 +209,7 @@ export function ForeignSecPanels({
                 <div className="mb-1 flex items-center justify-between">
                   <span className="text-sm font-semibold text-foreground">{option.label}</span>
                   {isActive && (
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-primary">
-                      Active
-                    </span>
+                    <span className="text-body-sm font-medium text-primary">Active</span>
                   )}
                 </div>
                 <p className="text-xs leading-snug text-muted">{option.description}</p>
@@ -226,7 +225,7 @@ export function ForeignSecPanels({
             isLoading={savingPriority}
             onClick={handleSavePriority}
           >
-            Apply Priority
+            Apply priority
           </Button>
           {priorityFeedback && (
             <span

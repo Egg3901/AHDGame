@@ -274,9 +274,12 @@ describe("finalizeResetGameWorld", () => {
     // are 1979-era region ids stranded by the preset switch (`BY` is not even a
     // CountryId; it is Bavaria, a DE state id — the #3523 crash shape).
     db.collection("states");
-    db.collectionMocks.states.find.mockReturnValue({
+    const rosterCursor = {
       toArray: vi.fn().mockResolvedValue([{ _id: "CA" }, { _id: "WY" }, { _id: "DD_BLN" }]),
-    });
+      project: vi.fn(),
+    };
+    rosterCursor.project.mockReturnValue(rosterCursor);
+    db.collectionMocks.states.find.mockReturnValue(rosterCursor);
 
     await finalizeResetGameWorld(db as never, {
       preset: "2019-default",
@@ -289,6 +292,9 @@ describe("finalizeResetGameWorld", () => {
       stateId: { $nin: ["CA", "WY", "DD_BLN"] },
     });
     expect(db.collectionMocks.regionDemographics?.deleteMany).toHaveBeenCalledWith({
+      _id: { $nin: ["CA", "WY", "DD_BLN"] },
+    });
+    expect(db.collectionMocks.politicalMetrics?.deleteMany).toHaveBeenCalledWith({
       _id: { $nin: ["CA", "WY", "DD_BLN"] },
     });
   });
@@ -306,7 +312,12 @@ describe("finalizeResetGameWorld", () => {
     });
 
     expect(db.collectionMocks.unownedSectors?.deleteMany).not.toHaveBeenCalled();
-    expect(db.collectionMocks.regionDemographics?.deleteMany).not.toHaveBeenCalled();
+    // The absent-country purge may still scope a delete to countries the preset
+    // does not have at all; what must never run is a roster-relative sweep.
+    for (const [filter] of db.collectionMocks.regionDemographics?.deleteMany.mock.calls ?? []) {
+      expect(filter).toHaveProperty("countryId.$in");
+      expect(filter).not.toHaveProperty("_id");
+    }
   });
 
   it("routes preset-mismatched party removal to the sink, not only to stdout", async () => {

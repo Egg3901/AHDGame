@@ -6,7 +6,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { countryIdSchema } from "@/lib/api/schemas/country";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import {
@@ -29,8 +29,7 @@ export async function GET(request: Request) {
     const corpFilter: Record<string, unknown> = {};
     if (rawCountry) {
       const parsed = countryIdSchema.safeParse(rawCountry);
-      if (!parsed.success)
-        return NextResponse.json({ error: "Invalid countryId" }, { status: 400 });
+      if (!parsed.success) return errorResponse(400, "Invalid countryId");
       corpFilter.countryId = parsed.data;
     }
 

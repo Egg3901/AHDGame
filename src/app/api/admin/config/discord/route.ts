@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import { getCountryWebhookDescriptors } from "@/lib/discord/countryWebhooks";
@@ -45,8 +45,7 @@ export async function PATCH(request: Request) {
     if (!auth.ok) return auth.response;
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const db = await getDb();
     const { general, countryWebhooks, claimWebhooks } = parsed.data;
@@ -73,10 +72,7 @@ export async function PATCH(request: Request) {
       );
       for (const [countryId, value] of Object.entries(countryWebhooks)) {
         if (!enabled.has(countryId)) {
-          return NextResponse.json(
-            { error: `Country ${countryId} is not enabled for players` },
-            { status: 400 }
-          );
+          return errorResponse(400, `Country ${countryId} is not enabled for players`);
         }
         if (value) $set[`discordCountryGameWebhookUrls.${countryId}`] = value;
         else $unset[`discordCountryGameWebhookUrls.${countryId}`] = 1;
@@ -99,13 +95,10 @@ export async function PATCH(request: Request) {
       // posting into the players' channels again. Renaming the real service is
       // the legitimate case, and it says so with `claimWebhooks`.
       if (owner && owner !== self && claimWebhooks !== true) {
-        return NextResponse.json(
-          {
-            error:
-              `These webhooks belong to the "${owner}" deployment and this is "${self}". ` +
-              `Re-send with claimWebhooks: true to move them here.`,
-          },
-          { status: 409 }
+        return errorResponse(
+          409,
+          `These webhooks belong to the "${owner}" deployment and this is "${self}". ` +
+            `Re-send with claimWebhooks: true to move them here.`
         );
       }
       $set.discordWebhookOwnerService = self;

@@ -11,10 +11,17 @@ import {
 } from "./commodityMarketScope";
 
 describe("commodityMarketScope", () => {
-  it("makes freight the only state-local commodity", () => {
-    expect(commodityMarketScope("freight")).toBe("state");
+  it("keeps on-site services and haulage in their state market", () => {
+    const local: CommodityType[] = [
+      "freight",
+      "construction_services",
+      "healthcare_services",
+      "real_estate_services",
+      "entertainment_services",
+    ];
+    for (const commodity of local) expect(commodityMarketScope(commodity), commodity).toBe("state");
     for (const commodity of COMMODITY_TYPES) {
-      if (commodity === "freight") continue;
+      if (local.includes(commodity)) continue;
       expect(commodityMarketScope(commodity), commodity).toBe("reachable");
     }
   });
@@ -128,7 +135,7 @@ describe("commodityMarketScope", () => {
       unmetForeignDemand: 10,
     };
     for (const commodity of COMMODITY_TYPES as readonly CommodityType[]) {
-      if (commodity === "freight") continue;
+      if (commodityMarketScope(commodity) === "state") continue;
       expect(
         commodityDemandGap({
           commodity,

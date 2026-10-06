@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { processPartyOrgTurn } from "./turnProcessing";
 import type { StatePartyOrg } from "@/lib/db/types";
+import { ORG_DECAY_GRACE_TURNS } from "@/lib/constants/partyOrg";
 
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
@@ -11,11 +12,13 @@ describe("processPartyOrgTurn", () => {
   const mockBulkWrite = vi.fn().mockResolvedValue({ modifiedCount: 1 });
 
   const createMockSpo = (overrides: Partial<StatePartyOrg> = {}): StatePartyOrg => ({
-    _id: "CA_democrat",
+    _id: "CA_1",
     countryId: "US",
     stateId: "CA",
-    partyId: "democrat",
+    partyId: "1",
     organization: 50,
+    organizationUnits: 50,
+    lastOrganizationBuildTurn: 100,
     chairId: null,
     viceChairId: null,
     treasurerId: null,
@@ -32,89 +35,89 @@ describe("processPartyOrgTurn", () => {
     vi.clearAllMocks();
   });
 
-  it("applies org decay when org > 0", async () => {
-    const spo = createMockSpo({ organization: 50 });
-
+  function mockRows(rows: StatePartyOrg[]) {
+    const project = vi.fn().mockReturnThis();
+    const toArray = vi.fn().mockResolvedValue(rows);
     const mockDb = {
-      collection: vi.fn().mockImplementation((name: string) => {
-        if (name === "statePartyOrg") {
-          return {
-            find: vi.fn().mockReturnValue({
-              project: vi.fn().mockReturnThis(),
-              toArray: vi.fn().mockResolvedValue([spo]),
-            }),
-            bulkWrite: mockBulkWrite,
-          };
-        }
-        return {};
+      collection: vi.fn().mockReturnValue({
+        find: vi.fn().mockReturnValue({ project, toArray }),
+        bulkWrite: mockBulkWrite,
       }),
     };
+    return mockDb;
+  }
+
+  it("does not decay a recently active party", async () => {
+    const mockDb = mockRows([createMockSpo({ organization: 33.3333 })]);
 
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(mockDb as any);
 
-    await processPartyOrgTurn();
+    await processPartyOrgTurn(100 + ORG_DECAY_GRACE_TURNS - 1);
 
-    const updateOps = mockBulkWrite.mock.calls[0][0];
-    const update = updateOps[0].updateOne.update.$set;
-    // Org decays by 0.03125 per turn (unconditional)
-    expect(update.organization).toBe(49.97);
+    expect(mockBulkWrite).not.toHaveBeenCalled();
   });
 
-  it("applies decay regardless of presence flag", async () => {
-    const spo = createMockSpo({ hasPresence: false, organization: 10 });
-
-    const mockDb = {
-      collection: vi.fn().mockImplementation((name: string) => {
-        if (name === "statePartyOrg") {
-          return {
-            find: vi.fn().mockReturnValue({
-              project: vi.fn().mockReturnThis(),
-              toArray: vi.fn().mockResolvedValue([spo]),
-            }),
-            bulkWrite: mockBulkWrite,
-          };
-        }
-        return {};
-      }),
-    };
+  it("decays units after the inactivity grace period and derives Org share", async () => {
+    const mockDb = mockRows([createMockSpo({ lastOrganizationBuildTurn: 0 })]);
 
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(mockDb as any);
 
-    await processPartyOrgTurn();
+    await processPartyOrgTurn(ORG_DECAY_GRACE_TURNS, new Date("2026-10-04T12:00:00Z"));
 
-    const updateOps = mockBulkWrite.mock.calls[0][0];
-    const update = updateOps[0].updateOne.update.$set;
-    // Org decays from 10 to 9.96875 (rounded 9.97)
-    expect(update.organization).toBe(9.97);
+    const update = mockBulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    expect(update.organizationUnits).toBe(49.5);
+    expect(update.organization).toBeCloseTo(33.1104, 4);
+    expect(update.lastOrganizationBuildTurn).toBe(0);
   });
 
-  it("does not decay below zero", async () => {
-    const spo = createMockSpo({ organization: 0 });
-
-    const mockDb = {
-      collection: vi.fn().mockImplementation((name: string) => {
-        if (name === "statePartyOrg") {
-          return {
-            find: vi.fn().mockReturnValue({
-              project: vi.fn().mockReturnThis(),
-              toArray: vi.fn().mockResolvedValue([spo]),
-            }),
-            bulkWrite: mockBulkWrite,
-          };
-        }
-        return {};
+  it("bootstraps legacy rows without immediately decaying them", async () => {
+    const mockDb = mockRows([
+      createMockSpo({
+        organization: 25,
+        organizationUnits: undefined,
+        lastOrganizationBuildTurn: undefined,
       }),
-    };
+    ]);
 
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(mockDb as any);
 
-    await processPartyOrgTurn();
+    await processPartyOrgTurn(900);
 
-    const updateOps = mockBulkWrite.mock.calls[0][0];
-    const update = updateOps[0].updateOne.update.$set;
-    expect(update.organization).toBe(0);
+    const update = mockBulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+    expect(update).toMatchObject({
+      organization: 25,
+      organizationUnits: 33.333333,
+      lastOrganizationBuildTurn: 900,
+    });
+  });
+
+  it("recomputes every party share when one inactive balance decays", async () => {
+    const mockDb = mockRows([
+      createMockSpo({
+        _id: "CA_1",
+        partyId: "1",
+        organizationUnits: 80,
+        lastOrganizationBuildTurn: 0,
+      }),
+      createMockSpo({
+        _id: "CA_2",
+        partyId: "2",
+        organizationUnits: 80,
+        lastOrganizationBuildTurn: ORG_DECAY_GRACE_TURNS,
+      }),
+    ]);
+
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(mockDb as any);
+
+    await processPartyOrgTurn(ORG_DECAY_GRACE_TURNS);
+
+    const operations = mockBulkWrite.mock.calls[0][0];
+    expect(operations).toHaveLength(2);
+    expect(operations[0].updateOne.update.$set.organization).toBeCloseTo(30.5556, 4);
+    expect(operations[1].updateOne.update.$set.organization).toBeCloseTo(30.8642, 4);
   });
 });

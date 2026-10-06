@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -29,7 +30,7 @@ import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import { VetoMessageModal } from "@/app/country/[code]/region/[id]/office/tabs/legislation/VetoMessageModal";
 import { VoteSeatingChart } from "@/components/legislature/dispatch/VoteSeatingChart";
 import { CardSkeleton, Skeleton } from "@/components/ui";
-import { LocalTime } from "@/components/time/LocalTime";
+import { GameMonthTime } from "@/components/time/GameMonthTime";
 
 function StateBillDetailContent() {
   const params = useParams<{ code: string; id: string; billId: string }>();
@@ -84,7 +85,7 @@ function StateBillDetailContent() {
       });
       const d = (await res.json()) as { error?: string; message?: string };
       if (!res.ok) {
-        setError(d.error ?? "Action failed");
+        setError(apiErrorText(d, "Action failed"));
         return;
       }
       const msg = d.message ?? okMessage;
@@ -153,7 +154,7 @@ function StateBillDetailContent() {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-6">
         <p className="text-error text-sm">{error}</p>
         <Link href={backHref} className="text-sm text-primary hover:underline">
-          ← Back to Legislature
+          ← Back to legislature
         </Link>
       </div>
     );
@@ -199,7 +200,7 @@ function StateBillDetailContent() {
           href={backHref}
           className="text-sm text-muted hover:text-foreground transition-colors"
         >
-          ← Back to Legislature
+          ← Back to legislature
         </Link>
 
         <div className="rounded-xl border border-card-border bg-card shadow-panel p-6 space-y-4">
@@ -211,7 +212,7 @@ function StateBillDetailContent() {
                 </span>
                 {bill.adminProposed && (
                   <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
-                    Admin Proposed
+                    Admin proposed
                   </span>
                 )}
                 {bill.legislationTypeName && (
@@ -247,7 +248,7 @@ function StateBillDetailContent() {
               )}
             </span>
             <span>
-              Introduced <LocalTime value={bill.proposedAt} options={{ dateStyle: "medium" }} />
+              Introduced <GameMonthTime value={bill.proposedAt} />
             </span>
           </div>
 

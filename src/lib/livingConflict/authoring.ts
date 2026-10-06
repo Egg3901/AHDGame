@@ -25,7 +25,7 @@ export function responseOpt(
   treasuryCostPctGdp?: number,
   depth: Pick<
     CrisisDecisionOption,
-    "campaignRequirement" | "campaignCommitment" | "responseVisibility"
+    "campaignRequirement" | "campaignCommitment" | "responseVisibility" | "refugeeReception"
   > = {}
 ): CrisisDecisionOption {
   return {

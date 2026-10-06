@@ -306,7 +306,7 @@ export function TheCountRail({
           fontWeight: 600,
         }}
       >
-        The Count
+        The count
       </div>
       <div
         style={{

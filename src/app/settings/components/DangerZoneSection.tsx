@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { MessageBanner, SpinnerIcon } from "./shared";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface Props {
   onAccountDeleted: () => void;
@@ -61,7 +62,7 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
         setSelectedPositionId("");
         setShowSpecificConfirm(false);
       } else {
-        setResignResult({ ok: false, text: data.error || t("danger.resignFailed") });
+        setResignResult({ ok: false, text: apiErrorText(data, t("danger.resignFailed")) });
       }
     } catch {
       setResignResult({ ok: false, text: t("common.networkErrorRetry") });
@@ -91,7 +92,7 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
         setSelectedPositionId("");
         setShowSpecificConfirm(false);
       } else {
-        setResignResult({ ok: false, text: data.error || t("danger.resignFailed") });
+        setResignResult({ ok: false, text: apiErrorText(data, t("danger.resignFailed")) });
       }
     } catch {
       setResignResult({ ok: false, text: t("common.networkErrorRetry") });
@@ -126,7 +127,7 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
         onAccountDeleted();
       } else {
         const data = await res.json();
-        setDeleteError(data.error || t("danger.deleteFailed"));
+        setDeleteError(apiErrorText(data, t("danger.deleteFailed")));
       }
     } catch {
       setDeleteError(t("common.networkErrorRetry"));

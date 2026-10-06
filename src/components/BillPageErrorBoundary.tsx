@@ -17,7 +17,7 @@ export function BillPageErrorBoundary({ children }: Props) {
       pageName="Bill page"
       errorMessage="The bill page couldn't load. This may be a temporary issue."
       navigationLinks={[
-        { href: "/congress?chamber=senate&tab=bills", label: "Back to Senate Bills" },
+        { href: "/congress?chamber=senate&tab=bills", label: "Back to Senate bills" },
         { href: "/dashboard", label: "Dashboard" },
       ]}
     >

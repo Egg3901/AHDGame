@@ -41,13 +41,13 @@ export function ResponsiveTable<T>({
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className="px-4 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-body-sm font-medium text-muted"
                 >
                   {col.header}
                 </th>
               ))}
               {renderActions && (
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted uppercase tracking-wider">
+                <th className="px-4 py-3 text-right text-body-sm font-medium text-muted">
                   Actions
                 </th>
               )}
@@ -91,7 +91,7 @@ export function ResponsiveTable<T>({
             <div key={keyExtractor(row)} className={`p-4 space-y-3 ${cardClassName}`}>
               {visibleColumns.map((col) => (
                 <div key={col.key} className="flex flex-col gap-0.5">
-                  <span className="text-xs font-medium text-muted uppercase tracking-wider">
+                  <span className="text-body-sm font-medium text-muted">
                     {col.mobileLabel ?? col.header}
                   </span>
                   <div className="text-sm">{col.render(row)}</div>

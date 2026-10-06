@@ -5,7 +5,7 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import type { Character } from "@/lib/db/types";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 
 const patchSchema = z.object({
@@ -29,12 +29,12 @@ export async function PATCH(request: Request) {
 
     const parsed = await parseJsonBody(request, patchSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { highlightedAchievementIds } = parsed.data;
     if (!highlightedAchievementIds) {
-      return NextResponse.json({ error: "highlightedAchievementIds required" }, { status: 400 });
+      return errorResponse(400, "highlightedAchievementIds required");
     }
 
     const db = await getDb();
@@ -43,14 +43,11 @@ export async function PATCH(request: Request) {
       userId: new ObjectId(user.userId),
     });
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 403 });
+      return errorResponse(403, "Character not found");
     }
 
     if (highlightedAchievementIds.length > 5) {
-      return NextResponse.json(
-        { error: "Maximum 5 achievements can be highlighted" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Maximum 5 achievements can be highlighted");
     }
 
     const earnedIds = await db
@@ -63,10 +60,7 @@ export async function PATCH(request: Request) {
     const validIds: ObjectId[] = [];
     for (const idStr of highlightedAchievementIds) {
       if (!earnedSet.has(idStr)) {
-        return NextResponse.json(
-          { error: `Achievement ${idStr} is not earned by this character` },
-          { status: 400 }
-        );
+        return errorResponse(400, `Achievement ${idStr} is not earned by this character`);
       }
       validIds.push(new ObjectId(idStr));
     }

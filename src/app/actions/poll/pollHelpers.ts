@@ -29,6 +29,33 @@ export function appealColor(appeal: number): string {
   return "text-red-400";
 }
 
+export function appealBand(appeal: number): string {
+  if (appeal >= 35) return "Strong";
+  if (appeal >= 20) return "Moderate";
+  if (appeal >= 10) return "Weak";
+  return "Very weak";
+}
+
+/** Fill class for an appeal meter, matching appealColor's bands. */
+export function appealFill(appeal: number): string {
+  if (appeal >= 35) return "bg-green-500";
+  if (appeal >= 20) return "bg-yellow-500";
+  if (appeal >= 10) return "bg-orange-500";
+  return "bg-red-500";
+}
+
+const NEUTRAL_PARTY_HEX = "#9CA3AF";
+const LEGACY_PARTY_HEX: Record<string, string> = { democrat: "#3b82f6", republican: "#ef4444" };
+
+/** Display hex for a party: the stored color, else the legacy named color, else neutral gray. */
+export function partyHex(
+  colors: Record<string, string> | undefined,
+  party: string | null | undefined
+): string {
+  if (!party) return NEUTRAL_PARTY_HEX;
+  return colors?.[party] ?? LEGACY_PARTY_HEX[party] ?? NEUTRAL_PARTY_HEX;
+}
+
 export function partyColor(party: string): string {
   if (party === "democrat") return "text-blue-400";
   if (party === "republican") return "text-red-400";

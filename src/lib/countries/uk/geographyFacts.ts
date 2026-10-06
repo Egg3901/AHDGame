@@ -211,8 +211,8 @@ export const UK_ADJACENCY_MAP: AdjacencyMap = {
   NWE: ["WMI", "EMI", "YHU", "NEE", "SCO", "WAL", "NIR"],
   NEE: ["YHU", "NWE", "SCO"],
   SCO: ["NEE", "NWE", "NIR"],
-  WAL: ["SWE", "WMI", "NWE"],
-  NIR: ["SCO", "NWE"],
+  WAL: ["SWE", "WMI", "NWE", "NIR"],
+  NIR: ["SCO", "NWE", "WAL"],
 };
 
 /**

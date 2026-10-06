@@ -1,0 +1,71 @@
+{
+  "baseline": "d7da4e6a89b118359544761b116c7ff314db72cb",
+  "model": "Two synthetic regions in isolated temporary Mongo databases, no world simulation",
+  "cases": [
+    {
+      "interruptedCollection": "demographicFlowProjections",
+      "interruptedMethod": "insertMany",
+      "reranUnpublished": true,
+      "equalToUninterrupted": true,
+      "completedReplayTargetWrites": 0,
+      "pendingReceipts": 0,
+      "retainedProjectionChunks": 1
+    },
+    {
+      "interruptedCollection": "regionDemographics",
+      "interruptedMethod": "bulkWrite",
+      "reranUnpublished": false,
+      "equalToUninterrupted": true,
+      "completedReplayTargetWrites": 0,
+      "pendingReceipts": 0,
+      "retainedProjectionChunks": 0
+    },
+    {
+      "interruptedCollection": "states",
+      "interruptedMethod": "bulkWrite",
+      "reranUnpublished": false,
+      "equalToUninterrupted": true,
+      "completedReplayTargetWrites": 0,
+      "pendingReceipts": 0,
+      "retainedProjectionChunks": 0
+    },
+    {
+      "interruptedCollection": "macroMetrics",
+      "interruptedMethod": "bulkWrite",
+      "reranUnpublished": false,
+      "equalToUninterrupted": true,
+      "completedReplayTargetWrites": 0,
+      "pendingReceipts": 0,
+      "retainedProjectionChunks": 0
+    },
+    {
+      "interruptedCollection": "demographicFlowReceipts",
+      "interruptedMethod": "updateOne",
+      "reranUnpublished": false,
+      "equalToUninterrupted": true,
+      "completedReplayTargetWrites": 0,
+      "pendingReceipts": 0,
+      "retainedProjectionChunks": 0
+    }
+  ],
+  "firstPass": {
+    "milliseconds": 152.22409199999993,
+    "commands": 27,
+    "readCommands": 19,
+    "replyBsonBytes": 12477,
+    "returnedDocuments": 25
+  },
+  "baselineFirstPass": {
+    "milliseconds": 38.81174699999974,
+    "commands": 10,
+    "readCommands": 7,
+    "replyBsonBytes": 4786,
+    "returnedDocuments": 8
+  },
+  "unchangedPopulationMath": true,
+  "limitations": [
+    "No refugee, casualty, service budget or physical-damage mechanic is qualified by this fixture.",
+    "Concurrent reset and turn writers remain unsupported; reset must stop turn processing.",
+    "First-pass timing includes setup effects and is diagnostic, not a full-world performance result."
+  ]
+}

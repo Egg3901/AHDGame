@@ -4,7 +4,7 @@ import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getGameState } from "@/lib/gameState";
 import { getGameTime, type GameTimeContext } from "@/lib/time/gameTime";
 import { isPrimaryEnded } from "@/lib/elections/phases";
@@ -77,7 +77,7 @@ async function handleGET() {
       : undefined;
 
     if (!gameState) {
-      return NextResponse.json({ error: "Game state not initialized" }, { status: 404 });
+      return errorResponse(404, "Game state not initialized");
     }
 
     // Compute next cron fire (top of the next hour, UTC)

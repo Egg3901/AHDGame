@@ -50,7 +50,7 @@ export function ElectionDropdown({
       <details className="group" open>
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2.5 text-sm font-medium hover:bg-background/50">
           <span>
-            {roleLabel} — Active Candidacies ({candidacies.length})
+            {roleLabel} — Active candidacies ({candidacies.length})
             {canVote ? " — vote for one below" : viewOnlyLabel ? ` — ${viewOnlyLabel}` : ""}
           </span>
           <span className="text-xs text-muted font-normal tabular-nums">

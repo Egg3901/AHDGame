@@ -1,13 +1,23 @@
+/**
+ * NPP mining autopilot retools eligible mines and places mines on shortage deposits.
+ * processExtractionAutoStrategy ranks recipes using lagged markets and deposit room,
+ * preserving player ownership, transition cooldowns and per-turn change limits.
+ */
 import { ObjectId, type Db } from "mongodb";
 import type {
   CommodityPrice,
   Corporation,
   CorporateSector,
+  GameConfig,
   SectorBuildOrder,
   StateResourceCapacity,
 } from "@/lib/db/types";
 import type { GameState, NppEntryViabilityMode } from "@/lib/db/types/gameState";
-import { EXTRACTABLE_RESOURCES, type ExtractableResource } from "@/lib/constants/commodities";
+import {
+  EXTRACTABLE_RESOURCES,
+  type CommodityType,
+  type ExtractableResource,
+} from "@/lib/constants/commodities";
 import { SECTOR_STRATEGIES, STRATEGY_COOLDOWN_TURNS } from "@/lib/constants/sectorStrategies";
 import {
   getExtractionStrategyResources,
@@ -19,7 +29,15 @@ import {
   type LaggedPriceRatioFn,
 } from "@/lib/turn/npp/strategyExpectedRevenue";
 import { retoolRescaleFields } from "@/lib/corporations/retoolRescale";
-import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
+import { capInputPriceRatioAtWorld } from "@/lib/corporations/physicalPnl";
+import { isMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
+import {
+  expectedSellableShare,
+  forecastStrategyContribution,
+  type StrategyContributionContext,
+} from "@/lib/turn/npp/rules/strategyContribution";
+import { bookFor, loadReachableBooks } from "@/lib/trade/queries/loadReachableBooks";
+import { reachableSellableDemand } from "@/lib/trade/reachableBook";
 import type { CountryId } from "@/lib/constants/countries";
 import {
   generateNppCorpName,
@@ -45,6 +63,7 @@ type ExtractionPriceDoc = Pick<
   | "basePrice"
   | "nationalPrices"
   | "reachablePrices"
+  | "stateInputAvailability"
 >;
 
 function laggedPriceRatioForCountry(
@@ -100,13 +119,13 @@ function capacityRescaleUpdate(
  * which doubles as a glut guard. Gated on gameState.extractionAutoStrategyEnabled.
  *
  * Pass 2 (t899 misallocation remediation): NPP-run miners are additionally
- * re-scored every run by EXPECTED REALIZED REVENUE — rate × lagged price ratio
- * × state capacity headroom (see lib/turn/npp/strategyExpectedRevenue) — and
- * switched when a meaningfully better strategy exists, including OUT of a
- * focused strategy whose deposit the state can't physically support. Price
- * ratios are the sector host country's reachable book (national, then global
- * fallback). Player-CEO sectors are never touched by either retool pass. Same
- * flag/cadence as pass 1.
+ * re-scored every run by normalized expected contribution: damped output prices,
+ * deposit headroom, lagged aggregate sellability and input availability, with
+ * variable input bills in plants mode. Below clearing, prices are global; at
+ * clearing and above, reachable prices fall back to global prices.
+ * Off retains the legacy raw-price score. A meaningfully better recipe can move
+ * a miner out of an unsupported deposit. Player-CEO sectors are never touched
+ * by either retool pass. Same flag/cadence as pass 1.
  *
  * Pass 3 places a new NPP extraction corporation through the shared founding
  * core when a genuine global shortage has idle state deposit capacity and the
@@ -254,11 +273,27 @@ export async function processExtractionAutoStrategy(
 
   // Resolved ONCE per run and threaded into both passes' rescale calls — the
   // D9 capacity renormalization below is plants-only.
-  const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
+  const config = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne(
+      { _id: "default" },
+      { projection: { marketSystemMode: 1, freightSettlementMode: 1, marketGovernorCap: 1 } }
+    );
+  const marketMode = isMarketSystemMode(config?.marketSystemMode) ? config.marketSystemMode : "off";
+  const plantsEnabled = marketAtLeast(marketMode, "plants");
+  const clearingEnabled = marketAtLeast(marketMode, "clearing");
+  const localInputsEnabled = clearingEnabled && config?.freightSettlementMode === "active";
+  const strategies = SECTOR_STRATEGIES.extraction ?? [];
+  const strategyCommodities = new Set<CommodityType>(EXTRACTABLE_RESOURCES);
+  for (const strategy of strategies) {
+    for (const commodity of [...Object.keys(strategy.supply), ...Object.keys(strategy.demand)]) {
+      strategyCommodities.add(commodity as CommodityType);
+    }
+  }
 
   const prices = await db
     .collection<CommodityPrice>("commodityPrices")
-    .find({ commodity: { $in: [...EXTRACTABLE_RESOURCES] } })
+    .find({ commodity: { $in: [...strategyCommodities] } })
     .project<ExtractionPriceDoc>({
       commodity: 1,
       globalSupply: 1,
@@ -268,6 +303,7 @@ export async function processExtractionAutoStrategy(
       basePrice: 1,
       nationalPrices: 1,
       reachablePrices: 1,
+      stateInputAvailability: 1,
     })
     .toArray();
 
@@ -287,6 +323,7 @@ export async function processExtractionAutoStrategy(
   >();
   const stateSupplyByResource = new Map<ExtractableResource, Record<string, number>>();
   for (const cp of prices) {
+    priceByCommodity.set(cp.commodity, cp);
     const r = cp.commodity as ExtractableResource;
     if (!(EXTRACTABLE_RESOURCES as readonly string[]).includes(r)) continue;
     const sd = cp.globalDemand > 0 ? cp.globalSupply / cp.globalDemand : 1;
@@ -296,7 +333,6 @@ export async function processExtractionAutoStrategy(
     if (sd < EXTRACTION_AUTO_STRATEGY_PLACEMENT_SHORTAGE_SD) {
       placementShortage.set(r, { sd, stateSupply: cp.stateSupply ?? {} });
     }
-    priceByCommodity.set(cp.commodity, cp);
     stateSupplyByResource.set(r, cp.stateSupply ?? {});
   }
 
@@ -478,6 +514,8 @@ export async function processExtractionAutoStrategy(
       | "capitalStock"
       | "buildQueue"
       | "otherOpexPerUnitAnchor"
+      | "clearingStartTurn"
+      | "throughputStartTurn"
     >;
     const nppSectors = await db
       .collection<CorporateSector>("corporateSectors")
@@ -497,8 +535,14 @@ export async function processExtractionAutoStrategy(
         capitalStock: 1,
         buildQueue: 1,
         otherOpexPerUnitAnchor: 1,
+        clearingStartTurn: 1,
+        throughputStartTurn: 1,
       })
       .toArray();
+
+    // One bounded projected snapshot read for the entire NPP cohort, never per mine.
+    const reachableBooks =
+      clearingEnabled && nppSectors.length > 0 ? await loadReachableBooks(db) : null;
 
     const headroomForState = (stateId: string): CapacityHeadroomFn => {
       const stateRes = capByState.get(stateId);
@@ -520,12 +564,69 @@ export async function processExtractionAutoStrategy(
       const countryId = s.countryId ?? nppCountryById.get(s.corporationId?.toString() ?? "");
       const priceRatioOf: LaggedPriceRatioFn = (commodity) =>
         laggedPriceRatioForCountry(priceByCommodity.get(commodity), countryId);
+      const headroomOf = headroomForState(s.stateId);
+      let contributionContext: StrategyContributionContext | undefined;
+      if (marketMode !== "off") {
+        const context: StrategyContributionContext = {
+          mode: marketMode,
+          priceRatios: {},
+          inputPriceRatios: {},
+          balances: {},
+          sellableShares: {},
+          headroom: Object.fromEntries(
+            EXTRACTABLE_RESOURCES.map((resource) => [resource, headroomOf(resource)])
+          ),
+          currentTurn,
+          clearingStartTurn: s.clearingStartTurn ?? undefined,
+          throughputStartTurn: s.throughputStartTurn ?? undefined,
+          governorCap: config?.marketGovernorCap,
+          localInputAvailability: localInputsEnabled ? {} : undefined,
+        };
+        for (const [commodity, price] of priceByCommodity) {
+          const key = commodity as CommodityType;
+          const worldRatio = laggedPriceRatioForCountry(price, undefined);
+          const reachablePrice = countryId ? price.reachablePrices?.[countryId] : undefined;
+          const reachableRatio =
+            typeof reachablePrice === "number" &&
+            reachablePrice > 0 &&
+            price.basePrice > 0 &&
+            Number.isFinite(reachablePrice / price.basePrice)
+              ? reachablePrice / price.basePrice
+              : null;
+          context.priceRatios[key] = clearingEnabled ? (reachableRatio ?? worldRatio) : worldRatio;
+          context.inputPriceRatios![key] =
+            reachableRatio !== null
+              ? capInputPriceRatioAtWorld(worldRatio ?? undefined, reachableRatio)
+              : worldRatio;
+          const globalBalance = { supply: price.globalSupply, demand: price.globalDemand };
+          context.balances[key] = globalBalance;
+          const book = countryId ? bookFor(reachableBooks, countryId, key) : undefined;
+          context.sellableShares[key] = expectedSellableShare(
+            book ? { supply: book.supply, demand: reachableSellableDemand(book) } : globalBalance
+          );
+          if (context.localInputAvailability) {
+            const availability = price.stateInputAvailability?.[s.stateId];
+            if (typeof availability === "number" && Number.isFinite(availability)) {
+              context.localInputAvailability[key] = availability;
+            }
+          }
+        }
+        contributionContext = context;
+      }
+      const forecastContext = contributionContext;
       const decision = decideExtractionStrategySwitch({
         currentStrategyId: s.strategyId ?? "standard",
-        strategies: SECTOR_STRATEGIES.extraction ?? [],
+        strategies,
         priceRatioOf,
-        headroomOf: headroomForState(s.stateId),
+        headroomOf,
         soldFraction: s.soldFraction,
+        scoreOf: forecastContext
+          ? (strategy) =>
+              forecastStrategyContribution(
+                { supply: strategy.supply, demand: strategy.demand ?? {} },
+                forecastContext
+              ).score
+          : undefined,
       });
       if (decision) {
         switches.push({

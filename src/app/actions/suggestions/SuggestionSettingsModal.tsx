@@ -12,17 +12,17 @@ interface SuggestionSettingsModalProps {
 const SUGGESTION_CATEGORIES = [
   {
     id: "stat-recovery",
-    label: "Stat Recovery",
+    label: "Stat recovery",
     description: "Low actions, funds, influence, favorability",
   },
   {
     id: "resource-opt",
-    label: "Resource Optimization",
+    label: "Resource optimization",
     description: "Action hoarding, cash conversion",
   },
   {
     id: "market-opportunity",
-    label: "Market Opportunities",
+    label: "Market opportunities",
     description: "Unowned sector splits, national expansion",
   },
   { id: "competitive", label: "Competitive", description: "Low market share vs competitors" },
@@ -37,7 +37,7 @@ export function SuggestionSettingsModal({
   onMuteToggle,
 }: SuggestionSettingsModalProps) {
   return (
-    <Modal open={isOpen} title="Suggestion Settings" onClose={onClose}>
+    <Modal open={isOpen} title="Suggestion settings" onClose={onClose}>
       <p className="text-sm text-muted mb-4">
         Mute suggestion categories you don&apos;t want to see. Muted suggestions won&apos;t appear
         in your dashboard or indicator strip.

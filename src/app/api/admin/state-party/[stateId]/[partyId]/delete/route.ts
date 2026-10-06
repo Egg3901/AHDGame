@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { StatePartyOrg, PartyBudget, StatePartyElection } from "@/lib/db/types";
 
 // POST /api/admin/state-party/[stateId]/[partyId]/delete — Deletes a state party organization along with its budget and election records.
@@ -30,7 +30,7 @@ export async function POST(
       .findOne({ _id: statePartyId });
 
     if (!stateParty) {
-      return NextResponse.json({ error: "State party not found" }, { status: 404 });
+      return errorResponse(404, "State party not found");
     }
 
     // Delete state party budget

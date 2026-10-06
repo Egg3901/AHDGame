@@ -9,7 +9,7 @@ import { AUTH_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
 import { durableRateLimit } from "@/lib/api/rateLimit.mongo";
 import { parseJsonBody } from "@/lib/api/validate";
 import { resetPasswordBodySchema } from "@/lib/api/schemas/auth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { consumePasswordReset } from "@/lib/passwordReset";
 import { invalidateCachedUser } from "@/lib/auth/userDocCache";
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, resetPasswordBodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { token, password } = parsed.data;
 
@@ -39,9 +39,9 @@ export async function POST(request: Request) {
         outcome: "rejected",
         reason: "invalid_or_expired_token",
       });
-      return NextResponse.json(
-        { error: "This reset link is invalid or has expired. Please request a new one." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "This reset link is invalid or has expired. Please request a new one."
       );
     }
 
@@ -50,9 +50,10 @@ export async function POST(request: Request) {
     // Fenced accounts never consume a reset token via legacy reset. Same
     // generic 400 body as an expired token so fenced is not an oracle.
     if (user && isAuthMigrationFenced(user)) {
-      return NextResponse.json(
-        { error: "This reset link is invalid or has expired. Please request a new one." },
-        { status: 400, headers: { "Cache-Control": "private, no-store" } }
+      return errorResponse(
+        400,
+        "This reset link is invalid or has expired. Please request a new one.",
+        { headers: { "Cache-Control": "private, no-store" } }
       );
     }
     if (
@@ -64,9 +65,10 @@ export async function POST(request: Request) {
           !Number.isFinite(user.passwordChangedAt.getTime()) ||
           user.passwordChangedAt >= reset.createdAt))
     ) {
-      return NextResponse.json(
-        { error: "This reset link is invalid or has expired. Please request a new one." },
-        { status: 400, headers: { "Cache-Control": "private, no-store" } }
+      return errorResponse(
+        400,
+        "This reset link is invalid or has expired. Please request a new one.",
+        { headers: { "Cache-Control": "private, no-store" } }
       );
     }
     const hashedPassword = await bcrypt.hash(password, 12);
@@ -88,9 +90,10 @@ export async function POST(request: Request) {
     );
 
     if (updated.matchedCount !== 1) {
-      return NextResponse.json(
-        { error: "Your account changed during this request. Please sign in and try again." },
-        { status: 409, headers: { "Cache-Control": "private, no-store" } }
+      return errorResponse(
+        409,
+        "Your account changed during this request. Please sign in and try again.",
+        { headers: { "Cache-Control": "private, no-store" } }
       );
     }
 

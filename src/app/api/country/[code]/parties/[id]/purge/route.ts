@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
@@ -45,11 +45,11 @@ export async function POST(
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     if (!PARTY_PURGE_ENABLED) {
-      return NextResponse.json({ error: "Party purges are currently disabled." }, { status: 403 });
+      return errorResponse(403, "Party purges are currently disabled.");
     }
 
     const authResult = await requireAuthWithCharacter();
@@ -61,23 +61,20 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     if (!canActAsChair(party, chair._id)) {
-      return NextResponse.json(
-        {
-          error:
-            "Only the party Chair (or acting Vice-Chair when the chair seat is vacant) can purge members",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the party Chair (or acting Vice-Chair when the chair seat is vacant) can purge members"
       );
     }
 
@@ -86,14 +83,11 @@ export async function POST(
     const target = await db.collection<Character>("characters").findOne({ _id: targetId });
 
     if (!target) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     if (target.party !== partyId || !isSameCountry(target, party)) {
-      return NextResponse.json(
-        { error: "That character is not a member of this party" },
-        { status: 400 }
-      );
+      return errorResponse(400, "That character is not a member of this party");
     }
 
     const isLeadership =
@@ -101,15 +95,12 @@ export async function POST(
       party.viceChairId?.equals(target._id) ||
       party.treasurerId?.equals(target._id);
     if (isLeadership) {
-      return NextResponse.json({ error: "Leadership roles cannot be purged" }, { status: 400 });
+      return errorResponse(400, "Leadership roles cannot be purged");
     }
 
     const isCommitteeMember = (party.committeeIds ?? []).some((id) => id.equals(target._id));
     if (isCommitteeMember) {
-      return NextResponse.json(
-        { error: "National committee members cannot be purged during their term" },
-        { status: 400 }
-      );
+      return errorResponse(400, "National committee members cannot be purged during their term");
     }
 
     const currentTurn = await getCurrentTurn(db);
@@ -118,12 +109,10 @@ export async function POST(
       currentTurn - party.lastPurgeAtTurn < PURGE_COOLDOWN_TURNS
     ) {
       const turnsRemaining = PURGE_COOLDOWN_TURNS - (currentTurn - party.lastPurgeAtTurn);
-      return NextResponse.json(
-        {
-          error: `Purge is on cooldown for ${turnsRemaining} more turn${turnsRemaining === 1 ? "" : "s"}`,
-          turnsRemaining,
-        },
-        { status: 429 }
+      return errorResponse(
+        429,
+        `Purge is on cooldown for ${turnsRemaining} more turn${turnsRemaining === 1 ? "" : "s"}`,
+        { extra: { turnsRemaining } }
       );
     }
 

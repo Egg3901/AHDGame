@@ -8,7 +8,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { requireConfirmedSecretary } from "@/lib/api/requireConfirmedSecretary";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { getGameState } from "@/lib/gameState";
@@ -43,30 +43,24 @@ export async function POST(request: Request, { params }: RouteParams) {
     const countryId = code.toUpperCase() as CountryId;
     const config = COUNTRY_CONFIGS[countryId];
     if (!config) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
     if (!config.financeMinisterCabinetId) {
-      return NextResponse.json(
-        { error: "Bond profile is not configured for this country" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Bond profile is not configured for this country");
     }
     if (positionId !== config.financeMinisterCabinetId) {
-      return NextResponse.json(
-        { error: "This position does not control sovereign bond profile" },
-        { status: 403 }
-      );
+      return errorResponse(403, "This position does not control sovereign bond profile");
     }
 
     const parsed = await parseJsonBody(request, bondProfileSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     const myChar = auth.user.character;
     if (!myChar) {
-      return NextResponse.json({ error: "Character required" }, { status: 403 });
+      return errorResponse(403, "Character required");
     }
 
     const isAdmin = auth.user.isAdmin === true;
@@ -77,11 +71,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         characterId: new ObjectId(myChar._id),
       });
       if (!member) {
-        return NextResponse.json(
-          {
-            error: `Only the ${config.financeMinisterCabinetId} for ${countryId} can set the bond profile`,
-          },
-          { status: 403 }
+        return errorResponse(
+          403,
+          `Only the ${config.financeMinisterCabinetId} for ${countryId} can set the bond profile`
         );
       }
       // The maturity mix decides what the country owes and when, for up to 240
@@ -95,18 +87,16 @@ export async function POST(request: Request, { params }: RouteParams) {
     const budgetId = getNationalBudgetId(countryId);
     const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
     if (!budget) {
-      return NextResponse.json({ error: "Federal budget not found" }, { status: 404 });
+      return errorResponse(404, "Federal budget not found");
     }
 
     // Rate limit: once per 24 turns (same as generic cabinet settings)
     const lastChangedTurn = budget.sovereignBondProfileLastChangedTurn ?? 0;
     if (!isAdmin && currentTurn - lastChangedTurn < 24) {
       const turnsRemaining = 24 - (currentTurn - lastChangedTurn);
-      return NextResponse.json(
-        {
-          error: `Bond profile can only be changed once per 24 turns. ${turnsRemaining} turns remaining.`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Bond profile can only be changed once per 24 turns. ${turnsRemaining} turns remaining.`
       );
     }
 

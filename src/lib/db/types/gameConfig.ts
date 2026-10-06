@@ -129,6 +129,8 @@ export interface GameConfig {
    * other than http/https.
    */
   pollBannerEnabled?: boolean;
+  /** Ops access gate: users with `sandboxAccessGrantedAt` may reach the sandbox without supporter status. */
+  sandboxTesterAccessEnabled?: boolean;
   /** Admin-authored sentence that precedes the link. */
   pollBannerMessage?: string;
   /** Admin-authored anchor text, e.g. "Click Here". */

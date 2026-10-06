@@ -42,9 +42,9 @@ const SUB_TABS: { id: ModPlayersSubTab; label: string }[] = [
   { id: "achievements", label: "Achievements" },
   { id: "characters", label: "Characters" },
   { id: "patreon", label: "Patreon" },
-  { id: "activity-log", label: "Activity Log" },
+  { id: "activity-log", label: "Activity log" },
   { id: "suspicious", label: "Suspicious" },
-  { id: "audit-log", label: "Audit Log" },
+  { id: "audit-log", label: "Audit log" },
 ];
 
 interface ModeratorPlayersTabProps {

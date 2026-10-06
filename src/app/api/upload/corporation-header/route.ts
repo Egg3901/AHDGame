@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import type { Corporation } from "@/lib/db/types";
 import { optimizeImage, IMAGE_PRESETS } from "@/lib/imageOptimize";
@@ -25,34 +25,31 @@ export async function POST(request: Request) {
 
     const parsed = await parseFormData(request);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const formData = parsed.data;
     const file = formData.get("file");
     const corpIdRaw = formData.get("corporationId");
 
     if (!corpIdRaw || typeof corpIdRaw !== "string") {
-      return NextResponse.json({ error: "corporationId is required" }, { status: 400 });
+      return errorResponse(400, "corporationId is required");
     }
 
     if (!file || !(file instanceof Blob)) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+      return errorResponse(400, "No file uploaded");
     }
     if (!ALLOWED_TYPES.has(file.type)) {
-      return NextResponse.json(
-        { error: "Only JPEG, PNG, WebP, and GIF images are allowed." },
-        { status: 400 }
-      );
+      return errorResponse(400, "Only JPEG, PNG, WebP, and GIF images are allowed.");
     }
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: "File must be under 4 MB." }, { status: 400 });
+      return errorResponse(400, "File must be under 4 MB.");
     }
 
     let corpObjectId: ObjectId;
     try {
       corpObjectId = new ObjectId(corpIdRaw);
     } catch {
-      return NextResponse.json({ error: "Invalid corporation id" }, { status: 400 });
+      return errorResponse(400, "Invalid corporation id");
     }
 
     const db = await getDb();
@@ -64,10 +61,7 @@ export async function POST(request: Request) {
       ceoVacant: { $ne: true },
     });
     if (!corporation) {
-      return NextResponse.json(
-        { error: "You are not the CEO of this corporation" },
-        { status: 403 }
-      );
+      return errorResponse(403, "You are not the CEO of this corporation");
     }
 
     // Optimize: resize and convert to WebP (GIFs preserved as-is)

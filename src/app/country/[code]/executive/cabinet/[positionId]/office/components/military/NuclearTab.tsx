@@ -160,7 +160,7 @@ export function NuclearTab({
           >
             {node.name}
           </span>
-          <span className="ml-auto text-[10px] font-bold uppercase tracking-wider text-muted">
+          <span className="ml-auto text-body-sm font-medium text-muted">
             {node.status === "future" ? `From ${node.yearAvailable}` : STATUS_LABEL[node.status]}
           </span>
         </div>
@@ -246,10 +246,7 @@ export function NuclearTab({
           ) : (
             <>
               <div className="flex items-center gap-3">
-                <label
-                  htmlFor="nuclear-rate"
-                  className="text-[11px] font-bold uppercase tracking-wider text-muted"
-                >
+                <label htmlFor="nuclear-rate" className="text-body-sm font-medium text-muted">
                   Warheads per turn
                 </label>
                 <input

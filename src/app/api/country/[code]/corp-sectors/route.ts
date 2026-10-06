@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
@@ -18,7 +18,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     const corpIdParam = new URL(request.url).searchParams.get("corporationId") ?? "";
     if (!ObjectId.isValid(corpIdParam)) return NextResponse.json({ sectors: [] });

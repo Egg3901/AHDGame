@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Modal } from "@/components/ui/Modal";
@@ -84,7 +85,7 @@ export function CeoCorporationSettingsModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Corporation Settings"
+      title="Corporation settings"
       maxWidthClass="max-w-lg"
       scrollable
       bodyClassName="px-5 pb-5 space-y-6"
@@ -110,7 +111,7 @@ export function CeoCorporationSettingsModal({
 
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">
-            Primary Sector Type
+            Primary sector type
           </label>
           <select
             value={editPrimaryType}
@@ -134,7 +135,7 @@ export function CeoCorporationSettingsModal({
 
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">
-            Secondary Sector Focus
+            Secondary sector focus
           </label>
           <select
             value={editSecondaryType}
@@ -175,7 +176,7 @@ export function CeoCorporationSettingsModal({
           )}
 
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Brand Color</label>
+          <label className="block text-sm font-medium text-foreground mb-1">Brand color</label>
           <div className="flex items-center gap-3">
             <input
               type="color"
@@ -200,7 +201,7 @@ export function CeoCorporationSettingsModal({
           disabled={saving}
           className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
-          {saving ? "Saving..." : "Save Settings"}
+          {saving ? "Saving..." : "Save settings"}
         </button>
       </section>
 
@@ -211,7 +212,7 @@ export function CeoCorporationSettingsModal({
       <div className="border-t border-card-border" />
 
       <section>
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Logo</p>
+        <p className="text-body-sm font-medium text-muted mb-3">Logo</p>
         <div className="flex items-center gap-3">
           {corporation.logoUrl ? (
             <Image
@@ -248,9 +249,7 @@ export function CeoCorporationSettingsModal({
       <div className="border-t border-card-border" />
 
       <section>
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">
-          Page Banner
-        </p>
+        <p className="text-body-sm font-medium text-muted mb-3">Page banner</p>
         {corporation.headerImageUrl && (
           <div className="relative mb-3 h-14 w-full overflow-hidden rounded-lg border border-card-border">
             <Image
@@ -363,7 +362,7 @@ function useStandaloneIdentitySettings({
         onFeedback?.({ success: "Settings saved" });
         onRefresh();
       } else {
-        const error = data.error || "Failed to save";
+        const error = apiErrorText(data, "Failed to save");
         setUploadError(error);
         onFeedback?.({ error });
       }
@@ -393,7 +392,7 @@ function useStandaloneIdentitySettings({
         onFeedback?.({ success: "Logo updated" });
         onRefresh();
       } else {
-        setUploadError(data.error || "Upload failed");
+        setUploadError(apiErrorText(data, "Upload failed"));
       }
     } catch {
       setUploadError("Upload failed");
@@ -421,7 +420,7 @@ function useStandaloneIdentitySettings({
         onFeedback?.({ success: "Page banner updated" });
         onRefresh();
       } else {
-        setUploadError(data.error || "Upload failed");
+        setUploadError(apiErrorText(data, "Upload failed"));
       }
     } catch {
       setUploadError("Upload failed");
@@ -445,7 +444,7 @@ function useStandaloneIdentitySettings({
         onFeedback?.({ success: "Banner removed" });
         onRefresh();
       } else {
-        setUploadError(data.error || "Failed to remove banner");
+        setUploadError(apiErrorText(data, "Failed to remove banner"));
       }
     } catch {
       setUploadError("Network error");
@@ -526,7 +525,7 @@ function RenameCorporationSection({
       });
       const data = await res.json();
       if (!res.ok) {
-        setRenameError(data.error || "Failed to rename corporation");
+        setRenameError(apiErrorText(data, "Failed to rename corporation"));
       } else {
         setRenameSuccess(`Corporation renamed to "${newName.trim()}"`);
         setNewName("");
@@ -542,7 +541,7 @@ function RenameCorporationSection({
 
   return (
     <section>
-      <h3 className="text-sm font-semibold text-foreground mb-1">Rename Corporation</h3>
+      <h3 className="text-sm font-semibold text-foreground mb-1">Rename corporation</h3>
       <p className="text-xs text-muted mb-3">
         Change your corporation&apos;s name. This costs{" "}
         <strong className="text-foreground">{costDisplay}</strong> from liquid capital and{" "}
@@ -572,7 +571,7 @@ function RenameCorporationSection({
 
       <div className="space-y-3">
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">New Name</label>
+          <label className="block text-sm font-medium text-foreground mb-1">New name</label>
           <input
             type="text"
             value={newName}
@@ -597,11 +596,11 @@ function RenameCorporationSection({
             disabled={!nameValid || isSameName || onCooldown || renaming}
             className="rounded-lg border border-card-border px-4 py-2 text-sm font-medium text-foreground hover:bg-card-elevated transition-colors disabled:opacity-50"
           >
-            Preview Rename Cost
+            Preview rename cost
           </button>
         ) : (
           <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 space-y-2">
-            <p className="text-sm font-medium text-foreground">Confirm Rename</p>
+            <p className="text-sm font-medium text-foreground">Confirm rename</p>
             <p className="text-xs text-muted">
               <strong className="text-foreground">&quot;{corporation.name}&quot;</strong>
               {" → "}
@@ -628,7 +627,7 @@ function RenameCorporationSection({
                 disabled={renaming}
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
-                {renaming ? "Renaming..." : "Confirm Rename"}
+                {renaming ? "Renaming..." : "Confirm rename"}
               </button>
               <button
                 type="button"

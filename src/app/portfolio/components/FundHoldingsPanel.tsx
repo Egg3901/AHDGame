@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -82,7 +83,7 @@ export function FundHoldingsPanel({
       }
       if (!res.ok) {
         const body = (await res.json()) as { error?: string };
-        setError(body.error || "Failed to load fund portfolio");
+        setError(apiErrorText(body, "Failed to load fund portfolio"));
         return;
       }
       const data = (await res.json()) as {
@@ -135,9 +136,7 @@ export function FundHoldingsPanel({
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
-        <p className="text-[10px] uppercase tracking-widest text-muted font-semibold">
-          Total fund holdings
-        </p>
+        <p className="text-body-sm font-medium text-muted">Total fund holdings</p>
         <p className="text-2xl font-bold tabular-nums mt-1">{formatAmount(totalValue)}</p>
         <p className="text-xs text-muted mt-1">
           Browse and subscribe on the{" "}
@@ -155,7 +154,7 @@ export function FundHoldingsPanel({
       ) : (
         <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
           <table className="w-full text-left text-sm">
-            <thead className="bg-card-elevated border-b border-card-border text-[10px] uppercase tracking-wider text-muted">
+            <thead className="bg-card-elevated border-b border-card-border text-sm font-semibold text-foreground">
               <tr>
                 <th className="px-4 py-3">Fund</th>
                 <th className="px-4 py-3 text-right">Units</th>

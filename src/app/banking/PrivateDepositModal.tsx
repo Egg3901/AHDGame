@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { Button, Input, useDialogA11y } from "@/components/ui";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
@@ -64,7 +66,7 @@ export function PrivateDepositModal({
         holderError?: string;
       };
       if (!response.ok) {
-        setError(json.error ?? "Deposit failed.");
+        setError(apiErrorText(json, "Deposit failed."));
         return;
       }
 
@@ -141,7 +143,7 @@ export function PrivateDepositModal({
             </p>
           </div>
 
-          <label className="block space-y-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+          <label className="block space-y-1.5 text-body-sm font-medium text-muted">
             Deposit amount ({bank.currency})
             <Input
               type="number"
@@ -156,7 +158,7 @@ export function PrivateDepositModal({
             />
           </label>
 
-          {error && <p className="text-sm text-error">{error}</p>}
+          <InlineError error={error} className="text-sm text-error" />
 
           <div className="flex justify-end gap-2 border-t border-card-border pt-4">
             <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>

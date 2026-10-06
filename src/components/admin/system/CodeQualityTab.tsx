@@ -77,7 +77,7 @@ export function CodeQualityTab() {
       {latest && Object.keys(latest.lint.byRule).length > 0 && (
         <details className="rounded-lg border border-border bg-card p-4 shadow-sm">
           <summary className="cursor-pointer text-sm font-semibold text-foreground">
-            ESLint Rules Breakdown
+            ESLint rules breakdown
           </summary>
           <div className="mt-3 max-h-60 overflow-auto">
             <table className="w-full text-left text-xs">

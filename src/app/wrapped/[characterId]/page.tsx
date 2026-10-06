@@ -12,7 +12,7 @@ type Props = { params: Promise<{ characterId: string }> };
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { characterId } = await params;
   const recap = await loadPublicRecap(characterId);
-  if (!recap) return { title: "Season Wrapped | A House Divided" };
+  if (!recap) return { title: "Season wrapped | A House Divided" };
 
   const season = recap.iteration ? iterationLabel(recap.iteration) : "Season";
   const title = `${recap.name}'s ${season} Wrapped`;

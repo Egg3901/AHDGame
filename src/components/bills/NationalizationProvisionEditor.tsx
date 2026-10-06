@@ -436,7 +436,7 @@ function NationalizeRow({
               {detail?.name ?? row.targetCorpName}
             </span>
             {detail && (
-              <span className="text-[11px] uppercase tracking-wide text-muted">
+              <span className="text-body-sm font-medium text-muted">
                 {detail.ownerKind === "npc" ? "NPC-run" : "Player-owned"} · HQ {detail.hqStateName}
               </span>
             )}
@@ -464,7 +464,7 @@ function NationalizeRow({
 
               {detail.triggers.length > 0 && (
                 <div className="mt-2">
-                  <div className="text-[11px] uppercase tracking-wide text-muted/70">
+                  <div className="text-body-sm font-medium text-muted">
                     Why it&apos;s a candidate
                   </div>
                   <div className="mt-1 flex flex-wrap gap-1.5">
@@ -711,7 +711,7 @@ function PrivatizeRow({
         }
         className="w-full rounded-lg border border-card-border bg-background px-2 py-1.5 text-sm"
       >
-        <option value="">— Source National Corporation —</option>
+        <option value="">— Source national corporation —</option>
         {natCorps.map((c) => (
           <option key={c.id} value={c.id}>
             {c.name}
@@ -795,7 +795,7 @@ function PrivatizeRow({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wide text-muted/70">{label}</span>
+      <span className="text-body-sm font-medium text-muted">{label}</span>
       <span className="font-medium text-foreground tabular-nums">{value}</span>
     </div>
   );

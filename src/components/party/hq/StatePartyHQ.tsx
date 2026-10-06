@@ -10,6 +10,7 @@ import { StatePartyMap, countryHasMap, type MapColorBy } from "./StatePartyMap";
 import { sumBulkEstimate, type BulkMode, type BulkPreview } from "./bulkEstimate";
 import { orgTier, toneColor } from "./orgTier";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export interface StatePartyHQProps {
   countryId: string;
@@ -83,7 +84,7 @@ export function StatePartyHQ({
   const [bulkMode, setBulkMode] = useState<BulkMode | null>(null);
   const [busy, setBusy] = useState(false);
   // Local copy so the bulk bar updates immediately after spends without waiting
-  // on a parent refetch (activity recovery means we can't subtract exactly).
+  // on a parent refetch.
   const [nationalPs, setNationalPs] = useState(nationalPoliticalStrength);
   useEffect(() => {
     setNationalPs(nationalPoliticalStrength);
@@ -203,7 +204,9 @@ export function StatePartyHQ({
       });
       const d = await res.json().catch(() => ({}));
       showToast(
-        res.ok ? (d.message ?? `Transferred ${fmtMoney(amount)}`) : (d.error ?? "Transfer failed"),
+        res.ok
+          ? (d.message ?? `Transferred ${fmtMoney(amount)}`)
+          : apiErrorText(d, "Transfer failed"),
         res.ok ? "success" : "error"
       );
       if (res.ok) await fetchRows();
@@ -225,7 +228,7 @@ export function StatePartyHQ({
       });
       const d = await res.json().catch(() => ({}));
       showToast(
-        res.ok ? "Priority region updated" : (d.error ?? "Could not update priority"),
+        res.ok ? "Priority region updated" : apiErrorText(d, "Could not update priority"),
         res.ok ? "success" : "error"
       );
       if (res.ok) await fetchRows();
@@ -340,7 +343,7 @@ export function StatePartyHQ({
         failed > 0
           ? `Built org in ${done} states from national PS${cashPart} · ${failed} failed`
           : `Built org in ${done} states from national PS` +
-              (spent > 0 ? ` (−${spent.toFixed(0)} Nat'l PS before recovery${cashPart})` : ""),
+              (spent > 0 ? ` (−${spent.toFixed(0)} Nat'l PS${cashPart})` : ""),
         failed > 0 ? "info" : "success"
       );
       setBulkMode(null);
@@ -445,7 +448,7 @@ export function StatePartyHQ({
           {canSpendPs && bulkMode && estimate && (
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-card-border pb-2 text-xs">
               <span className="font-medium">
-                Build Org · Nat&apos;l PS · {estimate.states} states · Est.{" "}
+                Build org · nat&apos;l PS · {estimate.states} states · Est.{" "}
                 <b className="tabular-nums">{estimate.totalPS} Nat&apos;l PS</b>
                 <span className="text-muted"> (have {nationalPs.toFixed(1)})</span>
                 {estimate.totalCash > 0 ? (
@@ -531,7 +534,7 @@ export function StatePartyHQ({
                   onClick={() => setBulkMode("build")}
                   className={`rounded-md border px-3 py-1.5 font-semibold shadow-sm transition-colors ${bulkMode === "build" ? "border-primary bg-primary/15 text-primary" : "border-card-border bg-card hover:border-primary/60 hover:bg-primary/10"}`}
                 >
-                  Build Org
+                  Build org
                 </button>
               )}
               <button

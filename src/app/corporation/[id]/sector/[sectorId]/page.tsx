@@ -50,6 +50,7 @@ import {
   Settings2,
   UsersRound,
 } from "lucide-react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type WorkspaceTab = "overview" | "operations" | "market" | "people" | "management";
 
@@ -174,7 +175,7 @@ export default function SectorDetailPage() {
         });
         dispatch({ type: "SET_FOR_SALE_INFO", value: data.forSaleInfo ?? null });
       } else {
-        dispatch({ type: "SET_ERROR", value: data.error || "Sector not found" });
+        dispatch({ type: "SET_ERROR", value: apiErrorText(data, "Sector not found") });
       }
     } catch {
       dispatch({ type: "SET_ERROR", value: "Network error" });
@@ -340,7 +341,10 @@ export default function SectorDetailPage() {
         });
         await fetchData();
       } else {
-        dispatch({ type: "SET_NAME_MESSAGE", value: data.error || "Failed to save sector name." });
+        dispatch({
+          type: "SET_NAME_MESSAGE",
+          value: apiErrorText(data, "Failed to save sector name."),
+        });
       }
     } catch {
       dispatch({ type: "SET_NAME_MESSAGE", value: "Network error" });
@@ -413,7 +417,7 @@ export default function SectorDetailPage() {
         await fetchData();
       } else {
         const data = await res.json();
-        dispatch({ type: "SET_ERROR", value: data.error || "Failed to change strategy" });
+        dispatch({ type: "SET_ERROR", value: apiErrorText(data, "Failed to change strategy") });
       }
     } catch {
       /* silent */
@@ -433,7 +437,7 @@ export default function SectorDetailPage() {
         await fetchData();
       } else {
         const data = await res.json();
-        dispatch({ type: "SET_ERROR", value: data.error || "Failed to cancel transition" });
+        dispatch({ type: "SET_ERROR", value: apiErrorText(data, "Failed to cancel transition") });
       }
     } catch {
       /* silent */
@@ -488,7 +492,7 @@ export default function SectorDetailPage() {
         fetchData();
         return true;
       } else {
-        dispatch({ type: "SET_ATTACK_ERROR", value: result.error || "Attack failed" });
+        dispatch({ type: "SET_ATTACK_ERROR", value: apiErrorText(result, "Attack failed") });
         return false;
       }
     } catch {
@@ -516,7 +520,7 @@ export default function SectorDetailPage() {
       } else {
         dispatch({
           type: "SET_FOR_SALE_MESSAGE",
-          value: { type: "error", text: result.error || "Failed to list sector" },
+          value: { type: "error", text: apiErrorText(result, "Failed to list sector") },
         });
       }
     } catch {
@@ -543,7 +547,7 @@ export default function SectorDetailPage() {
       } else {
         dispatch({
           type: "SET_FOR_SALE_MESSAGE",
-          value: { type: "error", text: result.error || "Failed to unlist sector" },
+          value: { type: "error", text: apiErrorText(result, "Failed to unlist sector") },
         });
       }
     } catch {
@@ -572,7 +576,7 @@ export default function SectorDetailPage() {
       } else {
         dispatch({
           type: "SET_FOR_SALE_MESSAGE",
-          value: { type: "error", text: result.error || "Purchase failed" },
+          value: { type: "error", text: apiErrorText(result, "Purchase failed") },
         });
       }
     } catch {
@@ -606,7 +610,7 @@ export default function SectorDetailPage() {
         dispatch({ type: "SET_SPLIT_MSG", value: result.message });
         fetchData();
       } else {
-        dispatch({ type: "SET_SPLIT_ERROR", value: result.error || "Split failed" });
+        dispatch({ type: "SET_SPLIT_ERROR", value: apiErrorText(result, "Split failed") });
       }
     } catch {
       dispatch({ type: "SET_SPLIT_ERROR", value: "Network error" });
@@ -1072,7 +1076,7 @@ export default function SectorDetailPage() {
             <ManagementPanel>
               {/* Sector Name editor */}
               <div>
-                <label className="block text-sm font-semibold text-foreground">Sector Name</label>
+                <label className="block text-sm font-semibold text-foreground">Sector name</label>
                 <p className="mt-1 text-xs text-muted">
                   Give this sector a custom display name. Leave blank to use the default type label.
                 </p>
@@ -1091,7 +1095,7 @@ export default function SectorDetailPage() {
                     disabled={nameSaving}
                     className="rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
                   >
-                    {nameSaving ? "Saving..." : "Save Name"}
+                    {nameSaving ? "Saving..." : "Save name"}
                   </button>
                 </div>
                 {nameMessage && <p className="mt-3 text-sm text-muted">{nameMessage}</p>}

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { CorporateSector, GameState, SectorBuildOrder } from "@/lib/db/types";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -59,7 +59,7 @@ export async function cancelSectorStrategy(request: Request, { params }: RoutePa
     if (ceoCheck) return ceoCheck;
 
     if (!ObjectId.isValid(sectorId)) {
-      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+      return errorResponse(400, "Invalid sector ID");
     }
 
     const sector = await db
@@ -67,19 +67,19 @@ export async function cancelSectorStrategy(request: Request, { params }: RoutePa
       .findOne({ _id: new ObjectId(sectorId), corporationId: corporation._id });
 
     if (!sector) {
-      return NextResponse.json({ error: "Sector not found" }, { status: 404 });
+      return errorResponse(404, "Sector not found");
     }
 
     // Must have an active transition to cancel
     if (!sector.transitionFromStrategyId || sector.transitionStartTurn == null) {
-      return NextResponse.json({ error: "No transition in progress to cancel" }, { status: 400 });
+      return errorResponse(400, "No transition in progress to cancel");
     }
 
     // Cannot cancel a reversal — must complete before changing strategy again
     if (sector.isReversing) {
-      return NextResponse.json(
-        { error: "Already reversing. Reversal must complete before changing strategy again." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Already reversing. Reversal must complete before changing strategy again."
       );
     }
 
@@ -109,17 +109,14 @@ export async function cancelSectorStrategy(request: Request, { params }: RoutePa
       corpFxRate
     );
     if (corpCapitalAnchor < cancelCostAnchor) {
-      return NextResponse.json(
-        {
-          error:
-            insufficientCapitalMessage(
-              "Cancellation",
-              anchorToCorpLiquidCapital(cancelCostAnchor, corporation, corpFxRate),
-              corporation.liquidCapital,
-              resolveCorpLiquidCurrencyCode(corporation)
-            ) + ` (${Math.round(progress * 100)}% progress × 10% of daily revenue).`,
-        },
-        { status: 400 }
+      return errorResponse(
+        400,
+        insufficientCapitalMessage(
+          "Cancellation",
+          anchorToCorpLiquidCapital(cancelCostAnchor, corporation, corpFxRate),
+          corporation.liquidCapital,
+          resolveCorpLiquidCurrencyCode(corporation)
+        ) + ` (${Math.round(progress * 100)}% progress × 10% of daily revenue).`
       );
     }
     const cancelCostInCorpCapital = anchorToCorpLiquidCapital(

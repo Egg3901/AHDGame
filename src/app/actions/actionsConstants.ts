@@ -198,6 +198,27 @@ export const CARDS: ActionCard[] = [
   },
 ];
 
+/**
+ * What the money figure on an operation card means. Most operations spend
+ * campaign funds, but Fundraise RAISES money and Convert cash reads the
+ * personal cash it can move. Labelling a gain or a balance "Cost" told players
+ * fundraising cost them money.
+ */
+export type FundLineKind = "cost" | "yield" | "available";
+
+export function fundLineKind(cardType: string): FundLineKind {
+  if (cardType === "fundraise") return "yield";
+  if (cardType === "convertCash") return "available";
+  return "cost";
+}
+
+/** Row label for each money line, shared by the card and list views. */
+export const FUND_LINE_TERMS: Record<FundLineKind, string> = {
+  cost: "Cost",
+  yield: "Raises",
+  available: "Personal cash",
+};
+
 export const CATEGORY_LABELS: Record<string, string> = {
   influence: "Influence",
   money: "Fundraising",

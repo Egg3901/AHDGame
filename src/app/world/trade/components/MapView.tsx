@@ -162,7 +162,7 @@ export default function MapView({ ledger }: { ledger: WorldTradeLedger }) {
     <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-bold text-foreground">
-          World Trade Map{" "}
+          World trade map{" "}
           <span className="font-normal text-muted">
             · {focus ? `balance vs. ${focus}` : "net balance by nation"}
           </span>

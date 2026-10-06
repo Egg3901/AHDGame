@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { z } from "zod";
 import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
@@ -40,7 +40,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -52,12 +52,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       await getGameStateCollection(db)
     ).findOne({ _id: "current" }, { projection: { conflictsEnabled: 1, currentTurn: 1 } });
     if (!gs?.conflictsEnabled) {
-      return NextResponse.json({ error: "Conflicts subsystem disabled" }, { status: 404 });
+      return errorResponse(404, "Conflicts subsystem disabled");
     }
 
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const targetCountry = parsed.data.targetCountry.toUpperCase();
 
@@ -78,9 +78,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         .collection("cabinetMembers")
         .findOne({ countryId, positionId: defenceSeat, characterId: character._id }));
     if (!auth.user.isAdmin && !isHog && !isDefence) {
-      return NextResponse.json(
-        { error: "Only the head of government or the defence minister may declare war." },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the head of government or the defence minister may declare war."
       );
     }
 
@@ -91,7 +91,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       countryId,
       currentTurn
     );
-    if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
+    if (!check.ok) return errorResponse(check.status, check.error);
 
     // One live declaration at a time, so a chamber is never asked to ratify two
     // wars against the same country at once.
@@ -102,9 +102,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       "provisions.targetCountry": targetCountry,
     });
     if (existing) {
-      return NextResponse.json(
-        { error: "A declaration against that country is already before the legislature." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "A declaration against that country is already before the legislature."
       );
     }
 
@@ -120,11 +120,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         .findOne({ _id: character._id }, { projection: { actions: 1 } });
       const currentActions = fresh?.actions ?? 0;
       if (currentActions < actionCost) {
-        return NextResponse.json(
-          {
-            error: `Proposing a bill costs ${actionCost} action points (you have ${currentActions}).`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Proposing a bill costs ${actionCost} action points (you have ${currentActions}).`
         );
       }
       // Conditional $inc, not read-then-write: two declarations submitted at once
@@ -136,10 +134,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
           { $inc: { actions: -actionCost }, $set: { updatedAt: new Date() } }
         );
       if (spend.modifiedCount === 0) {
-        return NextResponse.json(
-          { error: "Your actions changed. Please try again." },
-          { status: 409 }
-        );
+        return errorResponse(409, "Your actions changed. Please try again.");
       }
     }
 

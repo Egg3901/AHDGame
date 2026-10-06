@@ -23,7 +23,7 @@
 import { NextResponse } from "next/server";
 import { requireHumanSessionWithCharacter } from "@/lib/api/requireAuth";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { isSittingLeader } from "@/lib/governorOffice/isSittingLeader";
@@ -81,7 +81,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country" }, { status: 400 });
+      return errorResponse(400, "Invalid country");
     }
 
     // The sitting head of government always sees their own diagnostics.
@@ -99,10 +99,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         // Preserve the original 401 when the caller wasn't authenticated at
         // all; otherwise it's an authenticated non-leader, non-admin.
         return auth.ok
-          ? NextResponse.json(
-              { error: "Only the sitting leader can view regime diagnostics" },
-              { status: 403 }
-            )
+          ? errorResponse(403, "Only the sitting leader can view regime diagnostics")
           : auth.response;
       }
     }

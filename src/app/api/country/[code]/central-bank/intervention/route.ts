@@ -9,7 +9,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError, forbidden, notFound, badRequest } from "@/lib/api/errors";
+import { handleRouteError, forbidden, notFound, badRequest, errorResponse } from "@/lib/api/errors";
 import { isSameCountry } from "@/lib/api/sameCountry";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { CentralBank } from "@/lib/db/types";
@@ -158,8 +158,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (!guard.ok) return guard.response;
 
     const parsed = await parseJsonBody(request, bandSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const baseRate =
       Number.isFinite(guard.rate.baseRate) && guard.rate.baseRate > 0
@@ -207,8 +206,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (!guard.ok) return guard.response;
 
     const parsed = await parseJsonBody(request, bandSchema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const baseRate =
       Number.isFinite(guard.rate.baseRate) && guard.rate.baseRate > 0

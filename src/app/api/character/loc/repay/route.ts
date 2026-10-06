@@ -12,7 +12,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError, badRequest } from "@/lib/api/errors";
+import { handleRouteError, badRequest, errorResponse, statusResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse, SAVINGS_WALLET_LIMITS } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, repaySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { currency, amount: rawAmount, commandId } = parsed.data;
     const c = currency as CurrencyCode;
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
       isLineOfCreditEnabled(),
     ]);
     if (!locEnabled || !forexEnabled) {
-      return NextResponse.json({ error: "Line of credit is not available" }, { status: 404 });
+      return errorResponse(404, "Line of credit is not available");
     }
 
     const character = await getCharacterByUserId(db, auth.user.userId);
@@ -90,9 +90,10 @@ export async function POST(request: Request) {
         ...accepted.locSettlement,
         request: requestQuote,
       });
-      return NextResponse.json(replay.error ? { error: replay.error } : replay.result, {
-        status: replay.error ? 409 : 200,
-      });
+      return statusResponse(
+        replay.error ? 409 : 200,
+        replay.error ? { error: replay.error } : replay.result
+      );
     }
     const loc = character.lineOfCredit;
     if (!loc?.accountsOpened?.[c]) {
@@ -217,7 +218,7 @@ export async function POST(request: Request) {
         result: { success: true, currency: c, amount: applied, fromPersonal },
       },
     });
-    if (settled.error) return NextResponse.json({ error: settled.error }, { status: 409 });
+    if (settled.error) return errorResponse(409, settled.error);
 
     return NextResponse.json({
       success: true,

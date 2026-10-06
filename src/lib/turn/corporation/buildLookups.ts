@@ -152,6 +152,8 @@ export async function buildCorporationLookups(
     canonicalFreightBillingEnabled?: boolean;
     /** Project editorial positions and audience lean only while the rule is enabled. */
     mediaEditorialEnabled?: boolean;
+    /** Project treasury currency only while political-media settlement is active. */
+    politicalMediaMarketEnabled?: boolean;
   }
 ): Promise<CorporationLookups> {
   await reconcileSignedTariffBills(db);
@@ -335,6 +337,13 @@ export async function buildCorporationLookups(
             minimumWageKaitzRatio: 1,
             unionLawBias: 1,
             unionsBanned: 1,
+            ...(options?.politicalMediaMarketEnabled === true
+              ? {
+                  currencyCode: 1,
+                  treasuryCashLocal: 1,
+                  treasuryBalance: 1,
+                }
+              : {}),
           },
         }
       )
@@ -1032,7 +1041,7 @@ export async function buildCorporationLookups(
     const curtainedCountries = new Set<string>(
       COUNTRY_ORDER.filter((c) => isCurtained(c, curtainYear, curtainEnabled))
     );
-    const { affinityFor, capUnitsFor } = buildTradeAffinity({
+    const { affinityFor, capUnitsFor, importCostMultiplierFor } = buildTradeAffinity({
       ftaPairs: activeFtaPairs,
       blocsByCountry,
       tariffs: allTariffs,
@@ -1044,6 +1053,7 @@ export async function buildCorporationLookups(
       nationalBalances: nationalCommodityBalancesByCountry,
       affinityFor,
       capUnitsFor,
+      importCostMultiplierFor,
     });
   }
   const marketShareBySectorId = buildMarketShareBySectorId({
@@ -1315,6 +1325,7 @@ export async function buildCorporationLookups(
   }
 
   return {
+    preset: marketSharePreset,
     eraYear,
     eraUnitScale,
     corporations,

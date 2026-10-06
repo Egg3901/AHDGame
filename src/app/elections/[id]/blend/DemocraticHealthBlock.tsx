@@ -1,4 +1,4 @@
-import { BLEND, FONT } from "@/components/blend/tokens";
+import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import type { ElectionDetail } from "../components/ElectionDetailTypes";
 
 export function DemocraticHealthBlock({
@@ -96,18 +96,7 @@ export function DemocraticHealthBlock({
           {data.currentRulerReliefPct.toFixed(0)}%.
         </p>
       ) : null}
-      <p
-        style={{
-          margin: "9px 0 0",
-          fontFamily: FONT.mono,
-          fontSize: 9.5,
-          letterSpacing: ".1em",
-          textTransform: "uppercase",
-          color: BLEND.mutedDim,
-        }}
-      >
-        Read on turn {data.recordedTurn}
-      </p>
+      <p style={{ ...BLEND_LABEL, margin: "9px 0 0" }}>Read on turn {data.recordedTurn}</p>
     </>
   );
 }

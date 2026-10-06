@@ -44,7 +44,7 @@ export function ElectionFilterBar({
         }
         className="rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
       >
-        <option value="">All Countries</option>
+        <option value="">All countries</option>
         {registered.map((id) => (
           <option key={id} value={id}>
             {COUNTRY_CONFIGS[id].name} Only
@@ -58,32 +58,32 @@ export function ElectionFilterBar({
         }
         className="rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
       >
-        <option value="">All Types</option>
-        <option value="senate">Senate Only</option>
-        <option value="house">House Only</option>
-        <option value="commons">Commons Only</option>
-        <option value="governor">Governor Only</option>
-        <option value="stateSenate">State Senate Only</option>
-        <option value="president">President Only</option>
-        <option value="shugiin">Shūgiin Only</option>
-        <option value="sangiin">Sangiin Only</option>
-        <option value="bundestag">Bundestag Only</option>
-        <option value="landtag">Landtag Only</option>
-        <option value="ministerPresident">Minister-President Only</option>
-        <option value="regionalCouncil">Regional Council Only</option>
-        <option value="npcDelegate">NPC Delegate Only</option>
-        <option value="peoplesCongress">People&apos;s Congress Only</option>
+        <option value="">All types</option>
+        <option value="senate">Senate only</option>
+        <option value="house">House only</option>
+        <option value="commons">Commons only</option>
+        <option value="governor">Governor only</option>
+        <option value="stateSenate">State Senate only</option>
+        <option value="president">President only</option>
+        <option value="shugiin">Shūgiin only</option>
+        <option value="sangiin">Sangiin only</option>
+        <option value="bundestag">Bundestag only</option>
+        <option value="landtag">Landtag only</option>
+        <option value="ministerPresident">Minister-president only</option>
+        <option value="regionalCouncil">Regional council only</option>
+        <option value="npcDelegate">NPC delegate only</option>
+        <option value="peoplesCongress">People&apos;s Congress only</option>
         <option value="dail">Dáil Éireann Only</option>
         <option value="seanad">Seanad Éireann Only</option>
         <option value="uachtaran">Uachtarán na hÉireann Only</option>
-        <option value="localCouncil">IE Local Council Only</option>
+        <option value="localCouncil">IE local council only</option>
       </select>
       <select
         value={filterState}
         onChange={(e) => dispatch({ type: "SET_FILTER_STATE", value: e.target.value })}
         className="rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
       >
-        <option value="">All States/Regions</option>
+        <option value="">All states/Regions</option>
         <optgroup label="US">
           {US_STATES.map((s) => (
             <option key={s} value={s}>

@@ -36,14 +36,17 @@ export async function seedTRRegions(
   const { trRegions } = await import("@/lib/seeds/tr/trRegions");
   const { trRegions1953 } = await import("@/lib/seeds/tr/trRegions1953");
   const { trRegions1991 } = await import("@/lib/countries/tr/data/trRegions1991");
-  const { trRegions2019 } = await import("@/lib/countries/tr/data/trRegions2019");
+  const { trRegions2013 } = await import("@/lib/countries/tr/data/trRegions2013");
+  const { trRegionsModern } = await import("@/lib/countries/tr/data/trRegionsModern");
   const { selectPresetBundle } = await import("@/lib/seeds/presetSelector");
   const bundle = selectPresetBundle(
     preset,
     {
-      "2019-default": trRegions2019,
-      "2023-default": trRegions2019,
-      "2027-default": trRegions2019,
+      "1999-default": trRegions2013,
+      "2007-default": trRegions2013,
+      "2019-default": trRegionsModern,
+      "2023-default": trRegionsModern,
+      "2027-default": trRegionsModern,
       "1953-default": trRegions1953,
       "1979-default": trRegions,
       "1991-default": trRegions1991,
@@ -150,7 +153,7 @@ export async function seedTRStateMetrics(
   const { trStateMetrics } = await import("@/lib/seeds/tr/trStateMetrics");
   const { getRegionMetricPresets, applyMetricPresetToMetrics } =
     await import("@/lib/seeds/metricPresets");
-  // Base bundle is ~1979; 1953 overlay is the only registered TR preset (2019 no-op).
+  // The base is historical; authored 1953 and modern overlays select the era.
   const bundle = trStateMetrics.map((metric) => {
     const overlay = getRegionMetricPresets("TR", String(metric._id), preset);
     return overlay ? applyMetricPresetToMetrics(metric, overlay) : metric;
@@ -190,7 +193,7 @@ export async function seedTRBaselines(
       : is1979
         ? applyEra1979BaselineAdjustments(raw)
         : raw;
-    // Align decay targets with the authored metric overlay (1953); no-op otherwise.
+    // Align decay targets with the same authored overlay used by initial metrics.
     const overlay = getRegionMetricPresets("TR", String(raw._id), preset);
     const baseline = overlay ? applyMetricPresetToBaseline(adjusted, overlay) : adjusted;
     const { _id, ...baselineData } = baseline;

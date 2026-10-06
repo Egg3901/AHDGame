@@ -22,6 +22,8 @@ import type { MediaProductProject } from "@/lib/products/mediaProduct";
  * and other phases — avoids redundant DB reads.
  */
 export interface CorporationLookups {
+  /** Originating reset preset selects the qualified input baskets. */
+  preset?: string;
   corporations: Corporation[];
   sectorsByCorp: Map<string, CorporateSector[]>;
   productLinesV2Enabled?: boolean;
@@ -547,4 +549,15 @@ export interface SectorCalculationsResult {
     bindingResource: ExtractableResource;
     utilization: number;
   }>;
+  /**
+   * Marketing cash the sector pass settled per buying corp, per-turn anchor
+   * basis: the capped, funded share of the delivered advertising book.
+   * Read-only input to the advertising agreement attribution; no cash moves.
+   */
+  settledMarketingSpendAnchorByBuyerId: Map<string, number>;
+  /**
+   * Clearing value of actually delivered advertising per selling corp,
+   * per-turn anchor basis. Read-only input to the attribution; no cash moves.
+   */
+  advertisingDeliveredAnchorBySellerId: Map<string, number>;
 }

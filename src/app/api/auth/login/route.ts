@@ -15,7 +15,7 @@ import { AUTH_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
 import { durableRateLimit } from "@/lib/api/rateLimit.mongo";
 import { parseJsonBody } from "@/lib/api/validate";
 import { loginBodySchema } from "@/lib/api/schemas/auth";
-import { handleRouteError, internalError } from "@/lib/api/errors";
+import { handleRouteError, internalError, errorResponse } from "@/lib/api/errors";
 import { classifyDevice } from "@/lib/utils/userAgent";
 import { checkIpFireAndForget } from "@/lib/ip/ipteoh";
 import { getCfFingerprint, isEmptyCfFingerprint } from "@/lib/utils/cfFingerprint";
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, loginBodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { email, password, fingerprint, deviceKey, fingerprintComponents } = parsed.data;
 
@@ -100,7 +100,7 @@ export async function POST(request: Request) {
         outcome: "rejected",
         reason: "invalid_credentials",
       });
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+      return errorResponse(401, "Invalid credentials");
     }
 
     // Check if user is banned
@@ -114,10 +114,9 @@ export async function POST(request: Request) {
         outcome: "rejected",
         reason: "banned",
       });
-      return NextResponse.json(
-        { error: "banned", reason: user.banReason || "Violation of rules" },
-        { status: 403 }
-      );
+      return errorResponse(403, "banned", {
+        extra: { reason: user.banReason || "Violation of rules" },
+      });
     }
 
     // Fenced accounts never authenticate via legacy password login. Same
@@ -154,7 +153,7 @@ export async function POST(request: Request) {
         outcome: "rejected",
         reason: "invalid_credentials",
       });
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+      return errorResponse(401, "Invalid credentials");
     }
 
     // Verify password — reject OAuth-only accounts that have no password set
@@ -170,7 +169,7 @@ export async function POST(request: Request) {
         outcome: "rejected",
         reason: "invalid_credentials",
       });
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+      return errorResponse(401, "Invalid credentials");
     }
 
     if (
@@ -222,7 +221,7 @@ export async function POST(request: Request) {
         outcome: "rejected",
         reason: "invalid_credentials",
       });
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+      return errorResponse(401, "Invalid credentials");
     }
     const token = await new SignJWT({
       userId: user._id.toString(),
@@ -297,7 +296,7 @@ export async function POST(request: Request) {
         outcome: "rejected",
         reason: "invalid_credentials",
       });
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+      return errorResponse(401, "Invalid credentials");
     }
 
     cookieStore.set(AUTH_COOKIE_NAME, token, await getAuthCookieOptions());

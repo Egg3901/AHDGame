@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
 import { Button } from "@/components/ui";
 import { useAuthMe } from "@/contexts/AuthDataContext";
-import { FOREX_ACTIVE_COUNTRIES } from "@/lib/constants/currencies";
+import { FOREX_ACTIVE_CURRENCIES } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import {
@@ -24,7 +24,7 @@ export function LobbyingPanel({
   userLobbyLiquid,
   userHomeCurrency,
   userHomeLiquid,
-  countryId,
+  countryId: _countryId,
   bankApiBasePath,
   onChanged,
 }: {
@@ -45,7 +45,7 @@ export function LobbyingPanel({
   const [lobbyError, setLobbyError] = useState<string | null>(null);
   const [lobbySuccess, setLobbySuccess] = useState<string | null>(null);
 
-  const forexEnabled = FOREX_ACTIVE_COUNTRIES.includes(countryId);
+  const forexEnabled = FOREX_ACTIVE_CURRENCIES.includes(nationalCurrency);
   const autoConvertEnabled = authUser?.character?.autoConvertEnabled !== false;
 
   const lobbyEligibleCandidates = nominations

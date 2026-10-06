@@ -131,7 +131,7 @@ export function CommandEconomyAdminPanel() {
         <div className="overflow-x-auto rounded-xl border border-card-border bg-card">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
-              <tr className="border-b border-card-border text-[10px] font-bold uppercase tracking-wide text-muted">
+              <tr className="border-b border-card-border text-sm font-semibold text-foreground">
                 <th className="px-3 py-2">Country</th>
                 <th className="px-3 py-2">Regime</th>
                 <th className="px-3 py-2 text-right">Mktz</th>

@@ -6,7 +6,7 @@
  */
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { Tariff } from "@/lib/db/types";
 import { ALL_COUNTRY_IDS, type CountryId } from "@/lib/constants/countries";
 import { reconcileSignedTariffBills } from "@/lib/tariffs/reconcileTariffs";
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const raw = searchParams.get("countryId");
     if (!raw || !(ALL_COUNTRY_IDS as readonly string[]).includes(raw)) {
-      return NextResponse.json({ error: "Invalid or missing countryId" }, { status: 400 });
+      return errorResponse(400, "Invalid or missing countryId");
     }
     const countryId = raw as CountryId;
 

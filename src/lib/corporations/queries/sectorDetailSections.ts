@@ -515,6 +515,7 @@ export function computeTechGrowthCostReductionPct(args: {
 
 /** Strategy panel: current/available strategies, transition and cost fields. */
 export function buildSectorStrategySection(args: {
+  preset?: string;
   sector: CorporateSector;
   sectorType: CorporationType;
   effectiveRates: { isTransitioning: boolean };
@@ -688,70 +689,73 @@ export function buildSectorStrategySection(args: {
       };
 
       return (
-        getSectorStrategies(sectorType, mediaOperatingModelsEnabled, sector.mediaDiscriminator).map(
-          (s) => {
-            const availability = getStrategyAvailability(
-              techCorpView,
-              s,
-              techCurrentYear,
-              techTreesEnabled
-            );
-            const projection = projectStrategy(s);
-            return {
-              id: s.id,
-              name: s.name,
-              description: s.description,
-              locked: availability.locked,
-              lockReason: availability.reason ?? null,
-              minDecade: s.minDecade ?? null,
-              // Percentage points this strategy would move the effective margin
-              // by, at today's commodity prices. null when redacted.
-              projectedMarginDelta: projection.marginDelta,
-              // Fractional change to realized revenue via price realization.
-              projectedRealizationDelta: projection.realizationDelta,
-              // D9 capacity rescale preview (plants tier): retooling re-denominates
-              // capacity into the new output mix at equal value, so the unit count
-              // moves even though nothing was built or scrapped. Shipped for every
-              // mode (harmless below plants, where the page does not read it) using
-              // the SAME `capacityRescaleRatio` the retool command applies.
-              capacityRescaleRatio: capacityRescaleRatio(
-                sectorType,
-                sector.strategyId,
-                s.id,
-                sector.industryModel,
-                sector.mediaDiscriminator
-              ),
-              capacityAfterRetool:
-                typeof sector.capitalStock === "number" && Number.isFinite(sector.capitalStock)
-                  ? sector.capitalStock *
-                    capacityRescaleRatio(
-                      sectorType,
-                      sector.strategyId,
-                      s.id,
-                      sector.industryModel,
-                      sector.mediaDiscriminator
-                    )
-                  : null,
-              // ₳/turn preview; null when redacted or not an extraction sector.
-              projectedRevenuePerTurn:
-                sectorType === "extraction" && !shouldRedact
-                  ? Math.round(
-                      projectStrategyRevenuePerTurn({
-                        revenueAnchor: sectorRevenueForPreview,
-                        supply: s.supply,
-                        priceRatioByCommodity: previewPriceRatioByCommodity,
-                        capacityMultipliers:
-                          stateResources === undefined
-                            ? undefined // no cap doc, uncapped legacy state
-                            : stateResources === null
-                              ? null // cap doc with no resources, zero capacity
-                              : (strategyCapacityMultipliers?.get(s.id) ?? {}),
-                      })
-                    )
-                  : null,
-            };
-          }
-        ) ?? []
+        getSectorStrategies(
+          sectorType,
+          mediaOperatingModelsEnabled,
+          sector.mediaDiscriminator,
+          args.preset
+        ).map((s) => {
+          const availability = getStrategyAvailability(
+            techCorpView,
+            s,
+            techCurrentYear,
+            techTreesEnabled
+          );
+          const projection = projectStrategy(s);
+          return {
+            id: s.id,
+            name: s.name,
+            description: s.description,
+            locked: availability.locked,
+            lockReason: availability.reason ?? null,
+            minDecade: s.minDecade ?? null,
+            // Percentage points this strategy would move the effective margin
+            // by, at today's commodity prices. null when redacted.
+            projectedMarginDelta: projection.marginDelta,
+            // Fractional change to realized revenue via price realization.
+            projectedRealizationDelta: projection.realizationDelta,
+            // D9 capacity rescale preview (plants tier): retooling re-denominates
+            // capacity into the new output mix at equal value, so the unit count
+            // moves even though nothing was built or scrapped. Shipped for every
+            // mode (harmless below plants, where the page does not read it) using
+            // the SAME `capacityRescaleRatio` the retool command applies.
+            capacityRescaleRatio: capacityRescaleRatio(
+              sectorType,
+              sector.strategyId,
+              s.id,
+              sector.industryModel,
+              sector.mediaDiscriminator
+            ),
+            capacityAfterRetool:
+              typeof sector.capitalStock === "number" && Number.isFinite(sector.capitalStock)
+                ? sector.capitalStock *
+                  capacityRescaleRatio(
+                    sectorType,
+                    sector.strategyId,
+                    s.id,
+                    sector.industryModel,
+                    sector.mediaDiscriminator
+                  )
+                : null,
+            // ₳/turn preview; null when redacted or not an extraction sector.
+            projectedRevenuePerTurn:
+              sectorType === "extraction" && !shouldRedact
+                ? Math.round(
+                    projectStrategyRevenuePerTurn({
+                      revenueAnchor: sectorRevenueForPreview,
+                      supply: s.supply,
+                      priceRatioByCommodity: previewPriceRatioByCommodity,
+                      capacityMultipliers:
+                        stateResources === undefined
+                          ? undefined // no cap doc, uncapped legacy state
+                          : stateResources === null
+                            ? null // cap doc with no resources, zero capacity
+                            : (strategyCapacityMultipliers?.get(s.id) ?? {}),
+                    })
+                  )
+                : null,
+          };
+        }) ?? []
       );
     })(),
     currentTurn,
@@ -1442,6 +1446,7 @@ export function buildSectorPlantsSection(args: {
   techGrowthCostMultiplier: number;
   /** The world's era unit-basis scale (`getEraUnitScale(preset)`). */
   eraUnitScale: number;
+  preset?: string;
   corpCapitalAnchor: number;
   /** Untapped units in this market — see `unownedHeadroomUnitsOf`. */
   headroomUnits: number;
@@ -1522,6 +1527,7 @@ export function buildSectorPlantsSection(args: {
     hostCostOfLivingIndex,
     techGrowthCostMultiplier,
     eraUnitScale,
+    preset,
     corpCapitalAnchor,
     headroomUnits,
     demandGapUnits = 0,
@@ -1662,6 +1668,7 @@ export function buildSectorPlantsSection(args: {
     // 326.9x off the invoice for a rare-earth sector.
     strategyId: sector.strategyId ?? null,
     year: currentYear,
+    preset,
     eraUnitScale,
     marketSharePercent,
     nationalMarketSharePercent,

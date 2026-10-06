@@ -6,7 +6,7 @@ import { runTransactionWithSessionRetry } from "@/lib/db/transactionWithRetry";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getGameState } from "@/lib/gameState";
 import { closeCeoTenure } from "@/lib/corporations/ceoHistory";
@@ -90,7 +90,7 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
     const { id } = await params;
     const parsed = await parseJsonBody(request, relocateSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { targetStateId, targetCountryId, paymentMethod } = parsed.data;
@@ -104,9 +104,9 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
     const { corporation } = resolved;
 
     if (corporation.primaryUnderwritingIncomingFunding || corporation.bankUnderwritingFunding) {
-      return NextResponse.json(
-        { error: "Primary underwriting cash is settling; retry relocation after settlement" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Primary underwriting cash is settling; retry relocation after settlement"
       );
     }
 
@@ -121,16 +121,16 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
         corporation.headquartersRelocationBondFunding
       )
     ) {
-      return NextResponse.json(
-        { error: "Resolve secured construction before relocating corporate headquarters" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Resolve secured construction before relocating corporate headquarters"
       );
     }
 
     if (corporation.federationPendingHeadquartersId) {
-      return NextResponse.json(
-        { error: "Choose this firm's new headquarters through its pending federation settlement." },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "Choose this firm's new headquarters through its pending federation settlement."
       );
     }
 
@@ -143,13 +143,10 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
       .collection<State>("states")
       .findOne({ _id: normalizedTarget, countryId: resolvedTargetCountryId });
     if (!targetState) {
-      return NextResponse.json({ error: "Invalid target state or region" }, { status: 400 });
+      return errorResponse(400, "Invalid target state or region");
     }
     if (corporation.headquartersState === normalizedTarget) {
-      return NextResponse.json(
-        { error: "Corporation is already headquartered in this state" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Corporation is already headquartered in this state");
     }
 
     if (!corporation.isPrivate && targetState.countryId) {
@@ -161,12 +158,9 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
         "payload.destinationStateCode": normalizedTarget,
       });
       if (!passedVote) {
-        return NextResponse.json(
-          {
-            error:
-              "Public corporations require a passed shareholder relocation vote. Propose one from the admin tab.",
-          },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "Public corporations require a passed shareholder relocation vote. Propose one from the admin tab."
         );
       }
     }
@@ -177,11 +171,9 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
       // carrying the `economyPreview` flag — the old condition let a corp move
       // its HQ into a coming-soon country (the whole Eastern bloc).
       if (targetAccess.econOnly) {
-        return NextResponse.json(
-          {
-            error: `Cannot relocate to ${targetState.name} — ${targetState.countryId} is an econ-only nation and not open for corporate relocation.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Cannot relocate to ${targetState.name} — ${targetState.countryId} is an econ-only nation and not open for corporate relocation.`
         );
       }
     }
@@ -194,10 +186,7 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
       corpCountryId = currentHq?.countryId;
     }
     if (!corpCountryId) {
-      return NextResponse.json(
-        { error: "Corporation has no resolvable home country" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Corporation has no resolvable home country");
     }
 
     const commandEconomyBlock = await commandEconomyRelocationBlock(
@@ -207,7 +196,7 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
       targetState.countryId
     );
     if (commandEconomyBlock) {
-      return NextResponse.json({ error: commandEconomyBlock }, { status: 400 });
+      return errorResponse(400, commandEconomyBlock);
     }
 
     // Load FX rates once — used for cost math and any currency conversion.
@@ -226,26 +215,21 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
       (existingBondLease.targetStateId !== normalizedTarget ||
         existingBondLease.targetCountryId !== targetState.countryId)
     ) {
-      return NextResponse.json(
-        {
-          error: "A relocation bond is awaiting publication; retry its original headquarters move",
-        },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "A relocation bond is awaiting publication; retry its original headquarters move"
       );
     }
     if (existingBondLease && paymentMethod !== "bond") {
-      return NextResponse.json(
-        { error: "A relocation bond is awaiting publication; retry its original payment method" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "A relocation bond is awaiting publication; retry its original payment method"
       );
     }
     const relocationCost = existingBondLease?.relocationCostAnchor ?? computedCost.cost;
     const crossCountry = existingBondLease?.crossCountry ?? computedCost.crossCountry;
     if (relocationCost <= 0) {
-      return NextResponse.json(
-        { error: "Cannot relocate — market capitalization is too low" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Cannot relocate — market capitalization is too low");
     }
 
     const isImperialCeo = corporation.ceoType === "imperial";
@@ -257,10 +241,10 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
           .collection<Character>("characters")
           .findOne({ _id: corporation.ceoId }, { projection: { userId: 1, homeState: 1 } });
     if (!ceoChar) {
-      return NextResponse.json({ error: "CEO record not found" }, { status: 400 });
+      return errorResponse(400, "CEO record not found");
     }
     if (ceoChar.userId.toString() !== auth.user.userId) {
-      return NextResponse.json({ error: "Only the CEO can perform this action" }, { status: 403 });
+      return errorResponse(403, "Only the CEO can perform this action");
     }
     const ceoVacated =
       existingBondLease?.ceoVacated ??
@@ -299,11 +283,9 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
         corpFxRate
       );
       if (corpCapitalAnchor < relocationCost + relocationSpreadAnchor) {
-        return NextResponse.json(
-          {
-            error: `Insufficient cash. Need ${Math.round(relocationCost + relocationSpreadAnchor).toLocaleString()}, have ${Math.round(corporation.liquidCapital).toLocaleString()}.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Insufficient cash. Need ${Math.round(relocationCost + relocationSpreadAnchor).toLocaleString()}, have ${Math.round(corporation.liquidCapital).toLocaleString()}.`
         );
       }
     }
@@ -322,19 +304,15 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
         fxByCurrency
       );
       if (bondPreflight.cooldownTurnsRemaining != null) {
-        return NextResponse.json(
-          {
-            error: `Bond issuance on cooldown. ${bondPreflight.cooldownTurnsRemaining} turns remaining.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Bond issuance on cooldown. ${bondPreflight.cooldownTurnsRemaining} turns remaining.`
         );
       }
       if (!bondPreflight.ok) {
-        return NextResponse.json(
-          {
-            error: `Bond issuance would exceed leverage limit. Current debt: ${Math.round(bondPreflight.existingDebt).toLocaleString()}, equity: ${Math.round(bondPreflight.totalEquity).toLocaleString()}.`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Bond issuance would exceed leverage limit. Current debt: ${Math.round(bondPreflight.existingDebt).toLocaleString()}, equity: ${Math.round(bondPreflight.totalEquity).toLocaleString()}.`
         );
       }
     }
@@ -357,10 +335,7 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
         propertySectors
       );
       if (!convResult.ok) {
-        return NextResponse.json(
-          { error: convResult.error },
-          { status: convResult.rateUnavailable ? 503 : 400 }
-        );
+        return errorResponse(convResult.rateUnavailable ? 503 : 400, convResult.error);
       }
       currencyConversion = convResult;
       // Only refetch when conversion actually mutated the corp — skipping the
@@ -370,10 +345,7 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
           .collection<Corporation>("corporations")
           .findOne({ _id: corporation._id });
         if (!refreshed) {
-          return NextResponse.json(
-            { error: "Corporation not found after currency conversion" },
-            { status: 500 }
-          );
+          return errorResponse(500, "Corporation not found after currency conversion");
         }
         workingCorp = refreshed;
         workingFxRate = fxRateForCorpFromMap(workingCorp, fxByCurrency);
@@ -389,9 +361,9 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
         fxByCurrency
       );
       if (postConversionPreflight.cooldownTurnsRemaining != null || !postConversionPreflight.ok) {
-        return NextResponse.json(
-          { error: "Relocation bond capacity changed during currency conversion; retry" },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "Relocation bond capacity changed during currency conversion; retry"
         );
       }
       bondPreflight = postConversionPreflight;
@@ -410,9 +382,9 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
           true
         );
     if (!needsCurrencyConversion && !hqTransitionKeys) {
-      return NextResponse.json(
-        { error: "A sector changed or acquired secured construction during relocation" },
-        { status: 409 }
+      return errorResponse(
+        409,
+        "A sector changed or acquired secured construction during relocation"
       );
     }
     const releaseHqTransition = async () => {
@@ -446,9 +418,9 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
           }
         );
         if (updateResult.matchedCount !== 1) {
-          return NextResponse.json(
-            { error: "Primary underwriting cash is settling; retry relocation after settlement" },
-            { status: 409 }
+          return errorResponse(
+            409,
+            "Primary underwriting cash is settling; retry relocation after settlement"
           );
         }
 
@@ -502,7 +474,7 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
       // Bond path — preflight already validated above. Issue the bond now; it
       // stamps the (possibly new) corp currency.
       if (!bondPreflight) {
-        return NextResponse.json({ error: "Internal bond-path error" }, { status: 500 });
+        return errorResponse(500, "Internal bond-path error");
       }
       if (!frozenBondLease) {
         const operationKey = `hq-bond:${workingCorp._id.toHexString()}:${targetState.countryId}:${normalizedTarget}:${currentTurn}`;
@@ -531,17 +503,14 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
           ...(workingCorp.ceoType ? { ceoType: workingCorp.ceoType } : {}),
         });
         if (!acquiredLease) {
-          return NextResponse.json(
-            { error: "Corporate funding changed during relocation; retry the move" },
-            { status: 409 }
-          );
+          return errorResponse(409, "Corporate funding changed during relocation; retry the move");
         }
         frozenBondLease = acquiredLease;
       }
       if (frozenBondLease.currencyCode !== resolveCorpLiquidCurrencyCode(workingCorp)) {
-        return NextResponse.json(
-          { error: "The frozen relocation bond quote no longer matches corporate currency" },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "The frozen relocation bond quote no longer matches corporate currency"
         );
       }
       const bondCommit = await runTransactionWithSessionRetry(getMongoClient, async (session) => {
@@ -606,15 +575,15 @@ export async function relocateHeadquarters(request: Request, { params }: RoutePa
         throw error;
       });
       if (bondCommit.status === "transactions_unavailable") {
-        return NextResponse.json(
-          { error: "Bond relocation requires atomic database transactions; try again later" },
-          { status: 503 }
+        return errorResponse(
+          503,
+          "Bond relocation requires atomic database transactions; try again later"
         );
       }
       if (bondCommit.status === "underwriting_busy") {
-        return NextResponse.json(
-          { error: "Primary underwriting cash is settling; retry relocation after settlement" },
-          { status: 409 }
+        return errorResponse(
+          409,
+          "Primary underwriting cash is settling; retry relocation after settlement"
         );
       }
       if (bondCommit.status === "bond_refused") {

@@ -204,7 +204,7 @@ export function applyHouseholdDemand(
   global: GlobalLedger,
   byState: StateLedger,
   demandTruncated: Map<CommodityType, number>
-): void {
+): Map<string, Map<CommodityType, number>> {
   const household = computeHouseholdConsumption({
     eraUnitScale: inputs.eraUnitScale,
     // Plants worlds: re-anchor household demand onto the physical unit basis
@@ -233,6 +233,7 @@ export function applyHouseholdDemand(
       if (bal) bal.demand += units;
     }
   }
+  return household.byState;
 }
 
 /**

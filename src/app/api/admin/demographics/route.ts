@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { adminDemographicsPostSchema } from "@/lib/api/schemas/admin";
 import type { DemographicCategory, StateDemographics, AdminLog } from "@/lib/db/types";
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, adminDemographicsPostSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
@@ -70,10 +70,7 @@ export async function POST(request: Request) {
       .toArray();
 
     if (currentDemographics.length === 0) {
-      return NextResponse.json(
-        { error: "No demographics data found to save as defaults" },
-        { status: 400 }
-      );
+      return errorResponse(400, "No demographics data found to save as defaults");
     }
 
     // Clear existing defaults and insert current values

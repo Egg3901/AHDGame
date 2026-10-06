@@ -8,7 +8,7 @@ import {
 import { selectStatesBundleForPreset } from "./seedStates";
 import { policies } from "@/lib/seeds/reference/policies";
 import { gameConfig } from "@/lib/seeds/reference/gameConfig";
-import { coreGameConfigUpdate } from "./coreGameConfigUpdate";
+import { STALE_PER_WORLD_GAME_CONFIG_UNSET, coreGameConfigUpdate } from "./coreGameConfigUpdate";
 import { demographicCategories } from "@/lib/seeds/demographicCategories";
 import { registerAndGenerate, stateCensusData } from "@/lib/seeds/stateDemographics";
 import { stateCensusData1953 } from "@/lib/seeds/stateCensusData1953";
@@ -178,28 +178,10 @@ export const RESET_DROP_COLLECTIONS: ReadonlyArray<{
   },
 ];
 
-/**
- * Per-world markers the turn engine stamps onto `gameConfig`, cleared on reset.
- *
- * These are the one thing the old blanket `gameConfig` drop legitimately bought.
- * `src/lib/market/launchGuard.ts` stamps a reference market cap and turn on the
- * config doc and compares later turns against it; carried into a new world they
- * would measure the new market's drawdown against the dead world's valuation.
- *
- * Same shape and rationale as `STALE_PROGRESS_GAME_STATE_UNSET` on `gameState`
- * — an explicit `$unset` list, not a blanket drop, so the ~100 operational
- * fields beside them survive. ⚠️ The market-guard *configuration* knobs
- * (`marketGuardEnabled`, `marketGuardDropPct`, `marketGuardGraceTurns`) are
- * admin settings, not per-world state, and must NOT be listed here.
- */
-export const STALE_PER_WORLD_GAME_CONFIG_UNSET: Readonly<Record<string, "">> = Object.freeze({
-  marketGuardReferenceMcap: "",
-  marketGuardReferenceFundamentalMcap: "",
-  marketGuardReferenceTurn: "",
-  marketGuardTrippedAt: "",
-});
-
-export { STALE_MARKET_MODE_STAMP_UNSET } from "./coreGameConfigUpdate";
+export {
+  STALE_MARKET_MODE_STAMP_UNSET,
+  STALE_PER_WORLD_GAME_CONFIG_UNSET,
+} from "./coreGameConfigUpdate";
 
 export type RunSeedOptions = {
   db: Db;
@@ -377,30 +359,40 @@ export async function runSeed(
             : entry.name === "demographicCategories"
               ? { _id: { $in: ownedCategoryIds } }
               : {};
-      const res = await db
-        .collection(entry.name)
-        // Untyped handles across a heterogeneous list; each filter is validated
-        // by the scope contract test rather than by the collection's generic.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .deleteMany(filter as any)
-        .catch(() => ({ deletedCount: 0 }));
-      deleted += res.deletedCount ?? 0;
+      try {
+        const res = await db
+          .collection(entry.name)
+          // Untyped handles across a heterogeneous list; each filter is validated
+          // by the scope contract test rather than by the collection's generic.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .deleteMany(filter as any);
+        deleted += res.deletedCount ?? 0;
+      } catch (error) {
+        throw new Error(`RESET cleanup failed while clearing ${entry.name}`, {
+          cause: error,
+        });
+      }
     }
-    log(
-      `RESET mode: cleared ${deleted} US row(s) across ${RESET_DROP_COLLECTIONS.length} collections`
-    );
     // gameConfig is NOT dropped — see RESET_DROP_COLLECTIONS. Clear only the
     // per-world markers the turn engine stamped onto it, so the operational
     // half of the document (maintenance, webhooks, feature gates) survives.
-    await db
-      .collection<GameConfig>("gameConfig")
-      .updateOne({ _id: gameConfig._id }, { $unset: STALE_PER_WORLD_GAME_CONFIG_UNSET })
-      .catch(() => {});
+    try {
+      await db
+        .collection<GameConfig>("gameConfig")
+        .updateOne({ _id: gameConfig._id }, { $unset: STALE_PER_WORLD_GAME_CONFIG_UNSET });
+    } catch (error) {
+      throw new Error("RESET cleanup failed while clearing per-world gameConfig markers", {
+        cause: error,
+      });
+    }
     // Reset the US party counter so the US parties deleted above get consistent
     // ids on re-insert. Scoped: the other 23 countries' parties are untouched by
     // this function, so wiping their counters would hand the next insert a
     // colliding seqId.
     await resetPartyCounters(db, [US_COUNTRY_ID]);
+    log(
+      `RESET mode: cleared ${deleted} US row(s) across ${RESET_DROP_COLLECTIONS.length} collections`
+    );
   }
 
   for (const state of statesBundle) {

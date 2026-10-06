@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_READ_LIMITS } from "@/lib/api/rateLimit";
 import type { Corporation, CorporateSector, State, StateMetrics, Bond } from "@/lib/db/types";
@@ -26,6 +26,7 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { BOND_MATURITY_LABELS } from "@/lib/db/types/bond";
 import type { BondMaturityTurns } from "@/lib/db/types/bond";
 import { calculateCreditScore, getBondCouponRate } from "@/lib/constants/bonds";
+import { corporateBondMaturityLiquidity } from "@/lib/bonds/corporateCredit";
 import { isBondDefaultCreditPenaltyActive } from "@/lib/bonds/corporateBondDefault";
 import type { CentralBank } from "@/lib/db/types";
 import { getCountryConfig } from "@/lib/constants/countries";
@@ -334,6 +335,24 @@ async function buildCorpDetail(nameLower: string): Promise<CorpDetailPayload> {
     totalEquity,
     {
       bondDefaultCreditPenaltyActive: isBondDefaultCreditPenaltyActive(corporation, currentTurn),
+      nearTermLiquidityScore:
+        corporateBondMaturityLiquidity({
+          bonds: outstandingBonds,
+          liquidCapitalAnchor: corpCapitalToAnchor(
+            corporation.liquidCapital,
+            corpCurrency,
+            corpFxRate
+          ),
+          incomePerTurn: corpCapitalToAnchor(
+            (income * GAME_DAYS_PER_YEAR) / TURNS_PER_YEAR,
+            corpCurrency,
+            corpFxRate
+          ),
+          annualCouponObligations: annualInterestAnchor,
+          currentTurn,
+          fxByCurrency,
+        }).liquidityScore ?? undefined,
+      persistedCompositeScore: corporation.creditCompositeSnapshot ?? undefined,
     }
   );
 
@@ -449,7 +468,7 @@ const getCachedCorpDetail = unstable_cache(buildCorpDetail, ["discord-bot:corp-d
 export async function GET(request: Request) {
   try {
     if (!requireBotToken(request)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const rateLimit = checkRateLimit(
@@ -469,7 +488,7 @@ export async function GET(request: Request) {
     }
 
     if (!name) {
-      return NextResponse.json({ error: "Must provide name or list=true" }, { status: 400 });
+      return errorResponse(400, "Must provide name or list=true");
     }
 
     const detail = await getCachedCorpDetail(name.toLowerCase());

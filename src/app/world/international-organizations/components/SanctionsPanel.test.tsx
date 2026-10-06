@@ -178,7 +178,7 @@ describe("SanctionsPanel", () => {
       />
     );
     // The viewer is Germany's foreign minister, and Germany holds no ballot.
-    expect(screen.getByRole("button", { name: "Vote Yes" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Vote yes" }).hasAttribute("disabled")).toBe(true);
   });
 
   it("folds a country's duplicate vote rows down to its latest one", () => {

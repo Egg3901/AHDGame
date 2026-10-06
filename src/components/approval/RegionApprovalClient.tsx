@@ -64,14 +64,14 @@ export function RegionApprovalClient({
       <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
         <div className="flex items-center gap-2 mb-4 text-xs text-muted">
           <Link href={nationalHref} className="hover:text-foreground transition-colors">
-            {countryShortLabel} Approval &amp; Active Effects
+            {countryShortLabel} Approval &amp; active effects
           </Link>
           <span>/</span>
           <span>{data?.stateName ?? stateId}</span>
         </div>
 
         <h1 className="text-2xl font-bold mb-1">
-          {data?.stateName ?? stateId} — Approval &amp; Active Effects
+          {data?.stateName ?? stateId} — Approval &amp; active effects
         </h1>
         <p className="text-sm text-muted mb-8">
           Approval relative to the national average, adjusted by named conditions, and their
@@ -95,9 +95,7 @@ export function RegionApprovalClient({
             <div className="rounded-xl border border-card-border bg-card p-6 shadow-panel">
               <div className="flex flex-wrap items-end gap-8">
                 <div>
-                  <p className="text-xs uppercase tracking-widest text-muted font-medium mb-1">
-                    Base Score
-                  </p>
+                  <p className="text-body-sm font-medium text-muted mb-1">Base score</p>
                   <p className="text-4xl font-bold tabular-nums text-foreground">
                     {data.governmentApprovalBase.toFixed(1)}%
                   </p>
@@ -105,9 +103,7 @@ export function RegionApprovalClient({
                 </div>
                 <div className="text-2xl text-muted font-light">&rarr;</div>
                 <div>
-                  <p className="text-xs uppercase tracking-widest text-muted font-medium mb-1">
-                    Net Approval
-                  </p>
+                  <p className="text-body-sm font-medium text-muted mb-1">Net approval</p>
                   <p
                     className={`text-4xl font-bold tabular-nums ${netApproval >= 0 ? "text-success" : "text-error"}`}
                   >
@@ -118,9 +114,7 @@ export function RegionApprovalClient({
                 </div>
                 <div className="text-2xl text-muted font-light">=</div>
                 <div>
-                  <p className="text-xs uppercase tracking-widest text-muted font-medium mb-1">
-                    Approval
-                  </p>
+                  <p className="text-body-sm font-medium text-muted mb-1">Approval</p>
                   <p
                     className={`text-5xl font-bold tabular-nums ${approvalColor(data.governmentApproval)}`}
                   >
@@ -136,9 +130,7 @@ export function RegionApprovalClient({
                 {modifiers.length > 0 && (
                   <div className="flex gap-4 text-right text-xs">
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted">
-                        Net approval
-                      </div>
+                      <div className="text-body-sm font-medium text-muted">Net approval</div>
                       <div
                         className={
                           "mt-0.5 font-semibold tabular-nums " +
@@ -154,9 +146,7 @@ export function RegionApprovalClient({
                       </div>
                     </div>
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted">
-                        Net margin
-                      </div>
+                      <div className="text-body-sm font-medium text-muted">Net margin</div>
                       <div
                         className={
                           "mt-0.5 font-semibold tabular-nums " +
@@ -190,7 +180,7 @@ export function RegionApprovalClient({
             href={nationalHref}
             className="rounded-lg border border-card-border bg-card px-4 py-2 text-sm font-medium text-muted hover:text-foreground transition-colors"
           >
-            {countryShortLabel} Approval Rankings
+            {countryShortLabel} Approval rankings
           </Link>
         </div>
       </main>

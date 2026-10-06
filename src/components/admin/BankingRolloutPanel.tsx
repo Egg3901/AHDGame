@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * The staged activation of savings accounts: mode, read cohort, the gate and
@@ -112,7 +113,7 @@ export function BankingRolloutPanel() {
       });
       const data = (await res.json()) as RolloutSnapshot & { error?: string; reasons?: string[] };
       if (!res.ok) {
-        setError([data.error, ...(data.reasons ?? [])].filter(Boolean).join(" "));
+        setError([apiErrorText(data, ""), ...(data.reasons ?? [])].filter(Boolean).join(" "));
         return;
       }
       setSnapshot(data);
@@ -181,7 +182,7 @@ export function BankingRolloutPanel() {
       <div className="mb-4 rounded-lg border border-card-border bg-background/40 p-4">
         <div className="mb-1 flex items-center justify-between gap-2">
           <span className="text-sm font-semibold">Mode</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted">
+          <span className="text-body-sm font-medium text-muted">
             {MODES.find((m) => m.value === snapshot.state.mode)?.label ?? snapshot.state.mode}
           </span>
         </div>
@@ -217,7 +218,7 @@ export function BankingRolloutPanel() {
       <div className="mb-4 rounded-lg border border-card-border bg-background/40 p-4">
         <div className="mb-1 flex items-center justify-between gap-2">
           <span className="text-sm font-semibold">Read cohort</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted">
+          <span className="text-body-sm font-medium text-muted">
             {snapshot.state.readCurrencies.length > 0
               ? snapshot.state.readCurrencies.join(", ")
               : "none"}
@@ -230,7 +231,7 @@ export function BankingRolloutPanel() {
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-left text-[10px] uppercase tracking-wider text-muted">
+              <tr className="text-left text-body-sm font-medium text-muted">
                 <th className="py-1 pr-3">Currency</th>
                 <th className="py-1 pr-3">Legacy total</th>
                 <th className="py-1 pr-3">Accounts total</th>

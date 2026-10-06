@@ -16,6 +16,7 @@ import { importerTariffOnFlow } from "@/lib/trade/tariffDrag";
 import { PRIMARY_SECTOR_BY_COMMODITY } from "@/lib/trade/commoditySector";
 import { applyFreightHaulDemand } from "@/lib/logistics/freightDemand";
 import type { CommodityType } from "@/lib/constants/commodities";
+import type { DemandUsesByState } from "@/lib/logistics/rules/purchaseExposure";
 import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import type { CountryLedger, GlobalLedger, StateLedger } from "./ledgerTypes";
 
@@ -30,6 +31,7 @@ export interface FreightSettlementInputs {
   tariffDocs: Tariff[];
   ftaPairs: Parameters<typeof importerTariffOnFlow>[1];
   affinityFor: (commodity: CommodityType, exporter: CountryId, importer: CountryId) => number;
+  demandUsesByState?: DemandUsesByState;
 }
 
 export interface FreightSettlementOutcome {
@@ -70,6 +72,7 @@ export async function runFreightSettlementPhase(
     tariffDocs,
     ftaPairs,
     affinityFor,
+    demandUsesByState,
   } = inputs;
   // Freight is a separately-soaked rollout. The market ladder enables the
   // ledger needed to observe routes, while this gate decides whether those
@@ -108,6 +111,7 @@ export async function runFreightSettlementPhase(
       states: sourcingStates,
       byState,
       byCountry,
+      demandUsesByState,
       statePricesFor: (commodity) => existingPriceMap.get(commodity)?.statePrices,
       nationalPricesFor: (commodity) => existingPriceMap.get(commodity)?.nationalPrices,
       basePriceFor: (commodity) => ledgerBasePrices[commodity],
@@ -134,6 +138,7 @@ export async function runFreightSettlementPhase(
     const { commodityDocs, networkDoc } = buildSourcingDocs(freightSettlement.sourcing, turn, now, {
       includeFreightBilling: canonicalFreightBillingEnabled,
       billingRampFraction: freightRampFraction,
+      purchaseExposureMode: freightSettlementActive ? "active_delivered" : "shadow_simulated",
     });
     if (commodityDocs.length > 0) {
       // Lazy index for the {commodity} + latest-turn read path, mirroring

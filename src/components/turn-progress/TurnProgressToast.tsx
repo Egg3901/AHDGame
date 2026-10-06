@@ -121,9 +121,7 @@ export function TurnProgressToast() {
       >
         <div className="flex items-start gap-2 p-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted">
-              {heading}
-            </p>
+            <p className="text-body-sm font-medium text-muted">{heading}</p>
             <p className="mt-0.5 truncate text-sm text-foreground">{body}</p>
           </div>
           <button

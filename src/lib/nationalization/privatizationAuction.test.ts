@@ -426,6 +426,9 @@ describe("reabsorbSpunOutCorp", () => {
           "constructionPropertyTransition.key": expect.any(String),
         })
       );
+      expect(filter["constructionPropertyTransition.key"]).toBe(
+        `reabsorb:${shellId.toHexString()}:42:${filter._id.toHexString()}`
+      );
       expect(update.$set.absorbedAtTurn).toBe(42);
     }
     // Residual cash → primary.

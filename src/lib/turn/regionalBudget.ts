@@ -204,7 +204,8 @@ function getOptionCostPerCapita(
 function enactedRegionalPolicyCost(
   policy: StatePolicy,
   legTypeMap: Map<string, LegislationType>,
-  region: State
+  region: State,
+  programCostScale = 1
 ): number {
   const law = getLaw(policy.legislationTypeId);
   if (law && law.kind !== "tax" && law.levels) {
@@ -213,7 +214,8 @@ function enactedRegionalPolicyCost(
       law.levels[level],
       { gdp: (region.gdp ?? 0) * GDP_MILLIONS, population: region.population ?? 0 },
       law.countryId,
-      null
+      null,
+      programCostScale
     );
     // NET burden: a regional enactment's revenue accrues to the same payer
     // (spec §5.2 — "each payer its own"), so revenue-bearing laws charge
@@ -348,6 +350,7 @@ export async function processRegionalBudgets(
       projection: {
         spending: 1,
         baselineStateGrants: 1,
+        programCostScaleBaseline: 1,
         ...(regionalFinanceEnabled ? { departmentAccounts: 1 } : {}),
       },
     }
@@ -437,7 +440,12 @@ export async function processRegionalBudgets(
     const annualCostByLegislationTypeId = new Map<string, number>();
     let enactedBillCosts = 0;
     for (const policy of spendingPolicies) {
-      const cost = enactedRegionalPolicyCost(policy, legTypeMap, region);
+      const cost = enactedRegionalPolicyCost(
+        policy,
+        legTypeMap,
+        region,
+        nationalBudget?.programCostScaleBaseline ?? 1
+      );
       enactedBillCosts += cost;
       annualCostByLegislationTypeId.set(
         policy.legislationTypeId,
@@ -488,7 +496,12 @@ export async function processRegionalBudgets(
       // (region-total cost so v2 and legacy laws compare on the same basis).
       const policiesWithCost = spendingPolicies.map((p) => ({
         policy: p,
-        cost: enactedRegionalPolicyCost(p, legTypeMap, region),
+        cost: enactedRegionalPolicyCost(
+          p,
+          legTypeMap,
+          region,
+          nationalBudget?.programCostScaleBaseline ?? 1
+        ),
       }));
       policiesWithCost.sort((a, b) => b.cost - a.cost);
 

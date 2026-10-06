@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkWikiDisabled } from "@/lib/api/wikiGuard";
 import type { CommodityPrice, State } from "@/lib/db/types";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
@@ -59,7 +59,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ typ
     const { type } = await params;
     const commodity = type as CommodityType;
     if (!COMMODITY_TYPES.includes(commodity)) {
-      return NextResponse.json({ error: "Unknown commodity" }, { status: 400 });
+      return errorResponse(400, "Unknown commodity");
     }
 
     const isExtractable = (EXTRACTABLE_RESOURCES as readonly string[]).includes(commodity);

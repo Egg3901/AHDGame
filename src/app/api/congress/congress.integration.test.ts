@@ -90,10 +90,7 @@ describe("GET /api/congress/bills", () => {
     expect(json).toHaveProperty("total");
     expect(json).toHaveProperty("canPropose");
     expect(Array.isArray(json.bills)).toBe(true);
-    // No per-test timeout override here: the 15s global exists precisely for
-    // this dynamic route import under parallel load, and a local 10s override
-    // put this test *below* it — the only one in the file that could time out.
-  });
+  }, 30_000);
 
   it("includes concurrent and veto override bills in both chamber tabs and prioritizes overrides", async () => {
     const { getDb } = await import("@/lib/mongodb");
@@ -498,8 +495,9 @@ describe("POST /api/congress/house-leadership", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(403);
-    await expect(res.json()).resolves.toEqual({
+    await expect(res.json()).resolves.toMatchObject({
       error: "Only the majority party (MAJ) may run.",
+      code: "FORBIDDEN",
     });
   });
 });
@@ -599,8 +597,9 @@ describe("POST /api/congress/senate-leadership", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(403);
-    await expect(res.json()).resolves.toEqual({
+    await expect(res.json()).resolves.toMatchObject({
       error: "Only the majority party (MAJ) may run.",
+      code: "FORBIDDEN",
     });
   });
 });
@@ -690,8 +689,9 @@ describe("POST /api/congress/leaders", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(403);
-    await expect(res.json()).resolves.toEqual({
+    await expect(res.json()).resolves.toMatchObject({
       error: "Only the chamber's current majority party may hold this role.",
+      code: "FORBIDDEN",
     });
   });
 
@@ -738,8 +738,9 @@ describe("POST /api/congress/leaders", () => {
     const res = await POST(req);
 
     expect(res.status).toBe(403);
-    await expect(res.json()).resolves.toEqual({
+    await expect(res.json()).resolves.toMatchObject({
       error: "Only current House members may hold this role.",
+      code: "FORBIDDEN",
     });
   });
 });

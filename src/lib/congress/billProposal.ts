@@ -22,6 +22,7 @@ import {
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { LegislationType, SubsidyProvision, EndSubsidyProvision } from "@/lib/db/types";
+import type { GameState } from "@/lib/db/types/gameState";
 import type {
   EmbargoProvision,
   EndEmbargoProvision,
@@ -51,7 +52,6 @@ import { resolveTaxSliderProvisionFields } from "@/lib/politicalLegislation/taxS
 import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
 import { validateBillAdministration } from "@/lib/legislature/jurisdiction";
 import { findAdministrationConflict } from "@/lib/legislature/administrationConflictCheck";
-import type { GameState } from "@/lib/db/types/gameState";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
 import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 import { loadReviewedLawCatalog } from "@/lib/resetLegislation/loadReviewedCatalog";
@@ -405,7 +405,18 @@ export async function validateBillProvisions(
 
     // Handle electoral-law provisions (franchise + registration access)
     if ("type" in (rawP as object) && (rawP as { type: unknown }).type === "electoral_law") {
-      const res = validateElectoralLawProvision(rawP, category);
+      const rawElectoralLaw = rawP as { japanShugiinReform?: unknown };
+      const reformContext =
+        rawElectoralLaw.japanShugiinReform === true
+          ? await db
+              .collection<GameState>("gameState")
+              .findOne({ _id: "current" }, { projection: { preset: 1, currentYear: 1 } })
+          : null;
+      const res = validateElectoralLawProvision(rawP, category, {
+        countryId: sourceCountry,
+        preset: reformContext?.preset,
+        currentYear: reformContext?.currentYear,
+      });
       if (!res.ok) return { ok: false, status: 400, error: res.error };
       validatedElectoralLawProvisions.push(res.provision);
       continue;

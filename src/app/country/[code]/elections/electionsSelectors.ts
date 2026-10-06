@@ -61,9 +61,10 @@ export function summarize(elections: ElectionDisplay[]): ElectionsSummary {
 
   for (const e of elections) {
     if (e.candidates.length > 0) contested++;
-    // Presidential races are excluded from the competitive count to match the
-    // existing filter, which treats the national race separately.
-    if (e.electionType !== "president" && isCompetitiveElection(e)) competitive++;
+    // Same rule as the row badge and map marker, so "N close" always equals
+    // the number of rows carrying a Close badge. The national race stays
+    // pinned by the Close races filter, but only counts here when it is close.
+    if (isCompetitiveElection(e)) competitive++;
     const turn = relevantDeadlineTurn(e);
     if (turn != null && (nextDeadlineTurn === null || turn < nextDeadlineTurn)) {
       nextDeadlineTurn = turn;

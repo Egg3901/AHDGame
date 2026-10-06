@@ -5,6 +5,7 @@ import { Button } from "@/components/ui";
 import { MonetaryCard } from "./monetaryUi";
 import type { MonetaryView } from "../../useCabinetOffice";
 import { ActingLockNote, useActingLock } from "../ActingLock";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 export function DebtOperationPanel({
   countryCode,
@@ -45,7 +46,7 @@ export function DebtOperationPanel({
       );
       const json = (await res.json()) as { error?: string; expiresTurn?: number };
       if (!res.ok) {
-        setFeedback({ type: "error", message: json.error ?? "Failed to launch" });
+        setFeedback({ type: "error", message: apiErrorText(json, "Failed to launch") });
         return;
       }
       setFeedback({
@@ -62,7 +63,7 @@ export function DebtOperationPanel({
 
   return (
     <MonetaryCard
-      title="Debt Management Operation"
+      title="Debt management operation"
       hint="Costs 1 ministerial action. Accelerates investor-confidence recovery, lowering the sovereign premium."
     >
       <ActingLockNote reason={actingLockReason} />
@@ -83,7 +84,7 @@ export function DebtOperationPanel({
       )}
       <div className="mt-3 flex items-center gap-3">
         <Button variant="primary" disabled={disabled} isLoading={submitting} onClick={launch}>
-          Launch Operation
+          Launch operation
         </Button>
         {feedback && (
           <span

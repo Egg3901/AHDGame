@@ -29,6 +29,22 @@ describe("Seed budget nominal rebasing", () => {
     const next = rebaseBudgetNominals(source, 590);
     expect(rebaseBudgetNominals(next, 590)).toEqual(next);
   });
+  it("rebases absolute per-capita policy receipts and preserves GDP-based rates", () => {
+    const config = {
+      ...source,
+      policyRevenueConfigs: [
+        {
+          revenueKey: "healthcareIncome",
+          annualRevenuePerCapitaByOptionIndex: [100, 50],
+          gdpRevenueMultiplierByOptionIndex: [0.1, 0.05],
+        },
+      ],
+    };
+    const next = rebaseBudgetNominals(config, source.gdp * 2);
+    expect(next.policyRevenueConfigs[0].annualRevenuePerCapitaByOptionIndex).toEqual([200, 100]);
+    expect(next.policyRevenueConfigs[0].gdpRevenueMultiplierByOptionIndex).toEqual([0.1, 0.05]);
+    expect(config.policyRevenueConfigs[0].annualRevenuePerCapitaByOptionIndex).toEqual([100, 50]);
+  });
   it.each([0, -1, NaN, Infinity])("rejects invalid GDP %s", (gdp) => {
     expect(() => rebaseBudgetNominals(source, gdp)).toThrow("Positive finite GDP");
     expect(() => rebaseBudgetNominals({ ...source, gdp }, 590)).toThrow("Positive finite GDP");

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { publicApiGuard } from "@/lib/publicApi/middleware";
 import { queryCharacters } from "@/lib/publicApi/character";
 
@@ -16,10 +16,7 @@ export async function GET(request: Request) {
     const discordId = url.searchParams.get("discordId") ?? undefined;
 
     if (!name && !discordId) {
-      return NextResponse.json(
-        { ok: false, error: "Provide name or discordId", code: "BAD_REQUEST" },
-        { status: 400 }
-      );
+      return errorResponse(400, "Provide name or discordId", { code: "BAD_REQUEST", extra: { ok: false } });
     }
 
     const db = await getDb();

@@ -7,6 +7,7 @@ import { adjacentStates } from "@/lib/constants/stateAdjacency";
 import { isClusterConnected } from "@/lib/parties/priorityRegion";
 import type { CountryId } from "@/lib/constants/countries";
 import type { PartyData } from "./types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 /**
  * Chair-Office card for setting the party's Priority Region cluster.
@@ -139,7 +140,7 @@ export function PriorityRegionCard({ party, countryCode }: PriorityRegionCardPro
       });
       const body = await res.json();
       if (!res.ok) {
-        setMsg(`✗ ${body.error ?? "Failed to set Priority Region"}`);
+        setMsg(`✗ ${apiErrorText(body, "Failed to set Priority Region")}`);
         return;
       }
       setMsg("✓ Priority Region locked in.");
@@ -168,15 +169,13 @@ export function PriorityRegionCard({ party, countryCode }: PriorityRegionCardPro
     <div className="rounded-xl border border-card-border bg-card p-6">
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <h2 className="text-lg font-semibold">Priority region</h2>
-        <span className="text-xs text-muted">
-          +25% effectiveness on national PS actions in cluster states
-        </span>
+        <span className="text-xs text-muted">Planning focus for adjacent states</span>
       </div>
 
       <p className="text-xs text-muted mb-4">
-        Pick 2–3 adjacent states (4 with a Governor anchor) where this party will concentrate its
-        organizing efforts. Cluster states get a +25% effectiveness bonus on direct national PS
-        actions — Build Org, NPP placement, Contest, etc. Once set, the cluster is{" "}
+        Pick 2-3 adjacent states (4 with a Governor anchor) where this party will concentrate its
+        organizing efforts. Build Org contributes the same fixed bucket unit in every state, so this
+        designation does not multiply it. Once set, the cluster is{" "}
         <strong>locked for {data?.lockoutDurationTurns ?? 168} turns</strong>; no changes until the
         cooldown expires.
       </p>
@@ -281,7 +280,7 @@ export function PriorityRegionCard({ party, countryCode }: PriorityRegionCardPro
             disabled={submitting || picked.length < 2 || !picksAreConnected}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
           >
-            {submitting ? "Locking in…" : "Lock in Priority Region"}
+            {submitting ? "Locking in…" : "Lock in priority region"}
           </button>
         </div>
       )}

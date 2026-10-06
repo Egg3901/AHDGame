@@ -6,6 +6,7 @@ import type {
   ConstructionFinanceChoice,
   ConstructionFinanceView,
 } from "@/lib/banking/rules/constructionRequest";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 type Lender = { id: string; name: string; ratePercent: number; approvalRequired: boolean };
 export default function ConstructionFinanceControls({
@@ -63,7 +64,7 @@ export default function ConstructionFinanceControls({
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok || !data.enabled)
-          throw new Error(data.error ?? "Construction lender quotes are unavailable");
+          throw new Error(apiErrorText(data, "Construction lender quotes are unavailable"));
         return data;
       })
       .then((data: { currency: string; lenders: Lender[] }) => {

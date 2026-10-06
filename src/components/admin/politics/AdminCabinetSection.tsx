@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/ui";
 import { Pagination } from "../Pagination";
 import type { CountryId } from "@/lib/constants/countries";
 import { LocalTime } from "@/components/time/LocalTime";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface CabinetNominationRow {
   id: string;
@@ -78,13 +79,13 @@ export function AdminCabinetSection({ countryId }: AdminCabinetSectionProps) {
       body: JSON.stringify({ nominationId, action }),
     });
     const d = await res.json();
-    setMessage(res.ok ? d.message : `Error: ${d.error}`);
+    setMessage(res.ok ? d.message : `Error: ${apiErrorText(d, "Request failed")}`);
     if (res.ok) fetchNominations();
   };
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">Cabinet Nominations</h2>
+      <h2 className="text-lg font-semibold">Cabinet nominations</h2>
       {message && (
         <div
           className={`rounded-lg border px-4 py-2 text-sm ${message.startsWith("Error") ? "border-red-500/30 bg-red-500/10 text-red-400" : "border-green-500/30 bg-green-500/10 text-green-400"}`}
@@ -147,13 +148,13 @@ export function AdminCabinetSection({ countryId }: AdminCabinetSectionProps) {
                         onClick={() => runAction(nom.id, "force_confirm")}
                         className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-500/20 transition-colors"
                       >
-                        Force Confirm
+                        Force confirm
                       </button>
                       <button
                         onClick={() => runAction(nom.id, "force_reject")}
                         className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors"
                       >
-                        Force Reject
+                        Force reject
                       </button>
                     </>
                   )}

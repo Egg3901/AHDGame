@@ -100,7 +100,7 @@ export function SovereignDebtWatchPanel() {
   if (error) {
     return (
       <section className="rounded-lg border border-card-border bg-card p-4">
-        <h2 className="text-sm font-semibold">Sovereign Debt Watch</h2>
+        <h2 className="text-sm font-semibold">Sovereign debt watch</h2>
         <p className="mt-2 text-xs text-rose-600 dark:text-rose-400">{error}</p>
       </section>
     );
@@ -109,7 +109,7 @@ export function SovereignDebtWatchPanel() {
     return (
       <section className="rounded-lg border border-card-border bg-card p-4">
         <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold">Sovereign Debt Watch</h2>
+          <h2 className="text-sm font-semibold">Sovereign debt watch</h2>
           <Skeleton className="h-3 w-14" />
         </div>
         <Skeleton className="mt-2 h-3 w-4/5" />
@@ -137,7 +137,7 @@ export function SovereignDebtWatchPanel() {
   return (
     <section className="rounded-lg border border-card-border bg-card p-4">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold">Sovereign Debt Watch</h2>
+        <h2 className="text-sm font-semibold">Sovereign debt watch</h2>
         <span className="text-xs text-muted">Turn {data.currentTurn}</span>
       </div>
       <p className="mt-1 text-xs text-muted">

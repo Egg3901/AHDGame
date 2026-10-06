@@ -4,6 +4,7 @@ import { CampaignerPicker } from "@/components/party/CampaignerPicker";
 import { partyApiUrl } from "@/lib/urls";
 import { MAX_NATIONAL_CAMPAIGNERS } from "@/lib/parties/access";
 import type { PartyData } from "./types";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface PartyCampaignersCardProps {
   party: PartyData;
@@ -66,7 +67,7 @@ export function PartyCampaignersCard({ party, countryCode, onUpdate }: PartyCamp
             body: JSON.stringify({ campaignerIds: ids }),
           });
           const data = await res.json();
-          if (!res.ok) throw new Error(data.error ?? "Save failed");
+          if (!res.ok) throw new Error(apiErrorText(data, "Save failed"));
           onUpdate();
           return data.message as string | undefined;
         }}

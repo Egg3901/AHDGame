@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError, forbidden, notFound } from "@/lib/api/errors";
+import { handleRouteError, forbidden, notFound, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Character } from "@/lib/db/types";
 import {
@@ -52,9 +52,9 @@ export async function POST(_request: Request, context: RouteContext) {
     if (!result.ok) {
       const msg = result.error ?? "Cannot accept";
       if (msg.includes("not the pending")) {
-        return NextResponse.json({ error: msg }, { status: 403 });
+        return errorResponse(403, msg);
       }
-      return NextResponse.json({ error: msg }, { status: 400 });
+      return errorResponse(400, msg);
     }
 
     return NextResponse.json({

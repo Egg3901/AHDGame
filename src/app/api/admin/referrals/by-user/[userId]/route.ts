@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { schemas } from "@/lib/api/validate";
 import { buildCharacterHref } from "@/lib/utils/profileUrls";
 import type { GameConfig } from "@/lib/db/types";
@@ -39,7 +39,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ user
     const { userId: userIdParam } = await params;
     const parsedId = schemas.objectId.safeParse(userIdParam);
     if (!parsedId.success) {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+      return errorResponse(400, "Invalid user ID");
     }
 
     const referrerId = new ObjectId(parsedId.data);
@@ -54,7 +54,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ user
       .collection<User>("users")
       .findOne({ _id: referrerId }, { projection: { _id: 1 } });
     if (!referrer) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return errorResponse(404, "User not found");
     }
 
     let contestStartedAt: Date | null = null;

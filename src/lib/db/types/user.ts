@@ -20,6 +20,8 @@ export interface ModNote {
 export interface User {
   _id: ObjectId;
   email: string;
+  /** When the current `email` was proven by a confirmation link (POST /api/auth/confirm-email). */
+  emailVerifiedAt?: Date;
   username: string;
   displayName: string;
   password: string;
@@ -188,6 +190,14 @@ export interface User {
   clientAccessSource?: "bot" | "key" | "referral";
   /** Discord tag or admin name that last granted temporary access. */
   clientAccessGrantedBy?: string;
+  /**
+   * Admin grant that lets a non-supporter tester reach the sandbox while
+   * `gameConfig.sandboxTesterAccessEnabled` is on. Independent of every
+   * supporter field: it unlocks no supporter perk.
+   */
+  sandboxAccessGrantedAt?: Date;
+  /** Admin username that last granted sandbox tester access. */
+  sandboxAccessGrantedBy?: string;
   /** Moderator-approved name shown on the public supporter wall. */
   supporterWallName?: string | null;
   /** Set when the account's one-time Supporter++ NPP rename has been used. */

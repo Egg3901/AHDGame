@@ -4,7 +4,7 @@
 // repo works (the nuclear console included): `.../cabinet/[positionId]/...`.
 // A route without `positionId` could not express "the caller holds this office"
 // at all, which is the whole authorization model here.
-import { NextResponse } from "next/server";
+
 import type { Db, ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
@@ -22,6 +22,7 @@ import {
 } from "@/lib/intelligence/config";
 import { EFFICACY_PIVOT, EFFICACY_SLOPE, NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import type { CharacterStats } from "@/lib/stats/statsConstants";
+import { errorResponse } from "@/lib/api/errors";
 
 /** The intelligence seat's id. Identical across every country that has one. */
 export const INTELLIGENCE_POSITION_ID = "director_of_intelligence";
@@ -63,11 +64,11 @@ export async function requireIntelligenceHolder(
 
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) {
-    return { error: NextResponse.json({ error: "Invalid country" }, { status: 400 }) } as const;
+    return { error: errorResponse(400, "Invalid country") } as const;
   }
   if (positionId !== INTELLIGENCE_POSITION_ID) {
     return {
-      error: NextResponse.json({ error: "Not the intelligence position" }, { status: 404 }),
+      error: errorResponse(404, "Not the intelligence position"),
     } as const;
   }
 
@@ -86,14 +87,11 @@ export async function requireIntelligenceHolder(
   const permitted = intent === "read" ? canView : canAct;
   if (!permitted) {
     return {
-      error: NextResponse.json(
-        {
-          error:
-            intent === "read"
-              ? "This office's records are not published outside the office."
-              : "Only the intelligence director may direct the service.",
-        },
-        { status: 403 }
+      error: errorResponse(
+        403,
+        intent === "read"
+          ? "This office's records are not published outside the office."
+          : "Only the intelligence director may direct the service."
       ),
     } as const;
   }
@@ -192,21 +190,18 @@ export async function requireRegisteredTarget(db: Db, raw: string, ownerCountryI
   const targetCountryId = raw.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[targetCountryId]) {
     return {
-      error: NextResponse.json({ error: "Invalid target country" }, { status: 400 }),
+      error: errorResponse(400, "Invalid target country"),
     } as const;
   }
   if (targetCountryId === ownerCountryId) {
     return {
-      error: NextResponse.json(
-        { error: "A service cannot work against its own country." },
-        { status: 400 }
-      ),
+      error: errorResponse(400, "A service cannot work against its own country."),
     } as const;
   }
   const access = await getCountryAccessFromDb(db, targetCountryId);
   if (access.registered === false) {
     return {
-      error: NextResponse.json({ error: "That country no longer exists." }, { status: 404 }),
+      error: errorResponse(404, "That country no longer exists."),
     } as const;
   }
   return { targetCountryId } as const;

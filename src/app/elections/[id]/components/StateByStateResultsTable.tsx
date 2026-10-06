@@ -81,14 +81,14 @@ export function StateByStateResultsTable({
   return (
     <div className="rounded-xl border border-card-border bg-card overflow-hidden">
       <div className="px-5 py-3 bg-card-elevated border-b border-card-border">
-        <h3 className="text-lg font-semibold">State-by-State Results</h3>
+        <h3 className="text-lg font-semibold">State-by-state results</h3>
         <p className="text-xs text-muted mt-1">All 50 states + DC · Click column headers to sort</p>
       </div>
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-card-border bg-background text-left text-xs font-medium uppercase tracking-wider text-muted">
+            <tr className="border-b border-card-border bg-background text-left text-sm font-semibold text-foreground">
               <th
                 className="px-4 py-3 cursor-pointer hover:text-foreground transition-colors"
                 onClick={() => handleSort("state")}
@@ -121,8 +121,8 @@ export function StateByStateResultsTable({
                   )}
                 </div>
               </th>
-              <th className="px-4 py-3 text-right">Vote Share</th>
-              <th className="px-4 py-3 text-right">Total Votes</th>
+              <th className="px-4 py-3 text-right">Vote share</th>
+              <th className="px-4 py-3 text-right">Total votes</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-card-border">

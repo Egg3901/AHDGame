@@ -16,7 +16,7 @@
  * No DB writes; safe to call from any read path.
  */
 
-import { ObjectId, type Db } from "mongodb";
+import type { Db } from "mongodb";
 import { COUNTRY_ORDER, COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getEraTrendGdpGrowth } from "@/lib/constants/monetaryEra";
@@ -35,17 +35,17 @@ import {
   type InflationBreakdown,
 } from "@/lib/budget/inflation";
 import { savingsFlowPressureRatio } from "@/lib/budget/savingsFlowPressure";
-import { computeCountryTariffPressure } from "@/lib/tariffs/tariffEffects";
-import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
+import {
+  countryTurnTariffInflationExposure,
+  loadTurnTariffInflationExposure,
+} from "@/lib/tariffs/tariffInflationExposure";
 import type { CentralBank, TurnSnapshot } from "@/lib/db/types/centralBank";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
-import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { ExchangeRate } from "@/lib/db/types/exchangeRate";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { GameState } from "@/lib/db/types/gameState";
 import type { SavingsLedgerEntry } from "@/lib/db/types/savingsLedger";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
-import type { Tariff } from "@/lib/db/types/tariff";
 
 const SAVINGS_FLOW_WINDOW_TURNS = 12;
 
@@ -59,6 +59,14 @@ export interface InflationDiagnosticInputs {
   primeRateHistoryLength: number;
   surplusToGdp: number;
   tariffRate: number;
+  tariffExposureAvailable: boolean;
+  tariffExposureMode: "active_delivered" | "shadow_simulated" | "unavailable";
+  tariffExposureImportShare: number;
+  tariffExposureCoveredCommodities: string[];
+  tariffHouseholdAbsorptionValue: number;
+  tariffHouseholdDeliveredDuty: number;
+  tariffProductionInputAbsorptionValue: number;
+  tariffProductionInputDeliveredDuty: number;
   wageGrowth: number;
   commodityPressure: number;
   forexPressure: number;
@@ -108,36 +116,42 @@ export async function loadInflationDiagnostics(
   db: Db,
   currentTurn: number
 ): Promise<InflationDiagnosticsPayload> {
-  const [banks, exchangeRates, commodityPriceDocs, savingsFlowAgg, activeFtaPairs, gameState] =
-    await Promise.all([
-      db.collection<CentralBank>("centralBanks").find({}).toArray(),
-      db.collection<ExchangeRate>("exchangeRates").find({}).toArray(),
-      db
-        .collection<CommodityPrice>("commodityPrices")
-        .find({}, { projection: { commodity: 1, basePrice: 1, nationalPrices: 1 } })
-        .toArray(),
-      db
-        .collection<SavingsLedgerEntry>("savingsLedger")
-        .aggregate<{ _id: { countryId: string; type: string }; total: number }>([
-          {
-            $match: {
-              type: { $in: ["deposit", "withdraw"] },
-              turn: { $gte: currentTurn - SAVINGS_FLOW_WINDOW_TURNS },
-            },
+  const [
+    banks,
+    exchangeRates,
+    commodityPriceDocs,
+    savingsFlowAgg,
+    gameState,
+    tariffExposureSnapshot,
+  ] = await Promise.all([
+    db.collection<CentralBank>("centralBanks").find({}).toArray(),
+    db.collection<ExchangeRate>("exchangeRates").find({}).toArray(),
+    db
+      .collection<CommodityPrice>("commodityPrices")
+      .find({}, { projection: { commodity: 1, basePrice: 1, nationalPrices: 1 } })
+      .toArray(),
+    db
+      .collection<SavingsLedgerEntry>("savingsLedger")
+      .aggregate<{ _id: { countryId: string; type: string }; total: number }>([
+        {
+          $match: {
+            type: { $in: ["deposit", "withdraw"] },
+            turn: { $gte: currentTurn - SAVINGS_FLOW_WINDOW_TURNS },
           },
-          {
-            $group: {
-              _id: { countryId: "$countryId", type: "$type" },
-              total: { $sum: "$amount" },
-            },
+        },
+        {
+          $group: {
+            _id: { countryId: "$countryId", type: "$type" },
+            total: { $sum: "$amount" },
           },
-        ])
-        .toArray(),
-      loadActiveFtaPairs(db),
-      db
-        .collection<GameState>("gameState")
-        .findOne({ _id: "current" }, { projection: { currentYear: 1, startingYear: 1 } }),
-    ]);
+        },
+      ])
+      .toArray(),
+    db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { currentYear: 1, startingYear: 1 } }),
+    loadTurnTariffInflationExposure(db, currentTurn),
+  ]);
 
   const exchangeRateByCountry = new Map(exchangeRates.map((r) => [r.countryId as CountryId, r]));
   const bankByCountry = new Map<CountryId, CentralBank>();
@@ -193,34 +207,8 @@ export async function loadInflationDiagnostics(
     const surplusToGdp = finiteOr(budget?.surplus, 0) / gdp;
     const wageGrowth = finiteOr(budget?.economicFactors?.wageGrowth, 3.0);
 
-    const tariffs = await db.collection<Tariff>("tariffs").find({ countryId }).toArray();
-    const sectors = await db
-      .collection<CorporateSector>("corporateSectors")
-      .find(
-        { countryId },
-        { projection: { corporationId: 1, countryId: 1, sectorType: 1, revenue: 1 } }
-      )
-      .toArray();
-    const corporationIds = [
-      ...new Set(sectors.map((sector) => sector.corporationId.toString())),
-    ].map((id) => new ObjectId(id));
-    const corporations =
-      corporationIds.length > 0
-        ? await db
-            .collection<Corporation>("corporations")
-            .find({ _id: { $in: corporationIds } }, { projection: { countryId: 1 } })
-            .toArray()
-        : [];
-    const corpById = new Map(corporations.map((c) => [c._id.toString(), c]));
-    // FTA coverage neutralises the foreign-trade portion of every tariff layer
-    // (broad scopes scale by `1 − partner-share`, narrow scopes flip binary).
-    // Without this, sector/economy_wide tariffs would inflate consumer prices
-    // for trade flows that FTAs already exempt at the customs border.
-    const ftaCoverage = buildFtaCoverageLookup(sectors, corpById, activeFtaPairs);
-    const tariffRate = finiteOr(
-      computeCountryTariffPressure(tariffs, countryId, sectors, corpById, ftaCoverage),
-      0
-    );
+    const tariffExposure = countryTurnTariffInflationExposure(tariffExposureSnapshot, countryId);
+    const tariffRate = tariffExposure.tariffRate;
 
     const commodityPressures: number[] = [];
     for (const doc of commodityPriceDocs) {
@@ -323,6 +311,14 @@ export async function loadInflationDiagnostics(
         primeRateHistoryLength: primeRateHistory.length,
         surplusToGdp,
         tariffRate,
+        tariffExposureAvailable: tariffExposure.available,
+        tariffExposureMode: tariffExposure.mode,
+        tariffExposureImportShare: tariffExposure.importShare,
+        tariffExposureCoveredCommodities: tariffExposure.coveredCommodities,
+        tariffHouseholdAbsorptionValue: tariffExposure.householdAbsorptionValue,
+        tariffHouseholdDeliveredDuty: tariffExposure.householdDeliveredTariffPaid,
+        tariffProductionInputAbsorptionValue: tariffExposure.productionInputAbsorptionValue,
+        tariffProductionInputDeliveredDuty: tariffExposure.productionInputDeliveredTariffPaid,
         wageGrowth,
         commodityPressure,
         forexPressure,

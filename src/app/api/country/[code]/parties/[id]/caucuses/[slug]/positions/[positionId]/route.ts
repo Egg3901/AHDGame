@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { findCaucusBySlug } from "@/lib/db/caucusLookup";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -31,31 +31,28 @@ async function loadChairContext(
 ) {
   const countryId = code.toUpperCase() as CountryId;
   if (!COUNTRY_CONFIGS[countryId]) {
-    return { error: NextResponse.json({ error: "Invalid country code" }, { status: 400 }) };
+    return { error: errorResponse(400, "Invalid country code") };
   }
   const db = await getDb();
   const party = await findPartyBySequentialId(db, id, countryId);
   if (!party) {
-    return { error: NextResponse.json({ error: "Party not found" }, { status: 404 }) };
+    return { error: errorResponse(404, "Party not found") };
   }
   const partyId = String(party.sequentialId);
   const resolved = await findCaucusBySlug(db, countryId, partyId, slug);
   if (!resolved) {
-    return { error: NextResponse.json({ error: "Caucus not found" }, { status: 404 }) };
+    return { error: errorResponse(404, "Caucus not found") };
   }
   if (!resolved.caucus.chairId || resolved.caucus.chairId.toString() !== character._id.toString()) {
     return {
-      error: NextResponse.json(
-        { error: "Only the caucus chair can edit policy positions." },
-        { status: 403 }
-      ),
+      error: errorResponse(403, "Only the caucus chair can edit policy positions."),
     };
   }
   if (!isSameCountry(character, { countryId })) {
     return {
-      error: NextResponse.json(
-        { error: "You must be a citizen of this country to edit caucus policy positions." },
-        { status: 403 }
+      error: errorResponse(
+        403,
+        "You must be a citizen of this country to edit caucus policy positions."
       ),
     };
   }
@@ -69,7 +66,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const { code, id, slug, positionId } = await params;
     if (!ObjectId.isValid(positionId)) {
-      return NextResponse.json({ error: "Invalid position id" }, { status: 400 });
+      return errorResponse(400, "Invalid position id");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -77,7 +74,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, updateSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const ctx = await loadChairContext(code, id, slug, auth.user.character);
@@ -96,7 +93,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       .collection<CaucusPolicyPosition>("caucusPolicyPositions")
       .updateOne({ _id: new ObjectId(positionId), caucusId: caucus._id }, { $set: updates });
     if (result.matchedCount === 0) {
-      return NextResponse.json({ error: "Position not found" }, { status: 404 });
+      return errorResponse(404, "Position not found");
     }
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -111,7 +108,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
   try {
     const { code, id, slug, positionId } = await params;
     if (!ObjectId.isValid(positionId)) {
-      return NextResponse.json({ error: "Invalid position id" }, { status: 400 });
+      return errorResponse(400, "Invalid position id");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -125,7 +122,7 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       .collection<CaucusPolicyPosition>("caucusPolicyPositions")
       .deleteOne({ _id: new ObjectId(positionId), caucusId: caucus._id });
     if (result.deletedCount === 0) {
-      return NextResponse.json({ error: "Position not found" }, { status: 404 });
+      return errorResponse(404, "Position not found");
     }
     return NextResponse.json({ success: true });
   } catch (error) {

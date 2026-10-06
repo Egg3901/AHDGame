@@ -325,7 +325,7 @@ function SeatCard({
             )}
           </ul>
           <p className="mt-1.5 text-xs text-muted">
-            See the <Link href="/wiki/cabinet-projects">Cabinet Projects &amp; Buildings</Link>{" "}
+            See the <Link href="/wiki/cabinet-projects">Cabinet projects &amp; buildings</Link>{" "}
             guide for tiers, funding levels, and budget envelopes.
           </p>
         </div>

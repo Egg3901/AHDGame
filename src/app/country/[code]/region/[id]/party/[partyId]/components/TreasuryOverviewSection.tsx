@@ -72,9 +72,7 @@ export function TreasuryOverviewSection({
                   d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-                Cash on Hand
-              </div>
+              <div className="text-body-sm font-medium text-muted">Cash on hand</div>
             </div>
             <div className="text-4xl font-bold text-warning tabular-nums">
               {fmt(stateParty.treasury, countryId)}
@@ -107,9 +105,7 @@ export function TreasuryOverviewSection({
       {/* Budget Breakdown Bar */}
       {(isMember || user?.isAdmin) && revenue > 0 && totalSpending > 0 && (
         <div className="px-6 py-3 border-b border-card-border/40">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-1.5">
-            Budget Allocation
-          </div>
+          <div className="text-body-sm font-medium text-muted mb-1.5">Budget allocation</div>
           <div className="flex h-3 rounded-full overflow-hidden bg-background">
             {gotvPct > 0 && (
               <div
@@ -154,7 +150,7 @@ export function TreasuryOverviewSection({
             {psPct > 0 && (
               <span className="flex items-center gap-1">
                 <span className="inline-block h-2 w-2 rounded-sm bg-warning/70" />
-                PS Investment {psPct.toFixed(0)}%
+                PS investment {psPct.toFixed(0)}%
               </span>
             )}
             <span className="flex items-center gap-1">

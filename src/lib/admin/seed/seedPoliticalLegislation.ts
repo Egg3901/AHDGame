@@ -37,6 +37,16 @@ import { refreshNationalBudgetRevenue } from "@/lib/budget/revenue";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { NATIONAL_POLICY_STATE_IDS } from "@/lib/policy/nationalStateId";
 import type { CountryId } from "@/lib/constants/countries";
+import { calculateFederalLawAnnualCosts } from "@/lib/budget/spending";
+import { PLAYER_RESET_DEFICIT_GDP_SHARE_1991 } from "@/lib/seeds/reference/rules/openingFiscalEnvelope";
+import {
+  openingProgramCategoryScales,
+  openingProgramCostScale,
+  scaleProgramCostModel,
+} from "@/lib/seeds/reference/rules/openingProgramCostScale";
+
+/** Player books refit per category to their authored 1991 composition. */
+const OPENING_COMPOSITION_REFIT_1991: ReadonlySet<string> = new Set(["US", "UK"]);
 
 // The gate lives in ONE place (politicalMetrics/pipelinePreset) so the four
 // seed call sites cannot drift apart again. Re-exported under the historical
@@ -251,6 +261,7 @@ export async function seedPoliticalLegislationBaseline(
   );
 
   if (year === 1991) {
+    await calibratePlayerOpeningPrograms1991(db, log);
     const { SUCCESSOR_1991_GENERAL_GOVERNMENT_GDP_PERCENT } =
       await import("@/lib/seeds/reference/successorFiscal1991");
     const budget = await db
@@ -280,6 +291,129 @@ export async function seedPoliticalLegislationBaseline(
     `Seeded political-legislation ${year} baseline: ${policyCount} policy records, ` +
       `${lawCount} enacted laws, ${residualCount} metric residual sets, budgets synced`
   );
+}
+
+/**
+ * US/UK use the v2 book at every preset. Calibrate that authoritative book,
+ * including every proposable level, after its real receipts and fixed regional
+ * transfers are known. Expense fractions persist through fiscal refreshes;
+ * revenue fractions, tax rates and political metric effects are preserved.
+ */
+async function calibratePlayerOpeningPrograms1991(
+  db: Db,
+  log: (msg: string) => void
+): Promise<void> {
+  for (const countryId of ["US", "UK"] as const) {
+    const budgetId = getNationalBudgetId(countryId);
+    const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
+    if (!budget) throw new Error(`Missing 1991 ${countryId} national budget after law sync`);
+    const { items } = await calculateFederalLawAnnualCosts(db, budget);
+    const authored = OPENING_COMPOSITION_REFIT_1991.has(countryId)
+      ? (await import("@/lib/seeds/reference/budgets")).getAuthoredNationalSpending1991(countryId)
+      : null;
+    // The book-wide fit stays the regional (state) program scale and the
+    // fallback for any national category the refit does not price.
+    const bookProgramCost = items.reduce((sum, item) => sum + item.amount, 0);
+    const bookScale = openingProgramCostScale({
+      gdp: budget.gdp,
+      annualRevenue: budget.revenue.total,
+      annualDebtService: budget.spending.debtInterest,
+      fixedOperatingCost: Math.max(
+        0,
+        budget.spending.total - budget.spending.debtInterest - bookProgramCost
+      ),
+      programCost: bookProgramCost,
+      maximumDeficitGdpShare: PLAYER_RESET_DEFICIT_GDP_SHARE_1991,
+    });
+    let scaleFor: (category: string) => number;
+    let scaleSet: Partial<FederalBudget>;
+    let scaleNote: string;
+    if (authored) {
+      // The catalog prices this book on 1953 anchors: GDP-share defence and
+      // social programs on a 1953 income anchor. Refit each category to the
+      // authored 1991 composition instead of one book-wide factor.
+      const programCostByCategory: Record<string, number> = {};
+      for (const { law, amount } of items) {
+        if (!law.costModelV2) continue;
+        const category = law.budgetCategory || "other";
+        programCostByCategory[category] = (programCostByCategory[category] ?? 0) + amount;
+      }
+      const programCost = Object.values(programCostByCategory).reduce((a, b) => a + b, 0);
+      const scales = openingProgramCategoryScales({
+        gdp: budget.gdp,
+        annualRevenue: budget.revenue.total,
+        annualDebtService: budget.spending.debtInterest,
+        fixedOperatingCost: Math.max(
+          0,
+          budget.spending.total - budget.spending.debtInterest - programCost
+        ),
+        programCostByCategory,
+        targetByCategory: authored,
+        maximumDeficitGdpShare: PLAYER_RESET_DEFICIT_GDP_SHARE_1991,
+      });
+      scaleFor = (category) => scales[category] ?? bookScale;
+      scaleSet = {
+        programCostScaleBaseline: bookScale,
+        programCostScaleByCategoryBaseline: scales,
+      };
+      scaleNote = Object.entries(scales)
+        .map(([category, scale]) => `${category}=${scale.toFixed(4)}`)
+        .join(", ");
+    } else {
+      scaleFor = () => bookScale;
+      scaleSet = { programCostScaleBaseline: bookScale };
+      scaleNote = bookScale.toFixed(6);
+    }
+    await db
+      .collection<FederalBudget>("federalBudget")
+      .updateOne({ _id: budgetId }, { $set: scaleSet });
+    const costOps: AnyBulkWriteOperation<EnactedLaw>[] = items.flatMap(({ law }) =>
+      law.costModelV2
+        ? [
+            {
+              updateOne: {
+                filter: { _id: law._id },
+                update: {
+                  $set: {
+                    costModelV2: scaleProgramCostModel(
+                      law.costModelV2,
+                      scaleFor(law.budgetCategory || "other")
+                    ),
+                  },
+                },
+              },
+            },
+          ]
+        : []
+    );
+    if (costOps.length > 0) await db.collection<EnactedLaw>("enactedLaws").bulkWrite(costOps);
+
+    const typeOps: AnyBulkWriteOperation<LegislationType>[] = getCatalog(countryId, 1991)
+      .filter((law) => law.kind !== "tax")
+      .map((law) => {
+        const doc = projectLawToLegislationType(law);
+        return {
+          updateOne: {
+            filter: { _id: doc._id },
+            update: {
+              $set: {
+                policyOptions: doc.policyOptions!.map((option) => ({
+                  ...option,
+                  costModelV2: scaleProgramCostModel(
+                    option.costModelV2!,
+                    scaleFor(budgetKeyForLaw(law))
+                  ),
+                })),
+              },
+            },
+          },
+        };
+      });
+    if (typeOps.length > 0)
+      await db.collection<LegislationType>("legislationTypes").bulkWrite(typeOps);
+    await refreshNationalBudgetRevenue(db, [budgetId]);
+    log(`Calibrated 1991 ${countryId} program expense fractions by ${scaleNote}`);
+  }
 }
 
 /**

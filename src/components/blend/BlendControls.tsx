@@ -1,5 +1,6 @@
 "use client";
 
+import { BLEND_LABEL } from "@/components/blend/tokens";
 import type { ReactNode } from "react";
 import { BLEND, FONT } from "./tokens";
 
@@ -19,14 +20,11 @@ export function blendButtonStyle(
   full = false
 ): React.CSSProperties {
   const base: React.CSSProperties = {
+    ...BLEND_LABEL,
     ...(full ? { width: "100%" } : {}),
     padding: "9px 16px",
     font: "inherit",
-    fontFamily: FONT.mono,
-    fontSize: 10.5,
-    letterSpacing: ".08em",
     fontWeight: 700,
-    textTransform: "uppercase",
     cursor: enabled ? "pointer" : "not-allowed",
   };
 
@@ -84,17 +82,7 @@ export function BlendSelect(props: React.SelectHTMLAttributes<HTMLSelectElement>
 /** Letterspaced mono eyebrow, the Blend label form. */
 export function BlendLabel({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
   return (
-    <label
-      htmlFor={htmlFor}
-      style={{
-        display: "block",
-        fontFamily: FONT.mono,
-        fontSize: 9.5,
-        letterSpacing: ".16em",
-        textTransform: "uppercase",
-        color: BLEND.mutedDimmer,
-      }}
-    >
+    <label htmlFor={htmlFor} style={{ ...BLEND_LABEL, display: "block" }}>
       {children}
     </label>
   );

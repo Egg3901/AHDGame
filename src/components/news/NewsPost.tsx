@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -153,7 +154,7 @@ export function NewsPost({
       });
       const data = (await res.json()) as { url?: string; error?: string };
       if (!res.ok) {
-        setEditError(data.error ?? "Image upload failed");
+        setEditError(apiErrorText(data, "Image upload failed"));
         return;
       }
       if (data.url) setEditImageUrl(data.url);
@@ -183,7 +184,7 @@ export function NewsPost({
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setEditError(data.error ?? "Failed to save changes");
+        setEditError(apiErrorText(data, "Failed to save changes"));
         return;
       }
 

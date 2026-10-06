@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -86,7 +88,7 @@ export default function FeedbackDetailPage() {
       const res = await fetch(`/api/suggestions/public/${issueNum}`);
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Not found");
+        setError(apiErrorText(data, "Not found"));
         setDetail(null);
         return;
       }
@@ -155,7 +157,7 @@ export default function FeedbackDetailPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setPostError(data.error ?? "Failed to post");
+        setPostError(apiErrorText(data, "Failed to post"));
         return;
       }
       setCommentBody("");
@@ -441,7 +443,7 @@ export default function FeedbackDetailPage() {
             >
               Post comment
             </Button>
-            {postError && <p className="text-sm text-error">{postError}</p>}
+            <InlineError error={postError} className="text-sm text-error" />
           </div>
         </form>
 

@@ -17,6 +17,11 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { sovereignDebtTerms } from "@/lib/bonds/sovereignPrincipal";
+import {
+  SOVEREIGN_COUPON_BOOK_PROJECTION,
+  sovereignCouponBooksByCountry,
+} from "@/lib/bonds/sovereignCouponBook";
+import { sovereignStockAnnualService } from "@/lib/budget/rules/sovereignDebtService";
 import { ensureFederalBudget } from "@/lib/turn/ensureFederalBudget";
 import { getCentralBankScope } from "@/lib/centralBank/helpers";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
@@ -111,33 +116,29 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   const ledgerShadow = config?.ledgerShadow === true;
   const bankTreasuryEnabled = config?.bankTreasuryEnabled === true;
   const treasuryCashLedgerEnabled = config?.treasuryCashLedgerEnabled === true;
-  const sovereignBonds =
-    bankTreasuryEnabled || treasuryCashLedgerEnabled
-      ? await db
-          .collection<Bond>("bonds")
-          .find(
-            {
-              issuerType: "sovereign",
-              defaulted: { $ne: true },
-              matured: { $ne: true },
-              maturityTurn: { $gte: _turn },
-            },
-            {
-              projection: {
-                _id: 1,
-                issuerType: 1,
-                countryId: 1,
-                currencyCode: 1,
-                couponRate: 1,
-                holders: 1,
-                publicFloat: 1,
-                matured: 1,
-                defaulted: 1,
-              },
-            }
-          )
-          .toArray()
-      : [];
+  // Read once for every flag posture: the coupon book prices debt service on
+  // the stock (issue #2089) even when bank/treasury cash ledgers are off.
+  // Holder arrays are only needed by the funded coupon paths.
+  const holderPathsEnabled = bankTreasuryEnabled || treasuryCashLedgerEnabled;
+  const sovereignBonds = await db
+    .collection<Bond>("bonds")
+    .find(
+      {
+        issuerType: "sovereign",
+        defaulted: { $ne: true },
+        matured: { $ne: true },
+        maturityTurn: { $gte: _turn },
+      },
+      {
+        projection: {
+          ...SOVEREIGN_COUPON_BOOK_PROJECTION,
+          currencyCode: 1,
+          ...(holderPathsEnabled ? { holders: 1, publicFloat: 1 } : {}),
+        },
+      }
+    )
+    .toArray();
+  const couponBooks = sovereignCouponBooksByCountry(sovereignBonds);
   const corporationIds = [
     ...new Set(
       sovereignBonds.flatMap((bond) =>
@@ -278,8 +279,17 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
         imfBailoutActive: b.imfSovereignBailoutActive,
         sovereignRiskAnchor: b.sovereignRiskAnchor,
       });
+      // Outstanding bonds are serviced at their locked coupons; only stock not
+      // yet represented by bonds pays the current marginal ladder rate (#2089).
       const debtServiceTurn =
-        bondPrincipal > 0 ? (bondPrincipal * terms.interestRate) / TURNS_PER_YEAR : 0;
+        bondPrincipal > 0
+          ? sovereignStockAnnualService({
+              principal: bondPrincipal,
+              book: couponBooks.get(String(b.countryId ?? b._id)),
+              marginalRate: terms.interestRate,
+              imfBailoutActive: b.imfSovereignBailoutActive,
+            }) / TURNS_PER_YEAR
+          : 0;
 
       const enforcementCost = enforcementTreasuryCostPerTurn(
         b.gdp ?? 0,

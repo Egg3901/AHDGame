@@ -7,10 +7,10 @@ import {
   DEVOLUTION_POLICY_CHANGE_AP_COST,
   DEVOLUTION_POLICY_CHANGE_COOLDOWN_TURNS,
   MEAN_REVERSION_TARGET,
-  PRO_INDY_BONUS_BAND_SIZE,
-  PRO_INDY_BONUS_PER_BAND,
-  PRO_INDY_BONUS_THRESHOLD,
-  PRO_INDY_BONUS_TIER_COUNT,
+  HIGH_DESIRE_BONUS_BAND_SIZE,
+  HIGH_DESIRE_BONUS_PER_BAND,
+  HIGH_DESIRE_BONUS_THRESHOLD,
+  HIGH_DESIRE_BONUS_TIER_COUNT,
   getDevolutionPolicyLabel,
   getIndependenceMetricLabel,
 } from "@/lib/constants/devolution";
@@ -49,28 +49,25 @@ interface Props {
   viewerCanManage: boolean;
   viewerIsAdmin: boolean;
   driverPreview: DevolutionDriverSnapshot;
-  /** Current additive vote-share bonus the region's pro-indy party gets in
-   *  every election here, derived from independenceDesire. 0 when desire < 60. */
-  proIndyElectionBonus: number;
+  /** Current First Minister party eligible for the high-desire bonus. */
+  firstMinisterPartyName: string | null;
+  /** Current additive vote-share bonus after desire, policy, and office-holder
+   *  eligibility are considered. */
+  highDesireElectionBonus: number;
   /** Current/most-recent referendum + request eligibility for this region. */
   referendum: ReferendumPanelData;
 }
 
-const PRO_INDY_PARTY_LABEL: Record<string, string> = {
-  SCO: "Scottish National Party",
-  WAL: "Plaid Cymru",
-  NIR: "Sinn Féin",
-};
-
 /** Build the tier strip from the constants so the UI stays in lockstep
  *  with the engine if the thresholds, step size, or band count are ever
  *  retuned. */
-const PRO_INDY_BONUS_TIERS = Array.from({ length: PRO_INDY_BONUS_TIER_COUNT }, (_, i) => ({
-  threshold: PRO_INDY_BONUS_THRESHOLD + i * PRO_INDY_BONUS_BAND_SIZE,
-  bonusPct: (i + 1) * PRO_INDY_BONUS_PER_BAND * 100,
+const HIGH_DESIRE_BONUS_TIERS = Array.from({ length: HIGH_DESIRE_BONUS_TIER_COUNT }, (_, i) => ({
+  threshold: HIGH_DESIRE_BONUS_THRESHOLD + i * HIGH_DESIRE_BONUS_BAND_SIZE,
+  bonusPct: (i + 1) * HIGH_DESIRE_BONUS_PER_BAND * 100,
 }));
-const PRO_INDY_BONUS_MAX_PCT = PRO_INDY_BONUS_TIERS[PRO_INDY_BONUS_TIERS.length - 1].bonusPct;
-const PRO_INDY_BONUS_FIRST_PCT = PRO_INDY_BONUS_TIERS[0].bonusPct;
+const HIGH_DESIRE_BONUS_MAX_PCT =
+  HIGH_DESIRE_BONUS_TIERS[HIGH_DESIRE_BONUS_TIERS.length - 1].bonusPct;
+const HIGH_DESIRE_BONUS_FIRST_PCT = HIGH_DESIRE_BONUS_TIERS[0].bonusPct;
 
 const POLICY_OPTIONS: DevolutionPolicy[] = ["anti", "pro", "independence"];
 
@@ -179,42 +176,54 @@ export function DevolutionTab(props: Props) {
         </div>
       </div>
 
-      {/* Pro-indy election bonus */}
+      {/* First Minister party election bonus */}
       <div className="rounded-xl border border-card-border bg-card p-6">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm text-muted">Election bonus</h2>
           <div className="text-xs text-muted">
-            Active at {PRO_INDY_BONUS_THRESHOLD}+ · steps every {PRO_INDY_BONUS_BAND_SIZE}pp ·
-            capped at +{PRO_INDY_BONUS_MAX_PCT}%
+            Active at {HIGH_DESIRE_BONUS_THRESHOLD}+ · steps every {HIGH_DESIRE_BONUS_BAND_SIZE}pp ·
+            capped at +{HIGH_DESIRE_BONUS_MAX_PCT}%
           </div>
         </div>
-        {props.proIndyElectionBonus > 0 ? (
+        {props.highDesireElectionBonus > 0 ? (
           <div className="mt-3 flex items-end gap-3">
             <div className="text-3xl font-bold tabular-nums text-emerald-500">
-              +{(props.proIndyElectionBonus * 100).toFixed(1)}%
+              +{(props.highDesireElectionBonus * 100).toFixed(1)}%
             </div>
             <div className="pb-1 text-sm text-muted">
               vote bonus to{" "}
               <span className="font-medium text-foreground/90">
-                {PRO_INDY_PARTY_LABEL[props.stateId.toUpperCase()] ?? "the pro-indy party"}
+                {props.firstMinisterPartyName ?? "the First Minister's party"}
               </span>{" "}
-              in every {props.stateName} election (additive — does not penalise rivals).
+              in every {props.stateName} election. This does not penalise rivals.
             </div>
+          </div>
+        ) : props.currentPolicy !== "independence" ? (
+          <div className="mt-3 text-sm text-muted">
+            No bonus active. Devolution Policy must be set to{" "}
+            {getDevolutionPolicyLabel(props.stateId, "independence")} and{" "}
+            {getIndependenceMetricLabel(props.stateId).toLowerCase()} must reach{" "}
+            {HIGH_DESIRE_BONUS_THRESHOLD}.
+          </div>
+        ) : props.currentValue < HIGH_DESIRE_BONUS_THRESHOLD ? (
+          <div className="mt-3 text-sm text-muted">
+            No bonus active. {getIndependenceMetricLabel(props.stateId).toLowerCase()} must reach{" "}
+            {HIGH_DESIRE_BONUS_THRESHOLD} to unlock +{HIGH_DESIRE_BONUS_FIRST_PCT}%.
           </div>
         ) : (
           <div className="mt-3 text-sm text-muted">
-            No bonus active — {getIndependenceMetricLabel(props.stateId).toLowerCase()} would need
-            to reach {PRO_INDY_BONUS_THRESHOLD} to unlock +{PRO_INDY_BONUS_FIRST_PCT}%.
+            No bonus active. The current First Minister must belong to a party.
           </div>
         )}
         <ul
           className="mt-4 grid gap-2 text-center text-xs"
           style={{
-            gridTemplateColumns: `repeat(${PRO_INDY_BONUS_TIER_COUNT}, minmax(0, 1fr))`,
+            gridTemplateColumns: `repeat(${HIGH_DESIRE_BONUS_TIER_COUNT}, minmax(0, 1fr))`,
           }}
         >
-          {PRO_INDY_BONUS_TIERS.map((tier) => {
-            const active = props.currentValue >= tier.threshold;
+          {HIGH_DESIRE_BONUS_TIERS.map((tier) => {
+            const active =
+              props.highDesireElectionBonus > 0 && props.currentValue >= tier.threshold;
             return (
               <li
                 key={tier.threshold}
@@ -304,7 +313,7 @@ export function DevolutionTab(props: Props) {
             onClick={() => setModalMode("admin")}
             className="self-end rounded-lg bg-error px-3 py-1.5 text-sm font-medium text-white hover:bg-error/80 sm:self-auto"
           >
-            + Admin Override
+            + Admin override
           </button>
         </div>
       )}

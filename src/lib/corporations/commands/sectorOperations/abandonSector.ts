@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { CorporateSector, GameState, SectorBuildOrder, State } from "@/lib/db/types";
 import type { Corporation } from "@/lib/db/types";
@@ -52,7 +52,7 @@ export async function abandonSector(_request: Request, { params }: RouteParams) 
     if (ceoCheck) return ceoCheck;
 
     if (!ObjectId.isValid(sectorId)) {
-      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+      return errorResponse(400, "Invalid sector ID");
     }
 
     // Reserve the sector without deleting it. The property marker makes this
@@ -75,7 +75,7 @@ export async function abandonSector(_request: Request, { params }: RouteParams) 
     );
 
     if (!sector) {
-      return NextResponse.json({ error: "Sector not found" }, { status: 404 });
+      return errorResponse(404, "Sector not found");
     }
 
     const sectorLabel =

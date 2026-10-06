@@ -13,7 +13,7 @@ export const metadata: Metadata = publicPageMetadata({
 const GUIDES = [
   {
     href: "/guides/corporations",
-    title: "Running a Corporation",
+    title: "Running a corporation",
     description:
       "How to found, expand, and profit from your corporation. Covers sector focus, margin modifiers, commodity markets, sprawl, shares, and bonds.",
     icon: (
@@ -30,7 +30,7 @@ const GUIDES = [
   },
   {
     href: "/guides/running-for-office",
-    title: "Running for Office",
+    title: "Running for office",
     description:
       "How to declare candidacy, survive the primary, and win a general election. Covers Political Influence, campaign upgrades, favorability, and what the vote formula actually rewards.",
     icon: (
@@ -98,7 +98,7 @@ const GUIDES = [
   },
   {
     href: "/guides/forex",
-    title: "Currency Exchange (Forex)",
+    title: "Currency exchange (forex)",
     description:
       "How exchange rates move, trading tiers, volume pressure, and cross-currency strategies.",
     icon: (
@@ -115,7 +115,7 @@ const GUIDES = [
   },
   {
     href: "/guides/planned-economies",
-    title: "Planned / Command Economies",
+    title: "Planned / Command economies",
     description:
       "How USSR, China, and Eastern-bloc planned economies differ from market rules: fixed FX, administered prices, soft budgets, shortage and overhang, and dual-track transitions.",
     icon: (
@@ -132,7 +132,7 @@ const GUIDES = [
   },
   {
     href: "/supporters",
-    title: "Supporter Wall",
+    title: "Supporter wall",
     description:
       "The players whose support keeps A House Divided running. See every Supporter, Supporter+, and Supporter++ member on the wall.",
     icon: (

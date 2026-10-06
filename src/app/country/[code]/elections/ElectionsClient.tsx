@@ -49,6 +49,7 @@ import { ElectionsHero } from "./components/ElectionsHero";
 import { ElectionsControls } from "./components/ElectionsControls";
 import { ElectionsSkeleton } from "./components/ElectionsSkeleton";
 import { OfficeSection } from "./components/OfficeSection";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 // The map pulls in react-simple-maps and only renders behind a toggle, so keep
 // it out of this page's initial bundle.
@@ -183,7 +184,7 @@ export default function ElectionsClient({ code, initialElections }: ElectionsCli
     try {
       const result = await fetchAllElections(countryId);
       setElections(result.elections);
-      if (result.error) setFetchError(result.error);
+      if (result.error) setFetchError(apiErrorText(result, "Request failed. Try again."));
       await fetchSecondary();
     } catch (err) {
       console.error("Error fetching elections:", err);

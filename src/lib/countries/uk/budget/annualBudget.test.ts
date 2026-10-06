@@ -124,61 +124,69 @@ describe("buildAnnualBudgetProvisions", () => {
 });
 
 describe("previewAnnualBudget", () => {
-  it("forecasts the same tax and programme changes that the omnibus bill will enact", async () => {
-    const db = {
-      collection(name: string) {
-        if (name === "federalBudget") {
-          return {
-            findOne: async () => ({
-              _id: "UK",
-              countryId: "UK",
-              gdp: 1_000,
-              taxRates: { incomeTax: 20 },
-              taxBases: { taxableIncome: 500 },
-              revenue: {
-                incomeTax: 100,
-                lawRevenue: 20,
-                other: 100,
-                healthcareIncome: 0,
-                taxLikeRevenue: 120,
-                taxLikeRevenueAfterCap: 120,
-                total: 220,
-              },
-              spending: { byCategory: { defense: 300 }, debtInterest: 100, total: 500 },
-              debt: { principal: 1_500, interestRate: 0.04, ceiling: 2_000 },
-            }),
-          };
-        }
-        if (name === "statePolicies") {
-          return {
-            find: () => ({
-              toArray: async () => [
-                {
-                  legislationTypeId: "uk.defense.armedForces.primary",
-                  policyOptionIndex: 3,
+  it.each([1, 0.5])(
+    "forecasts the same changes at the persisted program scale %s",
+    async (scale) => {
+      const db = {
+        collection(name: string) {
+          if (name === "federalBudget") {
+            return {
+              findOne: async () => ({
+                _id: "UK",
+                countryId: "UK",
+                gdp: 1_000,
+                programCostScaleBaseline: scale,
+                taxRates: { incomeTax: 20 },
+                taxBases: { taxableIncome: 500 },
+                revenue: {
+                  incomeTax: 100,
+                  lawRevenue: 20,
+                  other: 100,
+                  healthcareIncome: 0,
+                  taxLikeRevenue: 120,
+                  taxLikeRevenueAfterCap: 120,
+                  total: 220,
                 },
-              ],
-            }),
-          };
-        }
-        if (name === "states") {
-          return { find: () => ({ toArray: async () => [{ gdp: 0.001, population: 1 }] }) };
-        }
-        throw new Error(`unexpected collection: ${name}`);
-      },
-    } as never;
+                spending: { byCategory: { defense: 300 }, debtInterest: 100, total: 500 },
+                debt: { principal: 1_500, interestRate: 0.04, ceiling: 2_000 },
+              }),
+            };
+          }
+          if (name === "statePolicies") {
+            return {
+              find: () => ({
+                toArray: async () => [
+                  {
+                    legislationTypeId: "uk.defense.armedForces.primary",
+                    policyOptionIndex: 3,
+                  },
+                ],
+              }),
+            };
+          }
+          if (name === "states") {
+            return { find: () => ({ toArray: async () => [{ gdp: 0.001, population: 1 }] }) };
+          }
+          throw new Error(`unexpected collection: ${name}`);
+        },
+      } as never;
 
-    const result = await previewAnnualBudget(db, {
-      taxRates: { "uk.tax.incomeTax": 30 },
-      programLevels: { "uk.defense.armedForces.primary": 1 },
-    });
+      const result = await previewAnnualBudget(db, {
+        taxRates: { "uk.tax.incomeTax": 30 },
+        programLevels: { "uk.defense.armedForces.primary": 1 },
+      });
 
-    expect(result).toMatchObject({
-      ok: true,
-      current: { revenue: 220, spending: 500, balance: -280 },
-      projected: { revenue: 270, spending: 477.3, balance: -207.3 },
-      categoryDeltas: { defense: -22.7 },
-      phaseInTurns: 10,
-    });
-  });
+      expect(result).toMatchObject({
+        ok: true,
+        current: { revenue: 220, spending: 500, balance: -280 },
+        projected: {
+          revenue: 270,
+          spending: 500 - 22.7 * scale,
+          balance: 270 - (500 - 22.7 * scale),
+        },
+        categoryDeltas: { defense: -22.7 * scale },
+        phaseInTurns: 10,
+      });
+    }
+  );
 });

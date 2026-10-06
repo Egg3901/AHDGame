@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireModerator } from "@/lib/api/requireModerator";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { createModAuditLog } from "@/lib/modAuditLog";
 import { z } from "zod";
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
     const parsed = await parseJsonBody(request, grantSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { characterId, achievementSlug } = parsed.data;
@@ -35,12 +35,12 @@ export async function POST(request: Request) {
       .collection<Character>("characters")
       .findOne({ _id: new ObjectId(characterId) });
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     const achievement = await db.collection("achievements").findOne({ slug: achievementSlug });
     if (!achievement) {
-      return NextResponse.json({ error: "Achievement not found" }, { status: 404 });
+      return errorResponse(404, "Achievement not found");
     }
 
     const granted = await awardAchievement(

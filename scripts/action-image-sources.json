@@ -3,12 +3,14 @@
     "Sources for the era/country action-card art on /actions.",
     "Keys are '<era>/<slug>' (era-generic) or '<era>/<country>/<slug>' (national).",
     "Every entry is public domain or a free CC/open licence — see `license` and `credit`.",
-    "Fetch + optimise:  node scripts/fetch-action-images.mjs",
-    "Publish to R2:     node scripts/upload-action-images-to-r2.mjs",
     "Adding a national image also requires listing its slug in ERA_COUNTRY_SLUGS",
     "in src/lib/images/actionImages.ts, or the resolver will keep serving the generic.",
     "Optional `gravity` (a sharp position: top/north/bottom/…) moves the 2:1 card crop",
-    "off centre; use it when the subject sits high or low in the frame."
+    "off centre; use it when the subject sits high or low in the frame.",
+    "Eras 1991/1999/2007/2019/2023/2027 and the era-neutral set `neutral/<slug>` were added for 1.12.",
+    "Optional `color: true` keeps the source in colour; the pre-2000 sets and the neutral set are greyscaled for one tonal treatment.",
+    "Optional `page` is the Commons file page; `credit` is the attribution line shown in public/static/actions/CREDITS.md.",
+    "Optional `revision: n` marks replaced art: the file is published as `<slug>-v<n>.webp` (new R2 object, the old one stays so cached URLs never show new art under an old name) and must also be listed in ACTION_ART_REVISIONS in src/lib/images/actionImages.ts."
   ],
   "1953/campaign": {
     "url": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Large_crowd_assembled_at_a_political_rally_in_South_Bend%2C_Indiana%2C_for_presidential_candidate_Dwight_Eisenhower.jpg",
@@ -260,5 +262,534 @@
     "url": "https://upload.wikimedia.org/wikipedia/commons/8/82/GermanyDemRepPFX6-100Mark-1979-donatedmjd_f.jpg",
     "credit": "GDR 100 Mark note, 1979 series",
     "license": "Public domain"
+  },
+  "1991/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/dc/Bundesarchiv_Bild_183-1990-0220-033%2C_Erfurt%2C_Volkskammerwahl%2C_CDU-Wahlkundgebung.jpg",
+    "credit": "Hirndorf, Heinz, via Wikimedia Commons",
+    "license": "CC BY-SA 3.0 de",
+    "page": "https://commons.wikimedia.org/wiki/File:Bundesarchiv_Bild_183-1990-0220-033,_Erfurt,_Volkskammerwahl,_CDU-Wahlkundgebung.jpg"
+  },
+  "1991/advertise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/61/Bundesarchiv_Bild_183-1990-1120-308%2C_Cottbus%2C_Wahlplakate.jpg",
+    "credit": "Rainer Weisflog, via Wikimedia Commons",
+    "license": "CC BY-SA 3.0 de",
+    "page": "https://commons.wikimedia.org/wiki/File:Bundesarchiv_Bild_183-1990-1120-308,_Cottbus,_Wahlplakate.jpg"
+  },
+  "1991/fundraise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/46/Bush_family_at_RNC_podium_1992.jpg",
+    "credit": "White House photo office, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Bush_family_at_RNC_podium_1992.jpg"
+  },
+  "1991/buildDonorBase": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/80/Al_Gore_campaigning_on_the_tarmac_in_1992_%282806706683%29.jpg",
+    "credit": "Janice Waltzer from Owasso, USA, via Wikimedia Commons",
+    "license": "CC BY 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Al_Gore_campaigning_on_the_tarmac_in_1992_(2806706683).jpg"
+  },
+  "1991/convertCash": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/0/04/Bundesarchiv_Bild_183-1990-1122-009%2C_Pressekonferenz%2C_Bundeswahlleiter_Egon_H%C3%B6lder.jpg",
+    "credit": "Hubert Link, via Wikimedia Commons",
+    "license": "CC BY-SA 3.0 de",
+    "page": "https://commons.wikimedia.org/wiki/File:Bundesarchiv_Bild_183-1990-1122-009,_Pressekonferenz,_Bundeswahlleiter_Egon_H%C3%B6lder.jpg"
+  },
+  "1991/poll": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/38/Bundesarchiv_Bild_183-1990-1202-012%2C_Berlin%2C_Bundestagswahl%2C_Gregor_Gysi.jpg",
+    "credit": "Hubert Link, via Wikimedia Commons",
+    "license": "CC BY-SA 3.0 de",
+    "page": "https://commons.wikimedia.org/wiki/File:Bundesarchiv_Bild_183-1990-1202-012,_Berlin,_Bundestagswahl,_Gregor_Gysi.jpg"
+  },
+  "1991/pollLarge": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/c8/Bundesarchiv_Bild_183-1990-1202-302%2C_Stendal%2C_Bundestagswahl%2C_Gerd_Giese.jpg",
+    "credit": "Friedrich Gahlbeck, via Wikimedia Commons",
+    "license": "CC BY-SA 3.0 de",
+    "page": "https://commons.wikimedia.org/wiki/File:Bundesarchiv_Bild_183-1990-1202-302,_Stendal,_Bundestagswahl,_Gerd_Giese.jpg"
+  },
+  "1991/canvass": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/f/f6/Bundesarchiv_Bild_183-1990-0311-013%2C_Cottbus%2C_Volkskammerwahl%2C_Wahlkampf_Vereinigte_Linke.jpg",
+    "credit": "Rainer Weisflog, via Wikimedia Commons",
+    "license": "CC BY-SA 3.0 de",
+    "page": "https://commons.wikimedia.org/wiki/File:Bundesarchiv_Bild_183-1990-0311-013,_Cottbus,_Volkskammerwahl,_Wahlkampf_Vereinigte_Linke.jpg"
+  },
+  "1991/flipflop": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/9/9b/Third_debate_3267.jpg",
+    "credit": "George Bush Presidential Library and Museum, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Third_debate_3267.jpg"
+  },
+  "1991/debatePrep": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/41/Debate_772.jpg",
+    "credit": "George Bush Presidential Library and Museum, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Debate_772.jpg"
+  },
+  "1991/hero": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/de/Boris_Yeltsin_22_August_1991-1.jpg",
+    "credit": "ITAR-TASS, via Wikimedia Commons",
+    "license": "CC BY 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Boris_Yeltsin_22_August_1991-1.jpg"
+  },
+  "1999/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/86/Bill_Clinton_1996_campaign_rally_in_Buffalo%2C_New_York_3f161d.jpg",
+    "credit": "White House Photograph Office,, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Bill_Clinton_1996_campaign_rally_in_Buffalo,_New_York_3f161d.jpg"
+  },
+  "1999/advertise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/b2/Golkar_campaigners_1997.jpg",
+    "credit": "Anton Leddin, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Golkar_campaigners_1997.jpg"
+  },
+  "1999/fundraise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/2d/President_and_Nancy_Reagan_Attending_a_Fundraising_Reception_for_The_John_F._Kennedy_Library_Foundation_%28From_Left_to_Right%29_Senator_Edward_Kennedy_President_Ronald_Reagan_Nancy_Rea_-_DPLA_-_cde1e4be16592924064bb6c754e0daee.jpg",
+    "credit": "President (1981-1989 : Reagan). White House Photographic Office. 1981-1989, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:President_and_Nancy_Reagan_Attending_a_Fundraising_Reception_for_The_John_F._Kennedy_Library_Foundation_(From_Left_to_Right)_Senator_Edward_Kennedy_President_Ronald_Reagan_Nancy_Rea_-_DPLA_-_cde1e4be16592924064bb6c754e0daee.jpg",
+    "revision": 2
+  },
+  "1999/buildDonorBase": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/1/16/RIAN_archive_858217_Boris_Yeltsin_and_Michel_Camdessus.jpg",
+    "credit": "Vladimir Rodionov / Владимир Родионов, via Wikimedia Commons",
+    "license": "CC BY-SA 3.0",
+    "page": "https://commons.wikimedia.org/wiki/File:RIAN_archive_858217_Boris_Yeltsin_and_Michel_Camdessus.jpg"
+  },
+  "1999/convertCash": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/29/Launching_of_the_Euro_-_Press_conference_-_1998.jpg",
+    "credit": "Danny Gys / European Communities, 1998 / EC - Audiovisual Service, via Wikimedia Commons",
+    "license": "CC BY 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Launching_of_the_Euro_-_Press_conference_-_1998.jpg"
+  },
+  "1999/poll": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/1/1b/Blue_Collar_Voters_NBC_1980_presidential_exit_poll.png",
+    "credit": "NBC News, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Blue_Collar_Voters_NBC_1980_presidential_exit_poll.png",
+    "revision": 2
+  },
+  "1999/pollLarge": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/40/Issue_One_Exit_Polling_Results_May_6%2C_1986_-_DPLA_-_5637d277156ad83f90077970182b9e85_%28page_4%29.jpg",
+    "credit": "Columbus (Ohio) Department of Development, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Issue_One_Exit_Polling_Results_May_6,_1986_-_DPLA_-_5637d277156ad83f90077970182b9e85_(page_4).jpg",
+    "revision": 2
+  },
+  "1999/canvass": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/52/Ismail_Kosan_beim_Wahlkampf_der_Gr%C3%BCnen_f%C3%BCr_die_Bundestagswahl_1998.jpg",
+    "credit": "ControV4, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Ismail_Kosan_beim_Wahlkampf_der_Gr%C3%BCnen_f%C3%BCr_die_Bundestagswahl_1998.jpg"
+  },
+  "1999/flipflop": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/44/Boris_Yeltsin_in_the_State_Duma_%281997-12-05%29.jpg",
+    "credit": "А.Н.Лукашина, via Wikimedia Commons",
+    "license": "CC BY 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Boris_Yeltsin_in_the_State_Duma_(1997-12-05).jpg"
+  },
+  "1999/debatePrep": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/83/Conference_%22Europe_Listens_to_the_Youth%22-_Press_conference_with_Edith_Cresson_%28P-002035-01-22%29.jpg",
+    "credit": "Mark Renders, Isopress-Sénépart, via Wikimedia Commons",
+    "license": "CC BY 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Conference_%22Europe_Listens_to_the_Youth%22-_Press_conference_with_Edith_Cresson_(P-002035-01-22).jpg"
+  },
+  "1999/hero": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/42/London_Parliament_2007-1.jpg",
+    "credit": "Alvesgaspar, via Wikimedia Commons",
+    "license": "CC BY-SA 3.0",
+    "page": "https://commons.wikimedia.org/wiki/File:London_Parliament_2007-1.jpg"
+  },
+  "2007/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/b2/Obama_Rally_%282286936605%29.jpg",
+    "credit": "Joel Gillman from Minneapolis, USA, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Obama_Rally_(2286936605).jpg",
+    "color": true
+  },
+  "2007/advertise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/0/0c/Nicolas_Sarkozy_-_Sarkozy_meeting_in_Toulouse_for_the_2007_French_presidential_election_0299_2007-04-12_cropped.jpg",
+    "credit": "Guillaume Paumier, via Wikimedia Commons",
+    "license": "CC BY-SA 2.5",
+    "page": "https://commons.wikimedia.org/wiki/File:Nicolas_Sarkozy_-_Sarkozy_meeting_in_Toulouse_for_the_2007_French_presidential_election_0299_2007-04-12_cropped.jpg",
+    "color": true
+  },
+  "2007/fundraise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/a/a3/Barack_Obama_Rally_Feb_2_2008_4.jpg",
+    "credit": "Calebrw, via Wikimedia Commons",
+    "license": "CC BY-SA 3.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Barack_Obama_Rally_Feb_2_2008_4.jpg",
+    "color": true
+  },
+  "2007/buildDonorBase": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/0/0d/Barack_Obama_strolls_the_Iowa_State_fairgrounds_-_Aug._16th_2007.jpg",
+    "credit": "IowaPolitics.com, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Barack_Obama_strolls_the_Iowa_State_fairgrounds_-_Aug._16th_2007.jpg",
+    "color": true
+  },
+  "2007/convertCash": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/f/fb/983706158-billet-de-10-euros-billet-de-20-euros-billet-de-50-euros-liasse-de-billets_%281%29.jpg",
+    "credit": "Europa credito urgente, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:983706158-billet-de-10-euros-billet-de-20-euros-billet-de-50-euros-liasse-de-billets_(1).jpg",
+    "color": true
+  },
+  "2007/poll": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/2e/2007_federal_elections_Belgium_3.jpg",
+    "credit": "Steven Fruitsmaak/Wikinews, via Wikimedia Commons",
+    "license": "CC BY 2.5",
+    "page": "https://commons.wikimedia.org/wiki/File:2007_federal_elections_Belgium_3.jpg",
+    "color": true
+  },
+  "2007/pollLarge": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/68/2007_federal_elections_Belgium_5.jpg",
+    "credit": "Steven Fruitsmaak/Wikinews, via Wikimedia Commons",
+    "license": "CC BY 2.5",
+    "page": "https://commons.wikimedia.org/wiki/File:2007_federal_elections_Belgium_5.jpg",
+    "color": true
+  },
+  "2007/canvass": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/d1/Socialist_campaign_booth_2007.JPG",
+    "credit": "Punkmorten, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Socialist_campaign_booth_2007.JPG",
+    "color": true
+  },
+  "2007/flipflop": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/2b/Meeting_Royal_2007_02_06_n9.jpg",
+    "credit": "Marie-Lan Nguyen (User:Jastrow), via Wikimedia Commons",
+    "license": "CC BY 2.5",
+    "page": "https://commons.wikimedia.org/wiki/File:Meeting_Royal_2007_02_06_n9.jpg",
+    "color": true
+  },
+  "2007/debatePrep": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/8e/HUJI_Election_Debate_%288361985738%29.jpg",
+    "credit": "The Israel Project, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:HUJI_Election_Debate_(8361985738).jpg",
+    "revision": 2,
+    "color": true
+  },
+  "2007/hero": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/b9/Obama_Rally_%282287720594%29.jpg",
+    "credit": "Joel Gillman from Minneapolis, USA, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Obama_Rally_(2287720594).jpg",
+    "color": true
+  },
+  "2019/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/35/Election_2016-_Bernie_Sanders_NYC_Fundraiser_Draws_Campaign_Supporters_Who_Are_%27Feelin%27_The_Bern%27_%2821647292132%29.jpg",
+    "credit": "Michael Vadon, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Election_2016-_Bernie_Sanders_NYC_Fundraiser_Draws_Campaign_Supporters_Who_Are_'Feelin'_The_Bern'_(21647292132).jpg",
+    "revision": 2,
+    "color": true
+  },
+  "2019/advertise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/47/2019_election_in_Bournemouth.jpg",
+    "credit": "Menacinghat, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:2019_election_in_Bournemouth.jpg",
+    "color": true
+  },
+  "2019/fundraise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/e/ee/Tpac-donors-dinner_16803559592_o.jpg",
+    "credit": "Eric Haynes for the Office of the Governor of Massachusetts, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Tpac-donors-dinner_16803559592_o.jpg",
+    "revision": 2,
+    "color": true
+  },
+  "2019/buildDonorBase": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/33/Bagels_with_Bernie_2020_20190202_113759.jpg",
+    "credit": "SecretName101, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Bagels_with_Bernie_2020_20190202_113759.jpg",
+    "color": true
+  },
+  "2019/convertCash": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/50/Euro_banknotes%2C_First_series.png",
+    "credit": "Bericht, via Wikimedia Commons",
+    "license": "CC0",
+    "page": "https://commons.wikimedia.org/wiki/File:Euro_banknotes,_First_series.png",
+    "color": true
+  },
+  "2019/poll": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/db/2019_TH-election_voting-booth_IMG_8250.jpg",
+    "credit": "Per Meistrup, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:2019_TH-election_voting-booth_IMG_8250.jpg",
+    "color": true
+  },
+  "2019/pollLarge": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/20/-2019-12-12_Polling_station%2C_Trimingham_village_hall%2C_Norfolk_%282%29.JPG",
+    "credit": "Kolforn (Kolforn) I'd appreciate if you could mail me (Kolforn@gmail.com) if you want to use this picture out of the Wik, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:-2019-12-12_Polling_station,_Trimingham_village_hall,_Norfolk_(2).JPG",
+    "color": true
+  },
+  "2019/canvass": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/dd/22-09-22_Campagna_elettorale_mercato_di_Cascina_24.jpg",
+    "credit": "Alexmar983, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:22-09-22_Campagna_elettorale_mercato_di_Cascina_24.jpg",
+    "revision": 2,
+    "color": true
+  },
+  "2019/flipflop": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/b0/Le_chef_lib%C3%A9ral_Michael_Ignatieff_lors_de_la_visite_dun_centre_de_ressources_communautaires_%C3%A0_Charlesbourg.jpg",
+    "credit": "Michael Ignatieff, via Wikimedia Commons",
+    "license": "CC BY 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Le_chef_lib%C3%A9ral_Michael_Ignatieff_lors_de_la_visite_dun_centre_de_ressources_communautaires_%C3%A0_Charlesbourg.jpg",
+    "revision": 2,
+    "color": true
+  },
+  "2019/debatePrep": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/8/82/Republican_Presidential_debate_2016_by_Gage_Skidmore.jpg",
+    "credit": "Gage Skidmore, via Wikimedia Commons",
+    "license": "CC BY-SA 3.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Republican_Presidential_debate_2016_by_Gage_Skidmore.jpg",
+    "revision": 2,
+    "color": true
+  },
+  "2019/hero": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/2c/European_Parliament_Strasbourg_Hemicycle_-_Diliff.jpg",
+    "credit": "Diliff, via Wikimedia Commons",
+    "license": "CC BY-SA 3.0",
+    "page": "https://commons.wikimedia.org/wiki/File:European_Parliament_Strasbourg_Hemicycle_-_Diliff.jpg",
+    "color": true
+  },
+  "neutral/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/b2/Obama_Rally_%282286936605%29.jpg",
+    "credit": "Joel Gillman from Minneapolis, USA, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Obama_Rally_(2286936605).jpg",
+    "revision": 2
+  },
+  "neutral/advertise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/7/74/Brno%2C_Kn%C3%ADni%C4%8Dsk%C3%A1%2C_billboard_ODS_%284040%29.jpg",
+    "credit": "Martin Strachoň, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Brno,_Kn%C3%ADni%C4%8Dsk%C3%A1,_billboard_ODS_(4040).jpg",
+    "gravity": "north",
+    "revision": 2
+  },
+  "neutral/fundraise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/e/ee/Tpac-donors-dinner_16803559592_o.jpg",
+    "credit": "Eric Haynes for the Office of the Governor of Massachusetts, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Tpac-donors-dinner_16803559592_o.jpg",
+    "revision": 2
+  },
+  "neutral/buildDonorBase": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/c1/Gov._Strickland_visits_Phone_Bank.jpg",
+    "credit": "aflcio2008, via Wikimedia Commons",
+    "license": "CC BY 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Gov._Strickland_visits_Phone_Bank.jpg",
+    "revision": 2
+  },
+  "neutral/convertCash": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/50/Euro_banknotes%2C_First_series.png",
+    "credit": "Bericht, via Wikimedia Commons",
+    "license": "CC0",
+    "page": "https://commons.wikimedia.org/wiki/File:Euro_banknotes,_First_series.png"
+  },
+  "neutral/poll": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/2e/2007_federal_elections_Belgium_3.jpg",
+    "credit": "Steven Fruitsmaak/Wikinews, via Wikimedia Commons",
+    "license": "CC BY 2.5",
+    "page": "https://commons.wikimedia.org/wiki/File:2007_federal_elections_Belgium_3.jpg"
+  },
+  "neutral/pollLarge": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/68/2007_federal_elections_Belgium_5.jpg",
+    "credit": "Steven Fruitsmaak/Wikinews, via Wikimedia Commons",
+    "license": "CC BY 2.5",
+    "page": "https://commons.wikimedia.org/wiki/File:2007_federal_elections_Belgium_5.jpg"
+  },
+  "neutral/canvass": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/d1/Socialist_campaign_booth_2007.JPG",
+    "credit": "Punkmorten, via Wikimedia Commons",
+    "license": "Public domain",
+    "page": "https://commons.wikimedia.org/wiki/File:Socialist_campaign_booth_2007.JPG"
+  },
+  "neutral/flipflop": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/f/f0/Hillary_Clinton_with_press.jpg",
+    "credit": "Terry Ross from Corpus Christi, Texas, United States, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Hillary_Clinton_with_press.jpg",
+    "revision": 2
+  },
+  "neutral/debatePrep": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/e/eb/HUJI_Election_Debate_%288367953626%29.jpg",
+    "credit": "The Israel Project, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:HUJI_Election_Debate_(8367953626).jpg",
+    "revision": 2
+  },
+  "neutral/hero": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/2c/European_Parliament_Strasbourg_Hemicycle_-_Diliff.jpg",
+    "credit": "Diliff, via Wikimedia Commons",
+    "license": "CC BY-SA 3.0",
+    "page": "https://commons.wikimedia.org/wiki/File:European_Parliament_Strasbourg_Hemicycle_-_Diliff.jpg"
+  },
+  "2023/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/0/0b/Millet_%C4%B0ttifak%C4%B1_%C4%B0zmir_mitingi.jpg",
+    "credit": "BSRF, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Millet_%C4%B0ttifak%C4%B1_%C4%B0zmir_mitingi.jpg",
+    "revision": 2,
+    "color": true
+  },
+  "2023/advertise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/f/fe/Predvolebn%C3%A1_kampa%C5%88%2C_parlamentn%C3%A9_vo%C4%BEby_2023%2C_Doln%C3%BD_Kub%C3%ADn%2C_Slovensko_01.jpg",
+    "credit": "Oto Zapletal, via Wikimedia Commons",
+    "license": "CC BY 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Predvolebn%C3%A1_kampa%C5%88,_parlamentn%C3%A9_vo%C4%BEby_2023,_Doln%C3%BD_Kub%C3%ADn,_Slovensko_01.jpg",
+    "revision": 2,
+    "color": true
+  },
+  "2023/fundraise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/b1/Election_2016-_Bernie_Sanders_NYC_Fundraiser_Draws_Campaign_Supporters_Who_Are_%27Feelin%27_The_Bern%27_%2821668863331%29.jpg",
+    "credit": "Michael Vadon, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Election_2016-_Bernie_Sanders_NYC_Fundraiser_Draws_Campaign_Supporters_Who_Are_'Feelin'_The_Bern'_(21668863331).jpg",
+    "revision": 2,
+    "color": true
+  },
+  "2023/buildDonorBase": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/58/Phone_bank_-_Lawrence%2C_MA_%2831127827577%29.jpg",
+    "credit": "ElizabethForMA, via Wikimedia Commons",
+    "license": "CC BY 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Phone_bank_-_Lawrence,_MA_(31127827577).jpg",
+    "revision": 2,
+    "color": true
+  },
+  "2023/convertCash": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/3b/Money_in_notes.jpg",
+    "credit": "Alexas_Fotos, via Wikimedia Commons",
+    "license": "CC0",
+    "page": "https://commons.wikimedia.org/wiki/File:Money_in_notes.jpg",
+    "color": true
+  },
+  "2023/poll": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/7/76/2023_TH-election_polling-station_IMG_4072.jpg",
+    "credit": "Per Meistrup, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:2023_TH-election_polling-station_IMG_4072.jpg",
+    "color": true
+  },
+  "2023/pollLarge": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/5f/Overview_of_Polling_station_of_Presidential_election_in_the_Czech_Republic_in_2023_in_Z%C5%A0_Ohradn%C3%AD_at_Ohradn%C3%AD_street_in_Michle%2C_Prague.jpg",
+    "credit": "Jiří Sedláček, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Overview_of_Polling_station_of_Presidential_election_in_the_Czech_Republic_in_2023_in_Z%C5%A0_Ohradn%C3%AD_at_Ohradn%C3%AD_street_in_Michle,_Prague.jpg",
+    "color": true
+  },
+  "2023/canvass": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2/26/22-09-22_Campagna_elettorale_mercato_di_Cascina_18.jpg",
+    "credit": "Alexmar983, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:22-09-22_Campagna_elettorale_mercato_di_Cascina_18.jpg",
+    "revision": 2,
+    "color": true
+  },
+  "2023/flipflop": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/36/Polling_station_London_Mayoral_Elections_2024.jpg",
+    "credit": "GeoMancer448, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Polling_station_London_Mayoral_Elections_2024.jpg",
+    "color": true
+  },
+  "2023/debatePrep": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/f/f9/King%27s_Speech_Debate%2C_17_July_2024_01.jpg",
+    "credit": "©House of Commons, via Wikimedia Commons",
+    "license": "CC BY 3.0",
+    "page": "https://commons.wikimedia.org/wiki/File:King's_Speech_Debate,_17_July_2024_01.jpg",
+    "color": true
+  },
+  "2023/hero": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/6/65/Hungarian_Parliament_Building_2023-9.jpg",
+    "credit": "Pierre Blaché, via Wikimedia Commons",
+    "license": "CC0",
+    "page": "https://commons.wikimedia.org/wiki/File:Hungarian_Parliament_Building_2023-9.jpg",
+    "color": true
+  },
+  "2027/campaign": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/59/Kamala_Harris_campaign_rally_in_Glendale%2C_Arizona.jpg",
+    "credit": "Jbash31, via Wikimedia Commons",
+    "license": "CC0",
+    "page": "https://commons.wikimedia.org/wiki/File:Kamala_Harris_campaign_rally_in_Glendale,_Arizona.jpg",
+    "color": true
+  },
+  "2027/advertise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/1/1e/General_Election%2C_4th_July_2024_-_Polling_station_at_Bleachingfield%2C_Dunbar_%28geograph_7812723%29.jpg",
+    "credit": "Richard West, via Wikimedia Commons",
+    "license": "CC BY-SA 2.0",
+    "page": "https://commons.wikimedia.org/wiki/File:General_Election,_4th_July_2024_-_Polling_station_at_Bleachingfield,_Dunbar_(geograph_7812723).jpg",
+    "color": true
+  },
+  "2027/fundraise": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/c1/Harris_Walz_rally_at_UNLV_Thomas_and_Mack_Center%2C_early_audience_IMG_2274.jpg",
+    "credit": "Alexis Jazz, via Wikimedia Commons",
+    "license": "CC BY 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Harris_Walz_rally_at_UNLV_Thomas_and_Mack_Center,_early_audience_IMG_2274.jpg",
+    "color": true
+  },
+  "2027/buildDonorBase": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/3/33/Kamala_Harris_rally_in_Las_Vegas_at_Thomas_%26_Mack_center.jpg",
+    "credit": "Alexis Jazz, via Wikimedia Commons",
+    "license": "CC BY 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Kamala_Harris_rally_in_Las_Vegas_at_Thomas_&_Mack_center.jpg",
+    "color": true
+  },
+  "2027/convertCash": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/b/b3/Wealth_in_colorful_banknotes.jpg",
+    "credit": "Basile Morin, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Wealth_in_colorful_banknotes.jpg",
+    "color": true
+  },
+  "2027/poll": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/4b/Ballot_dropped_into_ballot_box_2024_Swedish_EU_election_at_St%C3%A5ngen%C3%A4sskolan%2C_Brastad.jpg",
+    "credit": "W.carter, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Ballot_dropped_into_ballot_box_2024_Swedish_EU_election_at_St%C3%A5ngen%C3%A4sskolan,_Brastad.jpg",
+    "color": true
+  },
+  "2027/pollLarge": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/7/7c/Mendocino_County_Official_Election_Ballot_Drop_Box_-_April_2023_-_Sarah_Stierch_02.jpg",
+    "credit": "Missvain, via Wikimedia Commons",
+    "license": "CC BY 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Mendocino_County_Official_Election_Ballot_Drop_Box_-_April_2023_-_Sarah_Stierch_02.jpg",
+    "color": true
+  },
+  "2027/canvass": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/1/1f/22-09-22_Campagna_elettorale_mercato_di_Cascina_22.jpg",
+    "credit": "Alexmar983, via Wikimedia Commons",
+    "license": "CC BY-SA 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:22-09-22_Campagna_elettorale_mercato_di_Cascina_22.jpg",
+    "revision": 2,
+    "color": true
+  },
+  "2027/flipflop": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/d1/Scrum_-_M%C3%AAl%C3%A9e_de_presse_%2837100733570%29.jpg",
+    "credit": "Andrew Scheer, via Wikimedia Commons",
+    "license": "CC0",
+    "page": "https://commons.wikimedia.org/wiki/File:Scrum_-_M%C3%AAl%C3%A9e_de_presse_(37100733570).jpg",
+    "revision": 2,
+    "color": true
+  },
+  "2027/debatePrep": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/e/e9/Harris_Walz_rally_at_UNLV_Thomas_and_Mack_Center%2C_early_IMG_2258.jpg",
+    "credit": "Alexis Jazz, via Wikimedia Commons",
+    "license": "CC BY 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Harris_Walz_rally_at_UNLV_Thomas_and_Mack_Center,_early_IMG_2258.jpg",
+    "color": true
+  },
+  "2027/hero": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/45/Kamala_Harris_rally_in_Las_Vegas_at_Thomas_%26_Mack_center_panorama_01.jpg",
+    "credit": "Alexis Jazz, via Wikimedia Commons",
+    "license": "CC BY 4.0",
+    "page": "https://commons.wikimedia.org/wiki/File:Kamala_Harris_rally_in_Las_Vegas_at_Thomas_&_Mack_center_panorama_01.jpg",
+    "color": true
   }
 }

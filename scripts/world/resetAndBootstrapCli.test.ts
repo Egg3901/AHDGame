@@ -108,6 +108,21 @@ describe("reset and bootstrap CLI preflight", () => {
     }
   );
 
+  it("rejects --preserve-reference for a 1991 reset before connecting", async () => {
+    const connectDb = vi.fn(async () => ({ databaseName: "fixture-world" }) as unknown as Db);
+    const reset = vi.fn(async () => ({}));
+
+    await expect(
+      runResetAndBootstrapCli(
+        ["--expect-db=fixture-world", "--preset=1991-default", "--preserve-reference"],
+        { validateEnvironment: () => validEnv, connectDb, closeDb: vi.fn(async () => {}), reset }
+      )
+    ).rejects.toThrow("--preserve-reference is not supported for 1991-default");
+
+    expect(connectDb).not.toHaveBeenCalled();
+    expect(reset).not.toHaveBeenCalled();
+  });
+
   it("rejects an incorrect explicit target before connecting", async () => {
     const connectDb = vi.fn(async () => ({ databaseName: "fixture-world" }) as unknown as Db);
 

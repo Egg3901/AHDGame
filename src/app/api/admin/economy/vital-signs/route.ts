@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { EconomicVitalSigns } from "@/lib/db/types";
 import { evaluateCorporateNoHolderAlert } from "@/lib/economy/corporateNoHolderAlert/rules";
 import { getDb } from "@/lib/mongodb";
@@ -25,10 +25,7 @@ export async function GET(request: Request) {
       Object.fromEntries(new URL(request.url).searchParams.entries())
     );
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Invalid query", details: parsed.error.flatten() },
-        { status: 400 }
-      );
+      return errorResponse(400, "Invalid query", { extra: { details: parsed.error.flatten() } });
     }
 
     const db = await getDb();
@@ -42,10 +39,7 @@ export async function GET(request: Request) {
             .findOne({ turn: parsed.data.turn });
 
     if (!snapshot) {
-      return NextResponse.json(
-        { error: "Economic vital signs snapshot not found" },
-        { status: 404 }
-      );
+      return errorResponse(404, "Economic vital signs snapshot not found");
     }
     return NextResponse.json({
       snapshot,

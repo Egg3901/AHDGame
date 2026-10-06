@@ -8,7 +8,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
@@ -66,7 +66,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     if (!(await isPrivateBankingEnabled()))
-      return NextResponse.json({ error: "Private banking is not enabled" }, { status: 403 });
+      return errorResponse(403, "Private banking is not enabled");
 
     const { id } = await params;
     const db = await getDb();
@@ -76,8 +76,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (ceoCheck) return ceoCheck;
 
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success)
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
     const turn = await getCurrentTurn(db);
     const result =
@@ -85,7 +84,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         ? await drawDiscountWindow(db, resolved.corporation._id, parsed.data.amount, turn)
         : await repayDiscountWindow(db, resolved.corporation._id, parsed.data.amount, turn);
 
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    if (!result.ok) return errorResponse(result.status, result.error);
 
     return NextResponse.json({
       success: true,

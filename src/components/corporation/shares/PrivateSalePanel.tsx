@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { LocalTime } from "@/components/time/LocalTime";
 import type { CorporationDetail } from "../CorporationPageTypes";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface ShareOfferData {
   _id: string;
@@ -122,11 +123,14 @@ export default function PrivateSalePanel({
       if (!res.ok) {
         if (res.status === 409 && data.requiresCeoVacateConfirm) {
           setCeoVacateConfirm({
-            message: data.error ?? "Listing all your shares will remove you as CEO. Continue?",
+            message: apiErrorText(
+              data,
+              "Listing all your shares will remove you as CEO. Continue?"
+            ),
           });
           return;
         }
-        onToast(data.error ?? "Failed to create listing", "error");
+        onToast(apiErrorText(data, "Failed to create listing"), "error");
       } else {
         setCeoVacateConfirm(null);
         onToast(
@@ -149,7 +153,7 @@ export default function PrivateSalePanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        onToast(data.error ?? "Failed to cancel listing", "error");
+        onToast(apiErrorText(data, "Failed to cancel listing"), "error");
       } else {
         onToast("Listing cancelled and shares returned", "success");
         await loadListings();
@@ -177,7 +181,7 @@ export default function PrivateSalePanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        onToast(data.error ?? "Failed to submit offer", "error");
+        onToast(apiErrorText(data, "Failed to submit offer"), "error");
       } else {
         onToast(
           `Offer submitted. ${fmtFull(escrowToAnchor(data.escrowAmount))} in escrow.`,
@@ -201,7 +205,7 @@ export default function PrivateSalePanel({
       );
       const data = await res.json();
       if (!res.ok) {
-        onToast(data.error ?? "Failed to withdraw offer", "error");
+        onToast(apiErrorText(data, "Failed to withdraw offer"), "error");
       } else {
         onToast("Offer withdrawn and escrow refunded", "success");
         await loadListings();
@@ -226,7 +230,7 @@ export default function PrivateSalePanel({
       );
       const data = await res.json();
       if (!res.ok) {
-        onToast(data.error ?? "Failed to accept offer", "error");
+        onToast(apiErrorText(data, "Failed to accept offer"), "error");
       } else {
         onToast(
           `Accepted ${data.sharesTransferred.toLocaleString("en-US")} shares. ${fmtFull(data.proceeds)} received.`,

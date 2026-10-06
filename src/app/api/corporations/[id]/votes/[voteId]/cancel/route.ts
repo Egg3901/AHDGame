@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
@@ -30,9 +30,8 @@ export async function POST(_request: Request, { params }: RouteParams) {
       _id: new ObjectId(voteId),
       corporationId: corporation._id,
     });
-    if (!vote) return NextResponse.json({ error: "Vote not found" }, { status: 404 });
-    if (vote.status !== "open")
-      return NextResponse.json({ error: "Vote is not open" }, { status: 409 });
+    if (!vote) return errorResponse(404, "Vote not found");
+    if (vote.status !== "open") return errorResponse(409, "Vote is not open");
 
     await cancelCorporationVote({ db, vote });
     await notifyVoteEvent({

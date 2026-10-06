@@ -5,7 +5,7 @@ import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { badRequest, forbidden, handleRouteError, notFound } from "@/lib/api/errors";
+import { badRequest, forbidden, handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { getGameTime } from "@/lib/time/gameTime";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
 import type { CoalitionLeadershipGoalKey, CoalitionPriority } from "@/lib/db/types/coalition";
@@ -131,7 +131,7 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, createPrioritySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

@@ -15,6 +15,8 @@ function baseResult(overrides: Partial<SourcingResult> = {}): SourcingResult {
     deliveryLimitedSupplyByState: new Map(),
     freightChargesByDestState: new Map(),
     haulRevenueByOriginState: new Map(),
+    pairAggregates: [],
+    destinationAggregates: [],
     ...overrides,
   };
 }
@@ -47,6 +49,8 @@ describe("buildSourcingDocs", () => {
       deliveryLimitedSupplyByState: new Map(),
       freightChargesByDestState: new Map(),
       haulRevenueByOriginState: new Map(),
+      pairAggregates: [],
+      destinationAggregates: [],
     };
 
     const { commodityDocs } = buildSourcingDocs(result, 365, new Date("2026-08-25T00:00:00.000Z"));

@@ -23,6 +23,10 @@ import {
 } from "@/lib/nationalization/constants";
 import { IMF_SOVEREIGN_DEFAULT_RATE } from "@/lib/sovereignDefault/constants";
 import { effectiveBorrowingLimit } from "@/lib/budget/borrowingLimit";
+import {
+  sovereignStockAnnualService,
+  type SovereignCouponBook,
+} from "@/lib/budget/rules/sovereignDebtService";
 
 /**
  * Debt/GDP ratio at which a sovereign leaves the B band and degrades to CCC
@@ -165,7 +169,13 @@ export function getSovereignConfidencePremium(
 export async function processAnnualDebt(
   db: Db,
   federalBudget: FederalBudget,
-  nationalGDP: number
+  nationalGDP: number,
+  /**
+   * The country's outstanding sovereign coupon book. When supplied, interest is
+   * the coupons the stock actually carries plus the marginal rate on any stock
+   * not yet represented by bonds (#2089). Omitted: legacy whole-stock pricing.
+   */
+  couponBook?: SovereignCouponBook | null
 ): Promise<{
   newPrincipal: number;
   interestPayment: number;
@@ -180,7 +190,16 @@ export async function processAnnualDebt(
   // it from the treasury balance (that clobber overwrote same-turn bond state
   // every fiscal boundary, refs #1975). Treasury cash is a separate field.
   const newPrincipal = Math.max(0, federalBudget.debt?.principal ?? 0);
-  const interestPayment = newPrincipal * (federalBudget.debt?.interestRate ?? 0);
+  const marginalRate = federalBudget.debt?.interestRate ?? 0;
+  const interestPayment =
+    couponBook === undefined
+      ? newPrincipal * marginalRate
+      : sovereignStockAnnualService({
+          principal: newPrincipal,
+          book: couponBook,
+          marginalRate,
+          imfBailoutActive: federalBudget.imfSovereignBailoutActive,
+        });
 
   const debtToGdpRatio = newPrincipal / nationalGDP;
   const creditRating = calculateCreditRating(debtToGdpRatio, federalBudget.sovereignRiskAnchor);

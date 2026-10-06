@@ -66,7 +66,7 @@ describe("1991 current-law references", () => {
         sourceId: "us_public_health",
         selectedOption: "Public Health Services Act",
         optionIndex: 3,
-        annualBooked: 2_799_164_700,
+        annualBooked: 2_585_421_384,
       })
     );
   });
@@ -81,7 +81,9 @@ describe("1991 current-law references", () => {
       "JP:jp_resident_tax",
       "JP:jp_fixed_asset_tax",
     ]);
-    const expectedBudgetOptionDifferences = { US: 4, UK: 3, JP: 13 };
+    // JP's budget-neutral academic reform remains a legal reference, without
+    // a costed legacy fiscal law in the balanced opening.
+    const expectedBudgetOptionDifferences = { US: 4, UK: 3, JP: 12 };
     for (const country of ["US", "UK", "JP"] as const) {
       let budgetOptionDifferences = 0;
       for (const reference of openingLawReferences.filter(

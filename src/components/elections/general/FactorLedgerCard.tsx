@@ -51,7 +51,7 @@ function CandidateSelect({
 }) {
   return (
     <label className="flex flex-col gap-0.5">
-      <span className="text-[10px] uppercase tracking-wider text-muted">{label}</span>
+      <span className="text-body-sm font-medium text-muted">{label}</span>
       <select
         aria-label={label}
         value={value}
@@ -173,7 +173,7 @@ export function FactorLedgerCard({
     <div className="rounded-xl border border-card-border bg-card p-4 shadow-sm">
       <div className="mb-2 flex items-baseline justify-between">
         <h3 className="text-sm font-semibold text-muted">{t("factorLedger.title")}</h3>
-        <span className="text-[10px] uppercase tracking-wider text-muted">
+        <span className="text-body-sm font-medium text-muted">
           {t("factorLedger.recordedTurn", { turn: data.recordedTurn })}
         </span>
       </div>
@@ -216,7 +216,7 @@ export function FactorLedgerCard({
 
           {bucketAppeal.length > 0 ? (
             <div className="mt-3 flex flex-col gap-1.5">
-              <div className="text-[10px] uppercase tracking-wider text-muted">
+              <div className="text-body-sm font-medium text-muted">
                 {t("factorLedger.bucketsTitle")}
               </div>
               {/* The engine's bucket ids are internal — `education:no_college`,

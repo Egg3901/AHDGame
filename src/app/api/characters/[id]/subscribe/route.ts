@@ -4,7 +4,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth"; // Optional auth — intentionally uses getAuthUser() in GET
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import type { Character, UserSubscription } from "@/lib/db/types";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
@@ -19,7 +19,7 @@ async function handleGET(_request: Request, { params }: { params: Promise<{ id: 
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid character ID" }, { status: 400 });
+      return errorResponse(400, "Invalid character ID");
     }
 
     const db = await getDb();
@@ -62,7 +62,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid character ID" }, { status: 400 });
+      return errorResponse(400, "Invalid character ID");
     }
 
     const db = await getDb();
@@ -72,12 +72,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const myCharacter = await getCharacterByUserId(db, user.userId);
 
     if (!myCharacter) {
-      return NextResponse.json({ error: "Character required to subscribe" }, { status: 403 });
+      return errorResponse(403, "Character required to subscribe");
     }
 
     // Can't subscribe to yourself
     if (myCharacter._id.equals(targetCharacterId)) {
-      return NextResponse.json({ error: "Cannot subscribe to yourself" }, { status: 400 });
+      return errorResponse(400, "Cannot subscribe to yourself");
     }
 
     // Target must exist
@@ -86,7 +86,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       .findOne({ _id: targetCharacterId });
 
     if (!targetCharacter) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
 
     // Upsert subscription
@@ -143,7 +143,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 
     const { id } = await params;
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid character ID" }, { status: 400 });
+      return errorResponse(400, "Invalid character ID");
     }
 
     const db = await getDb();
@@ -152,7 +152,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     const myCharacter = await getCharacterByUserId(db, user.userId);
 
     if (!myCharacter) {
-      return NextResponse.json({ error: "Character required" }, { status: 403 });
+      return errorResponse(403, "Character required");
     }
 
     await db.collection<UserSubscription>("userSubscriptions").deleteOne({

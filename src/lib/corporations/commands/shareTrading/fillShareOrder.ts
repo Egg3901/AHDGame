@@ -11,7 +11,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { fillOrderSchema } from "@/lib/api/schemas/corporations";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { assertCeoTradeNotBlocked } from "@/lib/corporations/commands/privatization/openVoteGuard";
 import type { Character, Corporation, IndexFund, ShareOrder, User } from "@/lib/db/types";
@@ -86,7 +86,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
 
     const parsed = await parseJsonBody(request, fillOrderSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const { shares, fillAsCorporation } = parsed.data;
@@ -100,14 +100,14 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
     if (turnGuard) return turnGuard;
 
     if (!ObjectId.isValid(orderId)) {
-      return NextResponse.json({ error: "Invalid order ID" }, { status: 400 });
+      return errorResponse(400, "Invalid order ID");
     }
 
     const loadedOrder = await db
       .collection<ShareOrder>("shareOrders")
       .findOne({ _id: new ObjectId(orderId) });
 
-    if (!loadedOrder) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    if (!loadedOrder) return errorResponse(404, "Order not found");
     // Repair a stranded legacy claim and recover the stamped prior attempt
     // (money first, then audit) before validating: a stuck `filled` order
     // is fillable again here, and a prior attempt crashed mid-money
@@ -121,20 +121,19 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
     // Fund buy orders (bids) can be peer-filled: the filler sells their shares and
     // receives the fund's escrowed cash. Orders with no placer at all cannot be filled.
     if (!orderCharacterId && !order.placerFundId) {
-      return NextResponse.json({ error: "This order cannot be filled" }, { status: 400 });
+      return errorResponse(400, "This order cannot be filled");
     }
-    if (order.status !== "open")
-      return NextResponse.json({ error: "Order is not open" }, { status: 400 });
+    if (order.status !== "open") return errorResponse(400, "Order is not open");
     if (shares > order.sharesRemaining)
-      return NextResponse.json(
-        { error: `Only ${order.sharesRemaining.toLocaleString()} shares remaining in this order` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Only ${order.sharesRemaining.toLocaleString()} shares remaining in this order`
       );
 
     if (fillAsCorporation && order.type !== "sell") {
-      return NextResponse.json(
-        { error: "Corporation fills are only supported when buying from a sell order" },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "Corporation fills are only supported when buying from a sell order"
       );
     }
 
@@ -157,7 +156,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
         userId: new ObjectId(auth.user.userId),
       });
       if (!imperial) {
-        return NextResponse.json({ error: "Imperial character not found" }, { status: 404 });
+        return errorResponse(404, "Imperial character not found");
       }
       fillerId = imperial._id;
       fillerCollectionName = "imperialCharacters";
@@ -170,7 +169,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
         : { userId: new ObjectId(auth.user.userId) };
       const character = await db.collection<Character>("characters").findOne(characterQuery);
       if (!character) {
-        return NextResponse.json({ error: "Character not found" }, { status: 404 });
+        return errorResponse(404, "Character not found");
       }
       fillerId = character._id;
       fillerCollectionName = "characters";
@@ -191,7 +190,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
       orderCharacterId &&
       orderCharacterId.toString() === fillerId.toString()
     ) {
-      return NextResponse.json({ error: "Cannot fill your own order" }, { status: 400 });
+      return errorResponse(400, "Cannot fill your own order");
     }
 
     // Self-dealing guard: CEO cannot fill their own corporation's buy order
@@ -200,9 +199,9 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
         .collection<Corporation>("corporations")
         .findOne({ _id: order.placerCorporationId }, { projection: { ceoId: 1 } });
       if (buyingCorp?.ceoId?.toString() === fillerId.toString()) {
-        return NextResponse.json(
-          { error: "A corporation's CEO cannot fill that corporation's own buy orders" },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "A corporation's CEO cannot fill that corporation's own buy orders"
         );
       }
     }
@@ -212,7 +211,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
 
     // Ensure order belongs to this corporation
     if (order.corporationId.toString() !== resolved.corporation._id.toString()) {
-      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+      return errorResponse(404, "Order not found");
     }
 
     const { corporation } = resolved;
@@ -223,7 +222,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
     if (!fillAsCorporation) {
       const tradeLock = await assertCeoTradeNotBlocked(db, corporation, fillerId);
       if (tradeLock.blocked) {
-        return NextResponse.json({ error: tradeLock.error }, { status: tradeLock.status });
+        return errorResponse(tradeLock.status, tradeLock.error);
       }
     }
 
@@ -241,7 +240,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
         shares,
         await getCurrentTurn(db)
       );
-      if (ceoCap) return NextResponse.json({ error: ceoCap.error }, { status: ceoCap.status });
+      if (ceoCap) return errorResponse(ceoCap.status, ceoCap.error);
     }
     const now = new Date();
     // order.pricePerShare and order.escrowAmount are both stored in the target
@@ -260,7 +259,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
         ? await db.collection<IndexFund>("indexFunds").findOne({ _id: order.placerFundId })
         : null;
     if (order.type === "sell" && order.placerFundId && !sellerFund) {
-      return NextResponse.json({ error: "Liquidity-provider fund not found" }, { status: 404 });
+      return errorResponse(404, "Liquidity-provider fund not found");
     }
 
     // Load filler FX rate upfront — used in both fill paths
@@ -268,10 +267,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
     if (forexEnabled) {
       const fxResult = await loadCharacterFxRate(db, fillerHomeCurrency);
       if (!fxResult.ok) {
-        return NextResponse.json(
-          { error: "Exchange rate unavailable, try again shortly" },
-          { status: 503 }
-        );
+        return errorResponse(503, "Exchange rate unavailable, try again shortly");
       }
       fillerFxRate = fxResult.rate;
     }
@@ -291,35 +287,29 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
         .collection<Corporation>("corporations")
         .findOne({ ceoId: fillerId, ceoVacant: { $ne: true } });
       if (!buyingCorp) {
-        return NextResponse.json(
-          { error: "You must be an active CEO to fill orders on behalf of a corporation" },
-          { status: 403 }
+        return errorResponse(
+          403,
+          "You must be an active CEO to fill orders on behalf of a corporation"
         );
       }
       if (buyingCorp._id.equals(corporation._id)) {
-        return NextResponse.json(
-          { error: "A corporation cannot purchase shares in itself via the order book" },
-          { status: 400 }
+        return errorResponse(
+          400,
+          "A corporation cannot purchase shares in itself via the order book"
         );
       }
       if (buyingCorp.countryOwnerId) {
-        return NextResponse.json(
-          { error: "National corporations cannot hold equity positions" },
-          { status: 400 }
-        );
+        return errorResponse(400, "National corporations cannot hold equity positions");
       }
       if (order.placerCorporationId?.equals(buyingCorp._id)) {
-        return NextResponse.json(
-          { error: "A corporation cannot fill its own sell order" },
-          { status: 400 }
-        );
+        return errorResponse(400, "A corporation cannot fill its own sell order");
       }
       if (
         !order.placerCorporationId &&
         orderCharacterId &&
         orderCharacterId.equals(buyingCorp.ceoId)
       ) {
-        return NextResponse.json({ error: "Cannot fill your own order" }, { status: 400 });
+        return errorResponse(400, "Cannot fill your own order");
       }
       buyingCorpForSellFill = buyingCorp;
     } else if (order.type === "buy") {
@@ -328,7 +318,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
           .collection<Corporation>("corporations")
           .findOne({ _id: order.placerCorporationId }, { projection: { _id: 1, name: 1 } });
         if (!buyOrderBuyerCorp) {
-          return NextResponse.json({ error: "Buying corporation not found" }, { status: 404 });
+          return errorResponse(404, "Buying corporation not found");
         }
       }
 
@@ -354,11 +344,9 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
       const availableShares = fillerOwnedShares - alreadyReserved;
 
       if (availableShares < shares) {
-        return NextResponse.json(
-          {
-            error: `Only ${availableShares.toLocaleString()} shares available (${alreadyReserved.toLocaleString()} reserved in open orders)`,
-          },
-          { status: 400 }
+        return errorResponse(
+          400,
+          `Only ${availableShares.toLocaleString()} shares available (${alreadyReserved.toLocaleString()} reserved in open orders)`
         );
       }
     }
@@ -420,10 +408,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
           rates: fxRates,
         });
         if (!corpPurchaseEstimate) {
-          return NextResponse.json(
-            { error: "Exchange rate unavailable, try again shortly" },
-            { status: 503 }
-          );
+          return errorResponse(503, "Exchange rate unavailable, try again shortly");
         }
         corpFillCostInBuyerCapital =
           buyingCurrency !== targetCurrency
@@ -509,10 +494,7 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
 
     if (!claimedOrder) {
       await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-never-landed");
-      return NextResponse.json(
-        { error: "Order changed before this fill could be applied" },
-        { status: 409 }
-      );
+      return errorResponse(409, "Order changed before this fill could be applied");
     }
 
     const restoreClaimedOrder = async () => {
@@ -652,29 +634,20 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
               buyingCurrency !== targetCurrency
                 ? ` (${buySym}${adjustedStr} ${buyingCurrency} incl. FX, corp has ${buySym}${haveStr} ${buyingCurrency})`
                 : "";
-            return NextResponse.json(
-              {
-                error:
-                  buyingCurrency !== targetCurrency
-                    ? `Insufficient funds. Need ${targetSym}${costStr}${currencyNote}`
-                    : `Insufficient funds. Need ${targetSym}${costStr}, corp has ${buySym}${haveStr} ${buyingCurrency}`,
-              },
-              { status: 400 }
+            return errorResponse(
+              400,
+              buyingCurrency !== targetCurrency
+                ? `Insufficient funds. Need ${targetSym}${costStr}${currencyNote}`
+                : `Insufficient funds. Need ${targetSym}${costStr}, corp has ${buySym}${haveStr} ${buyingCurrency}`
             );
           }
           if (code === SHARE_FILL_MONEY_SELLER_SHARES) {
             await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
-            return NextResponse.json(
-              { error: "Seller no longer has enough shares to settle this order" },
-              { status: 409 }
-            );
+            return errorResponse(409, "Seller no longer has enough shares to settle this order");
           }
           if (code === SHARE_FILL_MONEY_LIQUIDITY_SHARES) {
             await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
-            return NextResponse.json(
-              { error: "Liquidity provider no longer has enough shares" },
-              { status: 409 }
-            );
+            return errorResponse(409, "Liquidity provider no longer has enough shares");
           }
           await settleShareFillAttempt(
             db,
@@ -763,21 +736,15 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
           const code = err instanceof Error ? err.message.split(":")[0] : "";
           if (code === SHARE_FILL_MONEY_INSUFFICIENT_FUNDS) {
             await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
-            return NextResponse.json({ error: "Insufficient funds" }, { status: 400 });
+            return errorResponse(400, "Insufficient funds");
           }
           if (code === SHARE_FILL_MONEY_SELLER_SHARES) {
             await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
-            return NextResponse.json(
-              { error: "Seller no longer has enough shares to settle this order" },
-              { status: 409 }
-            );
+            return errorResponse(409, "Seller no longer has enough shares to settle this order");
           }
           if (code === SHARE_FILL_MONEY_LIQUIDITY_SHARES) {
             await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
-            return NextResponse.json(
-              { error: "Liquidity provider no longer has enough shares" },
-              { status: 409 }
-            );
+            return errorResponse(409, "Liquidity provider no longer has enough shares");
           }
           await settleShareFillAttempt(
             db,

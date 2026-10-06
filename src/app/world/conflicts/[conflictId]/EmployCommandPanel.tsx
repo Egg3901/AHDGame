@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useState } from "react";
 import type { ConflictAssignment } from "@/lib/military/assignments";
 import { MIL_COLOR, MIL_FONT } from "../military/theme";
@@ -92,7 +93,7 @@ export function EmployCommandPanel({
           // membership and the one-TC-per-conflict rule, and a panel that keeps
           // showing a posting the server refused is worse than no panel.
           setMine(previous);
-          setError(body?.error ?? "Could not save postings.");
+          setError(apiErrorText(body, "Could not save postings."));
         }
       } catch {
         setMine(previous);

@@ -10,7 +10,7 @@ import type { Corporation, PoliticalParty, WikiPage } from "@/lib/db/types";
 import { ClaimButton } from "./ClaimButton";
 
 export const metadata: Metadata = wikiPublicPageMetadata({
-  title: "My Wiki Pages | A House Divided",
+  title: "My wiki pages | A House Divided",
   description:
     "Create and edit wiki pages for your politician, corporation, party, or a historical event.",
   pathname: "/wiki/my",
@@ -22,7 +22,7 @@ export default async function MyWikiPage() {
   if (!user.character) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-12">
-        <h1 className="mb-3 text-2xl font-bold text-foreground">My Wiki Pages</h1>
+        <h1 className="mb-3 text-2xl font-bold text-foreground">My wiki pages</h1>
         <p className="text-muted">
           You need an active character to create player-authored wiki pages.{" "}
           <Link href="/create-character" className="text-primary hover:underline">
@@ -68,7 +68,7 @@ export default async function MyWikiPage() {
     <div className="mx-auto max-w-5xl px-4 py-10">
       <div className="mb-8">
         <p className="section-label mb-2">Player-authored pages</p>
-        <h1 className="mb-2 text-3xl font-bold tracking-tight text-foreground">My Wiki Pages</h1>
+        <h1 className="mb-2 text-3xl font-bold tracking-tight text-foreground">My wiki pages</h1>
         <p className="max-w-2xl text-muted">
           Claim dedicated wiki pages for your politician, your corporation, the party you lead, or a
           historical event. Use the in-app editor — full markdown, inline image uploads, wiki

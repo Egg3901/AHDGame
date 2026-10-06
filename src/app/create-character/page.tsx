@@ -1126,7 +1126,7 @@ export default function CreateCharacterPage() {
 
       <footer className="border-t border-card-border bg-card-muted">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
-          <p className="text-body-xs text-muted">A House Divided &mdash; Political Simulation</p>
+          <p className="text-body-xs text-muted">A House Divided &mdash; political simulation</p>
           <Link href="/dashboard" className="text-body-xs text-muted hover:text-foreground">
             Back to dashboard
           </Link>
@@ -1156,9 +1156,7 @@ function AxisStepper({
   return (
     <div>
       <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-body-xs font-semibold uppercase tracking-[0.14em] text-muted">
-          {label}
-        </span>
+        <span className="text-body-sm font-medium text-muted">{label}</span>
         <span className="font-mono text-body-sm tabular-nums">
           {value > 0 ? `+${value}` : value}
         </span>

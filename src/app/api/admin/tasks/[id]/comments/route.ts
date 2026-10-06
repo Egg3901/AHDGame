@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdminOrApiKey } from "@/lib/api/requireAdminOrApiKey";
-import { handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { getTaskCommentsCollection } from "@/lib/db/collections/taskComments";
 import { getTasksCollection } from "@/lib/db/collections/tasks";
@@ -23,7 +23,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const { id } = await params;
     if (!schemas.objectId.safeParse(id).success) {
-      return NextResponse.json({ error: "Invalid task ID" }, { status: 400 });
+      return errorResponse(400, "Invalid task ID");
     }
 
     const db = await getDb();
@@ -66,12 +66,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const { id } = await params;
     if (!schemas.objectId.safeParse(id).success) {
-      return NextResponse.json({ error: "Invalid task ID" }, { status: 400 });
+      return errorResponse(400, "Invalid task ID");
     }
 
     const parsed = await parseJsonBody(request, createCommentSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

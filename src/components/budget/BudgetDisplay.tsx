@@ -192,7 +192,7 @@ export function BudgetDisplay({
 
   // Revenue breakdown segments — colorblind-friendly, max contrast between neighbors
   const revenueSegments = [
-    { key: "incomeTax", label: "Income Tax", value: revenue.incomeTax, color: "bg-blue-500/70" },
+    { key: "incomeTax", label: "Income tax", value: revenue.incomeTax, color: "bg-blue-500/70" },
     { key: "payrollTax", label: "Payroll", value: revenue.payrollTax, color: "bg-amber-400/70" },
     {
       key: "domesticCorporateTax",
@@ -213,7 +213,7 @@ export function BudgetDisplay({
       value: revenue.healthcareIncome,
       color: "bg-orange-400/70",
     },
-    { key: "salesTax", label: "Sales Tax", value: revenue.salesTax, color: "bg-sky-400/70" },
+    { key: "salesTax", label: "Sales tax", value: revenue.salesTax, color: "bg-sky-400/70" },
     // DE Solidaritätszuschlag — only renders for DE budgets where the rate is set.
     // Filtered out below when value is 0/undefined so other countries show no row.
     {
@@ -232,38 +232,38 @@ export function BudgetDisplay({
     },
     {
       key: "urbanMaintenanceTax",
-      label: "Urban Maintenance (城建税)",
+      label: "Urban maintenance (城建税)",
       value: revenue.urbanMaintenanceTax ?? 0,
       color: "bg-fuchsia-400/70",
     },
     {
       key: "stampDuty",
-      label: "Stamp Duty",
+      label: "Stamp duty",
       value: revenue.stampDuty ?? 0,
       color: "bg-purple-400/70",
     },
     // IE-specific lines — only render for IE budgets where the corresponding rate is set.
     {
       key: "universalSocialCharge",
-      label: "Universal Social Charge (USC)",
+      label: "Universal social charge (USC)",
       value: revenue.universalSocialCharge ?? 0,
       color: "bg-lime-400/70",
     },
     {
       key: "capitalGainsTax",
-      label: "Capital Gains Tax",
+      label: "Capital gains tax",
       value: revenue.capitalGainsTax ?? 0,
       color: "bg-amber-400/70",
     },
     {
       key: "exciseDuty",
-      label: "Excise Duty",
+      label: "Excise duty",
       value: revenue.exciseDuty ?? 0,
       color: "bg-orange-500/70",
     },
     {
       key: "propertyTax",
-      label: "Local Property Tax",
+      label: "Local property tax",
       value: revenue.propertyTax ?? 0,
       color: "bg-emerald-500/70",
     },
@@ -313,7 +313,7 @@ export function BudgetDisplay({
           {title && <h2 className="text-lg font-semibold">{title}</h2>}
           {isSnapshot ? (
             <span className="text-xs text-muted bg-card border border-card-border rounded px-2 py-1">
-              FY{snapshotFiscalYear} — Historical Snapshot
+              FY{snapshotFiscalYear} — Historical snapshot
             </span>
           ) : turnsUntilFY > 0 ? (
             <span className="text-xs text-muted bg-card border border-card-border rounded px-2 py-1">
@@ -326,9 +326,9 @@ export function BudgetDisplay({
       {/* Headline stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {[
-          { label: "Annual Revenue", value: fHeadline(revenue.total), sub: null, highlight: false },
+          { label: "Annual revenue", value: fHeadline(revenue.total), sub: null, highlight: false },
           {
-            label: "Annual Spending",
+            label: "Annual spending",
             value: fHeadline(spending.total),
             sub: null,
             highlight: false,
@@ -348,7 +348,7 @@ export function BudgetDisplay({
           ...(treasuryReserve != null
             ? [
                 {
-                  label: "Treasury Balance",
+                  label: "Treasury balance",
                   value: fHeadline(Math.abs(treasuryReserve)),
                   sub: treasuryReserve < 0 ? "national debt" : "in surplus",
                   highlight: treasuryReserve < 0,
@@ -360,7 +360,7 @@ export function BudgetDisplay({
             key={card.label}
             className="rounded-xl border border-card-border bg-card p-4 space-y-1"
           >
-            <p className="text-xs text-muted uppercase tracking-wider">{card.label}</p>
+            <p className="text-body-sm font-medium text-muted">{card.label}</p>
             <p
               className={`text-lg font-semibold ${card.highlight ? "text-error" : "text-foreground"}`}
             >
@@ -373,7 +373,7 @@ export function BudgetDisplay({
 
       {/* Revenue breakdown bar */}
       <div className="rounded-xl border border-card-border bg-card p-4 space-y-3">
-        <p className="text-sm font-medium">Revenue Breakdown</p>
+        <p className="text-sm font-medium">Revenue breakdown</p>
         <div className="h-7 w-full flex rounded overflow-hidden">
           {revenueSegments.map((seg) => (
             <BarSegment
@@ -400,7 +400,7 @@ export function BudgetDisplay({
 
       {/* Spending breakdown bar */}
       <div className="rounded-xl border border-card-border bg-card p-4 space-y-3">
-        <p className="text-sm font-medium">Spending Breakdown</p>
+        <p className="text-sm font-medium">Spending breakdown</p>
         <div className="h-7 w-full flex rounded overflow-hidden">
           {spendingCategories.map(([cat, amount], i) => (
             <BarSegment
@@ -426,7 +426,7 @@ export function BudgetDisplay({
               value={spending.debtInterest}
               total={totalSpendingForBar}
               color="bg-yellow-500/60"
-              label="Debt Interest"
+              label="Debt interest"
               formatValue={f}
             />
           )}
@@ -443,7 +443,7 @@ export function BudgetDisplay({
               ? [
                   {
                     key: "stateGrants",
-                    label: "State Grants",
+                    label: "State grants",
                     amount: spending.stateGrants,
                     color: "bg-cyan-400/50",
                   },
@@ -453,7 +453,7 @@ export function BudgetDisplay({
               ? [
                   {
                     key: "debtInterest",
-                    label: "Debt Interest",
+                    label: "Debt interest",
                     amount: spending.debtInterest,
                     color: "bg-yellow-500/60",
                   },
@@ -476,7 +476,7 @@ export function BudgetDisplay({
         <p className="text-sm font-medium">Debt &amp; Credit</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
           <div>
-            <p className="text-xs text-muted mb-0.5">Debt Principal</p>
+            <p className="text-xs text-muted mb-0.5">Debt principal</p>
             <p className="font-semibold">{f(debt.principal)}</p>
           </div>
           <div>
@@ -484,7 +484,7 @@ export function BudgetDisplay({
             <p className="font-semibold">{(debtToGdp * 100).toFixed(1)}%</p>
           </div>
           <div>
-            <p className="text-xs text-muted mb-0.5">Credit Rating</p>
+            <p className="text-xs text-muted mb-0.5">Credit rating</p>
             <span
               className={`text-xs font-semibold px-2 py-0.5 rounded ${creditRatingColor(budget.creditRating)}`}
             >
@@ -492,7 +492,7 @@ export function BudgetDisplay({
             </span>
           </div>
           <div>
-            <p className="text-xs text-muted mb-0.5">Effective Rate</p>
+            <p className="text-xs text-muted mb-0.5">Effective rate</p>
             <p className="font-semibold">{(debt.interestRate * 100).toFixed(2)}%</p>
           </div>
         </div>
@@ -530,7 +530,7 @@ export function BudgetDisplay({
       {scope === "national" && (
         <div className="rounded-xl border border-card-border bg-card p-4 space-y-2">
           <div className="flex items-center gap-2">
-            <p className="text-sm font-medium">Foreign Debt Ownership</p>
+            <p className="text-sm font-medium">Foreign debt ownership</p>
             <span className="text-[10px] font-semibold bg-muted/20 text-muted px-1.5 py-0.5 rounded">
               Planned
             </span>
@@ -544,29 +544,29 @@ export function BudgetDisplay({
 
       {/* Economic Indicators */}
       <div className="rounded-xl border border-card-border bg-card p-4 space-y-3">
-        <p className="text-sm font-medium">Economic Indicators</p>
+        <p className="text-sm font-medium">Economic indicators</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
           {[
             {
-              label: "Inflation Rate",
+              label: "Inflation rate",
               value: `${(economicFactors.inflationRate ?? 0).toFixed(2)}%`,
               note: "2% target",
               highlight: Math.abs((economicFactors.inflationRate ?? 0) - 2) > 2,
             },
             {
-              label: "Real GDP Growth",
+              label: "Real GDP growth",
               value: pct(economicFactors.gdpGrowth),
               note: null,
               highlight: economicFactors.gdpGrowth < 0,
             },
             {
-              label: "Wage Growth",
+              label: "Wage growth",
               value: pct(economicFactors.wageGrowth),
               note: null,
               highlight: false,
             },
             {
-              label: "Prime Rate",
+              label: "Prime rate",
               value: `${primeRate.toFixed(2)}%`,
               note: null,
               highlight: false,

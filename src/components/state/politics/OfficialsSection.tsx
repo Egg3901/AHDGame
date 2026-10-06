@@ -266,7 +266,7 @@ export function StateSenateSection({
                 <OfficialRow
                   key={senator._id}
                   official={senator}
-                  title="State Senator"
+                  title="State senator"
                   subtitle={seatCountLabel(senator.seatsHeld ?? 1)}
                   isVacant={!senator.characterId && !senator.nppId}
                   countryId={state.countryId}

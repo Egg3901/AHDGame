@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getPartyHex } from "@/lib/utils/politics";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_READ_LIMITS } from "@/lib/api/rateLimit";
 import { getGameTime } from "@/lib/time/gameTime";
 import { isPrimaryEnded } from "@/lib/elections/phases";
 import { ALL_COUNTRY_IDS, COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { getLiveLowerChamberSeats, getLiveUpperChamberSeats } from "@/lib/turn/lowerChamberSeats";
+import {
+  getLiveLowerChamberSeats,
+  getLiveUpperChamberSeats,
+} from "@/lib/legislature/lowerChamberSeats";
 import { getChamberName, raceToElectionTypes, raceToOfficeType, validRaces } from "./races";
 import type {
   Election,
@@ -33,7 +36,7 @@ const VACANT_KEY = "__vacant__";
 export async function GET(request: Request) {
   try {
     if (!requireBotToken(request)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errorResponse(401, "Unauthorized");
     }
 
     const rateLimit = checkRateLimit(
@@ -48,9 +51,9 @@ export async function GET(request: Request) {
     const rawRace = url.searchParams.get("race") ?? "";
 
     if (!country || !VALID_COUNTRIES.has(country)) {
-      return NextResponse.json(
-        { error: `Invalid country. Must be one of: ${[...VALID_COUNTRIES].join(", ")}` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Invalid country. Must be one of: ${[...VALID_COUNTRIES].join(", ")}`
       );
     }
 
@@ -65,9 +68,9 @@ export async function GET(request: Request) {
     }
 
     if (!race || !allowed.includes(race)) {
-      return NextResponse.json(
-        { error: `Invalid race for ${country}. Must be one of: ${allowed.join(", ")}` },
-        { status: 400 }
+      return errorResponse(
+        400,
+        `Invalid race for ${country}. Must be one of: ${allowed.join(", ")}`
       );
     }
 

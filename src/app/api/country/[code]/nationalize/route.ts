@@ -14,7 +14,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireHumanSession } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
@@ -43,12 +43,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const parsed = await parseJsonBody(request, executiveNationalizeSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const { corporationId, sectorId, tier } = parsed.data;
 
@@ -57,21 +57,21 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Authority: only the sitting head of government may order an executive taking.
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
+      return errorResponse(404, "Character not found");
     }
     const isLeader = await isSittingLeader(db, countryId, character._id);
     if (!isLeader) {
-      return NextResponse.json(
-        { error: "Only the head of government may order an executive nationalization." },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Only the head of government may order an executive nationalization."
       );
     }
 
     if (corporationId && !ObjectId.isValid(corporationId)) {
-      return NextResponse.json({ error: "Invalid corporation ID" }, { status: 400 });
+      return errorResponse(400, "Invalid corporation ID");
     }
     if (sectorId && !ObjectId.isValid(sectorId)) {
-      return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
+      return errorResponse(400, "Invalid sector ID");
     }
 
     const corps = db.collection<Corporation>("corporations");
@@ -90,16 +90,13 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
     }
     if (!targetCorp) {
-      return NextResponse.json({ error: "Target not found" }, { status: 404 });
+      return errorResponse(404, "Target not found");
     }
 
     // A national corporation cannot be a target (most fundamental rejection —
     // checked before jurisdiction so it always wins).
     if (isStateOwned(targetCorp)) {
-      return NextResponse.json(
-        { error: "That corporation is already state-owned." },
-        { status: 400 }
-      );
+      return errorResponse(400, "That corporation is already state-owned.");
     }
 
     const currentTurn = await getCurrentTurn(db);
@@ -120,9 +117,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Re-nationalization cooldown (spec §13.4): a just-privatized corp cannot be
     // immediately re-seized.
     if (isWithinRenationalizeCooldown(targetCorp, currentTurn)) {
-      return NextResponse.json(
-        { error: "This corporation was recently privatized and cannot be re-nationalized yet." },
-        { status: 400 }
+      return errorResponse(
+        400,
+        "This corporation was recently privatized and cannot be re-nationalized yet."
       );
     }
 
@@ -133,16 +130,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     // one country could absorb another country's assets.
     if (sectorId && targetSector) {
       if (targetSector.countryId !== countryId) {
-        return NextResponse.json(
-          { error: "That sector does not operate in your country." },
-          { status: 403 }
-        );
+        return errorResponse(403, "That sector does not operate in your country.");
       }
     } else if (targetCorp.countryId !== countryId) {
-      return NextResponse.json(
-        { error: "That corporation is not headquartered in your country." },
-        { status: 403 }
-      );
+      return errorResponse(403, "That corporation is not headquartered in your country.");
     }
 
     // Owner classification + eligibility (shared with the eligible-targets route
@@ -159,20 +150,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Executive-reach rule: emergency power reaches NPC/unowned + distressed
     // player corps only. A solvent player corp needs legislative authorization.
     if (ownerKind === "player" && !elig.isDistressed) {
-      return NextResponse.json(
-        {
-          error:
-            "Executive power can only nationalize failing firms. A solvent private corporation requires legislative authorization.",
-        },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Executive power can only nationalize failing firms. A solvent private corporation requires legislative authorization."
       );
     }
 
     if (!elig.eligible) {
-      return NextResponse.json(
-        { error: "This asset is not currently eligible for nationalization." },
-        { status: 400 }
-      );
+      return errorResponse(400, "This asset is not currently eligible for nationalization.");
     }
 
     // Politics context for the consequences layer (spec §12). Executive method;

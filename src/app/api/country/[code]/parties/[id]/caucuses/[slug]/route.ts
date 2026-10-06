@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth, requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import {
   findCaucusBySlug,
@@ -29,7 +29,7 @@ export async function GET(
     const { code, id, slug } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuth();
@@ -38,7 +38,7 @@ export async function GET(
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     const character = auth.user.character;
@@ -47,16 +47,13 @@ export async function GET(
       character.party === String(party.sequentialId) &&
       character.countryId === countryId;
     if (!auth.user.isAdmin && !isPartyMember) {
-      return NextResponse.json(
-        { error: "Only party members may view caucus details." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only party members may view caucus details.");
     }
 
     const partyId = String(party.sequentialId);
     const resolved = await findCaucusBySlug(db, countryId, partyId, slug);
     if (!resolved) {
-      return NextResponse.json({ error: "Caucus not found" }, { status: 404 });
+      return errorResponse(404, "Caucus not found");
     }
     const { caucus, isRedirect } = resolved;
 
@@ -151,7 +148,7 @@ export async function PATCH(
     const { code, id, slug } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -159,27 +156,24 @@ export async function PATCH(
 
     const parsed = await parseJsonBody(request, editSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const partyId = String(party.sequentialId);
 
     const resolved = await findCaucusBySlug(db, countryId, partyId, slug);
     if (!resolved) {
-      return NextResponse.json({ error: "Caucus not found" }, { status: 404 });
+      return errorResponse(404, "Caucus not found");
     }
     const { caucus } = resolved;
 
     if (!caucus.chairId || caucus.chairId.toString() !== auth.user.character._id.toString()) {
-      return NextResponse.json(
-        { error: "Only the caucus chair can edit caucus settings." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the caucus chair can edit caucus settings.");
     }
 
     const now = new Date();
@@ -191,10 +185,7 @@ export async function PATCH(
       const submittedDiscordInviteUrl = parsed.data.discordInviteUrl?.trim() ?? "";
       const normalizedDiscordInviteUrl = normalizeDiscordInviteUrl(submittedDiscordInviteUrl);
       if (submittedDiscordInviteUrl && !normalizedDiscordInviteUrl) {
-        return NextResponse.json(
-          { error: "Discord link must be a valid Discord invite URL." },
-          { status: 400 }
-        );
+        return errorResponse(400, "Discord link must be a valid Discord invite URL.");
       }
       updates.discordInviteUrl = normalizedDiscordInviteUrl;
     }
@@ -211,7 +202,7 @@ export async function PATCH(
         newSlug = normaliseCaucusSlug(parsed.data.name);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Invalid name";
-        return NextResponse.json({ error: msg }, { status: 400 });
+        return errorResponse(400, msg);
       }
       if (newSlug !== caucus.slug) {
         // Active-slug collision check.
@@ -223,11 +214,9 @@ export async function PATCH(
           _id: { $ne: caucus._id },
         });
         if (collision) {
-          return NextResponse.json(
-            {
-              error: `Slug "${newSlug}" is already in use by ${collision.name}. Pick a different name.`,
-            },
-            { status: 409 }
+          return errorResponse(
+            409,
+            `Slug "${newSlug}" is already in use by ${collision.name}. Pick a different name.`
           );
         }
         // Push the old slug onto previousSlugs and adopt the new one.
@@ -270,7 +259,7 @@ export async function DELETE(
     const { code, id, slug } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -279,21 +268,18 @@ export async function DELETE(
     const db = await getDb();
     const party = await findPartyBySequentialId(db, id, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
     const partyId = String(party.sequentialId);
 
     const resolved = await findCaucusBySlug(db, countryId, partyId, slug);
     if (!resolved) {
-      return NextResponse.json({ error: "Caucus not found" }, { status: 404 });
+      return errorResponse(404, "Caucus not found");
     }
     const { caucus } = resolved;
 
     if (!caucus.chairId || caucus.chairId.toString() !== auth.user.character._id.toString()) {
-      return NextResponse.json(
-        { error: "Only the caucus chair can disband the caucus." },
-        { status: 403 }
-      );
+      return errorResponse(403, "Only the caucus chair can disband the caucus.");
     }
 
     const now = new Date();

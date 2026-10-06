@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { publicApiGuard } from "@/lib/publicApi/middleware";
 import { queryCountryEconomy } from "@/lib/publicApi/economy";
 
@@ -16,10 +16,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const result = await queryCountryEconomy(db, code.toUpperCase());
 
     if (!result) {
-      return NextResponse.json(
-        { ok: false, error: "Country not found", code: "NOT_FOUND" },
-        { status: 404 }
-      );
+      return errorResponse(404, "Country not found", { code: "NOT_FOUND", extra: { ok: false } });
     }
 
     return NextResponse.json({ ok: true, ...result }, { headers: guard.headers });

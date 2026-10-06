@@ -1,5 +1,6 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
 import { useState, useEffect, useCallback } from "react";
 import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/ui/ResponsiveTable";
 
@@ -64,18 +65,18 @@ const COLUMNS: ResponsiveTableColumn<CorpRow>[] = [
   },
   {
     key: "marketCap",
-    header: "Market Cap",
+    header: "Market cap",
     render: (r) => <span>{fmt(r.marketCap)}</span>,
   },
   {
     key: "sharePrice",
-    header: "Share Price",
+    header: "Share price",
     hideOnMobile: true,
     render: (r) => <span>{fmt(r.sharePrice)}</span>,
   },
   {
     key: "revenue",
-    header: "Daily Revenue",
+    header: "Daily revenue",
     render: (r) => <span>{fmt(r.revenue)}</span>,
   },
   {
@@ -123,7 +124,7 @@ export function StockMarketAdminPanel() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h2 className="text-lg font-semibold">Stock Market</h2>
+        <h2 className="text-lg font-semibold">Stock market</h2>
         {/* Country filter pills */}
         <div className="flex flex-wrap gap-2">
           {COUNTRY_PILLS.map((pill) => (
@@ -146,9 +147,9 @@ export function StockMarketAdminPanel() {
       {summary && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: "Market Cap", value: fmt(summary.totalMarketCap) },
+            { label: "Market cap", value: fmt(summary.totalMarketCap) },
             {
-              label: "Listed Corps",
+              label: "Listed corps",
               value: String(summary.total),
               sub: (() => {
                 const flaggedCount = corps.filter(
@@ -158,9 +159,9 @@ export function StockMarketAdminPanel() {
               })(),
               subHighlight: true,
             },
-            { label: "Daily Revenue", value: fmt(summary.totalRevenue) },
+            { label: "Daily revenue", value: fmt(summary.totalRevenue) },
             {
-              label: "CEO Vacancies",
+              label: "CEO vacancies",
               value: String(summary.ceoVacancies),
               highlight: summary.ceoVacancies > 0,
             },
@@ -169,7 +170,7 @@ export function StockMarketAdminPanel() {
               key={card.label}
               className="rounded-xl border border-card-border bg-card p-4 space-y-1"
             >
-              <p className="text-xs text-muted uppercase tracking-wider">{card.label}</p>
+              <p className="text-body-sm font-medium text-muted">{card.label}</p>
               <p
                 className={`text-xl font-semibold ${card.highlight ? "text-error" : "text-foreground"}`}
               >
@@ -185,7 +186,7 @@ export function StockMarketAdminPanel() {
         </div>
       )}
 
-      {error && <p className="text-sm text-error bg-error/10 rounded-lg px-4 py-3">{error}</p>}
+      <InlineError error={error} className="text-sm text-error bg-error/10 rounded-lg px-4 py-3" />
 
       {/* Flagged corporations */}
       {!loading &&
@@ -193,10 +194,10 @@ export function StockMarketAdminPanel() {
           const flagged = corps
             .map((c) => {
               const badges: { label: string; color: "error" | "warning" }[] = [];
-              if (c.ceoVacant) badges.push({ label: "CEO Vacant", color: "error" });
+              if (c.ceoVacant) badges.push({ label: "CEO vacant", color: "error" });
               if (c.liquidCapital <= 0) badges.push({ label: "Insolvent", color: "error" });
               if (c.suspended) badges.push({ label: "Suspended", color: "warning" });
-              if (c.bondDefaultActive) badges.push({ label: "Bond Default", color: "warning" });
+              if (c.bondDefaultActive) badges.push({ label: "Bond default", color: "warning" });
               return badges.length > 0 ? { corp: c, badges } : null;
             })
             .filter(Boolean) as {
@@ -210,7 +211,7 @@ export function StockMarketAdminPanel() {
             <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
               <div className="px-5 py-3 border-b border-card-border">
                 <h3 className="text-sm font-semibold text-muted">
-                  <span className="text-warning">&#9650;</span> Flagged Corporations
+                  <span className="text-warning">&#9650;</span> Flagged corporations
                 </h3>
               </div>
               <div className="divide-y divide-card-border">

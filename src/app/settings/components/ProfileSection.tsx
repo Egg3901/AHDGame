@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { MessageBanner, SpinnerIcon, CheckIcon } from "./shared";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 const MAX_BIO = 500;
 
@@ -88,7 +89,7 @@ export function ProfileSection({ character, onCharacterUpdate, profileHref }: Pr
         setTimeout(() => setNameSaved(false), 1500);
         onCharacterUpdate({ name: data.name, lastNameChange: new Date().toISOString() });
       } else {
-        setNameMsg({ text: data.error ?? t("profile.changeFailed"), ok: false });
+        setNameMsg({ text: apiErrorText(data, t("profile.changeFailed")), ok: false });
       }
     } catch {
       setNameMsg({ text: t("common.networkError"), ok: false });
@@ -112,7 +113,7 @@ export function ProfileSection({ character, onCharacterUpdate, profileHref }: Pr
       if (res.ok) {
         setBioSaved(true);
         setTimeout(() => setBioSaved(false), 1500);
-      } else setBioMsg({ text: data.error ?? t("common.saveFailed"), ok: false });
+      } else setBioMsg({ text: apiErrorText(data, t("common.saveFailed")), ok: false });
     } catch {
       setBioMsg({ text: t("common.networkError"), ok: false });
     } finally {

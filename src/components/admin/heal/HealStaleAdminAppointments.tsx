@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 interface DuplicateRecord {
   id: string;
@@ -44,7 +45,7 @@ export function HealStaleAdminAppointments() {
       if (res.ok) {
         setDiagnostic(data);
       } else {
-        setResult({ ok: false, message: data.error ?? "Diagnostic failed" });
+        setResult({ ok: false, message: apiErrorText(data, "Diagnostic failed") });
       }
     } catch {
       setResult({ ok: false, message: "Network error" });
@@ -67,7 +68,7 @@ export function HealStaleAdminAppointments() {
     try {
       const res = await fetch("/api/admin/heal/stale-admin-appointments", { method: "POST" });
       const data = await res.json();
-      setResult({ ok: res.ok, message: data.message ?? data.error ?? "Unknown response" });
+      setResult({ ok: res.ok, message: data.message ?? apiErrorText(data, "Unknown response") });
     } catch {
       setResult({ ok: false, message: "Network error" });
     } finally {
@@ -78,7 +79,7 @@ export function HealStaleAdminAppointments() {
   return (
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
       <div>
-        <h3 className="font-semibold text-sm">Heal Stale Admin Appointments</h3>
+        <h3 className="font-semibold text-sm">Heal stale admin appointments</h3>
         <p className="mt-1 text-xs text-muted">
           Removes duplicate electedOfficials records for the same seat. Keeps filled records over
           vacant ones, and most recent among equal fill status. Fixes admin-appointed officials that
@@ -99,7 +100,7 @@ export function HealStaleAdminAppointments() {
           disabled={loading}
           className="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20 disabled:opacity-50"
         >
-          {loading ? "Healing..." : "Heal All"}
+          {loading ? "Healing..." : "Heal all"}
         </button>
       </div>
 

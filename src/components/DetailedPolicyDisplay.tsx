@@ -189,7 +189,7 @@ export function DetailedPolicyDisplay({
 
   return (
     <div className={wrapperClass}>
-      {!compact && !omitHeading && <h3 className={titleClass}>Policy Positions</h3>}
+      {!compact && !omitHeading && <h3 className={titleClass}>Policy positions</h3>}
 
       <div className={spaceClass}>
         {/* Economic */}
@@ -198,7 +198,7 @@ export function DetailedPolicyDisplay({
             <Tooltip
               content={
                 <div>
-                  <p className="font-semibold text-foreground mb-1">Economic Policy</p>
+                  <p className="font-semibold text-foreground mb-1">Economic policy</p>
                   <p className="text-muted/80">
                     Left: stronger redistribution and public-sector emphasis. Right: lower taxes and
                     market-oriented policy. Center: balanced.
@@ -268,7 +268,7 @@ export function DetailedPolicyDisplay({
             <Tooltip
               content={
                 <div>
-                  <p className="font-semibold text-foreground mb-1">Social Policy</p>
+                  <p className="font-semibold text-foreground mb-1">Social policy</p>
                   <p className="text-muted/80">
                     Liberal: socially progressive. Traditional: socially conservative. Moderate:
                     between the two.

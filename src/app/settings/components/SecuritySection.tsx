@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { MessageBanner, SpinnerIcon } from "./shared";
+import { apiErrorText } from "@/lib/errors/catalog";
 
 function EyeIcon({ open }: { open: boolean }) {
   if (open) {
@@ -109,7 +110,7 @@ export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
           setNewPassword("");
           setConfirmPassword("");
         } else {
-          setPasswordError(data.error || t("security.changeFailed"));
+          setPasswordError(apiErrorText(data, t("security.changeFailed")));
         }
       } else {
         // Set password for the first time (social-only accounts)
@@ -125,7 +126,7 @@ export function SecuritySection({ hasPassword, onPasswordSet }: Props) {
           setConfirmPassword("");
           onPasswordSet();
         } else {
-          setPasswordError(data.error || t("security.setFailed"));
+          setPasswordError(apiErrorText(data, t("security.setFailed")));
         }
       }
     } catch {

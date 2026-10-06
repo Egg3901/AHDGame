@@ -49,7 +49,7 @@ export function BondOwnersSection({
   }));
   if (publicFloat > 0) {
     slices.push({
-      label: "Public Float",
+      label: "Public float",
       units: publicFloat,
       color: PUBLIC_FLOAT_COLOR,
       pct: totalUnits > 0 ? (publicFloat / totalUnits) * 100 : 0,
@@ -141,7 +141,7 @@ export function BondOwnersSection({
   return (
     <div className="rounded-xl border border-card-border bg-card overflow-hidden">
       <div className="px-6 py-4 border-b border-card-border flex items-center justify-between">
-        <h2 className="text-lg font-bold text-foreground">Bond Ownership</h2>
+        <h2 className="text-lg font-bold text-foreground">Bond ownership</h2>
         <span className="text-xs text-muted tabular-nums">
           {totalUnits.toLocaleString("en-US")} total units
         </span>
@@ -270,8 +270,8 @@ export function BondOwnersSection({
                               </svg>
                             </div>
                             <div>
-                              <span className="font-medium text-foreground">Public Float</span>
-                              <span className="block text-[10px] text-muted uppercase tracking-wide">
+                              <span className="font-medium text-foreground">Public float</span>
+                              <span className="block text-body-sm font-medium text-muted">
                                 Available
                               </span>
                             </div>
@@ -338,9 +338,7 @@ export function BondOwnersSection({
                                 {holder.name}
                               </span>
                             )}
-                            <span className="text-[10px] text-muted uppercase tracking-wide">
-                              {typeLabel}
-                            </span>
+                            <span className="text-body-sm font-medium text-muted">{typeLabel}</span>
                           </div>
                         </div>
                       </td>

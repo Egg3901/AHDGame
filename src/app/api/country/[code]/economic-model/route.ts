@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import type { StateMetrics } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -19,12 +19,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const docId = getNationalDocId(countryId);
     if (!docId) {
-      return NextResponse.json({ error: "No national document for country" }, { status: 404 });
+      return errorResponse(404, "No national document for country");
     }
 
     const db = await getDb();
@@ -33,7 +33,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
       .findOne({ _id: docId }, { projection: { economicModel: 1 } });
 
     if (!doc?.economicModel) {
-      return NextResponse.json({ error: "No economic model classified yet" }, { status: 404 });
+      return errorResponse(404, "No economic model classified yet");
     }
 
     return NextResponse.json(presentEconomicModel(doc.economicModel));

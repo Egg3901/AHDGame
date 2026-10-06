@@ -55,7 +55,7 @@ describe("ExecutiveTabsClient admin tab", () => {
     renderTabs({ viewerIsAdmin: true, isOnePartyState: false });
     screen.getByRole("button", { name: "Admin" }).click();
     await waitFor(() => expect(screen.getByTestId("executive-admin-appoint")).toBeTruthy());
-    expect(screen.getByRole("button", { name: "Appoint PM (Admin)" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Appoint PM (admin)" })).toBeTruthy();
     expect(screen.queryByTestId("executive-admin-regime")).toBeNull();
   });
 
@@ -81,29 +81,29 @@ describe("ExecutiveTabsClient foreign affairs tab", () => {
 
   it("shows for the sitting head of government", () => {
     renderTabs({ viewerIsLeader: true });
-    expect(screen.getByRole("button", { name: "Foreign Affairs" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Foreign affairs" })).toBeTruthy();
   });
 
   it("shows for an admin", () => {
     renderTabs({ viewerIsAdmin: true });
-    expect(screen.getByRole("button", { name: "Foreign Affairs" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Foreign affairs" })).toBeTruthy();
   });
 
   it("is hidden from an ordinary viewer", () => {
     renderTabs({});
-    expect(screen.queryByRole("button", { name: "Foreign Affairs" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Foreign affairs" })).toBeNull();
   });
 
   it("is hidden when the conflicts subsystem is off, even for the leader", () => {
     // Matches every other conflict surface; the routes 404 in this state anyway.
     conflictsSpy.mockReturnValue(false);
     renderTabs({ viewerIsLeader: true });
-    expect(screen.queryByRole("button", { name: "Foreign Affairs" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Foreign affairs" })).toBeNull();
   });
 
   it("mounts the tab body with canAct true when opened by the leader", async () => {
     renderTabs({ viewerIsLeader: true });
-    screen.getByRole("button", { name: "Foreign Affairs" }).click();
+    screen.getByRole("button", { name: "Foreign affairs" }).click();
     await waitFor(() =>
       expect(screen.getByTestId("foreign-affairs-tab").textContent).toBe("canAct:true")
     );
@@ -121,7 +121,7 @@ describe("ExecutiveTabsClient deep link", () => {
     tabParam = "";
   });
 
-  it("opens the Foreign Affairs tab when the URL asks for it", () => {
+  it("opens the Foreign affairs tab when the URL asks for it", () => {
     // What the peace strip's link depends on: without this it landed on Overview
     // and the panel it promised was nowhere on screen. The overview body is only
     // mounted while its own tab is active, so its absence is the switch.

@@ -12,9 +12,7 @@ export function LivePreviewPanel({ derived }: { derived: DerivedComposition }) {
   const display = getDisplayLean(derived.stateEconomicLean, derived.stateSocialLean);
   return (
     <div className="sticky top-4 rounded-xl border border-card-border bg-card p-4 shadow-card">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-        Live State Lean
-      </p>
+      <p className="text-body-sm font-medium text-muted">Live state lean</p>
       <p className="mb-3 text-[11px] text-muted">Recomputed on every change · no calculate step</p>
       <div className="space-y-3 text-sm">
         <div>

@@ -19,7 +19,7 @@
  */
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getCountryHistoryCollection } from "@/lib/db/collections/countryHistory";
 
@@ -34,14 +34,14 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { code, id } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
     // id can be either a sequentialId number or an ObjectId hex. The party
     // field on countryHistory is the sequentialId-as-string, so the inbox
     // filter accepts the number-string form. Treat anything that's not a
     // pure integer string as 400.
     if (!/^\d+$/.test(id)) {
-      return NextResponse.json({ error: "Party id must be a sequentialId" }, { status: 400 });
+      return errorResponse(400, "Party id must be a sequentialId");
     }
 
     const db = await getDb();

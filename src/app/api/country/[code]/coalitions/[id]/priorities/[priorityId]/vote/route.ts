@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { badRequest, forbidden, handleRouteError, notFound } from "@/lib/api/errors";
+import { badRequest, forbidden, handleRouteError, notFound, errorResponse } from "@/lib/api/errors";
 import { z } from "zod";
 import { getGameTime } from "@/lib/time/gameTime";
 import {
@@ -46,7 +46,7 @@ export async function POST(
 
     const parsed = await parseJsonBody(request, voteSchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
 
     const db = await getDb();

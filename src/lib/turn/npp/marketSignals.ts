@@ -51,30 +51,41 @@ export const ESSENTIAL_SHORTAGE_SCORE = 1.6;
  * general concentration rule: each has a measured shortage and a known supply
  * response path. Advertising and freight need more producer breadth,
  * fertilizers need dedicated chemical capacity, and rare earths need focused
- * extraction in states with deposit headroom.
+ * extraction in states with deposit headroom. Healthcare and entertainment
+ * services (#2088) are produced only by their own sector types, so a chronic
+ * all-NPP shortage there has no other builder pool; each sector lists every
+ * commodity it answers, scanned in order.
  */
-export const FRAGILE_MARKET_COMMODITY_BY_SECTOR: Readonly<
-  Partial<Record<CorporationType, CommodityType>>
+export const FRAGILE_MARKET_COMMODITIES_BY_SECTOR: Readonly<
+  Partial<Record<CorporationType, readonly CommodityType[]>>
 > = {
-  media: "advertising",
-  entertainment: "advertising",
-  chemical_industries: "fertilizers",
-  logistics: "freight",
-  extraction: "rare_earth",
+  media: ["advertising"],
+  entertainment: ["advertising", "entertainment_services"],
+  healthcare: ["healthcare_services"],
+  chemical_industries: ["fertilizers"],
+  logistics: ["freight"],
+  extraction: ["rare_earth"],
 };
 
 /** Use the existing critical-shortage bar so the treatment self-disarms. */
 export const FRAGILE_MARKET_SHORTAGE_SCORE = ESSENTIAL_SHORTAGE_SCORE;
 
+/** The sector's most-short fragile commodity at or above the bar, else null. */
 export function fragileMarketCommodityForSector(
   sectorType: CorporationType,
   countryId: string,
   priceRatioOf: CommodityPriceRatioFn
 ): CommodityType | null {
-  const commodity = FRAGILE_MARKET_COMMODITY_BY_SECTOR[sectorType];
-  if (!commodity) return null;
-  const ratio = priceRatioOf(commodity, countryId);
-  return ratio != null && ratio >= FRAGILE_MARKET_SHORTAGE_SCORE ? commodity : null;
+  let best: CommodityType | null = null;
+  let bestRatio = FRAGILE_MARKET_SHORTAGE_SCORE;
+  for (const commodity of FRAGILE_MARKET_COMMODITIES_BY_SECTOR[sectorType] ?? []) {
+    const ratio = priceRatioOf(commodity, countryId);
+    if (ratio != null && ratio >= bestRatio) {
+      best = commodity;
+      bestRatio = ratio;
+    }
+  }
+  return best;
 }
 
 /** Focus a new plant on the diagnosed commodity when the sector has a dedicated recipe. */

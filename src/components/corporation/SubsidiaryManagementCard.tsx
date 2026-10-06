@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import Link from "next/link";
 import { MAX_DIVIDEND_RATE } from "@/lib/constants/corporations";
@@ -56,7 +57,7 @@ export function SubsidiaryManagementCard({
       });
       const data = await res.json();
       if (!res.ok) {
-        setErr(data.error || "Action failed");
+        setErr(apiErrorText(data, "Action failed"));
         return;
       }
       onChanged();

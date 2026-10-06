@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
-import { handleRouteError, forbidden } from "@/lib/api/errors";
+import { handleRouteError, forbidden, errorResponse } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { crossCountryActionGuard } from "@/lib/api/crossCountryGuard";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -93,7 +93,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { code, id: partyId } = await params;
     const countryId = code.toUpperCase() as CountryId;
     if (!COUNTRY_CONFIGS[countryId]) {
-      return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
+      return errorResponse(400, "Invalid country code");
     }
 
     const auth = await requireAuthWithCharacter();
@@ -111,7 +111,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const parsed = await parseJsonBody(request, bulkOrgBodySchema);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+      return errorResponse(parsed.status, parsed.error);
     }
     const setting = parsed.data.setting as BulkSetting;
     const config = SETTINGS[setting];
@@ -119,7 +119,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Validate the value against the SAME bounds the per-state route enforces.
     const valueParse = config.parse(parsed.data.value);
     if (!valueParse.ok) {
-      return NextResponse.json({ error: valueParse.error }, { status: 400 });
+      return errorResponse(400, valueParse.error);
     }
     const value = valueParse.value;
 
@@ -127,7 +127,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const party = await findPartyBySequentialId(db, partyId, countryId);
     if (!party) {
-      return NextResponse.json({ error: "Party not found" }, { status: 404 });
+      return errorResponse(404, "Party not found");
     }
 
     // AUTHORIZATION: only the seated national chair — or the vice-chair acting in

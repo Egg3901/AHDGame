@@ -56,9 +56,7 @@ export function ElectionPhaseStatusStrip({
       className={`grid grid-cols-2 gap-4 rounded-lg border border-card-border/40 bg-card-muted/50 p-3 ${className}`.trim()}
     >
       <div className="space-y-1">
-        <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-          {t("phaseStrip.primaryElection")}
-        </div>
+        <div className="text-body-sm font-medium text-muted">{t("phaseStrip.primaryElection")}</div>
         {isUpcoming ? (
           <div className="text-sm font-medium text-blue-400">
             {t("phaseStrip.opensIn", { time: primaryOpensTimer.text })}
@@ -86,9 +84,7 @@ export function ElectionPhaseStatusStrip({
       </div>
 
       <div className="space-y-1 border-l border-card-border/40 pl-4">
-        <div className="text-[10px] uppercase tracking-wider text-muted font-medium">
-          {t("phaseStrip.generalElection")}
-        </div>
+        <div className="text-body-sm font-medium text-muted">{t("phaseStrip.generalElection")}</div>
         <div className={`text-sm font-medium ${getTimerUrgencyStyle(electionTimer.urgency)}`}>
           {t("phaseStrip.endsIn", { time: electionTimer.text })}
         </div>

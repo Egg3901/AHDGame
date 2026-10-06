@@ -16,7 +16,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/api/requireAdmin";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { runRetention } from "@/lib/retention/retention";
 
 const bodySchema = z.object({
@@ -44,22 +44,19 @@ export async function POST(request: Request) {
       try {
         raw = JSON.parse(text);
       } catch {
-        return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+        return errorResponse(400, "Invalid JSON body");
       }
     }
     const parsedBody = bodySchema.safeParse(raw);
     if (!parsedBody.success) {
-      return NextResponse.json(
-        { error: parsedBody.error.issues[0]?.message ?? "Invalid body" },
-        { status: 400 }
-      );
+      return errorResponse(400, parsedBody.error.issues[0]?.message ?? "Invalid body");
     }
     const { dryRun, collections, compact } = parsedBody.data;
 
     if (!dryRun && process.env.RETENTION_ENABLED !== "1") {
-      return NextResponse.json(
-        { error: "Retention execution is disabled. Set RETENTION_ENABLED=1 to run for real." },
-        { status: 403 }
+      return errorResponse(
+        403,
+        "Retention execution is disabled. Set RETENTION_ENABLED=1 to run for real."
       );
     }
 

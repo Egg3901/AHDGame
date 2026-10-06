@@ -446,7 +446,7 @@ describe("the viewer's own vote", () => {
     );
 
     // "destructive" is the selected styling for No.
-    expect(screen.getByRole("button", { name: "Vote No" }).className).toContain("bg-error");
+    expect(screen.getByRole("button", { name: "Vote no" }).className).toContain("bg-error");
   });
 });
 

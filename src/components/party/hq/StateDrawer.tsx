@@ -70,7 +70,7 @@ export function StateDrawer({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
-      <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-sm overflow-y-auto border-l border-card-border bg-card p-5 shadow-xl">
+      <aside className="fixed right-0 top-0 z-50 h-full w-full max-w-sm overflow-y-auto border-l border-card-border bg-card p-5 pt-[max(1.25rem,env(safe-area-inset-top))] shadow-xl">
         <div className="mb-4 flex items-start justify-between">
           <div>
             <div className="text-lg font-bold">{row.name}</div>
@@ -116,10 +116,10 @@ export function StateDrawer({
         <div className="mb-4">
           <div className="mb-1 text-xs text-muted">Leadership</div>
           {row.chairName ? (
-            <div className="text-sm">{row.chairName} · State Chair</div>
+            <div className="text-sm">{row.chairName} · State chair</div>
           ) : (
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted italic">Vacant · State Chair</span>
+              <span className="text-sm text-muted italic">Vacant · state chair</span>
               <Link
                 href={`${regionPartyUrl(countryCode, row.regionId, partyId)}?tab=overview`}
                 className="rounded-md border border-card-border px-2 py-1 text-xs hover:bg-card-elevated"

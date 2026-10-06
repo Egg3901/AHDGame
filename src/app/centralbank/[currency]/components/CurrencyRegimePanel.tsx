@@ -1,5 +1,7 @@
 "use client";
 
+import { InlineError } from "@/components/ui/InlineError";
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 import { CentralBankSection } from "./CentralBankSection";
@@ -122,7 +124,7 @@ export function CurrencyRegimePanel({
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "Request failed.");
+        setError(apiErrorText(json, "Request failed."));
       } else {
         setSuccess(`Regime declared. ${json.summary ?? ""}`.trim());
         setConfirming(false);
@@ -138,7 +140,7 @@ export function CurrencyRegimePanel({
 
   return (
     <CentralBankSection title="Currency regime">
-      {loadError && <p className="text-body text-error">{loadError}</p>}
+      <InlineError error={loadError} className="text-body text-error" />
 
       {data && (
         <div className="mb-4 max-w-3xl text-body">
@@ -271,7 +273,7 @@ export function CurrencyRegimePanel({
         </div>
       )}
 
-      {error && <p className="mt-2 text-body text-error">{error}</p>}
+      <InlineError error={error} className="mt-2 text-body text-error" />
       {success && <p className="mt-2 text-body text-success">{success}</p>}
     </CentralBankSection>
   );

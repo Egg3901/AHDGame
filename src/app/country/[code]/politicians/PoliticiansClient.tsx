@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import Link from "next/link";
@@ -28,7 +29,7 @@ function getOfficeFilters(countryCode: string): { value: OfficeFilter; label: st
   const isUS = cid === "US";
   const subNationalLabel = isUS ? "State" : "Region";
   return [
-    { value: "all", label: "All Offices" },
+    { value: "all", label: "All offices" },
     { value: "federal_exec", label: "Executive" },
     { value: "congress", label: legislatureName },
     { value: "state", label: subNationalLabel },
@@ -139,7 +140,7 @@ export default function PoliticiansClient({ initialPoliticians, initialStats }: 
           setPoliticians(data.politicians);
           setStats({ playerCount: data.playerCount, nppCount: data.nppCount });
         } else {
-          setError(data.error || "Failed to fetch politicians");
+          setError(apiErrorText(data, "Failed to fetch politicians"));
         }
       } catch {
         setError("Network error - please try again");
@@ -332,7 +333,7 @@ export default function PoliticiansClient({ initialPoliticians, initialStats }: 
             {partyOptions.map((party) => (
               <option key={party} value={party}>
                 {party === "all"
-                  ? "All Parties"
+                  ? "All parties"
                   : (partyNameMap.get(party) ?? getPartyLabel(party))}
               </option>
             ))}
@@ -361,10 +362,10 @@ export default function PoliticiansClient({ initialPoliticians, initialStats }: 
             onChange={(e) => setSortBy(e.target.value as SortOption)}
             className={SELECT_CLASS}
           >
-            <option value="npi">Sort: National Influence</option>
+            <option value="npi">Sort: National influence</option>
             <option value="favorability">Sort: Favorability</option>
-            <option value="funds">Sort: Campaign Funds</option>
-            <option value="office">Sort: Office Rank</option>
+            <option value="funds">Sort: Campaign funds</option>
+            <option value="office">Sort: Office rank</option>
             <option value="name">Sort: Name (A–Z)</option>
             <option value="party">Sort: Party</option>
           </select>
@@ -452,18 +453,18 @@ export default function PoliticiansClient({ initialPoliticians, initialStats }: 
                   onClick={resetFilters}
                   className="mt-6 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
                 >
-                  Clear All Filters
+                  Clear all filters
                 </button>
               </div>
             ) : (
               <div className="overflow-hidden rounded-xl border border-card-border bg-card">
                 {/* Column headers */}
-                <div className="grid grid-cols-[2.5rem_minmax(0,1.5fr)_8.5rem_5.5rem] items-center gap-3.5 border-b border-card-border bg-card-muted px-4 py-2 text-[9px] font-bold uppercase tracking-widest text-muted lg:grid-cols-[2.75rem_minmax(0,1.5fr)_9rem_minmax(0,1fr)_8.5rem_5.5rem]">
+                <div className="grid grid-cols-[1.75rem_minmax(0,1fr)_4.5rem] items-center gap-2.5 sm:grid-cols-[2.5rem_minmax(0,1.5fr)_8.5rem_5.5rem] sm:gap-3.5 border-b border-card-border bg-card-muted px-3 py-2 text-sm sm:px-4 font-semibold text-foreground lg:grid-cols-[2.75rem_minmax(0,1.5fr)_9rem_minmax(0,1fr)_8.5rem_5.5rem]">
                   <span className="text-right">#</span>
                   <span>Name</span>
                   <span className="hidden lg:block">Party</span>
                   <span className="hidden lg:block">Office</span>
-                  <span>Influence</span>
+                  <span className="hidden sm:block">Influence</span>
                   <span className="text-right">{showFunds ? "Funds" : "Favorability"}</span>
                 </div>
                 {sortedPoliticians.map((politician, index) => {
@@ -476,7 +477,7 @@ export default function PoliticiansClient({ initialPoliticians, initialStats }: 
                           ? `/politicians/npp/${politician.id}`
                           : `/character/${politician.sequentialId ?? politician.id}`
                       }
-                      className="grid grid-cols-[2.5rem_minmax(0,1.5fr)_8.5rem_5.5rem] items-center gap-3.5 border-b border-card-border/50 px-4 py-2.5 transition-colors last:border-b-0 hover:bg-card-elevated/40 lg:grid-cols-[2.75rem_minmax(0,1.5fr)_9rem_minmax(0,1fr)_8.5rem_5.5rem]"
+                      className="grid grid-cols-[1.75rem_minmax(0,1fr)_4.5rem] items-center gap-2.5 sm:grid-cols-[2.5rem_minmax(0,1.5fr)_8.5rem_5.5rem] sm:gap-3.5 border-b border-card-border/50 px-3 py-2.5 transition-colors sm:px-4 last:border-b-0 hover:bg-card-elevated/40 lg:grid-cols-[2.75rem_minmax(0,1.5fr)_9rem_minmax(0,1fr)_8.5rem_5.5rem]"
                     >
                       {/* Rank */}
                       <span
@@ -518,6 +519,10 @@ export default function PoliticiansClient({ initialPoliticians, initialStats }: 
                           </span>
                           <span className="block truncate text-[11px] text-muted">
                             {politician.homeStateName}
+                            <span className="sm:hidden">
+                              {" · NPI "}
+                              {politician.nationalInfluence.toFixed(1)}
+                            </span>
                             <span className="lg:hidden">
                               {" · "}
                               {politician.partyName ?? getPartyLabel(politician.party)}
@@ -544,8 +549,8 @@ export default function PoliticiansClient({ initialPoliticians, initialStats }: 
                         )}
                       </span>
 
-                      {/* NPI rank ladder */}
-                      <span className="min-w-0">
+                      {/* NPI rank ladder (folded into the subline on phones) */}
+                      <span className="hidden min-w-0 sm:block">
                         <span className="mb-1 flex items-baseline justify-between font-mono text-[10px] text-muted">
                           <span>NPI</span>
                           <span className="font-semibold text-foreground">
