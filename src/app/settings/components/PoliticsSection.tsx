@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { PolicyShiftControl } from "@/components/PolicyShiftControl";
 import { MessageBanner } from "./shared";
@@ -13,6 +13,7 @@ interface CharacterPolicies {
 
 interface CharacterData {
   actions: number;
+  positionUpdateVouchers?: number;
   infamy: number;
   politicalInfluence: number;
   nationalInfluence?: number;
@@ -29,18 +30,29 @@ interface Props {
 export function PoliticsSection({ character, onCharacterUpdate, onReelectionChange }: Props) {
   const t = useTranslations("settings");
   const [policyMsg, setPolicyMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [useVoucher, setUseVoucher] = useState(false);
+  const [policyShiftLoading, setPolicyShiftLoading] = useState(false);
+  const policyShiftInFlightRef = useRef(false);
+  const availableVouchers = character.positionUpdateVouchers ?? 0;
+  const voucherSelected = useVoucher && availableVouchers > 0;
 
   const handlePolicyShift = async (axis: "economic" | "social", direction: -1 | 1) => {
+    if (policyShiftInFlightRef.current) return;
+    policyShiftInFlightRef.current = true;
+    setPolicyShiftLoading(true);
     setPolicyMsg(null);
     try {
       const res = await fetch("/api/settings/policy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ axis, direction }),
+        body: JSON.stringify({ axis, direction, useVoucher: voucherSelected }),
       });
       const data = await res.json();
       if (res.ok) {
-        setPolicyMsg({ text: t("politics.shifted"), ok: true });
+        setPolicyMsg({
+          text: t(data.usedVoucher ? "politics.shiftedWithVoucher" : "politics.shifted"),
+          ok: true,
+        });
         if (data.stats) {
           onCharacterUpdate({
             policies: data.stats.policies,
@@ -48,7 +60,9 @@ export function PoliticsSection({ character, onCharacterUpdate, onReelectionChan
             infamy: data.stats.infamy,
             politicalInfluence: data.stats.politicalInfluence,
             nationalInfluence: data.stats.nationalInfluence,
+            positionUpdateVouchers: data.stats.positionUpdateVouchers,
           });
+          if (data.stats.positionUpdateVouchers < 1) setUseVoucher(false);
         }
       } else {
         setPolicyMsg({ text: apiErrorText(data, t("politics.shiftFailed")), ok: false });
@@ -56,15 +70,20 @@ export function PoliticsSection({ character, onCharacterUpdate, onReelectionChan
     } catch {
       setPolicyMsg({ text: t("common.networkError"), ok: false });
     } finally {
+      policyShiftInFlightRef.current = false;
+      setPolicyShiftLoading(false);
       setTimeout(() => setPolicyMsg(null), 5000);
     }
   };
 
   return (
     <>
-      <div className="flex justify-end mb-4">
+      <div className="flex flex-wrap justify-end gap-2 mb-4">
         <span className="rounded-full bg-secondary/15 px-3 py-1 text-sm font-medium text-secondary">
           {t("politics.actionsCount", { count: character.actions })}
+        </span>
+        <span className="rounded-full bg-primary/15 px-3 py-1 text-sm font-medium text-primary">
+          {t("politics.voucherCount", { count: availableVouchers })}
         </span>
       </div>
       <p className="text-sm text-muted mb-6">{t("politics.intro")}</p>
@@ -75,17 +94,38 @@ export function PoliticsSection({ character, onCharacterUpdate, onReelectionChan
           onDismiss={() => setPolicyMsg(null)}
         />
       )}
+      <label
+        className={`mb-6 flex items-start gap-3 rounded-xl border p-4 ${
+          voucherSelected ? "border-primary/40 bg-primary/10" : "border-card-border bg-card"
+        } ${availableVouchers < 1 ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+      >
+        <input
+          type="checkbox"
+          checked={voucherSelected}
+          disabled={availableVouchers < 1}
+          onChange={(event) => setUseVoucher(event.target.checked)}
+          className="mt-0.5 h-4 w-4 rounded border-card-border bg-background text-primary focus:ring-primary"
+        />
+        <span className="flex-1">
+          <span className="block text-sm font-medium">{t("politics.useVoucher")}</span>
+          <span className="mt-1 block text-xs text-muted">{t("politics.useVoucherHint")}</span>
+        </span>
+      </label>
       <div className="grid gap-4 md:grid-cols-2">
         <PolicyShiftControl
           axis="economic"
           value={character.policies.economic}
           currentActions={character.actions}
+          useVoucher={voucherSelected}
+          disabled={policyShiftLoading}
           onShift={handlePolicyShift}
         />
         <PolicyShiftControl
           axis="social"
           value={character.policies.social}
           currentActions={character.actions}
+          useVoucher={voucherSelected}
+          disabled={policyShiftLoading}
           onShift={handlePolicyShift}
         />
       </div>

@@ -126,6 +126,7 @@ export const statusBarLayoutSchema = z.object({
 export const policyShiftSchema = z.object({
   axis: z.enum(["economic", "social"]),
   direction: z.union([z.literal(-1), z.literal(1)]),
+  useVoucher: z.boolean().optional(),
 });
 
 export const profileBioSchema = z.object({
