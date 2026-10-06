@@ -1,6 +1,6 @@
 "use client";
 
-import { getTargetableDemographics, getDemographicLabels } from "@/lib/utils/demographicAlignment";
+import { partyTurnoutTargetLabel } from "@/lib/demographics/partyTurnoutTarget";
 import { STATE_PASSIVE_PS_PER_TURN } from "@/lib/politicalStrength/strengthConstants";
 import type { StatePartyData, UserData } from "./types";
 import { getTreasuryFlavorText, fmt } from "./helpers";
@@ -33,22 +33,20 @@ export function TreasuryOverviewSection({
   psPct,
   netPct,
 }: TreasuryOverviewSectionProps) {
-  const targetableDemos = getTargetableDemographics(countryId);
-  const DEMOGRAPHIC_LABELS = getDemographicLabels(countryId);
-
-  const gotvDemo =
+  const gotvTargetLabel =
     stateParty.gotvTargetCategory && stateParty.gotvTargetGroup
-      ? targetableDemos.find(
-          (d) =>
-            d.category === stateParty.gotvTargetCategory && d.group === stateParty.gotvTargetGroup
+      ? partyTurnoutTargetLabel(
+          countryId,
+          stateParty.gotvTargetCategory,
+          stateParty.gotvTargetGroup
         )
       : null;
-  const supDemo =
+  const suppressionTargetLabel =
     stateParty.suppressionTargetCategory && stateParty.suppressionTargetGroup
-      ? targetableDemos.find(
-          (d) =>
-            d.category === stateParty.suppressionTargetCategory &&
-            d.group === stateParty.suppressionTargetGroup
+      ? partyTurnoutTargetLabel(
+          countryId,
+          stateParty.suppressionTargetCategory,
+          stateParty.suppressionTargetGroup
         )
       : null;
 
@@ -205,10 +203,8 @@ export function TreasuryOverviewSection({
               <>
                 -{fmt(stateParty.gotvEstimatedSpend, countryId)}
                 <span className="text-muted ml-1">({stateParty.gotvBudgetPercent}%)</span>
-                {gotvDemo && (
-                  <span className="text-muted ml-1 text-xs">
-                    · {DEMOGRAPHIC_LABELS[gotvDemo.group] ?? gotvDemo.group}
-                  </span>
+                {gotvTargetLabel && (
+                  <span className="text-muted ml-1 text-xs">· {gotvTargetLabel}</span>
                 )}
               </>
             ) : (
@@ -225,10 +221,8 @@ export function TreasuryOverviewSection({
             <span className="tabular-nums font-medium text-error">
               -{fmt(stateParty.suppressionEstimatedSpend, countryId)}
               <span className="text-muted ml-1">({stateParty.suppressionBudgetPercent}%)</span>
-              {supDemo && (
-                <span className="text-muted ml-1 text-xs">
-                  · {DEMOGRAPHIC_LABELS[supDemo.group] ?? supDemo.group}
-                </span>
+              {suppressionTargetLabel && (
+                <span className="text-muted ml-1 text-xs">· {suppressionTargetLabel}</span>
               )}
             </span>
           </div>
