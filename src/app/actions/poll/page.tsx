@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import type { Character } from "@/lib/db/types";
-import { useCurrency } from "@/contexts/CurrencyContext";
 import { notifyCharacterStatsUpdated } from "@/lib/characterStatsSync";
 import { getHomeCurrency, getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
@@ -26,7 +25,6 @@ const RECENT_POLLS_LIMIT = 5;
 const recentPollsKey = (characterId: string) => `recentPolls:${characterId}`;
 
 export default function PollPage() {
-  const { formatAmount } = useCurrency();
   const { showToast } = useToast();
   const [character, setCharacter] = useState<Character | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -236,8 +234,10 @@ export default function PollPage() {
     hasActionsLarge,
   } = pollData;
   // Server-quoted from the same rules quote execution debits: flat AP cost
-  // per tier plus the intellect-scaled fund cost in ANCHOR units.
-  const fundCost = pollData.fundCost;
+  // per tier plus the intellect-scaled fund cost, already converted to LOCAL
+  // at the frozen campaign rate POST charges.
+  const homeCurrency = getHomeCurrency(character);
+  const fundCostLocal = pollData.fundCostLocal;
   const actionCost = pollData.actionCost;
   const canAfford = selectedTier === "large" ? canAffordLarge : canAffordSmall;
   const hasActions = selectedTier === "large" ? hasActionsLarge : hasActionsSmall;
@@ -251,7 +251,7 @@ export default function PollPage() {
       id: "small" as const,
       name: "Quick poll",
       blurb: "Topline appeal score, estimated voters, and your 5 best and worst voter groups.",
-      fund: pollData.fundCostSmall,
+      fund: pollData.fundCostSmallLocal,
       actions: pollData.actionCostSmall,
       ring: "border-primary bg-primary/5",
       dot: "bg-primary",
@@ -261,7 +261,7 @@ export default function PollPage() {
       name: "Full poll",
       blurb:
         "Complete breakdown by every voter group: population, turnout, reach, appeal, and potential voters.",
-      fund: pollData.fundCostLarge,
+      fund: pollData.fundCostLargeLocal,
       actions: pollData.actionCostLarge,
       ring: "border-secondary bg-secondary/5",
       dot: "bg-secondary",
@@ -345,7 +345,7 @@ export default function PollPage() {
                     </div>
                     <div className="shrink-0 text-right">
                       <div className="text-body-lg font-semibold tabular-nums text-warning">
-                        ${t.fund.toLocaleString()}
+                        {formatCurrencyFaceAmount(t.fund, homeCurrency)}
                       </div>
                       <div className="text-body-sm text-muted">{t.actions} actions</div>
                     </div>
@@ -357,13 +357,16 @@ export default function PollPage() {
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
             <p className="text-body text-muted">
-              Cost <span className="font-semibold text-foreground">{formatAmount(fundCost)}</span>{" "}
+              Cost{" "}
+              <span className="font-semibold text-foreground">
+                {formatCurrencyFaceAmount(fundCostLocal, homeCurrency)}
+              </span>{" "}
               and <span className="font-semibold text-foreground">{actionCost} actions</span>. You
               have{" "}
               <span className={`font-semibold ${canAfford ? "text-success" : "text-error"}`}>
                 {formatCurrencyFaceAmount(
                   character.currencyBalances?.campaign ?? character.funds ?? 0,
-                  getHomeCurrency(character)
+                  homeCurrency
                 )}
               </span>{" "}
               and{" "}
