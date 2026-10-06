@@ -155,9 +155,9 @@ export interface User {
   /** @deprecated Campaign songs no longer autoplay; legacy documents may still carry it. */
   disableAutoplayOnOtherProfiles?: boolean;
   /**
-   * The redesigned interface (new navigation bar + CEO Command Center) is the
-   * default for everyone. This flag is the opt-OUT: an explicit `false` returns
-   * the user to the classic interface. Absent/`true` = new interface.
+   * The modern interface is the default for everyone. This legacy-named flag
+   * now controls the full presentation mode: an explicit `false` selects the
+   * classic interface. Absent/`true` selects the modern interface.
    */
   enableExperimentalUI?: boolean;
   actionsViewMode?: "cards" | "compact";

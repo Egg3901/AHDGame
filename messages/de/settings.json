@@ -107,7 +107,7 @@
     "sections": {
       "accountProfile": { "label": "Profil", "summary": "Benutzername & E-Mail" },
       "identity": { "label": "Verknüpfte Konten", "summary": "Discord, Google" },
-      "appearance": { "label": "Darstellung", "summary": "Design, experimentelle Oberfläche" },
+      "appearance": { "label": "Darstellung", "summary": "Design und Oberflächenstil" },
       "patreon": { "label": "Patreon", "summary": "Unterstützervorteile" },
       "supporterPerks": {
         "label": "Unterstützer-Extras",
@@ -247,8 +247,11 @@
         "solarized": "Solarized"
       },
       "interfaceTitle": "Oberfläche",
-      "classicUi": "Klassische Oberfläche verwenden",
-      "classicUiHint": "Die neue Navigationsleiste und das CEO Command Center sind jetzt Standard. Aktiviere dies, um zur klassischen Navigationsleiste und den alten Konzernseiten zurückzukehren.",
+      "modernUi": "Modern",
+      "modernUiHint": "Das aktuelle Layout mit klarerer Hierarchie, kompakter Navigation und stärkeren Farbakzenten auf Mobilgeräten.",
+      "classicUi": "Klassisch",
+      "classicUiHint": "Die reichere Typografie, Farbe, Tiefe und Navigation von vor der Neugestaltung am 3. Oktober. Aktuelle Spielfunktionen bleiben verfügbar.",
+      "interfaceSaveError": "Die Oberflächeneinstellung konnte nicht gespeichert werden. Die vorherige Auswahl wurde wiederhergestellt.",
       "statusBar": "Statusleiste",
       "statusBarHint": "Wähle, was in der unteren Statusleiste angezeigt wird.",
       "layouts": {

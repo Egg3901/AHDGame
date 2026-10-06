@@ -101,7 +101,7 @@
       },
       "appearance": {
         "label": "Appearance",
-        "summary": "Theme, experimental UI"
+        "summary": "Theme and interface style"
       },
       "patreon": {
         "label": "Patreon",
@@ -277,8 +277,11 @@
         "solarized": "Solarized"
       },
       "interfaceTitle": "Interface",
-      "classicUi": "Use the classic interface",
-      "classicUiHint": "The redesigned navigation bar and the CEO Command Center dashboard are now the default. Turn this on to switch back to the classic navigation bar and corporation pages.",
+      "modernUi": "Modern",
+      "modernUiHint": "The current layout with a cleaner hierarchy, compact navigation, and stronger mobile color cues.",
+      "classicUi": "Classic",
+      "classicUiHint": "The richer typography, color, depth, and navigation style used before the October 3 redesign. Current game features remain available.",
+      "interfaceSaveError": "Could not save the interface preference. Your previous choice was restored.",
       "statusBar": "Status Bar",
       "statusBarHint": "Choose what's shown in the bottom status bar.",
       "layouts": {

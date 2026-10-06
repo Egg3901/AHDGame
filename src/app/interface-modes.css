@@ -1,0 +1,211 @@
+/*
+ * Interface modes intentionally change presentation only. They never remove
+ * controls, data, or post-October features from the document. Classic mode
+ * restores the richer type, depth, color, and motion vocabulary that shipped
+ * immediately before the October 3 redesign while the current component tree
+ * remains the single source of truth for behavior.
+ */
+
+.interface-section-accent {
+  display: inline-block;
+  width: 0;
+  height: 0.75rem;
+  margin-right: 0;
+  border-radius: 999px;
+  background: var(--primary);
+  opacity: 0;
+  transition:
+    width 150ms ease,
+    margin-right 150ms ease,
+    opacity 150ms ease;
+}
+
+[data-interface="classic"] {
+  --interface-panel-tint: color-mix(in srgb, var(--primary) 7%, transparent);
+  --interface-panel-tint-secondary: color-mix(in srgb, var(--secondary) 5%, transparent);
+  --interface-accent-line: color-mix(in srgb, var(--primary) 72%, var(--card-border));
+  --glow-primary: 0 0 20px color-mix(in srgb, var(--primary) 18%, transparent);
+  --glow-primary-sm: 0 0 8px color-mix(in srgb, var(--primary) 28%, transparent);
+}
+
+[data-interface="classic"] body {
+  background-image:
+    radial-gradient(
+      circle at 12% 8%,
+      color-mix(in srgb, var(--primary) 7%, transparent),
+      transparent 30rem
+    ),
+    radial-gradient(
+      circle at 88% 18%,
+      color-mix(in srgb, var(--secondary) 6%, transparent),
+      transparent 34rem
+    );
+  background-attachment: fixed;
+}
+
+[data-interface="classic"] :is(h1, .display-heading) {
+  font-family: var(--font-lora), Georgia, serif;
+}
+
+[data-interface="classic"] .font-serif {
+  font-family: var(--font-lora), Georgia, serif;
+}
+
+[data-interface="classic"] .font-display {
+  font-family: var(--font-fraunces), var(--font-lora), Georgia, serif;
+}
+
+[data-interface="classic"] .gradient-text {
+  color: var(--primary);
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+[data-interface="classic"] .glass-card {
+  border: 1px solid var(--card-border);
+  background: color-mix(in srgb, var(--card) 72%, transparent);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+[data-interface="classic"] main :is(.bg-card, .bg-card-default, .bg-card-elevated) {
+  background-image: linear-gradient(
+    145deg,
+    var(--interface-panel-tint),
+    transparent 46%,
+    var(--interface-panel-tint-secondary)
+  );
+}
+
+[data-interface="classic"]
+  main
+  :is(
+    [data-ui-card],
+    article.rounded-xl.border.bg-card,
+    section.rounded-xl.border.bg-card,
+    div.rounded-xl.border.bg-card,
+    article.rounded-2xl.border.bg-card,
+    section.rounded-2xl.border.bg-card
+  ) {
+  box-shadow:
+    inset 3px 0 0 var(--interface-accent-line),
+    var(--shadow-sm);
+}
+
+[data-interface="classic"] .section-label {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: var(--text-body-xs);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+[data-interface="classic"] .section-label .interface-section-accent {
+  width: 2px;
+  margin-right: 0.5rem;
+  opacity: 0.8;
+}
+
+[data-interface="classic"] .card-sub-label {
+  color: color-mix(in srgb, var(--muted) 72%, transparent);
+  font-weight: 500;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+[data-interface="classic"] .card-hover {
+  transition:
+    transform 200ms ease,
+    box-shadow 200ms ease,
+    border-color 200ms ease;
+}
+
+[data-interface="classic"] .card-hover:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--card-border));
+  box-shadow: var(--shadow-md);
+}
+
+[data-interface="classic"] :is(button, a, input, select, textarea):focus-visible {
+  outline-color: var(--primary);
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 4px var(--primary),
+    var(--glow-primary-sm);
+}
+
+[data-interface="classic"] main .bg-primary:is(button, a) {
+  box-shadow: var(--glow-primary-sm);
+}
+
+[data-interface="classic"] main tbody tr:hover {
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+/* The modern mobile UI stays clean, but its important surfaces carry enough
+   theme color to remain distinct on a narrow screen. */
+@media (max-width: 640px) {
+  [data-interface="classic"] body {
+    background-attachment: scroll;
+  }
+
+  [data-interface="modern"]
+    main
+    :is(
+      [data-ui-card],
+      article.rounded-xl.border.bg-card,
+      section.rounded-xl.border.bg-card,
+      div.rounded-xl.border.bg-card,
+      article.rounded-2xl.border.bg-card,
+      section.rounded-2xl.border.bg-card
+    ) {
+    background-image: linear-gradient(
+      150deg,
+      color-mix(in srgb, var(--primary) 6%, transparent),
+      transparent 48%,
+      color-mix(in srgb, var(--secondary) 4%, transparent)
+    );
+    box-shadow:
+      inset 0 2px 0 color-mix(in srgb, var(--primary) 58%, var(--card-border)),
+      var(--shadow-sm);
+  }
+
+  [data-interface="modern"] .section-label {
+    display: flex;
+    align-items: center;
+  }
+
+  [data-interface="modern"] .section-label .interface-section-accent {
+    width: 2px;
+    margin-right: 0.5rem;
+    opacity: 0.72;
+  }
+
+  [data-interface="modern"] main h1 {
+    color: color-mix(in srgb, var(--foreground) 82%, var(--primary));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .interface-section-accent,
+  [data-interface-option],
+  [data-interface="classic"] .card-hover {
+    transition-duration: 0.01ms;
+  }
+
+  [data-interface="classic"] .card-hover:hover {
+    transform: none;
+  }
+}
+
+@media (forced-colors: active) {
+  [data-interface-option][data-selected="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
