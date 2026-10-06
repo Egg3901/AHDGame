@@ -1,7 +1,7 @@
 import type { PrimaryMetricDefinition } from "./catalog";
 import { politicalScoreFromLegacyValue } from "@/lib/politicalMetrics/derive/legacyInversion";
 
-export type ResetMetricScoreCountry = "US" | "UK" | "JP";
+export type ResetMetricScoreCountry = "US" | "UK" | "JP" | "IE" | "SCO" | "WAL";
 
 function clampScore(value: number): number {
   return Math.max(0, Math.min(100, value));

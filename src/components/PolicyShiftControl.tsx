@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import { Modal } from "@/components/ui";
+import { POLICY_SHIFT_ACTION_COST } from "@/lib/positionUpdateVouchers/rules";
 
 interface PolicyShiftControlProps {
   axis: "economic" | "social";
   value: number;
   onShift: (axis: "economic" | "social", direction: -1 | 1) => Promise<void>;
   currentActions: number;
+  useVoucher?: boolean;
+  disabled?: boolean;
 }
 
 export function PolicyShiftControl({
@@ -15,29 +18,31 @@ export function PolicyShiftControl({
   value,
   onShift,
   currentActions,
+  useVoucher = false,
+  disabled = false,
 }: PolicyShiftControlProps) {
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState<{ direction: -1 | 1 } | null>(null);
 
   const leftLabel = axis === "economic" ? "Progressive" : "Liberal";
   const rightLabel = axis === "economic" ? "Conservative" : "Traditional";
-  const ACTION_COST = 15;
 
   const handleShiftClick = (direction: -1 | 1) => {
+    if (disabled) return;
     // Check bounds
     if ((direction === -1 && value <= -5) || (direction === 1 && value >= 5)) {
       return;
     }
     // Check actions
-    if (currentActions < ACTION_COST) {
-      alert(`Not enough actions. You need ${ACTION_COST} actions.`);
+    if (!useVoucher && currentActions < POLICY_SHIFT_ACTION_COST) {
+      alert(`Not enough actions. You need ${POLICY_SHIFT_ACTION_COST} actions.`);
       return;
     }
     setShowConfirm({ direction });
   };
 
   const confirmShift = async () => {
-    if (!showConfirm) return;
+    if (!showConfirm || disabled || loading) return;
     setLoading(true);
     try {
       await onShift(axis, showConfirm.direction);
@@ -73,7 +78,7 @@ export function PolicyShiftControl({
           <p className="text-sm text-muted">Shift your stance on {axis} issues.</p>
         </div>
         <div className="text-xs font-medium px-2 py-1 rounded-full bg-secondary/10 text-secondary">
-          Cost: {ACTION_COST} Actions
+          {useVoucher ? "Cost: 1 Voucher" : `Cost: ${POLICY_SHIFT_ACTION_COST} Actions`}
         </div>
       </div>
 
@@ -81,9 +86,15 @@ export function PolicyShiftControl({
         {/* Left Shift Button */}
         <button
           onClick={() => handleShiftClick(-1)}
-          disabled={loading || value <= -5 || currentActions < ACTION_COST}
+          disabled={
+            disabled ||
+            loading ||
+            value <= -5 ||
+            (!useVoucher && currentActions < POLICY_SHIFT_ACTION_COST)
+          }
           className="flex h-10 w-10 items-center justify-center rounded-full border border-card-border bg-background transition-colors hover:bg-card hover:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
           title={`Shift ${leftLabel}`}
+          aria-label={`Shift ${leftLabel}`}
         >
           ←
         </button>
@@ -119,9 +130,15 @@ export function PolicyShiftControl({
         {/* Right Shift Button */}
         <button
           onClick={() => handleShiftClick(1)}
-          disabled={loading || value >= 5 || currentActions < ACTION_COST}
+          disabled={
+            disabled ||
+            loading ||
+            value >= 5 ||
+            (!useVoucher && currentActions < POLICY_SHIFT_ACTION_COST)
+          }
           className="flex h-10 w-10 items-center justify-center rounded-full border border-card-border bg-background transition-colors hover:bg-card hover:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
           title={`Shift ${rightLabel}`}
+          aria-label={`Shift ${rightLabel}`}
         >
           →
         </button>
@@ -138,36 +155,52 @@ export function PolicyShiftControl({
         </p>
 
         <div className="mb-6 space-y-2 rounded-lg bg-background p-4 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted">Action cost:</span>
-            <span className="font-medium text-red-400">-{ACTION_COST} Actions</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Infamy:</span>
-            <span className="font-medium text-red-400">+5 Points</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Political influence:</span>
-            <span className="font-medium text-red-400">-5% Reduction</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">National influence:</span>
-            <span className="font-medium text-red-400">-5% Reduction</span>
-          </div>
+          {useVoucher ? (
+            <>
+              <div className="flex justify-between">
+                <span className="text-muted">Voucher cost:</span>
+                <span className="font-medium text-primary">-1 Voucher</span>
+              </div>
+              <p className="pt-1 text-xs text-muted">
+                No actions, infamy, influence, or cooldown will be applied.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex justify-between">
+                <span className="text-muted">Action cost:</span>
+                <span className="font-medium text-red-400">
+                  -{POLICY_SHIFT_ACTION_COST} Actions
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">Infamy:</span>
+                <span className="font-medium text-red-400">+5 Points</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">Political influence:</span>
+                <span className="font-medium text-red-400">-5% Reduction</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">National influence:</span>
+                <span className="font-medium text-red-400">-5% Reduction</span>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex justify-end gap-3">
           <button
             onClick={() => setShowConfirm(null)}
             className="rounded-lg border border-card-border px-4 py-2 text-sm font-medium transition-colors hover:bg-secondary/10"
-            disabled={loading}
+            disabled={loading || disabled}
           >
             Cancel
           </button>
           <button
             onClick={confirmShift}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
-            disabled={loading}
+            disabled={loading || disabled}
           >
             {loading ? "Shifting..." : "Confirm shift"}
           </button>

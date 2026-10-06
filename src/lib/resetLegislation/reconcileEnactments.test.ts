@@ -7,6 +7,29 @@ vi.mock("./enactBill", () => ({ applyResetLawBillEnactment: vi.fn() }));
 import { applyResetLawBillEnactment } from "./enactBill";
 import { reconcileResetLawEnactments } from "./reconcileEnactments";
 
+const v2State = {
+  _id: "current",
+  resetWorldId: "world-1",
+  metricsSystemVersion: "v2",
+  legislationSystemVersion: "v2",
+  resetVersionSeeds: {
+    metrics: {
+      worldId: "world-1",
+      revision: 3,
+      sourceTurn: 1,
+      completedAt: "2026-10-04T00:00:00.000Z",
+      verificationHash: "metrics",
+    },
+    legislation: {
+      worldId: "world-1",
+      revision: 6,
+      sourceTurn: 1,
+      completedAt: "2026-10-04T00:00:00.000Z",
+      verificationHash: "legislation",
+    },
+  },
+} as never;
+
 describe("reconcileResetLawEnactments", () => {
   let db: MockDb;
   const cursor = (rows: unknown[]) => ({ toArray: vi.fn().mockResolvedValue(rows) });
@@ -24,7 +47,7 @@ describe("reconcileResetLawEnactments", () => {
     );
     vi.mocked(applyResetLawBillEnactment).mockResolvedValue({ applied: true, programs: 1 });
 
-    await expect(reconcileResetLawEnactments(db as unknown as Db, 12)).resolves.toEqual({
+    await expect(reconcileResetLawEnactments(db as unknown as Db, 12, v2State)).resolves.toEqual({
       candidates: 1,
       applied: 1,
     });
@@ -46,10 +69,17 @@ describe("reconcileResetLawEnactments", () => {
   it("does no transactional work when every enacted bill has a receipt", async () => {
     db.collectionMocks.bills!.aggregate.mockReturnValue(cursor([]));
 
-    await expect(reconcileResetLawEnactments(db as unknown as Db, 12)).resolves.toEqual({
+    await expect(reconcileResetLawEnactments(db as unknown as Db, 12, v2State)).resolves.toEqual({
       candidates: 0,
       applied: 0,
     });
     expect(applyResetLawBillEnactment).not.toHaveBeenCalled();
+  });
+
+  it("does not scan v2 enactments in a v1 world", async () => {
+    await expect(
+      reconcileResetLawEnactments(db as unknown as Db, 12, { _id: "current" } as never)
+    ).resolves.toEqual({ candidates: 0, applied: 0 });
+    expect(db.collectionMocks.bills!.aggregate).not.toHaveBeenCalled();
   });
 });

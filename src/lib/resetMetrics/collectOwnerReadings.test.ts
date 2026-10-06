@@ -111,7 +111,7 @@ describe("first live v2 metric owners", () => {
     const db = createMockDb();
     mockOwnerSources(db);
     const readings = await collectResetMetricOwnerReadings(db as unknown as Db, boards, 2);
-    expect(Object.keys(readings)).toHaveLength(74);
+    expect(Object.keys(readings)).toHaveLength(83);
     expect(readings["US:national"]!.updates["07"]?.value).toBe(4);
     expect(readings["US:national"]!.updates["09"]?.value).toBe(-1);
     expect(readings["US:national"]!.updates["10"]?.value).toBe(50);

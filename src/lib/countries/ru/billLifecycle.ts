@@ -12,8 +12,14 @@ import { runBillLifecycle } from "../../turn/billLifecycle/engine";
 import { passesRussianDumaLawChamber } from "./rules/dumaElectoralLaw";
 import { passesRussianCouncilFormationLaw } from "./rules/councilComposition";
 import { passesRussianConstitutionalDecision } from "./rules/constitutionalDecisions";
+import type { BillLifecycleRuntimeContext } from "../../turn/billLifecycle/types";
 
-export async function processRussian1991Bills(db: Db, now: Date, currentTurn: number) {
+export async function processRussian1991Bills(
+  db: Db,
+  now: Date,
+  currentTurn: number,
+  rng?: () => number
+) {
   const offices = await loadRuntimeCountryOffices(db, "RU", "1991-default");
   if (
     offices.config.legislature.lowerChamber.elected === false ||
@@ -55,19 +61,22 @@ export async function processRussian1991Bills(db: Db, now: Date, currentTurn: nu
       );
     };
   }
-  const result = await runBillLifecycle(db, lifecycle, now, currentTurn);
+  const result = await runBillLifecycle(db, lifecycle, now, currentTurn, "1991-default", rng);
   return { enacted: result.billsPassed, failed: result.billsFailed };
 }
 
 export async function processRUBillLifecycle(
-  now: Date
+  now: Date,
+  context?: BillLifecycleRuntimeContext
 ): Promise<{ enacted: number; failed: number }> {
-  const db = await getDb();
-  const state = await getGameState(db);
-  if (state?.preset !== "1991-default") {
+  const db = context?.db ?? (await getDb());
+  const state = context ? null : await getGameState(db);
+  const preset = context?.preset ?? state?.preset;
+  const currentTurn = context?.currentTurn ?? state?.currentTurn ?? 1;
+  if (preset !== "1991-default") {
     const { processOnePartyBillLifecycleForCountry } =
       await import("../../turn/onePartyBillLifecycle");
-    return processOnePartyBillLifecycleForCountry("RU", now);
+    return processOnePartyBillLifecycleForCountry("RU", now, context);
   }
-  return processRussian1991Bills(db, now, state.currentTurn ?? 1);
+  return processRussian1991Bills(db, now, currentTurn, context?.rng);
 }

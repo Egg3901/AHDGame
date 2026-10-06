@@ -29,6 +29,7 @@ import { SubsidySectorSelect } from "@/components/bills/SubsidySectorSelect";
 import { TaxRateSliderControl } from "@/components/legislation/TaxRateSliderControl";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
+import { LegislationSystemGate } from "@/components/legislation/LegislationSystemGate";
 import { GuidedLegislationModal } from "@/components/legislation/GuidedLegislationModal";
 
 function LegacyProposeStateBillModal({
@@ -740,11 +741,11 @@ function LegacyProposeStateBillModal({
 export function ProposeStateBillModal(props: Parameters<typeof LegacyProposeStateBillModal>[0]) {
   const flags = useWorldFlags();
   const countryId = props.countryId.toUpperCase() as CountryId;
+  if (!flags.loaded || flags.failed) {
+    return <LegislationSystemGate failed={flags.failed} onClose={props.onClose} />;
+  }
   const useV2 =
-    flags.loaded &&
-    !flags.failed &&
-    flags.resetSystemVersions.legislation === "v2" &&
-    flags.resetV2Countries.includes(countryId);
+    flags.resetSystemVersions.legislation === "v2" && flags.resetV2Countries.includes(countryId);
   if (useV2) {
     return (
       <GuidedLegislationModal

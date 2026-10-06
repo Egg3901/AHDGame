@@ -4,8 +4,7 @@ import { useWorldFlags } from "@/hooks/useWorldFlags";
 import type { ResetMetricCountry } from "@/components/metrics/ResetMetricBoard";
 import { RegionRegistryTab } from "./RegionRegistryTab";
 import { ResetRegionMetricsTab } from "./ResetRegionMetricsTab";
-
-const RESET_COUNTRIES = new Set<string>(["US", "UK", "JP"]);
+import { isResetV2Country } from "@/lib/resetVersions/rules";
 
 export function RegionMetricsTab({
   countryId,
@@ -17,7 +16,7 @@ export function RegionMetricsTab({
   regionName: string;
 }) {
   const { loaded, failed, resetSystemVersions, resetV2Countries } = useWorldFlags();
-  const resetCountry = RESET_COUNTRIES.has(countryId);
+  const resetCountry = isResetV2Country(countryId);
   const selectedV2 = loaded && resetSystemVersions.metrics === "v2" && resetCountry;
   const verifiedV2 = selectedV2 && resetV2Countries.includes(countryId);
 

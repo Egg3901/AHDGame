@@ -76,6 +76,9 @@ const treasurySeat: Record<ResetCountry, string> = {
   US: "secretary_of_treasury",
   UK: "chancellor",
   JP: "finance_minister",
+  IE: "minister_for_finance",
+  SCO: "financeSecretary",
+  WAL: "financeSecretary",
 };
 
 const nationalTaxes: ResetTaxDefinition[] = federal.flatMap(([id, title, taxType, us, uk, jp]) => [
@@ -106,7 +109,43 @@ const nationalTaxes: ResetTaxDefinition[] = federal.flatMap(([id, title, taxType
     existingLegislationTypeId: jp,
     overseeingSeatId: treasurySeat.JP,
   },
+  {
+    id,
+    title,
+    taxType,
+    country: "IE",
+    scope: "national",
+    existingLegislationTypeId: (
+      {
+        T01: "ie_income_tax_rate",
+        T02: "ie_corporate_tax_rate",
+        T03: "ie_foreign_corporate_tax_rate",
+        T04: "ie_prsi",
+        T05: "ie_vat_rate",
+        T06: "ie_customs_tariff_rate",
+      } as const
+    )[id as "T01" | "T02" | "T03" | "T04" | "T05" | "T06"],
+    overseeingSeatId: treasurySeat.IE,
+  },
+  ...(["SCO", "WAL"] as const).map((country) => ({
+    id,
+    title,
+    taxType,
+    country,
+    scope: "national" as const,
+    existingLegislationTypeId: uk,
+    overseeingSeatId: treasurySeat[country],
+  })),
 ]);
+nationalTaxes.push({
+  id: "T07",
+  title: "Local property tax",
+  taxType: "propertyTax",
+  country: "IE",
+  scope: "national",
+  existingLegislationTypeId: "ie_local_property_tax",
+  overseeingSeatId: treasurySeat.IE,
+});
 
 const regionalTaxes: ResetTaxDefinition[] = [
   {

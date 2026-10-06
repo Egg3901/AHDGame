@@ -184,7 +184,7 @@ export interface StateOverviewResult {
     parties: Array<{ id: string; abbr: string; name: string; color: string; regPct: number }>;
     independent: number;
     unregistered: number;
-    /** True once at least one party has a real Reg value in this state. */
+    /** True when this country's state registration pool exists, even with no party Reg. */
     seeded: boolean;
   };
   regionalExecutive: RegionalExecutive | null;

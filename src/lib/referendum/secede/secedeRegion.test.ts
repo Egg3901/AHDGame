@@ -16,6 +16,9 @@ vi.mock("@/lib/nationalMetrics", () => ({
 vi.mock("@/lib/turn/history/recordCountryEvent", () => ({
   recordCountryEvent: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("./promoteResetV2", () => ({
+  promoteResetV2ForIndependence: vi.fn().mockResolvedValue({ promoted: false }),
+}));
 
 import { makeInMemoryStore } from "@/lib/test-utils/inMemoryStore";
 import { secedeRegion } from "./secedeRegion";
@@ -25,6 +28,7 @@ import {
   ensureSCOGovernorElections,
   ensureSCORegionalCouncilElections,
 } from "@/lib/turn/perpetualElections";
+import { promoteResetV2ForIndependence } from "./promoteResetV2";
 
 function seedWorld() {
   const male = Array.from({ length: 101 }, () => 100);
@@ -156,5 +160,6 @@ describe("secedeRegion", () => {
     expect(
       await secedeRegion(db, { regionId: "SCO", fromCountryId: "UK", currentTurn: 301 })
     ).toEqual({ ok: true, skipped: "already-seceded" });
+    expect(promoteResetV2ForIndependence).toHaveBeenLastCalledWith(db, "SCO");
   });
 });

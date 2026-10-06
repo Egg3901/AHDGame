@@ -165,13 +165,6 @@ export async function applyWhipVotesToBill(
       ? "vetoOverrideVotes"
       : "votes";
 
-  const existingVotes =
-    (isOtherChamber
-      ? bill.otherChamberVotes
-      : isUsOverride
-        ? bill.vetoOverrideVotes
-        : bill.votes) ?? {};
-
   /**
    * On a CONCURRENT bill these forks are per-OFFICIAL, not per-bill.
    *
@@ -337,7 +330,7 @@ export async function applyWhipVotesToBill(
   }
 
   await db.collection<Bill>("bills").updateOne(
-    { _id: bill._id },
+    { _id: bill._id, status: bill.status },
     {
       $set: setFields,
       $inc: incFields,
@@ -498,7 +491,7 @@ export async function applyWhipVotesToStateBill(
 
   await db
     .collection<StateBill>("stateBills")
-    .updateOne({ _id: bill._id }, { $set: setFields, $inc: incFields });
+    .updateOne({ _id: bill._id, status: bill.status }, { $set: setFields, $inc: incFields });
 
   if (predictionOps.length > 0) {
     const now = new Date();

@@ -597,7 +597,7 @@ describe("applyWhipVotes fallback handling", () => {
 
     expect(result).toEqual({ fellInLine: 1, ignored: 0 });
     expect(collections.bills.updateOne).toHaveBeenCalledWith(
-      { _id: bill._id },
+      { _id: bill._id, status: bill.status },
       expect.objectContaining({
         $set: expect.objectContaining({
           [`votes.npp_${npp._id.toString()}`]: "for",
@@ -748,7 +748,7 @@ describe("applyWhipVotes fallback handling", () => {
 
     expect(result).toEqual({ fellInLine: 1, ignored: 0 });
     expect(collections.stateBills.updateOne).toHaveBeenCalledWith(
-      { _id: bill._id },
+      { _id: bill._id, status: bill.status },
       expect.objectContaining({
         $set: expect.objectContaining({
           [`votes.npp_${npp._id.toString()}`]: "for",

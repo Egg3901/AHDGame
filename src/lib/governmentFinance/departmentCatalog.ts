@@ -6,7 +6,7 @@ import { resolveDepartment } from "@/lib/cabinet/rosterEra";
 import { getCabinetMechanics } from "@/lib/constants/cabinetMechanics";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 
-export type DepartmentCountryId = "US" | "UK" | "JP";
+export type DepartmentCountryId = "US" | "UK" | "JP" | "IE" | "SCO" | "WAL";
 
 export type DepartmentKind =
   | "spending_department"
@@ -49,6 +49,58 @@ export interface DepartmentDefinition {
 
 const civil = "civil_operating";
 const capital = "civil_capital";
+
+function successorDepartments(countryId: "SCO" | "WAL"): DepartmentDefinition[] {
+  const nation = countryId === "SCO" ? "Scottish" : "Welsh";
+  const rows: Array<[string, DepartmentKind, string[], PortfolioId[], string]> = [
+    ["executive", "executive_centre", ["deputyFirstMinister"], [], civil],
+    ["finance", "finance_ministry", ["financeSecretary"], ["finance"], civil],
+    [
+      "external_affairs",
+      "spending_department",
+      ["externalAffairsSecretary"],
+      ["foreign_affairs"],
+      civil,
+    ],
+    ["justice", "spending_department", ["justiceSecretary"], ["justice", "intelligence"], civil],
+    ["defence", "spending_department", ["defenceSecretary"], ["defense"], "defense"],
+    ["health", "spending_department", ["healthSecretary"], ["health"], civil],
+    ["education", "spending_department", ["educationSecretary"], ["education_research"], civil],
+    ["economy", "spending_department", ["economySecretary"], ["economy_industry"], civil],
+    [
+      "communities",
+      "spending_department",
+      ["communitiesSecretary"],
+      ["housing", "interior_local_government", "agriculture_rural_affairs"],
+      capital,
+    ],
+    [
+      "transport",
+      "spending_department",
+      ["transportSecretary"],
+      ["transport_infrastructure"],
+      capital,
+    ],
+    ["net_zero", "spending_department", ["netZeroSecretary"], ["environment_energy"], capital],
+    [
+      "social_justice",
+      "spending_department",
+      ["socialJusticeSecretary"],
+      ["labor_social_protection"],
+      civil,
+    ],
+  ];
+  return rows.map(([suffix, kind, controllingPositionIds, portfolioIds, accountPolicyId]) => ({
+    id: `${countryId.toLowerCase()}_${suffix}_directorate`,
+    countryId,
+    kind,
+    canonicalName: `${nation} ${suffix.replaceAll("_", " ")} directorate`,
+    portfolioIds,
+    controllingPositionIds,
+    activeFromYear: 1775,
+    accountPolicyId,
+  }));
+}
 
 export const DEPARTMENT_DEFINITIONS: readonly DepartmentDefinition[] = [
   // United States
@@ -470,6 +522,149 @@ export const DEPARTMENT_DEFINITIONS: readonly DepartmentDefinition[] = [
     activeFromYear: 1775,
     accountPolicyId: "intelligence",
   },
+  // Ireland
+  {
+    id: "ie_finance_department",
+    countryId: "IE",
+    kind: "finance_ministry",
+    canonicalName: "Department of Finance",
+    portfolioIds: ["finance"],
+    controllingPositionIds: ["minister_for_finance"],
+    activeFromYear: 1775,
+    accountPolicyId: civil,
+  },
+  {
+    id: "ie_foreign_affairs_department",
+    countryId: "IE",
+    kind: "spending_department",
+    canonicalName: "Department of Foreign Affairs",
+    portfolioIds: ["foreign_affairs"],
+    controllingPositionIds: ["minister_for_foreign_affairs"],
+    activeFromYear: 1775,
+    accountPolicyId: civil,
+  },
+  {
+    id: "ie_defence_department",
+    countryId: "IE",
+    kind: "spending_department",
+    canonicalName: "Department of Defence",
+    portfolioIds: ["defense"],
+    controllingPositionIds: ["minister_for_defence"],
+    activeFromYear: 1775,
+    accountPolicyId: "defense",
+  },
+  {
+    id: "ie_justice_department",
+    countryId: "IE",
+    kind: "spending_department",
+    canonicalName: "Department of Justice",
+    portfolioIds: ["justice", "intelligence"],
+    controllingPositionIds: ["minister_for_justice"],
+    activeFromYear: 1775,
+    accountPolicyId: civil,
+  },
+  {
+    id: "ie_public_expenditure_department",
+    countryId: "IE",
+    kind: "coordinating_office",
+    canonicalName: "Department of Public Expenditure and Reform",
+    portfolioIds: ["interior_local_government"],
+    controllingPositionIds: ["minister_for_public_expenditure"],
+    activeFromYear: 1775,
+    accountPolicyId: civil,
+  },
+  {
+    id: "ie_enterprise_department",
+    countryId: "IE",
+    kind: "spending_department",
+    canonicalName: "Department of Enterprise, Trade and Employment",
+    portfolioIds: ["economy_industry"],
+    controllingPositionIds: ["minister_for_enterprise"],
+    activeFromYear: 1775,
+    accountPolicyId: civil,
+  },
+  {
+    id: "ie_social_protection_department",
+    countryId: "IE",
+    kind: "spending_department",
+    canonicalName: "Department of Social Protection",
+    portfolioIds: ["labor_social_protection"],
+    controllingPositionIds: ["minister_for_social_protection"],
+    activeFromYear: 1775,
+    accountPolicyId: civil,
+  },
+  {
+    id: "ie_health_department",
+    countryId: "IE",
+    kind: "spending_department",
+    canonicalName: "Department of Health",
+    portfolioIds: ["health"],
+    controllingPositionIds: ["minister_for_health"],
+    activeFromYear: 1775,
+    accountPolicyId: civil,
+  },
+  {
+    id: "ie_education_department",
+    countryId: "IE",
+    kind: "spending_department",
+    canonicalName: "Department of Education",
+    portfolioIds: ["education_research"],
+    controllingPositionIds: ["minister_for_education"],
+    activeFromYear: 1775,
+    accountPolicyId: civil,
+  },
+  {
+    id: "ie_higher_education_department",
+    countryId: "IE",
+    kind: "spending_department",
+    canonicalName: "Department of Further and Higher Education",
+    portfolioIds: ["education_research"],
+    controllingPositionIds: ["minister_for_further_higher_education"],
+    activeFromYear: 1775,
+    accountPolicyId: civil,
+  },
+  {
+    id: "ie_transport_department",
+    countryId: "IE",
+    kind: "spending_department",
+    canonicalName: "Department of Transport",
+    portfolioIds: ["transport_infrastructure"],
+    controllingPositionIds: ["minister_for_transport"],
+    activeFromYear: 1775,
+    accountPolicyId: capital,
+  },
+  {
+    id: "ie_agriculture_department",
+    countryId: "IE",
+    kind: "spending_department",
+    canonicalName: "Department of Agriculture, Food and the Marine",
+    portfolioIds: ["agriculture_rural_affairs"],
+    controllingPositionIds: ["minister_for_agriculture"],
+    activeFromYear: 1775,
+    accountPolicyId: civil,
+  },
+  {
+    id: "ie_environment_department",
+    countryId: "IE",
+    kind: "spending_department",
+    canonicalName: "Department of the Environment, Climate and Communications",
+    portfolioIds: ["environment_energy"],
+    controllingPositionIds: ["minister_for_environment_climate"],
+    activeFromYear: 1775,
+    accountPolicyId: capital,
+  },
+  {
+    id: "ie_housing_department",
+    countryId: "IE",
+    kind: "spending_department",
+    canonicalName: "Department of Housing, Local Government and Heritage",
+    portfolioIds: ["housing"],
+    controllingPositionIds: ["minister_for_housing"],
+    activeFromYear: 1775,
+    accountPolicyId: capital,
+  },
+  ...successorDepartments("SCO"),
+  ...successorDepartments("WAL"),
 ] as const;
 
 export function isDepartmentActive(

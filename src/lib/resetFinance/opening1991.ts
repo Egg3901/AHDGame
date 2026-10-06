@@ -10,8 +10,10 @@ import {
 import { states1991 } from "@/lib/countries/us/data/usStates1991";
 import { ukRegions1991 } from "@/lib/countries/uk/data/ukRegions1991";
 import { jpRegions1991 } from "@/lib/countries/jp/data/jpRegions1991";
+import { ieRegions1991 } from "@/lib/countries/ie/data/ieRegions1991";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import sourceReferences from "@/lib/resetLegislation/openingLawReferences.json";
+import { buildIeOpeningLawReferences1991 } from "@/lib/countries/ie/resetLegislation/openingIeReferences1991";
 import { bridgeOpeningLedger, type OpeningFiscalCorrection } from "./rules/openingLedger";
 import {
   SOURCE_SIGNATURE,
@@ -19,7 +21,7 @@ import {
   fitReviewedOpeningClaims1991,
 } from "./rules/openingSourceClaims1991";
 
-export type ResetOpeningCountry = "US" | "UK" | "JP";
+export type ResetOpeningCountry = "US" | "UK" | "JP" | "IE";
 
 const REGIONAL_ENVELOPE = {
   US: {
@@ -37,8 +39,19 @@ const REGIONAL_ENVELOPE = {
     regionalOwnRevenue: 19_029_600_000_000,
     regionalSpending: 26_958_600_000_000,
   },
+  IE: {
+    grants: 0,
+    regionalOwnRevenue: 1_284_360_000,
+    regionalSpending: 2_201_760_000,
+  },
 } as const;
-const REGIONS_1991 = { US: states1991, UK: ukRegions1991, JP: jpRegions1991 } as const;
+const REGIONS_1991 = {
+  US: states1991,
+  UK: ukRegions1991,
+  JP: jpRegions1991,
+  IE: ieRegions1991,
+} as const;
+const reviewedSourceReferences = [...sourceReferences, ...buildIeOpeningLawReferences1991()];
 
 export function openingFiscalBooks1991() {
   const seeded = new Map(
@@ -63,7 +76,7 @@ export function openingFiscalBooks1991() {
       // national copies. Fund that reviewed mix once; the source seed itself
       // now enforces era availability, so old absolute corrections cannot be
       // subtracted a second time. Receipts and historical debt stay untouched.
-      const fitted = fitReviewedOpeningClaims1991(country, sourceReferences);
+      const fitted = fitReviewedOpeningClaims1991(country, reviewedSourceReferences);
       const corrections: OpeningFiscalCorrection[] = [
         {
           id:
@@ -88,9 +101,9 @@ export function openingFiscalBooks1991() {
       ];
       const bridged = bridgeOpeningLedger(
         {
-          revenue: budget.revenue.total,
+          revenue: Math.round(budget.revenue.total),
           spendingIncludingInterest: budget.spending.total,
-          gdp: budget.gdp,
+          gdp: Math.round(budget.gdp),
           debt: budget.debt.principal,
           annualInterestRate: budget.debt.interestRate,
         },

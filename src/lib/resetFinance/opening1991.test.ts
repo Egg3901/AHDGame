@@ -3,7 +3,7 @@ import { openingFiscalBooks1991 } from "./opening1991";
 import * as budgetSeeds from "@/lib/seeds/reference/budgets";
 
 describe("v2 1991 opening books against current seed signatures", () => {
-  it("reconciles US, UK and JP without silently freeing period pension or grant money", () => {
+  it("reconciles all four opening countries without freeing pension or grant money", () => {
     const books = openingFiscalBooks1991();
     expect(books.US).toMatchObject({
       revenue: 939_213_600_000,
@@ -29,12 +29,19 @@ describe("v2 1991 opening books against current seed signatures", () => {
       annualBalance: 2_873_940_000_000,
       debt: 172_000_000_000_000,
     });
-    for (const country of ["US", "UK", "JP"] as const) {
+    expect(books.IE).toMatchObject({
+      revenue: 12_799_224_186,
+      operating: 10_118_345_916,
+      grants: 0,
+      annualBalance: -154_667_156,
+      debt: 28_355_454_256,
+    });
+    for (const country of ["US", "UK", "JP", "IE"] as const) {
       const book = books[country];
       const source = budgetSeeds
         .getInitialNationalBudgetsForPreset("1991-default")
         .find((row) => row.countryId === country)!;
-      expect(book.revenue).toBe(source.revenue.total);
+      expect(book.revenue).toBe(Math.round(source.revenue.total));
       expect(book.interest).toBe(source.spending.debtInterest);
       expect(-book.annualBalance / book.gdp).toBeLessThanOrEqual(0.005);
       expect(book.corrections.every((correction) => correction.revenueDelta === 0)).toBe(true);

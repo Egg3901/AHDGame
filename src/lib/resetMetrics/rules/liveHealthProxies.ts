@@ -1,6 +1,6 @@
 /** Portable, game-calibrated health access proxies until service ledgers exist. */
 export interface LiveHealthProxyInput {
-  countryId: "US" | "UK" | "JP";
+  countryId: "US" | "UK" | "JP" | "IE" | "SCO" | "WAL";
   uninsuredPercent: number | null;
   physicianRate: number | null;
   preparedness: number | null;

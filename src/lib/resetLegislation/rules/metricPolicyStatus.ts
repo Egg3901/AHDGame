@@ -4,6 +4,7 @@ import type { ResetLawProgramDocument } from "../program";
 import type { LawChoice, LawScope } from "./eligibility";
 import type { LawProgramDelivery } from "./programEffects";
 import { openingChoice1991 } from "./reviewCatalog";
+import type { ResetCountry } from "../fundingOwner";
 
 export type MetricLawState =
   "equilibrium" | "pushing_favorable" | "pushing_unfavorable" | "implementation_stalled";
@@ -40,7 +41,7 @@ function enactedState(points: number, implementationFactor: number): MetricLawSt
  * pressure; the metric owner remains responsible for the observed value.
  */
 export function buildMetricLawStatuses(input: {
-  country: "US" | "UK" | "JP";
+  country: ResetCountry;
   scope: LawScope;
   families: readonly LawFamilyDefinition[];
   references: Readonly<Record<string, OpeningLawReference>>;

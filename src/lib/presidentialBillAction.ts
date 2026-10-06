@@ -6,11 +6,10 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { Bill, BillWhip, Character, ElectedOfficial, GameState } from "@/lib/db/types";
 import { recordAudit } from "@/lib/audit/recordAudit";
-import { applyLegislationEffect } from "@/lib/legislationEffects";
+import { applyEnactedBillEffects } from "@/lib/legislature/commands/applyEnactedBillEffects";
 import { createNotification } from "@/lib/notifications";
 import { validateBudgetImpact } from "./budget/validation";
 import { triggerDebtCeilingCrisis } from "./budget/debt";
-import { onBillEnacted } from "@/lib/billEnactment";
 import { generateBillSignedNews, generateBillVetoedNews } from "@/lib/news";
 import { sendCountryGameEvent, buildBillVetoedDiscordEmbed } from "@/lib/discordWebhooks";
 import { billChamberVoteSplits } from "@/lib/charts/voteSplitChart";
@@ -84,11 +83,6 @@ export async function executePresidentialBillAction(
         error: "This bill is not awaiting presidential action.",
       };
     }
-    await applyLegislationEffect(db, bill).catch((err) =>
-      console.error("Legislation effect apply failed:", err)
-    );
-
-    // Call bill enactment hook (applies tax rate changes, policy updates, etc.)
     const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
     const currentTurn = gameState?.currentTurn ?? 1;
     await captureBillStatusChanged({
@@ -107,9 +101,10 @@ export async function executePresidentialBillAction(
       nationId: bill.countryId ?? "US",
       turn: currentTurn,
     });
-    await onBillEnacted(db, bill, currentTurn).catch((err) =>
-      console.error("Bill enactment hook failed (president sign):", err)
-    );
+    await applyEnactedBillEffects(db, bill, currentTurn, {
+      effect: "Legislation effect apply failed:",
+      enactment: "Bill enactment hook failed (president sign):",
+    });
 
     if (bill.sponsorId) {
       try {
