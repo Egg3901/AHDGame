@@ -1,3 +1,5 @@
+import { platformFromUserAgent } from "@/lib/tickets/platform";
+import { isSingleplayer } from "@/lib/singleplayer";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -75,6 +77,11 @@ export async function POST(request: Request) {
         viewport: context?.viewport ?? { width: 0, height: 0 },
         referrer: context?.referrer,
       },
+      // The apps identify themselves in the user agent, so in-game reports
+      // carry the same platform vocabulary as Discord tickets without asking.
+      platform: platformFromUserAgent(request.headers.get("user-agent") ?? context?.userAgent, {
+        singleplayer: isSingleplayer(),
+      }),
       status: "open",
       screenshotUrl: screenshotUrl ?? undefined,
       sentryEventId: sentryEventId ?? undefined,
@@ -124,6 +131,7 @@ export async function POST(request: Request) {
         impact: doc.impact,
         priority: doc.priority,
         context: doc.context,
+        platform: doc.platform,
         reporterUsername,
         screenshotUrl: doc.screenshotUrl,
       });
