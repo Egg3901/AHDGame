@@ -139,6 +139,14 @@ describe("Bill Lifecycle Integration Tests", () => {
               }),
             };
           }
+          if (name === "countryGameStates") {
+            return {
+              find: vi.fn().mockReturnValue({
+                project: vi.fn().mockReturnThis(),
+                toArray: async () => [{ _id: "US" }],
+              }),
+            };
+          }
           if (name === "bills") {
             return {
               // findOne called before body validation (active-bill check) — must return null

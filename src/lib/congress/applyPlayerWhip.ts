@@ -177,7 +177,7 @@ export async function applyPlayerWhipToBill(
   await db
     .collection<Bill>("bills")
     .updateOne(
-      { _id: bill._id },
+      { _id: bill._id, status: bill.status },
       Object.keys(incFields).length > 0 ? { $set: setFields, $inc: incFields } : { $set: setFields }
     );
 

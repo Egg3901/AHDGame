@@ -126,11 +126,15 @@ describe("validateBillProvisions: media ownership availability", () => {
   };
 
   it("rejects ownership legislation until delivered concentration exceeds the trigger", async () => {
-    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
-      _id: "us_media_communications",
-      name: "Media and Communications Regulation Act",
-      policyDomain: "mediaInformation",
-      policyOptions: [],
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "us_media_communications",
+          name: "Media and Communications Regulation Act",
+          policyDomain: "mediaInformation",
+          policyOptions: [],
+        },
+      ],
     });
     db.collectionMocks.gameState.findOne.mockResolvedValue({
       _id: "current",
@@ -175,11 +179,15 @@ describe("validateBillProvisions: media ownership availability", () => {
   });
 
   it("does not load sector concentration data with regulation disabled", async () => {
-    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
-      _id: "us_media_communications",
-      name: "Media and Communications Regulation Act",
-      policyDomain: "mediaInformation",
-      policyOptions: [],
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "us_media_communications",
+          name: "Media and Communications Regulation Act",
+          policyDomain: "mediaInformation",
+          policyOptions: [],
+        },
+      ],
     });
     db.collectionMocks.gameState.findOne.mockResolvedValue({
       _id: "current",
@@ -351,11 +359,15 @@ describe("declare-war provisions are refused on the legislator path", () => {
 
 describe("validateBillProvisions — policy axis zeros (ticket #1116)", () => {
   it("omits economic and social when they are missing or zero", async () => {
-    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
-      _id: "uk_healthcare",
-      name: "Healthcare",
-      policyDomain: "healthcare",
-      policyOptions: [{ id: "a", name: "A", effectDirection: -1, economic: -2, social: 0 }],
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "uk_healthcare",
+          name: "Healthcare",
+          policyDomain: "healthcare",
+          policyOptions: [{ id: "a", name: "A", effectDirection: -1, economic: -2, social: 0 }],
+        },
+      ],
     });
     const result = await validateBillProvisions(
       db as unknown as Db,
@@ -372,11 +384,15 @@ describe("validateBillProvisions — policy axis zeros (ticket #1116)", () => {
   });
 
   it("keeps a non-zero axis and still omits a zero axis", async () => {
-    db.collectionMocks.legislationTypes.findOne.mockResolvedValue({
-      _id: "uk_healthcare",
-      name: "Healthcare",
-      policyDomain: "healthcare",
-      policyOptions: [{ id: "a", name: "A", effectDirection: -1, economic: -2, social: 0 }],
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "uk_healthcare",
+          name: "Healthcare",
+          policyDomain: "healthcare",
+          policyOptions: [{ id: "a", name: "A", effectDirection: -1, economic: -2, social: 0 }],
+        },
+      ],
     });
     const result = await validateBillProvisions(
       db as unknown as Db,

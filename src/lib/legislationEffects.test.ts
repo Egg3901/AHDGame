@@ -562,6 +562,34 @@ describe("applyLegislationEffect — macro-metric effects are scoped to the enac
     });
     expect(db.collectionMocks["macroMetrics"]!.updateMany).not.toHaveBeenCalled();
   });
+
+  it("loads all policy provision types in one query", async () => {
+    db.collectionMocks["legislationTypes"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "us_growth_act",
+          effectTarget: { metricCategoryId: "economic", metricId: "gdpGrowth" },
+        },
+        {
+          _id: "us_productivity_act",
+          effectTarget: { metricCategoryId: "economic", metricId: "productivity" },
+        },
+      ]),
+    });
+
+    await applyLegislationEffect(db as unknown as Db, {
+      _id: new ObjectId(),
+      countryId: "US",
+      stateId: "federal",
+      provisions: [
+        { legislationTypeId: "us_growth_act", effectDirection: 1 },
+        { legislationTypeId: "us_productivity_act", effectDirection: -1 },
+      ],
+    });
+
+    expect(db.collectionMocks["legislationTypes"]!.find).toHaveBeenCalledOnce();
+    expect(db.collectionMocks["legislationTypes"]!.findOne).not.toHaveBeenCalled();
+  });
 });
 
 describe("applyLegislationEffect — war declarations", () => {
@@ -621,6 +649,25 @@ describe("applyLegislationEffect — war declarations", () => {
         billId: "507f1f77bcf86cd799439011",
         currentTurn: 42,
       })
+    );
+  });
+
+  it("reuses a turn supplied by the lifecycle instead of loading game state again", async () => {
+    const { getCurrentTurn } = await import("@/lib/turn/currentTurn");
+    await applyLegislationEffect(
+      db as unknown as Db,
+      {
+        _id: new ObjectId(),
+        countryId: "US",
+        provisions: [{ type: "declare_war", targetCountry: "CN", warGoal: "punitive" }],
+      } as never,
+      77
+    );
+
+    expect(getCurrentTurn).not.toHaveBeenCalled();
+    expect(declareWarSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ currentTurn: 77 })
     );
   });
 

@@ -146,14 +146,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         return NextResponse.json({ message: `"${bill.title}" was already signed.` });
       }
 
-      await applyLegislationEffect(db, bill).catch((err) =>
-        console.error("Legislation effect apply failed (admin force-sign):", err)
-      );
-
       // Get current turn and record bill enactment
       const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
+      const legislationTypes = await applyLegislationEffect(db, bill, gameState?.currentTurn).catch(
+        (err) => {
+          console.error("Legislation effect apply failed (admin force-sign):", err);
+          return undefined;
+        }
+      );
       if (gameState) {
-        await onBillEnacted(db, bill, gameState.currentTurn).catch((err) =>
+        const enactment = legislationTypes
+          ? onBillEnacted(db, bill, gameState.currentTurn, legislationTypes)
+          : onBillEnacted(db, bill, gameState.currentTurn);
+        await enactment.catch((err) =>
           console.error("Bill enactment hook failed (admin force-sign):", err)
         );
         await flushServerPosthog();

@@ -81,6 +81,50 @@ describe("runBillLifecycle — chamberVote stages (US)", () => {
     expect(set.votesFor).toBe(10);
     expect(set.voteSnapshot).toBeDefined();
     expect(set.otherChamberVotes).toEqual({});
+    expect(db.collectionMocks["bills"]!.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: bill._id,
+        status: "active",
+        votes: bill.votes,
+        votesFor: bill.votesFor,
+        votesAgainst: bill.votesAgainst,
+      }),
+      expect.anything()
+    );
+    expect(db.collectionMocks["bills"]!.findOne).not.toHaveBeenCalled();
+  });
+
+  it("leaves an expired bill active when its votes change before the final claim", async () => {
+    const voterId = new ObjectId();
+    const bill = {
+      _id: new ObjectId(),
+      countryId: "US",
+      status: "active",
+      originChamber: "house",
+      currentChamber: "house",
+      votingEndsOnTurn: 5,
+      votes: { [voterId.toString()]: "for" },
+      votesFor: 1,
+      votesAgainst: 0,
+      votesAbstain: 0,
+      sponsorId: new ObjectId(),
+      coSponsors: [],
+    };
+    db.collectionMocks["bills"]!.find.mockImplementation(findByStatus({ active: [bill] }));
+    officials([
+      { characterId: voterId, nppId: null, countryId: "US", officeType: "house", seatsHeld: 1 },
+    ]);
+    db.collectionMocks["bills"]!.updateOne.mockResolvedValue({
+      acknowledged: true,
+      matchedCount: 0,
+      modifiedCount: 0,
+    } as never);
+
+    const result = await runBillLifecycle(db as unknown as Db, US_NATIONAL_CONFIG, NOW, 10);
+
+    expect(result.billsProcessed).toBe(0);
+    expect(result.billsPassed).toBe(0);
+    expect(result.billsFailed).toBe(0);
   });
 
   it("fails a losing origin bill with a snapshot", async () => {

@@ -395,11 +395,17 @@ export async function applyCentralBankIndependenceProvision(
 export async function onBillEnacted(
   db: Db,
   bill: EnactableBill,
-  currentTurn: number
+  currentTurn: number,
+  knownLegislationTypes?: ReadonlyMap<string, LegislationType>
 ): Promise<void> {
   // Country-scoped national bills use pseudo-state ids (federal, uk_national, ca_national, …).
   const stateId = bill.stateId ?? "federal";
   const isNationalBill = inferCountryIdFromStateId(stateId) != null;
+  let resolvedCountryPromise: Promise<CountryId> | undefined;
+  const getResolvedCountry = (): Promise<CountryId> => {
+    resolvedCountryPromise ??= resolveBillCountryId(db, bill as Bill);
+    return resolvedCountryPromise;
+  };
 
   // National budget gate (audit S6). onBillEnacted is the single choke-point
   // every national enactment path flows through (manual presidential sign,
@@ -451,7 +457,7 @@ export async function onBillEnacted(
   // on landmark laws rather than every local policy change.
   if (isNationalBill) {
     (async () => {
-      const countryId = await resolveBillCountryId(db, bill);
+      const countryId = await getResolvedCountry();
       await recordCountryEvent(db, {
         countryId,
         turn: currentTurn,
@@ -508,7 +514,7 @@ export async function onBillEnacted(
   // and politics phases read next turn, and neither depends on provision state.
   const electoralLawProvisions = (bill.provisions ?? []).filter((p) => p.type === "electoral_law");
   if (electoralLawProvisions.length > 0) {
-    const enactingCountryId = await resolveBillCountryId(db, bill as Bill);
+    const enactingCountryId = await getResolvedCountry();
     for (const p of electoralLawProvisions) {
       await applyElectoralLawProvision(db, p as ElectoralLawProvision, enactingCountryId, {
         turn: currentTurn,
@@ -519,7 +525,7 @@ export async function onBillEnacted(
 
   // Euro adoption: record this country's vote; enable eurozone when all members adopt.
   if (bill.provisions?.some((p) => p.type === "euro_adoption")) {
-    const enactingCountryId = await resolveBillCountryId(db, bill as Bill);
+    const enactingCountryId = await getResolvedCountry();
     await applyEuroAdoptionProvision(
       db,
       enactingCountryId as CountryId,
@@ -533,7 +539,7 @@ export async function onBillEnacted(
     (p) => p.type === "central_bank_independence"
   );
   if (centralBankProvisions.length > 0) {
-    const enactingCountryId = await resolveBillCountryId(db, bill as Bill);
+    const enactingCountryId = await getResolvedCountry();
     for (const p of centralBankProvisions) {
       await applyCentralBankIndependenceProvision(
         db,
@@ -549,7 +555,7 @@ export async function onBillEnacted(
     (p) => p.type === "economic_system_reform"
   );
   if (economicReformProvisions.length > 0) {
-    const enactingCountryId = await resolveBillCountryId(db, bill as Bill);
+    const enactingCountryId = await getResolvedCountry();
     for (const p of economicReformProvisions) {
       await applyEconomicSystemReformProvision(
         db,
@@ -600,12 +606,16 @@ export async function onBillEnacted(
 
   // Batch fetch legislation types for the policy provisions (empty list is a no-op).
   const uniqueLegTypeIds = [...new Set(provisions.map((p) => p.legislationTypeId))];
-  const legTypes = uniqueLegTypeIds.length
-    ? await db
-        .collection<LegislationType>("legislationTypes")
-        .find({ _id: { $in: uniqueLegTypeIds } })
-        .toArray()
-    : [];
+  const knownTypesAreComplete =
+    knownLegislationTypes != null && uniqueLegTypeIds.every((id) => knownLegislationTypes.has(id));
+  const legTypes = knownTypesAreComplete
+    ? uniqueLegTypeIds.map((id) => knownLegislationTypes.get(id) as LegislationType)
+    : uniqueLegTypeIds.length
+      ? await db
+          .collection<LegislationType>("legislationTypes")
+          .find({ _id: { $in: uniqueLegTypeIds } })
+          .toArray()
+      : [];
   const legTypeMap = new Map<string, LegislationType>(
     legTypes.map((lt) => [lt._id, lt] as [string, LegislationType])
   );
@@ -627,7 +637,7 @@ export async function onBillEnacted(
     }
   }
 
-  const resolvedCountry = await resolveBillCountryId(db, bill as Bill);
+  const resolvedCountry = await getResolvedCountry();
   // UK-only archetype routing hook (unchanged behavior for non-UK)
   const billCountryId = resolvedCountry ?? undefined;
 

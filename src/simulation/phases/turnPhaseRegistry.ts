@@ -903,12 +903,21 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         const countryBillPhaseEntries = Object.entries(COUNTRY_BILL_PHASES).filter(([id]) =>
           registeredForBills.has(id as CountryId)
         );
+        const billLifecycleContext = {
+          db,
+          currentTurn: newTurn,
+          preset: gameState.preset,
+        };
         const billPhaseResults = await Promise.all([
-          runtime.runPhase("billLifecycle", () => processBillLifecycle(realNow)),
-          ...countryBillPhaseEntries.map(([, entry]) =>
-            runtime.runPhase(entry.phaseName, () => entry.fn(realNow))
+          runtime.runPhase("billLifecycle", () =>
+            processBillLifecycle(realNow, billLifecycleContext)
           ),
-          runtime.runPhase("stateBillTimers", () => processStateBillTimers(realNow)),
+          ...countryBillPhaseEntries.map(([, entry]) =>
+            runtime.runPhase(entry.phaseName, () => entry.fn(realNow, billLifecycleContext))
+          ),
+          runtime.runPhase("stateBillTimers", () =>
+            processStateBillTimers(realNow, undefined, billLifecycleContext)
+          ),
           runtime.runPhase("cabinetNominations", () => processCabinetNominationLifecycle(realNow)),
           // SCOTUS (#3598): runs in the same parallel group as cabinetNominations
           // (a like-shaped Senate-confirmation lifecycle) and BEFORE

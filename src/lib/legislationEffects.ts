@@ -57,21 +57,17 @@ export function getNonPolicyProvisionScope(stateId: string | undefined): "nation
 
 async function applyOneProvision(
   db: Db,
-  legislationTypeId: string,
+  legislationType: LegislationType | undefined,
   effectDirection: number,
   countryId: CountryId | null
 ): Promise<void> {
   if (effectDirection == null || effectDirection === 0) return;
-
-  const lt = await db
-    .collection<LegislationType>("legislationTypes")
-    .findOne({ _id: legislationTypeId });
-  if (!lt?.effectTarget) return;
+  if (!legislationType?.effectTarget) return;
 
   const delta = getLegislationEffectDelta(effectDirection);
   if (delta === 0) return;
 
-  const { metricCategoryId, metricId } = lt.effectTarget;
+  const { metricCategoryId, metricId } = legislationType.effectTarget;
   const path = `${metricCategoryId}.${metricId}.value`;
   // Macro paths write the enacting country's macroMetrics docs (regions plus
   // the national rollup, which all carry `countryId`). This used to be an
@@ -146,11 +142,41 @@ export async function applyLegislationEffect(
     | "countryId"
     | "stateId"
     | "nppSponsored"
-  >
-): Promise<void> {
+  >,
+  currentTurn?: number
+): Promise<Map<string, LegislationType>> {
   // Which country's board a political effect lands on. Hoisted because the
   // per-provision `countryId` below is scoped to the non-policy branch.
   const billCountryId = getBillCountryId(bill);
+  const policyTypeIds = Array.from(
+    new Set(
+      bill.provisions?.length
+        ? bill.provisions.filter(isPolicyProvision).map((p) => p.legislationTypeId)
+        : bill.legislationTypeId
+          ? [bill.legislationTypeId]
+          : []
+    )
+  );
+  const legislationTypes = new Map<string, LegislationType>();
+  if (policyTypeIds.length === 1) {
+    const legislationType = await db
+      .collection<LegislationType>("legislationTypes")
+      .findOne({ _id: policyTypeIds[0] });
+    if (legislationType) legislationTypes.set(legislationType._id, legislationType);
+  } else if (policyTypeIds.length > 1) {
+    const loaded = await db
+      .collection<LegislationType>("legislationTypes")
+      .find({ _id: { $in: policyTypeIds } })
+      .toArray();
+    for (const legislationType of loaded) {
+      legislationTypes.set(legislationType._id, legislationType);
+    }
+  }
+  let resolvedTurn = currentTurn;
+  const enactmentTurn = async (): Promise<number> => {
+    resolvedTurn ??= await getCurrentTurn(db);
+    return resolvedTurn;
+  };
   if (bill.provisions?.length) {
     for (const [provisionIndex, p] of bill.provisions.entries()) {
       if (!isPolicyProvision(p)) {
@@ -170,7 +196,7 @@ export async function applyLegislationEffect(
           // assets are taken. Best-effort: a snapshot failure must not block the
           // actual taking below.
           try {
-            const snapshotTurn = await getCurrentTurn(db);
+            const snapshotTurn = await enactmentTurn();
             const snapshot = await computeNationalizationProvisionDetail(
               db,
               countryId,
@@ -223,7 +249,7 @@ export async function applyLegislationEffect(
             countryId,
             p.action === "ratify",
             String(bill._id),
-            await getCurrentTurn(db)
+            await enactmentTurn()
           );
         } else if (p.type === "international_organization") {
           // International-organization membership actions (Foreign Policy). Fund
@@ -261,7 +287,7 @@ export async function applyLegislationEffect(
               defender: p.targetCountry,
               warGoal: p.warGoal,
               billId: String(bill._id),
-              currentTurn: await getCurrentTurn(db),
+              currentTurn: await enactmentTurn(),
             });
           }
         } else if (p.type === "join_conflict") {
@@ -276,7 +302,7 @@ export async function applyLegislationEffect(
             // Never switch a country's side: it can have been dragged onto the
             // other one by its own declaration while this bill was on the floor.
             if (!(opposing as string[]).includes(countryId)) {
-              const currentTurn = await getCurrentTurn(db);
+              const currentTurn = await enactmentTurn();
               const preparation = bill.nppSponsored
                 ? await prepareAutonomousWarEntry(
                     db,
@@ -315,7 +341,7 @@ export async function applyLegislationEffect(
           const wasBanned = p.banAction === "ban" ? await isUnionsBanned(db, countryId) : false;
           await applyUnionLawProvision(db, countryId, p);
           if (p.banAction === "ban" && !wasBanned) {
-            await triggerUnionBanStrike(db, countryId, await getCurrentTurn(db));
+            await triggerUnionBanStrike(db, countryId, await enactmentTurn());
           }
         } else if (p.type === "create_department") {
           // Structural act: bring a seat into existence regardless of its era.
@@ -344,12 +370,23 @@ export async function applyLegislationEffect(
           }
         }
       } else {
-        await applyOneProvision(db, p.legislationTypeId, p.effectDirection, billCountryId);
+        await applyOneProvision(
+          db,
+          legislationTypes.get(p.legislationTypeId),
+          p.effectDirection,
+          billCountryId
+        );
       }
     }
-    return;
+    return legislationTypes;
   }
   if (bill.legislationTypeId && bill.effectDirection != null) {
-    await applyOneProvision(db, bill.legislationTypeId, bill.effectDirection, billCountryId);
+    await applyOneProvision(
+      db,
+      legislationTypes.get(bill.legislationTypeId),
+      bill.effectDirection,
+      billCountryId
+    );
   }
+  return legislationTypes;
 }

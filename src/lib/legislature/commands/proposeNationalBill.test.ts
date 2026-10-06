@@ -14,6 +14,9 @@ vi.mock("@/lib/countryState", () => ({
 vi.mock("@/lib/countryAccess", () => ({
   getEnabledCountryIds: vi.fn().mockResolvedValue(["CN", "US"]),
 }));
+vi.mock("@/lib/achievements/triggers", () => ({
+  checkBillSponsoredAchievements: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { proposeNationalBill } from "./proposeNationalBill";
 
@@ -122,6 +125,36 @@ describe("proposeNationalBill — origin/current chamber storage", () => {
     const bill = insertedBill();
     expect(bill.originChamber).toBe("house");
     expect(bill.currentChamber).toBe("house");
+  });
+
+  it("preserves the US joint-bill lane when using the shared national command", async () => {
+    const { authUser } = seatDelegate({ countryId: "US", officeType: "senate" });
+
+    const result = await proposeNationalBill(db as unknown as Db, "US", authUser, {
+      title: "A Joint US Bill",
+      summary: "A test bill.",
+      chamber: "joint",
+      category: "custom",
+      provisions: [],
+    });
+
+    expect(result.status).toBe(201);
+    expect(insertedBill()).toMatchObject({ originChamber: "joint", currentChamber: "house" });
+  });
+
+  it("does not let a US member originate a bill in the other chamber", async () => {
+    const { authUser } = seatDelegate({ countryId: "US", officeType: "house" });
+
+    const result = await proposeNationalBill(db as unknown as Db, "US", authUser, {
+      title: "Wrong Chamber",
+      summary: "A test bill.",
+      chamber: "senate",
+      category: "custom",
+      provisions: [],
+    });
+
+    expect(result.status).toBe(403);
+    expect(db.collectionMocks.bills!.insertOne).not.toHaveBeenCalled();
   });
   it.each([
     [{}, "unionCongressDeputy", "unionCongress"],
