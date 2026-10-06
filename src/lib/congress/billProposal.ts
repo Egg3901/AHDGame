@@ -53,7 +53,7 @@ import { isLegislationTypeActive } from "@/lib/era/legislationCatalog";
 import { validateBillAdministration } from "@/lib/legislature/jurisdiction";
 import { findAdministrationConflict } from "@/lib/legislature/administrationConflictCheck";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
-import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { isResetV2Country, resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 import { loadReviewedLawCatalog } from "@/lib/resetLegislation/loadReviewedCatalog";
 import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 import type { LawChoice } from "@/lib/resetLegislation/rules/eligibility";
@@ -122,7 +122,7 @@ export async function validateBillProvisions(
     CATEGORY_TO_POLICY_DOMAINS[category as keyof typeof CATEGORY_TO_POLICY_DOMAINS] ?? [];
   const { year: eraYear, currentTurn, mediaRegulation } = await getEraContext(db);
   const resetState =
-    sourceCountry && ["US", "UK", "JP"].includes(sourceCountry)
+    sourceCountry && isResetV2Country(sourceCountry)
       ? await db.collection<GameState>("gameState").findOne(
           { _id: "current" },
           {
@@ -185,7 +185,7 @@ export async function validateBillProvisions(
       };
       if (
         !sourceCountry ||
-        !["US", "UK", "JP"].includes(sourceCountry) ||
+        !isResetV2Country(sourceCountry) ||
         selection.scope !== "national" ||
         selection.regionId !== undefined ||
         typeof selection.familyId !== "string" ||

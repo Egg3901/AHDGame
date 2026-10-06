@@ -21,7 +21,7 @@ describe("1991 reset metric opening", () => {
     }
     expect(
       Object.values(migration).reduce((sum, regions) => sum + Object.keys(regions).length, 0)
-    ).toBe(71);
+    ).toBe(79);
   });
 
   it("feeds cohorts the same rebased fertility targets as the v2 opening board", () => {
@@ -47,14 +47,14 @@ describe("1991 reset metric opening", () => {
     }
   });
 
-  it("contains complete, finite, scoped boards for all three countries and 71 regions", () => {
+  it("contains complete, finite, scoped boards for all four countries and 79 regions", () => {
     const rows = buildOpeningMetricSnapshots1991("world-test", 1);
     const nationalCount = primaryMetrics.filter(
       (metric) => metric.aggregation === "national"
     ).length;
-    expect(rows).toHaveLength(74);
-    expect(rows.filter((row) => row.scope === "national")).toHaveLength(3);
-    expect(new Set(rows.map((row) => row._id)).size).toBe(74);
+    expect(rows).toHaveLength(83);
+    expect(rows.filter((row) => row.scope === "national")).toHaveLength(4);
+    expect(new Set(rows.map((row) => row._id)).size).toBe(83);
     for (const row of rows) {
       expect(Object.keys(row.observations)).toHaveLength(
         row.scope === "national" ? nationalCount : primaryMetrics.length - nationalCount
@@ -103,7 +103,7 @@ describe("1991 reset metric opening", () => {
       verificationHash: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
     expect(db.collectionMocks.resetMetricSnapshots!.bulkWrite).toHaveBeenCalledTimes(1);
-    expect(db.collectionMocks.resetMetricSnapshots!.bulkWrite.mock.calls[0]![0]).toHaveLength(74);
+    expect(db.collectionMocks.resetMetricSnapshots!.bulkWrite.mock.calls[0]![0]).toHaveLength(83);
     expect(db.collectionMocks.macroMetrics).toBeUndefined();
     expect(db.collectionMocks.politicalMetrics).toBeUndefined();
   });

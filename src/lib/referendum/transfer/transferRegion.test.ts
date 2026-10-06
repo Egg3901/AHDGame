@@ -23,12 +23,20 @@ vi.mock("@/lib/nationalMetrics", () => ({
 vi.mock("@/lib/turn/history/recordCountryEvent", () => ({
   recordCountryEvent: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("./transferResetV2Region", () => ({
+  transferResetV2RegionToIreland: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/countries/ie/resetV2/ensureForReunification", () => ({
+  ensureIrelandResetV2ForReunification: vi.fn().mockResolvedValue({ promoted: false }),
+}));
 
 import { transferRegion } from "./transferRegion";
 import { evacuateRegionPolitics } from "./evacuateRegionPolitics";
 import { convertRegionDoc } from "./convertRegionDoc";
 import { computeNationalMetrics } from "@/lib/nationalMetrics";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
+import { transferResetV2RegionToIreland } from "./transferResetV2Region";
+import { ensureIrelandResetV2ForReunification } from "@/lib/countries/ie/resetV2/ensureForReunification";
 
 const ARGS = {
   regionId: "NIR",
@@ -73,6 +81,8 @@ describe("transferRegion", () => {
     expect(res).toEqual({ ok: true, skipped: "already-transferred" });
     expect(evacuateRegionPolitics).not.toHaveBeenCalled();
     expect(computeNationalMetrics).not.toHaveBeenCalled();
+    expect(ensureIrelandResetV2ForReunification).toHaveBeenCalledWith(db);
+    expect(transferResetV2RegionToIreland).toHaveBeenCalledWith(db, "NIR");
   });
 
   it("returns region-not-found when the region doc is missing", async () => {

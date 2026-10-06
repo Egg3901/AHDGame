@@ -2,6 +2,7 @@
 import type { Db } from "mongodb";
 import type { ResetDepartmentAccountSnapshot } from "@/lib/resetFinance/rules/liveDepartmentAccount";
 import { settleLiveDepartmentTurn } from "@/lib/resetFinance/rules/liveDepartmentTurn";
+import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 
 export interface PaidResetCabinetTurnResult {
   accounts: number;
@@ -14,7 +15,7 @@ export interface PaidResetCabinetTurnResult {
 export async function settlePaidResetCabinetTurn(input: {
   db: Db;
   worldId: string;
-  countryId: "US" | "UK" | "JP";
+  countryId: ResetCountry;
   turn: number;
   /** The opening account roster plus any law-authorized accounts. */
   expectedAccountIds: readonly string[];

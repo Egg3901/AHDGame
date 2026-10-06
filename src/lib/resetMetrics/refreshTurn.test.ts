@@ -23,6 +23,7 @@ const state = {
       sourceTurn: 1,
       completedAt: "2026-09-30T00:00:00.000Z",
       verificationHash: "test-hash",
+      countries: ["US", "UK", "JP", "IE"],
     },
   },
 } as GameState;
@@ -68,12 +69,12 @@ describe("v2 metric turn persistence shell", () => {
     expect(db.collectionMocks.resetMetricSnapshots).toBeUndefined();
   });
 
-  it("checks all 74 owner bundles before one compare-and-swap bulk", async () => {
+  it("checks all 83 owner bundles before one compare-and-swap bulk", async () => {
     const db = createMockDb();
     db.collection("resetMetricSnapshots").find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue(boards),
     });
-    db.collection("resetMetricSnapshots").bulkWrite.mockResolvedValue({ matchedCount: 74 });
+    db.collection("resetMetricSnapshots").bulkWrite.mockResolvedValue({ matchedCount: 83 });
     const result = await refreshResetMetricSnapshotsTurn({
       db: db as unknown as Db,
       gameState: state,
@@ -81,9 +82,9 @@ describe("v2 metric turn persistence shell", () => {
       ownerReadings: ownerReadings(),
       ready,
     });
-    expect(result).toEqual({ boards: 74, advanced: 74, replayed: 0 });
+    expect(result).toEqual({ boards: 83, advanced: 83, replayed: 0 });
     const operations = db.collectionMocks.resetMetricSnapshots!.bulkWrite.mock.calls[0]![0];
-    expect(operations).toHaveLength(74);
+    expect(operations).toHaveLength(83);
     expect(operations[0]).toMatchObject({
       updateOne: { filter: { worldId, asOfTurn: 1 }, update: { $set: { asOfTurn: 2 } } },
     });
@@ -138,7 +139,7 @@ describe("v2 metric turn persistence shell", () => {
     db.collection("resetMetricSnapshots").find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue(partial),
     });
-    db.collection("resetMetricSnapshots").bulkWrite.mockResolvedValue({ matchedCount: 64 });
+    db.collection("resetMetricSnapshots").bulkWrite.mockResolvedValue({ matchedCount: 73 });
     expect(
       await refreshResetMetricSnapshotsTurn({
         db: db as unknown as Db,
@@ -147,8 +148,8 @@ describe("v2 metric turn persistence shell", () => {
         ownerReadings: ownerReadings(),
         ready,
       })
-    ).toEqual({ boards: 74, advanced: 64, replayed: 10 });
-    expect(db.collectionMocks.resetMetricSnapshots!.bulkWrite.mock.calls[0]![0]).toHaveLength(64);
+    ).toEqual({ boards: 83, advanced: 73, replayed: 10 });
+    expect(db.collectionMocks.resetMetricSnapshots!.bulkWrite.mock.calls[0]![0]).toHaveLength(73);
   });
 
   it("samples history in the existing bulk write on the annual cadence", async () => {
@@ -157,7 +158,7 @@ describe("v2 metric turn persistence shell", () => {
     db.collection("resetMetricSnapshots").find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue(annualBoards),
     });
-    db.collection("resetMetricSnapshots").bulkWrite.mockResolvedValue({ matchedCount: 74 });
+    db.collection("resetMetricSnapshots").bulkWrite.mockResolvedValue({ matchedCount: 83 });
     await refreshResetMetricSnapshotsTurn({
       db: db as unknown as Db,
       gameState: { ...state, currentTurn: 12 },

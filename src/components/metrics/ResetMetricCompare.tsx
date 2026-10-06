@@ -7,13 +7,14 @@ import { scoreTone } from "@/app/country/[code]/political-metrics/components/ton
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { currencySymbolSep } from "@/lib/currency/symbolSep";
 import { getCurrencyPrefix } from "@/lib/utils/budgetCalculations";
+import { useWorldFlags } from "@/hooks/useWorldFlags";
+import { isResetV2Country } from "@/lib/resetVersions/rules";
 import type {
   ResetMetricBoardResponse,
   ResetMetricCountry,
   ResetMetricRow,
 } from "./ResetMetricBoard";
 
-const NATIONAL_COUNTRIES: readonly ResetMetricCountry[] = ["US", "UK", "JP"];
 const MAX_REGION_PEERS = 3;
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -104,9 +105,14 @@ export function ResetMetricCompare({
 }) {
   const homeKey = targetKey(home.countryId, home.regionId);
   const isNational = home.scope === "national";
+  const { resetV2Countries } = useWorldFlags();
+  const nationalCountries = useMemo(() => {
+    const active = resetV2Countries.filter(isResetV2Country);
+    return active.includes(home.countryId) ? active : [home.countryId, ...active];
+  }, [home.countryId, resetV2Countries]);
   const [targets, setTargets] = useState<ComparisonTarget[]>(() =>
     isNational
-      ? NATIONAL_COUNTRIES.map((countryId) => ({
+      ? [home.countryId].map((countryId) => ({
           key: countryId,
           countryId,
           regionId: null,
@@ -114,9 +120,7 @@ export function ResetMetricCompare({
         }))
       : []
   );
-  const [selected, setSelected] = useState<string[]>(() =>
-    isNational ? [...NATIONAL_COUNTRIES] : []
-  );
+  const [selected, setSelected] = useState<string[]>(() => (isNational ? [home.countryId] : []));
   const [boards, setBoards] = useState<
     Record<string, ResetMetricBoardResponse | null | "loading" | undefined>
   >({ [homeKey]: home });
@@ -132,6 +136,19 @@ export function ResetMetricCompare({
     (!isNational && !regionalMetric
       ? "No regional comparison series is available for this board."
       : null);
+
+  useEffect(() => {
+    if (!isNational) return;
+    setTargets(
+      nationalCountries.map((countryId) => ({
+        key: countryId,
+        countryId,
+        regionId: null,
+        name: COUNTRY_CONFIGS[countryId].name,
+      }))
+    );
+    setSelected([...nationalCountries]);
+  }, [isNational, nationalCountries]);
 
   useEffect(() => {
     if (isNational) return;

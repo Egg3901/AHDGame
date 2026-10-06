@@ -1466,10 +1466,28 @@ const regionalPresentation: Readonly<
       "Prefectural services coordinate inside the game's eight regional aggregates and use the regional budget.",
     authorityKind: "delegated_service_package",
   },
+  IE: {
+    titlePrefix: "Local Authority",
+    authorityNote:
+      "Local authorities deliver this service within national law and their allocated budget.",
+    authorityKind: "delegated_service_package",
+  },
+  SCO: {
+    titlePrefix: "Council",
+    authorityNote:
+      "Scottish councils deliver this service within national law and their allocated budget.",
+    authorityKind: "delegated_service_package",
+  },
+  WAL: {
+    titlePrefix: "Council",
+    authorityNote:
+      "Welsh councils deliver this service within national law and their allocated budget.",
+    authorityKind: "delegated_service_package",
+  },
 };
 
 const authoredRegionalLevels: readonly RegionalLawLevel[] = localRoutes.flatMap((route) =>
-  (route.countries ?? (["US", "UK", "JP"] as const)).flatMap((country) =>
+  (route.countries ?? (["US", "UK", "JP", "IE", "SCO", "WAL"] as const)).flatMap((country) =>
     route.levels.map((level, index) => ({
       familyId: route.familyId,
       country,
@@ -1481,6 +1499,42 @@ const authoredRegionalLevels: readonly RegionalLawLevel[] = localRoutes.flatMap(
       sourceAnchor: `1991 reset crosswalk: ${country}:regional:${route.familyId}`,
     }))
   )
+);
+
+const localizedPublicHealthLevels: readonly RegionalLawLevel[] = (
+  ["IE", "SCO", "WAL"] as const
+).flatMap((country) =>
+  [
+    [
+      "Community Health Guarantee",
+      "Fund a broad local clinic, vaccination, and surveillance network with clear delivery targets.",
+    ],
+    [
+      "Prevention Gap Fund",
+      "Expand targeted community outreach and disease reporting where coverage and staffing lag.",
+    ],
+    [
+      "Public Health Partnership",
+      "Maintain core public-health services while funding audited gap-filling partnerships.",
+    ],
+    [
+      "Targeted Prevention Plan",
+      "Commission risk-targeted outreach from eligible providers and monitor delivery within national law.",
+    ],
+    [
+      "Flexible Prevention Network",
+      "Use qualified public and private local providers while preserving public reporting duties.",
+    ],
+  ].map(([title, description], index) => ({
+    familyId: "L19",
+    country,
+    position: positions[index]!,
+    title: `${regionalPresentation[country].titlePrefix} ${title}`,
+    description: `${description} ${regionalPresentation[country].authorityNote}`,
+    authorityKind: regionalPresentation[country].authorityKind,
+    fundingAccount: "regional_budget" as const,
+    sourceAnchor: `1991 reset crosswalk: ${country}:regional:L19`,
+  }))
 );
 
 export const regionalLawLevels: readonly RegionalLawLevel[] = [
@@ -1649,6 +1703,7 @@ export const regionalLawLevels: readonly RegionalLawLevel[] = [
     fundingAccount: "regional_budget",
     sourceAnchor: SOURCE_JP,
   },
+  ...localizedPublicHealthLevels,
   ...authoredRegionalLevels,
 ];
 

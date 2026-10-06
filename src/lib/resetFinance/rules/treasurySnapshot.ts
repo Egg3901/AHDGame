@@ -1,6 +1,6 @@
 import type { NationalClaims, NationalTreasuryState } from "./settlement";
 
-export type ResetTreasuryCountry = "US" | "UK" | "JP";
+export type ResetTreasuryCountry = "US" | "UK" | "JP" | "IE" | "SCO" | "WAL";
 
 /** A world-bound cash ledger, separate from the legacy signed budget balance. */
 export interface ResetNationalTreasurySnapshot extends NationalTreasuryState {
@@ -24,21 +24,25 @@ export interface ResetNationalTreasurySnapshot extends NationalTreasuryState {
 export function openingNationalTreasurySnapshots(
   worldId: string,
   sourceTurn: number,
-  books: Readonly<Record<ResetTreasuryCountry, { debt: number; debtCeiling: number }>>,
+  books: Readonly<Partial<Record<ResetTreasuryCountry, { debt: number; debtCeiling: number }>>>,
   accounts?: readonly { _id: string; countryId: ResetTreasuryCountry }[]
 ): ResetNationalTreasurySnapshot[] {
   if (!worldId || !Number.isSafeInteger(sourceTurn) || sourceTurn < 1) {
     throw new Error("Invalid national treasury opening identity");
   }
-  return (["US", "UK", "JP"] as const).map((countryId) => ({
+  const countries = Object.keys(books).filter(
+    (countryId): countryId is ResetTreasuryCountry =>
+      books[countryId as ResetTreasuryCountry] !== undefined
+  );
+  return countries.map((countryId) => ({
     _id: countryId,
     worldId,
     countryId,
     sourceTurn,
     settledThroughTurn: sourceTurn,
     cash: 0,
-    debt: books[countryId].debt,
-    debtCeiling: books[countryId].debtCeiling,
+    debt: books[countryId]!.debt,
+    debtCeiling: books[countryId]!.debtCeiling,
     emergencyAdvance: 0,
     arrears: { interest: 0, mandatory: 0, grants: 0, existing: 0, new: 0 },
     ...(accounts
@@ -55,7 +59,7 @@ export function openingNationalTreasurySnapshots(
 export function openingNationalTreasuryPayload(
   rows: readonly ResetNationalTreasurySnapshot[]
 ): string {
-  if (rows.length !== 3) throw new Error("National treasury opening needs three countries");
+  if (rows.length === 0) throw new Error("National treasury opening needs countries");
   const ids = new Set<string>();
   const worldId = rows[0]?.worldId;
   const sourceTurn = rows[0]?.sourceTurn;
@@ -66,7 +70,6 @@ export function openingNationalTreasuryPayload(
         if (
           ids.has(row._id) ||
           row._id !== row.countryId ||
-          !(["US", "UK", "JP"] as string[]).includes(row.countryId) ||
           !row.worldId ||
           row.worldId !== worldId ||
           !Number.isSafeInteger(row.sourceTurn) ||

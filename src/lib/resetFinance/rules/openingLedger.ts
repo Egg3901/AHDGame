@@ -45,7 +45,8 @@ export function bridgeOpeningLedger(
     revenue += correction.revenueDelta;
     spending += correction.spendingDelta;
   }
-  const interest = source.debt * source.annualInterestRate;
+  // Seed budgets store currency in whole units, including debt service.
+  const interest = Math.round(source.debt * source.annualInterestRate);
   const operating = spending - interest;
   if (revenue < 0 || operating < 0) throw new Error("opening correction makes a book negative");
   return {

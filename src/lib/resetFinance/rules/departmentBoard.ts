@@ -1,10 +1,11 @@
 import type { OpeningDepartmentAccount } from "./departmentOpening";
+import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 
 /** An opening claim, not a cash balance or a license to spend twice. */
 export interface ResetDepartmentOpeningBoard {
   _id: string;
   worldId: string;
-  countryId: "US" | "UK" | "JP";
+  countryId: ResetCountry;
   sourceTurn: number;
   operating: number;
   continuityAmount: number;
@@ -62,8 +63,8 @@ export function departmentOpeningBoardPayload(
       throw new Error(`Department opening does not reconcile in ${board._id}`);
     }
   }
-  if (countries.size !== 3 || ["US", "UK", "JP"].some((country) => !countries.has(country))) {
-    throw new Error("Opening department boards must cover US, UK, and JP exactly once");
+  if (countries.size !== boards.length) {
+    throw new Error("Opening department boards must cover each country exactly once");
   }
   return JSON.stringify(
     [...boards]

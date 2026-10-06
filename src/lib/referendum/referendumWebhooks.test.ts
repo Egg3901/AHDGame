@@ -76,6 +76,16 @@ describe("referendum webhook builders", () => {
     expect(pass.description).toMatch(/57% Yes/);
     expect(pass.description).toMatch(/Westminster and the Dáil/);
 
+    const inactiveIrelandPass = buildReferendumVoteResultEmbed({
+      region: "Northern Ireland",
+      kind: "reunification",
+      passed: true,
+      finalYesShare: 55,
+      dailConsentRequired: false,
+    });
+    expect(inactiveIrelandPass.description).toMatch(/Westminster must now consent/);
+    expect(inactiveIrelandPass.description).not.toMatch(/Dáil/);
+
     const indyPass = buildReferendumVoteResultEmbed({
       region: "Scotland",
       kind: "independence",

@@ -53,6 +53,27 @@ describe("applyReferendumOutcome", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     db = createMockDb();
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "IE",
+      status: "active",
+      enabledForPlayers: true,
+    });
+  });
+
+  it("reunification YES omits Irish consent while Ireland is not player enabled", async () => {
+    db.collection("countryGameStates").findOne.mockResolvedValue({
+      _id: "IE",
+      status: "coming-soon",
+      enabledForPlayers: false,
+    });
+    await applyReferendumOutcome(
+      db as unknown as Db,
+      refDoc({ regionId: "NIR", kind: "reunification", targetCountryId: "IE" }),
+      { finalYesShare: 55, turnout: 60, passed: true },
+      200
+    );
+    expect(db.collectionMocks["bills"].insertOne).toHaveBeenCalledTimes(1);
+    expect(lastSet(db, "referendums").dailBillId).toBeNull();
   });
 
   it("YES → actuating, stamps the result, records a referendum_passed event", async () => {

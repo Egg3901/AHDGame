@@ -49,6 +49,7 @@ import { validateBillAdministration } from "@/lib/legislature/jurisdiction";
 import { findAdministrationConflict } from "@/lib/legislature/administrationConflictCheck";
 import { getGameState } from "@/lib/gameState";
 import { validateBillProvisions } from "@/lib/congress/billProposal";
+import { isResetV2Country } from "@/lib/resetVersions/rules";
 
 const CABINET_VOTE_DURATION_MS = 24 * 3_600_000; // 24 hours
 type BillListProvisionDisplay = NonNullable<BillDisplay["provisions"]>[number];
@@ -745,7 +746,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     }
     const gameState = await getGameState(db);
     const administrationEnabled =
-      gameState?.lawAdministrationEnabled === true && ["US", "UK", "JP"].includes(countryId);
+      gameState?.lawAdministrationEnabled === true && isResetV2Country(countryId);
     const administrationValidation = validateBillAdministration({
       enabled: administrationEnabled,
       legislationTypes: [selectedLegislationType],

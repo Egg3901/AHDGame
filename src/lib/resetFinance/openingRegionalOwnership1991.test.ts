@@ -3,15 +3,16 @@ import { openingRegionalFiscalOwnership1991 } from "./openingRegionalOwnership19
 import { allocateRegionalOpeningClaims } from "./rules/regionalOpeningAllocation";
 
 describe("1991 regional fiscal ownership", () => {
-  it("accounts for all 71 regions without inventing a regional Cabinet treasury", () => {
+  it("accounts for all 79 regions without inventing a regional Cabinet treasury", () => {
     const books = openingRegionalFiscalOwnership1991();
     expect(books.US.regions).toHaveLength(51);
     expect(books.UK.regions).toHaveLength(12);
     expect(books.JP.regions).toHaveLength(8);
+    expect(books.IE.regions).toHaveLength(8);
     expect(books.US.familyOwned).toBeCloseTo(474_041_960_700, 1);
     expect(books.UK.familyOwned).toBe(27_590_760_000);
     expect(books.JP.familyOwned).toBe(12_091_170_000_000);
-    for (const country of ["US", "UK", "JP"] as const) {
+    for (const country of ["US", "UK", "JP", "IE"] as const) {
       const book = books[country];
       expect(book.familyOwned + book.otherExistingServices).toBeCloseTo(book.annualSpending, 1);
       for (const region of book.regions) {

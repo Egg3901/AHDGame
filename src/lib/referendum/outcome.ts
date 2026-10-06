@@ -77,10 +77,9 @@ export async function applyReferendumOutcome(
     // today, so only it gets an auto-convert deadline; independence sits in
     // `actuating` until the secession engine (Phases 2–3). Admins can still
     // resolve/block either via the admin route.
-    // Both kinds open a conversion window with parliamentary consent: reunification
-    // needs BOTH a Westminster (UK releases NI) and a Dáil (Ireland admits NI) bill;
-    // independence needs only the single Westminster bill (UK releases the region —
-    // there is no admitting parliament). The actuation runs once the bill(s) pass.
+    // Both kinds open a conversion window with parliamentary consent. Reunification
+    // always needs Westminster consent and also needs Dáil consent when Ireland is
+    // already player enabled. Independence needs only Westminster consent.
     const conversionDeadlineTurn =
       ref.kind === "reunification" || ref.kind === "independence"
         ? currentTurn + CONVERSION_WINDOW_TURNS
@@ -127,6 +126,7 @@ export async function applyReferendumOutcome(
     await announceReferendumVoteResult(ref, {
       passed: true,
       finalYesShare: outcome.finalYesShare,
+      dailConsentRequired: bills.dailBillId != null,
     }).catch(() => {});
     await recordWireEvent(db, {
       referendumId: ref._id!,

@@ -218,14 +218,17 @@ export async function collectResetMetricOwnerReadings(
       } else {
         const healthRow = healthById.get(board.regionId!);
         const health = healthRow?.countryId === board.countryId ? healthRow.healthcare : undefined;
-        const reference = openingHealth[board.countryId];
+        const reference = openingHealth[board.countryId as keyof typeof openingHealth];
+        const physicianReference = reference?.physicianRate ?? health?.physicianRate?.value ?? null;
+        const preparednessReference =
+          reference?.preparedness ?? health?.publicHealthPreparedness?.value ?? null;
         const access = liveHealthProxies({
           countryId: board.countryId,
           physicianRate: health?.physicianRate?.value ?? null,
           preparedness: health?.publicHealthPreparedness?.value ?? null,
           uninsuredPercent: health?.uninsuredRate?.value ?? null,
-          openingPhysicianReference: reference.physicianRate,
-          openingPreparednessReference: reference.preparedness,
+          openingPhysicianReference: physicianReference ?? Number.NaN,
+          openingPreparednessReference: preparednessReference ?? Number.NaN,
         });
         if (due.has("16") && access) {
           updates["16"] = {
@@ -237,15 +240,19 @@ export async function collectResetMetricOwnerReadings(
           };
         }
         const delay =
-          board.countryId === "UK" ? health?.nhsWaitingTime?.value : access?.treatmentDelayIndex;
+          board.countryId === "UK"
+            ? health?.nhsWaitingTime?.value
+            : board.countryId === "IE"
+              ? health?.hseWaitingListMonths?.value
+              : access?.treatmentDelayIndex;
         if (due.has("18") && typeof delay === "number" && Number.isFinite(delay) && delay >= 0) {
           updates["18"] = {
             ...board.observations["18"]!,
             value: delay,
             status: "proxy",
             source:
-              board.countryId === "UK"
-                ? "current NHS waiting index"
+              board.countryId === "UK" || board.countryId === "IE"
+                ? "current national health-service waiting index"
                 : "current physician/preparedness delay estimate",
             note: "Comparable treatment-delay proxy, not median waiting days. Fixed opening references preserve nationwide capacity changes.",
           };
@@ -267,7 +274,8 @@ export async function collectResetMetricOwnerReadings(
         }
         if (due.has("02")) {
           const current = liveMacro;
-          const opening = openingGross[board.countryId][board.regionId!];
+          const opening =
+            openingGross[board.countryId as keyof typeof openingGross]?.[board.regionId!];
           const income = current?.economic?.medianIncome?.value;
           const basket = current?.economic?.costOfLiving?.value;
           if (opening && typeof income === "number" && typeof basket === "number") {
@@ -289,7 +297,8 @@ export async function collectResetMetricOwnerReadings(
         }
         const cohort = liveMacro?.resetCohortReading;
         if (cohort?.asOfTurn === turn) {
-          const lifeCalibration = openingLife[board.countryId][board.regionId!];
+          const lifeCalibration =
+            openingLife[board.countryId as keyof typeof openingLife]?.[board.regionId!];
           const measures = [
             [
               "20",

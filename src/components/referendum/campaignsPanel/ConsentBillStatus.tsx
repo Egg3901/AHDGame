@@ -31,7 +31,9 @@ export function ConsentBillStatus({
     kind === "peace_agreement"
       ? "Westminster and the Dáil authorized this agreement. The public ballot decides whether it proceeds to implementation."
       : kind === "reunification"
-        ? "Both consent bills must pass within the window for the union to take effect. If either fails or the window closes, the conversion is cancelled."
+        ? bills.length > 1
+          ? "Both consent bills must pass within the window for the union to take effect. If either fails or the window closes, the conversion is cancelled."
+          : "The Westminster consent bill must pass within the window for the union to take effect. If it fails or the window closes, the conversion is cancelled."
         : "The Westminster consent bill must pass within the window for independence to take effect. If it fails or the window closes, the conversion is cancelled.";
 
   return (
