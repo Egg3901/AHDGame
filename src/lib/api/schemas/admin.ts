@@ -115,6 +115,35 @@ export const adminResourcesGrantSchema = z
     funds: z.number().min(-100000000).max(100000000).optional(),
     cashOnHand: z.number().min(-100000000).max(100000000).optional(),
     currency: z.enum(["USD", "GBP", "JPY", "CAD", "EUR"]).optional(),
+    positionUpdateVoucher: z.boolean().optional(),
+  })
+  .refine(
+    (d) =>
+      (d.actions !== undefined && d.actions !== 0) ||
+      (d.funds !== undefined && d.funds !== 0) ||
+      (d.cashOnHand !== undefined && d.cashOnHand !== 0) ||
+      d.positionUpdateVoucher === true,
+    {
+      message:
+        "Must specify at least one resource to grant (actions, funds, cashOnHand, or positionUpdateVoucher)",
+      path: ["actions"],
+    }
+  )
+  .refine((d) => d.allPlayers === true || (d.characterIds && d.characterIds.length > 0), {
+    message: "Must specify characterIds or set allPlayers to true",
+    path: ["characterIds"],
+  });
+
+// Moderators retain the existing resource surface. Position Update Vouchers
+// are intentionally restricted to the admin route and admin UI.
+export const moderatorResourcesGrantSchema = z
+  .object({
+    characterIds: z.array(schemas.objectId).optional(),
+    allPlayers: z.boolean().optional(),
+    actions: z.number().min(-10000).max(10000).optional(),
+    funds: z.number().min(-100000000).max(100000000).optional(),
+    cashOnHand: z.number().min(-100000000).max(100000000).optional(),
+    currency: z.enum(["USD", "GBP", "JPY", "CAD", "EUR"]).optional(),
   })
   .refine(
     (d) =>

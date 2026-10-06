@@ -124,6 +124,9 @@ export function HomeStatePicker({
         >
           {rows.map(({ state, electorate, players }) => {
             const selected = value === state._id;
+            const electoralLean = electorate
+              ? getLeanLabel(getDisplayLean(electorate.economic, electorate.social))
+              : null;
             return (
               <div key={state._id}>
                 <button
@@ -143,17 +146,21 @@ export function HomeStatePicker({
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-body font-medium">{state.name}</span>
-                    <span className="block truncate font-mono text-body-xs text-muted">
-                      {/* The headline word uses getDisplayLean (dominant axis), not the raw
-                          economic value: some era models (e.g. UK 1953) keep economicLean
-                          negative and socialLean positive in EVERY region by construction —
-                          only the social axis's magnitude flips which one dominates region to
-                          region. Showing raw economic alone made every region read identically
-                          "Center-Left" here regardless of true lean; see uk1953.test.ts. */}
-                      {electorate
-                        ? `${getLeanLabel(getDisplayLean(electorate.economic, electorate.social))} · ${getSocialLeanLabel(electorate.social)}`
-                        : "Lean not yet derived"}
-                    </span>
+                    {electorate ? (
+                      <>
+                        <span className="block truncate font-mono text-body-xs text-muted">
+                          Electoral lean: {electoralLean}
+                        </span>
+                        <span className="block truncate font-mono text-body-xs text-muted">
+                          Economic: {getLeanLabel(electorate.economic)} · Social:{" "}
+                          {getSocialLeanLabel(electorate.social)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="block truncate font-mono text-body-xs text-muted">
+                        Lean not yet derived
+                      </span>
+                    )}
                   </span>
                   <span className="shrink-0 text-right font-mono text-body-xs text-muted">
                     <span className="block">{formatPopulation(state.population)}</span>

@@ -247,6 +247,8 @@ export interface Character {
   /** When true, insufficient foreign currency auto-converts from home currency */
   autoConvertEnabled?: boolean;
   actions: number;
+  /** Admin-granted credits that waive all costs for one policy-position shift. */
+  positionUpdateVouchers?: number;
   /** Last turn this character ran any underground union drive, across all unions. */
   lastUndergroundDriveTurn?: number | null;
   /** Per-country turn claim for the labor-archetype cost of an active union crackdown. */
