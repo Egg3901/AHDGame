@@ -21,7 +21,9 @@ import type { MacroCountryState } from "@/lib/world/macro/types";
 import type { Bond } from "@/lib/db/types/bond";
 import type { SeedDiagnosticCheck } from "./types";
 import { check } from "./checkFactory";
-import { nonFinitePaths, reconciles } from "./rules/economicOpening";
+import { nonFinitePaths, openingBalanceWithinEnvelope, reconciles } from "./rules/economicOpening";
+import { OPENING_INFLATION_BOUNDS } from "@/lib/seeds/reference/openingInflation1991";
+import { openingInflationProblem } from "@/lib/seeds/reference/rules/openingInflation";
 
 export async function checkEconomicOpening(db: Db, preset: string): Promise<SeedDiagnosticCheck[]> {
   if (preset !== "1991-default") return [];
@@ -112,7 +114,7 @@ export async function checkEconomicOpening(db: Db, preset: string): Promise<Seed
       assert(
         country,
         "opening-deficit",
-        -budget.surplus / budget.gdp <= 0.0075,
+        openingBalanceWithinEnvelope(budget.surplus, budget.gdp),
         `${((-100 * budget.surplus) / budget.gdp).toFixed(4)}% GDP`
       );
     }
@@ -264,6 +266,16 @@ export async function checkEconomicOpening(db: Db, preset: string): Promise<Seed
     "index-fund-capital",
     funds.length > 0 && funds.every((row) => nonFinitePaths(row).length === 0)
   );
+  // #3317: opening CPI and wage growth must be supported gameplay values, not
+  // historical hyperinflation the first recalculation would snap.
+  for (const budget of budgets) {
+    const problem = openingInflationProblem(
+      budget.countryId!,
+      budget.economicFactors,
+      OPENING_INFLATION_BOUNDS
+    );
+    assert(budget.countryId!, "opening-inflation", problem === null, problem ?? undefined);
+  }
   assert(
     "DD",
     "post-reunification-absence",

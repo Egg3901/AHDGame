@@ -59,6 +59,11 @@ export async function runResetAndBootstrapCli(
   }
   const skipRegionalCouncil = hasFlag(args, "--skip-regional-council");
   const resetReference = !hasFlag(args, "--preserve-reference");
+  if (!resetReference && preset === "1991-default") {
+    throw new Error(
+      "--preserve-reference is not supported for 1991-default: its taxonomy seeds need a reference rebuild"
+    );
+  }
   const preIteration = hasFlag(args, "--pre-iteration")
     ? true
     : hasFlag(args, "--no-pre-iteration")

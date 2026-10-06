@@ -70,7 +70,7 @@ interface Props {
     currentTrend: number;
     currentPolicy: DevolutionPolicy;
     policyChangedAtTurn: number | null;
-    proIndyElectionBonus: number;
+    highDesireElectionBonus: number;
     driverPreview: DevolutionDriverSnapshot;
     referendum: ReferendumPanelData;
   } | null;
@@ -243,7 +243,8 @@ export function GovernorOfficeClient(props: Props) {
               viewerCanManage={props.viewerCanManage}
               viewerIsAdmin={props.viewerIsAdmin}
               driverPreview={props.devolution.driverPreview}
-              proIndyElectionBonus={props.devolution.proIndyElectionBonus}
+              firstMinisterPartyName={props.officeHolderPartyName}
+              highDesireElectionBonus={props.devolution.highDesireElectionBonus}
               referendum={props.devolution.referendum}
             />
           )}

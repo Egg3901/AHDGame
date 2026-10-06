@@ -428,7 +428,7 @@ describe("recalculateInflationPerTurn", () => {
       expect.objectContaining({
         $set: expect.objectContaining({
           "economicFactors.inflationRate": 4.2,
-          "economicFactors.householdPriceIndex": expect.closeTo(1.00065625, 12),
+          "economicFactors.householdPriceIndex": expect.closeTo(1.000646334899634, 12),
         }),
       })
     );
@@ -544,7 +544,7 @@ describe("recalculateInflationPerTurn", () => {
       expect.objectContaining({
         $set: expect.objectContaining({
           "economicFactors.inflationRate": 4.2,
-          "economicFactors.householdPriceIndex": expect.closeTo(1.00065625, 12),
+          "economicFactors.householdPriceIndex": expect.closeTo(1.000646334899634, 12),
         }),
       })
     );

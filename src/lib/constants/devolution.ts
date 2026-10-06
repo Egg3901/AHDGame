@@ -136,28 +136,27 @@ export function meanReversionDrift(current: number): number {
   return 0;
 }
 
-// ─── Pro-independence high-desire election bonus ─────────────────────────────
+// ─── First Minister high-desire election bonus ───────────────────────────────
 
 /** Desire value (inclusive) at which the stepped vote-gain bonus first
- *  unlocks for the region's pro-independence party. */
-export const PRO_INDY_BONUS_THRESHOLD = 60;
+ *  unlocks for a qualifying First Minister's party. */
+export const HIGH_DESIRE_BONUS_THRESHOLD = 60;
 /** Band width — desire must climb another full 10pp to unlock the next step. */
-export const PRO_INDY_BONUS_BAND_SIZE = 10;
+export const HIGH_DESIRE_BONUS_BAND_SIZE = 10;
 /** Per-band multiplier increment. Bands: 60-69 → +1.5%, 70-79 → +3%,
  *  80-89 → +4.5%, 90-99 → +6%, 100 → +7.5%. */
-export const PRO_INDY_BONUS_PER_BAND = 0.015;
+export const HIGH_DESIRE_BONUS_PER_BAND = 0.015;
 /** Cap on the band index (5 bands → max 4). desire=100 yields band 4. */
-export const PRO_INDY_BONUS_MAX_BAND = 4;
+export const HIGH_DESIRE_BONUS_MAX_BAND = 4;
 /** Total number of bands (including the threshold band). Equals MAX_BAND + 1.
  *  Exported so the UI tier strip stays consistent if the band count is
  *  retuned. */
-export const PRO_INDY_BONUS_TIER_COUNT = PRO_INDY_BONUS_MAX_BAND + 1;
+export const HIGH_DESIRE_BONUS_TIER_COUNT = HIGH_DESIRE_BONUS_MAX_BAND + 1;
 
 /**
- * Stepped vote-gain bonus for the region's pro-independence party in
- * SCO/WAL/NIR general elections. Layered ON TOP of the soft electoral
- * transfer (which redistributes votes between parties) — this one is a
- * pure additive boost to the pro-indy party only, no rival penalty.
+ * Stepped vote-gain magnitude for qualifying SCO/WAL/NIR elections. The
+ * portable election rule decides whether the current First Minister's party
+ * qualifies based on the office's devolution policy.
  *
  * | Desire        | Bonus  |
  * | ------------- | ------ |
@@ -170,12 +169,12 @@ export const PRO_INDY_BONUS_TIER_COUNT = PRO_INDY_BONUS_MAX_BAND + 1;
  *
  * Returns the multiplier as a decimal (e.g. 0.015 for +1.5%).
  */
-export function proIndyHighDesireBonus(desire: number): number {
+export function highDesireElectionBonus(desire: number): number {
   if (!Number.isFinite(desire)) return 0;
-  if (desire < PRO_INDY_BONUS_THRESHOLD) return 0;
-  const rawBand = Math.floor((desire - PRO_INDY_BONUS_THRESHOLD) / PRO_INDY_BONUS_BAND_SIZE);
-  const band = Math.min(PRO_INDY_BONUS_MAX_BAND, Math.max(0, rawBand));
-  return (band + 1) * PRO_INDY_BONUS_PER_BAND;
+  if (desire < HIGH_DESIRE_BONUS_THRESHOLD) return 0;
+  const rawBand = Math.floor((desire - HIGH_DESIRE_BONUS_THRESHOLD) / HIGH_DESIRE_BONUS_BAND_SIZE);
+  const band = Math.min(HIGH_DESIRE_BONUS_MAX_BAND, Math.max(0, rawBand));
+  return (band + 1) * HIGH_DESIRE_BONUS_PER_BAND;
 }
 
 // ─── UI label resolution ─────────────────────────────────────────────────────

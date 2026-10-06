@@ -4,6 +4,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import OverviewTab from "./OverviewTab";
+import { redactPrivateCorporation } from "@/lib/corporations/redaction";
 
 vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({
@@ -146,5 +147,26 @@ describe("OverviewTab", () => {
     renderOverview({ financials: null, corporation: { ...corporation, isPrivate: true } });
     expect(screen.getByText(/disclosed to the CEO only/)).toBeTruthy();
     expect(screen.queryByText("Key statistics")).toBeNull();
+  });
+
+  it("renders a redacted private corporation without per-turn strength changes", () => {
+    // #3318: the corporation route strips these fields for outside viewers of a
+    // private corporation, so the overview must not dereference them.
+    const redacted = redactPrivateCorporation({ ...corporation, isPrivate: true });
+    expect(redacted).not.toHaveProperty("marketingStrengthGrowth");
+    expect(redacted).not.toHaveProperty("logisticsStrengthNetChange");
+    expect(redacted).not.toHaveProperty("rdScoreNetChange");
+    renderOverview({ financials: null, corporation: redacted });
+    expect(screen.getByText("Marketing strength")).toBeTruthy();
+    expect(screen.getByText("Logistics")).toBeTruthy();
+    expect(screen.getByText("R&D score")).toBeTruthy();
+    expect(screen.queryByText(/^[+-]?\d+\.\d{2}$/)).toBeNull();
+  });
+
+  it("still shows a zero per-turn change when the value is known", () => {
+    renderOverview();
+    expect(screen.getByText("+1.00")).toBeTruthy();
+    expect(screen.getByText("+0.00")).toBeTruthy();
+    expect(screen.getByText("+0.50")).toBeTruthy();
   });
 });
