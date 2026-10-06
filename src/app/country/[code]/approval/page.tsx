@@ -1,5 +1,8 @@
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { loadNationalMetrics } from "@/lib/country/nationalMetrics";
+import {
+  loadNationalMetrics,
+  serializeNationalMetricsForClient,
+} from "@/lib/country/nationalMetrics";
 import { loadNationalApproval } from "@/lib/country/nationalApproval";
 import ApprovalClient from "./ApprovalClient";
 
@@ -16,7 +19,9 @@ export default async function ApprovalPage({ params }: { params: Promise<{ code:
   // Best-effort: a DB hiccup here must not blank the page — fall back to the
   // client fetch (initial* undefined → the client shows its spinner + loads).
   const [metrics, approval] = await Promise.all([
-    loadNationalMetrics(countryId).catch(() => null),
+    loadNationalMetrics(countryId)
+      .then(serializeNationalMetricsForClient)
+      .catch(() => null),
     loadNationalApproval(countryId).catch(() => null),
   ]);
 
