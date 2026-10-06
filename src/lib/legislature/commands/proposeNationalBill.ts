@@ -3,7 +3,7 @@
  * proposeNationalBill resolves current offices, preserves proposal costs and rejects a dissolved chamber.
  */
 import { getNationalDocId } from "@/lib/constants/nationalScope";
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { AuthUser } from "@/lib/auth";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
@@ -323,6 +323,7 @@ export async function proposeNationalBill(
     };
     try {
       const result = await db.collection<Omit<Bill, "_id">>("bills").insertOne(natBill);
+      if (!usingAdminOverride) await awardBillSponsored(authUser.userId, character._id);
       if (usingSovereignOverride) {
         await enactSingleplayerDecree(db, { ...natBill, _id: result.insertedId } as Bill);
       }
@@ -642,6 +643,7 @@ export async function proposeNationalBill(
 
   try {
     const result = await db.collection<Omit<Bill, "_id">>("bills").insertOne(bill);
+    if (!usingAdminOverride) await awardBillSponsored(authUser.userId, character._id);
     if (usingSovereignOverride) {
       await enactSingleplayerDecree(db, { ...bill, _id: result.insertedId } as Bill);
     }
@@ -670,4 +672,10 @@ export async function proposeNationalBill(
     }
     throw error;
   }
+}
+
+/** Non-throwing: the first-bill achievement must never fail a proposal that already landed. */
+async function awardBillSponsored(userId: string, characterId: ObjectId): Promise<void> {
+  const { checkBillSponsoredAchievements } = await import("@/lib/achievements/triggers");
+  await checkBillSponsoredAchievements(new ObjectId(userId), characterId);
 }
