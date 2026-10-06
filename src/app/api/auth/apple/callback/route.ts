@@ -327,9 +327,12 @@ async function handleAppleLogin(
   // gates as the email, Google and Discord signup paths.
   const maintConfig = await db
     .collection<GameConfig>("gameConfig")
-    .findOne({ _id: "default" }, { projection: { maintenanceMode: 1 } });
+    .findOne({ _id: "default" }, { projection: { maintenanceMode: 1, testMode: 1 } });
   if (normalizeMaintenanceMode(maintConfig?.maintenanceMode) !== "off") {
     return appleResult(baseUrl, "error", "/maintenance", "maintenance");
+  }
+  if (maintConfig?.testMode) {
+    return appleResult(baseUrl, "error", "/login", "test_mode");
   }
 
   const clientIp = await getClientIp();

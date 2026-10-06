@@ -300,11 +300,21 @@ async function handleGoogleLogin(
   // be the one signup path that ignores maintenance mode.
   const maintConfig = await db
     .collection<GameConfig>("gameConfig")
-    .findOne({ _id: "default" }, { projection: { maintenanceMode: 1 } });
+    .findOne({ _id: "default" }, { projection: { maintenanceMode: 1, testMode: 1 } });
   if (normalizeMaintenanceMode(maintConfig?.maintenanceMode) !== "off") {
     return NextResponse.redirect(
       new URL(
         `/auth/google/result?status=error&reason=maintenance&next=${encodeURIComponent("/maintenance")}`,
+        baseUrl
+      )
+    );
+  }
+  // Test mode limits signup to holders of TEST_SECRET, which only the email
+  // form can carry, so OAuth signup is closed like the Discord callback.
+  if (maintConfig?.testMode) {
+    return NextResponse.redirect(
+      new URL(
+        `/auth/google/result?status=error&reason=test_mode&next=${encodeURIComponent("/login")}`,
         baseUrl
       )
     );
