@@ -251,12 +251,19 @@ export function StateElections({
     });
   }, [elections, stateId]);
 
-  const { actionLoading, message, handleEnterRace, handleWithdraw, isInRace, isInAnyRace } =
-    useElectionActions({
-      character,
-      elections,
-      onSuccess: fetchData,
-    });
+  const {
+    actionLoading,
+    message,
+    handleEnterRace,
+    handleWithdraw,
+    isInRace,
+    isInAnyRace,
+    confirmDialog,
+  } = useElectionActions({
+    character,
+    elections,
+    onSuccess: fetchData,
+  });
 
   // Split elections into categories
   const isParliamentary = isParliamentarySystem(COUNTRY_CONFIGS[countryId as CountryId]);
@@ -470,6 +477,7 @@ export function StateElections({
   return (
     <div className="space-y-6">
       {/* Federal Elections Section */}
+      {confirmDialog}
       <div className="rounded-xl border border-card-border bg-card p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 data-coach="nav-races" className="text-xl font-semibold">
