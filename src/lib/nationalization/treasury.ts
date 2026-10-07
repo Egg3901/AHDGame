@@ -19,6 +19,7 @@ import {
 } from "./treasuryLedger";
 import type { BankingTransition, TransitionProjection } from "@/lib/banking/rules/boundary";
 import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
+import { MONEY_MOVE_COLLECTION, type MoneyMoveRecordLeg } from "@/lib/banking/moneyMove";
 
 /**
  * Opt-in government-side witness for an event-driven caller whose own rows do
@@ -776,6 +777,7 @@ export async function remitToTreasury(
       },
     });
     if (settled.status === "replayed" && !settled.error) return 0;
+    if (settled.status === "rejected" && (await refusedBeforeAnyCashMoved(db, key))) return 0;
     if (settled.status !== "applied") {
       throw new Error(settled.error ?? "Funded SOE remittance is incomplete");
     }
@@ -794,6 +796,27 @@ export async function remitToTreasury(
     treasury: credited ? amount : 0,
   });
   return amount;
+}
+
+/**
+ * True only when the journal under `key` is terminally rejected because its
+ * guarded debit refused, with no leg landed. Nothing moved, so the remittance
+ * is simply not paid this turn, on the first attempt and on every replay of
+ * the same key. Partial receipts and malformed transitions do not qualify.
+ */
+async function refusedBeforeAnyCashMoved(db: Db, key: string): Promise<boolean> {
+  const receipt = await db
+    .collection<{ _id: string; status?: string; legs?: MoneyMoveRecordLeg[] }>(
+      MONEY_MOVE_COLLECTION
+    )
+    .findOne({ _id: key }, { projection: { status: 1, legs: 1 } });
+  const legs = receipt?.legs ?? [];
+  return (
+    receipt?.status === "rejected" &&
+    legs.length > 0 &&
+    legs.every((leg) => !leg.applied) &&
+    legs.some((leg) => leg.kind === "debit" && typeof leg.refusal === "string")
+  );
 }
 
 /** A treasury and enterprise transfer; `corpCurrency` is the enterprise's ledger account currency. */

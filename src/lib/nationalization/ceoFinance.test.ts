@@ -37,6 +37,11 @@ describe("ceoFinance", () => {
       expect(cappedRemittanceLocal(1000, 40, 100)).toBe(100); // uncapped 600 → capped to 100
     });
 
+    it("floors a fractional balance so the guarded debit can always be paid", () => {
+      expect(cappedRemittanceLocal(1000, 40, 100.6)).toBe(100); // never 101 from 100.6
+      expect(cappedRemittanceLocal(1000, 40, 0.6)).toBe(0);
+    });
+
     it("remits nothing with no cash or a non-positive estimate", () => {
       expect(cappedRemittanceLocal(1000, 40, 0)).toBe(0); // loss-backed to zero
       expect(cappedRemittanceLocal(1000, 40, -500)).toBe(0); // negative balance
