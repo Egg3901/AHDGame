@@ -6,6 +6,7 @@ import { invalidateGameStateCache } from "@/lib/gameState";
 import type { GameState } from "@/lib/db/types";
 import { createAdminLog } from "@/lib/adminLog";
 import { getProcessingLockState } from "@/lib/turn/processingLock";
+import { hasAppliedNextTurnEvidence } from "@/simulation/engine/turnResumeBootstrap";
 
 function formatRetryDelay(retryAfterMs: number): string {
   const totalSeconds = Math.max(1, Math.ceil(retryAfterMs / 1000));
@@ -31,8 +32,12 @@ export async function POST() {
       {
         projection: {
           isProcessing: 1,
+          currentTurn: 1,
+          processingKind: 1,
           processingPhase: 1,
           processingTargetTurn: 1,
+          processingPhaseStatuses: 1,
+          processingAbandonedAt: 1,
           processingHeartbeatAt: 1,
           processingStartedAt: 1,
           updatedAt: 1,
@@ -75,22 +80,47 @@ export async function POST() {
       );
     }
 
+    const preserveRecoveryEvidence = hasAppliedNextTurnEvidence(gameState);
+    const now = new Date();
+    const releaseFields: Record<string, unknown> = {
+      isProcessing: false,
+      processingKind: null,
+      processingStartedAt: null,
+      processingHeartbeatAt: null,
+      processingAbandonedAt: null,
+      updatedAt: now,
+    };
+    if (!preserveRecoveryEvidence) {
+      Object.assign(releaseFields, {
+        processingTargetTurn: null,
+        processingPhase: null,
+        processingPhaseStatuses: null,
+        processingPhaseResults: null,
+      });
+    }
+
     const result = await db.collection<GameState>("gameState").updateOne(
-      { _id: "current", isProcessing: true },
       {
-        $set: {
-          isProcessing: false,
-          processingKind: null,
-          processingStartedAt: null,
-          processingTargetTurn: null,
-          processingHeartbeatAt: null,
-          processingPhase: null,
-          processingPhaseStatuses: null,
-          processingPhaseResults: null,
-          updatedAt: new Date(),
-        },
+        _id: "current",
+        isProcessing: true,
+        processingKind: gameState.processingKind ?? null,
+        processingAbandonedAt: gameState.processingAbandonedAt ?? null,
+        processingStartedAt: gameState.processingStartedAt ?? null,
+        processingTargetTurn: gameState.processingTargetTurn ?? null,
+        processingPhase: gameState.processingPhase ?? null,
+        processingHeartbeatAt: gameState.processingHeartbeatAt ?? null,
+      },
+      {
+        $set: releaseFields,
       }
     );
+
+    if (result.matchedCount === 0) {
+      return errorResponse(
+        409,
+        "Processing lock changed while the reset was in progress. Nothing was cleared; refresh and try again."
+      );
+    }
 
     if (result.modifiedCount > 0) {
       invalidateGameStateCache();
@@ -100,7 +130,10 @@ export async function POST() {
         action: "turn_lock_reset",
         username: auth.admin.username,
         adminUsername: auth.admin.username,
-        details: `Cleared stale processing lock (phase=${gameState.processingPhase ?? "none"}, targetTurn=${gameState.processingTargetTurn ?? "none"})`,
+        details:
+          `Released stale processing lock (phase=${gameState.processingPhase ?? "none"}, ` +
+          `targetTurn=${gameState.processingTargetTurn ?? "none"}, ` +
+          `recoveryEvidence=${preserveRecoveryEvidence ? "preserved" : "none"})`,
       });
     }
 
@@ -109,7 +142,9 @@ export async function POST() {
       modified: result.modifiedCount > 0,
       message:
         result.modifiedCount > 0
-          ? "Processing lock cleared. Next cron tick will run normally."
+          ? preserveRecoveryEvidence
+            ? "Processing lock released. Existing turn recovery evidence was preserved for the next cron tick."
+            : "Processing lock cleared. Next cron tick will run normally."
           : "No change - lock was already cleared.",
     });
   } catch (error) {

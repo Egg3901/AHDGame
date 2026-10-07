@@ -232,10 +232,9 @@ describe("GET /api/admin/health/warnings", () => {
     );
   });
 
-  // Phase-budget pressure. runPhase kills a phase at PHASE_TIMEOUT_MS (240s),
-  // failing the phase and aborting the turn — so a phase creeping toward that
-  // ceiling is an outage with a lead time. A slow phase that still SUCCEEDS
-  // raises no warning, skip or error anywhere else, so nothing surfaced it.
+  // Phase-budget pressure. runPhase reports failure at PHASE_TIMEOUT_MS (240s)
+  // and drains the callback before the turn continues, so a phase creeping
+  // toward that threshold remains an outage risk with lead time.
   describe("phaseBudget warnings", () => {
     let sortSpy: ReturnType<typeof vi.fn>;
 

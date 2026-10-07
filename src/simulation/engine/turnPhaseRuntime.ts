@@ -17,7 +17,11 @@ import {
   roundTripCountsAvailable,
 } from "@/lib/observability/mongoRoundTrips";
 import { roundTripBudgetFor } from "./turnPhaseBudgets";
-import { discardPhaseSubsteps, takePhaseSubsteps } from "@/lib/observability/phaseSubsteps";
+import {
+  discardPhaseSubsteps,
+  peekPhaseSubsteps,
+  takePhaseSubsteps,
+} from "@/lib/observability/phaseSubsteps";
 import { withSpan } from "@/lib/observability/spans";
 import type { CompletedTurnPhaseObservation, TurnPhaseRuntime } from "@/simulation/engine/types";
 import { TURN_LOCK_HEARTBEAT_MS, PHASE_TIMEOUT_MS } from "@/lib/turn/processingLock";
@@ -338,12 +342,18 @@ export function createTurnPhaseRuntime(input: {
     let heartbeatTimer = setInterval(() => {
       // Heartbeats renew the lock only. An in-flight heartbeat may finish after
       // a terminal status write and must never revive that phase as running.
+      // Substeps are written as nested fields rather than replacing the status,
+      // so the progress overlay gains live detail without creating that race.
+      const now = new Date();
+      const substeps = peekPhaseSubsteps(name);
+      const setFields: Record<string, unknown> = { processingHeartbeatAt: now };
+      if (substeps) {
+        setFields[`processingPhaseStatuses.${name}.substeps`] = substeps;
+        setFields[`processingPhaseStatuses.${name}.updatedAt`] = now;
+      }
       void db
         .collection<GameState>("gameState")
-        .updateOne(
-          { _id: "current", isProcessing: true },
-          { $set: { processingHeartbeatAt: new Date() } }
-        )
+        .updateOne({ _id: "current", isProcessing: true }, { $set: setFields })
         .catch((err) => {
           console.warn(`[Turn] Failed to refresh heartbeat for phase "${name}"`, err);
           Sentry.captureException(err, {
@@ -366,12 +376,16 @@ export function createTurnPhaseRuntime(input: {
     function beginDrain(): Promise<void> {
       clearInterval(heartbeatTimer);
       heartbeatTimer = setInterval(() => {
+        const now = new Date();
+        const substeps = peekPhaseSubsteps(name);
+        const setFields: Record<string, unknown> = { processingHeartbeatAt: now };
+        if (substeps) {
+          setFields[`processingPhaseStatuses.${name}.substeps`] = substeps;
+          setFields[`processingPhaseStatuses.${name}.updatedAt`] = now;
+        }
         void db
           .collection<GameState>("gameState")
-          .updateOne(
-            { _id: "current", isProcessing: true },
-            { $set: { processingHeartbeatAt: new Date() } }
-          )
+          .updateOne({ _id: "current", isProcessing: true }, { $set: setFields })
           .catch((err) => {
             console.warn(`[Turn] Failed to refresh heartbeat for draining phase "${name}"`, err);
             Sentry.captureException(err, {
@@ -531,12 +545,27 @@ export function createTurnPhaseRuntime(input: {
           reason: message,
         });
       }
-      discardPhaseSubsteps(name);
-      void setPhaseStatus(name, "failed", { reason: "other", message }).catch((setErr) =>
-        console.warn(`[Turn] Failed to mark phase "${name}" failed`, setErr)
+      const persistFailure = (substeps: TurnPhaseTelemetry["substeps"] | undefined) =>
+        setPhaseStatus(name, "failed", {
+          reason: "other",
+          message,
+          ...(substeps ? { substeps } : {}),
+        }).catch((setErr) => console.warn(`[Turn] Failed to mark phase "${name}" failed`, setErr));
+      const initialFailureWrite = persistFailure(
+        drained ? peekPhaseSubsteps(name) : takePhaseSubsteps(name)
       );
       warnings.push(`${name}: ${message}`);
-      if (drained) await drained;
+      if (drained) {
+        await drained;
+        // The prompt timeout marker and final drained snapshot both replace
+        // the phase status. Serialize them so a slow first write cannot land
+        // last and overwrite substeps recorded while the callback drained.
+        await initialFailureWrite;
+        const finalSubsteps = takePhaseSubsteps(name);
+        if (finalSubsteps) await persistFailure(finalSubsteps);
+      } else {
+        void initialFailureWrite;
+      }
       return null;
     } finally {
       endPhaseProfiling(name);

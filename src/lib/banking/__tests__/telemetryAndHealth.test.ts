@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import { countBankingEvent, recordBankingStage, timedBankingStage } from "@/lib/banking/telemetry";
+import {
+  countBankingEvent,
+  recordBankingStage,
+  timedBankingStage,
+  withBankingTelemetryBatch,
+} from "@/lib/banking/telemetry";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { buildBankingHealth } from "@/lib/banking/health";
 
@@ -42,10 +47,23 @@ describe("banking telemetry", () => {
 
   it("ignores non-positive and non-finite input", async () => {
     countBankingEvent(db as unknown as Db, 42, "staleCommands", 0);
+    countBankingEvent(db as unknown as Db, 42, "staleCommands", Number.POSITIVE_INFINITY);
     countBankingEvent(db as unknown as Db, Number.NaN, "staleCommands", 1);
     recordBankingStage(db as unknown as Db, 42, "funding", -1);
     await flushMicrotasks();
     expect(db.collectionMocks.bankingTelemetry!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("does not wait for the best-effort batch flush", async () => {
+    db.collectionMocks.bankingTelemetry!.updateOne.mockReturnValue(new Promise(() => {}));
+
+    await expect(
+      withBankingTelemetryBatch(db as unknown as Db, 42, async () => {
+        countBankingEvent(db as unknown as Db, 42, "recoveredProjections");
+        return "settled";
+      })
+    ).resolves.toBe("settled");
+    expect(db.collectionMocks.bankingTelemetry!.updateOne).toHaveBeenCalledTimes(1);
   });
 
   it("records a stage duration and run count", async () => {
@@ -57,6 +75,25 @@ describe("banking telemetry", () => {
     };
     expect(update.$inc["stageRuns.loanServicing"]).toBe(1);
     expect(update.$inc["stageMs.loanServicing"]).toBeGreaterThanOrEqual(0);
+  });
+
+  it("coalesces counters and stage timing inside an explicit batch", async () => {
+    await withBankingTelemetryBatch(db as unknown as Db, 42, async () => {
+      countBankingEvent(db as unknown as Db, 42, "recoveredProjections");
+      countBankingEvent(db as unknown as Db, 42, "recoveredProjections", 2);
+      recordBankingStage(db as unknown as Db, 42, "recovery", 4.4);
+      expect(db.collectionMocks.bankingTelemetry!.updateOne).not.toHaveBeenCalled();
+    });
+
+    expect(db.collectionMocks.bankingTelemetry!.updateOne).toHaveBeenCalledTimes(1);
+    const update = db.collectionMocks.bankingTelemetry!.updateOne.mock.calls[0][1] as {
+      $inc: Record<string, number>;
+    };
+    expect(update.$inc).toEqual({
+      "counters.recoveredProjections": 3,
+      "stageMs.recovery": 4,
+      "stageRuns.recovery": 1,
+    });
   });
 
   it("never throws when the driver rejects or a mock returns nothing", async () => {
