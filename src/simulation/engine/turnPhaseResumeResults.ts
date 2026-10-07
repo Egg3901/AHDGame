@@ -54,6 +54,28 @@ function boundedFlow(value: unknown): Record<string, number> | null {
   return out;
 }
 
+/** Bounded plain-object copy of a valid BondTurnResult, for gameState. */
+function encodeBondTurnResult(result: unknown): Record<string, unknown> | null {
+  const decoded = decodeBondTurnResult(result);
+  if (!decoded) return null;
+  const out: Record<string, unknown> = {};
+  for (const key of BOND_COUNTS) out[key] = decoded[key];
+  for (const key of BOND_FLOWS) {
+    const flow = decoded[key];
+    if (flow) out[key] = { ...flow };
+  }
+  return out;
+}
+
+/**
+ * V2 treasury cash settles from all five sovereign flow maps. A result without
+ * every one of them (capture off, or a truncated stored copy) cannot feed it:
+ * an absent map is unknown, not zero. Non-V2 results legitimately omit them.
+ */
+export function hasCompleteSovereignFlows(result: BondTurnResult): boolean {
+  return BOND_FLOWS.every((key) => boundedFlow(result[key]) !== null);
+}
+
 /** Narrow a fresh or persisted value to an exact BondTurnResult, or null. */
 function decodeBondTurnResult(raw: unknown): BondTurnResult | null {
   if (!isRecord(raw)) return null;
@@ -80,7 +102,7 @@ interface ResumeResultCodec {
 }
 
 const CODECS: Record<string, ResumeResultCodec> = {
-  bondTurn: { encode: decodeBondTurnResult, decode: decodeBondTurnResult },
+  bondTurn: { encode: encodeBondTurnResult, decode: decodeBondTurnResult },
 };
 
 export function phaseRequiresResumeResult(name: string): boolean {
@@ -183,8 +205,24 @@ export function isResumeFailClosedError(err: unknown): boolean {
   return (
     err instanceof TurnResumeResultUnavailableError ||
     err instanceof TurnPhaseCompletionPersistError ||
-    err instanceof TurnResumeRefusedError
+    err instanceof TurnResumeRefusedError ||
+    err instanceof TurnPhaseResultIncompleteError
   );
+}
+
+/** A phase result exists but lacks fields its dependent requires. */
+export class TurnPhaseResultIncompleteError extends Error {
+  constructor(
+    readonly phase: string,
+    readonly dependent: string,
+    detail: string
+  ) {
+    super(
+      `${dependent} cannot run: the ${phase} result is incomplete (${detail}). ` +
+        `No missing flow is assumed to be zero. Repair required before this turn can finish.`
+    );
+    this.name = "TurnPhaseResultIncompleteError";
+  }
 }
 
 export class TurnResumeResultUnavailableError extends Error {

@@ -102,6 +102,10 @@ import { resolveProspects } from "@/lib/turn/prospecting/resolveProspects";
 import { settleExtractionContracts } from "@/lib/turn/extraction/contractSettlement";
 import { isProspectingEnabled, isContractIssuanceEnabled } from "@/lib/extraction/featureFlag";
 import { processBondTurn } from "@/lib/turn/bondTurn";
+import {
+  hasCompleteSovereignFlows,
+  TurnPhaseResultIncompleteError,
+} from "@/simulation/engine/turnPhaseResumeResults";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
 import { settleResetTreasuryCashTurn } from "@/lib/resetFinance/settleCashTurn";
 import { resetSystemVersionsFrom } from "@/lib/resetVersions/rules";
@@ -553,6 +557,13 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
             bondTurnResult,
             "resetTreasuryCash"
           );
+          if (!hasCompleteSovereignFlows(bondFlows)) {
+            throw new TurnPhaseResultIncompleteError(
+              "bondTurn",
+              "resetTreasuryCash",
+              "sovereign flow maps missing"
+            );
+          }
           (phaseResults as Record<string, unknown>).resetTreasuryCash = await runtime.runPhase(
             "resetTreasuryCash",
             () =>

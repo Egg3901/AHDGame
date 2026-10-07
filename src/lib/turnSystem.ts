@@ -56,6 +56,7 @@ import {
 } from "@/simulation/engine/turnPhaseResumeResults";
 import {
   bootstrapPhaseRecord,
+  isUnownedFailedTurn,
   lockAcquisitionSet,
   staleRecoveryEvidenceReset,
   validateLockedResume,
@@ -134,6 +135,7 @@ export async function initializeGameState(): Promise<GameState> {
     processingHeartbeatAt: null,
     processingPhase: null,
     processingPhaseStatuses: null,
+    processingPhaseResults: null,
     createdAt: now,
     updatedAt: now,
     // Fresh worlds start with the production feature-flag posture instead of
@@ -215,6 +217,7 @@ export async function releaseLocalProcessingLock(reason: string): Promise<boolea
           processingHeartbeatAt: null,
           processingPhase: null,
           processingPhaseStatuses: null,
+          processingPhaseResults: null,
           processingAbandonedAt: null,
           updatedAt: new Date(),
         },
@@ -326,6 +329,11 @@ async function processTurnImpl(
           // from the locked document after takeover, which must name the same target
           // (#3429).
           preLockRecoveryTarget = preLockState.processingTargetTurn;
+        } else if (isUnownedFailedTurn(preLockState)) {
+          // A turn the ordinary failure path released after phases applied. Its
+          // finalized statuses are exact for that holder, so it resumes under the
+          // same rules instead of rerunning from scratch (#3429).
+          preLockRecoveryTarget = preLockState.processingTargetTurn ?? null;
         }
         const lastTp = new Date(preLockState.lastTurnProcessed);
         const latestCronFire = localSingleplayer
@@ -649,6 +657,7 @@ async function processTurnImpl(
           processingHeartbeatAt: null,
           processingPhase: null,
           processingPhaseStatuses: null,
+          processingPhaseResults: null,
           updatedAt: context.realNow,
           ...(localSingleplayer
             ? {
@@ -812,6 +821,21 @@ async function processTurnImpl(
         currentPhaseRef.current && currentPhaseRef.current !== TURN_BOOTSTRAP_PHASE
           ? currentPhaseRef.current
           : (resumedFromCrash?.lastPhase ?? currentPhaseRef.current);
+      const failedTarget = resumedFromCrash?.targetTurn ?? (activeTurn > 0 ? activeTurn : null);
+      // Only overwrite evidence with values this attempt actually has. A failure
+      // before setup (no statuses, no target yet) must not null out what the
+      // previous holder left, or the next attempt would rerun applied phases.
+      const evidence = {
+        ...(holdForRepair
+          ? committedPhase
+            ? { processingPhase: committedPhase }
+            : {}
+          : currentPhaseRef.current
+            ? { processingPhase: currentPhaseRef.current }
+            : {}),
+        ...(failedTarget != null ? { processingTargetTurn: failedTarget } : {}),
+        ...(finalizedPhaseStatuses ? { processingPhaseStatuses: finalizedPhaseStatuses } : {}),
+      };
       await db.collection<GameState>("gameState").updateOne(
         { _id: "current" },
         {
@@ -821,21 +845,14 @@ async function processTurnImpl(
                 processingKind: "turn",
                 processingHeartbeatAt: failureTime,
                 processingAbandonedAt: failureTime,
-                processingPhase: committedPhase,
-                processingTargetTurn:
-                  resumedFromCrash?.targetTurn ?? (activeTurn > 0 ? activeTurn : null),
-                ...(finalizedPhaseStatuses
-                  ? { processingPhaseStatuses: finalizedPhaseStatuses }
-                  : {}),
+                ...evidence,
                 updatedAt: failureTime,
               }
             : {
                 isProcessing: false,
                 processingKind: null,
                 processingHeartbeatAt: failureTime,
-                processingPhase: currentPhaseRef.current,
-                processingTargetTurn: activeTurn > 0 ? activeTurn : null,
-                processingPhaseStatuses: finalizedPhaseStatuses,
+                ...evidence,
                 updatedAt: failureTime,
               },
         }

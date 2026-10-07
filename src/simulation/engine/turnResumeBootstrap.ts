@@ -13,6 +13,7 @@
 import type { GameState, TurnPhaseTelemetryMap } from "@/lib/db/types";
 import { TURN_BOOTSTRAP_PHASE, turnHasCommittedWrites } from "@/lib/turn/processingLock";
 import {
+  TurnResumeRefusedError,
   encodeResumeResult,
   readCrashedTurnPhaseState,
   type CrashedTurnPhaseState,
@@ -73,10 +74,42 @@ export function validateLockedResume(
 }
 
 /**
+ * Next-turn evidence that proves phases already applied: the target is the turn
+ * after `currentTurn`, the turn got past bootstrap, and at least one phase is
+ * marked applied. Discarding it would rerun committed financial writes.
+ */
+export function hasAppliedNextTurnEvidence(state: RecoveryFields): boolean {
+  if (state.processingTargetTurn !== state.currentTurn + 1) return false;
+  if (!turnHasCommittedWrites(state.processingPhase)) return false;
+  const phaseState = readCrashedTurnPhaseState(state.processingPhaseStatuses, null);
+  return phaseState.completed.size + phaseState.interrupted.size > 0;
+}
+
+/**
+ * A failed turn released by the ordinary failure path, which set
+ * `isProcessing: false` and `processingKind: null` but kept the target, phase
+ * and finalized statuses. The stale-lock gate never sees it, because there is
+ * no lock, so it is recognised here. `processingKind` is deliberately not
+ * required: that path cleared it. A completed turn clears its target and a
+ * healthy lock is still held, so neither matches.
+ */
+export function isUnownedFailedTurn(state: RecoveryFields & Pick<GameState, "isProcessing">) {
+  return state.isProcessing !== true && hasAppliedNextTurnEvidence(state);
+}
+
+/**
  * Evidence left by an earlier holder that does not describe a resumable turn.
  * Cleared before setup writes anything; skipped (no round trip) when absent.
  */
 export function staleRecoveryEvidenceReset(locked: RecoveryFields) {
+  // Applied next-turn evidence is never discarded, even when the resume did not
+  // validate; the caller must stop instead.
+  if (hasAppliedNextTurnEvidence(locked)) {
+    throw new TurnResumeRefusedError(
+      `Turn ${locked.processingTargetTurn} has phases already applied but did not validate ` +
+        `as a resume; refusing to discard its evidence or rerun it. Repair required.`
+    );
+  }
   const present =
     locked.processingTargetTurn != null ||
     (locked.processingPhase != null && locked.processingPhase !== TURN_BOOTSTRAP_PHASE) ||

@@ -3,6 +3,7 @@ import type { TurnPhaseTelemetryMap } from "@/lib/db/types";
 import type { BondTurnResult } from "@/lib/turn/bondTurn";
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 import {
+  hasCompleteSovereignFlows,
   isResumeFailClosedError,
   readCrashedTurnPhaseState,
   TurnPhaseCompletionPersistError,
@@ -386,5 +387,41 @@ describe("lock takeover and setup preserve crash evidence (#3429)", () => {
       "processingKind",
       "processingStartedAt",
     ]);
+  });
+});
+
+describe("V2 sovereign flow completeness (#3429)", () => {
+  const counters = {
+    bondsProcessed: 7,
+    couponsPaid: 5,
+    bondsMatured: 1,
+    bondsDefaulted: 0,
+    totalCouponsPaid: 1234.5,
+    bondHistorySnapshots: 7,
+    bondsAutoRestructured: 0,
+    bondsAutoRefinanced: 0,
+  };
+
+  it.each([
+    ["all flow maps missing", counters],
+    ["one flow map missing", { ...BOND_RESULT, sovereignDebtFaceRetiredByCountry: undefined }],
+  ])("rejects a stored result with %s before V2 settlement", (_label, stored) => {
+    const state = readCrashedTurnPhaseState(
+      { bondTurn: { status: "completed" } } as unknown as TurnPhaseTelemetryMap,
+      { bondTurn: stored }
+    );
+    // Still restorable for non-V2 consumers, which never read the flows...
+    expect(state.results.bondTurn).toBeDefined();
+    // ...but never complete enough for treasury cash.
+    expect(hasCompleteSovereignFlows(state.results.bondTurn as BondTurnResult)).toBe(false);
+  });
+
+  it("accepts a complete result and keeps a capture-off result for non-V2 use", () => {
+    expect(hasCompleteSovereignFlows(BOND_RESULT)).toBe(true);
+    const state = readCrashedTurnPhaseState(
+      { bondTurn: { status: "completed" } } as unknown as TurnPhaseTelemetryMap,
+      { bondTurn: counters }
+    );
+    expect(state.results.bondTurn).toEqual(counters);
   });
 });
