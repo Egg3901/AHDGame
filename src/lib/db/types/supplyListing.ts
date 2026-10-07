@@ -1,6 +1,9 @@
 import type { ObjectId } from "mongodb";
 import type { CommodityType } from "@/lib/constants/commodities";
-/** Non-binding advertisement. Only a separately accepted supply agreement settles. */
+/**
+ * Standing offer. Posting is the publisher's consent: a taker who passes the
+ * contract guards forms an active agreement for any volume up to what is left.
+ */
 export interface SupplyListing {
   /** Publisher id and slot make the ten-listing limit atomic. */
   _id: string;
@@ -23,6 +26,10 @@ export interface SupplyListingView {
   id: string;
   corporationId: string;
   corporationName: string;
+  /** Publisher's home country, the seller's for a sell offer. */
+  corporationCountryId?: string;
+  /** Publisher's credit rating, when one has been assigned. */
+  creditRating?: string;
   slot: number;
   own: boolean;
   /** Posted by an AI-run corporation rather than a player. */

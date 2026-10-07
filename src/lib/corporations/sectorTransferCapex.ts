@@ -60,6 +60,14 @@ export interface SectorPlantFields {
    * the rollback script can only file under "needs a human decision".
    */
   legacyRevenueShadow?: number | null;
+  /**
+   * Stockpiled output, units per commodity. A pile is physical goods the buyer
+   * paid for with the sector, so a merge sums it per commodity and a carve
+   * slices it with the capacity.
+   */
+  inventoryUnits?: Partial<Record<string, number>> | null;
+  /** ₳ value of that pile; summed and sliced in lockstep with the units. */
+  inventoryValueAnchor?: number | null;
 }
 
 /** The `$set` fragment a merge/carve produces. Keys match the sector doc. */
@@ -75,6 +83,9 @@ export interface SectorPlantFieldsUpdate {
   activeCapacityPercent?: number;
   plantsStartTurn: number | null;
   legacyRevenueShadow: number | null;
+  /** Present only when either side carried a pile. */
+  inventoryUnits?: Partial<Record<string, number>>;
+  inventoryValueAnchor?: number;
 }
 
 const num = (v: number | null | undefined): number =>
@@ -103,6 +114,30 @@ const remainder = (s: SectorPlantFields): number => {
     ? s.plantUnitRemainder
     : 0;
 };
+
+const hasInventory = (s: SectorPlantFields): boolean =>
+  num(s.inventoryValueAnchor) > 0 ||
+  Object.values(s.inventoryUnits ?? {}).some((units) => num(units ?? 0) > 0);
+
+/** Inventory `$set` fragment scaled by `factor`; empty when the sector holds no pile. */
+function inventoryFragment(
+  sources: readonly SectorPlantFields[],
+  factor = 1
+): Pick<SectorPlantFieldsUpdate, "inventoryUnits" | "inventoryValueAnchor"> {
+  const held = sources.filter(hasInventory);
+  if (held.length === 0) return {};
+  const inventoryUnits: Partial<Record<string, number>> = {};
+  for (const source of held) {
+    for (const [commodity, units] of Object.entries(source.inventoryUnits ?? {})) {
+      const amount = num(units ?? 0) * factor;
+      if (amount > 0) inventoryUnits[commodity] = (inventoryUnits[commodity] ?? 0) + amount;
+    }
+  }
+  return {
+    inventoryUnits,
+    inventoryValueAnchor: held.reduce((sum, s) => sum + num(s.inventoryValueAnchor) * factor, 0),
+  };
+}
 
 /** A restore point, or `null` if this row has none / a corrupt one. */
 const shadow = (s: SectorPlantFields): number | null =>
@@ -197,6 +232,9 @@ export function mergeSectorPlantFields(
     // having one is better than neither, even though the sum is then short by
     // whatever the shadow-less half was worth.
     legacyRevenueShadow: shadows.length > 0 ? shadows.reduce((a, b) => a + b, 0) : null,
+    // The incoming doc is deleted next, so its pile is summed per commodity
+    // into the survivor or it disappears with the row.
+    ...inventoryFragment([survivor, incoming]),
   };
 }
 
@@ -232,6 +270,7 @@ export function identitySectorPlantFields(sector: SectorPlantFields): SectorPlan
     activeCapacityPercent: sector.activeCapacityPercent ?? 100,
     plantsStartTurn: typeof sector.plantsStartTurn === "number" ? sector.plantsStartTurn : null,
     legacyRevenueShadow: shadow(sector),
+    ...inventoryFragment([sector]),
   };
 }
 
@@ -304,6 +343,8 @@ export function carveSectorPlantFields(
     // Split like revenue: the restore point is a nameplate, and the two halves
     // must still sum to the original one.
     legacyRevenueShadow: sourceShadow === null ? null : sourceShadow * f,
+    // The pile follows the capacity, so the two halves still sum to the original.
+    ...inventoryFragment([sector], stockFraction),
   };
 }
 
@@ -335,5 +376,7 @@ export function readSectorPlantFields(sector: Partial<CorporateSector>): SectorP
     activeCapacityPercent: sector.activeCapacityPercent,
     plantsStartTurn: sector.plantsStartTurn,
     legacyRevenueShadow: sector.legacyRevenueShadow,
+    inventoryUnits: sector.inventoryUnits,
+    inventoryValueAnchor: sector.inventoryValueAnchor,
   };
 }

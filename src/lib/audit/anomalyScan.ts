@@ -31,8 +31,14 @@ import type { AuditAnomalyFinding, AuditAnomalyType } from "@/lib/db/types/audit
 import {
   detectCircularWire as detectTransferCircularWire,
   detectWireFanInFanOut as detectTransferWireFanInFanOut,
+  SUPPLY_AGREEMENT_SETTLEMENT_ACTION,
   type AnomalyAuditRow,
+  type TransferFlowOptions,
 } from "@/lib/audit/rules/transferFlows";
+import {
+  agreementIdMatchValues,
+  loadRelatedSupplyAgreementIds,
+} from "@/lib/audit/relatedSupplyAgreements";
 
 export type { AnomalyAuditRow } from "@/lib/audit/rules/transferFlows";
 export { SYSTEM_SETTLEMENT_ACTIONS } from "@/lib/audit/rules/transferFlows";
@@ -190,8 +196,11 @@ export function detectRapidRepeat(
   };
 }
 
-export function detectCircularWire(rows: AnomalyAuditRow[]): DetectorResult {
-  return detectTransferCircularWire(rows);
+export function detectCircularWire(
+  rows: AnomalyAuditRow[],
+  options: TransferFlowOptions = {}
+): DetectorResult {
+  return detectTransferCircularWire(rows, options);
 }
 
 export function detectWireFanInFanOut(
@@ -432,13 +441,24 @@ const PRE_ELECTION_FUNDING_ACTIONS = ["party.donate", "party.transfer"];
  * Keep this in step with the detectors; the equivalence test in
  * anomalyScan.test.ts runs every detector on both row sets.
  */
-export function anomalyCandidateClauses(isPreElectionWindow: boolean): Document[] {
+export function anomalyCandidateClauses(
+  isPreElectionWindow: boolean,
+  relatedAgreementIds: ReadonlySet<string> = new Set()
+): Document[] {
   const clauses: Document[] = [
     { "actor.userId": { $ne: null } },
     { "actor.characterId": { $ne: null } },
     { "actor.kind": { $in: ["player", "npp", "admin"] } },
     { category: "admin" },
   ];
+  if (relatedAgreementIds.size > 0) {
+    // Supply settlement is system-actor and routine, except between related
+    // parties, whose rows `circular_wire` must see.
+    clauses.push({
+      action: SUPPLY_AGREEMENT_SETTLEMENT_ACTION,
+      "meta.agreementId": { $in: agreementIdMatchValues(relatedAgreementIds) },
+    });
+  }
   if (isPreElectionWindow) {
     clauses.push({
       category: "money",
@@ -448,8 +468,15 @@ export function anomalyCandidateClauses(isPreElectionWindow: boolean): Document[
   return clauses;
 }
 
-export function anomalyCandidateFilter(minTurn: number, isPreElectionWindow: boolean): Document {
-  return { turn: { $gte: minTurn }, $or: anomalyCandidateClauses(isPreElectionWindow) };
+export function anomalyCandidateFilter(
+  minTurn: number,
+  isPreElectionWindow: boolean,
+  relatedAgreementIds: ReadonlySet<string> = new Set()
+): Document {
+  return {
+    turn: { $gte: minTurn },
+    $or: anomalyCandidateClauses(isPreElectionWindow, relatedAgreementIds),
+  };
 }
 
 /**
@@ -463,14 +490,15 @@ async function detectWireFanInFanOutWithSkippedRows(
   rows: AnomalyAuditRow[],
   config: AnomalyScanConfig,
   minTurn: number,
-  isPreElectionWindow: boolean
+  isPreElectionWindow: boolean,
+  relatedAgreementIds: ReadonlySet<string>
 ): Promise<DetectorResult> {
   const result = detectWireFanInFanOut(rows, config);
   if (!result.finding) return result;
   const skippedMoneyRows = await col.countDocuments({
     turn: { $gte: minTurn },
     category: "money",
-    $nor: anomalyCandidateClauses(isPreElectionWindow),
+    $nor: anomalyCandidateClauses(isPreElectionWindow, relatedAgreementIds),
   });
   if (skippedMoneyRows === 0) return result;
   return detectWireFanInFanOut(rows, config, {
@@ -542,19 +570,30 @@ export async function runAuditAnomalyScan(
     // Stream compact rows instead of materializing every projected document.
     // The filter keeps only rows some detector can act on, so the system
     // mirror of every financialTxLog row never leaves Mongo.
+    const relatedAgreementIds = await loadRelatedSupplyAgreementIds(db);
     const rows: AnomalyAuditRow[] = [];
-    const cursor = col.find(anomalyCandidateFilter(minTurn, isPreElectionWindow), {
-      projection: ANOMALY_SCAN_PROJECTION,
-      batchSize: ANOMALY_SCAN_BATCH_SIZE,
-    });
+    const cursor = col.find(
+      anomalyCandidateFilter(minTurn, isPreElectionWindow, relatedAgreementIds),
+      {
+        projection: ANOMALY_SCAN_PROJECTION,
+        batchSize: ANOMALY_SCAN_BATCH_SIZE,
+      }
+    );
     for await (const doc of cursor) rows.push(toAnomalyRow(doc as ActionAuditRecord));
 
     if (rows.length === 0) return null;
 
     const results: DetectorResult[] = [
       detectRapidRepeat(rows, config),
-      detectCircularWire(rows),
-      await detectWireFanInFanOutWithSkippedRows(col, rows, config, minTurn, isPreElectionWindow),
+      detectCircularWire(rows, { relatedAgreementIds }),
+      await detectWireFanInFanOutWithSkippedRows(
+        col,
+        rows,
+        config,
+        minTurn,
+        isPreElectionWindow,
+        relatedAgreementIds
+      ),
       detectWashTrade(rows, config),
       detectPreElectionFundingSurge(rows, { isPreElectionWindow, ...config }),
       detectOffHoursPrivilegedAction(rows, config),

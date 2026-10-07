@@ -10,6 +10,10 @@ vi.mock("@/lib/api/corporations/resolveQuery", () => ({
 }));
 vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn() }));
+vi.mock("@/lib/api/rateLimit", () => ({
+  checkRateLimit: vi.fn().mockReturnValue({ ok: true }),
+  rateLimitResponse: vi.fn(),
+}));
 vi.mock("@/lib/market/featureFlag", () => ({
   getMarketSystemModeForDb: vi.fn().mockResolvedValue("plants"),
   marketAtLeast: vi.fn().mockReturnValue(true),
@@ -71,7 +75,10 @@ describe("proposeSupplyAgreement", () => {
       ])
     );
     db.collection("gameState").findOne.mockResolvedValue({ currentTurn: 10, currentYear: 1953 });
-    db.collection("gameConfig").findOne.mockResolvedValue({ commandEconomyEnabled: false });
+    db.collection("gameConfig").findOne.mockResolvedValue({
+      commandEconomyEnabled: false,
+      supplyAgreementsEnabled: true,
+    });
     db.collection("corporations").findOne.mockResolvedValue({ _id: new ObjectId() });
   }
 
@@ -174,7 +181,10 @@ describe("proposeSupplyAgreement", () => {
       ])
     );
     db.collection("gameState").findOne.mockResolvedValue({ currentTurn: 12, currentYear: 1953 });
-    db.collection("gameConfig").findOne.mockResolvedValue({ commandEconomyEnabled: false });
+    db.collection("gameConfig").findOne.mockResolvedValue({
+      commandEconomyEnabled: false,
+      supplyAgreementsEnabled: true,
+    });
     const supplierUserId = new ObjectId();
     db.collection("corporations").findOne.mockResolvedValue({
       _id: supplierId,
@@ -250,6 +260,7 @@ describe("proposeSupplyAgreement", () => {
   });
 
   it("rejects freight because corporation-wide agreements have no state identity", async () => {
+    db.collection("gameConfig").findOne.mockResolvedValue({ supplyAgreementsEnabled: true });
     const { proposeSupplyAgreement } = await import("./supplyAgreements");
     const response = await proposeSupplyAgreement(
       new Request("http://localhost/api/corporations/supplier/supply-agreements", {
@@ -342,12 +353,16 @@ describe("updateSupplyAgreement", () => {
       ])
     );
     db.collection("gameState").findOne.mockResolvedValue({ currentTurn: 20, currentYear: 1953 });
-    db.collection("gameConfig").findOne.mockResolvedValue({ commandEconomyEnabled: false });
-    db.collection("corporations").findOne.mockResolvedValue({
-      _id: supplierId,
-      name: "Gridworks",
-      userId: new ObjectId(),
+    db.collection("gameConfig").findOne.mockResolvedValue({
+      commandEconomyEnabled: false,
+      supplyAgreementsEnabled: true,
     });
+    const supplierDoc = { _id: supplierId, name: "Gridworks", userId: new ObjectId() };
+    const buyerDoc = { _id: buyerId, name: "Buyco", userId: new ObjectId() };
+    db.collection("corporations").findOne.mockResolvedValue(supplierDoc);
+    db.collection("corporations").find.mockReturnValue(
+      createAsyncIterableCursor([supplierDoc, buyerDoc])
+    );
     return agreementId;
   }
 

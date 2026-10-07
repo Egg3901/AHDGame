@@ -1118,3 +1118,57 @@ describe("ANOMALY_SCAN_DEFAULTS", () => {
     );
   });
 });
+
+describe("circular wire on related-party supply agreements", () => {
+  const base = Date.parse("2026-10-01T00:00:00Z");
+  const settle = (
+    offset: number,
+    turn: number,
+    agreementId: string,
+    payer: string,
+    payee: string
+  ) =>
+    row({
+      ts: new Date(base + offset),
+      turn,
+      actorKind: "system",
+      actorKey: null,
+      action: "corp.supply_agreement",
+      category: "money",
+      subjectId: payer,
+      counterpartyId: payee,
+      agreementId,
+      amount: -500,
+    });
+  // Premium A->B on turn 1, damages B->A on turn 2: the ring shape.
+  const rows = [settle(0, 1, "ag-1", "A", "B"), settle(60_000, 2, "ag-1", "B", "A")];
+
+  it("keeps ordinary supply settlement exempt", () => {
+    expect(detectCircularWire(rows).flaggedIds.size).toBe(0);
+  });
+
+  it("flags the round trip once the agreement is known to be related", () => {
+    const { flaggedIds, finding } = detectCircularWire(rows, {
+      relatedAgreementIds: new Set(["ag-1"]),
+    });
+    expect(flaggedIds.size).toBe(2);
+    expect(finding?.type).toBe("circular_wire");
+  });
+
+  it("does not extend the exemption lift to other agreements or other actions", () => {
+    expect(
+      detectCircularWire(rows, { relatedAgreementIds: new Set(["ag-2"]) }).flaggedIds.size
+    ).toBe(0);
+    const dividends = rows.map((r) => ({ ...r, action: "corp.dividends" }));
+    expect(
+      detectCircularWire(dividends, { relatedAgreementIds: new Set(["ag-1"]) }).flaggedIds.size
+    ).toBe(0);
+  });
+
+  it("pulls related settlement rows into the candidate filter only when some exist", () => {
+    const none = anomalyCandidateFilter(95, false).$or as unknown[];
+    const some = anomalyCandidateFilter(95, false, new Set(["ag-1"])).$or as unknown[];
+    expect(some.length).toBe(none.length + 1);
+    expect(some[some.length - 1]).toMatchObject({ action: "corp.supply_agreement" });
+  });
+});
