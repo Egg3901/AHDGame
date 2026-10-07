@@ -189,7 +189,7 @@ describe("takeSupplyListing", () => {
       db.collection("supplyListings").findOne.mockResolvedValue(
         listing({ publishedByUserId: doc.userId.toString() })
       );
-      const as = taker(doc.ceoId ? { ceoId: takerId, ceoType: "character" } : {});
+      const as = taker((doc as { ceoId?: unknown }).ceoId ? { ceoId: takerId, ceoType: "character" } : {});
       const response = await takeRequest({ listingId: `${publisherId}:0`, volume: 10 }, as);
       expect(response.status).toBe(403);
     }

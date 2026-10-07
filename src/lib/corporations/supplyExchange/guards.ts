@@ -6,6 +6,7 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isCurtained } from "@/lib/constants/commandEconomy";
 import { COUNTRY_ORDER } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
+import type { CountryId } from "@/lib/constants/countries";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import type { GameState } from "@/lib/db/types/gameState";
@@ -61,6 +62,8 @@ export async function isSupplyLaneClosed(
       .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
   ]);
   const turn = world?.currentTurn ?? 0;
+  const supplier = supplierCountry as CountryId;
+  const buyer = buyerCountry as CountryId;
   const embargoes = await db
     .collection<TradeEmbargo>("tradeEmbargoes")
     .find({
@@ -68,8 +71,8 @@ export async function isSupplyLaneClosed(
         { $or: [{ expiresTurn: { $exists: false } }, { expiresTurn: { $gte: turn } }] },
         {
           $or: [
-            { sourceCountry: supplierCountry, targetCountry: buyerCountry },
-            { sourceCountry: buyerCountry, targetCountry: supplierCountry },
+            { sourceCountry: supplier, targetCountry: buyer },
+            { sourceCountry: buyer, targetCountry: supplier },
           ],
         },
       ],
@@ -87,7 +90,7 @@ export async function isSupplyLaneClosed(
     embargoes,
     curtainedCountries,
   });
-  return affinityFor(commodity, supplierCountry, buyerCountry) <= 0;
+  return affinityFor(commodity, supplier, buyer) <= 0;
 }
 
 type GuardedCorp = RelatedPartyCorp & Pick<Corporation, "countryId">;
