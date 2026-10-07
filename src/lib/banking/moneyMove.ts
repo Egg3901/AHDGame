@@ -685,7 +685,7 @@ async function deliverCreditLegsInBatch(
   const targets = db.collection<LegTarget>(collection);
   const ids = group.map((i) => legs[i].filter!._id);
   const rows = await targets
-    .find({ _id: { $in: ids } } as Filter<LegTarget>, {
+    .find({ _id: { $in: ids } } as unknown as Filter<LegTarget>, {
       projection: { [PENDING_LEG]: 1, [LEG_REVISION]: 1 },
     })
     .toArray();
@@ -743,7 +743,7 @@ async function deliverCreditLegsInBatch(
       {
         _id: { $in: [...receipts.keys()].map((i) => legs[i].filter!._id) },
         [`${PENDING_LEG}.key`]: key,
-      } as Filter<LegTarget>,
+      } as unknown as Filter<LegTarget>,
       { projection: { [PENDING_LEG]: 1 } }
     )
     .toArray();
