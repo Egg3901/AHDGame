@@ -50,6 +50,10 @@ import {
   withPhaseProfiling,
 } from "@/lib/observability/mongoRoundTrips";
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
+import {
+  readCrashedTurnPhaseState,
+  type CrashedTurnPhaseState,
+} from "@/simulation/engine/turnPhaseResumeResults";
 import { buildTurnExecutionContext } from "@/simulation/engine/turnExecutionContext";
 import { recoverDemographicFlowsBeforeContext } from "@/lib/demographics/recoverFlows";
 import { getTurnPhaseRegistry } from "@/simulation/phases/turnPhaseRegistry";
@@ -228,6 +232,8 @@ interface CrashedTurnRecovery {
   lastPhase: string;
   /** Phases the dead holder already applied; the resumed turn must not repeat them. */
   appliedPhases: Set<string>;
+  /** Completed versus interrupted phases, and stored results dependents consume. */
+  phaseState: CrashedTurnPhaseState;
 }
 
 export function processTurn(options: Parameters<typeof processTurnImpl>[0] = {}) {
@@ -315,17 +321,19 @@ async function processTurnImpl(
           // have landed and no phase is guaranteed idempotent halfway through. Losing
           // that single phase is the price of resuming, against losing the ~150 the
           // turn had not reached yet, which is what consuming the turn cost.
-          const applied = new Set<string>();
-          for (const [phase, telemetry] of Object.entries(
-            preLockState.processingPhaseStatuses ?? {}
-          )) {
-            const status = (telemetry as { status?: string } | null)?.status;
-            if (status === "completed" || status === "running") applied.add(phase);
-          }
+          //
+          // The two are kept apart (#3429): only a completed phase can hand its stored
+          // result to a dependent phase. A phase an earlier resume inherited carries
+          // its original state, so a second crash never reruns it either.
+          const phaseState = readCrashedTurnPhaseState(
+            preLockState.processingPhaseStatuses,
+            preLockState.processingPhaseResults
+          );
           crashedTurnRecovery = {
             targetTurn: preLockState.processingTargetTurn,
             lastPhase: preLockState.processingPhase,
-            appliedPhases: applied,
+            appliedPhases: new Set([...phaseState.completed, ...phaseState.interrupted]),
+            phaseState,
           };
         }
         const lastTp = new Date(preLockState.lastTurnProcessed);
@@ -432,6 +440,7 @@ async function processTurnImpl(
           processingHeartbeatAt: lockAcquiredAt,
           processingPhase: TURN_BOOTSTRAP_PHASE,
           processingPhaseStatuses: null,
+          processingPhaseResults: null,
           // Never inherit the previous holder's abandon marker: this lock is live.
           processingAbandonedAt: null,
         },
@@ -468,10 +477,14 @@ async function processTurnImpl(
     //
     // It now RESUMES instead. `appliedPhases` names what must not run again, `runPhase`
     // skips exactly those, and the rest of the turn executes normally and completes
-    // normally, advancing the clock itself. Safe because a phase reads only the turn
-    // context (a read-only snapshot of characters and states, built at turn start) and
-    // writes its own `phaseResults` entry; no phase consumes another's results, so
-    // skipping one cannot starve a later one of an input.
+    // normally, advancing the clock itself. A phase reads the turn context (a
+    // read-only snapshot built at turn start) and writes its own `phaseResults`
+    // entry. A few phases do consume an earlier phase's result: V2 treasury cash
+    // settles from bondTurn's actual flows. Those phases are listed in
+    // `turnPhaseResumeResults.ts`, store a bounded copy of their result with their
+    // completed status, and the resume hands that copy back. A missing or
+    // interrupted one fails the dependent explicitly instead of rerunning or
+    // assuming zero (#3429).
     //
     // The race guard (target === currentTurn+1 against the freshly locked state) still
     // ensures a concurrent completion between the pre-lock read and lock acquisition
@@ -519,6 +532,8 @@ async function processTurnImpl(
         $set: {
           processingTargetTurn: nextTurnNumber,
           processingPhaseStatuses: phaseStatuses,
+          // Restored results are rewritten as their skips land; start empty.
+          processingPhaseResults: {},
           updatedAt: lockAcquiredAt,
         },
       }
@@ -546,6 +561,7 @@ async function processTurnImpl(
       // Empty on every normal turn. On a resume, the phases the dead holder already
       // applied, which `runPhase` skips rather than repeating.
       alreadyApplied: resumedFromCrash?.appliedPhases,
+      resumed: resumedFromCrash?.phaseState,
       // SIM-ONLY: sandbox worldsim can set gameConfig.simTurnPhaseMode to skip
       // the economy phases. Undefined in prod (config?.simTurnPhaseMode absent) →
       // full turn, unchanged.

@@ -23,6 +23,13 @@ import { TURN_LOCK_HEARTBEAT_MS, PHASE_TIMEOUT_MS } from "@/lib/turn/processingL
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { runInAuditContext, turnPhaseTraceId } from "@/lib/observability/context";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
+import {
+  encodeResumeResult,
+  phaseRequiresResumeResult,
+  TurnResumeResultUnavailableError,
+  type CrashedTurnPhaseState,
+  type ResumeResultOutcome,
+} from "./turnPhaseResumeResults";
 
 /**
  * Phases that only READ state to produce a derivative/historical record
@@ -101,6 +108,11 @@ export function createTurnPhaseRuntime(input: {
    */
   alreadyApplied?: Set<string>;
   /**
+   * How the dead holder left each applied phase, plus the stored results of
+   * completed phases a later phase consumes (#3429). Absent on a normal turn.
+   */
+  resumed?: CrashedTurnPhaseState;
+  /**
    * Combined phase eligibility predicate for simulation profiles, singleplayer
    * exclusions and shared-world scan cadence. A false result skips the phase
    * without executing its function. The boolean does not identify which
@@ -124,8 +136,10 @@ export function createTurnPhaseRuntime(input: {
     currentPhaseRef,
     shouldRunPhase,
     alreadyApplied,
+    resumed,
     onPhaseCompleted,
   } = input;
+  const resumeOutcomes = new Map<string, ResumeResultOutcome>();
   const turn = input.turn ?? 0;
   let lastFlushAtMs = 0;
 
@@ -140,6 +154,9 @@ export function createTurnPhaseRuntime(input: {
       roundTripBudget?: number;
       topCollections?: TurnPhaseTelemetry["topCollections"];
       substeps?: TurnPhaseTelemetry["substeps"];
+      resumeCarried?: TurnPhaseTelemetry["resumeCarried"];
+      /** Written in the same gameState update as the status, then flushed at once. */
+      result?: Record<string, unknown>;
     } = {}
   ): Promise<void> {
     const now = new Date();
@@ -155,6 +172,9 @@ export function createTurnPhaseRuntime(input: {
         : {}),
       ...(options.topCollections?.length ? { topCollections: options.topCollections } : {}),
       ...(options.substeps ? { substeps: options.substeps } : {}),
+      ...(status === "skipped" && options.resumeCarried
+        ? { resumeCarried: options.resumeCarried }
+        : {}),
       status,
       updatedAt: now,
       startedAt:
@@ -188,7 +208,11 @@ export function createTurnPhaseRuntime(input: {
     // Keep the in-memory current-phase pointer live regardless of flush timing.
     if (status === "running") currentPhaseRef.current = phase;
 
-    if (!isAbnormal && !windowElapsed) return;
+    // A phase a dependent reads brackets its writes with durable running and
+    // completed markers; a coalesced marker would let a resume rerun it (#3429).
+    const durable =
+      phaseRequiresResumeResult(phase) && (status === "running" || status === "completed");
+    if (!isAbnormal && !windowElapsed && !durable) return;
     lastFlushAtMs = now.getTime();
 
     const setFields: Record<string, unknown> = {
@@ -199,6 +223,9 @@ export function createTurnPhaseRuntime(input: {
     }
     if (status === "running") {
       setFields.processingPhase = phase;
+    }
+    if (options.result) {
+      setFields[`processingPhaseResults.${phase}`] = options.result;
     }
 
     await db
@@ -233,9 +260,39 @@ export function createTurnPhaseRuntime(input: {
     // every election, metric and settlement the turn had not reached yet. Skipping the
     // handful that already ran and continuing is strictly better: the cost of a deploy
     // falls from a whole turn to the one phase that was interrupted.
-    if (alreadyApplied?.has(name)) {
-      await markPhaseSkipped(name, "upstreamAbort", "skipped: already applied before crash");
-      return null;
+    //
+    // A skipped phase returns nothing, so a phase whose result a later phase reads
+    // hands back the bounded copy it stored with its completed status (#3429). An
+    // interrupted phase, or a completed one without a valid copy, returns null and
+    // records why; `requirePhaseResult` turns that into an explicit failure.
+    if (
+      alreadyApplied?.has(name) ||
+      resumed?.completed.has(name) ||
+      resumed?.interrupted.has(name)
+    ) {
+      const resumeCarried = resumed?.completed.has(name) ? "completed" : "interrupted";
+      const restored =
+        resumeCarried === "completed" && phaseRequiresResumeResult(name)
+          ? ((resumed?.results[name] as T | undefined) ?? null)
+          : null;
+      if (phaseRequiresResumeResult(name)) {
+        resumeOutcomes.set(
+          name,
+          restored !== null ? "restored" : resumeCarried === "completed" ? "missing" : "interrupted"
+        );
+      }
+      // Carry the restored copy forward, so a second crash can restore it again.
+      const result = restored !== null ? encodeResumeResult(name, restored) : null;
+      await setPhaseStatus(name, "skipped", {
+        reason: "upstreamAbort",
+        message:
+          restored !== null
+            ? "skipped: already applied before crash; restored its completed result"
+            : "skipped: already applied before crash",
+        resumeCarried,
+        ...(result ? { result } : {}),
+      });
+      return restored;
     }
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -343,11 +400,18 @@ export function createTurnPhaseRuntime(input: {
         roundTrips != null && roundTrips >= TOP_COLLECTIONS_MIN_ROUND_TRIPS
           ? phaseTopCollectionsByRoundTrips(name, 3)
           : undefined;
-      void setPhaseStatus(name, "completed", {
+      const completion = setPhaseStatus(name, "completed", {
         ...(roundTrips == null ? {} : { roundTrips, roundTripBudget }),
         ...(topCollections ? { topCollections } : {}),
         ...(substeps ? { substeps } : {}),
+        ...(phaseRequiresResumeResult(name)
+          ? { result: encodeResumeResult(name, result) ?? undefined }
+          : {}),
       }).catch((err) => console.warn(`[Turn] Failed to mark phase "${name}" completed`, err));
+      // A dependent phase may consume this result, so its completed marker and
+      // stored copy must land before the turn moves on. If that write fails, a
+      // later resume sees the phase as interrupted and fails closed.
+      if (phaseRequiresResumeResult(name)) await completion;
       return result;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -380,8 +444,19 @@ export function createTurnPhaseRuntime(input: {
     }
   }
 
+  function requirePhaseResult<T>(phase: string, result: T | null, dependent: string): T {
+    if (result !== null) return result;
+    const outcome = resumeOutcomes.get(phase);
+    if (outcome === "missing" || outcome === "interrupted") {
+      throw new TurnResumeResultUnavailableError(phase, outcome, dependent);
+    }
+    throw new Error(`${dependent} requires a completed ${phase} result`);
+  }
+
   return {
     runPhase,
     markPhaseSkipped,
+    requirePhaseResult,
+    resumeResultOutcome: (phase: string) => resumeOutcomes.get(phase) ?? null,
   };
 }

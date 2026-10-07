@@ -31,6 +31,12 @@ export interface TurnPhaseTelemetry {
   topCollections?: Array<{ collection: string; roundTrips: number }>;
   /** Wall time and round trips per named sequential segment of the phase (#2689). */
   substeps?: Record<string, { ms: number; roundTrips?: number; calls: number }>;
+  /**
+   * Set on a phase a crash-resumed turn skipped because the dead holder already
+   * applied it: how that holder left it. A second crash reads this so the phase
+   * still never runs again (#3429).
+   */
+  resumeCarried?: "completed" | "interrupted";
 }
 
 export type TurnPhaseTelemetryMap = Record<string, TurnPhaseTelemetry>;

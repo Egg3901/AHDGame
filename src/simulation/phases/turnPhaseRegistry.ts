@@ -546,7 +546,13 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           runtime.runPhase("commodityPrices", () => processCommodityPriceTurn(newTurn)),
         ]);
         if (captureV2SovereignCash) {
-          if (!bondTurnResult) throw new Error("V2 treasury requires completed bond settlement");
+          // On a crash resume this is the result bondTurn stored with its
+          // completed status, never a rerun and never an assumed zero (#3429).
+          const bondFlows = runtime.requirePhaseResult(
+            "bondTurn",
+            bondTurnResult,
+            "resetTreasuryCash"
+          );
           (phaseResults as Record<string, unknown>).resetTreasuryCash = await runtime.runPhase(
             "resetTreasuryCash",
             () =>
@@ -554,7 +560,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
                 db: context.db,
                 gameState: context.gameState,
                 turn: newTurn,
-                bondFlows: bondTurnResult,
+                bondFlows,
               })
           );
         }

@@ -412,6 +412,12 @@ export interface GameState {
   processingPhase?: string | null;
   /** Per-phase lifecycle state for the active turn; used to debug skips, failures, and stalls */
   processingPhaseStatuses?: TurnPhaseTelemetryMap | null;
+  /**
+   * Bounded results of completed phases a later phase consumes, written with the
+   * phase's completed status so a crash resume can restore them (#3429). Keys are
+   * limited to `turnPhaseResumeResults.ts`.
+   */
+  processingPhaseResults?: Record<string, Record<string, unknown>> | null;
   /** Master gate for the automatic sector seeding system (fires every 48 turns). */
   autoSectorSeedEnabled?: boolean;
   autoSectorSeedEnabledBy?: string;
