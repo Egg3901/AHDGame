@@ -9,7 +9,7 @@ describe("Amplitude client configuration", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.stubEnv("NEXT_PUBLIC_AMPLITUDE_API_KEY", "test-key");
-    init.mockReset();
+    init.mockReset().mockReturnValue({ promise: Promise.resolve() });
     setOptOut.mockReset();
   });
 

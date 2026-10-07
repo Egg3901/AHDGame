@@ -74,3 +74,52 @@ the backbone action/entity/spending fields and controlled domain-specific fields
 The productArea map broadens area_viewed to named gameplay areas while preserving
 previous area names. The server contracts are documented in
 [WORLD_EVENTS.md](./WORLD_EVENTS.md).
+
+### Observed account cohorts
+
+Browser product events carry the same account metadata in PostHog and Amplitude,
+using the authenticated `client-nav` response already loaded by the application:
+
+| Event property         | Meaning                                                      |
+| ---------------------- | ------------------------------------------------------------ |
+| `account_created_date` | Account creation date, `YYYY-MM-DD` UTC, or `unknown`        |
+| `account_age_days`     | UTC calendar days between creation and capture, or `unknown` |
+| `account_age_band`     | `day_0`, `days_1_6`, `days_7_plus`, or `unknown`             |
+| `account_role`         | `admin`, `moderator`, `player`, or `unknown`                 |
+
+These are event-time properties. Missing, malformed, and future creation dates
+remain unknown. `player` requires both admin and moderator flags to be explicitly
+false. This does not identify test accounts. No account query runs per event.
+Server events do not acquire browser consent or these properties by inference.
+
+Use `game_visit` for observed account presence and `player_action_succeeded` for
+acknowledged actions. Split by creation date or event-time age to separate recent
+accounts from older accounts creating new characters. `day_0` means the same UTC
+calendar date, not the first 24 hours. OAuth accounts are eligible for this
+metadata without fabricating `account_created` events. Registration events still
+cover only the consented password-registration path. Its pending marker is bound
+to the returned account ID; legacy unowned markers are discarded.
+
+Both destinations use the opaque authenticated account ID. Amplitude now resets
+its device ID before assigning an account, on account switching, and on logout;
+consent withdrawal opts out and resets both SDKs. Historical anonymous Amplitude
+identities are not backfilled or linked to these accounts. Compare account uniques
+only after rollout, and check actual destination delivery before interpreting
+counts. PostHog resets before a different account is identified, including initial
+SDK hydration, so a persisted previous account cannot absorb the next account.
+
+Events with known account context wait for SDK initialization. Work started under
+an account is discarded if the identity changes before delivery. Events without
+a known account are not queued for assignment to an arbitrary later login.
+Milestone helpers do not consume pending signup markers or claim durable character
+activation before account context exists. A claim already in flight at logout can
+still complete server-side while its browser event is dropped. Analytics delivery
+is best effort; the activation claim is not a delivery acknowledgement.
+
+For analysis, use complete UTC days after rollout and report unknown metadata
+separately. Exclude `account_role` admin/moderator where a player-only population
+is needed; require `account_role = player` for a strict known non-staff population
+and show excluded unknowns. Test traffic remains unexcluded unless independently
+identified by an existing documented project filter. Never sum generic successful
+actions with their overlapping domain-specific events. Rejection codes remain
+HTTP response classes, not detailed rule or reliability diagnoses.

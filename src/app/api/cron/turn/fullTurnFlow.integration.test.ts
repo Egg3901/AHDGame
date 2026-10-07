@@ -605,7 +605,21 @@ describe("processTurn() — full turn flow", () => {
 
     const turnLog = db.collectionMocks["turnLogs"].insertOne.mock.calls.at(-1)?.[0] as {
       phases: Record<string, unknown>;
+      phaseStatuses: Record<string, { status: string }>;
+      outcome: string;
+      failedPhases: string[];
+      memory: { peakRssMb: number; peakHeapUsedMb: number };
     };
+
+    // The committed turn says whether every phase finished, and how much memory it peaked at.
+    const failed = Object.entries(turnLog.phaseStatuses)
+      .filter(([, status]) => status.status === "failed")
+      .map(([phase]) => phase)
+      .sort();
+    expect(turnLog.failedPhases).toEqual(failed);
+    expect(turnLog.outcome).toBe(failed.length > 0 ? "degraded" : "clean");
+    expect(turnLog.memory.peakRssMb).toBeGreaterThan(0);
+    expect(turnLog.memory.peakHeapUsedMb).toBeGreaterThan(0);
 
     expect(turnLog.phases.billLifecycle).toEqual({
       billsProcessed: 4,

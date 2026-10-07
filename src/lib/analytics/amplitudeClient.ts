@@ -1,5 +1,6 @@
 "use client";
 
+import { getAnalyticsAccount, isAnalyticsGenerationCurrent } from "./accountContext";
 import { getStoredConsent } from "@/components/CookieConsent";
 
 type AmplitudeModule = typeof import("@amplitude/analytics-browser");
@@ -14,6 +15,7 @@ type AmplitudeModule = typeof import("@amplitude/analytics-browser");
  * With no `NEXT_PUBLIC_AMPLITUDE_API_KEY` present this is a silent no-op, so it
  * is safe to ship ahead of the key being provisioned.
  */
+let identifiedAccountId: string | null = null;
 let modulePromise: Promise<AmplitudeModule | null> | null = null;
 
 export function getAmplitudeModule(): Promise<AmplitudeModule | null> {
@@ -22,9 +24,9 @@ export function getAmplitudeModule(): Promise<AmplitudeModule | null> {
   if (modulePromise) return modulePromise;
 
   modulePromise = import("@amplitude/analytics-browser")
-    .then((mod) => {
+    .then(async (mod) => {
       if (getStoredConsent() !== "accepted") return null;
-      mod.init(apiKey, undefined, {
+      await mod.init(apiKey, undefined, {
         // Named-area events only; no autocapture, no default page views, no
         // session replay. PostHog owns replay if it is ever piloted.
         autocapture: false,
@@ -37,10 +39,14 @@ export function getAmplitudeModule(): Promise<AmplitudeModule | null> {
           language: false,
           platform: false,
         },
-        // Keep the user id opaque and stable across the same browser.
-
+        // Capture assigns the opaque account ID after initialization.
         deviceId: undefined,
-      });
+      }).promise;
+      if (getStoredConsent() !== "accepted") {
+        mod.setOptOut(true);
+        mod.reset();
+        return null;
+      }
       mod.setOptOut(false);
       return mod;
     })
@@ -56,8 +62,16 @@ export async function captureAmplitudeEvent(
   event: string,
   properties?: Record<string, string | number | boolean>
 ): Promise<void> {
+  const { account, generation } = getAnalyticsAccount();
+  if (!account) return;
   const mod = await getAmplitudeModule();
-  if (mod && getStoredConsent() === "accepted") {
+  if (mod && isAnalyticsGenerationCurrent(generation) && getStoredConsent() === "accepted") {
+    if (identifiedAccountId !== account.id) {
+      mod.reset();
+      mod.setUserId(account.id);
+      identifiedAccountId = account.id;
+    }
+    mod.setOptOut(false);
     if (properties) mod.track(event, properties);
     else mod.track(event);
   }
@@ -65,8 +79,18 @@ export async function captureAmplitudeEvent(
 
 /** Called when consent is withdrawn; no further events are sent to Amplitude. */
 export async function stopAmplitudeCapture(): Promise<void> {
+  const { generation } = getAnalyticsAccount();
+  identifiedAccountId = null;
   const mod = await modulePromise;
-  if (!mod) return;
+  if (!mod || !isAnalyticsGenerationCurrent(generation)) return;
   mod.setOptOut(true);
   mod.reset();
+}
+
+/** Clear persisted identity on logout, including when no more events are captured. */
+export async function resetAmplitudeUser(): Promise<void> {
+  const { generation } = getAnalyticsAccount();
+  identifiedAccountId = null;
+  const mod = await (modulePromise ?? getAmplitudeModule());
+  if (mod && isAnalyticsGenerationCurrent(generation)) mod.reset();
 }

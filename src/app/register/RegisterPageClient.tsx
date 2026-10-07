@@ -193,7 +193,7 @@ export default function RegisterPageClient({ heroImageUrl }: { heroImageUrl?: st
       }
 
       await import("@/lib/analytics/capture")
-        .then(({ rememberAccountCreated }) => rememberAccountCreated())
+        .then(({ rememberAccountCreated }) => rememberAccountCreated(registerData.userId))
         .catch(() => {});
 
       // Step 2: Auto-login
