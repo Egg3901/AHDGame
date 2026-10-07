@@ -33,6 +33,14 @@ export interface TurnExecutionContext {
 export interface TurnPhaseRuntime {
   runPhase<T>(name: string, fn: () => Promise<T>): Promise<T | null>;
   markPhaseSkipped(phase: string, reason: TurnPhaseSkipReason, message: string): Promise<void>;
+  /**
+   * The phase result a dependent phase needs, or an explicit failure. On a crash
+   * resume, distinguishes an interrupted phase from a completed one whose stored
+   * result is missing; neither reruns and neither becomes a zero flow (#3429).
+   */
+  requirePhaseResult<T>(phase: string, result: T | null, dependent: string): T;
+  /** How a crash resume answered a result-carrying phase; null when it ran normally. */
+  resumeResultOutcome(phase: string): "restored" | "missing" | "interrupted" | null;
 }
 
 export interface CompletedTurnPhaseObservation {

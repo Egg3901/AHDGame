@@ -86,6 +86,7 @@ export async function POST() {
           processingHeartbeatAt: null,
           processingPhase: null,
           processingPhaseStatuses: null,
+          processingPhaseResults: null,
           updatedAt: new Date(),
         },
       }
