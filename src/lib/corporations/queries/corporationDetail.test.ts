@@ -182,6 +182,8 @@ describe("loadCorporationDetailView", () => {
       viewerUserId: ceo.userId!.toString(),
     });
     expect(view.financials.totalRevenue).toBe(2520);
+    expect(view.sectors[0]?.financialRevenue).toBe(2520);
+    expect(view.sectors[0]?.profit).toBe(-1284);
     expect(view.financials.freightCosts).toBe(2160);
     expect(view.financials.freightIncome).toBe(120);
     expect(view.financials.regulatoryBurden).toBe(60);

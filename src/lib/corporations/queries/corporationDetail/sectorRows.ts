@@ -460,9 +460,11 @@ export function buildSectorDetails(ctx: SectorRowContext) {
         : null;
     const sectorLaborCostLocal =
       typeof sector.laborCost === "number" ? sectorFieldToCorpCcy(sector.laborCost, sector) : null;
+    const freightCost = sectorFieldToCorpCcy(sector.freightBillingCharge ?? 0, sector);
+    const freightIncome = sectorFieldToCorpCcy(sector.freightBillingCredit ?? 0, sector);
     const financialRevenue =
-      sectorRealizedRevenueLocal ??
-      sectorRevenueLocal * revenueMultiplier * revenueRealizationRatio;
+      (sectorRealizedRevenueLocal ??
+        sectorRevenueLocal * revenueMultiplier * revenueRealizationRatio) + freightIncome;
     // Dynamic SOE efficiency (spec §11.3) — same shared function as the turn math
     // and the budget estimate, so display stays aligned. Private corps get 0.
     const soeMandate = resolveSectorMandate(corporation, sector);
@@ -527,13 +529,11 @@ export function buildSectorDetails(ctx: SectorRowContext) {
     const maintenance = enginePnl
       ? sectorFieldToCorpCcy(enginePnl.totalCost - enginePnl.compliance, sector) -
         sectorGrowthCostLocal
-      : financialRevenue * (1 - effectiveProfitMargin / 100);
-    const freightCost = sectorFieldToCorpCcy(sector.freightBillingCharge ?? 0, sector);
-    const freightIncome = sectorFieldToCorpCcy(sector.freightBillingCredit ?? 0, sector);
+      : (financialRevenue - freightIncome) * (1 - effectiveProfitMargin / 100);
     const profit =
       (enginePnl
         ? sectorFieldToCorpCcy(enginePnl.profit, sector)
-        : financialRevenue - maintenance - sectorGrowthCostLocal) +
+        : financialRevenue - freightIncome - maintenance - sectorGrowthCostLocal) +
       freightIncome -
       freightCost;
     // Physical cost decomposition for the margin drilldown (ticket 1072: the
@@ -614,7 +614,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       ? sectorFieldToCorpCcy(enginePnl.compliance, sector)
       : financialRevenue * regulatoryBurdenRate;
     // Freight settles alongside plantsPnl, so neither leg is in its totals.
-    totalRevenue += financialRevenue + freightIncome;
+    totalRevenue += financialRevenue;
     totalFreightCosts += freightCost;
     totalFreightIncome += freightIncome;
     totalMaintenanceCosts += maintenance;
@@ -697,7 +697,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       ? plantsNetMarginPct({
           profit,
           revenue: financialRevenue,
-          totalCost: maintenance + sectorGrowthCostLocal,
+          totalCost: maintenance + sectorGrowthCostLocal + sectorRegulatoryBurden + freightCost,
         })
       : null;
     const fillAdjustedMarginPct =
