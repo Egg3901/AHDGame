@@ -23,7 +23,9 @@ export function remitFraction(retentionPercent: number): number {
  * estimate shows "profit" but whose real balance is zero (a loss-backed
  * loss-maker) remits nothing. Single source of truth for both the cash move
  * (`processSoeRemittance`) and the budget revenue line, so the budget reflects
- * only what is actually remitted, never phantom estimated revenue.
+ * only what is actually remitted, never phantom estimated revenue. The cap
+ * floors the balance: rounding 100.6 up to 101 asked the guarded debit for
+ * cash the SOE does not hold, and the refusal aborted the corporation turn.
  */
 export function cappedRemittanceLocal(
   incomeLocal: number,
@@ -32,7 +34,7 @@ export function cappedRemittanceLocal(
 ): number {
   if (!(incomeLocal > 0)) return 0;
   const uncapped = Math.round(incomeLocal * remitFraction(retentionPercent ?? 0));
-  const available = Math.max(0, Math.round(liquidCapital ?? 0));
+  const available = Math.max(0, Math.floor(liquidCapital ?? 0));
   return Math.min(uncapped, available);
 }
 
