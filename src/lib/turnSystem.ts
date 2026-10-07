@@ -67,6 +67,10 @@ import { publishPlatformEvent } from "@/lib/platformEvents";
 import type { CompletedTurnPhaseObservation } from "@/simulation/engine/types";
 import { completedTurnStatus } from "@/simulation/engine/turnCompletion";
 import { captureTurnPosthog } from "@/lib/analytics/turnPosthog";
+import { currentTurnBuild } from "@/lib/turn/turnBuild";
+
+/** Read once per process: the deployment does not change under a running server. */
+const turnBuild = currentTurnBuild();
 
 // Re-export public helpers consumed by other modules
 export {
@@ -656,6 +660,7 @@ async function processTurnImpl(
       health: lastHealth,
       phaseStatuses,
       phases: context.phaseResults,
+      ...(turnBuild ? { build: turnBuild } : {}),
       createdAt: context.realNow,
     };
     if (!localSingleplayer) {
@@ -839,6 +844,7 @@ async function processTurnImpl(
           health: lastHealth,
           phaseStatuses: finalizedPhaseStatuses,
           phases: phaseResultsForFailure,
+          ...(turnBuild ? { build: turnBuild } : {}),
           createdAt: failureTime,
         };
         await db.collection<TurnLog>("turnLogs").insertOne(crashTurnLog as TurnLog);
