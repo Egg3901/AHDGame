@@ -7,6 +7,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { perTurnCouponPayment } from "@/lib/constants/bonds";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import {
+  couponBatchKey,
   settleFundedSovereignCoupons,
   type SovereignCouponClaimRecord,
 } from "./fundedSovereignCoupons";
@@ -515,5 +516,441 @@ describe("funded sovereign coupon claims", () => {
     // The frozen-through mark still stops the paid turn from being frozen again.
     await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), args);
     expect(db.collection("sovereignCouponClaims").docs).toHaveLength(0);
+  });
+
+  describe("grouped public-float payout", () => {
+    const floatBonds = (count: number, prefix: string, publicFloat = 10) =>
+      Array.from({ length: count }, (_, i) => ({
+        ...bond(),
+        _id: new ObjectId(`${prefix}${String(i).padStart(2, "0")}`),
+        holders: [],
+        publicFloat,
+      })) as Bond[];
+    const args = { anchorRate: 1, forexEnabled: false, corporateQuotes: new Map() };
+    const pool = (db: InMemoryDb) =>
+      db.collection("bondMarketPools").docs[0] as unknown as {
+        cashLocal: number;
+        lifetime: { couponsIn: number };
+      };
+    const moves = (db: InMemoryDb) => db.collection("bankMoneyMoves").docs;
+
+    it("pays every funded pure public-float claim through one receipt", async () => {
+      const db = world(1_000_000);
+      const bonds = floatBonds(32, "6500000000000000000040");
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 12,
+        bonds,
+      });
+      const records = db.collection("sovereignCouponClaims")
+        .docs as unknown as SovereignCouponClaimRecord[];
+      const total = records.reduce((sum, row) => sum + row.claim.amountLocal, 0);
+      expect(records).toHaveLength(32);
+      expect(records.every((row) => row.settledTurn === 12)).toBe(true);
+      expect(moves(db).map((doc) => doc._id)).toEqual([couponBatchKey("US", 12)]);
+      expect(moves(db)[0].status).toBe("applied");
+      expect(savedBudget(db).treasuryCashLocal).toBe(1_000_000 - total);
+      expect(pool(db).cashLocal).toBe(total);
+      expect(pool(db).lifetime.couponsIn).toBe(total);
+
+      // An exact replay of the turn moves nothing and writes no second receipt.
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 12,
+        bonds,
+      });
+      expect(moves(db)).toHaveLength(1);
+      expect(savedBudget(db).treasuryCashLocal).toBe(1_000_000 - total);
+      expect(pool(db).cashLocal).toBe(total);
+      expect(pool(db).lifetime.couponsIn).toBe(total);
+    });
+
+    it("keeps frozen quotes per claim and values the receipt at their frozen sum", async () => {
+      const db = world(0);
+      const bonds = floatBonds(3, "6500000000000000000041");
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 12,
+        bonds,
+        anchorRate: 2,
+      });
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 13,
+        bonds,
+        anchorRate: 5,
+      });
+      const claims = openClaims(db);
+      expect(claims.map((claim) => claim.anchorRate)).toEqual([2, 2, 2, 5, 5, 5]);
+      savedBudget(db).treasuryCashLocal = 1_000_000;
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 14,
+        bonds: [],
+        anchorRate: 9,
+      });
+      expect(openClaims(db)).toEqual([]);
+      const receipt = moves(db)[0] as unknown as {
+        legs: Array<{ amount: number; valuation: { localPerAnchor: number } }>;
+      };
+      const local = claims.reduce((sum, claim) => sum + claim.amountLocal, 0);
+      const anchor = claims.reduce((sum, claim) => sum + claim.amountLocal / claim.anchorRate, 0);
+      expect(receipt.legs[0].amount).toBe(local);
+      expect(receipt.legs[0].valuation.localPerAnchor).toBeCloseTo(local / anchor, 12);
+      const stored = (
+        db.collection("sovereignCouponClaims").docs as unknown as SovereignCouponClaimRecord[]
+      ).map((row) => row.claim);
+      expect(stored).toEqual(claims);
+    });
+
+    it("pays the oldest arrears first and leaves what cash cannot cover queued", async () => {
+      const db = world(0);
+      const bonds = floatBonds(4, "6500000000000000000042");
+      for (const turn of [12, 13])
+        await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+          ...args,
+          turn,
+          bonds,
+        });
+      const claims = openClaims(db);
+      expect(claims).toHaveLength(8);
+      savedBudget(db).treasuryCashLocal = claims[0].amountLocal * 5;
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 14,
+        bonds: [],
+      });
+      expect(openClaims(db)).toEqual(claims.slice(5));
+      expect(savedBudget(db).treasuryCashLocal).toBe(0);
+      expect(moves(db)).toHaveLength(1);
+      expect(moves(db).filter((doc) => doc.status === "rejected")).toHaveLength(0);
+    });
+
+    it("closes claims from the landed receipt after a crash, without paying twice", async () => {
+      const db = world(1_000_000);
+      const bonds = floatBonds(5, "6500000000000000000043");
+      const crash = withInjectedCrash(db, {
+        collection: "sovereignCouponClaims",
+        op: "bulkWrite",
+        onCall: 1,
+      });
+      await expect(
+        settleFundedSovereignCoupons(crash.db, savedBudget(db), { ...args, turn: 12, bonds })
+      ).rejects.toThrow("crash");
+      const cash = savedBudget(db).treasuryCashLocal;
+      const poolCash = pool(db).cashLocal;
+      expect(openClaims(db)).toHaveLength(5);
+      expect(cash).toBeLessThan(1_000_000);
+
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 13,
+        bonds: [],
+      });
+      expect(openClaims(db)).toEqual([]);
+      expect(savedBudget(db).treasuryCashLocal).toBe(cash);
+      expect(pool(db).cashLocal).toBe(poolCash);
+      expect(moves(db).map((doc) => doc._id)).toEqual([couponBatchKey("US", 12)]);
+    });
+
+    it("resumes a partial per-claim receipt on its own key and batches the rest", async () => {
+      const db = world(1_000_000);
+      const [first, ...rest] = floatBonds(3, "6500000000000000000044");
+      const crash = withInjectedCrash(db, {
+        collection: "bondMarketPools",
+        op: "updateOne",
+        matches: (callArgs) =>
+          JSON.stringify(callArgs[1] ?? {}).includes("cashLocal") &&
+          !JSON.stringify(callArgs[1] ?? {}).includes("setOnInsert"),
+        onCall: 1,
+      });
+      // Seed a legacy per-claim attempt: a claim with a corporate holder takes
+      // the per-claim path, crashing between its Treasury debit and pool credit.
+      const corpId = new ObjectId("650000000000000000000016");
+      db.seed("corporations", [
+        { _id: corpId, countryId: "US", liquidCurrencyCode: "USD", liquidCapital: 0 },
+      ]);
+      await expect(
+        settleFundedSovereignCoupons(crash.db, savedBudget(db), {
+          ...args,
+          corporateQuotes: new Map([
+            [
+              corpId.toHexString(),
+              {
+                id: corpId.toHexString(),
+                countryId: "US",
+                currencyCode: "USD" as CurrencyCode,
+                localPerAnchor: 1,
+                currencyFieldPresent: true,
+                currencyFieldValue: "USD",
+                currencyUsesCountryFallback: false,
+              },
+            ],
+          ]),
+          turn: 12,
+          bonds: [{ ...first, holders: [{ corporationId: corpId, units: 2 }] } as unknown as Bond],
+        })
+      ).rejects.toThrow("crash");
+      const legacyKey = moves(db)[0]._id as string;
+      expect(legacyKey).toMatch(/:attempt:12$/);
+      expect(moves(db)[0].status).toBe("partial");
+
+      const resume = vi.spyOn(await import("./settlementJournal"), "resumeSettlement");
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 13,
+        bonds: rest,
+      });
+      expect(resume).toHaveBeenCalledWith(expect.anything(), legacyKey);
+      resume.mockRestore();
+      expect(openClaims(db)).toEqual([]);
+      expect(
+        moves(db)
+          .map((doc) => doc._id)
+          .sort()
+      ).toEqual([legacyKey, couponBatchKey("US", 13)].sort());
+      const batch = moves(db).find((doc) => doc._id === couponBatchKey("US", 13)) as unknown as {
+        event: { meta: { claimIds: string } };
+      };
+      expect(batch.event.meta.claimIds.split(",")).toHaveLength(2);
+      expect(batch.event.meta.claimIds).not.toContain(first._id.toHexString());
+    });
+
+    // A batch receipt written but crashed before its Treasury debit landed.
+    const unstartedBatch = async (db: InMemoryDb, bonds: Bond[], turn: number) => {
+      const crash = withInjectedCrash(db, {
+        collection: "federalBudget",
+        op: "updateOne",
+        matches: (callArgs) => JSON.stringify(callArgs[1] ?? {}).includes("treasuryCashLocal"),
+        onCall: 1,
+      });
+      await expect(
+        settleFundedSovereignCoupons(crash.db, savedBudget(db), { ...args, turn, bonds })
+      ).rejects.toThrow("crash");
+      const receipt = moves(db).find((doc) => doc._id === couponBatchKey("US", turn));
+      expect(receipt?.status).toBe("partial");
+      expect((receipt as unknown as { legs: { applied: boolean }[] }).legs).toEqual([
+        expect.objectContaining({ applied: false }),
+        expect.objectContaining({ applied: false }),
+      ]);
+    };
+
+    it("keeps claims owed when a resumed batch is refused by its Treasury guard", async () => {
+      const db = world(1_000_000);
+      const bonds = floatBonds(4, "6500000000000000000046");
+      await unstartedBatch(db, bonds, 12);
+      const claims = openClaims(db);
+      expect(claims).toHaveLength(4);
+
+      // Cash drained before the resume: the stored debit guard refuses.
+      savedBudget(db).treasuryCashLocal = 0;
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 13,
+        bonds: [],
+      });
+      expect(moves(db).find((doc) => doc._id === couponBatchKey("US", 12))?.status).toBe(
+        "rejected"
+      );
+      expect(openClaims(db)).toEqual(claims);
+      expect(savedBudget(db).treasuryCashLocal).toBe(0);
+      expect(pool(db).cashLocal).toBe(0);
+
+      // Once funded, the same claims pay exactly once through a fresh receipt.
+      const total = claims.reduce((sum, claim) => sum + claim.amountLocal, 0);
+      savedBudget(db).treasuryCashLocal = total;
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 14,
+        bonds: [],
+      });
+      expect(openClaims(db)).toEqual([]);
+      expect(savedBudget(db).treasuryCashLocal).toBe(0);
+      expect(pool(db).cashLocal).toBe(total);
+    });
+
+    it("sizes new claims against Treasury cash after a resumed batch lands", async () => {
+      const db = world(1_000_000);
+      const bonds = floatBonds(2, "6500000000000000000047");
+      await unstartedBatch(db, bonds, 12);
+      const owed = openClaims(db);
+      const coupon = owed[0].amountLocal;
+      // Enough for the resumed batch plus exactly one of the two new claims.
+      savedBudget(db).treasuryCashLocal = coupon * 3;
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 13,
+        bonds,
+      });
+      expect(moves(db).filter((doc) => doc.status === "rejected")).toHaveLength(0);
+      expect(openClaims(db)).toHaveLength(1);
+      expect(savedBudget(db).treasuryCashLocal).toBe(0);
+      expect(pool(db).cashLocal).toBe(coupon * 3);
+    });
+
+    it("conserves cash exactly at national-currency scale", async () => {
+      const db = world(1e15);
+      const bonds = floatBonds(32, "6500000000000000000045", 7_777_777_777);
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 12,
+        bonds,
+        anchorRate: 1_234.567,
+      });
+      expect(openClaims(db)).toEqual([]);
+      const before = 1e15 + 0;
+      expect(savedBudget(db).treasuryCashLocal + pool(db).cashLocal).toBe(before);
+      expect(pool(db).lifetime.couponsIn).toBe(pool(db).cashLocal);
+    });
+  });
+
+  describe("grouped fund-held and mixed payout", () => {
+    const fundIds = [
+      new ObjectId("650000000000000000000050"),
+      new ObjectId("650000000000000000000051"),
+    ];
+    const mixedBonds = (count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        ...bond(),
+        _id: new ObjectId(`6500000000000000000060${String(i).padStart(2, "0")}`),
+        holders: [{ fundId: fundIds[i % 2], units: 3 }],
+        publicFloat: i % 3 === 0 ? 0 : 10,
+      })) as unknown as Bond[];
+    const args = { anchorRate: 1.37, forexEnabled: false, corporateQuotes: new Map() };
+    const fundWorld = () => {
+      const db = world(0);
+      db.seed(
+        "indexFunds",
+        fundIds.map((_id) => ({ _id, cashAnchor: 0 }))
+      );
+      return db;
+    };
+    const fundCash = (db: InMemoryDb) =>
+      (db.collection("indexFunds").docs as unknown as { cashAnchor: number }[]).reduce(
+        (sum, fund) => sum + fund.cashAnchor,
+        0
+      );
+    const pool = (db: InMemoryDb) =>
+      db.collection("bondMarketPools").docs[0] as unknown as {
+        cashLocal: number;
+        lifetime: { couponsIn: number };
+      };
+
+    // Unfunded turns freeze one claim per bond per turn, then cash arrives.
+    async function backlog(db: InMemoryDb, bonds: Bond[], turns: number) {
+      for (let turn = 1; turn <= turns; turn++)
+        await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+          ...args,
+          turn,
+          bonds,
+        });
+      return openClaims(db);
+    }
+
+    function countCommands(db: InMemoryDb) {
+      const counts = new Map<string, number>();
+      const tracked = new Proxy(db, {
+        get(target, prop, receiver) {
+          if (prop !== "collection") return Reflect.get(target, prop, receiver);
+          return (name: string) => {
+            const collection = target.collection(name);
+            return new Proxy(collection, {
+              get(c, method, r) {
+                const value = Reflect.get(c, method, r);
+                if (typeof value !== "function") return value;
+                return (...callArgs: unknown[]) => {
+                  const key = `${String(method)} ${name}`;
+                  counts.set(key, (counts.get(key) ?? 0) + 1);
+                  return (value as (...a: unknown[]) => unknown).apply(c, callArgs);
+                };
+              },
+            });
+          };
+        },
+      });
+      const total = () => [...counts.values()].reduce((sum, n) => sum + n, 0);
+      return { db: tracked as unknown as Db, counts, total };
+    }
+
+    it("pays a fund-held and mixed backlog through one receipt and conserves cash", async () => {
+      const db = fundWorld();
+      const bonds = mixedBonds(6);
+      const owed = await backlog(db, bonds, 5);
+      expect(owed).toHaveLength(30);
+      const total = owed.reduce((sum, claim) => sum + claim.amountLocal, 0);
+      savedBudget(db).treasuryCashLocal = total;
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 6,
+        bonds: [],
+      });
+      expect(openClaims(db)).toEqual([]);
+      const receipts = db.collection("bankMoneyMoves").docs;
+      expect(receipts.map((doc) => doc._id)).toEqual([couponBatchKey("US", 6)]);
+      const legs = (receipts[0] as unknown as { legs: { collection: string }[] }).legs;
+      // One Treasury debit, one pool credit and one credit per fund.
+      expect(legs.map((leg) => leg.collection).sort()).toEqual(
+        ["bondMarketPools", "federalBudget", "indexFunds", "indexFunds"].sort()
+      );
+      const paidToFunds = owed.flatMap((claim) =>
+        claim.holders.filter((holder) => holder.kind === "fund")
+      );
+      expect(fundCash(db)).toBeCloseTo(
+        paidToFunds.reduce((sum, holder) => sum + holder.amountAnchor, 0),
+        9
+      );
+      expect(savedBudget(db).treasuryCashLocal).toBeCloseTo(0, 6);
+      expect(pool(db).cashLocal + fundCash(db) * args.anchorRate).toBeCloseTo(total, 6);
+      expect(pool(db).lifetime.couponsIn).toBe(pool(db).cashLocal);
+    });
+
+    it("settles a larger backlog in the same number of commands", async () => {
+      const measure = async (turns: number) => {
+        const db = fundWorld();
+        const owed = await backlog(db, mixedBonds(6), turns);
+        savedBudget(db).treasuryCashLocal = owed.reduce((sum, claim) => sum + claim.amountLocal, 0);
+        const tracked = countCommands(db);
+        await settleFundedSovereignCoupons(tracked.db, savedBudget(db), {
+          ...args,
+          turn: turns + 1,
+          bonds: [],
+        });
+        expect(openClaims(db)).toEqual([]);
+        return { claims: owed.length, commands: tracked.total() };
+      };
+      const small = await measure(2);
+      const large = await measure(12);
+      expect(large.claims).toBe(small.claims * 6);
+      expect(large.commands).toBe(small.commands);
+    });
+
+    it("leaves batchable claims owed on a same-turn replay instead of paying them one by one", async () => {
+      const db = fundWorld();
+      const bonds = mixedBonds(3);
+      const owed = await backlog(db, bonds, 2);
+      savedBudget(db).treasuryCashLocal = owed[0].amountLocal;
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 3,
+        bonds: [],
+      });
+      expect(openClaims(db)).toHaveLength(owed.length - 1);
+      savedBudget(db).treasuryCashLocal = 1e9;
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 3,
+        bonds: [],
+      });
+      expect(openClaims(db)).toHaveLength(owed.length - 1);
+      expect(db.collection("bankMoneyMoves").docs.map((doc) => doc._id)).toEqual([
+        couponBatchKey("US", 3),
+      ]);
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 4,
+        bonds: [],
+      });
+      expect(openClaims(db)).toEqual([]);
+    });
   });
 });
