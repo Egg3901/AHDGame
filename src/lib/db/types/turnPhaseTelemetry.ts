@@ -1,6 +1,13 @@
 export type TurnPhaseExecutionStatus =
   "pending" | "running" | "completed" | "skipped" | "failed" | "notReached";
 
+/**
+ * `clean`: every phase that ran completed. `degraded`: the turn committed, but
+ * at least one phase failed, or was skipped because an upstream phase failed,
+ * so its work for this turn did not happen.
+ */
+export type TurnOutcome = "clean" | "degraded";
+
 export type TurnPhaseSkipReason =
   | "conditional"
   | "featureDisabled"

@@ -8,6 +8,7 @@ import type { CorpSnapshot } from "./types";
 import type { Corporation } from "@/lib/db/types/corporation";
 import { loadTreasuryCashContext } from "@/lib/nationalization/treasuryLedger";
 import { settleTransition, resumeSettlement } from "@/lib/banking/settlementJournal";
+import { withBankingTelemetryBatch } from "@/lib/banking/telemetry";
 import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
 import { settlePriorCorporateCashArrears } from "./cashArrears";
 
@@ -120,6 +121,27 @@ class KeyedQueue {
 }
 
 /**
+ * Order work round-robin across buckets, keeping each bucket's input order.
+ * Snapshots arrive grouped by country, so a plain queue sent every lane to the
+ * same Treasury lock at once and the lanes ran one country at a time.
+ */
+export function interleaveByKey<T>(items: readonly T[], keyOf: (item: T) => string): T[] {
+  const buckets = new Map<string, T[]>();
+  for (const item of items) {
+    const key = keyOf(item);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(item);
+    else buckets.set(key, [item]);
+  }
+  const queues = [...buckets.values()];
+  const ordered: T[] = [];
+  for (let round = 0; ordered.length < items.length; round++) {
+    for (const queue of queues) if (round < queue.length) ordered.push(queue[round]);
+  }
+  return ordered;
+}
+
+/**
  * Settle modeled gross operating receipts before federal withholding. These
  * are separate durable receipts because the settlement journal applies
  * guarded debits before credits: one transition cannot spend income that has
@@ -132,6 +154,18 @@ export async function settleCorporateOperatingCash(
   turn: number,
   now: Date,
   lanes: number = OPERATING_CASH_LANES
+): Promise<void> {
+  return withBankingTelemetryBatch(db, turn, () =>
+    settleCorporateOperatingCashBatched(db, snapshots, turn, now, lanes)
+  );
+}
+
+async function settleCorporateOperatingCashBatched(
+  db: Db,
+  snapshots: readonly CorpSnapshot[],
+  turn: number,
+  now: Date,
+  lanes: number
 ): Promise<void> {
   if (snapshots.length === 0) return;
   const context = await loadTreasuryCashContext(db, turn);
@@ -605,7 +639,13 @@ export async function settleCorporateOperatingCash(
     if (group) group.push(snapshot);
     else snapshotsByCorp.set(id, [snapshot]);
   }
-  await runInLanes([...snapshotsByCorp.values()], lanes, async (group) => {
+  const groups = interleaveByKey([...snapshotsByCorp.values()], (group) =>
+    group
+      .flatMap((snapshot) => Array.from(snapshot.federalTaxByCountryAnchor?.keys() ?? []))
+      .sort()
+      .join(",")
+  );
+  await runInLanes(groups, lanes, async (group) => {
     for (const snapshot of group) await settleSnapshot(snapshot);
   });
 }

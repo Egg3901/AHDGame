@@ -41,7 +41,9 @@ describe("manual local turn refresh", () => {
       await refreshGameTurnStatus();
     });
     expect(result.current?.currentTurn).toBe(2);
-    expect(completed).toHaveBeenCalledWith(expect.objectContaining({ type: "turn_complete" }));
+    expect(completed).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "turn_complete", payload: { turn: 2 } })
+    );
     expect(fetcher).toHaveBeenLastCalledWith(
       "/api/game/turn/status",
       expect.objectContaining({ cache: "no-store" })

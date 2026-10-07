@@ -63,14 +63,20 @@ export function substepMarker(now: () => number = () => performance.now()): Subs
   };
 }
 
-/** Recorded steps for a phase, rounded for storage, and cleared. */
-export function takePhaseSubsteps(phase: string): PhaseSubsteps | undefined {
+/** Recorded steps for a phase, rounded for storage, without clearing them. */
+export function peekPhaseSubsteps(phase: string): PhaseSubsteps | undefined {
   const steps = store().get(phase);
-  store().delete(phase);
   if (!steps || Object.keys(steps).length === 0) return undefined;
   return Object.fromEntries(
     Object.entries(steps).map(([name, step]) => [name, { ...step, ms: Math.round(step.ms) }])
   );
+}
+
+/** Recorded steps for a phase, rounded for storage, and cleared. */
+export function takePhaseSubsteps(phase: string): PhaseSubsteps | undefined {
+  const steps = peekPhaseSubsteps(phase);
+  store().delete(phase);
+  return steps;
 }
 
 /** Drop recorded steps for a phase without persisting them (failure paths). */

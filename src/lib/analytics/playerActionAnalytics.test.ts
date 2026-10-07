@@ -30,6 +30,35 @@ describe("player action analytics", () => {
     vi.stubGlobal("window", makeWindow(vi.fn()));
   });
 
+  it("does not reassign a delayed action response after switching accounts", async () => {
+    let release!: (response: Response) => void;
+    const delegate = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          release = resolve;
+        })
+    );
+    vi.stubGlobal("window", makeWindow(delegate));
+    const { installPlayerActionAnalytics, setPlayerActionContext, classifyPlayerActionRoute } =
+      await import("./playerActionAnalytics");
+    expect(
+      classifyPlayerActionRoute("/api/parties/0123456789abcdef01234567/join", "POST")
+    ).not.toBeNull();
+    const { setAnalyticsAccount } = await import("./accountContext");
+    setAnalyticsAccount({ id: "first" });
+    setPlayerActionContext({ userId: "first", characterId: "first-character" });
+    const uninstall = installPlayerActionAnalytics();
+    const pending = window.fetch("/api/parties/0123456789abcdef01234567/join", { method: "POST" });
+    setAnalyticsAccount({ id: "second" });
+    setPlayerActionContext({ userId: "second", characterId: "second-character" });
+    release(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    await pending;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(state.captureProductEvent).not.toHaveBeenCalled();
+    expect(state.captureFirstMeaningfulAction).not.toHaveBeenCalled();
+    uninstall();
+  });
+
   it("captures successful election actions with allowlisted scalar props only", async () => {
     const electionId = "0123456789abcdef01234567";
     const delegate = vi.fn().mockResolvedValue(

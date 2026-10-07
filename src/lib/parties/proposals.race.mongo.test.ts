@@ -159,6 +159,14 @@ describe.runIf(ENABLED)("committee-proposal vote race against isolated mongod", 
     const proposingDecider = new ObjectId();
     const targetDecider = new ObjectId();
 
+    await db
+      .collection("states")
+      .updateOne({ _id: "CA" } as never, { $set: { countryId: "US" } }, { upsert: true });
+    await db.collection("characters").insertMany([
+      { _id: new ObjectId(), countryId: "US", homeState: "CA", party: "11" },
+      { _id: new ObjectId(), countryId: "US", homeState: "CA", party: "22" },
+    ]);
+
     await db.collection("politicalParties").insertMany([
       {
         ...seedParty(proposingPartyId, 11, { treasury: 500 }),

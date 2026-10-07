@@ -12,6 +12,7 @@ export function MergerNppWarning() {
       className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 space-y-2 text-xs"
     >
       <p className="font-semibold text-amber-600 dark:text-amber-300">{t("title")}</p>
+      <p>{t("adjacency")}</p>
       <p>{t("priority")}</p>
       <p>{t("regional")}</p>
       <p>{t("national")}</p>
