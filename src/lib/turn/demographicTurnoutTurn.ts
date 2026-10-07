@@ -94,6 +94,9 @@ export async function applyDecayToAllStates(
 
   for (const state of turnoutData) {
     state.campaignModifiers = decayTurnout(state.campaignModifiers ?? state.modifiers);
+    if (state.campaignContactModifiers) {
+      state.campaignContactModifiers = decayTurnout(state.campaignContactModifiers);
+    }
     const modifiers = state.modifiers;
 
     // Apply decay to all categories.
@@ -124,6 +127,9 @@ export async function applyDecayToAllStates(
             $set: {
               modifiers: state.modifiers,
               ...(state.campaignModifiers ? { campaignModifiers: state.campaignModifiers } : {}),
+              ...(state.campaignContactModifiers
+                ? { campaignContactModifiers: state.campaignContactModifiers }
+                : {}),
               lastDecayApplied: state.lastDecayApplied,
               lastUpdated: state.lastUpdated,
             },
@@ -1161,6 +1167,9 @@ export async function processPartyGOTV(
             $set: {
               modifiers: state.modifiers,
               ...(state.campaignModifiers ? { campaignModifiers: state.campaignModifiers } : {}),
+              ...(state.campaignContactModifiers
+                ? { campaignContactModifiers: state.campaignContactModifiers }
+                : {}),
               lastUpdated: state.lastUpdated,
             },
           },
@@ -1330,6 +1339,9 @@ export async function processPlayerCanvassing(
             $set: {
               modifiers: state.modifiers,
               ...(state.campaignModifiers ? { campaignModifiers: state.campaignModifiers } : {}),
+              ...(state.campaignContactModifiers
+                ? { campaignContactModifiers: state.campaignContactModifiers }
+                : {}),
               lastUpdated: state.lastUpdated,
             },
           },

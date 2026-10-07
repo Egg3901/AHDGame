@@ -111,6 +111,7 @@ import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-m
 import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank-treasury-trade-indexes";
 import { migration as underwritingRecoveryIndexes } from "./entries/2026-10-04-underwriting-recovery-indexes";
 import { migration as advertisingAgreementIndexes } from "./entries/2026-10-05-advertising-agreement-indexes";
+import { migration as activateLiveDemographicsV2 } from "./entries/2026-10-07-activate-live-demographics-v2";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -375,7 +376,12 @@ export const ROLLBACK_MIGRATIONS: Migration[] = [restoreCapitalModeFromShadow];
 //     TRADE-OFF: `poolConservationResidual` returns NaN without `seedLocal`, so
 //     the per-turn conservation warning is INERT until this is run. Run it as
 //     soon as the write is approved, or the monitoring half of the fix is dead.
-export const HELD_MIGRATIONS: Migration[] = [equityPoolSeedBackfill];
+export const HELD_MIGRATIONS: Migration[] = [
+  equityPoolSeedBackfill,
+  // #2159: explicit live-world promotion. The dedicated script targets
+  // MONGODB_URI_LIVE, defaults to dry-run, and requires the current world id.
+  activateLiveDemographicsV2,
+];
 
 // Deferred to follow-up (need bootstrap-marker pass on production first):
 //   - 2026-04-22-reverse-split-victim-reparations  (no marker writer in script)

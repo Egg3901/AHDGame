@@ -847,6 +847,7 @@ export async function _enrichElection(
             cumulativeVotes: t.cumulativeVotes,
             sharesPct: t.sharesPct,
             ...(seatsEstimateSnapshot ? { seatsEstimate: seatsEstimateSnapshot } : {}),
+            ...(t.participation ? { participation: t.participation } : {}),
           };
         }),
         ...electoralVotesResult,

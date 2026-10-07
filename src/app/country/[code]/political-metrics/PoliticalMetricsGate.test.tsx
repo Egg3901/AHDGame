@@ -6,7 +6,12 @@ import { PoliticalMetricsGate } from "./PoliticalMetricsGate";
 const flags = vi.hoisted(() => ({
   loaded: true,
   failed: false,
-  resetSystemVersions: { metrics: "v2", legislation: "v2", cabinet: "v2" },
+  resetSystemVersions: {
+    metrics: "v2",
+    legislation: "v2",
+    cabinet: "v2",
+    demographics: "v1",
+  },
   resetV2Countries: ["US", "UK", "JP"],
 }));
 

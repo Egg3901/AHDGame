@@ -21,6 +21,7 @@ export interface CanvassTurnoutWrite {
   modifierPath: string;
   modifierValue: number;
   campaignModifiers: Record<string, unknown>;
+  campaignContactModifiers: Record<string, unknown>;
 }
 
 export interface CanvassSpendInput {
@@ -145,6 +146,7 @@ export async function applyCanvassSpend(
                   $set: {
                     [input.turnout.modifierPath]: input.turnout.modifierValue,
                     campaignModifiers: input.turnout.campaignModifiers,
+                    campaignContactModifiers: input.turnout.campaignContactModifiers,
                     lastUpdated: now,
                   },
                 },

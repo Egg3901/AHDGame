@@ -53,6 +53,7 @@ export async function GET() {
         metricsSystemVersion: 1,
         legislationSystemVersion: 1,
         cabinetSystemVersion: 1,
+        demographicsSystemVersion: 1,
         resetWorldId: 1,
         resetVersionSeeds: 1,
         startingPartiesMode: 1,

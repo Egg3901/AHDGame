@@ -169,6 +169,22 @@ import {
 import { recordEraInterpolationFallback } from "@/lib/seeds/eraInterpolation";
 import { getUsTurnoutRatesForYear } from "@/lib/seeds/eraSubstrateForYear";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import {
+  liveElectorateAgeMarginals,
+  applyRegisteredShareToParticipation,
+  resolveCompetitiveness,
+  resolveIssueSalience,
+  resolveParticipation,
+  reweightSharesToMarginal,
+  summarizeParticipation,
+  type AgeSexVectorInput,
+  type ParticipationLedger,
+  type ParticipationSummary,
+} from "./v2/rules";
+import {
+  demographicsV2CalibrationForCountry,
+  type DemographicsV2Calibration,
+} from "./v2/calibration";
 
 /**
  * Live-clock context for Layer-1 derivation. `year` null means "the era system
@@ -255,6 +271,16 @@ export interface GranularSubstrateInput {
    * `checkpointBakedShifts.ts`.
    */
   startingYear?: number | null;
+  /** Demographics v2 inputs. Omitted keeps the complete v1 path unchanged. */
+  v2?: {
+    regionAges: AgeSexVectorInput;
+    votingAge?: number;
+    /** Share of the eligible electorate legally able to vote, 0..1. */
+    registeredShare: number;
+    /** Campaign-only turnout change projected into Layer-1 bucket space. */
+    contactByBucket?: Readonly<Record<string, number>>;
+    calibration?: DemographicsV2Calibration;
+  };
 }
 
 /** Drop-in replacements for the legacy engine inputs. */
@@ -268,6 +294,40 @@ export interface GranularSubstrate {
   enriched: EnrichedCandidate[];
   partyGroupFavorabilityByKey?: Map<string, number>;
   units: GranularElectorateUnit[];
+  /** Explainable turnout terms keyed by synthetic electorate unit. */
+  participationLedgers?: Record<string, ParticipationLedger>;
+  /** Electorate-weighted explanation persisted with the public turn snapshot. */
+  participationSummary?: ParticipationSummary;
+}
+
+/**
+ * Separate modern campaign contact from the ordinary turnout baseline. The
+ * contact ledger is written by the canvassing transaction and decays with the
+ * modern campaign turnout snapshot. Legacy archetype targets are projected
+ * into the country's native Layer-1 bucket vocabulary.
+ */
+export function campaignContactByBucket(
+  turnoutDoc: StateDemographicTurnout | null | undefined,
+  countryId: string
+): Record<string, number> {
+  if (!turnoutDoc?.campaignContactModifiers) return {};
+  const direct: Record<string, number> = {};
+  const archetypes: Record<string, number> = {};
+  const dimensions = new Set([...Object.keys(turnoutDoc.campaignContactModifiers)]);
+  for (const dimension of dimensions) {
+    const campaign = turnoutDoc.campaignContactModifiers[dimension] ?? {};
+    for (const bucket of Object.keys(campaign)) {
+      const delta = campaign[bucket] ?? 0;
+      if (!Number.isFinite(delta) || delta === 0) continue;
+      if (dimension === "voterGroups") archetypes[bucket] = delta;
+      else direct[`${dimension}:${bucket}`] = delta;
+    }
+  }
+  const projected = archetypeValuesToBuckets(archetypes, countryId);
+  for (const [bucket, delta] of Object.entries(projected)) {
+    direct[bucket] = (direct[bucket] ?? 0) + delta;
+  }
+  return direct;
 }
 
 // ─── Cell → unit derivation (memoized) ──────────────────────────────────────
@@ -427,7 +487,8 @@ function deriveCellsForState(
   turnoutDoc: StateDemographicTurnout | null | undefined,
   positionOverlay?: Layer1PositionOverlay | null,
   turnoutOverlay?: Layer1TurnoutOverlay | null,
-  yearCtx?: EraYearContext
+  yearCtx?: EraYearContext,
+  liveAgeMarginals?: Record<"young" | "mid" | "mature" | "senior", number> | null
 ): {
   cells: GenericGranularCell[];
   modifiersNative: boolean;
@@ -469,6 +530,7 @@ function deriveCellsForState(
       resolvedPositions = resolveGranularPositions(config, era, stateId);
     }
     if (!config || !("race" in config) || !resolvedPositions) return null;
+    if (liveAgeMarginals) config = { ...config, age: liveAgeMarginals };
     const positions = applyPositionOverlay(
       resolvedPositions,
       positionOverlay
@@ -491,7 +553,7 @@ function deriveCellsForState(
         conditionedOffsets,
       }
     );
-    const cells: GenericGranularCell[] = usCells.map((cell) => ({
+    let cells: GenericGranularCell[] = usCells.map((cell) => ({
       id: cell.id,
       buckets: {
         race: cell.race,
@@ -504,6 +566,9 @@ function deriveCellsForState(
       socialLean: cell.socialLean,
       turnout: cell.turnout,
     }));
+    if (liveAgeMarginals) {
+      cells = reweightSharesToMarginal(cells, "age", liveAgeMarginals);
+    }
     return { cells, modifiersNative: true, positions };
   }
 
@@ -535,7 +600,7 @@ function deriveCellsForState(
   const mergedPositions = applyPositionOverlay(substrate.positions, positionOverlay);
   const dims: GenericGranularDimInput[] = substrate.dims.map((name) => ({
     name,
-    marginals: substrate.marginals[name],
+    marginals: name === "age" && liveAgeMarginals ? liveAgeMarginals : substrate.marginals[name],
     positions: mergedPositions[name],
     // Dim-keyed turnout modifiers (`modifiers.race.black`) apply natively here,
     // exactly as they do on the US path — this is where bucket-targeted GOTV
@@ -549,11 +614,14 @@ function deriveCellsForState(
       turnoutOverlay?.[name]
     ),
   }));
-  const cells = deriveGranularCellsGeneric({
+  let cells = deriveGranularCellsGeneric({
     dims,
     priors: COUNTRY_PRIORS[countryId] ?? {},
     opts: { pruneFloor: ELECTORATE_PRUNE_FLOOR },
   });
+  if (liveAgeMarginals) {
+    cells = reweightSharesToMarginal(cells, "age", liveAgeMarginals);
+  }
   if (cells.length === 0) return null;
   // Non-US archetype-keyed GOTV modifiers have no bucket mapping — the caller-
   // supplied aggregate ratio handles them (modifiersNative: false).
@@ -663,13 +731,16 @@ export function deriveGranularElectorateUnits(
    */
   yearCtx?: EraYearContext,
   retainCampaignCells = false,
-  cache: "shared" | "bypass" = "shared"
+  cache: "shared" | "bypass" = "shared",
+  /** Demographics v2 live electorate age shares. Omitted preserves v1. */
+  liveAgeMarginals?: Record<"young" | "mid" | "mature" | "senior", number> | null
 ): { units: GranularElectorateUnit[]; modifiersNative: boolean } | null {
   const modifiersSig = turnoutDoc?.modifiers ? JSON.stringify(turnoutDoc.modifiers) : "";
   const overlaySig = positionOverlay ? JSON.stringify(positionOverlay) : "";
   const turnoutOverlaySig = turnoutOverlay ? JSON.stringify(turnoutOverlay) : "";
   const yearSig = yearCtx?.year != null ? `${yearCtx.year}:${yearCtx.startingYear ?? ""}` : "";
-  const cacheKey = `${countryId}|${stateId}|${preset ?? ""}|${modifiersSig}|${overlaySig}|${turnoutOverlaySig}|${yearSig}|${retainCampaignCells}`;
+  const ageSig = liveAgeMarginals ? JSON.stringify(liveAgeMarginals) : "";
+  const cacheKey = `${countryId}|${stateId}|${preset ?? ""}|${modifiersSig}|${overlaySig}|${turnoutOverlaySig}|${yearSig}|${ageSig}|${retainCampaignCells}`;
   if (cache === "shared" && UNIT_CACHE.has(cacheKey)) {
     const cached = UNIT_CACHE.get(cacheKey) ?? null;
     UNIT_CACHE.delete(cacheKey);
@@ -688,7 +759,8 @@ export function deriveGranularElectorateUnits(
       turnoutDoc,
       positionOverlay,
       turnoutOverlay,
-      yearCtx
+      yearCtx,
+      liveAgeMarginals
     );
   } catch {
     derived = null;
@@ -816,6 +888,9 @@ function aggregateTurnoutRatio(
 export function buildGranularElectorateSubstrate(
   input: GranularSubstrateInput
 ): GranularSubstrate | null {
+  const liveAgeMarginals = input.v2
+    ? liveElectorateAgeMarginals(input.v2.regionAges, input.v2.votingAge)
+    : null;
   const derived = deriveGranularElectorateUnits(
     input.countryId,
     input.stateId,
@@ -833,7 +908,8 @@ export function buildGranularElectorateSubstrate(
     input.demographicDefaults?.layer1TurnoutOverrides,
     { year: input.year ?? null, startingYear: input.startingYear ?? null },
     usesCampaignAds(input, input.enriched),
-    input.cache
+    input.cache,
+    liveAgeMarginals
   );
   if (!derived || derived.units.length === 0) return null;
   const { units, modifiersNative } = derived;
@@ -885,7 +961,31 @@ export function buildGranularElectorateSubstrate(
   }
   const turnoutDriftKeys = Object.keys(turnoutDrift);
 
+  const calibration = input.v2
+    ? (input.v2.calibration ?? demographicsV2CalibrationForCountry(input.countryId))
+    : null;
+  const salience = input.v2
+    ? resolveIssueSalience(
+        input.enriched.map((candidate) => ({
+          economic: candidate.charEP,
+          social: candidate.charSP,
+        })),
+        calibration ?? undefined
+      )
+    : null;
+  const competitiveness = input.v2
+    ? resolveCompetitiveness(
+        input.enriched.map((candidate) => candidate.favorability),
+        calibration ?? undefined
+      )
+    : 0;
+  // Vote choice uses squared distance. Scaling both endpoints by sqrt(weight)
+  // makes the resulting distance contribution equal the intended axis weight.
+  const economicSalienceScale = Math.sqrt(salience?.economic ?? 1);
+  const socialSalienceScale = Math.sqrt(salience?.social ?? 1);
+
   const liveTurnouts: Record<string, number> = {};
+  const participationLedgers: Record<string, ParticipationLedger> = {};
   const groups: StateDemographics["groups"] = {};
   const categoryGroups: DemographicCategory["groups"] = [];
   let pool = 0;
@@ -899,8 +999,38 @@ export function buildGranularElectorateSubstrate(
       }
       if (drift !== 0) turnout = clampTurnout(turnout + drift);
     }
-    const economicLean = foldLean(unit.economicLean, unit, econDeltaKeys, econBucketDeltas);
-    const socialLean = foldLean(unit.socialLean, unit, socDeltaKeys, socBucketDeltas);
+    if (input.v2 && salience) {
+      const contact = Object.entries(input.v2.contactByBucket ?? {}).reduce(
+        (sum, [bucket, delta]) => sum + (unit.bucketWeights[bucket] ?? 0) * delta,
+        0
+      );
+      const ledger = applyRegisteredShareToParticipation(
+        resolveParticipation(
+          {
+            baselineTurnout: turnout - contact,
+            salience: salience.overall,
+            competitiveness,
+            accessFriction: 0,
+            contactLift: contact,
+            saturation: Math.abs(contact) / 20,
+          },
+          calibration ?? undefined
+        ),
+        input.v2.registeredShare
+      );
+      participationLedgers[unit.id] = ledger;
+      turnout = ledger.resolvedTurnout;
+    }
+    const economicLean = clamp(
+      foldLean(unit.economicLean, unit, econDeltaKeys, econBucketDeltas) * economicSalienceScale,
+      -5,
+      5
+    );
+    const socialLean = clamp(
+      foldLean(unit.socialLean, unit, socDeltaKeys, socBucketDeltas) * socialSalienceScale,
+      -5,
+      5
+    );
     const populationPct = unit.share * 100;
     liveTurnouts[unit.id] = turnout;
     groups[unit.id] = {
@@ -970,6 +1100,20 @@ export function buildGranularElectorateSubstrate(
         ),
       };
     });
+  const applySalience = (candidate: EnrichedCandidate): EnrichedCandidate =>
+    salience
+      ? {
+          ...candidate,
+          charEP: clamp(candidate.charEP * economicSalienceScale, -5, 5),
+          charSP: clamp(candidate.charSP * socialSalienceScale, -5, 5),
+          ...(candidate.partyEcon == null
+            ? {}
+            : { partyEcon: clamp(candidate.partyEcon * economicSalienceScale, -5, 5) }),
+          ...(candidate.partySocial == null
+            ? {}
+            : { partySocial: clamp(candidate.partySocial * socialSalienceScale, -5, 5) }),
+        }
+      : candidate;
   const enriched = input.enriched.map((ec) => {
     const approvals =
       ec.archetypeApprovals && Object.keys(ec.archetypeApprovals).length > 0
@@ -980,7 +1124,9 @@ export function buildGranularElectorateSubstrate(
       input.currentTurn == null ||
       !ec.targetedAds?.length
     ) {
-      return approvals === ec.archetypeApprovals ? ec : { ...ec, archetypeApprovals: approvals };
+      return applySalience(
+        approvals === ec.archetypeApprovals ? ec : { ...ec, archetypeApprovals: approvals }
+      );
     }
     const bonuses = targetedAdBonuses(
       campaignCells,
@@ -1000,7 +1146,7 @@ export function buildGranularElectorateSubstrate(
         return [unit.id, weight > 0 ? bonus / weight : 0];
       })
     );
-    return { ...ec, archetypeApprovals: approvals, targetedAdBonuses: byUnit };
+    return applySalience({ ...ec, archetypeApprovals: approvals, targetedAdBonuses: byUnit });
   });
 
   // Address-driven `${party}:${archetype}` favorability deltas → `${party}:${unit}`.
@@ -1026,6 +1172,19 @@ export function buildGranularElectorateSubstrate(
     partyGroupFavorabilityByKey = remapped;
   }
 
+  const participationSummary =
+    input.v2 && salience && calibration
+      ? summarizeParticipation({
+          calibration,
+          competitiveness,
+          issueSalience: salience,
+          rows: units.map((unit) => ({
+            share: unit.share,
+            ledger: participationLedgers[unit.id],
+          })),
+        })
+      : null;
+
   return {
     demographics,
     categories,
@@ -1034,6 +1193,8 @@ export function buildGranularElectorateSubstrate(
     enriched,
     partyGroupFavorabilityByKey,
     units,
+    ...(input.v2 ? { participationLedgers } : {}),
+    ...(participationSummary ? { participationSummary } : {}),
     ...(usesCampaignAds(input, input.enriched) ? { campaignCells } : {}),
   };
 }

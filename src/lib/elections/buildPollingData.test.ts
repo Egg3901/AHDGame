@@ -269,17 +269,17 @@ describe("computeSeatEstimates — parity with allocateSeats (ticket #1032)", ()
       computeSeatEstimates("nationalAssembly", 80, tally, new Set(["candidate"]), "BG")
     ).toBeNull();
   });
-  it("projects 1991 Japan SNTV by candidate rather than party vote share", () => {
-    const votes = { a: 500, b: 400, c: 300, d: 100 };
+  it("fills a 1991 Japan region proportionally even from a legacy SNTV snapshot", () => {
+    const votes = { a: 500 };
     const tally = {
       totalVotes: votes,
-      candidateParties: { a: "LDP", b: "LDP", c: "JSP", d: "LDP" },
+      candidateParties: { a: "LDP" },
     } as never;
     expect(
-      computeSeatEstimates("shugiin", 3, tally, new Set(Object.keys(votes)), "JP", "sntv")
-    ).toEqual({ a: 1, b: 1, c: 1, d: 0 });
+      computeSeatEstimates("shugiin", 34, tally, new Set(Object.keys(votes)), "JP", "sntv")
+    ).toEqual({ a: 34 });
   });
-  it("projects bounded NPP slates with the same seats as final resolution", () => {
+  it("keeps legacy JP projections in parity with proportional final resolution", () => {
     const votes = { ldp: 600, jsp: 400, player: 250 };
     const tally = {
       totalVotes: votes,

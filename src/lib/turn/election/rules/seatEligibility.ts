@@ -8,6 +8,7 @@ import { US_CONFIG } from "@/lib/countries/us/institutionsFacts";
 
 const HOUSE_MIN_SHARE = 0.1;
 const HOUSE_MAX_SHARE = 0.2;
+export const STANDARD_MULTI_SEAT_MIN_SHARE = 0.1;
 
 /**
  * Derive the US House party eligibility gate from the authoritative state
@@ -51,6 +52,8 @@ export function getMultiSeatMinShare(
     electionType === "landtag" ||
     electionType === "commons" ||
     electionType === "snap_commons" ||
+    electionType === "shugiin" ||
+    electionType === "snap_shugiin" ||
     electionType === "peoplesCongress" ||
     electionType === "dail" ||
     electionType === "seanad" ||
@@ -66,7 +69,7 @@ export function getMultiSeatMinShare(
     electionType === "volkskammerDeputy" ||
     electionType === "landAssembly"
   ) {
-    return 0.1;
+    return STANDARD_MULTI_SEAT_MIN_SHARE;
   }
 
   return 0.2;

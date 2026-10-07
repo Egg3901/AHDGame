@@ -725,6 +725,9 @@ describe("canvassing campaign turnout integration", () => {
     expect(turnout.campaignModifiers).toEqual(
       expect.objectContaining({ race: { white: expect.any(Number) } })
     );
+    expect(turnout.campaignContactModifiers).toEqual(
+      expect.objectContaining({ race: { white: expect.any(Number) } })
+    );
   });
 
   it.each([0, -1, 1.5, 51, "5"])(

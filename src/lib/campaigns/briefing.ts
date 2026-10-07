@@ -15,7 +15,9 @@ import type {
   BriefingDelegatePath,
   BriefingTippingPath,
   CampaignBriefing,
+  BriefingParticipationPlan,
 } from "@/lib/campaigns/dto/campaignView";
+import type { ParticipationSummary } from "@/lib/demographics/v2/rules";
 import type { CandidateNationalLedger } from "@/lib/electionEngine/factorLedger";
 import { buildGeneralElectionViewModel } from "@/lib/elections/generalViewModel";
 import { allocateElectoralVotes } from "@/lib/turn/electionCalculations";
@@ -84,6 +86,42 @@ export function buildCoalitionWeakness(
 export function buildCashRunway(funds: number, netPerTurn: number): CampaignBriefing["cashRunway"] {
   const turnsOfRunway = netPerTurn < 0 ? Math.floor(funds / -netPerTurn) : null;
   return { funds, netPerTurn, turnsOfRunway };
+}
+
+/** Turn the latest Method 4 receipt into concrete uses of existing campaign controls. */
+export function buildParticipationPlan(
+  participation: ParticipationSummary | undefined,
+  weakBuckets: BriefingCoalitionBucket[]
+): BriefingParticipationPlan | undefined {
+  if (!participation) return undefined;
+  const fatigued = Math.abs(participation.saturation) >= Math.max(0.5, participation.contact * 0.2);
+  const targets = weakBuckets.slice(0, 3).map((bucket, index) => {
+    if (fatigued) {
+      return {
+        bucket: bucket.bucket,
+        action: "targeted_ads" as const,
+        reason: "Contact is losing efficiency. Persuade this group before canvassing it again.",
+      };
+    }
+    if (bucket.bucketShare < 0.4 || index === 0) {
+      return {
+        bucket: bucket.bucket,
+        action: "targeted_ads" as const,
+        reason: "You are losing this group. Improve support before asking more of it to vote.",
+      };
+    }
+    return {
+      bucket: bucket.bucket,
+      action: "canvass" as const,
+      reason: "This group is competitive and contact still has useful headroom.",
+    };
+  });
+  return {
+    expectedTurnout: participation.resolvedTurnout,
+    contactLift: participation.contact,
+    saturationDrag: participation.saturation,
+    targets,
+  };
 }
 
 /**

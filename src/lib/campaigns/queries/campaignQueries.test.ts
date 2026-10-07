@@ -767,6 +767,24 @@ describe("getCampaignDetail", () => {
           },
         ],
       },
+      turnSnapshots: [
+        {
+          turn: 5,
+          participation: {
+            calibrationId: "US-v1",
+            baseline: 60,
+            salience: 1,
+            competitiveness: 2,
+            access: -1,
+            contact: 3,
+            saturation: -0.5,
+            resolvedTurnout: 64.5,
+            economicSalience: 1,
+            socialSalience: 1,
+            competitivenessScore: 0.8,
+          },
+        },
+      ],
       totalVotesByUnit: {},
     });
 
@@ -792,6 +810,10 @@ describe("getCampaignDetail", () => {
       detail.briefing!.coalitionWeakness[1]!.bucketShare
     );
     expect(detail.briefing?.cashRunway.funds).toBe(500_000);
+    expect(detail.briefing?.participationPlan).toMatchObject({
+      expectedTurnout: 64.5,
+      contactLift: 3,
+    });
   });
 
   it("gives an owner a tipping-point EV briefing in the general phase", async () => {

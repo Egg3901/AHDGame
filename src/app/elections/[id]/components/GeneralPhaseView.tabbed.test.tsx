@@ -31,6 +31,10 @@ vi.mock("./GeneralElectionShellClient", () => ({
 vi.mock("@/components/elections/general/FactorLedgerCard", () => ({
   FactorLedgerCard: () => <div data-testid="ledger" />,
 }));
+vi.mock("@/components/elections/general/ParticipationLedgerCard", () => ({
+  ParticipationLedgerCard: ({ data }: { data?: unknown }) =>
+    data ? <div data-testid="participation-ledger" /> : null,
+}));
 vi.mock("@/components/elections/general/NationalMoodGauge", () => ({
   NationalMoodGauge: () => <div data-testid="mood" />,
 }));
@@ -133,6 +137,44 @@ describe("folding the detail views into tabs", () => {
       "State drivers",
       "Factor ledger",
     ]);
+  });
+
+  it("adds a turnout tab only when a Method 4 receipt exists", () => {
+    const data = election();
+    data.generalVotes!.turnSnapshots = [
+      {
+        turn: 10,
+        recordedAt: new Date().toISOString(),
+        cumulativeVotes: {},
+        sharesPct: {},
+        participation: {
+          calibrationId: "US-v1",
+          baseline: 60,
+          salience: 1,
+          competitiveness: 2,
+          access: -1,
+          contact: 3,
+          saturation: -0.5,
+          resolvedTurnout: 64.5,
+          economicSalience: 1,
+          socialSalience: 1,
+          competitivenessScore: 0.8,
+        },
+      },
+    ];
+    render(
+      <GeneralPhaseView
+        election={data}
+        electionId="e1"
+        localInPrimary={false}
+        localIsEnded={false}
+        amInRace={false}
+        onSuccess={() => {}}
+        tabbedDetail
+      />
+    );
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toContain("Turnout");
+    expect(screen.getAllByTestId("participation-ledger")).toHaveLength(1);
   });
 
   it("leaves naming a running mate to the campaign page", () => {
