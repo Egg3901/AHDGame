@@ -19,6 +19,9 @@ vi.mock("@/lib/achievements/triggers", () => ({
   checkActionAchievements: vi.fn().mockResolvedValue(undefined),
   checkFundsAchievements: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/politicalMedia/journal", () => ({
+  fundPoliticalMediaOrder: vi.fn(),
+}));
 vi.mock("@/lib/currency/characterFunds", async (importActual) => {
   const actual = await importActual<typeof import("@/lib/currency/characterFunds")>();
   return {
@@ -30,11 +33,16 @@ vi.mock("@/lib/currency/characterFunds", async (importActual) => {
 import { executeCharacterAction } from "./executeAction";
 import { getGameState } from "@/lib/gameState";
 import { getGdpBaseline } from "@/lib/utils/fundGeneration";
+import { fundPoliticalMediaOrder } from "@/lib/politicalMedia/journal";
 
 describe("executeCharacterAction — campaign-fund de-forex", () => {
   let findOneAndUpdate: ReturnType<typeof vi.fn>;
 
-  function makeDb(character: Character, baseRate?: number): Db {
+  function makeDb(
+    character: Character,
+    baseRate?: number,
+    politicalMediaMarketEnabled = false
+  ): Db {
     findOneAndUpdate = vi.fn().mockResolvedValue({ ...character, actions: 90 });
     return {
       collection: vi.fn((name: string) => {
@@ -68,6 +76,11 @@ describe("executeCharacterAction — campaign-fund de-forex", () => {
         }
         if (name === "characters") {
           return { findOne: vi.fn().mockResolvedValue(character), findOneAndUpdate };
+        }
+        if (name === "gameConfig") {
+          return {
+            findOne: vi.fn().mockResolvedValue({ politicalMediaMarketEnabled }),
+          };
         }
         return {
           insertOne: vi.fn().mockResolvedValue({}),
@@ -130,5 +143,33 @@ describe("executeCharacterAction — campaign-fund de-forex", () => {
     vi.mocked(getGameState).mockResolvedValue({ currentTurn: 1, preset: "2027-default" } as never);
     // The 2027 price-level quote is 90,000 anchor before the EUR basis ×0.92.
     expect(await campaignDebit("DE", 0.92)).toBe(-82_800);
+  });
+
+  it("applies favorability immediately without creating a corporation-backed media order", async () => {
+    const character = makeCharacter("US");
+    const db = makeDb(character, undefined, true);
+
+    const result = await executeCharacterAction(db, {
+      character,
+      characterQuery: { _id: character._id },
+      actionType: "advertise",
+      actor: { userId: null },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(fundPoliticalMediaOrder).not.toHaveBeenCalled();
+    const pipeline = findOneAndUpdate.mock.calls[0]![1] as [{ $set: Record<string, unknown> }];
+    expect(pipeline[0].$set.actions).toEqual({ $subtract: ["$actions", 5] });
+    expect(pipeline[0].$set["currencyBalances.campaign"]).toEqual({
+      $add: [{ $ifNull: ["$currencyBalances.campaign", 0] }, -100_000],
+    });
+    expect(pipeline[0].$set.favorability).toEqual({
+      $min: [
+        100,
+        {
+          $max: [0, { $add: [{ $ifNull: ["$favorability", 0] }, 3] }],
+        },
+      ],
+    });
   });
 });
