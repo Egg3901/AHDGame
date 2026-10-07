@@ -345,8 +345,12 @@ describe("frozen payout compensation and currency", () => {
 });
 
 it("fences a suspended plan writer after its unquoted claim is released", async () => {
-  const f = fixture(),
-    queue = f.memory.collection("indexFundRedemptionQueue"),
+  const f = fixture();
+  // A unit-supply-guarded claim keeps the single-payout plan path.
+  await f.db
+    .collection("indexFundRedemptionQueue")
+    .updateOne({ _id: f.entryId }, { $unset: { unitsBurnedAtRequest: "" } });
+  const queue = f.memory.collection("indexFundRedemptionQueue"),
     write = queue.findOneAndUpdate.bind(queue);
   let wake!: () => void,
     reached!: () => void,
@@ -497,21 +501,34 @@ describe.skipIf(process.env.AHD_FUND_PAYOUT_REAL_MONGO !== "1")(
                 get(coll, method) {
                   const value = Reflect.get(coll, method);
                   if (typeof value !== "function") return value;
+                  // Single payouts write one document at a time; batched NPP
+                  // payouts (queuedPayoutBatch.ts) reach the same boundary
+                  // through the multi-document form of the same write.
                   const selected = ["fund-receipt", "cash-witness", "ledger", "audit"].includes(
                     boundary
                   )
-                    ? "insertOne"
-                    : ["claim", "plan"].includes(boundary)
-                      ? "findOneAndUpdate"
-                      : "updateOne";
-                  if (method !== selected) return value.bind(coll);
+                    ? ["insertOne", "insertMany", "bulkWrite"]
+                    : boundary === "claim"
+                      ? ["findOneAndUpdate"]
+                      : boundary === "plan"
+                        ? ["findOneAndUpdate", "bulkWrite"]
+                        : ["updateOne", "bulkWrite"];
+                  if (!selected.includes(String(method))) return value.bind(coll);
                   return async (...args: any[]) => {
                     const result = await value.apply(coll, args);
-                    const update = args[1] as {
+                    type Update = {
                       $inc?: Record<string, number>;
                       $set?: Record<string, unknown>;
                     };
-                    const matches =
+                    const updates: Update[] =
+                      method === "bulkWrite"
+                        ? (args[0] as { updateOne?: { update: Update } }[]).flatMap((op) =>
+                            op.updateOne ? [op.updateOne.update] : [{}]
+                          )
+                        : method === "insertMany"
+                          ? [{}]
+                          : [args[1] as Update];
+                    const matches = updates.some((update) =>
                       boundary === "debit"
                         ? !!update.$inc?.cashAnchor
                         : boundary === "credit"
@@ -521,8 +538,9 @@ describe.skipIf(process.env.AHD_FUND_PAYOUT_REAL_MONGO !== "1")(
                             : boundary === "claim"
                               ? update.$set?.status === "processing"
                               : boundary === "plan"
-                                ? !!update.$set?.payoutPlan
-                                : true;
+                                ? !!update.$set?.payoutPlan || !!update.$set?.payoutBatch
+                                : true
+                    );
                     if (!interrupted && matches) {
                       interrupted = true;
                       throw new Error("Synthetic native acknowledgement lost");
