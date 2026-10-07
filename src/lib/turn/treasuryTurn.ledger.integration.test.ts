@@ -153,7 +153,9 @@ describe("treasury accrual stock-flow ownership", () => {
         expect(
           db.collection("sovereignCouponClaims").docs.filter((row) => row.settledTurn === undefined)
         ).toEqual([]);
-        expect(budget.treasuryCashLocal + poolCash + household).toBe(100_000);
+        expect(Number(budget.treasuryCashLocal) + Number(poolCash) + Number(household)).toBe(
+          100_000
+        );
       } else {
         expect(budget.treasuryCashLocal).toBe(0);
         expect(household).toBe(100_000);

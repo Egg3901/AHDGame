@@ -1,0 +1,121 @@
+{
+  "scope": "One-turn native Mongo command-volume comparison, 23 fiscal countries. Uniform flows, public-float holders only; not a full-world or remote-latency qualification.",
+  "baselineCommit": "d234477e3245438243e8a556fec385ff0d632e09",
+  "batchingImplementationCommit": "aed5339481c89af108529361480734955c7a6394",
+  "producer": "Instrumented copy of scripts/sim/conservedSovereignFinancing.ts; permanent script now includes reply bytes and document counters.",
+  "countries": 23,
+  "baseline32": {
+    "turn": 1,
+    "bonds": 32,
+    "treasury": {
+      "commands": 20414,
+      "ms": 161228,
+      "byOp": {
+        "find:centralBanks": 48,
+        "find:gameState": 1,
+        "find:organizationMemberships": 1,
+        "find:federalBudget": 898,
+        "find:countryGameStates": 1,
+        "createIndexes:sovereignCouponClaims": 1,
+        "distinct:sovereignCouponClaims": 1,
+        "find:gameConfig": 1,
+        "find:exchangeRates": 1,
+        "find:bankMoneyMoves": 4716,
+        "find:bonds": 1,
+        "getMore:-": 1,
+        "update:federalBudget": 1702,
+        "insert:bankMoneyMoves": 782,
+        "update:centralBanks": 92,
+        "update:bankMoneyMoves": 5428,
+        "find:sovereignCouponClaims": 782,
+        "insert:sovereignCouponClaims": 23,
+        "update:bondMarketPools": 2967,
+        "find:bondMarketPools": 1472,
+        "update:sovereignCouponClaims": 1472,
+        "delete:sovereignCouponClaims": 23
+      },
+      "bytes": 13728059,
+      "docs": 8627
+    }
+  },
+  "batched32": {
+    "turn": 1,
+    "bonds": 32,
+    "treasury": {
+      "commands": 1830,
+      "ms": 21394,
+      "byOp": {
+        "find:centralBanks": 48,
+        "find:gameState": 1,
+        "find:organizationMemberships": 1,
+        "find:federalBudget": 185,
+        "find:countryGameStates": 1,
+        "createIndexes:sovereignCouponClaims": 1,
+        "distinct:sovereignCouponClaims": 1,
+        "find:gameConfig": 1,
+        "find:exchangeRates": 1,
+        "find:bankMoneyMoves": 461,
+        "find:bonds": 1,
+        "getMore:-": 1,
+        "update:federalBudget": 276,
+        "insert:bankMoneyMoves": 69,
+        "update:centralBanks": 92,
+        "update:bankMoneyMoves": 414,
+        "find:sovereignCouponClaims": 46,
+        "insert:sovereignCouponClaims": 23,
+        "update:bondMarketPools": 115,
+        "find:bondMarketPools": 46,
+        "update:sovereignCouponClaims": 23,
+        "delete:sovereignCouponClaims": 23
+      },
+      "bytes": 961344,
+      "docs": 1474
+    }
+  },
+  "batched64": {
+    "turn": 1,
+    "bonds": 64,
+    "treasury": {
+      "commands": 1830,
+      "ms": 13978,
+      "byOp": {
+        "find:centralBanks": 48,
+        "find:gameState": 1,
+        "find:organizationMemberships": 1,
+        "find:federalBudget": 185,
+        "find:countryGameStates": 1,
+        "createIndexes:sovereignCouponClaims": 1,
+        "distinct:sovereignCouponClaims": 1,
+        "find:gameConfig": 1,
+        "find:exchangeRates": 1,
+        "find:bankMoneyMoves": 461,
+        "find:bonds": 1,
+        "getMore:-": 1,
+        "update:federalBudget": 276,
+        "insert:bankMoneyMoves": 69,
+        "update:centralBanks": 92,
+        "update:bankMoneyMoves": 414,
+        "find:sovereignCouponClaims": 46,
+        "insert:sovereignCouponClaims": 23,
+        "update:bondMarketPools": 115,
+        "find:bondMarketPools": 46,
+        "update:sovereignCouponClaims": 23,
+        "delete:sovereignCouponClaims": 23
+      },
+      "bytes": 1178099,
+      "docs": 2210
+    }
+  },
+  "baseline64": {
+    "status": "aborted",
+    "externalTimeoutMs": 180000,
+    "completed": false
+  },
+  "commandReductionPct": 91.04,
+  "caveats": [
+    "The first baseline attempts failed to produce a completed profile; only the successful 32-bond baseline is reported.",
+    "Local wall time varies with shared host load.",
+    "Raw command and reply-byte counts establish the improvement; the prior 500-command budget is separately raised to 2500 for the new funded flows.",
+    "Returned documents count cursor rows, including repeated reads, not unique documents."
+  ]
+}
