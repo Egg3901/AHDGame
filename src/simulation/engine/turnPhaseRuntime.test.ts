@@ -538,4 +538,34 @@ describe("phase timeout drain (#3385)", () => {
     await expect(runtime.runPhase("fast", async () => 3)).resolves.toBe(3);
     await expect(runtime.drainTimedOutPhases?.()).resolves.toBeUndefined();
   });
+  it("keeps nested-call exemptions local to their runtime", async () => {
+    const makeRuntime = () =>
+      createTurnPhaseRuntime({
+        db: createMockDb().db,
+        phaseStatuses: {},
+        warnings: [],
+        currentPhaseRef: { current: null },
+      });
+    const first = makeRuntime();
+    const second = makeRuntime();
+    const gate = deferred();
+    const writes: string[] = [];
+    const held = second.runPhase("held", async () => {
+      await gate.promise;
+      writes.push("held");
+    });
+    await vi.advanceTimersByTimeAsync(PHASE_TIMEOUT_MS);
+    // Both runtimes number their first invocation 1. One runtime's ancestor
+    // must not exempt a separate runtime's independently draining invocation.
+    const nested = first.runPhase("otherRuntime", () =>
+      second.runPhase("later", async () => {
+        writes.push("later");
+      })
+    );
+    await settle();
+    expect(writes).toEqual([]);
+    gate.resolve();
+    await Promise.all([held, nested]);
+    expect(writes).toEqual(["held", "later"]);
+  });
 });

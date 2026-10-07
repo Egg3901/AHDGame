@@ -91,11 +91,6 @@ function cheapPhaseResultMeta(result: unknown): Record<string, unknown> | undefi
 // of every phase — imperceptible on a multi-second turn.
 const PHASE_STATUS_FLUSH_THROTTLE_MS = 1500;
 
-// Ids of the runPhase invocations the current async call chain is running
-// inside, outermost first. A phase started from inside a draining phase is part
-// of that phase's own work, so it must not wait for the drain it belongs to.
-const phaseInvocationChain = new AsyncLocalStorage<readonly number[]>();
-
 export function createTurnPhaseRuntime(input: {
   db: Pick<Db, "collection">;
   phaseStatuses: TurnPhaseTelemetryMap;
@@ -135,6 +130,9 @@ export function createTurnPhaseRuntime(input: {
   const turn = input.turn ?? 0;
   let lastFlushAtMs = 0;
   let nextInvocationId = 0;
+  // Nested work may bypass its own ancestors, but never a different runtime's
+  // drain. Keep this context beside the invocation ids it identifies.
+  const phaseInvocationChain = new AsyncLocalStorage<readonly number[]>();
   // #3385: a timeout cannot cancel the phase function, which keeps issuing
   // writes. Every timed-out phase stays here until its function settles, and no
   // new phase starts (nor does the turn complete or release its lock) until the
