@@ -218,6 +218,14 @@ export const LEGACY_DYNAMIC_COLLECTION_SITES: readonly LegacyDynamicCollectionSi
     reason: "The persisted transaction or recovery record carries its destination collection.",
   },
   {
+    file: "src/lib/banking/moneyMove.ts",
+    owner: "deliverCreditLegsInBatch",
+    argument: "collection",
+    scopeHash: "5c694854a6c64c3b3d6a2e5f46fd73a0eb71597dfbeec713e159ebf4ec1a8469",
+    count: 1,
+    reason: "The persisted transaction or recovery record carries its destination collection.",
+  },
+  {
     file: "src/lib/banking/projectionSettlement.ts",
     owner: "acknowledge",
     argument: "collection",
