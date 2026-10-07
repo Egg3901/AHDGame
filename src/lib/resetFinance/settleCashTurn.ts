@@ -243,6 +243,23 @@ export async function settleResetTreasuryCashTurn(input: {
       plan.deliveries = plan.deliver(final);
     }
     if (resolved.length) {
+      // The receipt's opening cash may predate a concurrent spend or an
+      // interrupted credit. Keep the non-owning book at the observed closing
+      // funded balance, rather than reconstructing cash from that old plan.
+      const closing = await db
+        .collection<FederalBudget>("federalBudget")
+        .find(
+          { countryId: { $in: resolved.map(({ final }) => final.countryId) } },
+          { projection: { countryId: 1, treasuryCashLocal: 1 } }
+        )
+        .toArray();
+      const cashByCountry = new Map(closing.map((row) => [row.countryId, row.treasuryCashLocal]));
+      for (const { final } of resolved) {
+        const cash = cashByCountry.get(final.countryId);
+        if (typeof cash !== "number" || !Number.isFinite(cash))
+          throw new Error(`Missing closing funded cash for ${final.countryId}`);
+        final.cash = cash;
+      }
       const write = await treasuryCollection.bulkWrite(
         resolved.map(({ next, final }) => ({
           updateOne: {

@@ -263,6 +263,7 @@ describe.skipIf(!mongoUri)("conserved v2 department authority on native Mongo", 
         paidTotal: 0,
         plannedTotal: 10,
       });
+      expect(uk.cash).toBe(5);
       expect(uk.claimArrears?.["UK:health"]).toBe(PER_TURN);
       expect(await account(db, "UK")).toMatchObject({
         accruedThroughTurn: 2,
@@ -333,6 +334,7 @@ describe.skipIf(!mongoUri)("conserved v2 department authority on native Mongo", 
         status: "settled",
         paidTotal: PER_TURN,
       });
+      expect((await book(db, "US"))?.cash).toBe(0);
       const after = await money(db);
       expect(after.household[householdMoneyBankId("USD")]).toBe(5_000 + PER_TURN);
       expect(after.total).toBe(before.total - (100 - PER_TURN));
