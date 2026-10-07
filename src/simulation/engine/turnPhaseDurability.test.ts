@@ -14,7 +14,7 @@ function fixture() {
     apply(update)
   );
   const runtime = createTurnPhaseRuntime({
-    db: { collection: vi.fn(() => ({ updateOne })) },
+    db: { collection: vi.fn().mockReturnValue({ updateOne }) },
     phaseStatuses: {},
     warnings: [],
     currentPhaseRef: { current: null },
