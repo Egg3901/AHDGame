@@ -14,7 +14,7 @@ const receipt = {
   sourceTurn: 77,
   completedAt: "2026-10-07T12:00:00.000Z",
   verificationHash: "verified",
-  countries: ["US", "UK", "JP"],
+  countries: ["US", "UK", "JP", "IE"],
 };
 
 function state(overrides: Record<string, unknown> = {}) {
@@ -40,7 +40,12 @@ describe(migration.id, () => {
 
     const result = await migration.execute(db as unknown as Db, { dryRun: true });
 
-    expect(verifyDemographicsV2Opening).toHaveBeenCalledWith(db, "world-live", 77);
+    expect(verifyDemographicsV2Opening).toHaveBeenCalledWith(db, "world-live", 77, [
+      "US",
+      "UK",
+      "JP",
+      "IE",
+    ]);
     expect(db.collectionMocks.gameState.updateOne).not.toHaveBeenCalled();
     expect(result).toMatchObject({ documentsScanned: 1, documentsUpdated: 0 });
     expect(result.notes?.[0]).toContain("DRY RUN");
@@ -93,6 +98,27 @@ describe(migration.id, () => {
     expect(verifyDemographicsV2Opening).not.toHaveBeenCalled();
     expect(db.collectionMocks.gameState.updateOne).not.toHaveBeenCalled();
     expect(result.documentsUpdated).toBe(0);
+  });
+
+  it("repairs an otherwise-active receipt that does not cover inactive Ireland", async () => {
+    const db = createMockDb();
+    const legacyReceipt = { ...receipt, countries: ["US", "UK", "JP"] };
+    db.collection("gameState").findOne.mockResolvedValue(
+      state({
+        demographicsSystemVersion: "v2",
+        resetVersionSeeds: { demographics: legacyReceipt },
+        resetSystemSelections: { demographics: "v2" },
+      })
+    );
+
+    await migration.execute(db as unknown as Db, { dryRun: true });
+
+    expect(verifyDemographicsV2Opening).toHaveBeenCalledWith(db, "world-live", 77, [
+      "US",
+      "UK",
+      "JP",
+      "IE",
+    ]);
   });
 
   it("refuses to promote an inactive world", async () => {

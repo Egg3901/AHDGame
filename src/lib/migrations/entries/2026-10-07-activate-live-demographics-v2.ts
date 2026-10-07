@@ -12,6 +12,7 @@ import type { Migration, MigrationContext, MigrationResult } from "../types";
 export const LIVE_DEMOGRAPHICS_V2_MIGRATION_ID = "2026-10-07-activate-live-demographics-v2";
 
 const MIGRATION_ACTOR = `migration:${LIVE_DEMOGRAPHICS_V2_MIGRATION_ID}`;
+const LIVE_ACTIVATION_COUNTRIES = ["US", "UK", "JP", "IE"] as const;
 
 type ActivationState = Pick<
   GameState,
@@ -53,7 +54,10 @@ function assertActivatableWorld(state: ActivationState | null): asserts state is
 function alreadyActivated(state: ActivationState): boolean {
   return (
     resetSystemVersionsFrom(state, RESET_V2_READY).demographics === "v2" &&
-    resetSystemSelectionsFrom(state).demographics === "v2"
+    resetSystemSelectionsFrom(state).demographics === "v2" &&
+    LIVE_ACTIVATION_COUNTRIES.every((countryId) =>
+      state.resetVersionSeeds?.demographics?.countries?.includes(countryId)
+    )
   );
 }
 
@@ -70,7 +74,12 @@ async function activateLiveDemographicsV2(db: Db, ctx: MigrationContext): Promis
     };
   }
 
-  const receipt = await verifyDemographicsV2Opening(db, state.resetWorldId, state.currentTurn);
+  const receipt = await verifyDemographicsV2Opening(
+    db,
+    state.resetWorldId,
+    state.currentTurn,
+    LIVE_ACTIVATION_COUNTRIES
+  );
   const activatedAt = new Date().toISOString();
   const promotedState: ActivationState = {
     ...state,
@@ -90,8 +99,9 @@ async function activateLiveDemographicsV2(db: Db, ctx: MigrationContext): Promis
       documentsScanned: 1,
       documentsUpdated: 0,
       notes: [
-        "DRY RUN, no writes. The active world's US, UK, and JP population vectors passed verification.",
+        "DRY RUN, no writes. The active world's US, UK, JP, and inactive IE population vectors passed verification.",
         "Apply will atomically install the receipt, activate Demographics v2, and select v2 for the next reset.",
+        "SCO and WAL remain deferred until independence creates and verifies their successor-region vectors.",
       ],
     };
   }
@@ -140,8 +150,9 @@ async function activateLiveDemographicsV2(db: Db, ctx: MigrationContext): Promis
     documentsScanned: 1,
     documentsUpdated: update.modifiedCount,
     notes: [
-      "Activated Demographics v2 for the current world after verifying US, UK, and JP population vectors.",
+      "Activated Demographics v2 after verifying US, UK, JP, and inactive IE population vectors.",
       "Selected Demographics v2 for the next reset without changing any other reset-system selection.",
+      "SCO and WAL remain deferred until independence creates and verifies their successor-region vectors.",
     ],
   };
 }

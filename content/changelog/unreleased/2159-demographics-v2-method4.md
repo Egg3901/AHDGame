@@ -19,4 +19,4 @@ areas: [engine, frontend]
 - Canvassing now appears as its own turnout effect in v2, with repeated contact gradually losing efficiency. The election page explains every turnout term, and the Campaign Room recommends whether to canvass or persuade a weak group next.
 - Each country uses a named, versioned calibration pack, so balance changes can be simulated and reviewed without changing the portable rules.
 - The reset validates the required live population vectors before certifying v2. Missing data falls closed to v1 rather than partially activating the new model.
-- An explicit, dry-run-first migration can verify and promote the current active world to v2 without waiting for another reset.
+- An explicit, dry-run-first migration can verify and promote the current active world, including inactive Ireland, to v2 without waiting for another reset. Scotland and Wales join v2 when independence creates and verifies their successor-region data.
