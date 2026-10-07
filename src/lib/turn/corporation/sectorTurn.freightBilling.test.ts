@@ -7,6 +7,7 @@ import type { CorporationLookups } from "./types";
 import { processSector, type SectorTurnEnv } from "./sectorTurn";
 import { buildFreightBillingBySector } from "./freightBillingTurn";
 import type { CommodityType } from "@/lib/constants/commodities";
+import { computeSectorCommodityUnits } from "@/lib/corporations/corpCommodityFlows";
 
 /**
  * Canonical freight billing v1 (issue #897) turn wiring, flag ON: the
@@ -193,6 +194,8 @@ describe("buildFreightBillingBySector — corp-phase glue", () => {
   function glueLookups(over: {
     freightChargesByDestState?: Map<string, Map<CommodityType, number>>;
     freightHaulRevenueByOriginState?: Map<string, number>;
+    freightDemandByDestState?: Map<string, Map<CommodityType, number>>;
+    freightSupplyByOriginState?: Map<string, number>;
   }) {
     const corp = makeCorp();
     const buyer = makeSector({ _id: BUYER_ID, stateId: "US-NY", sectorType: "manufacturing" });
@@ -211,12 +214,74 @@ describe("buildFreightBillingBySector — corp-phase glue", () => {
     } as unknown as Parameters<typeof buildFreightBillingBySector>[0]["lookups"];
   }
 
+  it("does not charge a tiny sole corporate buyer for the rest of the state's imports", () => {
+    const lookups = glueLookups({
+      freightChargesByDestState: new Map([["US-NY", new Map([["iron", 500]])]]),
+    });
+    const args = {
+      lookups,
+      currentTurn: 1000,
+      plantsEnabled: false,
+      currentYear: undefined,
+      commandEconomyEnabled: false,
+    };
+    const baseline = buildFreightBillingBySector(args);
+    // The same sector demand is one percent of the sourcing buyer intent.
+    // Obtain that demand through the production helper, preserving the real seam.
+    const buyer = lookups.sectorsByCorp.get(CORP_ID.toString())![0];
+    const units = computeSectorCommodityUnits(buyer, 1000);
+    lookups.freightDemandByDestState = new Map([
+      ["US-NY", new Map([["iron", units.demand.get("iron")! * 100]])],
+    ]);
+    const billing = buildFreightBillingBySector(args);
+    expect(baseline.chargeBySectorId.has(BUYER_ID.toString())).toBe(false);
+    expect(billing.chargeBySectorId.get(BUYER_ID.toString())).toBeCloseTo(5);
+    expect(billing.unapportionedCharges).toBeCloseTo(495);
+  });
+
+  it("uses the world's qualified input recipe when deriving the buyer share", () => {
+    const lookups = glueLookups({
+      freightChargesByDestState: new Map([["US-NY", new Map([["iron", 500]])]]),
+    });
+    lookups.preset = "1991-default";
+    const buyer = lookups.sectorsByCorp.get(CORP_ID.toString())![0];
+    const units = computeSectorCommodityUnits(buyer, 1000, { preset: lookups.preset });
+    lookups.freightDemandByDestState = new Map([
+      ["US-NY", new Map([["iron", units.demand.get("iron")! * 100]])],
+    ]);
+    const billing = buildFreightBillingBySector({
+      lookups,
+      currentTurn: 1000,
+      plantsEnabled: false,
+      currentYear: 1991,
+      commandEconomyEnabled: false,
+    });
+    expect(billing.chargeBySectorId.get(BUYER_ID.toString())).toBeCloseTo(5);
+    expect(billing.unapportionedCharges).toBeCloseTo(495);
+  });
+
   it("bills the demanding sector and credits the freight supplier, conserving totals", () => {
     const billing = buildFreightBillingBySector({
       lookups: glueLookups({
         // Manufacturing demands iron, so the buyer is the only demander in NY.
         freightChargesByDestState: new Map([["US-NY", new Map([["iron" as CommodityType, 500]])]]),
         freightHaulRevenueByOriginState: new Map([["US-TX", 200]]),
+        freightDemandByDestState: new Map([
+          [
+            "US-NY",
+            new Map([
+              ["iron", computeSectorCommodityUnits(makeSector(), 1000).demand.get("iron")!],
+            ]),
+          ],
+        ]),
+        freightSupplyByOriginState: new Map([
+          [
+            "US-TX",
+            computeSectorCommodityUnits(makeSector({ sectorType: "logistics" }), 1000).supply.get(
+              "freight"
+            )!,
+          ],
+        ]),
       }),
       currentTurn: 1000,
       plantsEnabled: false,

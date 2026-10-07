@@ -42,6 +42,7 @@ import type { CorporationLookups } from "./types";
 export function buildFreightBillingBySector(args: {
   lookups: Pick<
     CorporationLookups,
+    | "preset"
     | "sectorsByCorp"
     | "corpById"
     | "eraUnitScale"
@@ -49,6 +50,8 @@ export function buildFreightBillingBySector(args: {
     | "stateResourceCapacityByState"
     | "freightChargesByDestState"
     | "freightHaulRevenueByOriginState"
+    | "freightDemandByDestState"
+    | "freightSupplyByOriginState"
   >;
   currentTurn: number;
   plantsEnabled: boolean;
@@ -82,6 +85,7 @@ export function buildFreightBillingBySector(args: {
           },
           currentTurn,
           {
+            preset: lookups.preset,
             plantsEnabled,
             isNatcorp,
             eraUnitScale: lookups.eraUnitScale,
@@ -106,6 +110,8 @@ export function buildFreightBillingBySector(args: {
   return apportionFreightBilling({
     freightChargesByDestState,
     haulRevenueByOriginState,
+    demandUnitsByDestState: lookups.freightDemandByDestState ?? new Map(),
+    freightSupplyUnitsByOriginState: lookups.freightSupplyByOriginState ?? new Map(),
     sectors,
   });
 }
