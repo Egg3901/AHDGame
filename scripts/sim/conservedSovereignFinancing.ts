@@ -3,8 +3,8 @@
  *
  * Runs the real Treasury phase (`processTreasuryTurn`) and the real bond-pool
  * phase (`processBondMarketPoolTurn`) for TURNS_PER_YEAR turns against a
- * disposable database on a transaction-capable replica set, at national scale:
- * every forex-active country, 32 public-float sovereign bonds each. Counts
+ * disposable database on a transaction-capable replica set, at 23-country
+ * volume with uniform cash fixtures and 32 public-float sovereign bonds each. Counts
  * every Mongo command per phase and checks money conservation per household
  * stock (household + Treasury cash + bond pool) every turn.
  *
@@ -19,19 +19,23 @@
  * before and after the run.
  */
 import { writeFileSync } from "node:fs";
-import { MongoClient, ObjectId, type Db } from "mongodb";
+import { BSON, MongoClient, ObjectId, type Db } from "mongodb";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { BOND_UNIT_FACE_VALUE, perTurnCouponPayment } from "@/lib/constants/bonds";
 import { getSeedCurrencyCode, getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getPresetMonetaryScope } from "@/lib/monetaryPolicy/presetMonetaryScope";
 import type { CountryId } from "@/lib/constants/countries";
+import { roundTripBudgetFor } from "@/simulation/engine/turnPhaseBudgets";
 
-const BONDS_PER_COUNTRY = 32;
+const bondsIndex = process.argv.indexOf("--bonds");
+const BONDS_PER_COUNTRY = bondsIndex > 0 ? Number(process.argv[bondsIndex + 1]) : 32;
+if (!Number.isSafeInteger(BONDS_PER_COUNTRY) || BONDS_PER_COUNTRY < 1 || BONDS_PER_COUNTRY > 128)
+  throw new Error("--bonds must be an integer between 1 and 128");
 const UNITS_PER_BOND = 1_000;
 const COUPON_RATE = 6;
 /** Phase limits the result is judged against (turn phase command budget and timeout). */
-const COMMAND_BUDGET = 500;
+const COMMAND_BUDGET = roundTripBudgetFor("treasuryTurn");
 const TIMEOUT_MS = 240_000;
 
 const dbName = process.env.MONGODB_DB ?? "";
@@ -51,8 +55,13 @@ const PRESET = "1991-default";
 const currencyFor = (country: string) => getSeedCurrencyCode(country as CountryId, PRESET);
 let lastCommand = "none";
 
-type Counter = { total: number; byOp: Record<string, number> };
-let counter: Counter = { total: 0, byOp: {} };
+type Counter = {
+  total: number;
+  byOp: Record<string, number>;
+  replyBytes: number;
+  returnedDocuments: number;
+};
+let counter: Counter = { total: 0, byOp: {}, replyBytes: 0, returnedDocuments: 0 };
 
 async function main() {
   const client = new MongoClient(uri, { monitorCommands: true });
@@ -63,6 +72,13 @@ async function main() {
     lastCommand = op;
     counter.total += 1;
     counter.byOp[op] = (counter.byOp[op] ?? 0) + 1;
+  });
+  client.on("commandSucceeded", (event) => {
+    if (["hello", "isMaster", "ping", "endSessions"].includes(event.commandName)) return;
+    counter.replyBytes += BSON.calculateObjectSize(event.reply);
+    const cursor = event.reply.cursor as
+      { firstBatch?: unknown[]; nextBatch?: unknown[] } | undefined;
+    counter.returnedDocuments += cursor?.firstBatch?.length ?? cursor?.nextBatch?.length ?? 0;
   });
   await client.connect();
   const db = client.db(dbName);
@@ -94,7 +110,7 @@ async function main() {
     const turns: Array<Record<string, unknown>> = [];
     let maxResidual = 0;
     for (let turn = 1; turn <= turnCount; turn += 1) {
-      counter = { total: 0, byOp: {} };
+      counter = { total: 0, byOp: {}, replyBytes: 0, returnedDocuments: 0 };
       let started = Date.now();
       const heartbeat = setInterval(() => {
         console.log(
@@ -106,8 +122,14 @@ async function main() {
       } finally {
         clearInterval(heartbeat);
       }
-      const treasury = { commands: counter.total, ms: Date.now() - started, byOp: counter.byOp };
-      counter = { total: 0, byOp: {} };
+      const treasury = {
+        commands: counter.total,
+        ms: Date.now() - started,
+        byOp: counter.byOp,
+        replyBytes: counter.replyBytes,
+        returnedDocuments: counter.returnedDocuments,
+      };
+      counter = { total: 0, byOp: {}, replyBytes: 0, returnedDocuments: 0 };
       started = Date.now();
       await processBondMarketPoolTurn(db, turn, new Date());
       const pool = { commands: counter.total, ms: Date.now() - started };
@@ -132,6 +154,8 @@ async function main() {
         turn,
         treasuryCommands: treasury.commands,
         treasuryMs: treasury.ms,
+        treasuryReplyBytes: treasury.replyBytes,
+        treasuryReturnedDocuments: treasury.returnedDocuments,
         poolCommands: pool.commands,
         poolMs: pool.ms,
         openCouponClaims:

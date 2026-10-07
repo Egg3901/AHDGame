@@ -42,6 +42,12 @@ export const PHASE_ROUND_TRIP_BUDGETS: Readonly<Record<string, number>> = {
   approvalSnapshot: 1500,
   nppGovernmentPhases: 1000,
   bondTurn: 1000,
+  // Conserved fiscal cash plus funded coupon batches: the 23-country native
+  // fixture measures 1,830 commands at both 32 and 64 bonds per country. Each
+  // Treasury journals tax, coupons and primary spending; cost scales with
+  // countries, not the number of public-float coupon claims. See the bounded
+  // conservedSovereignFinancing report; this is not a remote-time guarantee.
+  treasuryTurn: 2500,
   // At most three 1991 federation applications; real Mongo volume fixtures cap
   // one application at 20 commands, with headroom for all three and cursors.
   federationFacilityCompensation: 75,
