@@ -202,22 +202,18 @@ export function createTurnPhaseRuntime(input: {
     const stagedCompletion = phaseRequiresResumeResult(phase) && status === "completed";
     if (!stagedCompletion) phaseStatuses[phase] = next;
 
-    // Decide whether to flush this transition to gameState now, or coalesce it
-    // (the in-memory update above already happened, so nothing durable is lost).
-    // Always flush terminal/abnormal states and any transition once the throttle
-    // window has elapsed since the last flush (which includes every 30s
-    // heartbeat tick, keeping the lock fresh).
+    // Every start must land before the callback can mutate. A coalesced start
+    // leaves a pending phase eligible for duplicate execution after a crash.
+    // Completion telemetry remains coalesced; recovery conservatively treats a
+    // durable running marker as interrupted when completion was not flushed.
     const isAbnormal = status === "failed" || status === "skipped" || status === "notReached";
     const windowElapsed = now.getTime() - lastFlushAtMs >= PHASE_STATUS_FLUSH_THROTTLE_MS;
 
     // Keep the in-memory current-phase pointer live regardless of flush timing.
     if (status === "running") currentPhaseRef.current = phase;
 
-    // A phase a dependent reads brackets its writes with durable running and
-    // completed markers; a coalesced marker would let a resume rerun it (#3429).
-    const durable =
-      phaseRequiresResumeResult(phase) && (status === "running" || status === "completed");
-    if (!isAbnormal && !windowElapsed && !durable) return;
+    // Result-carrying completions must land atomically with their saved output.
+    if (status !== "running" && !isAbnormal && !windowElapsed && !stagedCompletion) return;
     lastFlushAtMs = now.getTime();
 
     const setFields: Record<string, unknown> = {
@@ -233,9 +229,12 @@ export function createTurnPhaseRuntime(input: {
       setFields[`processingPhaseResults.${phase}`] = options.result;
     }
 
-    await db
+    const persisted = await db
       .collection<GameState>("gameState")
       .updateOne({ _id: "current", isProcessing: true }, { $set: setFields });
+    if (status === "running" && persisted.matchedCount === 0) {
+      throw new Error(`Cannot start phase "${phase}": processing lock no longer matches`);
+    }
     if (stagedCompletion) phaseStatuses[phase] = next;
   }
 
@@ -307,12 +306,20 @@ export function createTurnPhaseRuntime(input: {
       }, PHASE_TIMEOUT_MS);
     });
     const heartbeatTimer = setInterval(() => {
-      void setPhaseStatus(name, "running").catch((err) => {
-        console.warn(`[Turn] Failed to refresh heartbeat for phase "${name}"`, err);
-        Sentry.captureException(err, {
-          extra: { phase: name, component: "turnHeartbeat" },
+      // Heartbeats renew the lock only. An in-flight heartbeat may finish after
+      // a terminal status write and must never revive that phase as running.
+      void db
+        .collection<GameState>("gameState")
+        .updateOne(
+          { _id: "current", isProcessing: true },
+          { $set: { processingHeartbeatAt: new Date() } }
+        )
+        .catch((err) => {
+          console.warn(`[Turn] Failed to refresh heartbeat for phase "${name}"`, err);
+          Sentry.captureException(err, {
+            extra: { phase: name, component: "turnHeartbeat" },
+          });
         });
-      });
     }, TURN_LOCK_HEARTBEAT_MS);
 
     const phaseStart = Date.now();
