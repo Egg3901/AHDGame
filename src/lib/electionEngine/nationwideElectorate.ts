@@ -128,23 +128,31 @@ export function buildNationwideElectoratePreload(
   const countryTurnout = turnoutDocs.filter(
     (row) => row.countryId === countryId && stateById.has(row._id)
   );
-  const modifierCategories = new Set(countryTurnout.flatMap((row) => Object.keys(row.modifiers)));
-  const modifiers: StateDemographicTurnout["modifiers"] = {};
-  for (const categoryId of modifierCategories) {
-    const modifierGroupIds = new Set(
-      countryTurnout.flatMap((row) => Object.keys(row.modifiers[categoryId] ?? {}))
-    );
-    modifiers[categoryId] = {};
-    for (const groupId of modifierGroupIds) {
-      modifiers[categoryId][groupId] =
-        weightedAverage(
-          countryTurnout.map((row) => ({
-            value: row.modifiers[categoryId]?.[groupId],
-            weight: stateById.get(row._id)?.population ?? 0,
-          }))
-        ) ?? 0;
+  const foldModifiers = (
+    field: "modifiers" | "campaignModifiers" | "campaignContactModifiers"
+  ): StateDemographicTurnout["modifiers"] => {
+    const categories = new Set(countryTurnout.flatMap((row) => Object.keys(row[field] ?? {})));
+    const folded: StateDemographicTurnout["modifiers"] = {};
+    for (const categoryId of categories) {
+      const groupIds = new Set(
+        countryTurnout.flatMap((row) => Object.keys(row[field]?.[categoryId] ?? {}))
+      );
+      folded[categoryId] = {};
+      for (const groupId of groupIds) {
+        folded[categoryId][groupId] =
+          weightedAverage(
+            countryTurnout.map((row) => ({
+              value: row[field]?.[categoryId]?.[groupId],
+              weight: stateById.get(row._id)?.population ?? 0,
+            }))
+          ) ?? 0;
+      }
     }
-  }
+    return folded;
+  };
+  const modifiers = foldModifiers("modifiers");
+  const campaignModifiers = foldModifiers("campaignModifiers");
+  const campaignContactModifiers = foldModifiers("campaignContactModifiers");
 
   const countryPartyOrgs = partyOrgs.filter(
     (row) => row.countryId === countryId && stateById.has(row.stateId)
@@ -234,6 +242,8 @@ export function buildNationwideElectoratePreload(
       _id: countryId,
       countryId,
       modifiers,
+      ...(Object.keys(campaignModifiers).length > 0 ? { campaignModifiers } : {}),
+      ...(Object.keys(campaignContactModifiers).length > 0 ? { campaignContactModifiers } : {}),
       lastDecayApplied: turnoutDecayAt,
       lastUpdated: turnoutUpdatedAt,
     },

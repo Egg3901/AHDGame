@@ -59,7 +59,12 @@ const DEFAULT_FLAGS: WorldFlags = {
   liveElectionResultsEnabled: false,
   startingPartiesMode: "default",
   foundingRound: null,
-  resetSystemVersions: { metrics: "v1", legislation: "v1", cabinet: "v1" },
+  resetSystemVersions: {
+    metrics: "v1",
+    legislation: "v1",
+    cabinet: "v1",
+    demographics: "v1",
+  },
   resetV2Countries: [],
   failed: false,
   loaded: false,
@@ -83,7 +88,7 @@ function refreshFlags(): Promise<void> {
       if (
         !Array.isArray(data.resetV2Countries) ||
         !data.resetSystemVersions ||
-        (["metrics", "legislation", "cabinet"] as const).some(
+        (["metrics", "legislation", "cabinet", "demographics"] as const).some(
           (system) =>
             data.resetSystemVersions[system] !== "v1" && data.resetSystemVersions[system] !== "v2"
         )

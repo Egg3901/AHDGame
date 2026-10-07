@@ -11,7 +11,7 @@ import { RESET_V2_READY } from "@/lib/resetVersions/availability";
 import {
   RESET_V2_COUNTRIES,
   resetSystemVersionsForCountry,
-  type ResetSystem,
+  type ResetV2Readiness,
 } from "@/lib/resetVersions/rules";
 import { settleResetCashTurn } from "./rules/cashTurn";
 import { buildResetAuthorityClaims } from "./rules/authorityClaims";
@@ -32,7 +32,7 @@ export async function settleResetTreasuryCashTurn(input: {
   gameState: GameState;
   turn: number;
   bondFlows: BondTurnResult;
-  ready?: Record<ResetSystem, boolean>;
+  ready?: ResetV2Readiness;
 }) {
   const { db, gameState, turn, bondFlows } = input;
   const countries = RESET_V2_COUNTRIES.filter(

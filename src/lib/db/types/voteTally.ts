@@ -2,6 +2,7 @@ import type { ObjectId } from "mongodb";
 import type { RankedBallot, PrStvResult } from "@/lib/turn/election/rules/prStv";
 import type { DemocraticHealthElectionSnapshot } from "@/lib/electionEngine/democraticHealth";
 import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
+import type { ParticipationSummary } from "@/lib/demographics/v2/rules";
 
 export interface VoteTurnSnapshot {
   turn: number;
@@ -10,6 +11,8 @@ export interface VoteTurnSnapshot {
   sharesPct: Record<string, number>;
   /** Multi-seat races only (house, stateSenate, commons, …): Hamilton seat projection at this turn. */
   seatsEstimate?: Record<string, number>;
+  /** Demographics v2's electorate-wide turnout explanation for this turn. */
+  participation?: ParticipationSummary;
   /** Native Council snapshots count valid voters separately from candidate marks. */
   russianCouncilBallot?: {
     registeredVoters: number;

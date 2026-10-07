@@ -8,13 +8,17 @@ vi.mock("@/lib/resetLegislation/seedOpening1991", () => ({ seedOpeningLawBoards1
 vi.mock("@/lib/resetFinance/seedOpeningDepartments1991", () => ({
   seedOpeningDepartmentBoards1991: vi.fn(),
 }));
+vi.mock("@/lib/demographics/v2/verifyOpening", () => ({
+  verifyDemographicsV2Opening: vi.fn(),
+}));
 
 import { seedOpeningMetrics1991 } from "@/lib/resetMetrics/seedOpening1991";
 import { seedOpeningLawBoards1991 } from "@/lib/resetLegislation/seedOpening1991";
 import { seedOpeningDepartmentBoards1991 } from "@/lib/resetFinance/seedOpeningDepartments1991";
+import { verifyDemographicsV2Opening } from "@/lib/demographics/v2/verifyOpening";
 import { ensureIrelandResetV2ForReunification } from "@/lib/countries/ie/resetV2/ensureForReunification";
 
-const systems = ["metrics", "legislation", "cabinet"] as const;
+const systems = ["metrics", "legislation", "cabinet", "demographics"] as const;
 
 function receipt(system: ResetSystem, countries = ["US", "UK", "JP"]) {
   return {
@@ -35,6 +39,7 @@ function gameState(countries = ["US", "UK", "JP"]) {
     metricsSystemVersion: "v2",
     legislationSystemVersion: "v2",
     cabinetSystemVersion: "v2",
+    demographicsSystemVersion: "v2",
     resetVersionSeeds: Object.fromEntries(
       systems.map((system) => [system, receipt(system, countries)])
     ),
@@ -51,6 +56,7 @@ describe("ensureIrelandResetV2ForReunification", () => {
     vi.mocked(seedOpeningMetrics1991).mockResolvedValue(receipt("metrics", ["IE"]));
     vi.mocked(seedOpeningLawBoards1991).mockResolvedValue(receipt("legislation", ["IE"]));
     vi.mocked(seedOpeningDepartmentBoards1991).mockResolvedValue(receipt("cabinet", ["IE"]));
+    vi.mocked(verifyDemographicsV2Opening).mockResolvedValue(receipt("demographics", ["IE"]));
   });
 
   it("seeds only Ireland and adds it to every active v2 receipt", async () => {
@@ -60,11 +66,35 @@ describe("ensureIrelandResetV2ForReunification", () => {
     expect(seedOpeningMetrics1991).toHaveBeenCalledWith(db, "world-a", 9, ["IE"]);
     expect(seedOpeningLawBoards1991).toHaveBeenCalledWith(db, "world-a", 9, ["IE"]);
     expect(seedOpeningDepartmentBoards1991).toHaveBeenCalledWith(db, "world-a", 9, ["IE"]);
+    expect(verifyDemographicsV2Opening).toHaveBeenCalledWith(db, "world-a", 9, ["IE"]);
     const set = db.collection("gameState").updateOne.mock.calls[0][1].$set;
     for (const system of systems) {
       expect(set[`resetVersionSeeds.${system}`].sourceTurn).toBe(1);
       expect(set[`resetVersionSeeds.${system}`].countries).toEqual(["IE", "JP", "UK", "US"]);
     }
+  });
+
+  it("promotes Ireland when demographics is the only active v2 system", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      resetWorldId: "world-a",
+      currentTurn: 9,
+      metricsSystemVersion: "v1",
+      legislationSystemVersion: "v1",
+      cabinetSystemVersion: "v1",
+      demographicsSystemVersion: "v2",
+      resetVersionSeeds: { demographics: receipt("demographics") },
+    });
+
+    await expect(ensureIrelandResetV2ForReunification(db as unknown as Db)).resolves.toEqual({
+      promoted: true,
+    });
+
+    expect(seedOpeningMetrics1991).not.toHaveBeenCalled();
+    expect(verifyDemographicsV2Opening).toHaveBeenCalledWith(db, "world-a", 9, ["IE"]);
+    expect(db.collection("gameState").updateOne.mock.calls[0][1].$set).toHaveProperty(
+      "resetVersionSeeds.demographics"
+    );
   });
 
   it("does nothing when Ireland is already covered by every active receipt", async () => {

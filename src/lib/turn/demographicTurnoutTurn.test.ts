@@ -38,6 +38,7 @@ describe("demographicTurnoutTurn", () => {
             gunowners: 0,
           },
         },
+        campaignContactModifiers: { race: { white: 6 } },
         countryId: "US",
         lastDecayApplied: new Date(),
         lastUpdated: new Date(),
@@ -49,6 +50,7 @@ describe("demographicTurnoutTurn", () => {
       expect(result[0].modifiers.race.black).toBeCloseTo(4.9);
       expect(result[0].modifiers.race.asian).toBeCloseTo(-2.94);
       expect(result[0].modifiers.age.young).toBeCloseTo(7.84);
+      expect(result[0].campaignContactModifiers?.race.white).toBeCloseTo(6 * 2 ** (-1 / 6));
     });
 
     it("rounds to zero when below threshold", async () => {

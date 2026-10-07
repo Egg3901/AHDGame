@@ -42,6 +42,7 @@ import { buildOpsTrees } from "@/lib/campaigns/dto/campaignView";
 import {
   buildCashRunway,
   buildCoalitionWeakness,
+  buildParticipationPlan,
   buildDelegatePath,
   buildTippingPath,
 } from "@/lib/campaigns/briefing";
@@ -700,6 +701,7 @@ async function buildBriefing(args: {
   const cashRunway = buildCashRunway(campaign.funds, args.netPerTurn);
   let path: CampaignBriefing["path"];
   let coalitionWeakness: CampaignBriefing["coalitionWeakness"] = [];
+  let participationPlan: CampaignBriefing["participationPlan"];
 
   if (election?.electionType === "president") {
     const tally = await db
@@ -715,6 +717,10 @@ async function buildBriefing(args: {
       coalitionWeakness = buildCoalitionWeakness(
         tally.factorLedger?.byCandidateNational,
         ownerTallyId
+      );
+      participationPlan = buildParticipationPlan(
+        (tally.turnSnapshots ?? []).at(-1)?.participation,
+        coalitionWeakness
       );
 
       const gameState = await db
@@ -763,6 +769,7 @@ async function buildBriefing(args: {
     ...(path ? { path } : {}),
     cashRunway,
     coalitionWeakness,
+    ...(participationPlan ? { participationPlan } : {}),
   };
 }
 

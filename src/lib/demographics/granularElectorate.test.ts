@@ -37,8 +37,10 @@ import {
   deriveGranularElectorateUnits,
   remapArchetypeValuesToUnits,
   clearGranularElectorateCache,
+  campaignContactByBucket,
   ELECTORATE_PRUNE_FLOOR,
   GRANULAR_CATEGORY_ID,
+  type GranularSubstrateInput,
 } from "@/lib/demographics/granularElectorate";
 
 const ARCHETYPE_IDS = [
@@ -126,6 +128,7 @@ function buildSubstrate(overrides?: {
   enriched?: EnrichedCandidate[];
   partyGroupFavorabilityByKey?: Map<string, number>;
   stateId?: string;
+  v2?: GranularSubstrateInput["v2"];
 }) {
   return buildGranularElectorateSubstrate({
     countryId: "US",
@@ -140,6 +143,7 @@ function buildSubstrate(overrides?: {
       makeCandidate("right", "republican", 2, 2),
     ],
     partyGroupFavorabilityByKey: overrides?.partyGroupFavorabilityByKey,
+    v2: overrides?.v2,
   });
 }
 
@@ -662,6 +666,65 @@ describe("buildGranularElectorateSubstrate", () => {
 
   it("returns null (legacy fallback) when the state has no census", () => {
     expect(buildSubstrate({ stateId: "NOT_A_STATE" })).toBeNull();
+  });
+
+  it("uses the live age stock and emits the Method 4 participation ledger only in v2", () => {
+    const male = Array<number>(101).fill(0);
+    const female = Array<number>(101).fill(0);
+    male[20] = 10;
+    female[20] = 10;
+    male[70] = 40;
+    female[70] = 40;
+    const substrate = buildSubstrate({
+      enriched: [
+        makeCandidate("left", "democrat", -4, 0, { favorability: 52 }),
+        makeCandidate("right", "republican", 4, 0, { favorability: 50 }),
+      ],
+      v2: { regionAges: { male, female }, votingAge: 18, registeredShare: 0.9 },
+    })!;
+    const seniorShare = substrate.units.reduce(
+      (sum, unit) => sum + unit.share * (unit.bucketWeights["age:senior"] ?? 0),
+      0
+    );
+    expect(seniorShare).toBeCloseTo(0.8, 3);
+    expect(Object.keys(substrate.participationLedgers ?? {})).toHaveLength(substrate.units.length);
+    expect(substrate.participationSummary).toMatchObject({ calibrationId: "US-v1" });
+    expect(substrate.enriched[0].charEP).toBeCloseTo(-4 * Math.sqrt(1.15));
+    expect(substrate.enriched[1].charEP).toBeCloseTo(4 * Math.sqrt(1.15));
+    expect(buildSubstrate()!.participationLedgers).toBeUndefined();
+    expect(buildSubstrate()!.participationSummary).toBeUndefined();
+  });
+
+  it("separates modern canvassing from the baseline and applies saturation", () => {
+    const turnoutDoc: StateDemographicTurnout = {
+      _id: "CT",
+      countryId: "US",
+      modifiers: { age: { young: 1 }, voterGroups: { retirees: 2 } },
+      campaignModifiers: { age: { young: 5 }, voterGroups: { retirees: 6 } },
+      campaignContactModifiers: { age: { young: 4 }, voterGroups: { retirees: 4 } },
+      lastDecayApplied: new Date("2024-01-01"),
+      lastUpdated: new Date("2024-01-01"),
+    };
+    const contactByBucket = campaignContactByBucket(turnoutDoc, "US");
+    expect(contactByBucket["age:young"]).toBe(4);
+    expect(contactByBucket["age:senior"]).toBeCloseTo(2.8);
+
+    const male = Array<number>(101).fill(1);
+    const female = Array<number>(101).fill(1);
+    const substrate = buildSubstrate({
+      turnoutDoc: { ...turnoutDoc, modifiers: turnoutDoc.campaignModifiers! },
+      enriched: [
+        makeCandidate("left", "democrat", -1, 0, { favorability: 50 }),
+        makeCandidate("right", "republican", 1, 0, { favorability: 50 }),
+      ],
+      v2: {
+        regionAges: { male, female },
+        registeredShare: 1,
+        contactByBucket,
+      },
+    })!;
+    expect(substrate.participationSummary?.contact).toBeGreaterThan(0);
+    expect(substrate.participationSummary?.saturation).toBeLessThan(0);
   });
 
   it("remaps candidate archetypeApprovals onto units", () => {

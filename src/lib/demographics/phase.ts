@@ -28,7 +28,7 @@ import { NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
 import {
   resetSystemVersionsForCountry,
-  type ResetSystem,
+  type ResetV2Readiness,
   type ResetVersionState,
 } from "@/lib/resetVersions/rules";
 import { dependencyBurden15To64 } from "@/lib/resetMetrics/rules/cohortOpening";
@@ -190,7 +190,7 @@ export async function runDemographicFlows(
   db: Db,
   turn: number,
   suppliedWorldEpochId?: string,
-  v2Ready: Record<ResetSystem, boolean> = RESET_V2_READY
+  v2Ready: ResetV2Readiness = RESET_V2_READY
 ): Promise<{ regionsProcessed: number; circuitBreakerTrips: number }> {
   const worldEpochId = suppliedWorldEpochId ?? (await ensureDemographicWorldEpoch(db));
   const prior = await resumeDemographicFlowReceipt(db, worldEpochId, turn);

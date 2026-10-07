@@ -23,6 +23,7 @@ describe("world flags reset versions", () => {
       metrics: "v1",
       legislation: "v1",
       cabinet: "v1",
+      demographics: "v1",
     });
     expect(body.resetV2Countries).toEqual([]);
     expect(db.collectionMocks.gameState!.findOne.mock.calls[0]![1]?.projection).toMatchObject({
