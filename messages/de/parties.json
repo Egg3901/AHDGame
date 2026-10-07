@@ -1,0 +1,12 @@
+{
+  "parties": {
+    "leave": {
+      "button": "Partei verlassen",
+      "pending": "Wird verlassen…",
+      "confirmTitle": "Diese Partei verlassen?",
+      "confirmMessage": "Du wirst danach parteilos.",
+      "confirm": "Partei verlassen",
+      "cancel": "Abbrechen"
+    }
+  }
+}
