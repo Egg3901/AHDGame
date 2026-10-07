@@ -168,6 +168,8 @@ const GAME_STATE_OPERATOR_FLAG_AUDIT_FIELDS = [
   "legislationSystemVersionAt",
   "cabinetSystemVersionBy",
   "cabinetSystemVersionAt",
+  "demographicsSystemVersionBy",
+  "demographicsSystemVersionAt",
   "onboardingChecklistEnabledBy",
   "onboardingChecklistEnabledAt",
   "seasonRecapEnabledBy",
@@ -396,6 +398,7 @@ export async function resetGameWorld(
               metricsSystemVersion: 1,
               legislationSystemVersion: 1,
               cabinetSystemVersion: 1,
+              demographicsSystemVersion: 1,
               resetSystemSelections: 1,
             },
           }
@@ -680,6 +683,7 @@ export async function resetGameWorld(
     metricsSystemVersion: selectedVersions.metrics,
     legislationSystemVersion: selectedVersions.legislation,
     cabinetSystemVersion: selectedVersions.cabinet,
+    demographicsSystemVersion: selectedVersions.demographics,
     resetSystemSelections: selectedVersions,
   };
   // Law-created seats belong to the outgoing world. A fresh v1 world begins

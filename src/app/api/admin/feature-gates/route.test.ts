@@ -133,7 +133,12 @@ describe("admin feature gates foreign policy mode", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      resetSystemVersions: { metrics: "v1", legislation: "v1", cabinet: "v1" },
+      resetSystemVersions: {
+        metrics: "v1",
+        legislation: "v1",
+        cabinet: "v1",
+        demographics: "v1",
+      },
       resetV2Ready: { metrics: true, legislation: true, cabinet: true },
     });
   });

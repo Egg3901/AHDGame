@@ -45,6 +45,8 @@ interface HarnessOpts {
     inflationRate: number;
     realIncomeTrendPct?: number;
   };
+  demographicsV2?: boolean;
+  unregistered?: number;
 }
 
 function buildMockDb(opts: HarnessOpts) {
@@ -74,6 +76,7 @@ function buildMockDb(opts: HarnessOpts) {
 
   const states = uniqueStateIds.map((id) => ({
     _id: id,
+    countryId: "US",
     name: id,
     population: STATE_POP_DEFAULT,
     gdp: 0,
@@ -156,7 +159,28 @@ function buildMockDb(opts: HarnessOpts) {
     }
     if (name === "gameState") {
       return {
-        findOne: vi.fn().mockResolvedValue(preset ? { _id: "current", preset } : null),
+        findOne: vi.fn().mockResolvedValue(
+          opts.demographicsV2
+            ? {
+                _id: "current",
+                ...(preset ? { preset } : {}),
+                demographicsSystemVersion: "v2",
+                resetWorldId: "world-a",
+                resetVersionSeeds: {
+                  demographics: {
+                    worldId: "world-a",
+                    revision: 1,
+                    sourceTurn: 1,
+                    completedAt: "2026-01-01T00:00:00.000Z",
+                    verificationHash: "verified",
+                    countries: ["US"],
+                  },
+                },
+              }
+            : preset
+              ? { _id: "current", preset }
+              : null
+        ),
       };
     }
     if (name === "electedOfficials") {
@@ -210,6 +234,36 @@ function buildMockDb(opts: HarnessOpts) {
           toArray: vi
             .fn()
             .mockResolvedValue(statePartyOrgs.filter((o) => uniqueStateIds.includes(o.stateId))),
+        }),
+      };
+    }
+    if (name === "stateRegistrationPool") {
+      return {
+        find: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue(
+            uniqueStateIds.map((stateId) => ({
+              _id: `US_${stateId}`,
+              stateId,
+              countryId: "US",
+              independent: 20,
+              unregistered: opts.unregistered ?? 0,
+            }))
+          ),
+        }),
+      };
+    }
+    if (name === "regionDemographics") {
+      const ages = { male: Array(101).fill(1), female: Array(101).fill(1) };
+      return {
+        find: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue(
+            uniqueStateIds.map((stateId) => ({
+              _id: stateId,
+              countryId: "US",
+              ages,
+              lastUpdated: new Date("2026-01-01T00:00:00.000Z"),
+            }))
+          ),
         }),
       };
     }
@@ -340,6 +394,47 @@ describe("presidential engine — registration entrenchment", () => {
     // Backward-compat: absent registration degrades to the neutral 1.0× for
     // every party, so two no-reg runs are byte-identical.
     expect(a).toBe(b);
+  });
+
+  it("keeps v1 presidential tallies off the v2 population read", async () => {
+    const opts = {
+      electionId: new ObjectId(),
+      demId: new ObjectId().toString(),
+      repId: new ObjectId().toString(),
+      startTime: new Date("2024-11-01T00:00:00Z"),
+      endTime: new Date("2024-11-05T00:00:00Z"),
+    };
+    const { collection } = buildMockDb(opts);
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue({ collection } as never);
+
+    const { accumulatePresidentVoteTurn } = await import("./presidentialElectionEngine");
+    await accumulatePresidentVoteTurn(opts.electionId, 1, new Date("2024-11-03T12:00:00Z"));
+
+    expect(collection).not.toHaveBeenCalledWith("regionDemographics");
+  });
+
+  it("persists a national Method 4 receipt for a v2 presidential tally", async () => {
+    const opts = {
+      electionId: new ObjectId(),
+      demId: new ObjectId().toString(),
+      repId: new ObjectId().toString(),
+      startTime: new Date("2024-11-01T00:00:00Z"),
+      endTime: new Date("2024-11-05T00:00:00Z"),
+      demographicsV2: true,
+      unregistered: 10,
+    };
+    const { collection, updateOne } = buildMockDb(opts);
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue({ collection } as never);
+
+    const { accumulatePresidentVoteTurn } = await import("./presidentialElectionEngine");
+    await accumulatePresidentVoteTurn(opts.electionId, 1, new Date("2024-11-03T12:00:00Z"));
+
+    const snapshot = updateOne.mock.calls[0]?.[1]?.$push?.turnSnapshots;
+    expect(snapshot?.participation).toMatchObject({ calibrationId: "US-v1" });
+    expect(snapshot?.participation.access).toBeLessThan(0);
+    expect(collection).toHaveBeenCalledWith("regionDemographics");
   });
 
   it.each([1953, 1979, 1991, 1999, 2007, 2019, 2023, 2027])(

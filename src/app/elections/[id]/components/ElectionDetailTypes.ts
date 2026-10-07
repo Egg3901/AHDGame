@@ -126,6 +126,7 @@ export interface VoteTurnSnapshot {
   sharesPct: Record<string, number>;
   /** Multi-seat general elections: projected seats at this turn (same method as `seatsEstimate`). */
   seatsEstimate?: Record<string, number>;
+  participation?: import("@/lib/demographics/v2/rules").ParticipationSummary;
 }
 
 /** Per-state map data for presidential electoral map (stateId -> display data) */

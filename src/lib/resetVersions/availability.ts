@@ -10,4 +10,5 @@ export const RESET_V2_READY: Readonly<Record<ResetSystem, boolean>> = {
   metrics: true,
   legislation: true,
   cabinet: true,
+  demographics: true,
 };

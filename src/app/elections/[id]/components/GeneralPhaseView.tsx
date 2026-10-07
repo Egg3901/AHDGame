@@ -22,6 +22,7 @@ import {
 import { NationalMoodGauge } from "@/components/elections/general/NationalMoodGauge";
 import { DemocraticHealthGauge } from "@/components/elections/general/DemocraticHealthGauge";
 import { FactorLedgerCard } from "@/components/elections/general/FactorLedgerCard";
+import { ParticipationLedgerCard } from "@/components/elections/general/ParticipationLedgerCard";
 import { RaceDetailTabs, type RaceDetailPane } from "./RaceDetailTabs";
 import { StateOrganizationTab } from "@/app/political-operations/components/StateOrganizationTab";
 import { GeneralVoteCharts, type LineSeries } from "./ElectionDetailCharts";
@@ -262,6 +263,8 @@ export function GeneralPhaseView({
       }))}
     />
   );
+  const participation = election.generalVotes?.turnSnapshots.at(-1)?.participation;
+  const participationLedger = <ParticipationLedgerCard data={participation} />;
 
   const stateDrivers = (
     <GeneralElectionShellClient
@@ -330,6 +333,9 @@ export function GeneralPhaseView({
           : []),
         ...(trends ? [{ id: "trends", label: "Trends", content: trends }] : []),
         ...(isUS ? [{ id: "drivers", label: "State drivers", content: stateDrivers }] : []),
+        ...(participation
+          ? [{ id: "turnout", label: "Turnout", content: participationLedger }]
+          : []),
         { id: "ledger", label: "Factor ledger", content: factorLedger },
       ]
     : [];
@@ -447,6 +453,8 @@ export function GeneralPhaseView({
         {showDemocraticHealth && election.electionType === "president" && !localInPrimary && (
           <DemocraticHealthGauge data={election.democraticHealth} />
         )}
+
+        {!tabbedDetail && !localInPrimary && participationLedger}
 
         {/* Factor Ledger — the read-only decomposition of each candidate's
             projected votes into named factors, teed off the engine's own math.

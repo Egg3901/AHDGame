@@ -208,6 +208,7 @@ export async function POST(request: Request) {
             metricsSystemVersion: 1,
             legislationSystemVersion: 1,
             cabinetSystemVersion: 1,
+            demographicsSystemVersion: 1,
             resetSystemSelections: 1,
             resetWorldId: 1,
           },

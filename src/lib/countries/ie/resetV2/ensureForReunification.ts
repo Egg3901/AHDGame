@@ -4,6 +4,7 @@ import type { GameState } from "@/lib/db/types/gameState";
 import { seedOpeningMetrics1991 } from "@/lib/resetMetrics/seedOpening1991";
 import { seedOpeningLawBoards1991 } from "@/lib/resetLegislation/seedOpening1991";
 import { seedOpeningDepartmentBoards1991 } from "@/lib/resetFinance/seedOpeningDepartments1991";
+import { verifyDemographicsV2Opening } from "@/lib/demographics/v2/verifyOpening";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
 import {
   RESET_SYSTEMS,
@@ -50,6 +51,7 @@ export async function ensureIrelandResetV2ForReunification(db: Db): Promise<{ pr
         metricsSystemVersion: 1,
         legislationSystemVersion: 1,
         cabinetSystemVersion: 1,
+        demographicsSystemVersion: 1,
         resetVersionSeeds: 1,
       },
     }
@@ -74,8 +76,12 @@ export async function ensureIrelandResetV2ForReunification(db: Db): Promise<{ pr
       additions.metrics = await seedOpeningMetrics1991(db, worldId, sourceTurn, [IRELAND]);
     } else if (system === "legislation") {
       additions.legislation = await seedOpeningLawBoards1991(db, worldId, sourceTurn, [IRELAND]);
-    } else {
+    } else if (system === "cabinet") {
       additions.cabinet = await seedOpeningDepartmentBoards1991(db, worldId, sourceTurn, [IRELAND]);
+    } else {
+      additions.demographics = await verifyDemographicsV2Opening(db, worldId, sourceTurn, [
+        IRELAND,
+      ]);
     }
   }
 

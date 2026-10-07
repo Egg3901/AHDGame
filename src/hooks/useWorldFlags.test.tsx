@@ -25,7 +25,12 @@ describe("shared world flags", () => {
         eurozoneEnabled: false,
         euroMemberCurrencies: [],
         resetV2Countries: ["US", "UK", "JP"],
-        resetSystemVersions: { metrics: "v1", legislation: "v1", cabinet: "v1" },
+        resetSystemVersions: {
+          metrics: "v1",
+          legislation: "v1",
+          cabinet: "v1",
+          demographics: "v1",
+        },
       }),
     });
     vi.stubGlobal("fetch", fetch);
@@ -41,7 +46,12 @@ describe("shared world flags", () => {
         eurozoneEnabled: true,
         euroMemberCurrencies: ["EUR", "IEP", "GBP"],
         resetV2Countries: ["US", "UK", "JP"],
-        resetSystemVersions: { metrics: "v1", legislation: "v1", cabinet: "v1" },
+        resetSystemVersions: {
+          metrics: "v1",
+          legislation: "v1",
+          cabinet: "v1",
+          demographics: "v1",
+        },
       }),
     });
     act(() => {

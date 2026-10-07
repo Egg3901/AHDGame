@@ -12,16 +12,19 @@ import {
 } from "./rules";
 
 describe("reset-era system versions", () => {
-  const ready = { metrics: true, legislation: true, cabinet: true };
-  const staged = { metrics: false, legislation: false, cabinet: false };
+  const ready = { metrics: true, legislation: true, cabinet: true, demographics: true };
+  const staged = { metrics: false, legislation: false, cabinet: false, demographics: false };
   const seeded = {
     resetWorldId: "world-a",
     resetVersionSeeds: Object.fromEntries(
-      ["metrics", "legislation", "cabinet"].map((system) => [
+      ["metrics", "legislation", "cabinet", "demographics"].map((system) => [
         system,
         {
           worldId: "world-a",
-          revision: RESET_V2_SEED_REVISION[system as "metrics" | "legislation" | "cabinet"],
+          revision:
+            RESET_V2_SEED_REVISION[
+              system as "metrics" | "legislation" | "cabinet" | "demographics"
+            ],
           sourceTurn: 42,
           completedAt: "2026-09-29T00:00:00.000Z",
           verificationHash: `verified-${system}`,
@@ -35,6 +38,7 @@ describe("reset-era system versions", () => {
       metrics: "v1",
       legislation: "v1",
       cabinet: "v1",
+      demographics: "v1",
     });
     expect(resolveResetSystemVersion("v3", true)).toBe("v1");
   });
@@ -50,13 +54,13 @@ describe("reset-era system versions", () => {
         },
         ready
       )
-    ).toEqual({ metrics: "v2", legislation: "v1", cabinet: "v2" });
+    ).toEqual({ metrics: "v2", legislation: "v1", cabinet: "v2", demographics: "v1" });
     expect(
       resetSystemVersionsFrom(
         { ...seeded, legislationSystemVersion: "v2", cabinetSystemVersion: "v2" },
         ready
       )
-    ).toEqual({ metrics: "v1", legislation: "v1", cabinet: "v1" });
+    ).toEqual({ metrics: "v1", legislation: "v1", cabinet: "v1", demographics: "v1" });
   });
 
   it("fails closed if a stored v2 value is not released", () => {
@@ -70,7 +74,7 @@ describe("reset-era system versions", () => {
         },
         staged
       )
-    ).toEqual({ metrics: "v1", legislation: "v1", cabinet: "v1" });
+    ).toEqual({ metrics: "v1", legislation: "v1", cabinet: "v1", demographics: "v1" });
   });
 
   it("requires Metrics v2 first and makes a downgrade order explicit", () => {
@@ -106,6 +110,19 @@ describe("reset-era system versions", () => {
     expect(resetSeedComplete({ ...seeded, resetWorldId: "world-b" }, "metrics")).toBe(false);
   });
 
+  it("activates Demographics v2 independently of Metrics v2", () => {
+    const state = { ...seeded, demographicsSystemVersion: "v2" as const };
+    expect(resetSystemVersionsFrom(state, ready)).toEqual({
+      metrics: "v1",
+      legislation: "v1",
+      cabinet: "v1",
+      demographics: "v2",
+    });
+    expect(resetVersionSelectionEligibility(null, "demographics", "v2", ready)).toEqual({
+      allowed: true,
+    });
+  });
+
   it("keeps other countries on v1 even when all global selectors are v2", () => {
     const state = {
       ...seeded,
@@ -118,6 +135,7 @@ describe("reset-era system versions", () => {
         metrics: "v2",
         legislation: "v2",
         cabinet: "v2",
+        demographics: "v1",
       });
     }
     for (const country of ["DE", "CN", "IE", "BR", "RU"]) {
@@ -125,6 +143,7 @@ describe("reset-era system versions", () => {
         metrics: "v1",
         legislation: "v1",
         cabinet: "v1",
+        demographics: "v1",
       });
     }
   });
@@ -142,11 +161,13 @@ describe("reset-era system versions", () => {
       metrics: "v2",
       legislation: "v2",
       cabinet: "v1",
+      demographics: "v1",
     });
     expect(resetSystemVersionsFrom(state, ready)).toEqual({
       metrics: "v1",
       legislation: "v1",
       cabinet: "v1",
+      demographics: "v1",
     });
     expect(resetVersionSelectionEligibility(state, "metrics", "v1", ready)).toEqual({
       allowed: false,

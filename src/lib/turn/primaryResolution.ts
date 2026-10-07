@@ -129,6 +129,10 @@ import {
 } from "@/lib/electionEngine/candidateEnrichment";
 import { loadEnrichmentCountryConfigsByElection } from "./electionEnrichmentPreload";
 import { forEachWithConcurrency } from "@/lib/utils/forEachWithConcurrency";
+import {
+  loadDemographicsV2Preload,
+  loadElectionDemographicsGameState,
+} from "@/lib/electionEngine/demographicsV2Preload";
 
 const VOTE_ACCUMULATION_CONCURRENCY = 8;
 
@@ -1808,27 +1812,7 @@ export async function accumulateGeneralElectionVotes(
                 : { stateId: { $in: uniqueStateIds } }
             )
             .toArray(),
-          db
-            .collection<{
-              _id: string;
-              preset?: string;
-              currentYear?: number;
-              currentTurn?: number;
-              startingYear?: number;
-              eraSystemEnabled?: boolean;
-            }>("gameState")
-            .findOne(
-              { _id: "current" },
-              {
-                projection: {
-                  preset: 1,
-                  currentYear: 1,
-                  currentTurn: 1,
-                  startingYear: 1,
-                  eraSystemEnabled: 1,
-                },
-              }
-            ),
+          loadElectionDemographicsGameState(db),
           // Seeded snapshots for the granular substrate's legislation
           // lean-drift fold (only consumed when the flag is on).
           db.collection<StateDemographics>("demographicDefaults").find(regionalScope).toArray(),
@@ -1839,6 +1823,15 @@ export async function accumulateGeneralElectionVotes(
             )
           ),
         ]);
+        const { regionDemographicsByState, demographicsV2Countries, votingAgeByCountry } =
+          await loadDemographicsV2Preload({
+            db,
+            countries: uniqueCountries,
+            regionFilter: regionalScope,
+            states,
+            nationwideCountries,
+            gameState: gsPreset,
+          });
         const stateMap = new Map(states.map((s) => [s._id as string, s]));
         const demographicsMap = new Map(demographics.map((d) => [d._id as string, d]));
         const turnoutByState = new Map(turnoutDocs.map((t) => [t._id as string, t]));
@@ -1877,6 +1870,9 @@ export async function accumulateGeneralElectionVotes(
           turnoutByState,
           registrationPoolByState,
           demographicDefaultsByState: new Map(demoDefaults.map((d) => [d._id as string, d])),
+          regionDemographicsByState,
+          demographicsV2Countries,
+          votingAgeByCountry,
           governingPartyIdsByCountry: new Map(governingPartyEntries),
           turnMemo: createVoteTurnMemo(),
         };

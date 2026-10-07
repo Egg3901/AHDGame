@@ -27,6 +27,11 @@ export const VERSION_GATES: { system: ResetSystem; label: string; desc: string }
     label: "Cabinet",
     desc: "v1 keeps the live Cabinet behavior. v2 will switch to portfolios, departmental funding, and revised ministerial actions.",
   },
+  {
+    system: "demographics",
+    label: "Demographics",
+    desc: "v1 keeps today's electorate and turnout model. v2 connects the live population to voter composition, adds an explainable participation ledger, and makes issue contrast matter.",
+  },
 ];
 
 interface BooleanGate {

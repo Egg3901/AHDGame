@@ -40,6 +40,8 @@ export interface StateDemographicTurnout {
   modifiers: DemographicModifiers;
   /** Faster-decaying turnout inputs for races opened with coalition campaigning. */
   campaignModifiers?: DemographicModifiers;
+  /** Canvassing-only component for Demographics v2 participation receipts. */
+  campaignContactModifiers?: DemographicModifiers;
   /** Timestamp of last decay application (decay runs each turn) */
   lastDecayApplied: Date;
   /** Timestamp of last modifier update (GOTV or canvassing) */
