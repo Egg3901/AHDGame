@@ -122,7 +122,9 @@ export async function executeCharacterAction(
     gameConfig?.campaignEraPriceLevelEnabled,
     gameState?.preset
   );
-  const politicalMediaMarketEnabled = gameConfig?.politicalMediaMarketEnabled === true;
+  // TODO: Rework corporation-backed political advertising before re-enabling this path.
+  // Advertisements intentionally apply immediately for now and do not create media orders.
+  const politicalMediaMarketEnabled: boolean = false;
 
   // Block player actions while the game is paused/stopped. `isActive` is false only
   // on admin stop, auto-drift pause, or a pre-start world (turnSystem.ts) — it is not
