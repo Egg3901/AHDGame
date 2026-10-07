@@ -20,8 +20,14 @@ import { recoverAllQueuedPayouts } from "./queuedPayoutSettlement";
 import { recoverAllFundFloatSettlements } from "./fundFloatSettlement";
 import { loadFloatAuditContext, type FloatAuditContext } from "./fundFloatTradePlan";
 export { executeFundShareBuy, type FundShareBuyBatch } from "./fundFloatBuyExecution";
-import { processQueuedRedemptions } from "./processQueuedRedemptions";
-export { processQueuedRedemptions } from "./processQueuedRedemptions";
+import {
+  processQueuedRedemptions,
+  QUEUED_REDEMPTION_CLAIMS_PER_PASS,
+} from "./processQueuedRedemptions";
+export {
+  processQueuedRedemptions,
+  QUEUED_REDEMPTION_CLAIMS_PER_PASS,
+} from "./processQueuedRedemptions";
 import { assertTransactionSupportAtBoot } from "@/lib/db/transactionSupport";
 import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import type { Db } from "mongodb";
@@ -572,6 +578,11 @@ async function runFundCron(db: Db, options?: { currentTurn?: number }): Promise<
   funds = await listFundsByIds(db, redemptionServiceFundIds);
   // Snapshots are upserts keyed by (fund, turn); one bulk write replaces one per fund.
   const fundSnapshots: Parameters<typeof insertFundSnapshotsBulk>[1] = [];
+  // One claim budget for the whole pass, split evenly over the funds still
+  // waiting so an early fund's queue cannot starve the rest. Claims a fund does
+  // not use roll forward to the funds after it.
+  let claimsLeft = QUEUED_REDEMPTION_CLAIMS_PER_PASS;
+  let queuedFundsLeft = funds.filter((f) => queuedUnitsByFundId.has(f._id.toString())).length;
   for (const fund of funds) {
     try {
       // `funds` was just re-read above and nothing writes between; the old
@@ -579,9 +590,24 @@ async function runFundCron(db: Db, options?: { currentTurn?: number }): Promise<
       const refreshedFund = fund;
 
       const hasQueuedRedemptions = queuedUnitsByFundId.has(fund._id.toString());
-      const paidRedemptions = hasQueuedRedemptions
-        ? await processQueuedRedemptions(db, refreshedFund, forexEnabled, currentTurn, true)
-        : 0;
+      let paidRedemptions = 0;
+      if (hasQueuedRedemptions) {
+        const share = { claimsLeft: Math.ceil(claimsLeft / Math.max(1, queuedFundsLeft)) };
+        const allotted = share.claimsLeft;
+        queuedFundsLeft--;
+        try {
+          paidRedemptions = await processQueuedRedemptions(
+            db,
+            refreshedFund,
+            forexEnabled,
+            currentTurn,
+            true,
+            share
+          );
+        } finally {
+          claimsLeft -= allotted - share.claimsLeft;
+        }
+      }
       result.redemptionsPaid += paidRedemptions;
 
       if (currentTurn > 0) {
