@@ -11,9 +11,10 @@ import { PHASE_TIMEOUT_MS } from "@/lib/turn/processingLock";
 const TURN_STUCK_WARNING_MS = 5 * 60_000;
 
 /**
- * Phase-budget headroom. `runPhase` kills a phase at PHASE_TIMEOUT_MS, which
- * fails the phase and aborts the whole turn — so a phase creeping toward that
- * ceiling is an outage with a lead time, and worth surfacing before it lands.
+ * Phase-budget headroom. `runPhase` reports failure at PHASE_TIMEOUT_MS, then
+ * drains the still-running callback before any later phase or turn completion.
+ * A phase creeping toward that threshold is an outage risk with lead time and
+ * is worth surfacing before it crosses the threshold.
  *
  * Why this exists (2026-08-28): corporationTurn costs ~6ms per corporateSector
  * and the sector population grows with NPP expansion, so the phase gets more
@@ -223,7 +224,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // Phase-budget pressure: phases approaching the hard PHASE_TIMEOUT_MS kill.
+    // Phase-budget pressure: phases approaching the PHASE_TIMEOUT_MS failure.
     // Only the worst phase per turn is reported, so a broadly slow turn produces
     // one actionable line rather than thirty.
     if (source === "phaseBudget" || !source) {
@@ -274,7 +275,7 @@ export async function GET(request: Request) {
           message:
             `Phase "${worst.phase}" took ${Math.round(worst.ms / 1000)}s, ` +
             `${Math.round(fraction * 100)}% of the ${PHASE_TIMEOUT_MS / 1000}s phase timeout. ` +
-            `Exceeding it fails the phase and aborts the turn.`,
+            `Exceeding it fails the phase, then drains its callback before the turn continues.`,
           source: "phaseBudget",
           timestamp,
         });
