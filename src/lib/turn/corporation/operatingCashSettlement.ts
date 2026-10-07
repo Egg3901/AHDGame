@@ -120,6 +120,27 @@ class KeyedQueue {
 }
 
 /**
+ * Order work round-robin across buckets, keeping each bucket's input order.
+ * Snapshots arrive grouped by country, so a plain queue sent every lane to the
+ * same Treasury lock at once and the lanes ran one country at a time.
+ */
+export function interleaveByKey<T>(items: readonly T[], keyOf: (item: T) => string): T[] {
+  const buckets = new Map<string, T[]>();
+  for (const item of items) {
+    const key = keyOf(item);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(item);
+    else buckets.set(key, [item]);
+  }
+  const queues = [...buckets.values()];
+  const ordered: T[] = [];
+  for (let round = 0; ordered.length < items.length; round++) {
+    for (const queue of queues) if (round < queue.length) ordered.push(queue[round]);
+  }
+  return ordered;
+}
+
+/**
  * Settle modeled gross operating receipts before federal withholding. These
  * are separate durable receipts because the settlement journal applies
  * guarded debits before credits: one transition cannot spend income that has
@@ -605,7 +626,13 @@ export async function settleCorporateOperatingCash(
     if (group) group.push(snapshot);
     else snapshotsByCorp.set(id, [snapshot]);
   }
-  await runInLanes([...snapshotsByCorp.values()], lanes, async (group) => {
+  const groups = interleaveByKey([...snapshotsByCorp.values()], (group) =>
+    group
+      .flatMap((snapshot) => Array.from(snapshot.federalTaxByCountryAnchor?.keys() ?? []))
+      .sort()
+      .join(",")
+  );
+  await runInLanes(groups, lanes, async (group) => {
     for (const snapshot of group) await settleSnapshot(snapshot);
   });
 }
