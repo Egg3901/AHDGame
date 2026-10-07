@@ -83,6 +83,7 @@ function same(a: unknown, b: unknown): boolean {
 
 function matches(doc: Doc, filter: Doc): boolean {
   return Object.entries(filter).every(([key, cond]) => {
+    if (key === "$or") return (cond as Doc[]).some((branch) => matches(doc, branch));
     if (cond && typeof cond === "object" && "$in" in (cond as Doc)) {
       return ((cond as { $in: unknown[] }).$in ?? []).some((v) => same(doc[key], v));
     }
@@ -100,10 +101,24 @@ function createStoreDb(store: Store) {
     },
     find: (filter: Doc) => {
       reads.push({ collection: name, filter });
+      let order: Record<string, 1 | -1> = {};
       const cursor = {
-        sort: () => cursor,
+        sort: (spec: Record<string, 1 | -1>) => {
+          order = spec;
+          return cursor;
+        },
         project: () => cursor,
-        toArray: async () => (store[name] ?? []).filter((d) => matches(d, filter)),
+        toArray: async () =>
+          (store[name] ?? [])
+            .filter((d) => matches(d, filter))
+            .sort((a, b) => {
+              for (const [key, dir] of Object.entries(order)) {
+                const av = Number(a[key] ?? 0);
+                const bv = Number(b[key] ?? 0);
+                if (av !== bv) return (av - bv) * dir;
+              }
+              return 0;
+            }),
       };
       return cursor;
     },
@@ -306,5 +321,108 @@ describe("GET /api/congress/senate-leadership leader reads", () => {
       partySeats: 20,
       myVoteId: null,
     });
+  });
+
+  it("reads nominations and nominee display data once for every role", async () => {
+    const userId = new ObjectId();
+    const playerNominee = new ObjectId();
+    const nppNominee = new ObjectId();
+    const confirmedHolder = new ObjectId();
+    const voter = new ObjectId().toString();
+    const nomination = (role: string, nomineeId: ObjectId, status: string, extra: Doc = {}) => ({
+      _id: new ObjectId(),
+      role,
+      nomineeId,
+      nomineeName: `${role} ${status}`,
+      nomineeParty: "dem",
+      nominatedByName: "Someone",
+      status,
+      votesFor: 0,
+      createdAt: new Date("2026-01-10T00:00:00.000Z"),
+      ...extra,
+    });
+    const leading = nomination("pro_tempore", nppNominee, "voting", {
+      votesFor: 2,
+      votes: { [voter]: "for", [new ObjectId().toString()]: "for" },
+    });
+    const trailing = nomination("pro_tempore", playerNominee, "open", {
+      createdAt: new Date("2026-01-09T00:00:00.000Z"),
+    });
+    const minority = nomination("minority_leader", playerNominee, "open", { nomineeParty: "rep" });
+
+    const voting = (role: string) => ({
+      _id: role,
+      status: "voting",
+      endsOnTurn: 110,
+      startedAt: new Date(0),
+    });
+    const { res, json, reads } = await callGet({
+      senateLeadershipElections: [
+        voting("pro_tempore"),
+        voting("minority_leader"),
+        voting("minority_whip"),
+        { _id: "majority_leader", status: "closed", endsOnTurn: 90 },
+      ],
+      senateLeadershipNominations: [
+        trailing,
+        leading,
+        minority,
+        // Withdrawn and lost candidacies never show on a voting role.
+        nomination("pro_tempore", confirmedHolder, "failed"),
+        nomination("minority_leader", confirmedHolder, "confirmed"),
+        // A settled role shows neither stale open rows nor candidacies.
+        nomination("majority_leader", confirmedHolder, "confirmed"),
+        nomination("majority_leader", playerNominee, "open"),
+      ],
+      // Same role name in the other chamber must not leak into the Senate.
+      houseLeadershipNominations: [nomination("minority_leader", nppNominee, "open")],
+      characters: [{ _id: playerNominee, userId, avatarUrl: "/p.png" }],
+      npps: [{ _id: nppNominee, avatarUrl: "/n.png" }],
+      users: [{ _id: userId, patreonProfileBorder: "gold", patreonHighlightColor: "#abc" }],
+    });
+
+    expect(res.status).toBe(200);
+    expect(count(reads, "senateLeadershipNominations")).toBe(1);
+    expect(count(reads, "houseLeadershipNominations")).toBe(0);
+    expect(countFor(reads, "characters", playerNominee)).toBe(1);
+    expect(countFor(reads, "npps", nppNominee)).toBe(1);
+    expect(count(reads, "users")).toBe(1);
+
+    expect(json.proTempore.candidacies.map((c: Doc) => c.id)).toEqual([
+      leading._id.toString(),
+      trailing._id.toString(),
+    ]);
+    expect(json.proTempore.candidacies[0]).toMatchObject({
+      nomineeId: nppNominee.toString(),
+      avatarUrl: "/n.png",
+      borderKey: null,
+      votesFor: 2,
+    });
+    expect(json.proTempore.candidacies[1]).toMatchObject({
+      nomineeId: playerNominee.toString(),
+      avatarUrl: "/p.png",
+      borderKey: "gold",
+      tintColor: "#abc",
+    });
+    expect(json.minorityLeader.candidacies.map((c: Doc) => c.id)).toEqual([
+      minority._id.toString(),
+    ]);
+    expect(json.minorityLeader.candidacies[0]).toMatchObject({ nomineePartyName: "Republican" });
+    // Voting role with no candidacies and roles with no election at all.
+    expect(json.minorityWhip.candidacies).toEqual([]);
+    expect(json.majorityWhip.candidacies).toEqual([]);
+    expect(json.majorityWhip.election.status).toBe("none");
+    expect(json.majorityLeader.candidacies).toEqual([]);
+    expect(json.majorityLeader.election.status).toBe("closed");
+    expect(json.activeCandidacies).toEqual(json.proTempore.candidacies);
+  });
+
+  it("skips nominee reads when no role has nominations", async () => {
+    const { reads } = await callGet({});
+
+    expect(count(reads, "senateLeadershipNominations")).toBe(1);
+    expect(count(reads, "characters")).toBe(0);
+    expect(count(reads, "npps")).toBe(0);
+    expect(count(reads, "users")).toBe(0);
   });
 });
