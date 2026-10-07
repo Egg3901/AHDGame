@@ -5,8 +5,10 @@ export const TURN_LOCK_HEARTBEAT_MS = 30_000;
 
 /**
  * Hard ceiling on a single turn phase. `runPhase` races every phase against
- * this and rejects when it is exceeded, which fails the phase and aborts the
- * turn.
+ * this and records the phase as failed when it is exceeded. The timeout cannot
+ * cancel the phase function, so the runtime then holds the turn, with its lock
+ * and heartbeat, until that function settles; no later phase starts while it
+ * is still writing (#3385).
  *
  * Lives here rather than in turnPhaseRuntime so the admin health check can
  * measure phases against the same number the runtime enforces, instead of

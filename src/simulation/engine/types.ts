@@ -33,6 +33,12 @@ export interface TurnExecutionContext {
 export interface TurnPhaseRuntime {
   runPhase<T>(name: string, fn: () => Promise<T>): Promise<T | null>;
   markPhaseSkipped(phase: string, reason: TurnPhaseSkipReason, message: string): Promise<void>;
+  /**
+   * Resolves once every phase that timed out has actually stopped. A timeout
+   * does not cancel the phase function, so the turn must await this before it
+   * commits or releases its lock (#3385).
+   */
+  drainTimedOutPhases?(): Promise<void>;
 }
 
 export interface CompletedTurnPhaseObservation {

@@ -64,7 +64,7 @@ import { getAnomalyScanCadencePredicate } from "@/simulation/phases/anomalyScanC
 import { isSingleplayer } from "@/lib/singleplayer";
 import { reconcileFederalBudgetInvariants } from "@/lib/budget/budgetInvariants";
 import { publishPlatformEvent } from "@/lib/platformEvents";
-import type { CompletedTurnPhaseObservation } from "@/simulation/engine/types";
+import type { CompletedTurnPhaseObservation, TurnPhaseRuntime } from "@/simulation/engine/types";
 import { completedTurnStatus } from "@/simulation/engine/turnCompletion";
 import { captureTurnPosthog } from "@/lib/analytics/turnPosthog";
 
@@ -251,6 +251,7 @@ async function processTurnImpl(
   const currentPhaseRef = { current: null as string | null };
   let phaseStatusesForFailure: TurnPhaseTelemetryMap | null = null;
   let phaseResultsForFailure: TurnLog["phases"] | null = null;
+  let phaseRuntimeForFailure: TurnPhaseRuntime | null = null;
   let turnLogWritten = false;
   let healthSnapshotWritten = false;
   let lastHealth: GameHealthSummary | null = null;
@@ -560,6 +561,7 @@ async function processTurnImpl(
       turn: nextTurnNumber,
       onPhaseCompleted: options.onPhaseCompleted,
     });
+    phaseRuntimeForFailure = runtime;
 
     activeTurn = context.newTurn;
     activeCurrentYear = context.currentYear;
@@ -578,6 +580,9 @@ async function processTurnImpl(
         await adapter.execute(context, runtime);
       }
     });
+    // A timed-out phase can still be writing (#3385). Nothing after this line
+    // may run, and the lock may not be released, until it has stopped.
+    await runtime.drainTimedOutPhases?.();
 
     // Reconciles, never throws. `federalBudget.surplus` and `debt.principal` are
     // caches of an expression, and both drift intra-year on the live world even
@@ -767,6 +772,9 @@ async function processTurnImpl(
     }
 
     try {
+      // Releasing the lock while a timed-out phase is still writing would let
+      // the next turn run against its writes (#3385).
+      await phaseRuntimeForFailure?.drainTimedOutPhases?.();
       const db = await getDb();
       const finalizedPhaseStatuses = phaseStatusesForFailure
         ? finalizeAbortedPhaseStatuses(

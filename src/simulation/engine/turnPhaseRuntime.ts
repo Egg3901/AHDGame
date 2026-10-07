@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "async_hooks";
 import * as Sentry from "@sentry/nextjs";
 import type {
   GameState,
@@ -90,6 +91,11 @@ function cheapPhaseResultMeta(result: unknown): Record<string, unknown> | undefi
 // of every phase — imperceptible on a multi-second turn.
 const PHASE_STATUS_FLUSH_THROTTLE_MS = 1500;
 
+// Ids of the runPhase invocations the current async call chain is running
+// inside, outermost first. A phase started from inside a draining phase is part
+// of that phase's own work, so it must not wait for the drain it belongs to.
+const phaseInvocationChain = new AsyncLocalStorage<readonly number[]>();
+
 export function createTurnPhaseRuntime(input: {
   db: Pick<Db, "collection">;
   phaseStatuses: TurnPhaseTelemetryMap;
@@ -128,6 +134,24 @@ export function createTurnPhaseRuntime(input: {
   } = input;
   const turn = input.turn ?? 0;
   let lastFlushAtMs = 0;
+  let nextInvocationId = 0;
+  // #3385: a timeout cannot cancel the phase function, which keeps issuing
+  // writes. Every timed-out phase stays here until its function settles, and no
+  // new phase starts (nor does the turn complete or release its lock) until the
+  // set is empty. A function that never settles therefore halts the turn with
+  // its lock held: safety over liveness.
+  const drainingPhases = new Map<number, Promise<void>>();
+
+  async function waitForDrainingPhases(): Promise<void> {
+    const ancestors = phaseInvocationChain.getStore() ?? [];
+    for (;;) {
+      const pending = [...drainingPhases.entries()]
+        .filter(([id]) => !ancestors.includes(id))
+        .map(([, drained]) => drained);
+      if (pending.length === 0) return;
+      await Promise.all(pending);
+    }
+  }
 
   async function setPhaseStatus(
     phase: string,
@@ -237,13 +261,21 @@ export function createTurnPhaseRuntime(input: {
       await markPhaseSkipped(name, "upstreamAbort", "skipped: already applied before crash");
       return null;
     }
+    await waitForDrainingPhases();
+    const invocationId = ++nextInvocationId;
+    const invocationChain = [...(phaseInvocationChain.getStore() ?? []), invocationId];
+    // Set by the timeout once it fires; settles when the timed-out function does.
+    let drained: Promise<void> | null = null;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
+        // Registered synchronously, before the rejection reaches any awaiting
+        // caller, so no other lane can start a phase in between.
+        drained = beginDrain();
         reject(new Error(`Phase "${name}" timed out after ${PHASE_TIMEOUT_MS / 1000}s`));
       }, PHASE_TIMEOUT_MS);
     });
-    const heartbeatTimer = setInterval(() => {
+    let heartbeatTimer = setInterval(() => {
       void setPhaseStatus(name, "running").catch((err) => {
         console.warn(`[Turn] Failed to refresh heartbeat for phase "${name}"`, err);
         Sentry.captureException(err, {
@@ -260,33 +292,72 @@ export function createTurnPhaseRuntime(input: {
     const traceId = turnPhaseTraceId(turn, name);
     const isMutatingPhase = !READ_ONLY_PHASES.has(name);
 
-    try {
-      const result = await Promise.race([
-        runInAuditContext(
-          traceId,
-          async () => {
-            await setPhaseStatus(name, "running");
-            beginPhaseProfiling(name);
-            Sentry.addBreadcrumb({
-              category: "turn.phase",
-              message: `Phase "${name}" started`,
-              level: "info",
-              data: { phase: name },
+    // The timeout is reported by the catch below as usual; this only holds the
+    // phase open until its function settles. The running-status heartbeat would
+    // overwrite the failed status, so a lock-only heartbeat replaces it.
+    function beginDrain(): Promise<void> {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = setInterval(() => {
+        void db
+          .collection<GameState>("gameState")
+          .updateOne(
+            { _id: "current", isProcessing: true },
+            { $set: { processingHeartbeatAt: new Date() } }
+          )
+          .catch((err) => {
+            console.warn(`[Turn] Failed to refresh heartbeat for draining phase "${name}"`, err);
+            Sentry.captureException(err, {
+              extra: { phase: name, component: "turnHeartbeat" },
             });
-            // Each phase becomes a span nested under the turn cron transaction,
-            // so GlitchTip's trace view shows a per-phase timing waterfall and
-            // flags which phase failed (span status ERROR) — not just the
-            // pre-existing breadcrumbs.
-            return await withSpan(
-              `turn.phase.${name}`,
-              { op: "turn.phase", tags: { "turn.phase": name } },
-              () => fn()
-            );
+          });
+      }, TURN_LOCK_HEARTBEAT_MS);
+      const settled = work
+        .then(
+          () => {
+            console.warn(`[Turn] Timed-out phase "${name}" finished after its timeout`);
           },
-          { kind: "system" }
-        ),
-        timeoutPromise,
-      ]);
+          (lateErr) => {
+            console.error(`[Turn] Timed-out phase "${name}" failed after its timeout`, lateErr);
+            Sentry.captureException(lateErr, {
+              extra: { phase: name, settledAfterTimeout: true },
+            });
+          }
+        )
+        .finally(() => {
+          drainingPhases.delete(invocationId);
+        });
+      drainingPhases.set(invocationId, settled);
+      return settled;
+    }
+
+    const work = phaseInvocationChain.run(invocationChain, () =>
+      runInAuditContext(
+        traceId,
+        async () => {
+          await setPhaseStatus(name, "running");
+          beginPhaseProfiling(name);
+          Sentry.addBreadcrumb({
+            category: "turn.phase",
+            message: `Phase "${name}" started`,
+            level: "info",
+            data: { phase: name },
+          });
+          // Each phase becomes a span nested under the turn cron transaction,
+          // so GlitchTip's trace view shows a per-phase timing waterfall and
+          // flags which phase failed (span status ERROR) — not just the
+          // pre-existing breadcrumbs.
+          return await withSpan(
+            `turn.phase.${name}`,
+            { op: "turn.phase", tags: { "turn.phase": name } },
+            () => fn()
+          );
+        },
+        { kind: "system" }
+      )
+    );
+
+    try {
+      const result = await Promise.race([work, timeoutPromise]);
       const phaseDurationMs = Date.now() - phaseStart;
       if (onPhaseCompleted) await onPhaseCompleted({ name, result });
       Sentry.addBreadcrumb({
@@ -372,6 +443,7 @@ export function createTurnPhaseRuntime(input: {
         console.warn(`[Turn] Failed to mark phase "${name}" failed`, setErr)
       );
       warnings.push(`${name}: ${message}`);
+      if (drained) await drained;
       return null;
     } finally {
       endPhaseProfiling(name);
@@ -383,5 +455,6 @@ export function createTurnPhaseRuntime(input: {
   return {
     runPhase,
     markPhaseSkipped,
+    drainTimedOutPhases: waitForDrainingPhases,
   };
 }
