@@ -6,6 +6,10 @@
  * reset book's own `cash`, revenue credit and appropriation financing are not
  * used. Claims are paid in priority order from the funded balance and every
  * unpaid amount stays an explicit per-claimant arrear.
+ *
+ * The receipt is a plan until its single cash leg lands. `cash` is rewritten
+ * as a non-owning projection of the funded balance after payment, and `debt`
+ * tracks bond face only (analytics, never cash).
  */
 import { allocatePaidAuthority } from "./paidAuthority";
 import { NATIONAL_CLAIM_PRIORITY } from "./settlement";
@@ -18,6 +22,9 @@ export function settleConservedResetCashTurn(input: {
   claims: readonly CashAuthorityClaim[];
   /** Funded Treasury cash read after bond settlement. */
   fundedCash: number;
+  /** This turn's captured bond face, for the debt book only. */
+  bondFaceIssued?: number;
+  bondFaceRetired?: number;
 }): ResetNationalTreasurySnapshot {
   const { treasury, turn, claims } = input;
   if (!Number.isSafeInteger(turn) || turn !== treasury.settledThroughTurn + 1) {
@@ -67,8 +74,17 @@ export function settleConservedResetCashTurn(input: {
     }
   }
   const paidTotal = Object.values(lastPaidByClaim).reduce((sum, value) => sum + value, 0);
+  const faceIssued = input.bondFaceIssued ?? 0;
+  const faceRetired = input.bondFaceRetired ?? 0;
+  if (
+    ![faceIssued, faceRetired].every((value) => Number.isFinite(value) && value >= 0) ||
+    faceRetired > treasury.debt + faceIssued
+  )
+    throw new Error("Invalid sovereign face flow");
   return {
     ...treasury,
+    cash: Math.max(0, input.fundedCash) - paidTotal,
+    debt: treasury.debt + faceIssued - faceRetired,
     arrears,
     settledThroughTurn: turn,
     lastPaid,
@@ -76,6 +92,44 @@ export function settleConservedResetCashTurn(input: {
     lastAppropriationFinancing: 0,
     lastPaidByClaim,
     claimArrears,
-    conservedFunding: { turn, fundedCash: input.fundedCash, paidTotal },
+    conservedFunding: {
+      turn,
+      fundedCash: input.fundedCash,
+      paidTotal,
+      plannedTotal: paidTotal,
+      status: "planned",
+    },
+  };
+}
+
+/**
+ * The cash leg for a planned receipt was wholly refused (a concurrent
+ * Treasury spend left less than the frozen amount). Nothing moved, so the
+ * turn books zero authority and every planned payment returns to its
+ * claimant's arrears. Paid legs never reach here: a partial move resumes.
+ */
+export function unpaidConservedReceipt(
+  planned: ResetNationalTreasurySnapshot
+): ResetNationalTreasurySnapshot {
+  const funding = planned.conservedFunding;
+  if (!funding || funding.status !== "planned" || !planned.lastPaidByClaim || !planned.lastPaid)
+    throw new Error("Only a planned conserved receipt can fall back to unpaid");
+  const claimArrears: Record<string, number> = {};
+  for (const [id, paid] of Object.entries(planned.lastPaidByClaim))
+    claimArrears[id] = (planned.claimArrears?.[id] ?? 0) + paid;
+  const arrears = { ...planned.arrears };
+  const lastPaid = { ...planned.lastPaid };
+  for (const category of Object.keys(lastPaid) as (keyof typeof lastPaid)[]) {
+    arrears[category] += lastPaid[category];
+    lastPaid[category] = 0;
+  }
+  return {
+    ...planned,
+    cash: planned.cash + funding.paidTotal,
+    arrears,
+    lastPaid,
+    lastPaidByClaim: Object.fromEntries(Object.keys(claimArrears).map((id) => [id, 0])),
+    claimArrears,
+    conservedFunding: { ...funding, paidTotal: 0, status: "refused" },
   };
 }

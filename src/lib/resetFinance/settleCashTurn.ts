@@ -14,7 +14,7 @@ import {
   type ResetSystem,
 } from "@/lib/resetVersions/rules";
 import { settleResetCashTurn } from "./rules/cashTurn";
-import { settleConservedResetCashTurn } from "./rules/conservedCashTurn";
+import { settleConservedResetCashTurn, unpaidConservedReceipt } from "./rules/conservedCashTurn";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 import { householdMoneyBankId } from "@/lib/budget/conservedFiscalCash";
 import { CONSERVED_FISCAL_SPENDING_KIND } from "@/lib/budget/rules/conservedFiscalCash";
@@ -145,6 +145,8 @@ export async function settleResetTreasuryCashTurn(input: {
               turn,
               claims,
               fundedCash: budget.treasuryCashLocal ?? 0,
+              bondFaceIssued: flow(bondFlows.sovereignDebtFaceIssuedByCountry),
+              bondFaceRetired: flow(bondFlows.sovereignDebtFaceRetiredByCountry),
             })
           : settleResetCashTurn({
               treasury: { ...opening, debtCeiling: budget.debt.ceiling },
@@ -161,33 +163,38 @@ export async function settleResetTreasuryCashTurn(input: {
                 bondCouponCashPaid: flow(bondFlows.sovereignCouponPaidByCountry),
               },
             });
-    if (!next.lastPaidByClaim) throw new Error("V2 cash replay is missing its payment receipt");
-    const deliveries = roster
-      .filter((account) => !account.externallySettled)
-      .map((account) => {
-        if (account._id !== `${country}:${account.departmentId}`)
-          throw new Error("Invalid account identity");
-        const authorityPaid = next.lastPaidByClaim![account._id];
-        if (authorityPaid === undefined) throw new Error("V2 cash receipt omitted a department");
-        const fundingControls = Object.fromEntries(
-          Object.keys(account.familyAnnualDemand).map((familyId) => [
-            familyId,
-            activeDepartmentProgramFundingControl(account, familyId, currentPrograms),
-          ])
-        );
-        const activeFamilyIds = activeDepartmentProgramFamilyIds(account, currentPrograms);
-        const result = settleLiveDepartmentTurn({
-          account,
-          turn,
-          authorityPaid,
-          fundingControls,
-          activeFamilyIds,
+    const deliver = (receipt: ResetNationalTreasurySnapshot) => {
+      if (!receipt.lastPaidByClaim)
+        throw new Error("V2 cash replay is missing its payment receipt");
+      return roster
+        .filter((account) => !account.externallySettled)
+        .map((account) => {
+          if (account._id !== `${country}:${account.departmentId}`)
+            throw new Error("Invalid account identity");
+          const authorityPaid = receipt.lastPaidByClaim![account._id];
+          if (authorityPaid === undefined) throw new Error("V2 cash receipt omitted a department");
+          const fundingControls = Object.fromEntries(
+            Object.keys(account.familyAnnualDemand).map((familyId) => [
+              familyId,
+              activeDepartmentProgramFundingControl(account, familyId, currentPrograms),
+            ])
+          );
+          const activeFamilyIds = activeDepartmentProgramFamilyIds(account, currentPrograms);
+          const result = settleLiveDepartmentTurn({
+            account,
+            turn,
+            authorityPaid,
+            fundingControls,
+            activeFamilyIds,
+          });
+          if ((result.next.unpaidAuthority ?? 0) !== receipt.claimArrears?.[account._id])
+            throw new Error("Department unpaid authority does not reconcile to treasury");
+          return { account, result };
         });
-        if ((result.next.unpaidAuthority ?? 0) !== next.claimArrears?.[account._id])
-          throw new Error("Department unpaid authority does not reconcile to treasury");
-        return { account, result };
-      });
-    return { opening, next, deliveries, budget };
+    };
+    // Preflight every delivery before any cash or account mutation.
+    const deliveries = deliver(next);
+    return { opening, next, deliveries, budget, deliver };
   });
   // Freeze cash payments first. If account persistence fails part way through,
   // the next attempt consumes the same receipt, not a new revenue or bond flow.
@@ -207,17 +214,51 @@ export async function settleResetTreasuryCashTurn(input: {
   }
   // The frozen receipt fixes the amount; the journal key makes the cash leg
   // exactly-once across retries. Departments are credited only after it lands.
+  // A wholly refused leg moved nothing, so its receipt is rewritten to pay
+  // zero with every claim still owed; the next turn pays from fresh cash.
   if (input.conserved) {
-    for (const { next, budget } of planned) {
-      if (next.conservedFunding?.turn !== turn)
+    const resolved: {
+      next: ResetNationalTreasurySnapshot;
+      final: ResetNationalTreasurySnapshot;
+    }[] = [];
+    for (const plan of planned) {
+      const { next, budget } = plan;
+      const funding = next.conservedFunding;
+      if (funding?.turn !== turn)
         throw new Error(`Conserved v2 receipt missing for ${next.countryId}`);
-      await settleConservedAuthorityCash(db, {
+      if (funding.status !== "planned") continue;
+      const outcome = await settleConservedAuthorityCash(db, {
         turn,
         countryId: next.countryId,
         budgetId: String(budget._id),
         currency: resolveCountryCurrencyCode(budget) ?? "USD",
-        amount: next.conservedFunding.paidTotal,
+        amount: funding.plannedTotal,
       });
+      const final =
+        outcome === "settled"
+          ? { ...next, conservedFunding: { ...funding, status: "settled" as const } }
+          : unpaidConservedReceipt(next);
+      resolved.push({ next, final });
+      plan.next = final;
+      plan.deliveries = plan.deliver(final);
+    }
+    if (resolved.length) {
+      const write = await treasuryCollection.bulkWrite(
+        resolved.map(({ next, final }) => ({
+          updateOne: {
+            filter: {
+              _id: next._id,
+              worldId,
+              settledThroughTurn: turn,
+              "conservedFunding.status": "planned",
+            },
+            update: { $set: final },
+          },
+        })),
+        { ordered: true }
+      );
+      if (write.matchedCount !== resolved.length)
+        throw new Error("V2 treasury lost its conserved receipt compare-and-swap");
     }
   }
   const deliveries = planned.flatMap((plan) => plan.deliveries);
@@ -302,21 +343,35 @@ export function conservedAuthorityTransition(input: {
   };
 }
 
+/**
+ * Land the frozen cash leg exactly once. `settled` when the money moved;
+ * `refused` only when the journal proves no leg applied. A partial move (the
+ * Treasury debit landed, the household credit did not) resumes the original
+ * plan and fails loud if it cannot finish: paid money never falls back.
+ */
 async function settleConservedAuthorityCash(
   db: Db,
   input: Parameters<typeof conservedAuthorityTransition>[0]
-): Promise<void> {
+): Promise<"settled" | "refused"> {
   const transition = conservedAuthorityTransition(input);
-  if (transition.legs.length === 0) return;
-  const existing = await db
-    .collection<{ _id: string; status?: string }>(MONEY_MOVE_COLLECTION)
-    .findOne({ _id: transition.key }, { projection: { status: 1 } });
-  const result =
-    existing && existing.status !== "rejected"
-      ? await resumeSettlement(db, transition.key)
-      : await settleTransition(db, transition);
-  if (result.status !== "applied" && result.status !== "replayed")
-    // Treasury cash fell below the frozen receipt between read and settle.
-    // Fail loud: crediting departments without the cash would mint money.
-    throw new Error(result.error ?? `Conserved v2 authority ${transition.key} did not settle`);
+  if (transition.legs.length === 0) return "settled";
+  const journal = db.collection<{ _id: string; status?: string; legs?: { applied?: boolean }[] }>(
+    MONEY_MOVE_COLLECTION
+  );
+  const existing = await journal.findOne(
+    { _id: transition.key },
+    { projection: { status: 1, legs: 1 } }
+  );
+  const result = !existing
+    ? await settleTransition(db, transition)
+    : existing.status === "rejected"
+      ? { status: "rejected" as const, error: undefined }
+      : await resumeSettlement(db, transition.key);
+  if ((result.status === "applied" || result.status === "replayed") && !result.error)
+    return "settled";
+  if (result.status === "rejected") {
+    const record = await journal.findOne({ _id: transition.key }, { projection: { legs: 1 } });
+    if (record?.legs?.length && record.legs.every((leg) => !leg.applied)) return "refused";
+  }
+  throw new Error(result.error ?? `Conserved v2 authority ${transition.key} did not settle`);
 }

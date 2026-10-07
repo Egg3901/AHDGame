@@ -18,3 +18,5 @@ areas: [engine]
 - Department funding is paid afterward from the Treasury's real remaining cash, in priority order, and returned to the same stock. Shortfalls stay as unpaid authority per department.
 - Bond sale proceeds and debt payments are already in the Treasury balance, so they are not counted a second time.
 - Worlds without the switch keep today's behavior.
+- If other Treasury spending lands between planning and payment and leaves too little cash, that turn pays no department and every claim stays owed; the next turn pays it from fresh cash instead of retrying the same payment forever.
+- A payment interrupted after the Treasury was debited always finishes with its original amounts.

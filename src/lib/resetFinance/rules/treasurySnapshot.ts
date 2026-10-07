@@ -22,9 +22,18 @@ export interface ResetNationalTreasurySnapshot extends NationalTreasuryState {
   /**
    * Conserved financing (#3381) receipt: the funded Treasury cash the claims
    * were paid from and the whole-unit total settled to the household stock.
-   * When present, `cash` is a legacy projection, not spendable money.
+   * When present, `cash` is a non-owning projection of that funded balance
+   * after payment, never spendable money. `planned` is frozen before the cash
+   * leg, `settled` once it landed, `refused` when the leg was wholly rejected
+   * and every planned payment returned to arrears.
    */
-  conservedFunding?: { turn: number; fundedCash: number; paidTotal: number };
+  conservedFunding?: {
+    turn: number;
+    fundedCash: number;
+    paidTotal: number;
+    plannedTotal: number;
+    status: "planned" | "settled" | "refused";
+  };
 }
 
 export function openingNationalTreasurySnapshots(

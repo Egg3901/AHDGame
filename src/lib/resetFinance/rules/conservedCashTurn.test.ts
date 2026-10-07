@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { settleConservedResetCashTurn } from "./conservedCashTurn";
+import { settleConservedResetCashTurn, unpaidConservedReceipt } from "./conservedCashTurn";
 import type { ResetNationalTreasurySnapshot } from "./treasurySnapshot";
 
 const treasury = (cash: number): ResetNationalTreasurySnapshot =>
@@ -21,16 +21,26 @@ const claims = [
 ];
 
 describe("settleConservedResetCashTurn", () => {
-  it("pays every claim from funded cash and ignores the synthetic book cash", () => {
+  it("pays every claim from funded cash and replaces the synthetic book cash", () => {
     const next = settleConservedResetCashTurn({
       treasury: treasury(1_000_000),
       turn: 5,
       claims,
       fundedCash: 200.7,
+      bondFaceIssued: 300,
+      bondFaceRetired: 100,
     });
     expect(next.lastPaidByClaim).toEqual({ "UK:health": 60, "UK:defence": 50 });
-    expect(next.conservedFunding).toEqual({ turn: 5, fundedCash: 200.7, paidTotal: 110 });
-    expect(next.cash).toBe(1_000_000);
+    expect(next.conservedFunding).toEqual({
+      turn: 5,
+      fundedCash: 200.7,
+      paidTotal: 110,
+      plannedTotal: 110,
+      status: "planned",
+    });
+    // Non-owning projection of funded cash after payment; debt is face only.
+    expect(next.cash).toBeCloseTo(90.7);
+    expect(next.debt).toBe(1200);
     expect(next.lastAppropriationFinancing).toBe(0);
     expect(next.lastEmergencyAdvanceDrawn).toBe(0);
   });
@@ -65,5 +75,31 @@ describe("settleConservedResetCashTurn", () => {
     expect(() =>
       settleConservedResetCashTurn({ treasury: opening, turn: 5, claims: [], fundedCash: 1 })
     ).toThrow("unpaid claimant");
+  });
+
+  it("returns a wholly refused plan to arrears without losing a claimant", () => {
+    const planned = settleConservedResetCashTurn({
+      treasury: {
+        ...treasury(0),
+        arrears: { interest: 0, mandatory: 0, grants: 0, existing: 30, new: 0 },
+        claimArrears: { "UK:health": 0, "UK:defence": 30 },
+      },
+      turn: 5,
+      claims,
+      fundedCash: 100,
+    });
+    expect(planned.lastPaidByClaim).toEqual({ "UK:health": 60, "UK:defence": 40 });
+    const refused = unpaidConservedReceipt(planned);
+    expect(refused.lastPaidByClaim).toEqual({ "UK:health": 0, "UK:defence": 0 });
+    expect(refused.claimArrears).toEqual({ "UK:health": 60, "UK:defence": 80 });
+    expect(refused.arrears).toMatchObject({ mandatory: 60, existing: 80 });
+    expect(refused.lastPaid).toMatchObject({ mandatory: 0, existing: 0 });
+    expect(refused.conservedFunding).toMatchObject({
+      paidTotal: 0,
+      plannedTotal: 100,
+      status: "refused",
+    });
+    expect(refused.cash).toBe(100);
+    expect(() => unpaidConservedReceipt(refused)).toThrow("planned");
   });
 });
