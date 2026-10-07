@@ -1299,15 +1299,15 @@ export async function foundNppCorporationsSurplus(
   // Sector choice follows the market: one price read and one count per sweep.
   const priceDocs = await db.collection<CommodityPrice>("commodityPrices").find({}).toArray();
   const { priceRatioOf } = buildNppPriceSignals(new Map(priceDocs.map((p) => [p.commodity, p])));
-  const existingByCell = new Map<string, number>();
-  for (const row of await db
+  const cellCounts = await db
     .collection<Corporation>("corporations")
     .aggregate<{ _id: { c: string; t: string }; n: number }>([
       { $group: { _id: { c: "$countryId", t: "$type" }, n: { $sum: 1 } } },
     ])
-    .toArray()) {
-    existingByCell.set(`${row._id.c}:${row._id.t}`, row.n);
-  }
+    .toArray();
+  const existingByCell = new Map<string, number>(
+    cellCounts.map((row) => [`${row._id.c}:${row._id.t}`, row.n])
+  );
   const existingCount = (countryId: string, type: CorporationType) =>
     existingByCell.get(`${countryId}:${type}`) ?? 0;
 
