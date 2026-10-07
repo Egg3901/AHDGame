@@ -101,7 +101,7 @@ export async function seedCohortVectors(
     const census = proxyAge ? null : getRegionCensusData(state.countryId, id, preset);
     const age = proxyAge ?? (census as { age: Record<string, number> } | null)?.age;
     if (!age || !(population > 0)) {
-      stats.skipped.push(`${id} (${state.countryId}): ${!age ? "no census" : "no population"}`);
+      stats.skipped.push(`${id} (${state.countryId}): ${!(population > 0) ? "no population" : "no census"}`);
       continue;
     }
 
@@ -164,6 +164,20 @@ export async function seedCohortVectors(
           },
         },
       });
+    }
+  }
+
+  // The demographic phase writes each cohort total back over states.population,
+  // so a region without a stock silently drops out of population evolution and a
+  // stale stock from an earlier world replaces the seeded population on turn one.
+  // 1991 qualification therefore requires a stock for every populated region.
+  if (preset === "1991-default") {
+    const missing = stats.skipped.filter((row) => row.endsWith(": no census"));
+    if (missing.length > 0) {
+      throw new Error(
+        `1991 cohort coverage incomplete: ${missing.length} populated region(s) have no ` +
+          `dated age profile: ${missing.join(", ")}`
+      );
     }
   }
 
