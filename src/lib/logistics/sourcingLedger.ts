@@ -92,6 +92,10 @@ export interface SourcingNetworkDoc {
    * `freightCharges`.
    */
   freightHaulRevenue?: Record<string, number>;
+  /** Full sourcing buyer demand for each billed state/commodity, including noncorporate demand. */
+  freightDemand?: Record<string, Partial<Record<CommodityType, number>>>;
+  /** Full sourcing freight supply in each earning state, including unowned hauliers. */
+  freightSupply?: Record<string, number>;
   /**
    * Phase 4 freight ramp indicator: the active ramp fraction R in [0,1] applied
    * this turn to the sales cap and billing money. Written whenever the ramp is
@@ -112,6 +116,11 @@ export function buildSourcingDocs(
      * billing fields at all — the aggregates exist only inside the pure pass.
      */
     includeFreightBilling?: boolean;
+    /** The exact state balances used by this sourcing pass, before later ledger changes. */
+    billingBalancesByState?: ReadonlyMap<
+      string,
+      ReadonlyMap<CommodityType, { supply: number; demand: number }>
+    >;
     /**
      * Phase 4 freight ramp: scale the persisted billing money (charge AND haul
      * revenue) by this fraction [0,1] so the shipping bill fades in with the
@@ -283,6 +292,24 @@ export function buildSourcingDocs(
     }
     networkDoc.freightCharges = freightCharges;
     networkDoc.freightHaulRevenue = freightHaulRevenue;
+    if (options.billingBalancesByState) {
+      networkDoc.freightDemand = {};
+      networkDoc.freightSupply = {};
+      for (const [stateId, byCommodity] of Object.entries(freightCharges)) {
+        const demand: Partial<Record<CommodityType, number>> = {};
+        for (const commodity of Object.keys(byCommodity) as CommodityType[]) {
+          const units = options.billingBalancesByState.get(stateId)?.get(commodity)?.demand;
+          if (typeof units === "number" && Number.isFinite(units) && units > 0)
+            demand[commodity] = units;
+        }
+        networkDoc.freightDemand[stateId] = demand;
+      }
+      for (const stateId of Object.keys(freightHaulRevenue)) {
+        const units = options.billingBalancesByState.get(stateId)?.get("freight")?.supply;
+        if (typeof units === "number" && Number.isFinite(units) && units > 0)
+          networkDoc.freightSupply[stateId] = units;
+      }
+    }
   }
 
   return { commodityDocs, networkDoc };

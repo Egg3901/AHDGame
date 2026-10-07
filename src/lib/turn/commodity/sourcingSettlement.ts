@@ -137,6 +137,7 @@ export async function runFreightSettlementPhase(
     });
     const { commodityDocs, networkDoc } = buildSourcingDocs(freightSettlement.sourcing, turn, now, {
       includeFreightBilling: canonicalFreightBillingEnabled,
+      billingBalancesByState: byState,
       billingRampFraction: freightRampFraction,
       purchaseExposureMode: freightSettlementActive ? "active_delivered" : "shadow_simulated",
     });
