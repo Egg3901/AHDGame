@@ -27,6 +27,7 @@ export interface WorldNavItem {
 export interface WorldNavOpts {
   countryId?: string;
   myCorporationId?: number | null;
+  myUnionId?: string | null;
   conflictsEnabled?: boolean;
   unionsEnabled?: boolean;
   /**
@@ -45,6 +46,7 @@ export interface WorldNavOpts {
 export function buildWorldNavItems({
   countryId = "US",
   myCorporationId = null,
+  myUnionId = null,
   conflictsEnabled = false,
   unionsEnabled = false,
   settlementCrisisLive = false,
@@ -59,6 +61,15 @@ export function buildWorldNavItems({
       href: `/corporation/${myCorporationId}`,
       section: "corporate",
       show: myCorporationId != null,
+      primary: true,
+    },
+    {
+      id: "myUnion",
+      label: "My Union",
+      labelKey: "menus.profile.myUnion",
+      href: `/unions/${myUnionId}`,
+      section: "corporate",
+      show: unionsEnabled && myUnionId != null,
       primary: true,
     },
     {
@@ -265,8 +276,8 @@ const WORLD_NAV_GROUPS: WorldNavGroupDef[] = [
 
 /**
  * Groups visible World nav items into the mobile drawer's four collapsible
- * categories (Leaderboards / Diplomacy / Economy / Other). `myCorporation` is
- * intentionally excluded — it's a personal/pinned link, surfaced separately
+ * categories (Leaderboards / Diplomacy / Economy / Other). Personal organization
+ * shortcuts are intentionally excluded — they are pinned links surfaced separately
  * via {@link looseWorldNavItems} above the grouped categories (mirrors the
  * Nation section's loose Home Nation / My Party links above its groups).
  * Empty groups (e.g. Diplomacy with `conflicts` hidden) are dropped.
@@ -285,5 +296,5 @@ export function buildWorldNavSections(items: WorldNavItem[]): WorldNavGroup[] {
 
 /** Ungrouped, pinned World items shown above the collapsible categories. */
 export function looseWorldNavItems(items: WorldNavItem[]): WorldNavItem[] {
-  return items.filter((item) => item.id === "myCorporation");
+  return items.filter((item) => item.section === "corporate");
 }
