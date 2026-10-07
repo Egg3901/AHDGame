@@ -21,7 +21,11 @@ export type BondMarketPoolFlowKind =
   | "estateOut"
   | "recoveriesIn"
   | "inflowIn"
-  | "sweepOut";
+  | "sweepOut"
+  /** Conserved financing: household savings moved in, not minted. */
+  | "householdInflowIn"
+  /** Conserved financing: cash returned to household savings, not burned. */
+  | "householdSweepOut";
 
 /**
  * The counterparty for every bond trade that used to hit an infinite "AI

@@ -196,6 +196,8 @@ export const NON_GAMEPLAY_GAME_CONFIG_FIELDS: Readonly<Record<string, string>> =
     "era-derived: bootstrap sets it from the preset (on for 1953 and 1979 command regimes)",
   demographicsDemandEnabled:
     "superseded alternative to householdConsumptionEnabled; enabling both double-counts consumer demand",
+  conservedSovereignFinancingEnabled:
+    "monetary rollout (#3381): explicit per-world opt-in, qualified for no seed preset yet; reset clears it",
 };
 
 /**

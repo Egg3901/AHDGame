@@ -105,6 +105,57 @@ describe("treasury accrual stock-flow ownership", () => {
     expect(db.collection("bondMarketPools").docs[0].cashLocal).toBe(50);
   });
 
+  it.each([true, false])(
+    "moves the macro slice as conserved household cash only when the fresh-world flag is %s",
+    async (conserved) => {
+      const db = world(false);
+      const bondId = new ObjectId("650000000000000000003384");
+      Object.assign(db.collection("gameConfig").docs[0], {
+        treasuryCashLedgerEnabled: true,
+        ...(conserved ? { conservedSovereignFinancingEnabled: true } : {}),
+      });
+      db.seed("centralBanks", [{ _id: "US", countryId: "US", externalBroadMoney: 100_000 }]);
+      db.seed("bondMarketPools", [{ _id: "USD", cashLocal: 0 }]);
+      db.seed("bonds", [
+        {
+          _id: bondId,
+          issuerType: "sovereign",
+          countryId: "US",
+          currencyCode: "USD",
+          couponRate: 4.8,
+          maturityTurn: 40,
+          matured: false,
+          defaulted: false,
+          publicFloat: 50,
+          holders: [],
+        },
+      ]);
+      db.collection("federalBudget").docs[0].treasuryCashLocal = 0;
+
+      await processTreasuryTurn(10);
+      await processTreasuryTurn(10);
+
+      const budget = db.collection("federalBudget").docs[0];
+      const household = db.collection("centralBanks").docs[0].externalBroadMoney;
+      const poolCash = db.collection("bondMarketPools").docs[0].cashLocal;
+      // The signed accrual is identical in both postures.
+      expect(budget.treasuryBalance).toBe(-1000 + 500);
+      if (conserved) {
+        // Revenue 1,000 in from households, coupon 50 to the pool, 500 spending back.
+        expect(budget.treasuryCashLocal).toBe(450);
+        expect(poolCash).toBe(50);
+        expect(household).toBe(100_000 - 1_000 + 500);
+        expect(budget.sovereignCouponClaims).toEqual([]);
+        expect(budget.treasuryCashLocal + poolCash + household).toBe(100_000);
+      } else {
+        expect(budget.treasuryCashLocal).toBe(0);
+        expect(household).toBe(100_000);
+        expect(budget.sovereignCouponClaims).toHaveLength(1);
+        expect(budget.conservedFiscalCash).toBeUndefined();
+      }
+    }
+  );
+
   it("does not treat modeled revenue totals as spendable cash under the funded-cash flag", async () => {
     const db = world(false);
     await db

@@ -38,6 +38,12 @@ import {
 import type { SovereignCouponCorporationQuote } from "@/lib/banking/rules/sovereignCoupons";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
 import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import {
+  conservedFinancingActive,
+  loadConservedFiscalContext,
+  settleConservedHouseholdTax,
+  settleConservedPrimarySpending,
+} from "@/lib/budget/conservedFiscalCash";
 
 /**
  * Per-turn fiscal accrual (spec §4). For each country's federalBudget, move a
@@ -103,6 +109,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
           ledgerShadow: 1,
           bankTreasuryEnabled: 1,
           treasuryCashLedgerEnabled: 1,
+          conservedSovereignFinancingEnabled: 1,
         },
       }
     ),
@@ -116,6 +123,12 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   const ledgerShadow = config?.ledgerShadow === true;
   const bankTreasuryEnabled = config?.bankTreasuryEnabled === true;
   const treasuryCashLedgerEnabled = config?.treasuryCashLedgerEnabled === true;
+  // Conserved financing (#3381): fresh-world opt-in. The macro slice moves
+  // funded cash between the household money stock and the Treasury around the
+  // coupon pass; a retained world without the flag keeps signed-only accrual.
+  const conservedCtx = conservedFinancingActive(config)
+    ? await loadConservedFiscalContext(db, _turn)
+    : null;
   // Read once for every flag posture: the coupon book prices debt service on
   // the stock (issue #2089) even when bank/treasury cash ledgers are off.
   // Holder arrays are only needed by the funded coupon paths.
@@ -227,6 +240,8 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
               throw new Error(
                 `Cannot fund sovereign coupon claims for ${b.countryId}: missing native FX quote`
               );
+            if (conservedCtx && b.treasuryAccrual.turn === _turn)
+              await settleConservedHouseholdTax(db, conservedCtx, b, b.treasuryAccrual);
             await settleFundedSovereignCoupons(db, b, {
               turn: _turn,
               bonds: sovereignBonds.filter(
@@ -236,6 +251,8 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
               forexEnabled,
               corporateQuotes: corporationQuotes,
             });
+            if (conservedCtx && b.treasuryAccrual.turn === _turn)
+              await settleConservedPrimarySpending(db, conservedCtx, b, b.treasuryAccrual);
           }
           break;
         }
@@ -401,6 +418,9 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
             throw new Error(
               `Cannot fund sovereign coupon claims for ${b.countryId}: missing native FX quote`
             );
+          // Tax cash lands before debt service; primary spending is paid from
+          // what the coupon pass leaves, and the rest is an explicit arrear.
+          if (conservedCtx) await settleConservedHouseholdTax(db, conservedCtx, b, receipt);
           await settleFundedSovereignCoupons(
             db,
             {
@@ -419,6 +439,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
               corporateQuotes: corporationQuotes,
             }
           );
+          if (conservedCtx) await settleConservedPrimarySpending(db, conservedCtx, b, receipt);
         }
         countriesProcessed += 1;
         break;

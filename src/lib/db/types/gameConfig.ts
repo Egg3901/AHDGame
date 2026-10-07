@@ -232,6 +232,16 @@ export interface GameConfig {
   /** Experimental funded spendable government-cash ledger. Absent means off. */
   treasuryCashLedgerEnabled?: boolean;
   /**
+   * Conserved sovereign financing (#3381): the macro tax and primary spending
+   * slices move funded cash between the household money stock
+   * (`centralBanks.externalBroadMoney`) and Treasury cash, and bond-pool
+   * liquidity moves from the same stock instead of being minted. Explicit
+   * per-world opt-in, off for every seed preset until qualified; a reset clears
+   * it. Absent or false keeps existing behavior. Requires
+   * `treasuryCashLedgerEnabled`.
+   */
+  conservedSovereignFinancingEnabled?: boolean;
+  /**
    * Gate on player-chartered ADVANCED bank types. When absent/false, players may
    * only charter (or switch to) a RETAIL bank; investment and universal charters
    * are withheld until this is turned on. Existing charters are grandfathered —

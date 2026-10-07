@@ -31,6 +31,11 @@ import {
   type BondPoolLedgerContext,
 } from "./marketPoolLedger";
 import { SOVEREIGN_ISSUANCE_INTERVAL_TURNS } from "@/lib/bonds/sovereign";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
+import {
+  conservedFinancingActive,
+  settleConservedPoolFlow,
+} from "@/lib/budget/conservedFiscalCash";
 
 /** Share of the shortfall against target that flows in per turn. */
 export const BOND_POOL_INFLOW_RATE = 0.02;
@@ -114,6 +119,16 @@ export async function processBondMarketPoolTurn(
     appetitesRefreshed: 0,
   };
   if (pools.length === 0) return result;
+  // Conserved financing (#3381): pool liquidity is household savings moving in
+  // and out, journaled per turn, instead of a mint toward target and a burn.
+  const conserved = conservedFinancingActive(
+    await db
+      .collection<GameConfig>("gameConfig")
+      .findOne(
+        { _id: "default" },
+        { projection: { treasuryCashLedgerEnabled: 1, conservedSovereignFinancingEnabled: 1 } }
+      )
+  );
   const context =
     ledgerContext === undefined ? await loadBondPoolLedgerContext(db, turn) : ledgerContext;
 
@@ -172,7 +187,15 @@ export async function processBondMarketPoolTurn(
       const targetCashLocal = Math.round(Math.max(liquidityTarget, rolloverLocal) * 100) / 100;
 
       const moves = planPoolCashMoves({ cashLocal: pool.cashLocal, targetCashLocal });
-      if (moves.inflow > 0) {
+      if (conserved) {
+        const direction = moves.inflow > 0 ? "inflow" : "sweep";
+        const amount = moves.inflow > 0 ? moves.inflow : moves.sweep;
+        const { moved } = await settleConservedPoolFlow(db, { turn, currency, direction, amount });
+        if (moved > 0) {
+          if (direction === "inflow") result.inflowLocalByCurrency[currency] = moved;
+          else result.sweptLocalByCurrency[currency] = moved;
+        }
+      } else if (moves.inflow > 0) {
         await creditBondPool(db, currency, moves.inflow, "inflowIn", now, { ledgerContext: batch });
         result.inflowLocalByCurrency[currency] = moves.inflow;
       } else if (moves.sweep > 0) {

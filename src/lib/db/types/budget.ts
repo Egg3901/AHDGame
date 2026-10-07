@@ -618,6 +618,12 @@ export interface FederalBudget {
   treasuryBalance: number;
   /** Feature-gated spendable native cash. Missing legacy value means zero when enabled. */
   treasuryCashLocal?: number;
+  /**
+   * Conserved sovereign financing (#3381) carried state, written only through
+   * journaled projections of the household tax and primary spending flows.
+   * Absent means the world never ran conserved financing.
+   */
+  conservedFiscalCash?: ConservedFiscalCashState;
   /** Applied automatic disaster crisis IDs; keeps fiscal debits replay-safe. */
   disasterFiscalReceipts?: string[];
   /**
@@ -845,6 +851,16 @@ export interface FederalBudget {
   imfBoardOverrideRateDelta?: number | null;
   imfBoardOverrideCaptureDelta?: number | null;
   imfBoardPublicStatement?: string | null;
+}
+
+/** Funded flows between the household money stock and the Treasury, with explicit arrears. */
+export interface ConservedFiscalCashState {
+  /** Non-player tax the household stock owed but could not fund. */
+  householdTaxArrearsLocal?: number;
+  /** Primary spending the Treasury owed the household stock but could not fund. */
+  primarySpendingArrearsLocal?: number;
+  lifetime?: { taxCashIn?: number; spendingCashOut?: number };
+  last?: { taxCashInTurn?: number; spendingCashOutTurn?: number };
 }
 
 export interface FundedSovereignCouponClaim {

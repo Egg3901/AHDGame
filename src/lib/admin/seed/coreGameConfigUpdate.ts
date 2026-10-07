@@ -43,6 +43,10 @@ export const STALE_PER_WORLD_GAME_CONFIG_UNSET: Readonly<Record<string, "">> = O
   marketGuardReferenceFundamentalMcap: "",
   marketGuardReferenceTurn: "",
   marketGuardTrippedAt: "",
+  // Conserved sovereign financing (#3381) is an explicit per-world opt-in, not
+  // a fresh-world default: it is qualified for no seed preset yet. A reset must
+  // not carry the outgoing world's opt-in into the new world.
+  conservedSovereignFinancingEnabled: "",
   // Retail demand unwind window (src/lib/market/retailDemandTransition.ts).
   // Capacity expansion is refused until start + turns.
   retailDemandTransitionStartTurn: "",
