@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "net.lakesidegames.ahdclient",
+      "sha256_cert_fingerprints": [
+        "50:E9:24:EA:91:38:88:6B:1A:6D:1B:3C:D1:F9:8A:B1:01:2B:4F:7C:C6:52:26:F8:5A:0F:97:BD:CF:26:7F:B8"
+      ]
+    }
+  }
+]
