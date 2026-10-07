@@ -82,9 +82,12 @@ export function getPostHogClient(): Promise<PostHogClient | null> {
                   question?.response !== undefined && question.response !== null
               ).length
             : 0;
-          void import("./capture").then(({ captureProductEvent }) =>
-            captureProductEvent("survey_dismissed", { question_index: questionIndex })
-          );
+          const { generation } = getAnalyticsAccount();
+          void import("./capture").then(({ captureProductEvent }) => {
+            if (isAnalyticsGenerationCurrent(generation)) {
+              return captureProductEvent("survey_dismissed", { question_index: questionIndex });
+            }
+          });
         }
       );
       return posthog;

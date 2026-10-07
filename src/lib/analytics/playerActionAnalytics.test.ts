@@ -39,8 +39,11 @@ describe("player action analytics", () => {
         })
     );
     vi.stubGlobal("window", makeWindow(delegate));
-    const { installPlayerActionAnalytics, setPlayerActionContext } =
+    const { installPlayerActionAnalytics, setPlayerActionContext, classifyPlayerActionRoute } =
       await import("./playerActionAnalytics");
+    expect(
+      classifyPlayerActionRoute("/api/parties/0123456789abcdef01234567/join", "POST")
+    ).not.toBeNull();
     const { setAnalyticsAccount } = await import("./accountContext");
     setAnalyticsAccount({ id: "first" });
     setPlayerActionContext({ userId: "first", characterId: "first-character" });

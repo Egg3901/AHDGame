@@ -195,6 +195,21 @@ describe("analytics fan-out", () => {
     );
   });
 
+  it("drops a deferred survey dismissal when the account changes", async () => {
+    state.consent = "accepted";
+    await identifyPlayer();
+    const { setAnalyticsAccount } = await import("./accountContext");
+    const listener = state.posthog.on.mock.calls[0]?.[1] as (event: {
+      event: string;
+      properties: Record<string, unknown>;
+    }) => void;
+    listener({ event: "survey dismissed", properties: {} });
+    setAnalyticsAccount({ id: "another-account" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(state.posthog.capture).not.toHaveBeenCalled();
+    expect(state.amplitude.track).not.toHaveBeenCalled();
+  });
+
   it("still reaches PostHog when Amplitude has no key configured", async () => {
     // Amplitude is provisioned separately; a missing key must not suppress the
     // other destination, which is the whole point of the fan-out.
