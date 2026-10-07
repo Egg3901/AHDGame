@@ -31,3 +31,7 @@ The synthetic live vector contains 20% young, 25% mid, 25% mature, and 30% senio
 - Every v2 tally snapshot stores the electorate-weighted participation receipt used by the player-facing explanation and Campaign Room guidance.
 - Live age marginals fall back to the existing census data if the vector is absent or empty.
 - The turn path adds one projected, country-batched `regionDemographics` read only when Demographics v2 is active. It does not query per election or per region.
+
+## Existing-world migration preflight
+
+On 2026-10-07, the held migration was dry-run against `MONGODB_URI_LIVE` through the Railway direct-connection path. The current world was active, had a stable reset identity and valid turn, and every populated US, UK, and JP region had a complete, non-negative 101-element male and female age vector with a valid update time. The migration reported zero updated documents. Dry-run did not install a receipt, change a gate, or write a migration marker.
