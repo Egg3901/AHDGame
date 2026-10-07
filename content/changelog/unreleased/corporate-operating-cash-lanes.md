@@ -7,9 +7,9 @@ summary: >-
   past its time limit. Independent corporations now settle in a few lanes with
   the same receipts, the same amounts and the same order inside each
   corporation.
-tags: [stability, performance]
+tags: [stability, performance, economy]
 badges: [hotfix]
-areas: [backend, economy]
+areas: [backend, engine]
 ---
 
 ## What changed
@@ -20,7 +20,7 @@ areas: [backend, economy]
   any loss, then tax withholding, and a corporation listed twice settles its
   entries in input order.
 - Tax receipts into the same country's Treasury still land one at a time, so
-  every receipt is paid once and none is refused for contention.
+  these settlements do not compete for the same Treasury revision.
 - If any corporation fails, no new corporation starts, every corporation
   already in progress finishes, and the turn then reports the failure. Retries
   resume from the same durable receipts as before.
