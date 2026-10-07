@@ -1,5 +1,6 @@
 "use client";
 
+import { getAnalyticsAccount, isAnalyticsGenerationCurrent } from "./accountContext";
 import { getStoredConsent } from "@/components/CookieConsent";
 import { captureFirstMeaningfulAction, captureProductEvent } from "./capture";
 
@@ -974,9 +975,14 @@ async function trackActionResponse(
   route: PlayerActionRoute,
   response: Response,
   body: Record<string, unknown> | null,
-  context: PlayerActionContext
+  context: PlayerActionContext,
+  generation: number
 ): Promise<void> {
-  if (getStoredConsent() !== "accepted") return;
+  const current = () =>
+    isAnalyticsGenerationCurrent(generation) &&
+    context.userId === actionContext.userId &&
+    getStoredConsent() === "accepted";
+  if (!current()) return;
   const base = {
     action_domain: route.action_domain,
     action_type:
@@ -1001,6 +1007,7 @@ async function trackActionResponse(
     }
   }
 
+  if (!current()) return;
   if (!response.ok || resultBody?.success === false) {
     await captureProductEvent("player_action_rejected", {
       ...base,
@@ -1030,6 +1037,7 @@ async function trackActionResponse(
     ...base,
     ...(spend ?? {}),
   });
+  if (!current()) return;
   if (route.depth_family) {
     const marketSide = body?.type === "buy" || body?.type === "sell" ? body.type : undefined;
     await captureProductEvent(`${route.depth_family}_action_succeeded`, {
@@ -1044,6 +1052,7 @@ async function trackActionResponse(
         : {}),
     });
   }
+  if (!current()) return;
   if (context.characterId && isMeaningfulGameAction(route, base.action_type)) {
     await captureFirstMeaningfulAction(context.characterId, {
       action_domain: route.action_domain,
@@ -1051,6 +1060,7 @@ async function trackActionResponse(
     });
   }
 
+  if (!current()) return;
   const regionId = safeRegionId(resultBody) ?? safeRegionId(body);
   if (route.election) {
     await captureProductEvent("election_action_succeeded", {
@@ -1068,7 +1078,7 @@ async function trackActionResponse(
   }
   if (!route.campaign) return;
   const election = await campaignElectionContext(route.campaign.campaign_id, resultBody);
-  if (!election) return;
+  if (!election || !current()) return;
   await captureProductEvent("election_action_succeeded", {
     election_id: election.election_id,
     election_type: election.election_type,
@@ -1103,6 +1113,7 @@ export function installPlayerActionAnalytics(): () => void {
   const delegate = originalFetch.bind(window);
   const wrapped: typeof window.fetch = async (input, init) => {
     const currentContext = actionContext;
+    const { generation } = getAnalyticsAccount();
     const request = requestPath(input);
     const route = request
       ? classifyPlayerActionRoute(request.pathname, init?.method ?? request.method)
@@ -1121,7 +1132,7 @@ export function installPlayerActionAnalytics(): () => void {
       void (async () => {
         // Let body inspection share the request clone opened before fetch sends it.
         const body = await bodyPromise;
-        await trackActionResponse(route, observedResponse, body, currentContext);
+        await trackActionResponse(route, observedResponse, body, currentContext, generation);
       })().catch(() => {
         // Analytics must not affect the API response or the game action.
       });
