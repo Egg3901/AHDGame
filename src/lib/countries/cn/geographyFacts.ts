@@ -258,7 +258,9 @@ export const CN_INCOME_ANCHORS: NormalAnchor[] = [
   },
   {
     year: 1991,
-    value: 9000,
+    // Derived 1991 household median (seeds/reference/income1991, #3316); was
+    // 9,000 CNY, which did not share the 1991 GDP currency scale.
+    value: 3187,
   },
   {
     year: 2019,

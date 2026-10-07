@@ -153,8 +153,15 @@ export async function seedTRStateMetrics(
   const { trStateMetrics } = await import("@/lib/seeds/tr/trStateMetrics");
   const { getRegionMetricPresets, applyMetricPresetToMetrics } =
     await import("@/lib/seeds/metricPresets");
+  const { apply1991IncomeVintage } = await import("@/lib/seeds/reference/income1991");
   // The base is historical; authored 1953 and modern overlays select the era.
-  const bundle = trStateMetrics.map((metric) => {
+  // 1991 has no income overlay, so the 1979-lira base income is replaced with
+  // its 1991 old-lira vintage (#3371).
+  const base =
+    preset === "1991-default"
+      ? trStateMetrics.map((m) => apply1991IncomeVintage("TR", m))
+      : trStateMetrics;
+  const bundle = base.map((metric) => {
     const overlay = getRegionMetricPresets("TR", String(metric._id), preset);
     return overlay ? applyMetricPresetToMetrics(metric, overlay) : metric;
   });
@@ -187,12 +194,15 @@ export async function seedTRBaselines(
   const { applyEra1979BaselineAdjustments } = is1979
     ? await import("@/lib/seeds/reference/stateBaselines1979")
     : { applyEra1979BaselineAdjustments: <T>(x: T): T => x };
+  const { apply1991IncomeVintageBaseline } = await import("@/lib/seeds/reference/income1991");
   for (const raw of trStateBaselines) {
     const adjusted = is1953
       ? applyEra1953BaselineAdjustments(raw)
       : is1979
         ? applyEra1979BaselineAdjustments(raw)
-        : raw;
+        : preset === "1991-default"
+          ? apply1991IncomeVintageBaseline("TR", raw)
+          : raw;
     // Align decay targets with the same authored overlay used by initial metrics.
     const overlay = getRegionMetricPresets("TR", String(raw._id), preset);
     const baseline = overlay ? applyMetricPresetToBaseline(adjusted, overlay) : adjusted;

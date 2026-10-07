@@ -257,7 +257,9 @@ export const NG_INCOME_ANCHORS: NormalAnchor[] = [
   },
   {
     year: 1991,
-    value: 210000,
+    // Derived 1991 household median (seeds/reference/income1991, #3316); was
+    // 210,000 NGN, which did not share the 1991 GDP currency scale.
+    value: 15084,
   },
   {
     year: 2019,
