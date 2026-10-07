@@ -996,6 +996,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           growthCostAnchor: sectorAmountAnchor(sector.currentGrowthCost),
           profitAnchor: sectorAmountAnchor(profit),
           inputsAnchor,
+          freightCostAnchor: sectorAmountAnchor(sector.freightBillingCharge ?? 0),
+          freightIncomeAnchor: sectorAmountAnchor(sector.freightBillingCredit ?? 0),
           // Ticket 1122: the turn's own lines, normalized to ₳. Present on any
           // sector that has run a plants turn since the field shipped; the
           // builder falls back to reconstruction when it is null.

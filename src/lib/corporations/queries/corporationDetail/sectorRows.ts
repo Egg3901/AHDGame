@@ -179,6 +179,8 @@ export interface SectorFinancialTotals {
   totalSubsidyBenefit: number;
   totalRegulatoryBurden: number;
   totalLaborCosts: number;
+  totalFreightCosts?: number;
+  totalFreightIncome?: number;
 }
 
 export interface PhysicalRollups {
@@ -253,6 +255,8 @@ export function buildSectorDetails(ctx: SectorRowContext) {
   let totalSubsidyBenefit = 0;
   let totalRegulatoryBurden = 0;
   let totalLaborCosts = 0;
+  let totalFreightCosts = 0;
+  let totalFreightIncome = 0;
   const wageBillAnchorPerTurnBySectorId = new Map<string, number>();
 
   // Corp-level physical rollups (plants only). These are the physical P&L's
@@ -518,12 +522,20 @@ export function buildSectorDetails(ctx: SectorRowContext) {
     // profit includes. The inversion stays as the fallback for rows that
     // predate the field. See `plantsPnlBasis.ts`.
     const enginePnl = readPlantsPnl(sector);
+    // The corporation pays the full physical bill, not only the operating-margin
+    // subset. Compliance and stored growth have their own statement lines.
     const maintenance = enginePnl
-      ? sectorFieldToCorpCcy(enginePnl.operatingCost, sector)
+      ? sectorFieldToCorpCcy(enginePnl.totalCost - enginePnl.compliance, sector) -
+        sectorGrowthCostLocal
       : financialRevenue * (1 - effectiveProfitMargin / 100);
-    const profit = enginePnl
-      ? sectorFieldToCorpCcy(enginePnl.profit, sector)
-      : financialRevenue - maintenance - sectorGrowthCostLocal;
+    const freightCost = sectorFieldToCorpCcy(sector.freightBillingCharge ?? 0, sector);
+    const freightIncome = sectorFieldToCorpCcy(sector.freightBillingCredit ?? 0, sector);
+    const profit =
+      (enginePnl
+        ? sectorFieldToCorpCcy(enginePnl.profit, sector)
+        : financialRevenue - maintenance - sectorGrowthCostLocal) +
+      freightIncome -
+      freightCost;
     // Physical cost decomposition for the margin drilldown (ticket 1072: the
     // additive modifier list could not explain a physically-derived margin —
     // base + modifiers summed 40pts above the engine figure with no line
@@ -598,8 +610,13 @@ export function buildSectorDetails(ctx: SectorRowContext) {
     // buildNationalDominanceShareBySectorId) isn't available here without a
     // country-wide query. Displayed burden is a lower bound for a spread champion.
     const regulatoryBurdenRate = getDominanceRegulatoryBurden(sectorMarketSharePct);
-    const sectorRegulatoryBurden = financialRevenue * regulatoryBurdenRate;
-    totalRevenue += financialRevenue;
+    const sectorRegulatoryBurden = enginePnl
+      ? sectorFieldToCorpCcy(enginePnl.compliance, sector)
+      : financialRevenue * regulatoryBurdenRate;
+    // Freight settles alongside plantsPnl, so neither leg is in its totals.
+    totalRevenue += financialRevenue + freightIncome;
+    totalFreightCosts += freightCost;
+    totalFreightIncome += freightIncome;
     totalMaintenanceCosts += maintenance;
     if (labourWagesEnabled && sectorLaborCostLocal != null && sectorLaborCostLocal > 0) {
       totalLaborCosts += sectorLaborCostLocal;
@@ -789,6 +806,8 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       totalSubsidyBenefit,
       totalRegulatoryBurden,
       totalLaborCosts,
+      totalFreightCosts,
+      totalFreightIncome,
     },
     wageBillAnchorPerTurnBySectorId,
     physicalRollups: {

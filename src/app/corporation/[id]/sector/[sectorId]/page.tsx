@@ -985,6 +985,7 @@ export default function SectorDetailPage() {
             />
             {margins && (
               <MarginsPanel
+                pnl={plants?.pnl ?? null}
                 margins={margins}
                 inputLabels={commodities?.demands.map((d) => d.label) ?? []}
                 fillAdjustedMarginPct={plants?.truth?.fillAdjustedMarginPct ?? null}

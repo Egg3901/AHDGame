@@ -1106,9 +1106,10 @@ export function computeSectorMarginSection(args: {
   const maintenance = enginePnl
     ? enginePnl.operatingCost
     : economicRevenue * (1 - effectiveMargin / 100);
-  const profit = enginePnl
-    ? enginePnl.profit
-    : economicRevenue - maintenance - sector.currentGrowthCost;
+  const freightNet = (sector.freightBillingCredit ?? 0) - (sector.freightBillingCharge ?? 0);
+  const profit =
+    (enginePnl ? enginePnl.profit : economicRevenue - maintenance - sector.currentGrowthCost) +
+    freightNet;
 
   return {
     mods: effectiveMods,
@@ -1338,6 +1339,8 @@ export interface SectorPlantsSection {
     /** The same stack in percentage points of revenue, after the soft cap. */
     policyPp: number;
     otherOperatingAnchor: number;
+    freightCostAnchor?: number;
+    freightIncomeAnchor?: number;
     growthAndBuildAnchor: number;
     profitAnchor: number;
     /** Part of `otherOperatingAnchor` attributable to active crises. */
@@ -1478,6 +1481,8 @@ export function buildSectorPlantsSection(args: {
     profitAnchor: number;
     /** Physical input bill computed from the demand rows at market prices. */
     inputsAnchor: number;
+    freightCostAnchor?: number;
+    freightIncomeAnchor?: number;
     /**
      * Ticket 1122: the lines the turn ACTUALLY booked, in ₳. When present every
      * money figure below is read straight off them and nothing is
@@ -1844,13 +1849,17 @@ export function buildSectorPlantsSection(args: {
       engine.compliance -
       engine.inventoryCarry
     : 0;
-  const operatingCostAnchor = engine
-    ? engine.totalCost - engineGrowthAnchor
-    : nonNeg(money.maintenanceNetAnchor + money.labourAnchor);
+  const freightCostAnchor = money.freightCostAnchor ?? 0;
+  const freightIncomeAnchor = money.freightIncomeAnchor ?? 0;
+  const operatingCostAnchor =
+    (engine
+      ? engine.totalCost - engineGrowthAnchor
+      : nonNeg(money.maintenanceNetAnchor + money.labourAnchor)) + freightCostAnchor;
   const totalCostAnchor = engine
-    ? engine.totalCost
+    ? engine.totalCost + freightCostAnchor
     : operatingCostAnchor + nonNeg(money.growthCostAnchor);
-  const revenueAnchor = engine ? engine.revenue : money.realizedRevenueAnchor;
+  const revenueAnchor =
+    (engine ? engine.revenue : money.realizedRevenueAnchor) + freightIncomeAnchor;
   const receivedPerUnitAnchor =
     producedUnits != null && producedUnits > 0 ? revenueAnchor / producedUnits : null;
   const costPerUnitAnchor =
@@ -1964,6 +1973,8 @@ export function buildSectorPlantsSection(args: {
       policyAnchor,
       policyPp,
       otherOperatingAnchor,
+      freightCostAnchor,
+      freightIncomeAnchor,
       growthAndBuildAnchor: engine ? nonNeg(engineGrowthAnchor) : nonNeg(money.growthCostAnchor),
       profitAnchor: money.profitAnchor,
       financialEventsAnchor,
