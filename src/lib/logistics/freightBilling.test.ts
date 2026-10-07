@@ -36,6 +36,19 @@ describe("apportionFreightBilling — charges", () => {
     expect(r.unapportionedCharges).toBeCloseTo(697_860.4);
   });
 
+  it("puts sector inputs on the sourcing book's calibrated demand basis", () => {
+    const r = apportionFreightBilling({
+      freightChargesByDestState: charges({ WA: { iron: 698_000 } }),
+      haulRevenueByOriginState: new Map(),
+      demandUnitsByDestState: charges({ WA: { iron: 4_500 } }),
+      demandCalibrationByCommodity: demand({ iron: 0.45 }),
+      freightSupplyUnitsByOriginState: new Map(),
+      sectors: [sector({ stateId: "WA", demandUnitsByCommodity: demand({ iron: 2 }) })],
+    });
+    expect(r.chargeBySectorId.get("s1")).toBeCloseTo(139.6);
+    expect(r.unapportionedCharges).toBeCloseTo(697_860.4);
+  });
+
   it("does not shift missing, invalid or stale demand coverage onto corporate buyers", () => {
     for (const total of [undefined, 0, -1, NaN, Infinity]) {
       const r = apportionFreightBilling({

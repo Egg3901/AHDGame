@@ -68,6 +68,8 @@ export function apportionFreightBilling(inputs: {
   haulRevenueByOriginState: ReadonlyMap<string, number>;
   sectors: readonly FreightBillingSectorUnits[];
   demandUnitsByDestState: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  /** The sourcing pass's era calibration, applied to sector input demand too. */
+  demandCalibrationByCommodity?: ReadonlyMap<CommodityType, number>;
   freightSupplyUnitsByOriginState: ReadonlyMap<string, number>;
 }): FreightBillingApportionment {
   const {
@@ -75,6 +77,7 @@ export function apportionFreightBilling(inputs: {
     haulRevenueByOriginState,
     sectors,
     demandUnitsByDestState,
+    demandCalibrationByCommodity,
     freightSupplyUnitsByOriginState,
   } = inputs;
   const positiveFinite = (value: number | undefined): number =>
@@ -99,10 +102,12 @@ export function apportionFreightBilling(inputs: {
     const stateSectors = sectorsByState.get(stateId);
     for (const [commodity, charge] of byCommodity) {
       if (!(positiveFinite(charge) > 0)) continue;
+      const calibration = positiveFinite(demandCalibrationByCommodity?.get(commodity) ?? 1);
       let corporateDemand = 0;
       if (stateSectors) {
         for (const sector of stateSectors) {
-          corporateDemand += positiveFinite(sector.demandUnitsByCommodity.get(commodity));
+          corporateDemand +=
+            positiveFinite(sector.demandUnitsByCommodity.get(commodity)) * calibration;
         }
       }
       const stateDemand = positiveFinite(demandUnitsByDestState.get(stateId)?.get(commodity));
@@ -115,7 +120,7 @@ export function apportionFreightBilling(inputs: {
       const totalDemand = Math.max(stateDemand, corporateDemand);
       let apportioned = 0;
       for (const sector of stateSectors) {
-        const demand = positiveFinite(sector.demandUnitsByCommodity.get(commodity));
+        const demand = positiveFinite(sector.demandUnitsByCommodity.get(commodity)) * calibration;
         if (!(demand > 0)) continue;
         const share = (charge * demand) / totalDemand;
         chargeBySectorId.set(sector.sectorId, (chargeBySectorId.get(sector.sectorId) ?? 0) + share);

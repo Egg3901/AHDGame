@@ -239,21 +239,24 @@ describe("buildFreightBillingBySector — corp-phase glue", () => {
     expect(billing.unapportionedCharges).toBeCloseTo(495);
   });
 
-  it("uses the world's qualified input recipe when deriving the buyer share", () => {
+  it.each([
+    ["1991-default", 1991, 1],
+    ["1953-default", 1953, 0.45],
+  ] as const)("uses the %s input recipe and sourcing demand basis", (preset, year, calibration) => {
     const lookups = glueLookups({
       freightChargesByDestState: new Map([["US-NY", new Map([["iron", 500]])]]),
     });
-    lookups.preset = "1991-default";
+    lookups.preset = preset;
     const buyer = lookups.sectorsByCorp.get(CORP_ID.toString())![0];
     const units = computeSectorCommodityUnits(buyer, 1000, { preset: lookups.preset });
     lookups.freightDemandByDestState = new Map([
-      ["US-NY", new Map([["iron", units.demand.get("iron")! * 100]])],
+      ["US-NY", new Map([["iron", units.demand.get("iron")! * calibration * 100]])],
     ]);
     const billing = buildFreightBillingBySector({
       lookups,
       currentTurn: 1000,
       plantsEnabled: false,
-      currentYear: 1991,
+      currentYear: year,
       commandEconomyEnabled: false,
     });
     expect(billing.chargeBySectorId.get(BUYER_ID.toString())).toBeCloseTo(5);
