@@ -78,6 +78,7 @@ import { reconcileFederalBudgetInvariants } from "@/lib/budget/budgetInvariants"
 import { publishPlatformEvent } from "@/lib/platformEvents";
 import type { CompletedTurnPhaseObservation } from "@/simulation/engine/types";
 import { completedTurnStatus } from "@/simulation/engine/turnCompletion";
+import { startTurnMemorySampler, type TurnMemoryPeak } from "@/lib/turn/turnMemory";
 import { captureTurnPosthog } from "@/lib/analytics/turnPosthog";
 import { currentTurnBuild } from "@/lib/turn/turnBuild";
 
@@ -274,6 +275,9 @@ async function processTurnImpl(
   let preLockRecoveryTarget: number | null = null;
   /** Set when this turn is a resume; drives the phase skip set below. */
   let resumedFromCrash: CrashedTurnRecovery | null = null;
+  const stopMemorySampler = startTurnMemorySampler(() => currentPhaseRef.current);
+  let memoryPeak: TurnMemoryPeak | null = null;
+  const readMemoryPeak = () => (memoryPeak ??= stopMemorySampler());
 
   try {
     const db = await getDb();
@@ -628,7 +632,7 @@ async function processTurnImpl(
     healthSnapshotWritten = context.phaseResults.gameHealthSnapshot !== null;
     lastHealth = context.phaseResults.gameHealthSnapshot?.health ?? null;
 
-    const completion = completedTurnStatus(warnings);
+    const completion = completedTurnStatus(warnings, phaseStatuses);
     const compactPhaseTimings = Object.entries(phaseStatuses)
       .flatMap(([phase, status]) => {
         if (!status.startedAt || !status.completedAt) return [];
@@ -687,6 +691,10 @@ async function processTurnImpl(
       realTime: context.realNow,
       durationMs: Date.now() - startTime,
       success: completion.success,
+      outcome: completion.outcome,
+      failedPhases: completion.failedPhases,
+      abortedPhases: completion.abortedPhases,
+      memory: readMemoryPeak(),
       warnings,
       health: lastHealth,
       phaseStatuses,
@@ -901,6 +909,7 @@ async function processTurnImpl(
           realTime: failureTime,
           durationMs: Date.now() - startTime,
           success: false,
+          memory: readMemoryPeak(),
           warnings: [...warnings],
           health: lastHealth,
           phaseStatuses: finalizedPhaseStatuses,
@@ -943,6 +952,8 @@ async function processTurnImpl(
       warnings,
       health: lastHealth,
     };
+  } finally {
+    readMemoryPeak();
   }
 }
 
