@@ -672,7 +672,7 @@ describe("AI supplier accepts a player buy proposal", () => {
       embargoes: [
         {
           sourceCountry: "US",
-          targetCountry: "SU",
+          targetCountry: "RU",
           commodity: "all",
           direction: "export",
           mode: "block",
@@ -680,7 +680,7 @@ describe("AI supplier accepts a player buy proposal", () => {
       ],
       turn: TURN,
     });
-    const foreign = new Map([["player1", { countryId: "SU" }]]);
+    const foreign = new Map([["player1", { countryId: "RU" }]]);
     expect(run([proposal()], { externalBuyers: foreign, tradeBlocked: blocked })).toEqual([]);
     expect(run([proposal()], { tradeBlocked: blocked })).toContainEqual({
       action: "activate",
@@ -694,7 +694,7 @@ describe("buildTradeBlocked", () => {
     const f = buildTradeBlocked({
       embargoes: [
         {
-          sourceCountry: "GB",
+          sourceCountry: "UK",
           targetCountry: "US",
           commodity: "iron",
           direction: "import",
@@ -711,8 +711,8 @@ describe("buildTradeBlocked", () => {
       ],
       turn: TURN,
     });
-    expect(f("iron", "US", "GB")).toBe(true);
-    expect(f("steel", "US", "GB")).toBe(false);
+    expect(f("iron", "US", "UK")).toBe(true);
+    expect(f("steel", "US", "UK")).toBe(false);
     expect(f("iron", "US", "FR")).toBe(false);
     expect(f("iron", "US", "US")).toBe(false);
   });
