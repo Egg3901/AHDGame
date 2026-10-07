@@ -12,6 +12,10 @@
  *   5. A fixed scenario grid of medianIncome engine turns (productivity x
  *      unemployment), scored each year with the era band.
  *   6. Anchor regression for every other NG/CN/TR start year.
+ *   7. Sub-unit income precision (#3394): one year of small positive and
+ *      negative wage signals on each country's poorest region, run through
+ *      the actual medianIncome node and through the same node with the
+ *      legacy whole-unit baseline, plus currency-scale invariance.
  *
  * This is NOT a worldsim. Only the medianIncome node runs; GDP, prices,
  * migration, policy and every other system are held fixed. Use it as targeted
@@ -27,6 +31,7 @@ import {
 } from "@/lib/era/metricCatalog";
 import { evaluateRegistry } from "@/lib/metricEngine/evaluate";
 import { medianIncomeNode } from "@/lib/metricEngine/registry/economic";
+import type { RegistryNode } from "@/lib/metricEngine/types";
 import { scoreMetric } from "@/lib/utils/metricScoring";
 import { ngRegions1991 } from "@/lib/countries/ng/data/ngRegions1991";
 import { cnRegions1991 } from "@/lib/countries/cn/data/cnRegions1991";
@@ -97,6 +102,7 @@ const ASSUMPTIONS = [
   "A world that starts in 1991 scores income against the derived national median (start-year vintage). Other start years keep the interpolation series unchanged.",
   "The engine grid holds GDP fixed (income band index 1) and runs only the medianIncome node; no other system moves.",
   "No new monetary mechanic: no inflation pass-through, no FX or price-level change.",
+  "Precision runs start from a running world (persisted simBaseline equal to the value); the cold-start turn is excluded.",
 ];
 
 /** Standard normal CDF via Abramowitz and Stegun 7.1.26 erf. */
@@ -244,10 +250,11 @@ function regionalOpening(c: Income1991CountryId) {
     bandWidth: round(1.25 / 0.45, 2),
     insideBand: rows.filter((r) => r.score > 0 && r.score < 100).length,
     atEdge: rows.filter((r) => r.score <= 0 || r.score >= 100).length,
-    // medianIncome is stored in whole units, so a per-turn change under half a
-    // unit rounds away. Below this annual wage growth (either sign) the
-    // poorest region does not move at all.
-    poorestRegionFreezeBelowPctPerYear: round(
+    // Under the legacy whole-unit baseline a per-turn change under half a unit
+    // rounded away, so below this annual wage growth (either sign) the poorest
+    // region did not move at all. The 6dp baseline removes the freeze (#3394);
+    // see `precision`.
+    legacyPoorestRegionFreezeBelowPctPerYear: round(
       (0.5 / Math.min(...incomes)) * TURNS_PER_YEAR * 100,
       3
     ),
@@ -297,6 +304,84 @@ function engineGrid(c: Income1991CountryId) {
   return out;
 }
 
+/** The node as it stood before #3394: the baseline rounds to whole units too. */
+const LEGACY_MEDIAN_INCOME_NODE: RegistryNode = {
+  ...medianIncomeNode,
+  baselineDecimals: undefined,
+};
+
+/** One year from a running world (persisted simBaseline equal to the value). */
+function oneYear(node: RegistryNode, c: Income1991CountryId, start: number, annualPct: number) {
+  let value = start;
+  let simBaseline = start;
+  for (let turn = 1; turn <= TURNS_PER_YEAR; turn++) {
+    const res = evaluateRegistry([node], {
+      stateId: "S",
+      countryId: c,
+      prev: { "economic.medianIncome": value },
+      prevSimBaseline: { "economic.medianIncome": simBaseline },
+      providers: {},
+      spending: {},
+      policyValues: { "economic.medianIncome": value },
+      seedCurrent: {
+        "economic.productivityGrowth": annualPct,
+        "economic.unemploymentRate": 5,
+      },
+    })["economic.medianIncome"];
+    value = res.value;
+    simBaseline = res.simBaseline;
+  }
+  return { value, simBaseline };
+}
+
+const PRECISION_SIGNALS = [-1, -0.5, 0.5, 1];
+
+function precision(c: Income1991CountryId) {
+  const poorest = Math.min(...Object.values(INCOME_1991_REGIONAL[c]));
+  return {
+    poorestRegionIncome: poorest,
+    oneYear: PRECISION_SIGNALS.map((annualPct) => {
+      const exact = poorest * (1 + annualPct / 100 / TURNS_PER_YEAR) ** TURNS_PER_YEAR;
+      const legacy = oneYear(LEGACY_MEDIAN_INCOME_NODE, c, poorest, annualPct);
+      const actual = oneYear(medianIncomeNode, c, poorest, annualPct);
+      return {
+        annualPct,
+        exactValue: round(exact, 4),
+        legacyValue: legacy.value,
+        legacyRealizedPct: round((legacy.value / poorest - 1) * 100, 4),
+        actualValue: actual.value,
+        actualBaseline: actual.simBaseline,
+        actualRealizedPct: round((actual.simBaseline / poorest - 1) * 100, 4),
+        actualValueErrorUnits: round(actual.value - exact, 4),
+      };
+    }),
+  };
+}
+
+/** Same 1% signal on every scale the seeds span: realized growth should match. */
+function scaleInvariance() {
+  const scales = [100, 1_884, 15_084, 50_000, 25_145_041];
+  const rows = scales.map((start) => {
+    const legacy = oneYear(LEGACY_MEDIAN_INCOME_NODE, "CN", start, 1);
+    const actual = oneYear(medianIncomeNode, "CN", start, 1);
+    return {
+      start,
+      legacyRealizedPct: round((legacy.value / start - 1) * 100, 4),
+      actualBaselineRealizedPct: round((actual.simBaseline / start - 1) * 100, 6),
+      actualValueRealizedPct: round((actual.value / start - 1) * 100, 4),
+    };
+  });
+  const baseline = rows.map((r) => r.actualBaselineRealizedPct);
+  return {
+    annualPct: 1,
+    exactRealizedPct: round(((1 + 0.01 / TURNS_PER_YEAR) ** TURNS_PER_YEAR - 1) * 100, 6),
+    tolerance:
+      "baseline: 1e-5 percentage points (6dp storage); written value: half a currency unit (0.5 / value)",
+    actualBaselineSpreadPct: round(Math.max(...baseline) - Math.min(...baseline), 6),
+    rows,
+  };
+}
+
 function anchorRegression(c: Income1991CountryId) {
   return [1953, 1979, 1991, 1999, 2007, 2019, 2023].map((year) => ({
     startYear: year,
@@ -336,6 +421,7 @@ const countries = Object.fromEntries(
         regionalOpening: regionalOpening(c),
         engineGrid: engineGrid(c),
         anchorRegression: anchorRegression(c),
+        precision: precision(c),
       },
     ];
   })
@@ -353,6 +439,7 @@ console.log(
       sources: SOURCES,
       assumptions: ASSUMPTIONS,
       countries,
+      scaleInvariance: scaleInvariance(),
     },
     null,
     2

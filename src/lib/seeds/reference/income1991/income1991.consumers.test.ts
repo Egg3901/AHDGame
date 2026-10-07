@@ -155,9 +155,12 @@ describe("first medianIncome engine updates on a fresh 1991 world", { timeout: 6
           policyValues: { "economic.medianIncome": t1.value },
           seedCurrent,
         })["economic.medianIncome"];
-        // The node rounds its baseline to whole units: allow one unit or 1e-6.
-        const grown = t1.value * (1 + productivity / 100 / TURNS_PER_YEAR);
+        // Whole-unit value over a 6dp baseline (#3394): the baseline compounds
+        // exactly; the value lands within a unit (or 1e-6) of it after rounding.
+        const growth = 1 + productivity / 100 / TURNS_PER_YEAR;
+        const grown = t1.value * growth;
         expect(Math.abs(t2.value - grown)).toBeLessThanOrEqual(Math.max(1, grown * 1e-6));
+        expect(Math.abs(t2.simBaseline - t1.simBaseline * growth)).toBeLessThan(1e-5);
         expect(t2.value).toBeGreaterThanOrEqual(t1.value);
         after.set(id, t2.value);
       }

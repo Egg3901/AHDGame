@@ -5,6 +5,7 @@ summary: >-
   New 1991 worlds now open Nigeria, China and Turkey with household incomes in
   the same 1991 currency as their GDP. Nigeria and China no longer start far
   above their own economies, and Turkey no longer starts with 1979 lira.
+  Small yearly wage changes now move incomes in every currency.
 tags: [economy, balance, seeds]
 badges: [minor]
 areas: [backend]
@@ -22,4 +23,16 @@ areas: [backend]
   Worlds that start in any other year keep their income scoring as it was.
 - The income ceiling now fits Turkish lira incomes, so the first turns no
   longer cut 1991 Turkish incomes down to 10 million lira.
-- Existing worlds are unchanged. This applies to newly seeded 1991 worlds.
+- The seed changes above apply only to newly seeded 1991 worlds. Existing
+  worlds keep their seeds.
+
+## Income growth precision
+
+- Regional median income still shows in whole currency units, but its growth
+  path now keeps the fractions between turns. A slow wage trend used to vanish
+  each turn in currencies with small income numbers: a 1% yearly change on a
+  1,884 yuan income never moved it at all. It now adds up to the full 1% over
+  the year, the same as it does for incomes in the millions.
+- This applies to every world, including running ones, from the next turn. No
+  income jumps on the switch, and no money is created: an income with no wage
+  change stays exactly where it is.

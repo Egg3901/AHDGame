@@ -343,7 +343,12 @@ export const medianIncomeNode: RegistryNode = {
   inputs: ["economic.productivityGrowth", "economic.unemploymentRate"],
   bounds: [0, 1_000_000_000],
   inertia: 0,
+  // The value stays whole currency units; the growth baseline carries 6dp so a
+  // small step on a low-unit income (1%/yr on 1,884 CNY is 0.39 a turn)
+  // accumulates instead of rounding away (#3394). 1e9 x 1e6 stays inside
+  // double precision.
   decimals: 0,
+  baselineDecimals: 6,
   compute: (ctx) => {
     const id = "economic.medianIncome";
     const base = Number.isFinite(ctx.prevSimBaseline[id])

@@ -68,7 +68,8 @@
     "Regional shape comes from each country's authored base bundle and is kept by one population-weighted rescale.",
     "A world that starts in 1991 scores income against the derived national median (start-year vintage). Other start years keep the interpolation series unchanged.",
     "The engine grid holds GDP fixed (income band index 1) and runs only the medianIncome node; no other system moves.",
-    "No new monetary mechanic: no inflation pass-through, no FX or price-level change."
+    "No new monetary mechanic: no inflation pass-through, no FX or price-level change.",
+    "Precision runs start from a running world (persisted simBaseline equal to the value); the cold-start turn is excluded."
   ],
   "countries": {
     "NG": {
@@ -132,7 +133,7 @@
         "bandWidth": 2.78,
         "insideBand": 5,
         "atEdge": 1,
-        "poorestRegionFreezeBelowPctPerYear": 0.266,
+        "legacyPoorestRegionFreezeBelowPctPerYear": 0.266,
         "rows": [
           {
             "id": "NORTH_WEST",
@@ -178,28 +179,28 @@
             },
             {
               "year": 1,
-              "national": 15169,
-              "score": 69.45
+              "national": 15173,
+              "score": 69.49
             },
             {
               "year": 2,
-              "national": 15256,
-              "score": 70.17
+              "national": 15265,
+              "score": 70.25
             },
             {
               "year": 3,
-              "national": 15342,
-              "score": 70.89
+              "national": 15356,
+              "score": 71.01
             },
             {
               "year": 4,
-              "national": 15429,
-              "score": 71.61
+              "national": 15449,
+              "score": 71.77
             },
             {
               "year": 5,
-              "national": 15516,
-              "score": 72.33
+              "national": 15542,
+              "score": 72.54
             }
           ]
         },
@@ -250,28 +251,28 @@
             },
             {
               "year": 1,
-              "national": 14867,
-              "score": 66.95
+              "national": 14864,
+              "score": 66.93
             },
             {
               "year": 2,
-              "national": 14649,
-              "score": 65.14
+              "national": 14643,
+              "score": 65.09
             },
             {
               "year": 3,
-              "national": 14434,
-              "score": 63.37
+              "national": 14425,
+              "score": 63.29
             },
             {
               "year": 4,
-              "national": 14220,
-              "score": 61.59
+              "national": 14210,
+              "score": 61.51
             },
             {
               "year": 5,
-              "national": 14005,
-              "score": 59.81
+              "national": 13999,
+              "score": 59.76
             }
           ]
         },
@@ -286,136 +287,136 @@
             },
             {
               "year": 1,
-              "national": 15351,
-              "score": 70.96
+              "national": 15352,
+              "score": 70.97
             },
             {
               "year": 2,
+              "national": 15631,
+              "score": 73.28
+            },
+            {
+              "year": 3,
+              "national": 15915,
+              "score": 75.64
+            },
+            {
+              "year": 4,
+              "national": 16204,
+              "score": 78.03
+            },
+            {
+              "year": 5,
+              "national": 16499,
+              "score": 80.47
+            }
+          ]
+        },
+        {
+          "productivity": 1.2,
+          "unemployment": 5,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 15263,
+              "score": 70.23
+            },
+            {
+              "year": 2,
+              "national": 15447,
+              "score": 71.76
+            },
+            {
+              "year": 3,
+              "national": 15633,
+              "score": 73.3
+            },
+            {
+              "year": 4,
+              "national": 15822,
+              "score": 74.87
+            },
+            {
+              "year": 5,
+              "national": 16013,
+              "score": 76.45
+            }
+          ]
+        },
+        {
+          "productivity": 1.2,
+          "unemployment": 10,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 15040,
+              "score": 68.39
+            },
+            {
+              "year": 2,
+              "national": 14995,
+              "score": 68.01
+            },
+            {
+              "year": 3,
+              "national": 14950,
+              "score": 67.64
+            },
+            {
+              "year": 4,
+              "national": 14905,
+              "score": 67.27
+            },
+            {
+              "year": 5,
+              "national": 14861,
+              "score": 66.9
+            }
+          ]
+        },
+        {
+          "productivity": 3,
+          "unemployment": 3,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 1,
               "national": 15625,
               "score": 73.24
             },
             {
-              "year": 3,
-              "national": 15909,
-              "score": 75.58
-            },
-            {
-              "year": 4,
-              "national": 16194,
-              "score": 77.95
-            },
-            {
-              "year": 5,
-              "national": 16479,
-              "score": 80.31
-            }
-          ]
-        },
-        {
-          "productivity": 1.2,
-          "unemployment": 5,
-          "yearly": [
-            {
-              "year": 0,
-              "national": 15084,
-              "score": 68.75
-            },
-            {
-              "year": 1,
-              "national": 15266,
-              "score": 70.26
-            },
-            {
               "year": 2,
-              "national": 15452,
-              "score": 71.8
-            },
-            {
-              "year": 3,
-              "national": 15639,
-              "score": 73.35
-            },
-            {
-              "year": 4,
-              "national": 15825,
-              "score": 74.89
-            },
-            {
-              "year": 5,
-              "national": 16011,
-              "score": 76.43
-            }
-          ]
-        },
-        {
-          "productivity": 1.2,
-          "unemployment": 10,
-          "yearly": [
-            {
-              "year": 0,
-              "national": 15084,
-              "score": 68.75
-            },
-            {
-              "year": 1,
-              "national": 15037,
-              "score": 68.36
-            },
-            {
-              "year": 2,
-              "national": 14989,
-              "score": 67.96
-            },
-            {
-              "year": 3,
-              "national": 14941,
-              "score": 67.57
-            },
-            {
-              "year": 4,
-              "national": 14893,
-              "score": 67.17
-            },
-            {
-              "year": 5,
-              "national": 14845,
-              "score": 66.77
-            }
-          ]
-        },
-        {
-          "productivity": 3,
-          "unemployment": 3,
-          "yearly": [
-            {
-              "year": 0,
-              "national": 15084,
-              "score": 68.75
-            },
-            {
-              "year": 1,
-              "national": 15625,
-              "score": 73.23
-            },
-            {
-              "year": 2,
-              "national": 16194,
-              "score": 77.95
+              "national": 16199,
+              "score": 77.99
             },
             {
               "year": 3,
               "national": 16792,
-              "score": 82.9
+              "score": 82.91
             },
             {
               "year": 4,
-              "national": 17403,
-              "score": 87.97
+              "national": 17408,
+              "score": 88.01
             },
             {
               "year": 5,
-              "national": 18044,
-              "score": 93.28
+              "national": 18046,
+              "score": 93.3
             }
           ]
         },
@@ -430,28 +431,28 @@
             },
             {
               "year": 1,
-              "national": 15535,
-              "score": 72.49
+              "national": 15534,
+              "score": 72.48
             },
             {
               "year": 2,
-              "national": 16013,
-              "score": 76.45
+              "national": 16007,
+              "score": 76.4
             },
             {
               "year": 3,
-              "national": 16493,
-              "score": 80.43
+              "national": 16495,
+              "score": 80.44
             },
             {
               "year": 4,
-              "national": 16995,
-              "score": 84.59
+              "national": 16997,
+              "score": 84.61
             },
             {
               "year": 5,
-              "national": 17513,
-              "score": 88.88
+              "national": 17515,
+              "score": 88.9
             }
           ]
         },
@@ -466,28 +467,28 @@
             },
             {
               "year": 1,
-              "national": 15301,
-              "score": 70.55
+              "national": 15307,
+              "score": 70.6
             },
             {
               "year": 2,
-              "national": 15523,
-              "score": 72.39
+              "national": 15539,
+              "score": 72.52
             },
             {
               "year": 3,
-              "national": 15749,
-              "score": 74.26
+              "national": 15774,
+              "score": 74.47
             },
             {
               "year": 4,
-              "national": 15992,
-              "score": 76.28
+              "national": 16012,
+              "score": 76.44
             },
             {
               "year": 5,
-              "national": 16242,
-              "score": 78.34
+              "national": 16254,
+              "score": 78.45
             }
           ]
         }
@@ -535,7 +536,52 @@
           "startAnchor": 1100000,
           "changed": false
         }
-      ]
+      ],
+      "precision": {
+        "poorestRegionIncome": 9014,
+        "oneYear": [
+          {
+            "annualPct": -1,
+            "exactValue": 8924.2999,
+            "legacyValue": 8918,
+            "legacyRealizedPct": -1.065,
+            "actualValue": 8924,
+            "actualBaseline": 8924.299903,
+            "actualRealizedPct": -0.9951,
+            "actualValueErrorUnits": -0.2999
+          },
+          {
+            "annualPct": -0.5,
+            "exactValue": 8969.0402,
+            "legacyValue": 8966,
+            "legacyRealizedPct": -0.5325,
+            "actualValue": 8969,
+            "actualBaseline": 8969.040149,
+            "actualRealizedPct": -0.4988,
+            "actualValueErrorUnits": -0.0402
+          },
+          {
+            "annualPct": 0.5,
+            "exactValue": 9059.1805,
+            "legacyValue": 9062,
+            "legacyRealizedPct": 0.5325,
+            "actualValue": 9059,
+            "actualBaseline": 9059.180504,
+            "actualRealizedPct": 0.5012,
+            "actualValueErrorUnits": -0.1805
+          },
+          {
+            "annualPct": 1,
+            "exactValue": 9104.5827,
+            "legacyValue": 9110,
+            "legacyRealizedPct": 1.065,
+            "actualValue": 9105,
+            "actualBaseline": 9104.582726,
+            "actualRealizedPct": 1.0049,
+            "actualValueErrorUnits": 0.4173
+          }
+        ]
+      }
     },
     "CN": {
       "crossChecks": {
@@ -603,7 +649,7 @@
         "bandWidth": 2.78,
         "insideBand": 5,
         "atEdge": 2,
-        "poorestRegionFreezeBelowPctPerYear": 1.274,
+        "legacyPoorestRegionFreezeBelowPctPerYear": 1.274,
         "rows": [
           {
             "id": "DB",
@@ -655,27 +701,27 @@
             {
               "year": 1,
               "national": 3206,
-              "score": 69.48
+              "score": 69.5
             },
             {
               "year": 2,
-              "national": 3224,
-              "score": 70.22
+              "national": 3225,
+              "score": 70.25
             },
             {
               "year": 3,
-              "national": 3243,
-              "score": 70.96
+              "national": 3245,
+              "score": 71.02
             },
             {
               "year": 4,
-              "national": 3262,
-              "score": 71.69
+              "national": 3264,
+              "score": 71.78
             },
             {
               "year": 5,
-              "national": 3281,
-              "score": 72.43
+              "national": 3284,
+              "score": 72.56
             }
           ]
         },
@@ -726,28 +772,28 @@
             },
             {
               "year": 1,
-              "national": 3140,
-              "score": 66.92
+              "national": 3141,
+              "score": 66.94
             },
             {
               "year": 2,
-              "national": 3092,
-              "score": 65.04
+              "national": 3094,
+              "score": 65.1
             },
             {
               "year": 3,
-              "national": 3044,
-              "score": 63.16
+              "national": 3048,
+              "score": 63.3
             },
             {
               "year": 4,
-              "national": 2996,
-              "score": 61.27
+              "national": 3003,
+              "score": 61.52
             },
             {
               "year": 5,
-              "national": 2948,
-              "score": 59.39
+              "national": 2958,
+              "score": 59.77
             }
           ]
         },
@@ -762,28 +808,28 @@
             },
             {
               "year": 1,
-              "national": 3253,
-              "score": 71.33
+              "national": 3244,
+              "score": 70.99
             },
             {
               "year": 2,
-              "national": 3319,
-              "score": 73.95
+              "national": 3303,
+              "score": 73.29
             },
             {
               "year": 3,
-              "national": 3386,
-              "score": 76.56
+              "national": 3363,
+              "score": 75.64
             },
             {
               "year": 4,
-              "national": 3453,
-              "score": 79.18
+              "national": 3424,
+              "score": 78.04
             },
             {
               "year": 5,
-              "national": 3520,
-              "score": 81.8
+              "national": 3486,
+              "score": 80.48
             }
           ]
         },
@@ -798,28 +844,28 @@
             },
             {
               "year": 1,
-              "national": 3231,
-              "score": 70.48
+              "national": 3225,
+              "score": 70.23
             },
             {
               "year": 2,
-              "national": 3276,
-              "score": 72.23
+              "national": 3264,
+              "score": 71.76
             },
             {
               "year": 3,
-              "national": 3320,
-              "score": 73.98
+              "national": 3303,
+              "score": 73.31
             },
             {
               "year": 4,
-              "national": 3365,
-              "score": 75.73
+              "national": 3343,
+              "score": 74.88
             },
             {
               "year": 5,
-              "national": 3410,
-              "score": 77.48
+              "national": 3383,
+              "score": 76.46
             }
           ]
         },
@@ -834,28 +880,28 @@
             },
             {
               "year": 1,
-              "national": 3187,
-              "score": 68.76
+              "national": 3178,
+              "score": 68.4
             },
             {
               "year": 2,
-              "national": 3187,
-              "score": 68.76
+              "national": 3168,
+              "score": 68.01
             },
             {
               "year": 3,
-              "national": 3187,
-              "score": 68.76
+              "national": 3159,
+              "score": 67.64
             },
             {
               "year": 4,
-              "national": 3187,
-              "score": 68.76
+              "national": 3149,
+              "score": 67.27
             },
             {
               "year": 5,
-              "national": 3187,
-              "score": 68.76
+              "national": 3140,
+              "score": 66.9
             }
           ]
         },
@@ -875,23 +921,23 @@
             },
             {
               "year": 2,
-              "national": 3430,
-              "score": 78.29
+              "national": 3423,
+              "score": 78
             },
             {
               "year": 3,
-              "national": 3563,
-              "score": 83.5
+              "national": 3548,
+              "score": 82.93
             },
             {
               "year": 4,
-              "national": 3698,
-              "score": 88.78
+              "national": 3678,
+              "score": 88.02
             },
             {
               "year": 5,
-              "national": 3837,
-              "score": 94.24
+              "national": 3813,
+              "score": 93.31
             }
           ]
         },
@@ -906,28 +952,28 @@
             },
             {
               "year": 1,
-              "national": 3285,
-              "score": 72.59
+              "national": 3282,
+              "score": 72.49
             },
             {
               "year": 2,
-              "national": 3384,
-              "score": 76.49
+              "national": 3382,
+              "score": 76.41
             },
             {
               "year": 3,
-              "national": 3484,
-              "score": 80.4
+              "national": 3485,
+              "score": 80.45
             },
             {
               "year": 4,
-              "national": 3584,
-              "score": 84.3
+              "national": 3591,
+              "score": 84.61
             },
             {
               "year": 5,
-              "national": 3686,
-              "score": 88.31
+              "national": 3701,
+              "score": 88.91
             }
           ]
         },
@@ -947,23 +993,23 @@
             },
             {
               "year": 2,
-              "national": 3282,
-              "score": 72.49
+              "national": 3283,
+              "score": 72.53
             },
             {
               "year": 3,
-              "national": 3330,
-              "score": 74.37
+              "national": 3333,
+              "score": 74.48
             },
             {
               "year": 4,
-              "national": 3378,
-              "score": 76.26
+              "national": 3383,
+              "score": 76.45
             },
             {
               "year": 5,
-              "national": 3426,
-              "score": 78.14
+              "national": 3434,
+              "score": 78.45
             }
           ]
         }
@@ -1011,7 +1057,52 @@
           "startAnchor": 90000,
           "changed": false
         }
-      ]
+      ],
+      "precision": {
+        "poorestRegionIncome": 1884,
+        "oneYear": [
+          {
+            "annualPct": -1,
+            "exactValue": 1865.2519,
+            "legacyValue": 1884,
+            "legacyRealizedPct": 0,
+            "actualValue": 1865,
+            "actualBaseline": 1865.251945,
+            "actualRealizedPct": -0.9951,
+            "actualValueErrorUnits": -0.2519
+          },
+          {
+            "annualPct": -0.5,
+            "exactValue": 1874.603,
+            "legacyValue": 1884,
+            "legacyRealizedPct": 0,
+            "actualValue": 1875,
+            "actualBaseline": 1874.603021,
+            "actualRealizedPct": -0.4988,
+            "actualValueErrorUnits": 0.397
+          },
+          {
+            "annualPct": 0.5,
+            "exactValue": 1893.4431,
+            "legacyValue": 1884,
+            "legacyRealizedPct": 0,
+            "actualValue": 1893,
+            "actualBaseline": 1893.443095,
+            "actualRealizedPct": 0.5012,
+            "actualValueErrorUnits": -0.4431
+          },
+          {
+            "annualPct": 1,
+            "exactValue": 1902.9325,
+            "legacyValue": 1884,
+            "legacyRealizedPct": 0,
+            "actualValue": 1903,
+            "actualBaseline": 1902.932533,
+            "actualRealizedPct": 1.0049,
+            "actualValueErrorUnits": 0.0675
+          }
+        ]
+      }
     },
     "TR": {
       "crossChecks": {
@@ -1079,7 +1170,7 @@
         "bandWidth": 2.78,
         "insideBand": 3,
         "atEdge": 5,
-        "poorestRegionFreezeBelowPctPerYear": 0,
+        "legacyPoorestRegionFreezeBelowPctPerYear": 0,
         "rows": [
           {
             "id": "TR_IST",
@@ -1150,7 +1241,7 @@
             },
             {
               "year": 4,
-              "national": 25752641,
+              "national": 25752640,
               "score": 71.77
             },
             {
@@ -1212,22 +1303,22 @@
             },
             {
               "year": 2,
-              "national": 24409637,
+              "national": 24409636,
               "score": 65.09
             },
             {
               "year": 3,
-              "national": 24046285,
+              "national": 24046284,
               "score": 63.29
             },
             {
               "year": 4,
-              "national": 23688344,
+              "national": 23688343,
               "score": 61.51
             },
             {
               "year": 5,
-              "national": 23335733,
+              "national": 23335732,
               "score": 59.76
             }
           ]
@@ -1248,7 +1339,7 @@
             },
             {
               "year": 2,
-              "national": 26057150,
+              "national": 26057148,
               "score": 73.28
             },
             {
@@ -1258,12 +1349,12 @@
             },
             {
               "year": 4,
-              "national": 27012460,
+              "national": 27012459,
               "score": 78.03
             },
             {
               "year": 5,
-              "national": 27503167,
+              "national": 27503164,
               "score": 80.47
             }
           ]
@@ -1279,12 +1370,12 @@
             },
             {
               "year": 1,
-              "national": 25442274,
+              "national": 25442275,
               "score": 70.23
             },
             {
               "year": 2,
-              "national": 25749458,
+              "national": 25749459,
               "score": 71.75
             },
             {
@@ -1294,12 +1385,12 @@
             },
             {
               "year": 4,
-              "national": 26374994,
+              "national": 26374995,
               "score": 74.86
             },
             {
               "year": 5,
-              "national": 26693436,
+              "national": 26693437,
               "score": 76.45
             }
           ]
@@ -1325,7 +1416,7 @@
             },
             {
               "year": 3,
-              "national": 24921315,
+              "national": 24921316,
               "score": 67.64
             },
             {
@@ -1351,7 +1442,7 @@
             },
             {
               "year": 1,
-              "national": 26047542,
+              "national": 26047543,
               "score": 73.24
             },
             {
@@ -1366,12 +1457,12 @@
             },
             {
               "year": 4,
-              "national": 29019181,
+              "national": 29019182,
               "score": 88.01
             },
             {
               "year": 5,
-              "national": 30083188,
+              "national": 30083190,
               "score": 93.3
             }
           ]
@@ -1392,22 +1483,22 @@
             },
             {
               "year": 2,
-              "national": 26683708,
+              "national": 26683707,
               "score": 76.4
             },
             {
               "year": 3,
-              "national": 27496569,
+              "national": 27496568,
               "score": 80.44
             },
             {
               "year": 4,
-              "national": 28334177,
+              "national": 28334176,
               "score": 84.6
             },
             {
               "year": 5,
-              "national": 29197286,
+              "national": 29197285,
               "score": 88.89
             }
           ]
@@ -1428,22 +1519,22 @@
             },
             {
               "year": 2,
-              "national": 25902843,
+              "national": 25902842,
               "score": 72.52
             },
             {
               "year": 3,
-              "national": 26294369,
+              "national": 26294371,
               "score": 74.46
             },
             {
               "year": 4,
-              "national": 26691814,
+              "national": 26691816,
               "score": 76.44
             },
             {
               "year": 5,
-              "national": 27095264,
+              "national": 27095266,
               "score": 78.44
             }
           ]
@@ -1492,7 +1583,90 @@
           "startAnchor": 1900,
           "changed": false
         }
-      ]
+      ],
+      "precision": {
+        "poorestRegionIncome": 9892052,
+        "oneYear": [
+          {
+            "annualPct": -1,
+            "exactValue": 9793614.2349,
+            "legacyValue": 9793614,
+            "legacyRealizedPct": -0.9951,
+            "actualValue": 9793614,
+            "actualBaseline": 9793614.234935,
+            "actualRealizedPct": -0.9951,
+            "actualValueErrorUnits": -0.2349
+          },
+          {
+            "annualPct": -0.5,
+            "exactValue": 9842712.6214,
+            "legacyValue": 9842714,
+            "legacyRealizedPct": -0.4988,
+            "actualValue": 9842713,
+            "actualBaseline": 9842712.62144,
+            "actualRealizedPct": -0.4988,
+            "actualValueErrorUnits": 0.3786
+          },
+          {
+            "annualPct": 0.5,
+            "exactValue": 9941633.5282,
+            "legacyValue": 9941633,
+            "legacyRealizedPct": 0.5012,
+            "actualValue": 9941634,
+            "actualBaseline": 9941633.528202,
+            "actualRealizedPct": 0.5012,
+            "actualValueErrorUnits": 0.4718
+          },
+          {
+            "annualPct": 1,
+            "exactValue": 9991458.3691,
+            "legacyValue": 9991458,
+            "legacyRealizedPct": 1.0049,
+            "actualValue": 9991458,
+            "actualBaseline": 9991458.369076,
+            "actualRealizedPct": 1.0049,
+            "actualValueErrorUnits": -0.3691
+          }
+        ]
+      }
     }
+  },
+  "scaleInvariance": {
+    "annualPct": 1,
+    "exactRealizedPct": 1.004912,
+    "tolerance": "baseline: 1e-5 percentage points (6dp storage); written value: half a currency unit (0.5 / value)",
+    "actualBaselineSpreadPct": 0.000001,
+    "rows": [
+      {
+        "start": 100,
+        "legacyRealizedPct": 0,
+        "actualBaselineRealizedPct": 1.004911,
+        "actualValueRealizedPct": 1
+      },
+      {
+        "start": 1884,
+        "legacyRealizedPct": 0,
+        "actualBaselineRealizedPct": 1.004912,
+        "actualValueRealizedPct": 1.0085
+      },
+      {
+        "start": 15084,
+        "legacyRealizedPct": 0.9547,
+        "actualBaselineRealizedPct": 1.004911,
+        "actualValueRealizedPct": 1.0077
+      },
+      {
+        "start": 50000,
+        "legacyRealizedPct": 0.976,
+        "actualBaselineRealizedPct": 1.004912,
+        "actualValueRealizedPct": 1.004
+      },
+      {
+        "start": 25145041,
+        "legacyRealizedPct": 1.0049,
+        "actualBaselineRealizedPct": 1.004912,
+        "actualValueRealizedPct": 1.0049
+      }
+    ]
   }
 }
