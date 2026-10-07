@@ -33,6 +33,8 @@ const proposal: ProposalView = {
 
 function assertWarning() {
   const note = screen.getByRole("note");
+  expect(note.textContent).toContain("same region or in neighboring regions");
+  expect(note.textContent).toContain("again before the merger takes effect");
   expect(note.textContent).toContain("permanently deleted");
   expect(note.textContent).toContain("keeps ALL of its existing NPPs");
   expect(note.textContent).toContain("5 NPPs per active player, up to 25");

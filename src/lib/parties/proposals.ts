@@ -13,6 +13,7 @@ import type {
   PoliticalParty,
 } from "@/lib/db/types";
 import { MAX_NATIONAL_CAMPAIGNERS } from "./access";
+import { assertMergeEligibility, MergeEligibilityError } from "./mergeEligibility";
 import type { StatePartyOrg } from "@/lib/db/types/statePartyOrg";
 import type { StateRegistrationPool } from "@/lib/db/types/stateRegistrationPool";
 import type { ElectedOfficial } from "@/lib/db/types/officials";
@@ -575,7 +576,9 @@ export async function processMergeProposal(
   ]);
   if (!proposingParty) throw new Error("Proposing party not found");
   if (!targetParty) throw new Error("Target party not found");
-  if (targetParty.isDefunct) throw new Error("Target party is defunct");
+
+  // Check before moving anyone: incoming members must not validate their own merger.
+  await assertMergeEligibility(db, proposingParty, targetParty);
 
   const proposingStrId = String(proposingParty.sequentialId);
   const targetStrId = String(targetParty.sequentialId);
@@ -1104,6 +1107,11 @@ export async function attemptResolution(
     }
     await markResolved(db, proposal._id, outcome, currentTurn);
   } catch (error) {
+    if (error instanceof MergeEligibilityError) {
+      // Geography can change during voting. Reject cleanly rather than leaving
+      // a claimed, permanently open proposal requiring an operator to repair it.
+      await markResolved(db, proposal._id, "rejected", currentTurn);
+    }
     await coll
       .updateOne(
         { _id: proposal._id },
@@ -1115,6 +1123,7 @@ export async function attemptResolution(
         }
       )
       .catch(() => {});
+    if (error instanceof MergeEligibilityError) return;
     throw error;
   }
 }

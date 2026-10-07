@@ -23,9 +23,16 @@ import { POSITION_SHIFT_COOLDOWN_TURNS, PROPOSAL_COOLDOWN_TURNS } from "./propos
 import type { CommitteeProposal } from "@/lib/db/types/committeeProposal";
 import * as gameTimeModule from "@/lib/time/gameTime";
 import { getPartyNppCapacity } from "@/lib/npp/partyCapacity";
+import { assertMergeEligibility } from "./mergeEligibility";
+
+vi.mock("./mergeEligibility", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./mergeEligibility")>()),
+  assertMergeEligibility: vi.fn(),
+}));
 
 vi.mock("@/lib/npp/partyCapacity", () => ({ getPartyNppCapacity: vi.fn() }));
 beforeEach(() => {
+  vi.mocked(assertMergeEligibility).mockResolvedValue(undefined);
   vi.mocked(getPartyNppCapacity).mockResolvedValue({ activeMemberCount: 5, maxNpps: 25 });
 });
 

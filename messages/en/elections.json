@@ -1,6 +1,7 @@
 {
   "elections": {
     "mergerNppWarning": {
+      "adjacency": "Both parties must have a member, elected official, or active NPP in the same region or in neighboring regions. This is checked when proposing and again before the merger takes effect. If they no longer touch, the proposal is rejected.",
       "title": "Merger warning: excess incoming NPPs are permanently deleted",
       "priority": "The target party survives and keeps ALL of its existing NPPs, even if already above either limit. Only NPPs from the absorbed party can be deleted.",
       "regional": "Incoming active NPPs must fit the remaining slots in their home region: 2 below 30% Org, 3 from 30% to below 40%, 4 from 40% to below 50%, and 5 at 50% or more. This uses the surviving party's Org after adding half the absorbed party's Org, rounded down.",
