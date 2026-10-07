@@ -227,6 +227,8 @@ export const GAME_STATE_RESET_PRESERVED_FIELD_REASONS: Readonly<Record<string, s
       "Turn-runner recovery evidence owned by processTurn and its shutdown recovery.",
     processingPhaseStatuses:
       "Turn-runner recovery evidence owned by processTurn and its shutdown recovery.",
+    processingPhaseResults:
+      "Turn-runner recovery evidence owned by processTurn and its shutdown recovery.",
     ...Object.fromEntries(
       GAME_STATE_OPERATOR_FLAG_AUDIT_FIELDS.map((field) => [
         field,

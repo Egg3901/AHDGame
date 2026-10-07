@@ -9,6 +9,7 @@ import {
   SPRAWL_PENALTY_PER_PAIR,
   LOGISTICS_MAX_SPRAWL_EFFECT,
   getSprawlModifier,
+  isSprawlExemptSectorType,
 } from "@/lib/constants/corporations";
 import {
   MONEY_PERIODS,
@@ -197,7 +198,11 @@ export default function SectorsTab({
   );
   const effectivePenaltyPerPair =
     SPRAWL_PENALTY_PER_PAIR * (hasSecondaryType ? 2 : 1) * Math.max(0.5, 1 - 0.5 * lsFraction);
-  const currentSprawlPenalty = getSprawlModifier(totalSectors, logisticsStrength, hasSecondaryType);
+  // Logistics sectors never pay sprawl, so an all-logistics corp carries none.
+  const sprawlExposed = sectors.some((sector) => !isSprawlExemptSectorType(sector.sectorType));
+  const currentSprawlPenalty = sprawlExposed
+    ? getSprawlModifier(totalSectors, logisticsStrength, hasSecondaryType)
+    : 0;
 
   // Stored money figures are daily (24-turn) rates; moneyTimescale owns the
   // conversion so every surface shows the same number in the same unit.
@@ -431,13 +436,15 @@ export default function SectorsTab({
             <span className="font-medium text-foreground">Sprawl. </span>
             {currentSprawlPenalty < 0 ? (
               <span className="font-medium text-error">
-                {currentSprawlPenalty.toFixed(1)}% on every sector margin now.{" "}
+                {currentSprawlPenalty.toFixed(1)}% on every non-logistics sector margin now.{" "}
               </span>
+            ) : !sprawlExposed ? (
+              <span className="text-success">None: logistics sectors are exempt. </span>
             ) : totalSectors >= SPRAWL_SECTOR_THRESHOLD ? (
               <span className="text-success">Offset by Logistics &amp; Operations. </span>
             ) : null}
             The penalty begins at sector {SPRAWL_SECTOR_THRESHOLD + 1}. Every 2 sectors over the
-            threshold reduce all sector margins by{" "}
+            threshold reduce every non-logistics sector margin by{" "}
             {Math.abs(SPRAWL_PENALTY_PER_PAIR * (hasSecondaryType ? 2 : 1)).toFixed(1)}%
             {hasSecondaryType ? " (doubled because you have a secondary type)" : ""}. Logistics
             &amp; Operations strength raises the threshold (now{" "}

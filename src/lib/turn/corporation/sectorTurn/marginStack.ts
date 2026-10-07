@@ -20,6 +20,7 @@ import {
   getStateSectorSpecializationMarginBonus,
   getSectorTypeMatchModifier,
   getSprawlModifier,
+  isSprawlExemptSectorType,
   softCapEffectiveMargin,
   TYPE_SWITCH_MARGIN_PENALTY,
   TYPE_SWITCH_PENALTY_TURNS,
@@ -323,10 +324,12 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
   // Logistical sprawl: -0.5% per 2 sectors over 15 for a single-type corp
   // (-1.0% per pair if dual-type). Logistics spending raises the threshold
   // (15 at LS 0, 30 at LS 200) and halves the rate at LS 200. SOEs are exempt
-  // - they accumulate sectors by nationalization.
-  const sprawlMod = isStateOwned(corp)
-    ? 0
-    : getSprawlModifier(corpSectorCount, corp.logisticsStrength ?? 0, !!corp.secondaryType);
+  // - they accumulate sectors by nationalization. Logistics sectors are exempt
+  // on their own margin but still count toward corpSectorCount.
+  const sprawlMod =
+    isStateOwned(corp) || isSprawlExemptSectorType(operatingSectorType)
+      ? 0
+      : getSprawlModifier(corpSectorCount, corp.logisticsStrength ?? 0, !!corp.secondaryType);
   // National-level macroeconomic modifiers (inflation, debt-to-GDP, deficit)
   const inflationMod = lookups.macroInflationByCountry.get(sectorCountryId) ?? 0;
   const debtToGdpMod = lookups.macroDebtToGdpByCountry.get(sectorCountryId) ?? 0;

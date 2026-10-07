@@ -13,6 +13,14 @@ vi.mock("@/lib/budget/publicEnterpriseRevenue", () => ({
 }));
 vi.mock("./treasury", () => ({
   remitToTreasury: vi.fn(async (_db: unknown, input: { amountLocal: number }) => input.amountLocal),
+  loadSoeRemittanceReceipts: vi.fn(async () => new Map()),
+  soeRemittanceKey: (turn: number, corpId: unknown) =>
+    `treasury-soe-remittance:${turn}:${String(corpId)}`,
+}));
+vi.mock("./treasuryLedger", () => ({
+  resolveTreasuryCashOptions: vi.fn(
+    async (_db: unknown, options?: unknown) => options ?? { context: null }
+  ),
 }));
 vi.mock("@/lib/currency/corporationCapital", () => ({
   loadFxRatesByCurrency: vi.fn().mockResolvedValue(new Map()),
@@ -75,6 +83,7 @@ describe("processSoeRemittance", () => {
       db,
       { countryId: "CN", corpId, amountLocal: 600, corpCurrency: "CNY" },
       now,
+      { context: null },
       undefined
     );
   });
@@ -93,6 +102,7 @@ describe("processSoeRemittance", () => {
       db,
       { countryId: "CN", corpId, amountLocal: 250, corpCurrency: "CNY" },
       now,
+      { context: null },
       undefined
     );
   });
@@ -126,6 +136,7 @@ describe("processSoeRemittance", () => {
       db,
       { countryId: "CN", corpId, amountLocal: 100, corpCurrency: "CNY" },
       now,
+      { context: null },
       undefined
     );
   });
@@ -191,6 +202,7 @@ describe("processSoeRemittance", () => {
       db,
       { countryId: "CN", corpId, amountLocal: 600, corpCurrency: "CNY" },
       now,
+      { context: null },
       undefined
     );
   });

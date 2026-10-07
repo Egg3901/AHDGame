@@ -421,7 +421,7 @@ describe("phase timeout drain (#3385)", () => {
       throw new Error("late coupon failure");
     });
     await vi.advanceTimersByTimeAsync(PHASE_TIMEOUT_MS);
-    const later = runtime.runPhase("bondTurn", async () => "ran");
+    const later = runtime.runPhase("commodityPrices", async () => "ran");
     await settle();
 
     gate.resolve();

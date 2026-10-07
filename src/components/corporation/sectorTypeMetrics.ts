@@ -371,7 +371,7 @@ function buildMetric(
         label: "Sprawl relief",
         value: `${relief.toFixed(2)} pp`,
         sub: "of penalty bought back",
-        help: "Margin your logistics strength is currently returning to every sector the corporation owns, against the penalty you would carry with no logistics at all.",
+        help: "Margin your logistics strength is currently returning to every non-logistics sector the corporation owns (logistics sectors never pay sprawl), against the penalty you would carry with no logistics at all.",
       };
     }
     case "growthTarget": {

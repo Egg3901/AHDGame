@@ -166,7 +166,12 @@ interface MoneyMoveRecord {
 export { legsNet };
 
 export type MoneyMoveClaim =
-  | { status: "claimed"; legs: MoneyMoveLeg[] }
+  | {
+      status: "claimed";
+      legs: MoneyMoveLeg[];
+      /** The record this call inserted; absent when there was nothing to move. */
+      record?: MoneyMoveRecord;
+    }
   | { status: "replayed" }
   | { status: "rejected"; error: string };
 
@@ -281,7 +286,7 @@ export async function claimMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
     // caller owns the key. Reporting them as replays silently drops the move.
     throw error;
   }
-  return { status: "claimed", legs };
+  return { status: "claimed", legs, record };
 }
 
 /**
@@ -416,7 +421,7 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
     return { status: "rejected", applied: [], error: bindingError };
   }
   if (claim.legs.length === 0) return { status: "applied", applied: [] };
-  return executeMoneyMove(db, move.key, false);
+  return executeMoneyMove(db, move.key, false, claim.record);
 }
 
 /**
@@ -643,14 +648,163 @@ async function applyLeg(
   return `Leg ${i} of ${key} changed during delivery; retry this command.`;
 }
 
+/** Below this many eligible credit legs a move keeps the per-leg path. */
+export const BATCHED_CREDIT_MIN_LEGS = 4;
+
+/**
+ * Deliver a move's credit legs in a fixed number of round trips instead of
+ * five per leg. Every write is the one {@link applyLeg} would make: the same
+ * revision CAS, the same pending receipt and settled-key stamp, acknowledged
+ * the same way. Only the round trips are shared. Targets are read before the
+ * journal, as in applyLeg. A leg this pass cannot confirm (guard miss,
+ * contended or repeated target, pending receipt) is left untouched for the
+ * per-leg path, which finishes it from the receipts exactly as it would after
+ * a crash. Returns the indices it delivered.
+ */
+async function deliverCreditLegsInBatch(
+  db: Db,
+  key: string,
+  indices: number[],
+  legs: MoneyMoveRecordLeg[]
+): Promise<Set<number>> {
+  const delivered = new Set<number>();
+  // A fan-out pays one kind of holder. Batch the collection with the most
+  // eligible payees; legs elsewhere, and any repeated target, stay per-leg.
+  const byCollection = new Map<string, number[]>();
+  const seen = new Set<string>();
+  for (const i of indices) {
+    const leg = legs[i];
+    if (leg.kind !== "credit" || !leg.collection || !leg.path || leg.filter?._id === undefined)
+      continue;
+    if ([leg.path, ...Object.keys(leg.set ?? {})].some(reservedLegPath)) continue;
+    const targetKey = `${leg.collection}\u0000${String(leg.filter._id)}`;
+    if (seen.has(targetKey)) continue;
+    seen.add(targetKey);
+    byCollection.set(leg.collection, [...(byCollection.get(leg.collection) ?? []), i]);
+  }
+  const [collection, group] = [...byCollection.entries()].sort(
+    (a, b) => b[1].length - a[1].length
+  )[0] ?? ["", []];
+  if (group.length < BATCHED_CREDIT_MIN_LEGS) return delivered;
+
+  const targets = db.collection<LegTarget>(collection);
+  const ids = group.map((i) => legs[i].filter!._id);
+  const rows = await targets
+    .find({ _id: { $in: ids } } as unknown as Filter<LegTarget>, {
+      projection: { [PENDING_LEG]: 1, [LEG_REVISION]: 1 },
+    })
+    .toArray();
+  const current = new Map<number, LegTarget>();
+  for (const i of group) {
+    const row = rows.find((r) => isDeepStrictEqual(r._id, legs[i].filter!._id));
+    if (row) current.set(i, row);
+  }
+  const records = db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION);
+  const record = await records.findOne(
+    { _id: key },
+    { projection: { status: 1, genericMoneyMoveVersion: 1, legs: 1 } }
+  );
+  if (record?.status !== "partial" || record.genericMoneyMoveVersion !== 2) return delivered;
+
+  const receipts = new Map<number, LegReceipt>();
+  const writes = [];
+  for (const i of group) {
+    const saved = record.legs[i];
+    const target = current.get(i);
+    if (!saved || saved.applied || saved.refusal || !target || target.pendingMoneyMoveReceipt)
+      continue;
+    const revision = target.moneyMoveRevision ?? 0;
+    if (!Number.isSafeInteger(revision) || revision < 0 || revision >= Number.MAX_SAFE_INTEGER)
+      continue;
+    const leg = legs[i];
+    const receipt: LegReceipt = { key, index: i, generation: revision + 1, outcome: "applied" };
+    receipts.set(i, receipt);
+    writes.push({
+      updateOne: {
+        filter: {
+          $and: [
+            leg.filter,
+            {
+              _id: leg.filter!._id,
+              [LEG_REVISION]: target.moneyMoveRevision ?? { $exists: false },
+              [PENDING_LEG]: { $exists: false },
+            },
+          ],
+        } as Filter<LegTarget>,
+        update: {
+          $inc: { [leg.path!]: Math.max(0, leg.amount), [LEG_REVISION]: 1 },
+          $set: { updatedAt: new Date(), ...leg.set, [PENDING_LEG]: receipt },
+          $push: { settledKeys: { $each: [legStamp(key, i)], $slice: -SETTLED_KEYS_CAP } },
+        },
+      },
+    });
+  }
+  if (!writes.length) return delivered;
+  await targets.bulkWrite(writes, { ordered: false });
+
+  // Which writes landed: the target now carries exactly our receipt.
+  const landed = await targets
+    .find(
+      {
+        _id: { $in: [...receipts.keys()].map((i) => legs[i].filter!._id) },
+        [`${PENDING_LEG}.key`]: key,
+      } as unknown as Filter<LegTarget>,
+      { projection: { [PENDING_LEG]: 1 } }
+    )
+    .toArray();
+  for (const row of landed) {
+    const receipt = row.pendingMoneyMoveReceipt;
+    if (receipt && receipts.get(receipt.index)?.generation === receipt.generation)
+      delivered.add(receipt.index);
+  }
+  if (!delivered.size) return delivered;
+
+  // Acknowledge in the journal with one write. If anything moved underneath
+  // (another worker acknowledged a leg first), fall back to the per-leg
+  // acknowledgement, which verifies each outcome before releasing it.
+  const filter: Record<string, unknown> = { _id: key, status: "partial" };
+  const set: Record<string, boolean> = {};
+  for (const i of delivered) {
+    filter[`legs.${i}.collection`] = collection;
+    filter[`legs.${i}.filter._id`] = legs[i].filter!._id;
+    filter[`legs.${i}.applied`] = false;
+    filter[`legs.${i}.refusal`] = { $exists: false };
+    set[`legs.${i}.applied`] = true;
+  }
+  const acknowledged = await records.updateOne(filter as Filter<MoneyMoveRecord>, { $set: set });
+  if (!acknowledged.matchedCount) {
+    for (const i of delivered)
+      await acknowledgeLeg(db, collection, legs[i].filter!._id, receipts.get(i)!);
+    return delivered;
+  }
+  await targets.bulkWrite(
+    [...delivered].map((i) => ({
+      updateOne: {
+        filter: { _id: legs[i].filter!._id, [PENDING_LEG]: receipts.get(i) } as Filter<LegTarget>,
+        update: { $unset: { [PENDING_LEG]: "" } },
+      },
+    })),
+    { ordered: false }
+  );
+  return delivered;
+}
+
 /** Finish from the original journal, without reinterpreting terminal outcomes. */
 export async function resumeMoneyMove(db: Db, key: string): Promise<MoneyMoveResult> {
   return executeMoneyMove(db, key, true);
 }
 
-async function executeMoneyMove(db: Db, key: string, resuming: boolean): Promise<MoneyMoveResult> {
+async function executeMoneyMove(
+  db: Db,
+  key: string,
+  resuming: boolean,
+  claimed?: MoneyMoveRecord
+): Promise<MoneyMoveResult> {
   const records = db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION);
-  const record = await records.findOne({ _id: key });
+  // A move this call just claimed is exactly the record it inserted, so it is
+  // not read back. Every leg still re-reads the journal before it writes, so
+  // a recovery worker that touched the record meanwhile is still respected.
+  const record = claimed ?? (await records.findOne({ _id: key }));
   if (!record) return { status: "rejected", applied: [], error: `no money move ${key}` };
   if (
     record.atomicDocument ||
@@ -675,10 +829,35 @@ async function executeMoneyMove(db: Db, key: string, resuming: boolean): Promise
     return { status: "rejected", applied: [], error: record.moneyMoveBindingError };
   }
   let failure: string | undefined;
-  for (const i of legOrder(record.legs)) {
+  const order = legOrder(record.legs);
+  // Credits sort last. Once every debit and asset leg before them has landed,
+  // the credits of a wide fan-out are delivered together; the loop below then
+  // skips those and handles any the batch left behind one at a time.
+  let batched = new Set<number>();
+  const bookkeeping = new Set<number>();
+  for (let n = 0; n < order.length; n++) {
+    const i = order[n];
     const leg = record.legs[i];
     if (record.genericMoneyMoveVersion !== 2 && leg.applied) continue;
     if (record.status === "rejected" && !leg.applied && !leg.refusal) continue;
+    if (
+      leg.kind === "credit" &&
+      batched.size === 0 &&
+      record.status === "partial" &&
+      record.genericMoneyMoveVersion === 2
+    ) {
+      const rest = order.slice(n).filter((k) => !record.legs[k].applied && !record.legs[k].refusal);
+      batched = await deliverCreditLegsInBatch(db, key, rest, record.legs);
+      if (!batched.size) batched = new Set([-1]);
+    }
+    if (batched.has(i)) continue;
+    if (leg.kind === "mint" || leg.kind === "burn") {
+      // Mint and burn touch no document: their only effect is the journal
+      // mark, which the completion write below records. A crash before it
+      // re-reaches this leg on resume and marks it then.
+      if (record.status === "partial") bookkeeping.add(i);
+      continue;
+    }
     const failed = await applyLeg(db, key, i, leg);
     if (failed) {
       failure = failed;
@@ -687,7 +866,9 @@ async function executeMoneyMove(db: Db, key: string, resuming: boolean): Promise
   }
   const latest = await records.findOne({ _id: key });
   if (!latest) throw new Error(`Money move ${key} disappeared during recovery`);
-  const applied = latest.legs.flatMap((leg, i) => (leg.applied ? [i] : []));
+  const applied = latest.legs.flatMap((leg, i) =>
+    leg.applied || (bookkeeping.has(i) && latest.status === "partial") ? [i] : []
+  );
   const refusal = latest.legs.find((leg) => leg.refusal)?.refusal;
   const status =
     latest.status === "rejected"
