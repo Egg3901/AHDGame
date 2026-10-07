@@ -170,7 +170,7 @@ async function pollTurnStatus(force = false) {
         for (const eventType of events) {
           emitGameEvent({
             type: eventType,
-            payload: {},
+            payload: { turn: status.currentTurn },
             timestamp: now.toISOString(),
           });
         }
