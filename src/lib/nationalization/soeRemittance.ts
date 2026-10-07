@@ -23,8 +23,8 @@ import {
 } from "@/lib/budget/publicEnterpriseRevenue";
 import { isStateOwned } from "./nationalCorporation";
 import { cappedRemittanceLocal } from "./ceoFinance";
-import { remitToTreasury } from "./treasury";
-import type { TreasuryCashOptions } from "./treasuryLedger";
+import { loadSoeRemittanceReceipts, remitToTreasury, soeRemittanceKey } from "./treasury";
+import { resolveTreasuryCashOptions, type TreasuryCashOptions } from "./treasuryLedger";
 import { snapshotCorporationCurrency } from "@/lib/ledger/balanceSnapshot";
 import { loadSoeGovernanceInputs } from "./soeGovernanceInputs";
 
@@ -57,7 +57,9 @@ export async function processSoeRemittance(
   // above promises these go through the same helper so they stay reconciled;
   // under plants they silently did not. Resolved ONCE per turn here, the same
   // hoist the budget turn does, so this costs at most two extra reads per turn.
-  const [allSectors, fxByCurrency, plants] = await Promise.all([
+  const options = await resolveTreasuryCashOptions(db, ledger);
+  const turn = options.context?.treasuryCashLedgerEnabled ? options.context.turn : null;
+  const [allSectors, fxByCurrency, plants, receipts] = await Promise.all([
     db
       .collection<CorporateSector>("corporateSectors")
       .find(
@@ -67,6 +69,16 @@ export async function processSoeRemittance(
       .toArray(),
     loadFxRatesByCurrency(db),
     loadPlantsBudgetContext(db),
+    // A crash resume replays this sweep with live inputs that have moved on.
+    // Receipts the earlier attempt froze are authoritative, so they are read
+    // up front and resumed rather than repriced.
+    turn === null
+      ? undefined
+      : loadSoeRemittanceReceipts(
+          db,
+          turn,
+          corps.filter(isStateOwned).map((c) => c._id)
+        ),
   ]);
 
   const stateIds = Array.from(new Set(allSectors.map((s) => s.stateId)));
@@ -98,7 +110,9 @@ export async function processSoeRemittance(
       plants.plantsEnabled,
       plants
     );
-    if (incomeAnchor <= 0) continue; // losses are treasury-backed in processSoeOperations
+    const receipt = turn === null ? undefined : receipts?.get(soeRemittanceKey(turn, corp._id));
+    // losses are treasury-backed in processSoeOperations
+    if (incomeAnchor <= 0 && !receipt) continue;
 
     const code = resolveCorpLiquidCurrencyCode(corp);
     const rate = fxRateForCorpFromMap(corp, fxByCurrency);
@@ -114,7 +128,7 @@ export async function processSoeRemittance(
       corp.profitRetentionPercent,
       corp.liquidCapital
     );
-    if (amountLocal <= 0) continue;
+    if (amountLocal <= 0 && !receipt) continue;
 
     const countryId = (corp.countryOwnerId ?? corp.countryId) as CountryId;
     const remittedLocal = await remitToTreasury(
@@ -126,10 +140,13 @@ export async function processSoeRemittance(
         corpCurrency: snapshotCorporationCurrency(corp),
       },
       now,
-      ledger
+      options,
+      receipts
     );
     if (remittedLocal <= 0) continue;
-    perCorp.push({ corpId: corp._id, countryId, amountLocal });
+    // What actually left the enterprise in this call, which for a resumed
+    // receipt is its frozen amount rather than this attempt's quote.
+    perCorp.push({ corpId: corp._id, countryId, amountLocal: remittedLocal });
     remitted++;
   }
 

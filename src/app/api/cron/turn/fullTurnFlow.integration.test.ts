@@ -330,11 +330,215 @@ describe("processTurn() — full turn flow", () => {
           processingKind: "turn",
           processingStartedAt: expect.any(Date),
           processingHeartbeatAt: expect.any(Date),
-          processingPhase: "turn_bootstrap",
         }),
       }),
       { returnDocument: "after" }
     );
+    // Crash evidence is never touched by the lock write (#3429); a fresh turn
+    // marks bootstrap in its first status write instead.
+    const lockSet = db.collectionMocks["gameState"].findOneAndUpdate.mock.calls[0]![1].$set;
+    for (const field of [
+      "processingPhase",
+      "processingTargetTurn",
+      "processingPhaseStatuses",
+      "processingPhaseResults",
+    ]) {
+      expect(lockSet).not.toHaveProperty(field);
+    }
+    expect(db.collectionMocks["gameState"].updateOne).toHaveBeenCalledWith(
+      { _id: "current", isProcessing: true },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          processingTargetTurn: 100,
+          processingPhase: "turn_bootstrap",
+          processingPhaseResults: {},
+        }),
+      })
+    );
+  });
+
+  describe("crash resume through processTurn setup (#3429)", () => {
+    const BOND = {
+      bondsProcessed: 3,
+      couponsPaid: 2,
+      bondsMatured: 0,
+      bondsDefaulted: 0,
+      totalCouponsPaid: 10,
+      bondHistorySnapshots: 3,
+      bondsAutoRestructured: 0,
+      bondsAutoRefinanced: 0,
+      sovereignCouponPaidByCountry: { US: 10 },
+    };
+
+    function crashedState(statuses: Record<string, unknown>, results: unknown) {
+      return {
+        ...mockGameState,
+        isProcessing: true,
+        processingKind: "turn",
+        processingTargetTurn: 100,
+        processingPhase: "resetTreasuryCash",
+        processingHeartbeatAt: new Date("2025-12-31T00:00:00Z"),
+        processingAbandonedAt: new Date("2025-12-31T00:00:00Z"),
+        processingPhaseStatuses: statuses,
+        processingPhaseResults: results,
+      };
+    }
+
+    async function resumeWith(state: ReturnType<typeof crashedState>) {
+      db.collectionMocks["gameState"].findOne.mockResolvedValue(state);
+      db.collectionMocks["gameState"].findOneAndUpdate.mockResolvedValue({ ...state });
+      const bondTurn = await import("@/lib/turn/bondTurn");
+      const spy = vi.spyOn(bondTurn, "processBondTurn");
+      const { processTurn } = await import("@/lib/turnSystem");
+      await processTurn();
+      const setup = db.collectionMocks["gameState"].updateOne.mock.calls.find(
+        ([, update]) => "processingPhaseResults" in (update.$set ?? {})
+      )![1].$set;
+      return { spy, setup };
+    }
+
+    it("control: a fresh turn does call bondTurn through the same spy", async () => {
+      const bondTurn = await import("@/lib/turn/bondTurn");
+      const spy = vi.spyOn(bondTurn, "processBondTurn");
+      const { processTurn } = await import("@/lib/turnSystem");
+      await processTurn();
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps inherited results and markers in the setup write and never reruns bondTurn", async () => {
+      const { spy, setup } = await resumeWith(
+        crashedState({ bondTurn: { status: "completed" } }, { bondTurn: BOND })
+      );
+      expect(spy).not.toHaveBeenCalled();
+      expect(setup.processingPhaseResults).toEqual({ bondTurn: BOND });
+      expect(setup.processingPhaseStatuses.bondTurn).toMatchObject({
+        status: "skipped",
+        resumeCarried: "completed",
+      });
+      expect(setup).not.toHaveProperty("processingPhase");
+    });
+
+    // The affected sandbox: the old ordinary failure path released the lock
+    // (isProcessing false, processingKind null) but kept the next-turn target,
+    // last phase and finalized statuses with a legacy bondTurn marker.
+    const legacyFailedTurn = () => ({
+      ...mockGameState,
+      currentTurn: 99,
+      isProcessing: false,
+      processingKind: null,
+      processingTargetTurn: 100,
+      processingPhase: "commodityPrices",
+      processingHeartbeatAt: new Date("2025-12-31T00:00:00Z"),
+      processingPhaseStatuses: {
+        fundGeneration: { status: "completed" },
+        commodityPrices: { status: "failed", reason: "other" },
+        bondTurn: {
+          status: "skipped",
+          reason: "upstreamAbort",
+          message: "skipped: already applied before crash",
+        },
+      },
+      processingPhaseResults: undefined,
+    });
+
+    it("resumes, never reruns, the unlocked legacy failed-turn shape", async () => {
+      const state = legacyFailedTurn();
+      db.collectionMocks["gameState"].findOne.mockResolvedValue(state);
+      db.collectionMocks["gameState"].findOneAndUpdate.mockResolvedValue({
+        ...state,
+        isProcessing: true,
+        processingKind: "turn",
+      });
+      const bondTurn = await import("@/lib/turn/bondTurn");
+      const bondSpy = vi.spyOn(bondTurn, "processBondTurn");
+      const fundGen = await import("@/lib/turn/fundGeneration");
+      const { processTurn } = await import("@/lib/turnSystem");
+      await processTurn();
+      expect(bondSpy).not.toHaveBeenCalled();
+      expect(fundGen.processFundGeneration).not.toHaveBeenCalled();
+      const sets = db.collectionMocks["gameState"].updateOne.mock.calls.map(
+        ([, update]) => update.$set ?? {}
+      );
+      // Its evidence is never discarded.
+      expect(
+        sets.some(
+          (set) => set.processingPhase === "turn_bootstrap" && set.processingPhaseStatuses === null
+        )
+      ).toBe(false);
+      const setup = sets.find((set) => "processingPhaseResults" in set)!;
+      expect(setup.processingPhaseStatuses.bondTurn).toMatchObject({
+        resumeCarried: "interrupted",
+      });
+      expect(setup.processingPhaseStatuses.commodityPrices).toMatchObject({
+        resumeCarried: "interrupted",
+      });
+    });
+
+    it("blocks, never resets, applied next-turn evidence the pre-lock read did not see", async () => {
+      const state = legacyFailedTurn();
+      db.collectionMocks["gameState"].findOne.mockResolvedValue({
+        ...mockGameState,
+        isProcessing: false,
+      });
+      db.collectionMocks["gameState"].findOneAndUpdate.mockResolvedValue({
+        ...state,
+        isProcessing: true,
+        processingKind: "turn",
+      });
+      const bondTurn = await import("@/lib/turn/bondTurn");
+      const bondSpy = vi.spyOn(bondTurn, "processBondTurn");
+      const { processTurn } = await import("@/lib/turnSystem");
+      const result = await processTurn();
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/refusing to discard its evidence/);
+      expect(bondSpy).not.toHaveBeenCalled();
+      const hold = db.collectionMocks["gameState"].updateOne.mock.calls
+        .map(([, update]) => update.$set ?? {})
+        .find((set) => set.processingAbandonedAt)!;
+      expect(hold).toMatchObject({ isProcessing: true, processingKind: "turn" });
+      for (const field of ["processingPhase", "processingTargetTurn", "processingPhaseStatuses"]) {
+        expect(hold[field] ?? "kept").not.toBeNull();
+      }
+    });
+
+    it("still runs fresh over a completed prior turn's stale target", async () => {
+      const state = { ...legacyFailedTurn(), processingTargetTurn: 99 };
+      db.collectionMocks["gameState"].findOne.mockResolvedValue(state);
+      db.collectionMocks["gameState"].findOneAndUpdate.mockResolvedValue({
+        ...state,
+        isProcessing: true,
+        processingKind: "turn",
+      });
+      const bondTurn = await import("@/lib/turn/bondTurn");
+      const bondSpy = vi.spyOn(bondTurn, "processBondTurn");
+      const { processTurn } = await import("@/lib/turnSystem");
+      await processTurn();
+      expect(bondSpy).toHaveBeenCalledTimes(1);
+      expect(db.collectionMocks["gameState"].updateOne).toHaveBeenCalledWith(
+        { _id: "current", isProcessing: true },
+        { $set: expect.objectContaining({ processingPhaseStatuses: null }) }
+      );
+    });
+
+    it("never reruns bondTurn behind a legacy skipped/upstreamAbort marker", async () => {
+      const { spy, setup } = await resumeWith(
+        crashedState(
+          {
+            bondTurn: {
+              status: "skipped",
+              reason: "upstreamAbort",
+              message: "skipped: already applied before crash",
+            },
+          },
+          null
+        )
+      );
+      expect(spy).not.toHaveBeenCalled();
+      expect(setup.processingPhaseResults).toEqual({});
+      expect(setup.processingPhaseStatuses.bondTurn).toMatchObject({
+        resumeCarried: "interrupted",
+      });
+    });
   });
 
   it("clears processing metadata when the turn finishes", async () => {
