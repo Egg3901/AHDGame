@@ -14,6 +14,10 @@ import {
 import type { IndexFundTransaction } from "@/lib/db/types";
 import { buildFundNavMetrics } from "@/lib/indexFunds/fundNavMetrics";
 
+import { getOpenOrdersEscrowAnchor } from "@/lib/indexFunds/fundValuation";
+import { listFundBondHoldings } from "@/lib/bonds/fundBondHoldings";
+import { corpCapitalToAnchor, loadValuationFxRates } from "@/lib/currency/corporationCapital";
+
 type CorpSummary = {
   _id: ObjectId;
   name: string;
@@ -42,8 +46,32 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
     const totalHolders = nonReservePositions.length;
     const totalNonReserveUnits = nonReservePositions.reduce((sum, p) => sum + p.units, 0);
 
+    const openOrdersEscrowAnchor = await getOpenOrdersEscrowAnchor(db, fund._id);
+    const bondPositions = await listFundBondHoldings(db, fund._id);
+    const fxRates = bondPositions.length
+      ? await loadValuationFxRates(db)
+      : new Map<string, number>();
+    const bondHoldings = bondPositions.map((row) => {
+      const rate = fxRates.get(row.currencyCode);
+      if (!rate || rate <= 0)
+        throw new Error(`Missing exchange rate for bond currency ${row.currencyCode}`);
+      return {
+        bondId: row.bondId.toString(),
+        corporationId: row.issuerType === "corporation" ? row.corporationId.toString() : null,
+        issuerType: row.issuerType,
+        issuerName: row.issuerName ?? row.countryId ?? "Unknown",
+        countryId: row.countryId ?? null,
+        units: row.units,
+        couponRate: row.couponRate,
+        marketPrice: row.marketPrice,
+        maturityTurn: row.maturityTurn,
+        valueAnchor: corpCapitalToAnchor(row.valueAnchor, row.currencyCode, rate),
+      };
+    });
+
     const corpIds = [
       ...new Set([
+        ...bondHoldings.filter((h) => h.corporationId).map((h) => h.corporationId!),
         ...fund.holdings.map((h) => h.corporationId.toString()),
         ...fund.targetConstituents.map((c) => c.corporationId.toString()),
       ]),
@@ -133,6 +161,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
         unitSupply: fund.unitSupply,
         aumAnchor: fund.quotedNav * fund.unitSupply,
         cashAnchor: fund.cashAnchor,
+        openOrdersEscrowAnchor,
         backingRatio: fund.backingRatio ?? null,
         lastRebalancedAt: fund.lastRebalancedAt ?? null,
         // A5 sponsorship (all null for the seeded system funds)
@@ -147,6 +176,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
         navChange1: navMetrics.navChange1,
         navChange24: navMetrics.navChange24,
         navChange48: navMetrics.navChange48,
+        bondHoldings: bondHoldings.map((h) => ({
+          ...h,
+          issuerName: h.corporationId
+            ? (corpById.get(h.corporationId)?.name ?? h.issuerName)
+            : h.issuerName,
+          sequentialId: h.corporationId
+            ? (corpById.get(h.corporationId)?.sequentialId ?? null)
+            : null,
+        })),
+        bondHoldingsValueAnchor: bondHoldings.reduce((sum, h) => sum + h.valueAnchor, 0),
         holdings: fund.holdings.map((h) => ({
           ...enrichCorp(h.corporationId.toString()),
           shares: h.shares,
