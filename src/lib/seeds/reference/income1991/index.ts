@@ -1,6 +1,7 @@
 /**
  * 1991 household income vintages for countries whose base metric bundle is
- * dated to another era (#3370 NG, #3371 TR, #3376 CN; parent #3316).
+ * dated to another era (#3370 NG, #3371 TR, #3376 CN, #3393 AT/ES/FI/FR/GR/IT/SE;
+ * parent #3316).
  *
  * The base bundles keep their authored REGIONAL SHAPE; only the national
  * level is replaced. The level is derived from the same 1991 regional GDP and
@@ -18,6 +19,13 @@
  *     sits above the NBS 1991 urban household mean.
  *   - TR: base bundle is roughly 1979 nominal lira with no 1991 replacement,
  *     opening at about 127k TRL, 1.2% of 1991 GDP per resident.
+ *   - AT, ES, FI, FR, GR, IT, SE (#3393): base bundles are roughly 1979
+ *     nominal legacy currency with no 1991 replacement, opening at 0.18x
+ *     (GR) to 0.70x (AT) of 1991 GDP per resident. Their only authored
+ *     income anchor is the 1953 overlay level (anciens francs for FR, old
+ *     markka for FI, the overlay's USD for IT), read flat into 1991, so every
+ *     region scored 0 or 100. GDP is WDI 1991 converted to the legacy unit,
+ *     never euro (fiscalAnchors1991.ts).
  */
 
 import type { CountryId } from "@/lib/constants/countries";
@@ -29,13 +37,28 @@ import { trRegions1991 } from "@/lib/countries/tr/data/trRegions1991";
 import { ngStateMetrics } from "@/lib/seeds/ng/ngStateMetrics";
 import { cnStateMetrics } from "@/lib/seeds/cn/cnStateMetrics";
 import { trStateMetrics } from "@/lib/seeds/tr/trStateMetrics";
+import { atRegions1991 } from "@/lib/countries/at/data/atRegions1991";
+import { esRegions1991 } from "@/lib/countries/es/data/esRegions1991";
+import { fiRegions1991 } from "@/lib/countries/fi/data/fiRegions1991";
+import { frRegions1991 } from "@/lib/countries/fr/data/frRegions1991";
+import { grRegions1991 } from "@/lib/countries/gr/data/grRegions1991";
+import { itRegions1991 } from "@/lib/countries/it/data/itRegions1991";
+import { seRegions1991 } from "@/lib/countries/se/data/seRegions1991";
+import { atStateMetrics } from "@/lib/seeds/at/atStateMetrics";
+import { esStateMetrics } from "@/lib/seeds/es/esStateMetrics";
+import { fiStateMetrics } from "@/lib/seeds/fi/fiStateMetrics";
+import { frStateMetrics } from "@/lib/seeds/fr/frStateMetrics";
+import { grStateMetrics } from "@/lib/seeds/gr/grStateMetrics";
+import { itStateMetrics } from "@/lib/seeds/it/itStateMetrics";
+import { seStateMetrics } from "@/lib/seeds/se/seStateMetrics";
 import {
   nationalHouseholdMedianFromGdp,
   scaleRegionalIncomes,
   type HouseholdIncomeProxy,
 } from "./rules";
 
-export type Income1991CountryId = "NG" | "CN" | "TR";
+export type Income1991CountryId =
+  "NG" | "CN" | "TR" | "AT" | "ES" | "FI" | "FR" | "GR" | "IT" | "SE";
 
 /**
  * Bounded gameplay proxies. Household size and income-share inputs are
@@ -71,6 +94,56 @@ export const INCOME_1991_PROXIES: Record<
       "Household size 5.0 from the 1990 census; household share below private consumption " +
       "share of GDP; Gini about 0.44 per the late-1980s household income surveys.",
   },
+  // #3393. One method for all seven, every input a primary 1991 series:
+  //   householdSize: Eurostat cens_91hpnper (1991 census round, private
+  //     households by size; persons / households with 7+ counted as 7).
+  //   householdIncomeShare: WDI NE.CON.PRVT.ZS 1991, household final
+  //     consumption share of GDP. It omits household saving, so the level
+  //     leans low; it is used as is rather than adjusted by a guessed rate.
+  //   medianToMean: lognormal median/mean for the WDI/PIP Gini nearest 1991.
+  //     Gini is equivalised disposable income, so the ratio leans high.
+  AT: {
+    householdSize: 2.53,
+    householdIncomeShare: 0.549,
+    medianToMean: 0.85,
+    note: "1991 census 2.53 persons per household; consumption 54.9% of GDP; Gini 30.8 (1994).",
+  },
+  ES: {
+    householdSize: 3.24,
+    householdIncomeShare: 0.613,
+    medianToMean: 0.84,
+    note: "1991 census 3.24 persons per household; consumption 61.3% of GDP; Gini 32.0 (1990).",
+  },
+  FI: {
+    householdSize: 2.41,
+    householdIncomeShare: 0.532,
+    medianToMean: 0.92,
+    note: "1990 census 2.41 persons per household; consumption 53.2% of GDP; Gini 22.9 (1991).",
+  },
+  FR: {
+    householdSize: 2.56,
+    householdIncomeShare: 0.545,
+    medianToMean: 0.84,
+    note: "1990 census 2.56 persons per household; consumption 54.5% of GDP; Gini 32.1 (1990).",
+  },
+  GR: {
+    householdSize: 2.97,
+    householdIncomeShare: 0.67,
+    medianToMean: 0.8,
+    note: "1991 census 2.97 persons per household; consumption 67.0% of GDP; Gini 36.5 (1995).",
+  },
+  IT: {
+    householdSize: 2.82,
+    householdIncomeShare: 0.574,
+    medianToMean: 0.85,
+    note: "1991 census 2.82 persons per household; consumption 57.4% of GDP; Gini 31.1 (1991).",
+  },
+  SE: {
+    householdSize: 2.14,
+    householdIncomeShare: 0.493,
+    medianToMean: 0.9,
+    note: "1990 census 2.14 persons per household; consumption 49.3% of GDP; Gini 24.9 (1992).",
+  },
 };
 
 interface RegionRow {
@@ -83,6 +156,13 @@ const SOURCES: Record<Income1991CountryId, { regions: RegionRow[]; metrics: Stat
   NG: { regions: ngRegions1991 as RegionRow[], metrics: ngStateMetrics },
   CN: { regions: cnRegions1991 as RegionRow[], metrics: cnStateMetrics },
   TR: { regions: trRegions1991 as RegionRow[], metrics: trStateMetrics },
+  AT: { regions: atRegions1991 as RegionRow[], metrics: atStateMetrics },
+  ES: { regions: esRegions1991 as RegionRow[], metrics: esStateMetrics },
+  FI: { regions: fiRegions1991 as RegionRow[], metrics: fiStateMetrics },
+  FR: { regions: frRegions1991 as RegionRow[], metrics: frStateMetrics },
+  GR: { regions: grRegions1991 as RegionRow[], metrics: grStateMetrics },
+  IT: { regions: itRegions1991 as RegionRow[], metrics: itStateMetrics },
+  SE: { regions: seRegions1991 as RegionRow[], metrics: seStateMetrics },
 };
 
 /** Region `gdp` fields are millions of local currency. */
@@ -123,6 +203,13 @@ export const INCOME_1991_REGIONAL: Record<Income1991CountryId, Record<string, nu
   NG: buildRegional("NG"),
   CN: buildRegional("CN"),
   TR: buildRegional("TR"),
+  AT: buildRegional("AT"),
+  ES: buildRegional("ES"),
+  FI: buildRegional("FI"),
+  FR: buildRegional("FR"),
+  GR: buildRegional("GR"),
+  IT: buildRegional("IT"),
+  SE: buildRegional("SE"),
 };
 
 function regionalIncome(countryId: string, regionId: string): number | undefined {

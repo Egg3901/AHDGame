@@ -139,7 +139,14 @@ export async function seedGRStateMetrics(
   const { getRegionMetricPresets, applyMetricPresetToMetrics } =
     await import("@/lib/seeds/metricPresets");
   // Base bundle is ~1979; 1953 overlay is the only registered GR preset (2019 no-op).
-  const bundle = grStateMetrics.map((metric) => {
+  // 1991 has no income overlay, so the ~1979 base income is replaced with its
+  // 1991 vintage in the same legacy currency as the 1991 GDP (#3393).
+  const vintage1991 =
+    preset === "1991-default"
+      ? (await import("@/lib/seeds/reference/income1991")).apply1991IncomeVintage
+      : null;
+  const base = vintage1991 ? grStateMetrics.map((m) => vintage1991("GR", m)) : grStateMetrics;
+  const bundle = base.map((metric) => {
     const overlay = getRegionMetricPresets("GR", String(metric._id), preset);
     return overlay ? applyMetricPresetToMetrics(metric, overlay) : metric;
   });
@@ -172,12 +179,18 @@ export async function seedGRBaselines(
   const { applyEra1979BaselineAdjustments } = is1979
     ? await import("@/lib/seeds/reference/stateBaselines1979")
     : { applyEra1979BaselineAdjustments: <T>(x: T): T => x };
+  const vintage1991Baseline =
+    preset === "1991-default"
+      ? (await import("@/lib/seeds/reference/income1991")).apply1991IncomeVintageBaseline
+      : null;
   for (const raw of grStateBaselines) {
     const adjusted = is1953
       ? applyEra1953BaselineAdjustments(raw)
       : is1979
         ? applyEra1979BaselineAdjustments(raw)
-        : raw;
+        : vintage1991Baseline
+          ? vintage1991Baseline("GR", raw)
+          : raw;
     // Align decay targets with the authored metric overlay (1953); no-op otherwise.
     const overlay = getRegionMetricPresets("GR", String(raw._id), preset);
     const baseline = overlay ? applyMetricPresetToBaseline(adjusted, overlay) : adjusted;

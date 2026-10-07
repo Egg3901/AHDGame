@@ -151,7 +151,14 @@ export async function seedITStateMetrics(
   const { itStateMetrics } = await import("@/lib/seeds/it/itStateMetrics");
   const { getRegionMetricPresets, applyMetricPresetToMetrics } =
     await import("@/lib/seeds/metricPresets");
-  const bundle = itStateMetrics.map((metric) => {
+  // 1991 has no income overlay, so the ~1979 base income is replaced with its
+  // 1991 vintage in the same legacy currency as the 1991 GDP (#3393).
+  const vintage1991 =
+    preset === "1991-default"
+      ? (await import("@/lib/seeds/reference/income1991")).apply1991IncomeVintage
+      : null;
+  const base = vintage1991 ? itStateMetrics.map((m) => vintage1991("IT", m)) : itStateMetrics;
+  const bundle = base.map((metric) => {
     const overlay = getRegionMetricPresets("IT", String(metric._id), preset);
     return overlay ? applyMetricPresetToMetrics(metric, overlay) : metric;
   });
@@ -182,12 +189,18 @@ export async function seedITBaselines(
   const { applyEra1979BaselineAdjustments } = is1979
     ? await import("@/lib/seeds/reference/stateBaselines1979")
     : { applyEra1979BaselineAdjustments: <T>(x: T): T => x };
+  const vintage1991Baseline =
+    preset === "1991-default"
+      ? (await import("@/lib/seeds/reference/income1991")).apply1991IncomeVintageBaseline
+      : null;
   for (const raw of itStateBaselines) {
     const adjusted = is1953
       ? applyEra1953BaselineAdjustments(raw)
       : is1979
         ? applyEra1979BaselineAdjustments(raw)
-        : raw;
+        : vintage1991Baseline
+          ? vintage1991Baseline("IT", raw)
+          : raw;
     const { getRegionMetricPresets, applyMetricPresetToBaseline } =
       await import("@/lib/seeds/metricPresets");
     const overlay = getRegionMetricPresets("IT", String(raw._id), preset);

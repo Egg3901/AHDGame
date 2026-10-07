@@ -130,6 +130,16 @@ export const FR_INCOME_ANCHORS: NormalAnchor[] = [
   },
 ];
 
+/**
+ * Income anchor for a world that STARTS in the given year. Used only at the
+ * exact start year; never interpolated, so a 1953 world running forward keeps
+ * its flat 1953 anchor. 1991 is the derived franc household median from
+ * seeds/reference/income1991 (#3393). The 1953 point above is in anciens francs.
+ */
+export const FR_INCOME_START_VINTAGES: Record<number, number> = {
+  1991: 146451,
+};
+
 /*
  * ⚠ THESE TWO ARE INDEPENDENT, AND NESTING THEM COST ELEVEN COUNTRIES. The
  * income-anchor block was first written INSIDE the population-multiplier
