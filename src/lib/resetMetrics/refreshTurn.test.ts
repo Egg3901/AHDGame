@@ -35,13 +35,7 @@ function ownerReadings(
 ): MetricOwnerTurnReadingsByBoard {
   return Object.fromEntries(
     sourceBoards.map((board) => {
-      const dueIds = refreshResetMetricBoard({
-        board,
-        turn,
-        updates: {},
-        cohortDue: false,
-        electionDue: false,
-      }).dueIds;
+      const dueIds = dueResetMetricIds(board, turn, false, false);
       return [
         board._id,
         {
@@ -153,6 +147,53 @@ describe("v2 metric turn persistence shell", () => {
         ready,
       })
     ).rejects.toThrow("did not refresh US:national");
+    expect(db.collectionMocks.resetMetricSnapshots!.bulkWrite).not.toHaveBeenCalled();
+  });
+
+  it("rejects a changed owner reading on a persisted same-turn board before writes", async () => {
+    const db = createMockDb();
+    const previous = boards.map((board) => ({ ...board, asOfTurn: 11 }));
+    const firstReadings = ownerReadings(previous, 12);
+    const completed = previous.map(
+      (board) =>
+        refreshResetMetricBoard({
+          board,
+          turn: 12,
+          ...firstReadings[board._id]!,
+          allowCatchUp: true,
+        }).board
+    );
+    db.collection("resetMetricSnapshots").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue(completed),
+    });
+    const replayReadings = ownerReadings(completed, 12);
+    const ctUpdates = replayReadings["US:CT"]!.updates;
+    const changedMetricId = Object.keys(ctUpdates)[0]!;
+    const ownerReader = vi.fn(async () => ({
+      ...replayReadings,
+      "US:CT": {
+        ...replayReadings["US:CT"]!,
+        updates: {
+          ...ctUpdates,
+          [changedMetricId]: {
+            ...ctUpdates[changedMetricId]!,
+            value: ctUpdates[changedMetricId]!.value + 1,
+          },
+        },
+      },
+    }));
+
+    await expect(
+      refreshResetMetricSnapshotsTurn({
+        db: db as unknown as Db,
+        gameState: { ...state, currentTurn: 11 },
+        turn: 12,
+        ownerReadings: ownerReader,
+        ready,
+      })
+    ).rejects.toThrow("Reset metric turn replay differs from its persisted owner readings");
+
+    expect(ownerReader).toHaveBeenCalledOnce();
     expect(db.collectionMocks.resetMetricSnapshots!.bulkWrite).not.toHaveBeenCalled();
   });
 
