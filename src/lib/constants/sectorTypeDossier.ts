@@ -47,7 +47,7 @@ export const SECTOR_TYPE_BRIEFING: Record<CorporationType, string> = {
   defense:
     "Sells to governments, not markets. Revenue is contract backlog: procurement orders, delivery grades and export licences decide the year, not consumer demand.",
   logistics:
-    "Moves everyone else's goods. Every depot adds freight capacity and network coverage. Depots count toward sprawl like any other sector; only the logistics budget offsets it.",
+    "Moves everyone else's goods. Every depot adds freight capacity and network coverage. Depots never pay the sprawl penalty themselves, but they count toward the sector total that sets it for everything else.",
   chemical_industries:
     "Refines oil and energy into feedstocks everyone downstream needs: chemicals, plastics, fertilizers, drugs. Flexible output mix, but every line carries spill and regulatory risk.",
   automobiles:

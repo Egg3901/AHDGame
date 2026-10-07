@@ -703,14 +703,24 @@ export async function remitToTreasury(
   db: Db,
   input: TreasuryTransferInput,
   now: Date,
-  ledger?: TreasuryCashOptions
+  ledger?: TreasuryCashOptions,
+  receipts?: SoeRemittanceReceipts
 ): Promise<number> {
   const amount = Math.round(input.amountLocal);
-  if (amount <= 0) return 0;
+  // A preloaded receipt is resumed even when this attempt's quote is zero.
+  if (amount <= 0 && !receipts) return 0;
 
   const options = await resolveTreasuryCashOptions(db, ledger);
   if (options.context?.treasuryCashLedgerEnabled) {
     const context = options.context;
+    const key = soeRemittanceKey(context.turn, input.corpId);
+    // The receipt an earlier attempt froze owns this key. Its amount and rates
+    // stand; the live quote below is only priced when no receipt exists.
+    const receipt = receipts
+      ? receipts.get(key)
+      : ((await loadSoeRemittanceReceipts(db, context.turn, [input.corpId])).get(key) ?? null);
+    if (receipt) return resumeSoeRemittanceReceipt(db, receipt, input, context.turn);
+    if (amount <= 0) return 0;
     const treasuryCurrency =
       context.treasuryCurrencies.get(input.countryId) ??
       COUNTRY_CURRENCY_MAP[input.countryId] ??
@@ -728,7 +738,6 @@ export async function remitToTreasury(
       .collection<FederalBudget>("federalBudget")
       .findOne({ countryId: input.countryId }, { projection: { _id: 1 } });
     if (!treasury) throw new Error(`Treasury for ${input.countryId} is unavailable`);
-    const key = `treasury-soe-remittance:${context.turn}:${input.corpId.toString()}`;
     const settled = await settleTransition(db, {
       key,
       kind: "soe_profit_remittance",
@@ -784,6 +793,7 @@ export async function remitToTreasury(
     return amount;
   }
 
+  if (amount <= 0) return 0;
   const debited = await db
     .collection<Corporation>("corporations")
     .updateOne(
@@ -796,6 +806,137 @@ export async function remitToTreasury(
     treasury: credited ? amount : 0,
   });
   return amount;
+}
+
+/** The settlement journal key of one enterprise's remittance in one turn. */
+export function soeRemittanceKey(turn: number, corpId: ObjectId): string {
+  return `treasury-soe-remittance:${turn}:${corpId.toString()}`;
+}
+
+/** A remittance receipt as the settlement journal froze it. */
+export interface SoeRemittanceReceipt {
+  _id: string;
+  kind?: string;
+  transitionKind?: string;
+  turn?: number;
+  status?: string;
+  error?: string;
+  legs?: MoneyMoveRecordLeg[];
+  projections?: { applied?: boolean; appliedAt?: Date | null }[];
+  event?: { command?: string; subjectId?: string };
+}
+
+/** Receipts keyed by journal key; a missing key means no earlier attempt claimed it. */
+export type SoeRemittanceReceipts = ReadonlyMap<string, SoeRemittanceReceipt>;
+
+/** One read for every enterprise the sweep may remit for this turn. */
+export async function loadSoeRemittanceReceipts(
+  db: Db,
+  turn: number,
+  corpIds: readonly ObjectId[]
+): Promise<Map<string, SoeRemittanceReceipt>> {
+  if (corpIds.length === 0) return new Map();
+  const rows = await db
+    .collection<SoeRemittanceReceipt>(MONEY_MOVE_COLLECTION)
+    .find(
+      { _id: { $in: corpIds.map((id) => soeRemittanceKey(turn, id)) } },
+      {
+        projection: {
+          kind: 1,
+          transitionKind: 1,
+          turn: 1,
+          status: 1,
+          error: 1,
+          legs: 1,
+          projections: 1,
+          event: 1,
+        },
+      }
+    )
+    .toArray();
+  return new Map(rows.map((row) => [row._id, row]));
+}
+
+function validFrozenLeg(
+  leg: MoneyMoveRecordLeg | undefined,
+  kind: "debit" | "credit",
+  collection: string,
+  path: string
+): leg is MoneyMoveRecordLeg & { valuation: { currencyCode: string; localPerAnchor: number } } {
+  return (
+    leg?.kind === kind &&
+    leg.collection === collection &&
+    leg.path === path &&
+    Number.isFinite(leg.amount) &&
+    leg.amount > 0 &&
+    typeof leg.valuation?.currencyCode === "string" &&
+    Number.isFinite(leg.valuation.localPerAnchor) &&
+    leg.valuation.localPerAnchor > 0
+  );
+}
+
+/**
+ * Why `receipt` is not this enterprise's remittance for this turn, or null when
+ * it is. Anything unreadable fails closed: the receipt is never repriced,
+ * resumed or skipped on a guess.
+ */
+function soeRemittanceOwnershipError(
+  receipt: SoeRemittanceReceipt,
+  input: TreasuryTransferInput,
+  turn: number
+): string | null {
+  const corpId = input.corpId.toString();
+  const [debit, credit] = receipt.legs ?? [];
+  if (receipt.kind !== "soe_profit_remittance" || receipt.transitionKind !== receipt.kind)
+    return "is not an SOE remittance";
+  if (receipt.turn !== turn) return "belongs to another turn";
+  if (receipt.legs?.length !== 2) return "does not have the remittance legs";
+  if (
+    !validFrozenLeg(debit, "debit", "corporations", "liquidCapital") ||
+    String(debit.filter?._id) !== corpId ||
+    debit.valuation.currencyCode !== input.corpCurrency
+  )
+    return "does not debit this enterprise's cash";
+  if (
+    !validFrozenLeg(credit, "credit", "federalBudget", "treasuryCashLocal") ||
+    credit.filter?.countryId !== input.countryId
+  )
+    return "does not credit this country's Treasury cash";
+  if (receipt.event?.command !== "turn.soe.remittance" || receipt.event.subjectId !== corpId)
+    return "does not name this enterprise";
+  return null;
+}
+
+/**
+ * Finish, or honour, the remittance an earlier attempt of this turn froze.
+ *
+ * Returns the enterprise cash this call debited, so the caller folds it into
+ * its turn-start snapshot exactly once: zero for a receipt that already
+ * settled or was refused before any cash moved, and the frozen debit when a
+ * receipt that stopped before its debit is finished here.
+ */
+async function resumeSoeRemittanceReceipt(
+  db: Db,
+  receipt: SoeRemittanceReceipt,
+  input: TreasuryTransferInput,
+  turn: number
+): Promise<number> {
+  const ownership = soeRemittanceOwnershipError(receipt, input, turn);
+  if (ownership) throw new Error(`SOE remittance receipt ${receipt._id} ${ownership}`);
+  const legs = receipt.legs ?? [];
+  const projectionsDone = (receipt.projections ?? []).every((p) => p.applied || p.appliedAt);
+  if (receipt.status === "applied" && legs.every((leg) => leg.applied) && projectionsDone) return 0;
+  if (receipt.status === "rejected") {
+    if (await refusedBeforeAnyCashMoved(db, receipt._id)) return 0;
+    throw new Error(receipt.error ?? `SOE remittance receipt ${receipt._id} was rejected`);
+  }
+  const resumed = await resumeSettlement(db, receipt._id);
+  if (resumed.status === "rejected" && (await refusedBeforeAnyCashMoved(db, receipt._id))) return 0;
+  if (resumed.status !== "applied") {
+    throw new Error(resumed.error ?? `SOE remittance receipt ${receipt._id} is incomplete`);
+  }
+  // An operator-reconciled `applied` receipt already moved its cash.
+  return receipt.status === "applied" || legs[0]?.applied ? 0 : (legs[0]?.amount ?? 0);
 }
 
 /**

@@ -65,6 +65,8 @@ interface CeoBudgetPanelProps {
   financials: Financials;
   /** Sectors operated; drives the sprawl readout on the logistics line. */
   sectorCount: number;
+  /** True when every sector is a logistics sector, which never pays sprawl. */
+  allSectorsSprawlExempt?: boolean;
   editMarketingBudget: string;
   setEditMarketingBudget: (val: string) => void;
   editLogisticsBudget: string;
@@ -91,6 +93,7 @@ export default function CeoBudgetPanel({
   corporation,
   financials,
   sectorCount,
+  allSectorsSprawlExempt = false,
   editMarketingBudget,
   setEditMarketingBudget,
   editLogisticsBudget,
@@ -157,11 +160,9 @@ export default function CeoBudgetPanel({
   const sprawlCap =
     SPRAWL_SECTOR_THRESHOLD +
     SPRAWL_SECTOR_THRESHOLD * (Math.max(0, currentLs) / LOGISTICS_MAX_SPRAWL_EFFECT);
-  const sprawlPenalty = getSprawlModifier(
-    sectorCount,
-    currentLs,
-    Boolean(corporation.secondaryType)
-  );
+  const sprawlPenalty = allSectorsSprawlExempt
+    ? 0
+    : getSprawlModifier(sectorCount, currentLs, Boolean(corporation.secondaryType));
   const innovationPct = Math.min(1, Math.max(0, currentRd) / RD_INNOVATION_SCORE_THRESHOLD) * 100;
 
   const setters: Record<BudgetKey, (displayValue: number) => void> = {
@@ -320,9 +321,16 @@ export default function CeoBudgetPanel({
                 "No spend"
               )}
               {". "}
-              <span className={sectorCount > sprawlCap ? "text-warning" : undefined}>
-                {sectorCount} of {Math.floor(sprawlCap)} sectors before sprawl
-                {sectorCount > sprawlCap ? `, margin penalty ${sprawlPenalty.toFixed(1)}%` : ""}
+              <span
+                className={
+                  !allSectorsSprawlExempt && sectorCount > sprawlCap ? "text-warning" : undefined
+                }
+              >
+                {allSectorsSprawlExempt
+                  ? "Logistics sectors are exempt from sprawl"
+                  : `${sectorCount} of ${Math.floor(sprawlCap)} sectors before sprawl${
+                      sectorCount > sprawlCap ? `, margin penalty ${sprawlPenalty.toFixed(1)}%` : ""
+                    }`}
               </span>
             </>
           }
