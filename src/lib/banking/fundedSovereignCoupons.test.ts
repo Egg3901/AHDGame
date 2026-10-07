@@ -301,4 +301,64 @@ describe("funded sovereign coupon claims", () => {
       .docs.find((doc) => (doc._id as ObjectId).equals(secondCharacterId));
     expect((secondCharacter as { cashOnHand: number }).cashOnHand).toBeGreaterThan(0);
   });
+
+  it("does not journal a rejected attempt per arrears claim when Treasury cannot cover it", async () => {
+    const db = world(0);
+    const bonds = Array.from({ length: 50 }, (_, i) => ({
+      ...bond(),
+      _id: new ObjectId(`6500000000000000000010${String(i).padStart(2, "0")}`),
+    })) as Bond[];
+    const args = { anchorRate: 1, forexEnabled: false, corporateQuotes: new Map() };
+    for (let turn = 12; turn < 16; turn++)
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn,
+        bonds,
+      });
+    const claims = savedBudget(db).sovereignCouponClaims ?? [];
+    expect(claims).toHaveLength(200);
+
+    const writes = new Map<string, number>();
+    const counted = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop !== "collection") return Reflect.get(target, prop, receiver);
+        return (name: string) => {
+          const inner = target.collection(name);
+          return new Proxy(inner, {
+            get(c, method, r) {
+              const value = Reflect.get(c, method, r);
+              if (typeof value !== "function") return value;
+              return (...callArgs: unknown[]) => {
+                writes.set(name, (writes.get(name) ?? 0) + 1);
+                return value.apply(c, callArgs);
+              };
+            },
+          });
+        };
+      },
+    });
+    await settleFundedSovereignCoupons(counted as unknown as Db, savedBudget(db), {
+      ...args,
+      turn: 16,
+      bonds: [],
+    });
+    expect(savedBudget(db).sovereignCouponClaims).toHaveLength(200);
+    expect(savedBudget(db).treasuryCashLocal).toBe(0);
+    expect(db.collection("bankMoneyMoves").docs).toHaveLength(0);
+    const commands = [...writes.values()].reduce((sum, n) => sum + n, 0);
+    expect(commands).toBeLessThan(10);
+
+    // Cash for exactly two claims pays the first two in order and defers the rest.
+    savedBudget(db).treasuryCashLocal = claims[0].amountLocal * 2;
+    await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+      ...args,
+      turn: 17,
+      bonds: [],
+    });
+    expect(savedBudget(db).treasuryCashLocal).toBeCloseTo(0, 9);
+    expect(savedBudget(db).sovereignCouponClaims).toEqual(claims.slice(2));
+    expect(
+      db.collection("bankMoneyMoves").docs.filter((doc) => doc.status === "rejected")
+    ).toHaveLength(0);
+  });
 });
