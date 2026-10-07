@@ -138,6 +138,8 @@ export interface ElectionResponse {
    */
   electionYear: number | null;
   status: string;
+  /** The requesting character withdrew from this election and may not re-enter. */
+  viewerWithdrew?: boolean;
   totalSeats: number | null;
 
   // Timing

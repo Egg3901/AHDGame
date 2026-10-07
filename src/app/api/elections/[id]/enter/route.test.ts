@@ -163,6 +163,53 @@ describe("POST /api/elections/[id]/enter — OPS filing gates", () => {
     expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
   });
 
+  it("refuses re-entry after the character withdrew from this election (ticket #1391)", async () => {
+    const db = setupScenario({
+      electionCountry: "US",
+      characterCountry: "US",
+      characterParty: "1",
+      partyDocReturn: null,
+    });
+    const withdrawnRow = {
+      electionId: electionOid,
+      characterId: characterOid,
+      status: "withdrawn",
+      withdrawnBy: "candidate",
+    };
+    db.collectionMocks.electionCandidates.find.mockImplementation((filter: unknown) => {
+      const cursor = emptyFindCursor();
+      if ((filter as { withdrawnBy?: string }).withdrawnBy === "candidate")
+        cursor.toArray.mockResolvedValue([withdrawnRow]);
+      return cursor;
+    });
+    const res = await POST(makeReq(), {
+      params: Promise.resolve({ id: electionOid.toString() }),
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({
+      error: "You withdrew from this race and cannot re-enter it.",
+    });
+    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("still lets a character enter when their only prior row was a system withdrawal", async () => {
+    const db = setupScenario({
+      electionCountry: "US",
+      characterCountry: "US",
+      characterParty: "1",
+      partyDocReturn: null,
+    });
+    const res = await POST(makeReq(), {
+      params: Promise.resolve({ id: electionOid.toString() }),
+    });
+    expect(res.status).toBe(200);
+    expect(db.collectionMocks.electionCandidates.find).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "withdrawn", withdrawnBy: "candidate" }),
+      expect.anything()
+    );
+    expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalled();
+  });
+
   it("returns 403 when a banned-party character files in CN", async () => {
     setupScenario({
       electionCountry: "CN",
@@ -805,9 +852,12 @@ describe("Bound first-Council player filing", () => {
         russianCouncilNomination: { registrationOrder: 500 },
       },
     ];
-    const cursor = emptyFindCursor();
-    cursor.toArray.mockResolvedValue(rows);
-    db.collectionMocks.electionCandidates.find.mockReturnValue(cursor);
+    db.collectionMocks.electionCandidates.find.mockImplementation((filter: unknown) => {
+      const cursor = emptyFindCursor();
+      if ((filter as { withdrawnBy?: string }).withdrawnBy !== "candidate")
+        cursor.toArray.mockResolvedValue(rows);
+      return cursor;
+    });
     db.collectionMocks.electionCandidates.updateMany.mockResolvedValue({ modifiedCount: 1 });
     const res = await post();
     expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);

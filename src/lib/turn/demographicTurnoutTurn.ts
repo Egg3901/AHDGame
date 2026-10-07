@@ -39,6 +39,7 @@ import {
   calculateCanvassingBoost,
 } from "./demographicTurnoutCalculations";
 import { resolveCanvassGroup } from "@/lib/demographics/countryDemographics";
+import { resolvePartyTurnoutTargetLean } from "@/lib/demographics/partyTurnoutTargetResolver";
 import {
   calculateRegistrationDriveBoost,
   planRegistrationDriveSourcing,
@@ -609,11 +610,14 @@ export async function processPartyGOTV(
       const targetGroup = budget.gotvTargetGroup;
 
       if (targetCategory && targetGroup) {
-        // Country-aware lean lookup: non-US parties target voter-group
-        // categories (e.g. UK uk_voterGroups) absent from the US-only
-        // LAYER1 table, which used to collapse their alignment to the 0.1
-        // fallback (ticket #1265).
-        const lean = resolveCanvassGroup(budgetCountryId, targetCategory, targetGroup);
+        // Party targeting now accepts the same Layer-1 bucket catalog as the
+        // region Demographics tab while preserving established targets.
+        const lean = resolvePartyTurnoutTargetLean(
+          budgetCountryId,
+          targetCategory,
+          targetGroup,
+          revenueCtx?.preset
+        );
         const alignMult = lean
           ? calculateAlignmentMultiplier(
               position.economic,
@@ -621,9 +625,10 @@ export async function processPartyGOTV(
               lean.economicLean,
               lean.socialLean
             )
-          : 0.1;
+          : null;
+        let applied = false;
 
-        if (budget.scope === "national") {
+        if (alignMult !== null && budget.scope === "national") {
           // National: divide spend across this country's regions only. The
           // collection holds every country's docs, so the unfiltered length
           // diluted non-US parties (UK: 12 regions split ~127 ways) and
@@ -638,25 +643,41 @@ export async function processPartyGOTV(
             alignMult
           );
           for (const state of inScopeTurnout) {
-            applyBoost(state, { category: targetCategory, group: targetGroup }, boost);
-            state.lastUpdated = new Date();
+            if (
+              applyBoost(state, { category: targetCategory, group: targetGroup }, boost, boost, {
+                initializeMissingCategory: true,
+              })
+            ) {
+              state.lastUpdated = new Date();
+              applied = true;
+            }
           }
-        } else {
+        } else if (alignMult !== null && budget.scope === "state") {
           // State: full spend in one state
           const state = stateTurnout.find((s) => s._id === budget.stateId);
           if (state) {
             const boost = calculateStateGOTVBoost(gotvSpend, DOLLARS_PER_TURNOUT_POINT, alignMult);
-            applyBoost(state, { category: targetCategory, group: targetGroup }, boost);
-            state.lastUpdated = new Date();
+            applied = applyBoost(
+              state,
+              { category: targetCategory, group: targetGroup },
+              boost,
+              boost,
+              { initializeMissingCategory: true }
+            );
+            if (applied) state.lastUpdated = new Date();
           }
         }
-        totalSpend += gotvSpend;
-        availableTreasury -= gotvSpend;
-        if (budget.scope === "national") {
-          nationalPartyGotvDeductions.set(
-            treasuryKey,
-            (nationalPartyGotvDeductions.get(treasuryKey) ?? 0) + gotvSpend
-          );
+        // Invalid stale targets and scopes with no turnout document cannot
+        // produce an effect, so they must not consume treasury.
+        if (applied) {
+          totalSpend += gotvSpend;
+          availableTreasury -= gotvSpend;
+          if (budget.scope === "national") {
+            nationalPartyGotvDeductions.set(
+              treasuryKey,
+              (nationalPartyGotvDeductions.get(treasuryKey) ?? 0) + gotvSpend
+            );
+          }
         }
       }
       // If no target group selected, GOTV does nothing (group selection required)
@@ -678,7 +699,12 @@ export async function processPartyGOTV(
       ) {
         // Suppression targets a specific demographic with a negative boost
         // Alignment multiplier is inverted: further groups are EASIER to suppress
-        const supLean = resolveCanvassGroup(budgetCountryId, supCategory, supGroup);
+        const supLean = resolvePartyTurnoutTargetLean(
+          budgetCountryId,
+          supCategory,
+          supGroup,
+          revenueCtx?.preset
+        );
         const alignMult = supLean
           ? calculateAlignmentMultiplier(
               position.economic,
@@ -686,9 +712,10 @@ export async function processPartyGOTV(
               supLean.economicLean,
               supLean.socialLean
             )
-          : 0.5;
+          : null;
+        let applied = false;
 
-        if (budget.scope === "national") {
+        if (alignMult !== null && budget.scope === "national") {
           const inScopeTurnout = stateTurnout.filter((s) =>
             isTurnoutDocInCountry(s, budgetCountryId)
           );
@@ -699,10 +726,16 @@ export async function processPartyGOTV(
             alignMult
           );
           for (const state of inScopeTurnout) {
-            applyBoost(state, { category: supCategory, group: supGroup }, -negBoost);
-            state.lastUpdated = new Date();
+            if (
+              applyBoost(state, { category: supCategory, group: supGroup }, -negBoost, -negBoost, {
+                initializeMissingCategory: true,
+              })
+            ) {
+              state.lastUpdated = new Date();
+              applied = true;
+            }
           }
-        } else {
+        } else if (alignMult !== null && budget.scope === "state") {
           const state = stateTurnout.find((s) => s._id === budget.stateId);
           if (state) {
             const negBoost = calculateStateGOTVBoost(
@@ -710,17 +743,25 @@ export async function processPartyGOTV(
               DOLLARS_PER_TURNOUT_POINT,
               alignMult
             );
-            applyBoost(state, { category: supCategory, group: supGroup }, -negBoost);
-            state.lastUpdated = new Date();
+            applied = applyBoost(
+              state,
+              { category: supCategory, group: supGroup },
+              -negBoost,
+              -negBoost,
+              { initializeMissingCategory: true }
+            );
+            if (applied) state.lastUpdated = new Date();
           }
         }
-        totalSpend += suppressionSpend;
-        availableTreasury -= suppressionSpend;
-        if (budget.scope === "national") {
-          nationalPartySuppressionDeductions.set(
-            treasuryKey,
-            (nationalPartySuppressionDeductions.get(treasuryKey) ?? 0) + suppressionSpend
-          );
+        if (applied) {
+          totalSpend += suppressionSpend;
+          availableTreasury -= suppressionSpend;
+          if (budget.scope === "national") {
+            nationalPartySuppressionDeductions.set(
+              treasuryKey,
+              (nationalPartySuppressionDeductions.get(treasuryKey) ?? 0) + suppressionSpend
+            );
+          }
         }
       }
     }

@@ -1649,8 +1649,12 @@ async function fundSovereignSeries(
     (sum, doc) => sum + Math.floor(doc.totalIssued / BOND_UNIT_FACE_VALUE),
     0
   );
+  // Funded Treasury cash forbids minting (#3401): the gap stays unsold and
+  // places later as pool cash allows, with no face, principal or coupon now.
   let monetaryCapacity =
-    args.centralBank?.chairMode === "npp" && args.centralBank.chairControlsLocked !== true
+    args.accounting.treasuryCashLedgerEnabled !== true &&
+    args.centralBank?.chairMode === "npp" &&
+    args.centralBank.chairControlsLocked !== true
       ? planSovereignMonetization({
           unsoldUnits: requested,
           gdpLocal: args.budget.gdpSmoothed || args.budget.gdp,

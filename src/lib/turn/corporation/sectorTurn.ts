@@ -10,7 +10,7 @@ import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CommodityType } from "@/lib/constants/commodities";
-import { eraScaledBasePrices } from "@/lib/constants/commodities";
+import { commodityMixWeight, eraScaledBasePrices } from "@/lib/constants/commodities";
 import { trendProductionPolicy, getRevenueMultiplier } from "@/lib/utils/productionPolicy";
 import {
   calculateDailyGrowthCost,
@@ -500,6 +500,17 @@ export function processSector(
       isStateScopedCommodity(commodity)
         ? lookups.statePriceRatioByState?.get(sector.stateId)?.get(commodity)
         : lookups.reachablePriceRatioByCountry?.get(sectorCountryId)?.get(commodity),
+    throttleLegBalance: (commodity) =>
+      isStateScopedCommodity(commodity)
+        ? lookups.rawStateBalances?.get(sector.stateId)?.get(commodity)
+        : (lookups.countryClearingBooks?.get(sectorCountryId)?.get(commodity) ??
+          lookups.globalCommodityBalances?.get(commodity)),
+    throttleLegMixWeight: (commodity) =>
+      commodityMixWeight(
+        strategyRates.supply,
+        eraScaledBasePrices(lookups.eraUnitScale),
+        commodity
+      ),
   });
   if (capacityBindingEvent) {
     pendingCapacityBindingEvents.push(capacityBindingEvent);

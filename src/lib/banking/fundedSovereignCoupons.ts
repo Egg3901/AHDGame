@@ -12,6 +12,151 @@ import {
   type SovereignCouponCorporationQuote,
 } from "@/lib/banking/rules/sovereignCoupons";
 
+/**
+ * One document per frozen coupon claim. Claims used to live in an array on the
+ * country's `federalBudget` document, which every unfunded turn grew by one
+ * claim per sovereign bond. That made every whole-budget read heavier each turn
+ * and put the document on course for the 16 MB limit. The claim, its id and its
+ * frozen quotes are unchanged; only where it is kept moved.
+ */
+export const SOVEREIGN_COUPON_CLAIMS_COLLECTION = "sovereignCouponClaims";
+
+export interface SovereignCouponClaimRecord {
+  /** The claim id, `sovereign-coupon:<bondId>:<dueTurn>`. */
+  _id: string;
+  budgetId: string;
+  /** Book position within the due turn, so claims settle in the order they were frozen. */
+  order: number;
+  claim: FundedSovereignCouponClaim;
+  createdAt: Date;
+  /** Set by the payout projection once the claim is paid. */
+  settledTurn?: number;
+  /** Written by the settlement journal while it publishes to this record; never set here. */
+  pendingSettlementProjection?: unknown;
+}
+
+const OPEN_CLAIM = { settledTurn: { $exists: false } };
+let claimIndexReady: Promise<unknown> | null = null;
+
+function claimStore(db: Db) {
+  const store = db.collection<SovereignCouponClaimRecord>(SOVEREIGN_COUPON_CLAIMS_COLLECTION);
+  claimIndexReady ??= store
+    .createIndex(
+      { budgetId: 1, settledTurn: 1 },
+      { name: "sovereignCouponClaims_budget_settled", background: true }
+    )
+    .catch((error) => {
+      claimIndexReady = null;
+      throw error;
+    });
+  return store;
+}
+
+/** Budget ids that still owe at least one stored coupon claim. */
+export async function budgetIdsWithOpenSovereignCouponClaims(db: Db): Promise<Set<string>> {
+  const ids = await claimStore(db).distinct("budgetId", OPEN_CLAIM);
+  return new Set(ids.map(String));
+}
+
+/** Unpaid claims for one budget, in book order. Legacy array claims are not included. */
+export async function loadOpenSovereignCouponClaims(
+  db: Db,
+  budgetId: string
+): Promise<FundedSovereignCouponClaim[]> {
+  const rows = await claimStore(db)
+    .find({ budgetId, ...OPEN_CLAIM })
+    .sort({ "claim.dueTurn": 1, order: 1 })
+    .toArray();
+  return rows.map((row) => row.claim);
+}
+
+/**
+ * Insert claim records. Unordered, so a record a concurrent or replayed install
+ * already wrote fails alone with a duplicate key and every other record lands.
+ */
+async function insertClaimRecords(db: Db, records: SovereignCouponClaimRecord[]): Promise<void> {
+  if (!records.length) return;
+  try {
+    await claimStore(db).insertMany(records, { ordered: false });
+  } catch (error) {
+    if (!isDuplicateKeyError(error)) throw error;
+  }
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const { code, writeErrors } = error as { code?: unknown; writeErrors?: unknown };
+  if (code === 11000) return true;
+  return (
+    Array.isArray(writeErrors) &&
+    writeErrors.length > 0 &&
+    writeErrors.every((row) => (row as { code?: unknown })?.code === 11000)
+  );
+}
+
+async function findPriorPayouts(
+  db: Db,
+  claims: FundedSovereignCouponClaim[]
+): Promise<Array<{ _id: string; status: string }>> {
+  if (!claims.length) return [];
+  return db
+    .collection<{ _id: string; status: string }>("bankMoneyMoves")
+    .find(
+      {
+        $or: claims.map((claim) => ({ _id: { $regex: `^${escapeRegex(claim.id)}:attempt:` } })),
+        status: { $in: ["partial", "applied"] },
+      },
+      { projection: { _id: 1, status: 1 } }
+    )
+    .toArray();
+}
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const claimIdOfMove = (moveId: string) => moveId.slice(0, moveId.indexOf(":attempt:"));
+
+/**
+ * Move a budget's legacy array claims into the claim store. A claim with a
+ * partial or applied payout already in the journal stays in the array: its
+ * frozen projection plan removes it from there, and moving it would leave that
+ * plan pointing at nothing.
+ */
+async function migrateLegacyClaims(
+  db: Db,
+  budgetId: string,
+  legacy: FundedSovereignCouponClaim[]
+): Promise<FundedSovereignCouponClaim[]> {
+  if (!legacy.length) return [];
+  const priors = await findPriorPayouts(db, legacy);
+  const pinned = new Set(priors.map((move) => claimIdOfMove(move._id)));
+  const movable = legacy.filter((claim) => !pinned.has(claim.id));
+  // A crash between the insert and the pull leaves a claim in both places; the
+  // stored record wins and the pull below finishes the move.
+  const stored = movable.length
+    ? await claimStore(db)
+        .find({ _id: { $in: movable.map((claim) => claim.id) } }, { projection: { _id: 1 } })
+        .toArray()
+    : [];
+  const storedIds = new Set(stored.map((row) => row._id));
+  await insertClaimRecords(
+    db,
+    movable.flatMap((claim, order) =>
+      storedIds.has(claim.id)
+        ? []
+        : [{ _id: claim.id, budgetId, order, claim, createdAt: new Date() }]
+    )
+  );
+  if (movable.length) {
+    await db
+      .collection<FederalBudget>("federalBudget")
+      .updateOne(
+        { _id: budgetId as FederalBudget["_id"] },
+        { $pull: { sovereignCouponClaims: { id: { $in: movable.map((claim) => claim.id) } } } }
+      );
+  }
+  return legacy.filter((claim) => pinned.has(claim.id));
+}
+
 function payoutTransition(
   claim: FundedSovereignCouponClaim,
   budgetId: string,
@@ -106,10 +251,10 @@ function payoutTransition(
     legs,
     projections: [
       {
-        collection: "federalBudget",
-        filter: { _id: budgetId, "sovereignCouponClaims.id": claim.id },
-        update: { $pull: { sovereignCouponClaims: { id: claim.id } } },
-        note: "Remove paid sovereign coupon claim",
+        collection: SOVEREIGN_COUPON_CLAIMS_COLLECTION,
+        filter: { _id: claim.id, budgetId },
+        update: { $set: { settledTurn: attemptTurn } },
+        note: "Mark paid sovereign coupon claim settled",
       },
       ...claim.holders
         .filter((holder) => holder.kind === "publicFloat")
@@ -146,8 +291,18 @@ export async function settleFundedSovereignCoupons(
     corporateQuotes: ReadonlyMap<string, SovereignCouponCorporationQuote>;
   }
 ): Promise<void> {
-  const collection = db.collection<FederalBudget>("federalBudget");
-  const claimById = new Map((budget.sovereignCouponClaims ?? []).map((claim) => [claim.id, claim]));
+  const budgetId = String(budget._id);
+  const pinnedLegacy = await migrateLegacyClaims(db, budgetId, budget.sovereignCouponClaims ?? []);
+  const claimById = new Map<string, FundedSovereignCouponClaim>(
+    pinnedLegacy.map((claim) => [claim.id, claim])
+  );
+  for (const claim of await loadOpenSovereignCouponClaims(db, budgetId))
+    claimById.set(claim.id, claim);
+
+  // Freeze this turn's claims. The record is written before the frozen-through
+  // mark, so a crash between the two re-installs the same id (a no-op) rather
+  // than losing the claim.
+  const fresh: SovereignCouponClaimRecord[] = [];
   for (const bond of input.bonds) {
     if (
       bond.issuerType !== "sovereign" ||
@@ -159,8 +314,7 @@ export async function settleFundedSovereignCoupons(
     const bondId = bond._id.toHexString();
     const claimId = `sovereign-coupon:${bondId}:${input.turn}`;
     if (claimById.has(claimId)) continue;
-    const frozenKey = `b${bondId}`;
-    if ((budget.sovereignCouponFrozenThrough?.[frozenKey] ?? -1) >= input.turn) continue;
+    if ((budget.sovereignCouponFrozenThrough?.[`b${bondId}`] ?? -1) >= input.turn) continue;
     const snapshot: SovereignCouponBondSnapshot = {
       id: bond._id.toHexString(),
       countryId: String(bond.countryId ?? ""),
@@ -199,46 +353,39 @@ export async function settleFundedSovereignCoupons(
       corporateQuotes: input.corporateQuotes,
     });
     if (!claim) continue;
-    const frozenPath = `sovereignCouponFrozenThrough.${frozenKey}`;
-    const result = await collection.updateOne(
+    fresh.push({ _id: claim.id, budgetId, order: fresh.length, claim, createdAt: new Date() });
+  }
+  if (fresh.length) {
+    // A replayed install keeps the claim frozen the first time, and a claim
+    // already paid stays paid.
+    const existing = await claimStore(db)
+      .find({ _id: { $in: fresh.map((row) => row._id) } })
+      .toArray();
+    const existingById = new Map(existing.map((row) => [row._id, row]));
+    await insertClaimRecords(
+      db,
+      fresh.filter((row) => !existingById.has(row._id))
+    );
+    await db.collection<FederalBudget>("federalBudget").updateOne(
+      { _id: budget._id },
       {
-        _id: budget._id,
-        "sovereignCouponClaims.id": { $ne: claim.id },
-        $or: [{ [frozenPath]: { $exists: false } }, { [frozenPath]: { $lt: claim.dueTurn } }],
-      },
-      {
-        $push: { sovereignCouponClaims: claim },
-        $set: { [frozenPath]: claim.dueTurn },
+        $max: Object.fromEntries(
+          fresh.map((row) => [
+            `sovereignCouponFrozenThrough.b${row.claim.bondId}`,
+            row.claim.dueTurn,
+          ])
+        ),
       }
     );
-    if (result.matchedCount === 0) {
-      const current = await collection.findOne(
-        { _id: budget._id },
-        { projection: { sovereignCouponClaims: 1, sovereignCouponFrozenThrough: 1 } }
-      );
-      const frozen = current?.sovereignCouponClaims?.find((row) => row.id === claim.id);
-      if (frozen) claimById.set(claim.id, frozen);
-      else if ((current?.sovereignCouponFrozenThrough?.[frozenKey] ?? -1) >= claim.dueTurn)
-        continue;
-      else throw new Error(`Sovereign coupon claim install lost for ${claim.id}`);
-    } else claimById.set(claim.id, claim);
+    for (const row of fresh) {
+      const saved = existingById.get(row._id);
+      if (saved?.settledTurn !== undefined) continue;
+      claimById.set(row._id, saved?.claim ?? row.claim);
+    }
   }
-  const claims = [...claimById.values()];
-  const attemptPrefixes = claims.map(
-    (claim) => `^${claim.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:attempt:`
-  );
-  const priorMoves = attemptPrefixes.length
-    ? await db
-        .collection<{ _id: string; status: string }>("bankMoneyMoves")
-        .find(
-          {
-            $or: attemptPrefixes.map((prefix) => ({ _id: { $regex: prefix } })),
-            status: { $in: ["partial", "applied"] },
-          },
-          { projection: { _id: 1, status: 1 } }
-        )
-        .toArray()
-    : [];
+
+  const claims = [...claimById.values()].sort((a, b) => a.dueTurn - b.dueTurn);
+  const priorMoves = await findPriorPayouts(db, claims);
   const targetReadyClaimIds = await loadCouponTargetReadiness(db, claims);
   // Unpaid claims stay queued, so an unfunded Treasury carries one claim per
   // bond per turn of arrears. Attempting each through the journal writes a
@@ -248,10 +395,9 @@ export async function settleFundedSovereignCoupons(
   // defers a claim one turn or lets the guard reject it as before.
   let fundableCash = 0;
   if (claims.length) {
-    const cash = await collection.findOne(
-      { _id: budget._id },
-      { projection: { treasuryCashLocal: 1 } }
-    );
+    const cash = await db
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ _id: budget._id }, { projection: { treasuryCashLocal: 1 } });
     const value = (cash as { treasuryCashLocal?: unknown } | null)?.treasuryCashLocal;
     fundableCash = typeof value === "number" && Number.isFinite(value) ? value : 0;
   }
@@ -268,11 +414,19 @@ export async function settleFundedSovereignCoupons(
     if (!prior && claim.amountLocal > fundableCash) continue;
     const result = prior
       ? await resumeSettlement(db, prior._id)
-      : await settleTransition(db, payoutTransition(claim, String(budget._id), attempt));
+      : await settleTransition(db, payoutTransition(claim, budgetId, attempt));
     if (result.status === "partial") return;
     if (!prior && result.status === "applied") fundableCash -= claim.amountLocal;
     // A wholly rejected source guard has no landed cash leg. Keep the immutable claim for the next turn.
   }
+
+  // Paid records are only history once their receipt is acknowledged; keep
+  // anything a journal may still publish to.
+  await claimStore(db).deleteMany({
+    budgetId,
+    settledTurn: { $lt: input.turn },
+    pendingSettlementProjection: { $exists: false },
+  });
 }
 
 async function loadCouponTargetReadiness(

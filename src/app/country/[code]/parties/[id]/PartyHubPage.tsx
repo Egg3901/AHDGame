@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -52,6 +53,7 @@ import { getOrgLabel, fmt as stateFmt } from "../../region/[id]/party/[partyId]/
 import type { MainTab as StateMainTab } from "../../region/[id]/party/[partyId]/components/types";
 import type { StatePartyAnalyticsPayload } from "@/lib/partyAnalytics";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 
 export type PartyHubScope =
   | { kind: "national"; countryCode: string; partyId: string }
@@ -451,6 +453,11 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
   const [msg, setMsg] = useState("");
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  // Guards the whole confirm-then-POST window, so a double click cannot send
+  // a second leave request while the first is in flight.
+  const leaveInFlightRef = useRef(false);
+  const tParties = useTranslations("parties");
+  const { confirm: confirmDialog, dialog: confirmDialogNode } = useConfirmDialog();
   const [modViewEnabled, setModViewEnabled] = useState(false);
   const [modViewLoading, setModViewLoading] = useState(false);
 
@@ -730,12 +737,27 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
     fetchUser();
     setJoining(false);
   };
+  // In-page modal, not window.confirm(): native client webviews deny or never
+  // show the browser dialog, which rejected unhandled (#3375).
   const handleLeave = async () => {
-    if (!confirm("Leave this party? You will become Independent.")) return;
-    setLeaving(true);
-    await apiPost(`${partyApiUrl(requestedCountry?.toLowerCase() ?? "us", id)}/leave`, {});
-    fetchUser();
-    setLeaving(false);
+    if (leaveInFlightRef.current) return;
+    leaveInFlightRef.current = true;
+    try {
+      const confirmed = await confirmDialog({
+        title: tParties("leave.confirmTitle"),
+        message: tParties("leave.confirmMessage"),
+        confirmLabel: tParties("leave.confirm"),
+        cancelLabel: tParties("leave.cancel"),
+        destructive: true,
+      });
+      if (!confirmed) return;
+      setLeaving(true);
+      await apiPost(`${partyApiUrl(requestedCountry?.toLowerCase() ?? "us", id)}/leave`, {});
+      fetchUser();
+    } finally {
+      leaveInFlightRef.current = false;
+      setLeaving(false);
+    }
   };
 
   const switcherRegionId = useMemo(
@@ -886,7 +908,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
               disabled={leaving}
               className="h-9 rounded-lg border border-error/40 px-3.5 text-body font-medium text-error transition-colors hover:bg-error/10 disabled:opacity-50"
             >
-              {leaving ? "Leaving…" : "Leave party"}
+              {leaving ? tParties("leave.pending") : tParties("leave.button")}
             </button>
           ) : (
             <Button
@@ -1312,6 +1334,7 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
       {activeTab === "admin" && user?.isAdmin && (
         <NationalPartyAdminTab party={party} onUpdate={fetchParty} />
       )}
+      {confirmDialogNode}
     </PartyHubChrome>
   );
 }

@@ -30,7 +30,12 @@ import {
   type MandateContribution,
 } from "./soeMandates";
 import * as Sentry from "@sentry/nextjs";
-import { coverSoeOperatingLoss, debitTreasurySoeCapex, loadTreasuryCurrency } from "./treasury";
+import {
+  coverSoeOperatingLoss,
+  debitTreasurySoeCapex,
+  loadTreasuryCurrency,
+  settleFundedSoeCapexGrant,
+} from "./treasury";
 import {
   resolveTreasuryCashOptions,
   witnessTreasuryCash,
@@ -913,8 +918,7 @@ async function applyStateCapexGrants(
   now: Date,
   treasuryLedger: () => Promise<TreasuryCashOptions>
 ): Promise<void> {
-  const ops: AnyBulkWriteOperation<CorporateSector>[] = [];
-  const grantByCountry = new Map<CountryId, number>();
+  const grantByCountry = new Map<CountryId, { grantAnchor: number; buys: SoeCapexSectorBuy[] }>();
   const grantUnitScale = await loadWorldEraUnitScale(db);
   for (const corp of soeCorps) {
     if (corp.soe) continue; // command economy — funded by directed credit
@@ -925,27 +929,63 @@ async function applyStateCapexGrants(
       currentYear,
       grantUnitScale
     );
-    if (!(grantAnchor > 0)) continue;
-    for (const buy of buys) {
-      ops.push({
-        updateOne: {
-          filter: { _id: buy.sectorId },
-          update: plantCapacityDeltaPipeline(
-            buy.sectorType,
-            buy.unitsAdded,
-            { capacityBookAnchor: buy.nextBookAnchor, updatedAt: now },
-            buy.industryModel,
-            buy.mediaDiscriminator
-          ),
-        },
-      });
-    }
-    grantByCountry.set(countryId, (grantByCountry.get(countryId) ?? 0) + grantAnchor);
+    if (!(grantAnchor > 0) || buys.length === 0) continue;
+    const grant = grantByCountry.get(countryId) ?? { grantAnchor: 0, buys: [] };
+    grant.grantAnchor += grantAnchor;
+    grant.buys.push(...buys);
+    grantByCountry.set(countryId, grant);
   }
-  if (ops.length === 0) return;
+  if (grantByCountry.size === 0) return;
+  const cashLedger = await treasuryLedger();
+  const turn = cashLedger.context?.turn ?? 0;
+  const capacityUpdate = (buy: SoeCapexSectorBuy) =>
+    plantCapacityDeltaPipeline(
+      buy.sectorType,
+      buy.unitsAdded,
+      { capacityBookAnchor: buy.nextBookAnchor, updatedAt: now },
+      buy.industryModel,
+      buy.mediaDiscriminator
+    );
+
+  if (cashLedger.context?.treasuryCashLedgerEnabled) {
+    // Funded cash: each country's capacity rides its Treasury debit's receipt,
+    // so an unaffordable grant buys nothing and blocks no other country.
+    for (const [countryId, { grantAnchor, buys }] of grantByCountry) {
+      const outcome = await settleFundedSoeCapexGrant(db, {
+        countryId,
+        grantAnchor,
+        fxByCurrency,
+        now,
+        ledger: cashLedger,
+        treasuryCurrency: treasuryCurrencyByCountry.get(countryId),
+        key: `soe-capex-grant:${turn}:${countryId}`,
+        capacity: buys.map((buy) => ({
+          collection: "corporateSectors",
+          filter: { _id: buy.sectorId },
+          pipelineUpdate: capacityUpdate(buy),
+          note: "Install the state capex grant's replacement capacity",
+        })),
+      });
+      if (outcome.status !== "paid") {
+        Sentry.addBreadcrumb({
+          category: "soe.capexGrant",
+          level: "warning",
+          message: `State capex grant for ${countryId} not paid this turn (${outcome.status})`,
+          data: { countryId, turn, grantAnchor, error: outcome.error },
+        });
+      }
+    }
+    return;
+  }
+
+  const ops: AnyBulkWriteOperation<CorporateSector>[] = [];
+  for (const { buys } of grantByCountry.values()) {
+    for (const buy of buys) {
+      ops.push({ updateOne: { filter: { _id: buy.sectorId }, update: capacityUpdate(buy) } });
+    }
+  }
   await db.collection<CorporateSector>("corporateSectors").bulkWrite(ops);
-  for (const [countryId, grantAnchor] of grantByCountry) {
-    const cashLedger = await treasuryLedger();
+  for (const [countryId, { grantAnchor }] of grantByCountry) {
     await debitTreasurySoeCapex(
       db,
       countryId,
@@ -954,7 +994,7 @@ async function applyStateCapexGrants(
       now,
       cashLedger,
       treasuryCurrencyByCountry.get(countryId),
-      `soe-capex-grant:${cashLedger.context?.turn ?? 0}:${countryId}`
+      `soe-capex-grant:${turn}:${countryId}`
     );
   }
 }

@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./animations.css";
+@import "./interface-modes.css";
 
 /* Default theme — premium dark, slightly warmed graphite.
    Surfaces tuned to separate cards from page without a dashboardy feel:

@@ -33,6 +33,7 @@ import type { NationalTreasuryInsights } from "@/lib/treasury/partyTreasuryInsig
 import { TreasuryFundingInsightsCard } from "@/components/party/TreasuryFundingInsightsCard";
 import { TreasuryOverrideHistoryCard } from "@/components/party/TreasuryOverrideHistoryCard";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { useTurnoutTargetSections } from "@/hooks/useTurnoutTargetSections";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -96,6 +97,7 @@ export function TreasuryPanel({
   const { baseRates } = useCurrency();
   const partyCurrencyCode = COUNTRY_CURRENCY_MAP[party.countryId];
   const presetOptions = useMemo(() => getTreasuryPresetOptions(), []);
+  const targetSections = useTurnoutTargetSections(countryId);
   const emptyInsights = useMemo<NationalTreasuryInsights>(
     () => ({
       recentTransferRecipients: [],
@@ -794,6 +796,7 @@ export function TreasuryPanel({
               gotvForm={gotvForm}
               dispatch={dispatchWithPreset}
               onSave={handleSaveGotv}
+              targetSections={targetSections}
             />
           )}
 
@@ -815,6 +818,7 @@ export function TreasuryPanel({
               suppressionForm={suppressionForm}
               dispatch={dispatchWithPreset}
               onSave={handleSaveSuppression}
+              targetSections={targetSections}
             />
           )}
 

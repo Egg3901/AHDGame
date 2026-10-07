@@ -525,9 +525,11 @@ function applyUpdate(doc: Doc, update: Update): void {
         setPath(doc, path, base);
       }
     } else if (op === "$pull") {
-      // Selector form only (`$pull: { path: { field: value } }`): drop every
-      // array element matching ALL selector fields. Pulling an absent element
-      // is a no-op, which is what makes pull-then-credit legs replay-safe.
+      // Selector form only (`$pull: { path: { field: condition } }`): drop every
+      // array element matching ALL selector fields, conditions evaluated as a
+      // query the way the server does (`{ id: { $in: [...] } }`). Pulling an
+      // absent element is a no-op, which is what makes pull-then-credit legs
+      // replay-safe.
       for (const [path, selector] of Object.entries(fields as Doc)) {
         const current = getPath(doc, path);
         if (current === undefined) continue;
@@ -540,12 +542,7 @@ function applyUpdate(doc: Doc, update: Update): void {
         setPath(
           doc,
           path,
-          current.filter(
-            (item) =>
-              !Object.entries(selector).every(([key, want]) =>
-                sameValue(isPlainObject(item) ? (item as Doc)[key] : undefined, want)
-              )
-          )
+          current.filter((item) => !(isPlainObject(item) && matchesFilter(item as Doc, selector)))
         );
       }
     } else if (op === "$max") {
