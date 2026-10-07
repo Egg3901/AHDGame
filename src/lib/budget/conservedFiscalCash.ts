@@ -17,19 +17,19 @@ import {
 } from "@/lib/banking/settlementJournal";
 import type { BankingTransition } from "@/lib/banking/rules/boundary";
 import {
-  PLAYER_TAX_RECEIPT_KINDS,
+  BUDGET_REVENUE_RECEIPT_KINDS,
   conservedFiscalKey,
   conservedPoolFlowTransition,
   householdTaxTransition,
   planHouseholdTax,
   planPrimarySpending,
-  playerTaxReceiptsByCountry,
+  fundedRevenueReceiptsByCountry,
   primarySpendingTransition,
   unfundedFallbackKey,
   unfundedPlan,
   type ConservedFiscalTarget,
   type ConservedFlowPlan,
-  type PlayerTaxReceiptRecord,
+  type BudgetRevenueReceiptRecord,
 } from "@/lib/budget/rules/conservedFiscalCash";
 
 /** Both gates: funded Treasury cash, and the fresh-world conserved financing opt-in. */
@@ -52,7 +52,7 @@ export function householdMoneyBankId(currency: string): string {
 
 export interface ConservedFiscalContext {
   turn: number;
-  playerTaxByCountry: Map<string, number>;
+  fundedRevenueByCountry: Map<string, number>;
   /** Running snapshot of `externalBroadMoney`; guards on the write stay authoritative. */
   householdCashByBank: Map<string, number>;
 }
@@ -64,9 +64,9 @@ export async function loadConservedFiscalContext(
 ): Promise<ConservedFiscalContext> {
   const [receipts, banks] = await Promise.all([
     db
-      .collection<PlayerTaxReceiptRecord & { _id: string }>(MONEY_MOVE_COLLECTION)
+      .collection<BudgetRevenueReceiptRecord & { _id: string }>(MONEY_MOVE_COLLECTION)
       .find(
-        { turn, kind: { $in: [...PLAYER_TAX_RECEIPT_KINDS] } },
+        { turn, kind: { $in: [...BUDGET_REVENUE_RECEIPT_KINDS] } },
         { projection: { kind: 1, turn: 1, legs: 1 } }
       )
       .toArray(),
@@ -77,7 +77,7 @@ export async function loadConservedFiscalContext(
   ]);
   return {
     turn,
-    playerTaxByCountry: playerTaxReceiptsByCountry(receipts, turn),
+    fundedRevenueByCountry: fundedRevenueReceiptsByCountry(receipts, turn),
     householdCashByBank: new Map(
       banks.map((bank) => [
         String(bank._id),
@@ -187,7 +187,7 @@ export async function settleConservedHouseholdTax(
     () => {
       planned = planHouseholdTax({
         revenueSlice: receipt.components.revenue,
-        playerTaxReceipts: ctx.playerTaxByCountry.get(target.countryId) ?? 0,
+        fundedRevenueReceipts: ctx.fundedRevenueByCountry.get(target.countryId) ?? 0,
         priorArrears: budget.conservedFiscalCash?.householdTaxArrearsLocal ?? 0,
         householdCash: ctx.householdCashByBank.get(target.centralBankId) ?? 0,
       });
@@ -196,7 +196,7 @@ export async function settleConservedHouseholdTax(
     (plan) =>
       householdTaxTransition(
         target,
-        { ...plan, playerTaxReceipts: planned?.playerTaxReceipts ?? 0 },
+        { ...plan, fundedRevenueReceipts: planned?.fundedRevenueReceipts ?? 0 },
         unfundedFallbackKey(key)
       )
   );

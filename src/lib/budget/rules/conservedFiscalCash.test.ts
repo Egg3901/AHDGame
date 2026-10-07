@@ -6,7 +6,7 @@ import {
   householdTaxTransition,
   planHouseholdTax,
   planPrimarySpending,
-  playerTaxReceiptsByCountry,
+  fundedRevenueReceiptsByCountry,
   primarySpendingTransition,
   unfundedPlan,
 } from "./conservedFiscalCash";
@@ -24,7 +24,7 @@ describe("conserved fiscal cash rules", () => {
     expect(
       planHouseholdTax({
         revenueSlice: 1_000,
-        playerTaxReceipts: 150,
+        fundedRevenueReceipts: 150,
         priorArrears: 0,
         householdCash: 10_000,
       })
@@ -33,12 +33,12 @@ describe("conserved fiscal cash rules", () => {
       priorArrears: 0,
       paid: 850,
       arrearsAfter: 0,
-      playerTaxReceipts: 150,
+      fundedRevenueReceipts: 150,
     });
     expect(
       planHouseholdTax({
         revenueSlice: 100,
-        playerTaxReceipts: 150,
+        fundedRevenueReceipts: 150,
         priorArrears: 0,
         householdCash: 10_000,
       }).paid
@@ -49,7 +49,7 @@ describe("conserved fiscal cash rules", () => {
     expect(
       planHouseholdTax({
         revenueSlice: 500,
-        playerTaxReceipts: 0,
+        fundedRevenueReceipts: 0,
         priorArrears: 200,
         householdCash: 300,
       })
@@ -84,17 +84,26 @@ describe("conserved fiscal cash rules", () => {
       path: "treasuryCashLocal",
       filter: { countryId, _id: countryId },
     });
-    const receipts = playerTaxReceiptsByCountry(
+    const receipts = fundedRevenueReceiptsByCountry(
       [
         { kind: "corporate_tax_withholding", turn: 7, legs: [credit("US", 100), credit("UK", 40)] },
         { kind: "corporate_tax_arrears_payment", turn: 7, legs: [credit("US", 5)] },
+        { kind: "soe_profit_remittance", turn: 7, legs: [credit("US", 25)] },
         { kind: "corporate_tax_withholding", turn: 7, legs: [credit("US", 999, false)] },
         { kind: "corporate_tax_withholding", turn: 6, legs: [credit("US", 999)] },
         { kind: "treasury_funded_expense", turn: 7, legs: [credit("US", 999)] },
       ],
       7
     );
-    expect(Object.fromEntries(receipts)).toEqual({ US: 105, UK: 40 });
+    expect(Object.fromEntries(receipts)).toEqual({ US: 130, UK: 40 });
+    expect(
+      planHouseholdTax({
+        revenueSlice: 200,
+        fundedRevenueReceipts: receipts.get("US") ?? 0,
+        priorArrears: 0,
+        householdCash: 1_000,
+      }).paid
+    ).toBe(70);
   });
 
   it("builds balanced native-currency transitions with guarded payer debits", () => {
@@ -103,7 +112,7 @@ describe("conserved fiscal cash rules", () => {
       priorArrears: 0,
       paid: 850,
       arrearsAfter: 0,
-      playerTaxReceipts: 150,
+      fundedRevenueReceipts: 150,
     });
     expect(checkBalancedTransfer(tax.legs, tax.key)).toEqual([]);
     expect(tax.key).toBe("conserved-fiscal:7:US:tax");

@@ -102,6 +102,15 @@ function bond(c: Country): Bond {
 function budget(db: InMemoryDb, id: string): FederalBudget & { treasuryCashLocal: number } {
   return db.collection("federalBudget").docs.find((doc) => doc._id === id) as never;
 }
+function openClaims(db: InMemoryDb, id: string): unknown[] {
+  return [
+    ...(budget(db, id).sovereignCouponClaims ?? []),
+    ...db
+      .collection("sovereignCouponClaims")
+      .docs.filter((row) => row.budgetId === id && row.settledTurn === undefined)
+      .map((row) => row.claim),
+  ];
+}
 function household(db: InMemoryDb, id: string): number {
   return db.collection("centralBanks").docs.find((doc) => doc._id === id)!
     .externalBroadMoney as number;
@@ -138,7 +147,7 @@ describe("conserved sovereign financing settlement", () => {
     const db = memory as unknown as Db;
     const before = { US: stock(memory, US), UK: stock(memory, UK) };
     await treasuryPhase(db, memory, 1);
-    expect(budget(memory, "US").sovereignCouponClaims).toEqual([]);
+    expect(openClaims(memory, "US")).toEqual([]);
     expect(pool(memory, "USD")).toBeCloseTo(couponPerTurn(US), 6);
     expect(budget(memory, "US").treasuryCashLocal).toBeCloseTo(1_000 - couponPerTurn(US) - 600, 6);
     expect(household(memory, "US")).toBeCloseTo(1_000_000 - 1_000 + 600, 6);
@@ -233,7 +242,7 @@ describe("conserved sovereign financing settlement", () => {
     await treasuryPhase(db, memory, 1, [UK]);
     expect(household(memory, "UK")).toBe(0);
     expect(budget(memory, "UK").treasuryCashLocal).toBe(0);
-    expect(budget(memory, "UK").sovereignCouponClaims).toHaveLength(1);
+    expect(openClaims(memory, "UK")).toHaveLength(1);
     expect(budget(memory, "UK").conservedFiscalCash).toMatchObject({
       householdTaxArrearsLocal: 1_000,
       primarySpendingArrearsLocal: 600,
@@ -242,7 +251,7 @@ describe("conserved sovereign financing settlement", () => {
       100_000;
     await treasuryPhase(db, memory, 2, [UK]);
     // Both turns of tax, both coupon claims, both turns of spending.
-    expect(budget(memory, "UK").sovereignCouponClaims).toEqual([]);
+    expect(openClaims(memory, "UK")).toEqual([]);
     expect(budget(memory, "UK").conservedFiscalCash).toMatchObject({
       householdTaxArrearsLocal: 0,
       primarySpendingArrearsLocal: 0,
@@ -393,7 +402,7 @@ describe("conserved sovereign financing settlement", () => {
     const opening = stock(memory, US);
     for (let turn = 1; turn <= TURNS_PER_YEAR; turn += 1) {
       await treasuryPhase(db, memory, turn, [US]);
-      expect(budget(memory, "US").sovereignCouponClaims).toEqual([]);
+      expect(openClaims(memory, "US")).toEqual([]);
       expect(budget(memory, "US").treasuryCashLocal).toBeGreaterThanOrEqual(0);
       expect(stock(memory, US)).toBeCloseTo(opening, 4);
     }

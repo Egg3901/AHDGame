@@ -15,8 +15,8 @@
  * stimulus. Each turn:
  *
  * 1. The non-player share of the revenue slice moves from that stock into
- *    Treasury cash. Corporate tax that players' corporations already paid in
- *    cash this turn is subtracted first, so it is never collected twice.
+ *    Treasury cash. Corporate tax and SOE profit remittances already paid in
+ *    cash this turn are subtracted first, so they are never collected twice.
  * 2. Coupon claims settle from Treasury cash through the existing funded
  *    holder and bond-pool machinery (unchanged, not in this module).
  * 3. The primary spending slice returns from Treasury cash to the same stock.
@@ -28,10 +28,11 @@
 
 import type { BankingTransition } from "@/lib/banking/rules/boundary";
 
-/** Journal kinds whose Treasury cash credits are real player tax receipts. */
-export const PLAYER_TAX_RECEIPT_KINDS = [
+/** Journal kinds whose actual Treasury credits overlap the macro revenue slice. */
+export const BUDGET_REVENUE_RECEIPT_KINDS = [
   "corporate_tax_withholding",
   "corporate_tax_arrears_payment",
+  "soe_profit_remittance",
 ] as const;
 
 export const CONSERVED_FISCAL_TAX_KIND = "conserved_fiscal_household_tax";
@@ -50,7 +51,7 @@ function nonNegative(value: number | undefined): number {
 }
 
 /** A journal record as the receipt reader needs it. */
-export interface PlayerTaxReceiptRecord {
+export interface BudgetRevenueReceiptRecord {
   kind: string;
   turn?: number;
   legs?: Array<{
@@ -64,15 +65,15 @@ export interface PlayerTaxReceiptRecord {
 }
 
 /**
- * Sum the Treasury cash each country actually received from player tax this
+ * Sum the Treasury cash each country actually received from modeled revenue this
  * turn, keyed by country id. Only landed credit legs count; a rejected or
  * half-landed withholding contributes exactly what reached the Treasury.
  */
-export function playerTaxReceiptsByCountry(
-  records: readonly PlayerTaxReceiptRecord[],
+export function fundedRevenueReceiptsByCountry(
+  records: readonly BudgetRevenueReceiptRecord[],
   turn: number
 ): Map<string, number> {
-  const kinds = new Set<string>(PLAYER_TAX_RECEIPT_KINDS);
+  const kinds = new Set<string>(BUDGET_REVENUE_RECEIPT_KINDS);
   const out = new Map<string, number>();
   for (const record of records) {
     if (!kinds.has(record.kind) || record.turn !== turn) continue;
@@ -94,7 +95,7 @@ export function playerTaxReceiptsByCountry(
 
 /** One funded flow for one turn: what was owed, what moved, what is still owed. */
 export interface ConservedFlowPlan {
-  /** Obligation arising this turn, after player receipts are netted out. */
+  /** Obligation arising this turn, after modeled cash receipts are netted out. */
   currentDue: number;
   /** Arrears carried in from earlier turns. */
   priorArrears: number;
@@ -119,22 +120,22 @@ function planFlow(currentDue: number, priorArrears: number, payerCash: number): 
 /**
  * Household tax cash for one country and turn. `revenueSlice` is the frozen
  * accrual receipt's revenue component, so the cash leg is the same slice the
- * signed position already booked. Player tax already received in cash is
+ * signed position already booked. Overlapping revenue already received in cash is
  * removed from it; a receipt larger than the slice is never clawed back.
  */
 export function planHouseholdTax(input: {
   revenueSlice: number;
-  playerTaxReceipts: number;
+  fundedRevenueReceipts: number;
   priorArrears: number;
   householdCash: number;
-}): ConservedFlowPlan & { playerTaxReceipts: number } {
-  const receipts = roundCash(nonNegative(input.playerTaxReceipts));
+}): ConservedFlowPlan & { fundedRevenueReceipts: number } {
+  const receipts = roundCash(nonNegative(input.fundedRevenueReceipts));
   const plan = planFlow(
     nonNegative(input.revenueSlice) - receipts,
     input.priorArrears,
     input.householdCash
   );
-  return { ...plan, playerTaxReceipts: receipts };
+  return { ...plan, fundedRevenueReceipts: receipts };
 }
 
 /**
@@ -209,7 +210,7 @@ function planMeta(plan: ConservedFlowPlan, extra: Record<string, number> = {}) {
 /** Household money stock pays the non-player tax slice into spendable Treasury cash. */
 export function householdTaxTransition(
   target: ConservedFiscalTarget,
-  plan: ConservedFlowPlan & { playerTaxReceipts?: number },
+  plan: ConservedFlowPlan & { fundedRevenueReceipts?: number },
   key = conservedFiscalKey("tax", target)
 ): BankingTransition {
   const legs: BankingTransition["legs"] =
@@ -246,7 +247,7 @@ export function householdTaxTransition(
       subjectType: "country",
       subjectId: target.countryId,
       amount: plan.paid,
-      meta: planMeta(plan, { playerTaxReceipts: plan.playerTaxReceipts ?? 0 }),
+      meta: planMeta(plan, { fundedRevenueReceipts: plan.fundedRevenueReceipts ?? 0 }),
     },
   };
 }

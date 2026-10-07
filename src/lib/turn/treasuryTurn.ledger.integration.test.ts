@@ -149,12 +149,17 @@ describe("treasury accrual stock-flow ownership", () => {
         expect(budget.treasuryCashLocal).toBe(450);
         expect(poolCash).toBe(50);
         expect(household).toBe(100_000 - 1_000 + 500);
-        expect(budget.sovereignCouponClaims).toEqual([]);
+        expect(budget.sovereignCouponClaims ?? []).toEqual([]);
+        expect(
+          db.collection("sovereignCouponClaims").docs.filter((row) => row.settledTurn === undefined)
+        ).toEqual([]);
         expect(budget.treasuryCashLocal + poolCash + household).toBe(100_000);
       } else {
         expect(budget.treasuryCashLocal).toBe(0);
         expect(household).toBe(100_000);
-        expect(budget.sovereignCouponClaims).toHaveLength(1);
+        expect(
+          db.collection("sovereignCouponClaims").docs.filter((row) => row.settledTurn === undefined)
+        ).toHaveLength(1);
         expect(budget.conservedFiscalCash).toBeUndefined();
       }
     }
