@@ -101,7 +101,7 @@ describe("queued redemption pass budget", () => {
     expect(untouched).toHaveLength(ENTRIES - QUEUED_REDEMPTION_CLAIMS_PER_PASS);
     for (const e of untouched) {
       expect(e).toMatchObject({ status: "queued", units: 10 });
-      expect(e.settlementClaimId).toBeUndefined();
+      expect(e).not.toHaveProperty("settlementClaimId");
     }
     // Paid out plus still owed equals the cash that left the fund.
     const paidOut = queue.reduce((s, e) => s + e.paidAmountAnchor, 0);
