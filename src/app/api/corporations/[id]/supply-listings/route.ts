@@ -73,7 +73,11 @@ export async function GET(request: Request, context: Context) {
     const serialize = (row: SupplyListing): SupplyListingView | null => {
       const corp = byId.get(row.corporationId.toString());
       const own = row.corporationId.equals(a.corp._id);
-      if (!corp || (!own && (corp.ceoVacant || corp.userId?.toString() !== row.publishedByUserId)))
+      const ai = row.aiListed === true;
+      if (
+        !corp ||
+        (!own && !ai && (corp.ceoVacant || corp.userId?.toString() !== row.publishedByUserId))
+      )
         return null;
       return {
         id: row._id,
@@ -81,6 +85,7 @@ export async function GET(request: Request, context: Context) {
         corporationName: corp.name,
         slot: row.slot,
         own,
+        ...(ai ? { ai: true } : {}),
         side: row.side,
         commodity: row.commodity,
         ...(row.stateId ? { stateId: row.stateId } : {}),
