@@ -123,3 +123,41 @@ and show excluded unknowns. Test traffic remains unexcluded unless independently
 identified by an existing documented project filter. Never sum generic successful
 actions with their overlapping domain-specific events. Rejection codes remain
 HTTP response classes, not detailed rule or reliability diagnoses.
+
+### Operation diagnostics
+
+Generic `player_action_succeeded` and `player_action_rejected` events also carry
+`action_operation`. It is a fixed label for the following POST routes; every
+other observed route/method is `unknown`. No URL or dynamic path segment is
+copied into this property. Existing `action_type`, event eligibility, success
+classification and `failure_code` semantics stay unchanged.
+
+| POST route                                                           | `action_operation`                  |
+| -------------------------------------------------------------------- | ----------------------------------- |
+| `/api/actions/execute`                                               | `character_action_execute`          |
+| `/api/country/[code]/parties`                                        | `party_create`                      |
+| `/api/country/[code]/parties/[id]/influence`                         | `party_influence_national`          |
+| `/api/country/[code]/region/[id]/party/[partyId]/influence`          | `party_influence_regional`          |
+| `/api/country/[code]/region/[id]/party/[partyId]/recruitment`        | `party_recruitment_regional`        |
+| `/api/country/[code]/region/[id]/party/[partyId]/org-building`       | `party_org_building_regional`       |
+| `/api/country/[code]/region/[id]/party/[partyId]/leadership`         | `party_leadership_regional`         |
+| `/api/country/[code]/region/[id]/party/[partyId]/primary-allocation` | `party_primary_allocation_regional` |
+| `/api/country/[code]/region/[id]/party/[partyId]/build-org`          | `party_build_org_regional`          |
+
+Only `character_action_execute` also carries `requested_action`, read from the
+request's `actionType`: `fundraise`, `campaign`, `advertise`, `buildDonorBase`,
+`poll`, `pollLarge`, `convertCash`, `rest`, or `debatePrep`. Missing, malformed
+and unreviewed values become `unknown`. It describes the requested action,
+including requests rejected before validation; it does not prove execution.
+Other operations omit this property. Request amounts, targets, error messages
+and response codes are not added to these diagnostics.
+
+Match operation, requested action where applicable, account population, iteration
+and time window between success and rejection counts. The rejection rate is all
+rejections divided by successes plus all rejections in that scope. A single
+failure class uses that same denominator, not successes plus only that class.
+Show literal `unknown`
+operation/action coverage and pre-rollout missing properties separately. These
+labels do not backfill or reclassify historical `action_type = post` events, and
+do not add detailed game-rule rejection reasons. Domain-specific success events
+retain their existing shape and overlap the generic stream; do not sum them.

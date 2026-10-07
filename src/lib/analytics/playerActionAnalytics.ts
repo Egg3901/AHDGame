@@ -3,6 +3,7 @@
 import { getAnalyticsAccount, isAnalyticsGenerationCurrent } from "./accountContext";
 import { getStoredConsent } from "@/components/CookieConsent";
 import { captureFirstMeaningfulAction, captureProductEvent } from "./capture";
+import { playerActionOperationProperties } from "./playerActionOperation";
 
 const PLAYER_ACTION_API_ROOTS = new Set([
   "actions",
@@ -983,6 +984,7 @@ async function trackActionResponse(
     context.userId === actionContext.userId &&
     getStoredConsent() === "accepted";
   if (!current()) return;
+  const operationProperties = playerActionOperationProperties(route.pathname, route.method, body);
   const base = {
     action_domain: route.action_domain,
     action_type:
@@ -1011,6 +1013,7 @@ async function trackActionResponse(
   if (!response.ok || resultBody?.success === false) {
     await captureProductEvent("player_action_rejected", {
       ...base,
+      ...operationProperties,
       failure_code: response.ok ? "action_rejected" : failureCode(response.status),
     });
     return;
@@ -1035,6 +1038,7 @@ async function trackActionResponse(
     safeSpend(body) ?? { resource_type: "none", resource_amount: 0 };
   await captureProductEvent("player_action_succeeded", {
     ...base,
+    ...operationProperties,
     ...(spend ?? {}),
   });
   if (!current()) return;

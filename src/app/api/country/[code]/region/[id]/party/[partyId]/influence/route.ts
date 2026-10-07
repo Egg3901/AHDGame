@@ -151,7 +151,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const crossCountry = crossCountryActionGuard(authResult.user.character, countryId);
     if (crossCountry) return crossCountry;
 
-    const rateLimit = checkRateLimit(authResult.user.userId, 20, 60000);
+    const rateLimit = checkRateLimit(`party-influence:${authResult.user.userId}`, 20, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     const parsed = await parseJsonBody(request, partyInfluenceSchema);

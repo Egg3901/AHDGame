@@ -16,6 +16,12 @@ import { sellFundBondHoldingsForCash } from "@/lib/bonds/sellFundBondUnits";
 import { proRataRedemptionCashShare, quoteCashOnlyRedemption } from "./unitAccounting";
 import { remainingRedemptionUnits } from "./fundRedemptionQueue";
 import {
+  isBatchablePayout,
+  QUEUED_PAYOUT_BATCH_MAX,
+  settleQueuedPayoutBatch,
+  type PayoutBatchMember,
+} from "./queuedPayoutBatch";
+import {
   loadQueuedPayoutAuditContext,
   recoverQueuedPayouts,
   settleQueuedPayout,
@@ -23,12 +29,16 @@ import {
 
 /**
  * Queue claims one redemption pass may make, shared by every fund in the pass.
- * Each settlement is a durable money move of ~30 round trips, and the pro-rata
- * gate gives every waiting entry a slice, so an uncapped pass re-settled the
- * whole queue each turn (#3366). Entries past the budget stay untouched and go
- * first next turn; cash they did not draw stays in the fund for them.
+ * The pro-rata gate gives every waiting entry a slice, so an uncapped pass
+ * re-settled the whole queue each turn (#3366). Entries past the budget stay
+ * untouched and go first next turn; cash they did not draw stays in the fund.
+ *
+ * NPP payouts settle in batches (queuedPayoutBatch.ts) for about one claim
+ * write each, so the budget sits above the NPP rebalancing inflow (about 1,000
+ * claims a turn on a 1991 world). At the old one-receipt-per-claim cost of ~30
+ * round trips the pass could pay 250 and the queue grew without bound.
  */
-export const QUEUED_REDEMPTION_CLAIMS_PER_PASS = 250;
+export const QUEUED_REDEMPTION_CLAIMS_PER_PASS = 2000;
 
 export interface QueuedRedemptionClaimBudget {
   claimsLeft: number;
@@ -122,6 +132,25 @@ export async function processQueuedRedemptions(
   // the share is measured against who is still waiting, not the original queue.
   let unservedUnits = pending.reduce((sum, e) => sum + Math.max(0, e.units ?? 0), 0);
 
+  // NPP payouts wait here and settle together (queuedPayoutBatch.ts). The
+  // batch is flushed before anything that reads or moves fund cash on its own
+  // (a liquidation sale or a single payout), when it is full, and at the end,
+  // so every payout still lands in claim order against the same cash.
+  let batch: PayoutBatchMember[] = [];
+  const flushBatch = async () => {
+    if (!batch.length) return;
+    const members = batch;
+    batch = [];
+    paid += await settleQueuedPayoutBatch(db, {
+      fund: fundState,
+      members,
+      turn: currentTurn,
+      audit,
+    });
+    fundState = (await getFundById(db, fund._id)) ?? fundState;
+    availableCash = fundState.cashAnchor;
+  };
+
   for (const pendingEntry of ordered) {
     if (budget.claimsLeft <= 0) break;
     budget.claimsLeft--;
@@ -192,6 +221,7 @@ export async function processQueuedRedemptions(
     }
 
     const entryObligation = unitsRemaining * redemptionNav;
+    if (availableCash < entryObligation) await flushBatch();
     if (availableCash < entryObligation && fundState.holdings.length > 0) {
       await sellFundHoldingsForRedemptionCash(db, fundState, entryObligation - availableCash, {
         note: "Queued redemption liquidity",
@@ -245,6 +275,25 @@ export async function processQueuedRedemptions(
     }
 
     const paidAmount = quote.paidAmountAnchor;
+    if (isBatchablePayout(entry)) {
+      const holder = holders.get(`npps:${entry.nppId}`);
+      if (holder) {
+        batch.push({
+          entry,
+          claimId,
+          paidAmount,
+          units: quote.redeemableUnits,
+          remainingUnits: quote.queuedUnits,
+          nav: redemptionNav,
+          holder,
+          nppCurrency: nppCurrencyById.get(entry.nppId?.toString() ?? "") ?? "USD",
+        });
+        availableCash -= paidAmount;
+        if (batch.length >= QUEUED_PAYOUT_BATCH_MAX) await flushBatch();
+        continue;
+      }
+    }
+    await flushBatch();
     // Native-currency equivalent for personal wallet credits (₳ × blended rate).
     // Absent redeemFxRate = pre-fix queue row → credit rate-free (× 1), matching
     // what the holder was owed under the old symmetric-scale code (no windfall).
@@ -282,6 +331,7 @@ export async function processQueuedRedemptions(
 
     paid++;
   }
+  await flushBatch();
 
   return paid;
 }

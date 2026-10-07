@@ -17,6 +17,8 @@ import { processQueuedRedemptions, QUEUED_REDEMPTION_CLAIMS_PER_PASS } from "./f
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
 const ENTRIES = 600;
+/** A pass budget below the queue, so the untouched remainder is observable. */
+const BUDGET = 250;
 const T0 = new Date("2000-01-01T00:00:00Z");
 
 function world() {
@@ -82,9 +84,14 @@ describe("queued redemption pass budget", () => {
   it("bounds round trips per pass and conserves cash between fund and holders", async () => {
     const w = world();
     const trips = countRoundTrips(w.memory);
-    const paid = await processQueuedRedemptions(w.db, w.fund, false, 9, true);
-    expect(paid).toBe(QUEUED_REDEMPTION_CLAIMS_PER_PASS);
-    expect(trips.total(), trips.summary()).toBeLessThan(QUEUED_REDEMPTION_CLAIMS_PER_PASS * 40);
+    const paid = await processQueuedRedemptions(w.db, w.fund, false, 9, true, {
+      claimsLeft: BUDGET,
+    });
+    expect(paid).toBe(BUDGET);
+    // NPP payouts settle in batches: about one claim write per entry plus a
+    // fixed cost per batch, against ~30 round trips each when paid singly.
+    console.log("BUDGET_TRIPS", trips.total(), trips.summary());
+    expect(trips.total(), trips.summary()).toBeLessThan(BUDGET * 3);
 
     const fundAfter = await w.db.collection<IndexFund>("indexFunds").findOne({ _id: w.fundId });
     const credited = await nppCashTotal(w.db);
@@ -98,7 +105,7 @@ describe("queued redemption pass budget", () => {
     // Unclaimed entries are untouched: no fence, no partial payout, no stale claim.
     expect(queue.filter((e) => e.status === "processing")).toHaveLength(0);
     const untouched = queue.filter((e) => e.paidAmountAnchor === 0);
-    expect(untouched).toHaveLength(ENTRIES - QUEUED_REDEMPTION_CLAIMS_PER_PASS);
+    expect(untouched).toHaveLength(ENTRIES - BUDGET);
     for (const e of untouched) {
       expect(e).toMatchObject({ status: "queued", units: 10 });
       expect(e).not.toHaveProperty("settlementClaimId");
@@ -110,15 +117,27 @@ describe("queued redemption pass budget", () => {
 
   it("serves the entries a pass skipped before re-serving the ones it paid", async () => {
     const w = world();
-    await processQueuedRedemptions(w.db, w.fund, false, 9, true);
+    await processQueuedRedemptions(w.db, w.fund, false, 9, true, { claimsLeft: BUDGET });
     const fund1 = (await w.db.collection<IndexFund>("indexFunds").findOne({ _id: w.fundId }))!;
-    await processQueuedRedemptions(w.db, fund1, false, 10, true);
+    await processQueuedRedemptions(w.db, fund1, false, 10, true, { claimsLeft: BUDGET });
     const queue = await w.db
       .collection<IndexFundRedemptionQueueEntry>("indexFundRedemptionQueue")
       .find({})
       .toArray();
     const served = queue.filter((e) => e.paidAmountAnchor > 0).length;
-    expect(served).toBe(Math.min(ENTRIES, QUEUED_REDEMPTION_CLAIMS_PER_PASS * 2));
+    expect(served).toBe(Math.min(ENTRIES, BUDGET * 2));
+  });
+
+  it("pays the whole queue in one default pass now that NPP payouts batch", async () => {
+    const w = world();
+    expect(QUEUED_REDEMPTION_CLAIMS_PER_PASS).toBeGreaterThanOrEqual(ENTRIES);
+    const trips = countRoundTrips(w.memory);
+    const paid = await processQueuedRedemptions(w.db, w.fund, false, 9, true);
+    expect(paid).toBe(ENTRIES);
+    expect(trips.total(), trips.summary()).toBeLessThan(ENTRIES * 3);
+    const credited = await nppCashTotal(w.db);
+    const fundAfter = await w.db.collection<IndexFund>("indexFunds").findOne({ _id: w.fundId });
+    expect(fundAfter!.cashAnchor + credited).toBeCloseTo(w.fund.cashAnchor, 6);
   });
 
   it("shares one claim budget across funds in a pass", async () => {
