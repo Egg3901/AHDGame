@@ -102,6 +102,10 @@ import { resolveProspects } from "@/lib/turn/prospecting/resolveProspects";
 import { settleExtractionContracts } from "@/lib/turn/extraction/contractSettlement";
 import { isProspectingEnabled, isContractIssuanceEnabled } from "@/lib/extraction/featureFlag";
 import { processBondTurn } from "@/lib/turn/bondTurn";
+import {
+  hasCompleteSovereignFlows,
+  TurnPhaseResultIncompleteError,
+} from "@/simulation/engine/turnPhaseResumeResults";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
 import { settleResetTreasuryCashTurn } from "@/lib/resetFinance/settleCashTurn";
 import { resetSystemVersionsFrom } from "@/lib/resetVersions/rules";
@@ -546,7 +550,20 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           runtime.runPhase("commodityPrices", () => processCommodityPriceTurn(newTurn)),
         ]);
         if (captureV2SovereignCash) {
-          if (!bondTurnResult) throw new Error("V2 treasury requires completed bond settlement");
+          // On a crash resume this is the result bondTurn stored with its
+          // completed status, never a rerun and never an assumed zero (#3429).
+          const bondFlows = runtime.requirePhaseResult(
+            "bondTurn",
+            bondTurnResult,
+            "resetTreasuryCash"
+          );
+          if (!hasCompleteSovereignFlows(bondFlows)) {
+            throw new TurnPhaseResultIncompleteError(
+              "bondTurn",
+              "resetTreasuryCash",
+              "sovereign flow maps missing"
+            );
+          }
           (phaseResults as Record<string, unknown>).resetTreasuryCash = await runtime.runPhase(
             "resetTreasuryCash",
             () =>
@@ -554,7 +571,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
                 db: context.db,
                 gameState: context.gameState,
                 turn: newTurn,
-                bondFlows: bondTurnResult,
+                bondFlows,
               })
           );
         }
@@ -605,15 +622,25 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           );
         }
 
-        const lineOfCreditResult = await runtime.runPhase("lineOfCreditTurn", () =>
-          processLineOfCreditTurn(
+        const lineOfCreditResult = await runtime.runPhase("lineOfCreditTurn", async () => {
+          // Currency income comes only from this turn's corporationTurn result.
+          // When that phase ran but left no result (it failed, or a crash resume
+          // skipped it), the income is unknown, not zero: stop before auto-pay
+          // can size anything from an empty map (#3429). A paused corporation
+          // turn really earned nothing.
+          if (gameState.forexEnabled === true && !corpActionsPaused && !corpTurnResults) {
+            throw new Error(
+              "lineOfCreditTurn needs this turn's corporationTurn currency income, which is unavailable"
+            );
+          }
+          return processLineOfCreditTurn(
             context.db,
             newTurn,
             corpTurnResults?.currencyIncomeInternalByCharacterId ?? new Map(),
             corpTurnResults?.currencyIncomeFaceByCharacterId ?? new Map(),
             gameState.forexEnabled === true
-          )
-        );
+          );
+        });
         if (lineOfCreditResult) {
           phaseResults.lineOfCreditTurn = {
             charactersProcessed: lineOfCreditResult.charactersProcessed,

@@ -72,13 +72,13 @@ function failOpeningWrite(db: Db, afterWrite: boolean): Db {
           if (name !== "balanceSnapshots") return collection;
           return new Proxy(collection, {
             get(targetCollection, method) {
-              if (method === "replaceOne")
-                return async (...args: Parameters<typeof collection.replaceOne>) => {
+              if (method === "updateOne")
+                return async (...args: Parameters<typeof collection.updateOne>) => {
                   if (args[0].turn === 1) {
-                    if (afterWrite) await targetCollection.replaceOne(...args);
+                    if (afterWrite) await targetCollection.updateOne(...args);
                     throw new Error("Injected opening snapshot storage failure");
                   }
-                  return targetCollection.replaceOne(...args);
+                  return targetCollection.updateOne(...args);
                 };
               const value = Reflect.get(targetCollection, method);
               return typeof value === "function" ? value.bind(targetCollection) : value;
