@@ -54,6 +54,72 @@ function readOperatingCashQuote(
 }
 
 /**
+ * Independent corporations settle in a few concurrent lanes. Each receipt is
+ * a chain of dependent journal round trips, so one lane per turn made the
+ * whole phase as slow as the sum of every corporation's chain.
+ */
+const OPERATING_CASH_LANES = 8;
+
+/**
+ * Run tasks in order across bounded lanes. After any failure no new task
+ * starts, every in-flight task is awaited, and the earliest failed task's
+ * error is thrown, so no settlement write is left detached behind the throw.
+ */
+async function runInLanes<T>(
+  items: readonly T[],
+  lanes: number,
+  task: (item: T) => Promise<void>
+): Promise<void> {
+  let next = 0;
+  const failure: { index: number; error: unknown } = { index: -1, error: undefined };
+  const lane = async () => {
+    while (failure.index < 0 && next < items.length) {
+      const index = next++;
+      try {
+        await task(items[index]);
+      } catch (error) {
+        if (failure.index < 0 || index < failure.index) {
+          failure.index = index;
+          failure.error = error;
+        }
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(lanes, items.length)) }, lane));
+  if (failure.index >= 0) throw failure.error;
+}
+
+/**
+ * FIFO serialization per key. Every key of one call is queued in the same
+ * synchronous step, so waits follow one global order and cannot deadlock.
+ * Money-move cash legs guard their target with a revision CAS, so concurrent
+ * credits to one Treasury document would exhaust its retries; Treasury writes
+ * for a country therefore run one at a time while corporation-only work
+ * overlaps.
+ */
+class KeyedQueue {
+  private readonly tails = new Map<string, Promise<void>>();
+
+  async run<R>(keys: Iterable<string>, fn: () => Promise<R>): Promise<R> {
+    const unique = [...new Set(keys)];
+    if (unique.length === 0) return fn();
+    const prior = unique.map((key) => this.tails.get(key));
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    for (const key of unique) this.tails.set(key, held);
+    try {
+      await Promise.all(prior);
+      return await fn();
+    } finally {
+      release();
+      for (const key of unique) if (this.tails.get(key) === held) this.tails.delete(key);
+    }
+  }
+}
+
+/**
  * Settle modeled gross operating receipts before federal withholding. These
  * are separate durable receipts because the settlement journal applies
  * guarded debits before credits: one transition cannot spend income that has
@@ -64,7 +130,8 @@ export async function settleCorporateOperatingCash(
   db: Db,
   snapshots: readonly CorpSnapshot[],
   turn: number,
-  now: Date
+  now: Date,
+  lanes: number = OPERATING_CASH_LANES
 ): Promise<void> {
   if (snapshots.length === 0) return;
   const context = await loadTreasuryCashContext(db, turn);
@@ -92,15 +159,22 @@ export async function settleCorporateOperatingCash(
   // Finish already claimed gross receipts before taking the corporation cash
   // snapshot used for new work. This keeps the read batched while allowing a
   // retry to spend the proceeds it just replayed.
-  for (const snapshot of snapshots) {
-    const baseKey = `corp-operating-cash:${turn}:${snapshot.corpId.toString()}`;
-    const grossKey = `${baseKey}:gross`;
-    if (existingKeys.has(baseKey) || !existingKeys.has(grossKey)) continue;
+  // Gross receipts touch only their own corporation, so they resume in lanes.
+  const grossResumeKeys = [
+    ...new Set(
+      snapshots.flatMap((snapshot) => {
+        const baseKey = `corp-operating-cash:${turn}:${snapshot.corpId.toString()}`;
+        const grossKey = `${baseKey}:gross`;
+        return existingKeys.has(baseKey) || !existingKeys.has(grossKey) ? [] : [grossKey];
+      })
+    ),
+  ];
+  await runInLanes(grossResumeKeys, lanes, async (grossKey) => {
     const resumed = await resumeSettlement(db, grossKey);
     if (resumed.status !== "applied" && resumed.status !== "replayed") {
       throw new Error(resumed.error ?? `Corporate gross receipt ${grossKey} is incomplete`);
     }
-  }
+  });
 
   const corporations = await db
     .collection<Corporation>("corporations")
@@ -121,20 +195,42 @@ export async function settleCorporateOperatingCash(
     corporations.map((corp) => [corp._id.toString(), corp.liquidCapital])
   );
 
+  // Every Treasury country this call can credit. Legacy receipts and prior
+  // tax arrears hold all of them: their destinations are not known up front,
+  // and both paths are rare recovery work.
+  const treasuryLock = new KeyedQueue();
+  const treasuryKey = (country: string) => `federalBudget:${country}`;
+  const allTreasuryKeys = new Set<string>();
   for (const snapshot of snapshots) {
+    for (const [country] of snapshot.federalTaxByCountryAnchor ?? []) {
+      allTreasuryKeys.add(treasuryKey(country));
+    }
+  }
+  for (const row of existingRows) {
+    for (const destination of readOperatingCashQuote(row.event?.meta)?.taxDestinations ?? []) {
+      allTreasuryKeys.add(treasuryKey(destination.country));
+    }
+  }
+  for (const corp of corporations) {
+    for (const country of Object.keys(corp.federalTaxArrearsAnchorByCountry ?? {})) {
+      allTreasuryKeys.add(treasuryKey(country));
+    }
+  }
+
+  const settleSnapshot = async (snapshot: CorpSnapshot): Promise<void> => {
     const baseKey = `corp-operating-cash:${turn}:${snapshot.corpId.toString()}`;
 
     // Resume receipts created by the previous implementation before starting
     // the split gross/tax protocol. Its original journal already contains both
     // legs, so applying a second withholding would double-charge the corp.
     if (existingKeys.has(baseKey)) {
-      const resumed = await resumeSettlement(db, baseKey);
+      const resumed = await treasuryLock.run(allTreasuryKeys, () => resumeSettlement(db, baseKey));
       if (resumed.status !== "applied" && resumed.status !== "replayed") {
         throw new Error(
           resumed.error ?? `Corporate operating cash receipt ${baseKey} is incomplete`
         );
       }
-      continue;
+      return;
     }
 
     const grossKey = `${baseKey}:gross`;
@@ -145,11 +241,11 @@ export async function settleCorporateOperatingCash(
       throw new Error(`Gross receipt ${grossKey} has no complete frozen operating quote`);
     }
     if (!existingKeys.has(grossKey) && existingKeys.has(taxKey) && !savedQuote) {
-      const resumed = await resumeSettlement(db, taxKey);
+      const resumed = await treasuryLock.run(allTreasuryKeys, () => resumeSettlement(db, taxKey));
       if (resumed.status !== "applied" && resumed.status !== "replayed") {
         throw new Error(resumed.error ?? `Corporate tax receipt ${taxKey} is incomplete`);
       }
-      continue;
+      return;
     }
     const quote =
       savedQuote ??
@@ -266,15 +362,17 @@ export async function settleCorporateOperatingCash(
       (amount) => amount > 0
     );
     if (hasOperatingArrears || hasTaxArrears) {
-      availableCash = await settlePriorCorporateCashArrears({
-        db,
-        context,
-        corporationId: snapshot.corpId.toString(),
-        currencyCode: sourceCurrency as CurrencyCode,
-        localPerAnchor: sourceRate,
-        turn,
-        now,
-      });
+      availableCash = await treasuryLock.run(allTreasuryKeys, () =>
+        settlePriorCorporateCashArrears({
+          db,
+          context,
+          corporationId: snapshot.corpId.toString(),
+          currencyCode: sourceCurrency as CurrencyCode,
+          localPerAnchor: sourceRate,
+          turn,
+          now,
+        })
+      );
     }
 
     if (grossLocal < 0 && !existingKeys.has(grossKey)) {
@@ -348,7 +446,8 @@ export async function settleCorporateOperatingCash(
       }
     }
 
-    if (!(taxSourceLocal > 0)) continue;
+    if (!(taxSourceLocal > 0)) return;
+    const destinationKeys = taxDestinations.map((destination) => treasuryKey(destination.country));
     const arrearsKey = `${baseKey}:arrears`;
     const recordTaxArrears = async () => {
       if (existingKeys.has(arrearsKey)) {
@@ -409,15 +508,15 @@ export async function settleCorporateOperatingCash(
       existingKeys.add(arrearsKey);
     };
     if (existingKeys.has(taxKey)) {
-      const resumed = await resumeSettlement(db, taxKey);
+      const resumed = await treasuryLock.run(destinationKeys, () => resumeSettlement(db, taxKey));
       if (resumed.status === "rejected") {
         await recordTaxArrears();
-        continue;
+        return;
       }
       if (resumed.status !== "applied" && resumed.status !== "replayed") {
         throw new Error(resumed.error ?? `Corporate tax receipt ${taxKey} is incomplete`);
       }
-      continue;
+      return;
     }
 
     const sourceValuation = { currencyCode: sourceCurrency, localPerAnchor: sourceRate };
@@ -479,16 +578,32 @@ export async function settleCorporateOperatingCash(
         },
       },
     };
-    const taxed = await settleTransition(db, taxTransition);
+    const taxed = await treasuryLock.run(destinationKeys, () =>
+      settleTransition(db, taxTransition)
+    );
     if (taxed.status === "rejected") {
       // Withholding that the corporation cannot fund is a payable, not a
       // Treasury receipt. Persist it once and let the ordinary insolvency path
       // see the shortfall; never mint the missing government cash.
       await recordTaxArrears();
-      continue;
+      return;
     }
     if (taxed.status !== "applied" && taxed.status !== "replayed") {
       throw new Error(taxed.error ?? `Corporate tax receipt ${taxKey} is incomplete`);
     }
+  };
+
+  // A corporation's receipts stay strictly ordered (gross, prior arrears,
+  // loss, tax), and a corporation listed twice settles its entries in input
+  // order inside one task, so its idempotency keys never race themselves.
+  const snapshotsByCorp = new Map<string, CorpSnapshot[]>();
+  for (const snapshot of snapshots) {
+    const id = snapshot.corpId.toString();
+    const group = snapshotsByCorp.get(id);
+    if (group) group.push(snapshot);
+    else snapshotsByCorp.set(id, [snapshot]);
   }
+  await runInLanes([...snapshotsByCorp.values()], lanes, async (group) => {
+    for (const snapshot of group) await settleSnapshot(snapshot);
+  });
 }
