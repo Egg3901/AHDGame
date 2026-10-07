@@ -218,6 +218,10 @@ export interface CorporationLookups {
    * in which case the corporation turn computes and writes nothing.
    */
   freightChargesByDestState?: Map<string, Map<CommodityType, number>>;
+  /** Full buyer demand from the same sourcing snapshot as freight charges. */
+  freightDemandByDestState?: Map<string, Map<CommodityType, number>>;
+  /** Full freight supply from the same sourcing snapshot as haul revenue. */
+  freightSupplyByOriginState?: Map<string, number>;
   /**
    * The transfer's other half: per origin state, LAST turn's haul revenue its
    * freight network earned. Same gate and source as
