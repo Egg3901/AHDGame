@@ -166,7 +166,12 @@ interface MoneyMoveRecord {
 export { legsNet };
 
 export type MoneyMoveClaim =
-  | { status: "claimed"; legs: MoneyMoveLeg[] }
+  | {
+      status: "claimed";
+      legs: MoneyMoveLeg[];
+      /** The record this call inserted; absent when there was nothing to move. */
+      record?: MoneyMoveRecord;
+    }
   | { status: "replayed" }
   | { status: "rejected"; error: string };
 
@@ -281,7 +286,7 @@ export async function claimMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
     // caller owns the key. Reporting them as replays silently drops the move.
     throw error;
   }
-  return { status: "claimed", legs };
+  return { status: "claimed", legs, record };
 }
 
 /**
@@ -416,7 +421,7 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
     return { status: "rejected", applied: [], error: bindingError };
   }
   if (claim.legs.length === 0) return { status: "applied", applied: [] };
-  return executeMoneyMove(db, move.key, false);
+  return executeMoneyMove(db, move.key, false, claim.record);
 }
 
 /**
@@ -789,9 +794,17 @@ export async function resumeMoneyMove(db: Db, key: string): Promise<MoneyMoveRes
   return executeMoneyMove(db, key, true);
 }
 
-async function executeMoneyMove(db: Db, key: string, resuming: boolean): Promise<MoneyMoveResult> {
+async function executeMoneyMove(
+  db: Db,
+  key: string,
+  resuming: boolean,
+  claimed?: MoneyMoveRecord
+): Promise<MoneyMoveResult> {
   const records = db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION);
-  const record = await records.findOne({ _id: key });
+  // A move this call just claimed is exactly the record it inserted, so it is
+  // not read back. Every leg still re-reads the journal before it writes, so
+  // a recovery worker that touched the record meanwhile is still respected.
+  const record = claimed ?? (await records.findOne({ _id: key }));
   if (!record) return { status: "rejected", applied: [], error: `no money move ${key}` };
   if (
     record.atomicDocument ||
