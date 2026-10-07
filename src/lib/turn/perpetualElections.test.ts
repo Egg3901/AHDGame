@@ -1497,7 +1497,7 @@ describe("perpetualElections", () => {
       expect(mock.insertCalls.flat()).toHaveLength(0);
     });
 
-    it("backfills the 1991 SNTV rule on a legacy live race once", async () => {
+    it("backfills the 1991 proportional rule on a legacy live race once", async () => {
       const now = new Date("2026-04-01T00:00:00Z");
       const live = {
         _id: new ObjectId(),
@@ -1520,15 +1520,49 @@ describe("perpetualElections", () => {
             filter: {
               _id: live._id,
               allocationMethod: { $exists: false },
+              status: { $in: ["active", "upcoming"] },
               "japanShugiinRules.ruleVersion": { $ne: "mixed-1994-v1" },
             },
-            update: { $set: { allocationMethod: "sntv", updatedAt: now } },
+            update: { $set: { allocationMethod: "pr_hareQuota", updatedAt: now } },
           },
         },
       ]);
     });
 
-    it("repairs an explicit pre-reform allocation only before an upcoming race opens", async () => {
+    it("repairs an explicit null allocation method on a legacy live race", async () => {
+      const now = new Date("2026-04-01T00:00:00Z");
+      const live = {
+        _id: new ObjectId(),
+        countryId: "JP",
+        electionType: "shugiin",
+        state: "KAN",
+        cycle: 1,
+        status: "active",
+        totalSeats: 145,
+        allocationMethod: null,
+      } as unknown as Election;
+      const mock = makeJPMockDb(["KAN"], [live], [], 100, "1991-default");
+      await mountJPDb(mock);
+
+      const { ensureJPElections } = await import("./perpetualElections");
+      await ensureJPElections(now);
+
+      expect(mock.electionsCollection.bulkWrite).toHaveBeenCalledWith([
+        {
+          updateOne: {
+            filter: {
+              _id: live._id,
+              allocationMethod: null,
+              status: { $in: ["active", "upcoming"] },
+              "japanShugiinRules.ruleVersion": { $ne: "mixed-1994-v1" },
+            },
+            update: { $set: { allocationMethod: "pr_hareQuota", updatedAt: now } },
+          },
+        },
+      ]);
+    });
+
+    it("repairs explicit pre-reform SNTV allocations for active and upcoming races", async () => {
       const now = new Date("2026-04-01T00:00:00Z");
       const upcoming = {
         _id: new ObjectId(),
@@ -1538,7 +1572,7 @@ describe("perpetualElections", () => {
         cycle: 1,
         status: "upcoming",
         totalSeats: 145,
-        allocationMethod: "pr_hareQuota",
+        allocationMethod: "sntv",
       } as Election;
       const active = { ...upcoming, _id: new ObjectId(), status: "active" } as Election;
       const mock = makeJPMockDb(["KAN"], [upcoming, active], [], 100, "1991-default");
@@ -1552,11 +1586,22 @@ describe("perpetualElections", () => {
           updateOne: {
             filter: {
               _id: upcoming._id,
-              allocationMethod: "pr_hareQuota",
-              status: "upcoming",
+              allocationMethod: "sntv",
+              status: { $in: ["active", "upcoming"] },
               "japanShugiinRules.ruleVersion": { $ne: "mixed-1994-v1" },
             },
-            update: { $set: { allocationMethod: "sntv", updatedAt: now } },
+            update: { $set: { allocationMethod: "pr_hareQuota", updatedAt: now } },
+          },
+        },
+        {
+          updateOne: {
+            filter: {
+              _id: active._id,
+              allocationMethod: "sntv",
+              status: { $in: ["active", "upcoming"] },
+              "japanShugiinRules.ruleVersion": { $ne: "mixed-1994-v1" },
+            },
+            update: { $set: { allocationMethod: "pr_hareQuota", updatedAt: now } },
           },
         },
       ]);

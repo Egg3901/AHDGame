@@ -5,7 +5,7 @@ import type { CountryEraOverride } from "../../contract";
  *
  * ⚠️ DIFFERENCES ONLY. Everything not named here comes from the base modules.
  *
- * Config override: legislature.
+ * Config override: election systems and legislature.
  *
  * ⚠️ getCountryConfig is a SHALLOW merge, so supplying `legislature` replaces the
  * WHOLE object. A partial one would silently drop chamber keys, names and
@@ -28,7 +28,10 @@ export const JP_1991: CountryEraOverride = {
   config: {
     usdExchangeRate: 0.007434944237918215,
     electionSystems: {
-      lowerChamber: "sntv",
+      // The frozen `sntv-1991-v1` law snapshot still owns the historical seat
+      // map and 1994 reform transition. Regional game races deliberately use
+      // proportional allocation so their aggregate candidates fill that map.
+      lowerChamber: "pr_hareQuota",
       upperChamber: "pr_hareQuota",
       subNationalChamber: "pr_hareQuota",
       headOfGovernment: "parliamentary",
