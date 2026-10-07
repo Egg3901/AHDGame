@@ -1,3 +1,4 @@
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { quoteLoanOrigination } from "@/lib/banking/rules/loanFees";
 import { resumeTreasuryReserveTransfers } from "@/lib/budget/treasuryReserveTransfer";
 /**
@@ -98,6 +99,8 @@ type DepositTaker = {
  * the turn explicitly for idempotency keys.
  */
 export async function processBankingTurn(db: Db, turn: number): Promise<BankingTurnSummary> {
+  // Persisted per-stage timings and round trips for this phase (#2689).
+  const steps = substepMarker();
   await resumeReservePoolTransfers(db);
   await resumeMonetaryOperations(db, MONETARY_OPERATION_COOLDOWN_TURNS);
   await resumeLiquidityAdvances(db, MONETARY_OPERATION_COOLDOWN_TURNS);
@@ -123,6 +126,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   // that crashed between two legs, an estate claimed and never settled. Doing
   // it first means nothing below builds on money still in flight.
   const recovered = await recoverBankingSettlements(db, turn, policy);
+  steps.mark("resume+recovery");
   const recovery = {
     resumedSettlements: recovered.resumedSettlements.length,
     stillPartial: recovered.stillPartial.length,
@@ -219,6 +223,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   }
 
   const summary: BankingTurnSummary = { ...ZERO_BANKING_TURN_SUMMARY, recovery };
+  steps.mark("load");
 
   for (const row of depositTakers) {
     const bankResult = await processOneBank(
@@ -243,6 +248,8 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     summary.premiumShortfall += bankResult.premiumShortfall;
   }
 
+  steps.mark("depositTakers");
+
   // Charters with a loan book but no deposit base: the named loans still have
   // to advance every turn, exactly as they do for a deposit taker.
   for (const row of loanBookOnly) {
@@ -253,6 +260,8 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     summary.loanPrincipalRepaid += loanResult.principalRepaid;
     summary.defaultsWrittenOff += loanResult.writtenOff;
   }
+
+  steps.mark("loanBookOnly");
 
   // Loans owed to banks that have already been wound up. They are not part of
   // any live bank's pass, and before this they were serviced by nobody: the
@@ -297,10 +306,12 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   summary.deadBankRecoveredToEstate = deadBankResult.recoveredToEstate;
   summary.deadBankRecoveredToInsurer = deadBankResult.recoveredToInsurer;
   recordBankingStage(db, turn, "deadBankLoans", Date.now() - deadBankStarted);
+  steps.mark("deadBankLoans");
 
   await timedBankingStage(db, turn, "interbank", () =>
     serviceInterbankAndCbMargin(db, turn, summary, policy.propTrading, cbById)
   );
+  steps.mark("interbank");
 
   if (policy.bankTreasury) {
     await timedBankingStage(db, turn, "bankTreasury", async () => {
@@ -311,9 +322,11 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   // What this pass leaves behind for the repair queue. Reported on the turn
   // summary so a half-applied move shows up in phase results the same turn,
   // not when somebody thinks to open the admin page.
+  steps.mark("bankTreasury");
   summary.unfinishedSettlements = await db
     .collection(MONEY_MOVE_COLLECTION)
     .countDocuments({ status: "partial" });
+  steps.mark("unfinishedCount");
 
   return summary;
 }

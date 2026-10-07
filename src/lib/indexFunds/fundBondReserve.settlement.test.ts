@@ -143,6 +143,33 @@ describe("bond reserve batched settlement", () => {
     expect(fundRows.filter(Boolean).length).toBeGreaterThan(1);
   });
 
+  it("skips an issue awaiting its maturity claim without abandoning the batch", async () => {
+    // The issue the plan would otherwise buy first. Its reservation guard
+    // refuses new holders, so a planned purchase would abort the whole
+    // transaction and send every purchase down the per-purchase path.
+    const claimed = (memory: InMemoryDb) => {
+      const bond = memory.collection("bonds").docs[0]!;
+      bond.sovereignMaturityClaim = { turn: 150, amountLocal: 1 };
+      return memory;
+    };
+    const sequential = claimed(world());
+    const batched = claimed(world());
+
+    const sequentialResult = await deploy(sequential, false);
+    const perPurchaseDebits = vi.spyOn(batched.collection("indexFunds"), "findOneAndUpdate");
+    const batchReservations = vi.spyOn(batched.collection("bonds"), "bulkWrite");
+    const batchedResult = await deploy(batched, true);
+
+    // Same purchases and books as the per-purchase path, which refuses the issue too.
+    expect(sequentialResult.unitsPurchased).toBeGreaterThan(0);
+    expect(batchedResult).toEqual(sequentialResult);
+    expect(state(batched)).toEqual(state(sequential));
+    expect(state(batched).bonds[0]!.holders).toEqual([]);
+    // Settled in the one transaction: no per-purchase fallback ran.
+    expect(batchReservations).toHaveBeenCalledTimes(1);
+    expect(perPurchaseDebits).not.toHaveBeenCalled();
+  });
+
   it("commits nothing from the batch when a guard misses, then settles per purchase", async () => {
     const batched = world();
     const before = state(batched);
