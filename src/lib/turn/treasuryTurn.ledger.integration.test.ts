@@ -89,9 +89,13 @@ describe("treasury accrual stock-flow ownership", () => {
     expect(budget.bankSovereignClaims).toEqual([
       expect.objectContaining({ turn: 8, amountLocal: 50 }),
     ]);
-    expect(budget.sovereignCouponClaims).toEqual([
-      expect.objectContaining({ dueTurn: 8, amountLocal: 50 }),
-    ]);
+    const openCouponClaims = () =>
+      db
+        .collection("sovereignCouponClaims")
+        .docs.filter((row) => row.settledTurn === undefined)
+        .map((row) => row.claim);
+    expect(budget.sovereignCouponClaims ?? []).toEqual([]);
+    expect(openCouponClaims()).toEqual([expect.objectContaining({ dueTurn: 8, amountLocal: 50 })]);
 
     budget.treasuryCashLocal = 1_000;
     await processTreasuryTurn(10);
@@ -99,7 +103,7 @@ describe("treasury accrual stock-flow ownership", () => {
 
     expect(budget.treasuryCashLocal).toBe(900);
     expect(budget.bankSovereignClaims).toEqual([]);
-    expect(budget.sovereignCouponClaims).toEqual([]);
+    expect(openCouponClaims()).toEqual([]);
     expect(budget.sovereignCouponFrozenThrough).toEqual({ [`b${bondId.toHexString()}`]: 8 });
     expect(db.collection("corporations").docs[0].bankCharter).toMatchObject({ cashReserves: 55 });
     expect(db.collection("bondMarketPools").docs[0].cashLocal).toBe(50);

@@ -387,6 +387,7 @@ export const RUNTIME: CollectionEntry[] = [
   { name: "financialCrisisFiscalActions", category: "runtime" },
   { name: "financialCrisisCreditHistory", category: "runtime" },
   { name: "bankMoneyMoves", category: "runtime" },
+  { name: "sovereignCouponClaims", category: "runtime" },
   { name: "bankLiquidityOperations", category: "runtime" },
   { name: "monetaryOperationCommands", category: "runtime" },
   { name: "reservePoolTransferCommands", category: "runtime" },

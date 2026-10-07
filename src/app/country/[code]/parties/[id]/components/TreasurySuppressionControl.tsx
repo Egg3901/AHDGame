@@ -2,11 +2,9 @@ import { Slider } from "@/components/ui";
 import {
   DOLLARS_PER_TURNOUT_POINT,
   calculateAlignmentMultiplier,
-  getTargetableDemographics,
-  getTargetableCategories,
-  getCategoryLabels,
-  getDemographicLabels,
 } from "@/lib/utils/demographicAlignment";
+import type { TurnoutTargetSection } from "@/lib/demographics/turnoutTargets";
+import { buildPartyTurnoutTargetCatalog } from "@/lib/demographics/partyTurnoutTarget";
 import type { PartyData } from "./types";
 import type { TreasuryAction } from "./treasuryReducer";
 import { fmt } from "./helpers";
@@ -18,6 +16,7 @@ interface TreasurySuppressionControlProps {
   suppressionForm: { percent: number; category: string; group: string; saving: boolean };
   dispatch: (action: TreasuryAction) => void;
   onSave: () => void;
+  targetSections: TurnoutTargetSection[];
 }
 
 export function TreasurySuppressionControl({
@@ -26,11 +25,12 @@ export function TreasurySuppressionControl({
   suppressionForm,
   dispatch,
   onSave,
+  targetSections,
 }: TreasurySuppressionControlProps) {
-  const targetableDemos = getTargetableDemographics(countryId);
-  const targetableCategories = getTargetableCategories(countryId);
-  const categoryLabels = getCategoryLabels(countryId);
-  const demoLabels = getDemographicLabels(countryId);
+  const { categories, targets: targetableDemos } = buildPartyTurnoutTargetCatalog(
+    countryId,
+    targetSections
+  );
 
   const supSpend = Math.floor(party.expectedHourlyIncome * (suppressionForm.percent / 100));
   const selectedSupDemo =
@@ -120,9 +120,9 @@ export function TreasurySuppressionControl({
           className="rounded-lg border border-card-border bg-background px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         >
           <option value="">Category…</option>
-          {targetableCategories.map((cat) => (
-            <option key={cat} value={cat}>
-              {categoryLabels[cat] ?? cat}
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.label}
             </option>
           ))}
         </select>
@@ -137,7 +137,7 @@ export function TreasurySuppressionControl({
           <option value="">Demographic…</option>
           {groupsForSupCat.map((d) => (
             <option key={d.group} value={d.group}>
-              {demoLabels[d.group] ?? d.group}
+              {d.label}
             </option>
           ))}
         </select>

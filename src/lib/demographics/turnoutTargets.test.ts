@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   getTurnoutTargetsForCountry,
   isTargetValidForCountry,
+  flattenPartyTurnoutTargets,
+  resolvePartyTurnoutTarget,
   turnoutTargetIdsForCountry,
 } from "./turnoutTargets";
 import { getCountryLayer1Model } from "@/lib/seeds/international";
@@ -40,6 +42,19 @@ describe("turnout targets are the country's own buckets", () => {
     // Germany's education keys are its own — the UK's must not validate there.
     expect(isTargetValidForCountry("education:degree_plus", "UK", PRESET)).toBe(true);
     expect(isTargetValidForCountry("education:degree_plus", "DE", PRESET)).toBe(false);
+  });
+
+  it("carries the same bucket leans into party targeting", () => {
+    const sections = getTurnoutTargetsForCountry("UK", PRESET);
+    const flattened = flattenPartyTurnoutTargets(sections);
+    const target = flattened.find(
+      (candidate) => candidate.category === "education" && candidate.group === "degree_plus"
+    );
+
+    expect(target).toEqual(resolvePartyTurnoutTarget("UK", "education", "degree_plus", PRESET));
+    expect(target?.label).toBeTruthy();
+    expect(target?.economicLean).toEqual(expect.any(Number));
+    expect(target?.socialLean).toEqual(expect.any(Number));
   });
 
   it("never renders a target as a raw key or blank", () => {

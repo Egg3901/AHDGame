@@ -325,6 +325,9 @@ export function ElectorateDossier({
                           {g.sharePct.toFixed(1)}%
                         </span>
                       </div>
+                      <div className="mt-0.5 truncate text-[11px] text-muted">
+                        Econ: {econWord(g.economicLean)} · Social: {socWord(g.socialLean)}
+                      </div>
                       <div className="mt-1 h-1 overflow-hidden rounded-full bg-card-border/40">
                         <div
                           className="h-full rounded-full"
@@ -406,30 +409,33 @@ export function ElectorateDossier({
               </div>
             </div>
 
-            {/* Analyst-only detail */}
+            {/* The averages are visible in both views. They are the clearest
+                answer to what this group tends to believe, even when a region
+                has no major-party records to produce a party match. */}
+            <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="rounded-xl border border-card-border bg-card-muted/30 px-3 py-2.5">
+                <div className="text-body-sm font-medium text-muted">Economic lean</div>
+                <div className={`text-sm font-bold ${leanTextClass(selected.economicLean)}`}>
+                  {econWord(selected.economicLean)}
+                </div>
+                <div className="text-[11px] text-muted">
+                  Average {fmtLean(selected.economicLean)} · Left -5 to right +5
+                </div>
+              </div>
+              <div className="rounded-xl border border-card-border bg-card-muted/30 px-3 py-2.5">
+                <div className="text-body-sm font-medium text-muted">Social lean</div>
+                <div className={`text-sm font-bold ${leanTextClass(selected.socialLean)}`}>
+                  {socWord(selected.socialLean)}
+                </div>
+                <div className="text-[11px] text-muted">
+                  Average {fmtLean(selected.socialLean)} · Progressive -5 to traditional +5
+                </div>
+              </div>
+            </div>
+
+            {/* Analyst-only party detail */}
             {view === "analyst" && (
               <>
-                <div className="mb-4 grid grid-cols-2 gap-2">
-                  <div className="rounded-xl border border-card-border bg-card-muted/30 px-3 py-2.5">
-                    <div className="text-body-sm font-medium text-muted">Economic lean</div>
-                    <div className={`text-sm font-bold ${leanTextClass(selected.economicLean)}`}>
-                      {econWord(selected.economicLean)}
-                    </div>
-                    <div className="text-[11px] text-muted">
-                      {fmtLean(selected.economicLean)} / ±5
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-card-border bg-card-muted/30 px-3 py-2.5">
-                    <div className="text-body-sm font-medium text-muted">Social lean</div>
-                    <div className={`text-sm font-bold ${leanTextClass(selected.socialLean)}`}>
-                      {socWord(selected.socialLean)}
-                    </div>
-                    <div className="text-[11px] text-muted">
-                      {fmtLean(selected.socialLean)} / ±5
-                    </div>
-                  </div>
-                </div>
-
                 {selected.matches.length > 0 && (
                   <div className="mb-4">
                     <div className="mb-2 text-body-sm font-medium text-muted">Party match</div>

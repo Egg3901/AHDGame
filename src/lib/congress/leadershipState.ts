@@ -197,14 +197,102 @@ async function loadLeaderDisplays(
   return out;
 }
 
+type ChamberNomination = SenateLeadershipNomination | HouseLeadershipNomination;
+
+interface NomineeDisplay {
+  avatarByNominee: Map<string, string | undefined>;
+  borderByNominee: Map<
+    string,
+    { borderKey?: string | null; tintColor?: string | null } | undefined
+  >;
+}
+
+function isElectionVoting(election: ChamberElection | null, gameTime: GameTime): boolean {
+  return (
+    election?.status === "voting" &&
+    !isLeadershipElectionClosed(election, gameTime.currentTurn, gameTime.effectiveNow)
+  );
+}
+
+/**
+ * One read of the nominations for every requested role. A role that is voting
+ * shows its open candidacies, any other role shows its confirmed rows, exactly
+ * the per-role filters this replaces. Each role keeps the same
+ * `votesFor desc, createdAt asc` order because grouping a sorted list by role
+ * preserves the order within each group.
+ */
+async function loadNominationsByRole(
+  db: Db,
+  chamber: "senate" | "house",
+  roles: LeadershipRoleSpec["role"][],
+  votingRoles: Set<LeadershipRoleSpec["role"]>
+): Promise<Map<LeadershipRoleSpec["role"], ChamberNomination[]>> {
+  const nominationCollection =
+    chamber === "senate" ? "senateLeadershipNominations" : "houseLeadershipNominations";
+  const voting = [...new Set(roles.filter((role) => votingRoles.has(role)))];
+  const settled = [...new Set(roles.filter((role) => !votingRoles.has(role)))];
+  const branches: Filter<ChamberNomination>[] = [];
+  if (voting.length > 0) {
+    branches.push({ role: { $in: voting }, status: { $in: ["open", "voting"] } });
+  }
+  if (settled.length > 0) branches.push({ role: { $in: settled }, status: "confirmed" });
+
+  const out = new Map<LeadershipRoleSpec["role"], ChamberNomination[]>(
+    roles.map((role) => [role, []])
+  );
+  if (branches.length === 0) return out;
+  const nomDocs = await db
+    .collection<ChamberNomination>(nominationCollection)
+    .find(branches.length === 1 ? branches[0]! : { $or: branches })
+    .sort({ votesFor: -1, createdAt: 1 })
+    .toArray();
+  for (const nom of nomDocs) out.get(nom.role)?.push(nom);
+  return out;
+}
+
+/** Avatar and border data for every nominee across all roles, read once. */
+async function loadNomineeDisplays(db: Db, nomineeIds: ObjectId[]): Promise<NomineeDisplay> {
+  const avatarByNominee = new Map<string, string | undefined>();
+  const borderByNominee: NomineeDisplay["borderByNominee"] = new Map();
+  if (nomineeIds.length === 0) return { avatarByNominee, borderByNominee };
+
+  const nomineeChars = await db
+    .collection<Character>("characters")
+    .find({ _id: { $in: nomineeIds } }, { projection: { _id: 1, avatarUrl: 1, userId: 1 } })
+    .toArray();
+  for (const c of nomineeChars) avatarByNominee.set(c._id.toString(), c.avatarUrl);
+
+  const nomBorderMap = await fetchBordersByUserIds(
+    db,
+    nomineeChars.map((c) => c.userId)
+  );
+  for (const c of nomineeChars) {
+    borderByNominee.set(c._id.toString(), nomBorderMap.get(c.userId.toString()));
+  }
+
+  // Fill NPP avatars
+  const foundCharIds = new Set(nomineeChars.map((c) => c._id.toString()));
+  const nppNomineeIds = nomineeIds.filter((id) => !foundCharIds.has(id.toString()));
+  if (nppNomineeIds.length > 0) {
+    const nppDocs = await db
+      .collection<NPP>("npps")
+      .find({ _id: { $in: nppNomineeIds } }, { projection: { _id: 1, avatarUrl: 1 } })
+      .toArray();
+    for (const npp of nppDocs) {
+      avatarByNominee.set(npp._id.toString(), npp.avatarUrl);
+    }
+  }
+  return { avatarByNominee, borderByNominee };
+}
+
 /**
  * Builds the complete state for every leadership election shown on a chamber
  * page, in the order of `specs`.
  *
- * Two phases: every closed election is resolved first, then the seated leaders
- * are read once for all roles. Reading leaders per role used to cost one
- * congressLeaders round trip per role, and a snapshot taken before resolution
- * would show the pre-election holder.
+ * Two phases: every closed election is resolved first, then the seated leaders,
+ * the nominations and the nominee display data are each read once for all
+ * roles. Reading them per role used to cost one round trip per role for each,
+ * and a snapshot taken before resolution would show the pre-election state.
  */
 export async function buildLeadershipElectionStates(
   db: Db,
@@ -220,9 +308,36 @@ export async function buildLeadershipElectionStates(
     specs.map((spec) => spec.leaderRole),
     viewer.partyMap
   );
+  const votingRoles = new Set(
+    specs
+      .filter((_, i) => isElectionVoting(fresh[i]!.election, fresh[i]!.gameTime))
+      .map((spec) => spec.role)
+  );
+  const nominationsByRole = await loadNominationsByRole(
+    db,
+    chamber,
+    specs.map((spec) => spec.role),
+    votingRoles
+  );
+  const nominees = await loadNomineeDisplays(db, [
+    ...new Map(
+      [...nominationsByRole.values()]
+        .flat()
+        .map((nom) => [nom.nomineeId.toString(), nom.nomineeId] as const)
+    ).values(),
+  ]);
   return Promise.all(
     specs.map((spec, i) =>
-      buildRoleState(db, chamber, spec, viewer, fresh[i]!, leaders.get(spec.leaderRole) ?? null)
+      buildRoleState(
+        db,
+        chamber,
+        spec,
+        viewer,
+        fresh[i]!.election,
+        leaders.get(spec.leaderRole) ?? null,
+        nominationsByRole.get(spec.role) ?? [],
+        nominees
+      )
     )
   );
 }
@@ -230,61 +345,15 @@ export async function buildLeadershipElectionStates(
 async function buildRoleState(
   db: Db,
   chamber: "senate" | "house",
-  { role, eligiblePartySlugs, partySeats, partyLabel }: LeadershipRoleSpec,
+  { eligiblePartySlugs, partySeats, partyLabel }: LeadershipRoleSpec,
   { partyMap, myCharacterId, myParty, isMember }: LeadershipViewer,
-  { election, gameTime }: { election: ChamberElection | null; gameTime: GameTime },
-  current: LeaderDisplay | null
+  election: ChamberElection | null,
+  current: LeaderDisplay | null,
+  nomDocs: ChamberNomination[],
+  { avatarByNominee, borderByNominee }: NomineeDisplay
 ): Promise<LeadershipElectionState> {
-  type ChamberNomination = SenateLeadershipNomination | HouseLeadershipNomination;
   const eligiblePartySet = new Set(eligiblePartySlugs ?? []);
-  const nominationCollection =
-    chamber === "senate" ? "senateLeadershipNominations" : "houseLeadershipNominations";
-
   const electionStatus = election?.status ?? "none";
-  const isVoting =
-    electionStatus === "voting" &&
-    !!election &&
-    !isLeadershipElectionClosed(election, gameTime.currentTurn, gameTime.effectiveNow);
-
-  const nominationFilter: Filter<ChamberNomination> = isVoting
-    ? { role, status: { $in: ["open", "voting"] } }
-    : { role, status: "confirmed" };
-
-  // Fetch nominations
-  const nomDocs = await db
-    .collection<ChamberNomination>(nominationCollection)
-    .find(nominationFilter)
-    .sort({ votesFor: -1, createdAt: 1 })
-    .toArray();
-
-  // Enrich with avatars
-  const nomineeIds = nomDocs.map((n: { nomineeId: ObjectId }) => n.nomineeId);
-  const nomineeChars = await db
-    .collection<Character>("characters")
-    .find({ _id: { $in: nomineeIds } }, { projection: { _id: 1, avatarUrl: 1, userId: 1 } })
-    .toArray();
-  const avatarByNominee = new Map(nomineeChars.map((c) => [c._id.toString(), c.avatarUrl]));
-
-  const nomBorderMap = await fetchBordersByUserIds(
-    db,
-    nomineeChars.map((c) => c.userId)
-  );
-  const borderByNominee = new Map(
-    nomineeChars.map((c) => [c._id.toString(), nomBorderMap.get(c.userId.toString())])
-  );
-
-  // Fill NPP avatars
-  const foundCharIds = new Set(nomineeChars.map((c) => c._id.toString()));
-  const nppNomineeIds = nomineeIds.filter((id: ObjectId) => !foundCharIds.has(id.toString()));
-  if (nppNomineeIds.length > 0) {
-    const nppDocs = await db
-      .collection<NPP>("npps")
-      .find({ _id: { $in: nppNomineeIds } }, { projection: { _id: 1, avatarUrl: 1 } })
-      .toArray();
-    for (const npp of nppDocs) {
-      avatarByNominee.set(npp._id.toString(), npp.avatarUrl);
-    }
-  }
 
   // Build candidacy displays (with party vote breakdown when ballots exist)
   const filteredNoms = nomDocs.filter((n: { status: string }) => n.status !== "confirmed");

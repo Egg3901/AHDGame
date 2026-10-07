@@ -29,7 +29,10 @@ import { getRegisteredCountryIdSet } from "@/lib/country/registeredCountries";
 import { enforcementTreasuryCostPerTurn } from "@/lib/unions/enforcementCosts";
 import { settleBankSovereignClaims } from "@/lib/banking/bankSovereignClaims";
 import { bankCouponClaim, bankCouponPlanForCountry } from "@/lib/banking/rules/sovereignClaims";
-import { settleFundedSovereignCoupons } from "@/lib/banking/fundedSovereignCoupons";
+import {
+  budgetIdsWithOpenSovereignCouponClaims,
+  settleFundedSovereignCoupons,
+} from "@/lib/banking/fundedSovereignCoupons";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import {
   fxRateForCorpFromMap,
@@ -95,10 +98,14 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   const allBudgets = await db.collection<FederalBudget>("federalBudget").find({}).toArray();
   // Dissolved countries keep their budget doc but must not be simulated against
   // it; see `getRegisteredCountryIdSet`.
-  const liveCountries = await getRegisteredCountryIdSet(db);
+  const [liveCountries, budgetsOwingCoupons] = await Promise.all([
+    getRegisteredCountryIdSet(db),
+    budgetIdsWithOpenSovereignCouponClaims(db),
+  ]);
+  const owesCoupons = (b: FederalBudget) =>
+    (b.sovereignCouponClaims?.length ?? 0) > 0 || budgetsOwingCoupons.has(String(b._id));
   const budgets = allBudgets.filter(
-    (b) =>
-      liveCountries.has(String(b.countryId ?? b._id)) || (b.sovereignCouponClaims?.length ?? 0) > 0
+    (b) => liveCountries.has(String(b.countryId ?? b._id)) || owesCoupons(b)
   );
 
   const [config, rates] = await Promise.all([
@@ -216,11 +223,12 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   for (const initial of budgets) {
     let b = initial;
     if (!liveCountries.has(String(b.countryId ?? b._id))) {
-      if (treasuryCashLedgerEnabled && b.sovereignCouponClaims?.length) {
+      if (treasuryCashLedgerEnabled && owesCoupons(b)) {
+        // No bonds are passed, so nothing new is frozen and the rate is unused.
         await settleFundedSovereignCoupons(db, b, {
           turn: _turn,
           bonds: [],
-          anchorRate: b.sovereignCouponClaims[0].anchorRate,
+          anchorRate: b.sovereignCouponClaims?.[0]?.anchorRate ?? 0,
           forexEnabled,
           corporateQuotes: corporationQuotes,
         });
