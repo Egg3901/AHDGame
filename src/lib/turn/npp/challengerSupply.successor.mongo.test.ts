@@ -137,19 +137,22 @@ it.skipIf(!enabled)(
         startTurn: 1,
       }));
       await db.collection("elections").insertMany(modernElections);
-      expect(await processChallengerGeneration(new Date())).toBe(26);
+      // Explicit AI-only configuration preserves the historical simulation
+      // coverage, while the live US remains open to players.
+      await db
+        .collection<Document & { _id: string }>("countryGameStates")
+        .insertMany(["IE", "NG", "DE"].map((_id) => ({ _id, enabledForPlayers: false })));
+      expect(await processChallengerGeneration(new Date())).toBe(22);
       const modernCandidates = await db.collection("electionCandidates").find({}).toArray();
-      for (const election of [
-        ...modernElections,
-        ...elections.filter((e) => e.countryId === "US"),
-      ]) {
+      for (const election of modernElections) {
         expect(
           modernCandidates.filter((candidate) => candidate.electionId.equals(election._id))
         ).toHaveLength(2);
       }
-      expect(new Set(modernCandidates.map((c) => String(c.characterId))).size).toBe(38);
+      expect(modernCandidates.some((candidate) => candidate.countryId === "US")).toBe(false);
+      expect(new Set(modernCandidates.map((c) => String(c.characterId))).size).toBe(34);
       expect(await processChallengerGeneration(new Date())).toBe(0);
-      expect(await db.collection("electionCandidates").countDocuments({})).toBe(38);
+      expect(await db.collection("electionCandidates").countDocuments({})).toBe(34);
     } finally {
       if (!/^ahd_sim_issue2072_candidates_[a-f0-9]{12}$/.test(db.databaseName))
         throw new Error("Refusing cleanup outside the disposable sandbox fixture");
