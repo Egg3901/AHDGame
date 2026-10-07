@@ -143,7 +143,7 @@ The second case is a route problem, so check the Logistics map for the origin st
 These names are easy to confuse:
 
 - **Freight capacity** is market output from logistics sectors. It moves goods between states and appears on the commodity page and Logistics map.
-- **Corporate logistics strength** is an internal corporation stat built by the CEO's logistics budget. It reduces the sprawl penalty from operating many sectors.
+- **Corporate logistics strength** is an internal corporation stat built by the CEO's logistics budget. It reduces the sprawl penalty from operating many sectors. Logistics sectors themselves are exempt from that penalty but still count toward the sector total.
 
 Spending on corporate logistics strength does not create TEU. Opening and operating a logistics sector does.
 

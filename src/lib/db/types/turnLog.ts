@@ -2,6 +2,7 @@ import type { ObjectId } from "mongodb";
 import type { GameHealthSummary } from "./gameHealthSnapshot";
 import type { TurnPhaseTelemetryMap } from "./turnPhaseTelemetry";
 import type { GameIteration } from "./gameState";
+import type { TurnBuild } from "@/lib/turn/turnBuild";
 
 /**
  * Verbose turn processing log stored every hour.
@@ -20,6 +21,8 @@ export interface TurnLog {
   warnings: string[];
   health?: GameHealthSummary | null;
   phaseStatuses?: TurnPhaseTelemetryMap;
+  /** Deployed source the turn ran on; absent outside a hosted deployment. */
+  build?: TurnBuild;
   /**
    * Anti-abuse scans run after the turn commits (#2694): financialSuspectScan,
    * auditAnomalyScan, suspiciousDetection. Absent on off-cadence turns.
