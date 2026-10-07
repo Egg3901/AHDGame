@@ -30,7 +30,10 @@ describe("buildSourcingDocs", () => {
     const { networkDoc } = buildSourcingDocs(result, 27, new Date(), {
       includeFreightBilling: true,
       billingRampFraction: 0.25,
-      billingBalancesByState: new Map([
+      billingBalancesByState: new Map<
+        string,
+        Map<CommodityType, { supply: number; demand: number }>
+      >([
         ["WA", new Map([["vehicles", { supply: 0, demand: 10_000.123456 }]])],
         ["CA", new Map([["freight", { supply: 100.123456, demand: 20 }]])],
       ]),

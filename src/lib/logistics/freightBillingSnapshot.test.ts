@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { readFreightBillingSnapshot } from "./freightBillingSnapshot";
 
-const prices = [
-  { commodity: "vehicles" as const, turn: 27, stateDemand: { WA: 100 }, stateSupply: {} },
-  { commodity: "freight" as const, turn: 27, stateDemand: {}, stateSupply: { CA: 200 } },
+const prices: Parameters<typeof readFreightBillingSnapshot>[1] = [
+  { commodity: "vehicles", turn: 27, stateDemand: { WA: 100 }, stateSupply: {} },
+  { commodity: "freight", turn: 27, stateDemand: {}, stateSupply: { CA: 200 } },
 ];
 const legacy = {
   turn: 27,
