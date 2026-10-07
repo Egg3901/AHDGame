@@ -61,8 +61,14 @@ function StatRow({
   countryId: string;
   stateId: string;
 }) {
-  const { preset, eraSystemEnabled, currentYear, startingYear, incomeBandIndexByCountry } =
-    useWorldFlags();
+  const {
+    preset,
+    eraSystemEnabled,
+    currentYear,
+    startingYear,
+    incomeBandIndexByCountry,
+    incomeStartVintages,
+  } = useWorldFlags();
   // Live year for era-aware score bands; null while the flag is off (legacy path).
   const eraYear = eraSystemEnabled ? currentYear : null;
   const incomeIndex = eraYear != null ? (incomeBandIndexByCountry?.[countryId] ?? null) : null;
@@ -71,7 +77,16 @@ function StatRow({
   if (!isMetricActive(metricId, countryId, eraYear)) return null;
   const name = def ? getEraMetricName(def, eraYear, stateId) : metricId;
   const isHigherBetter = def?.isHigherBetter ?? true;
-  const score = scoreMetric(metricId, value, countryId, preset, eraYear, incomeIndex, startingYear);
+  const score = scoreMetric(
+    metricId,
+    value,
+    countryId,
+    preset,
+    eraYear,
+    incomeIndex,
+    startingYear,
+    incomeStartVintages
+  );
   const badge = score !== null ? getMetricBadge(score) : null;
   const fmt = (v: number) => (def ? formatMetricValue(def, v, countryId) : v.toFixed(1));
   const vsNational =

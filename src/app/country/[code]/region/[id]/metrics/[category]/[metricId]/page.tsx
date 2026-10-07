@@ -25,8 +25,14 @@ export default function MetricDetailPage({
 }) {
   const { code, id: rawRegionParam, category, metricId } = use(params);
   const regionId = canonicalRegionId(code.toUpperCase(), rawRegionParam);
-  const { preset, eraSystemEnabled, currentYear, startingYear, incomeBandIndexByCountry } =
-    useWorldFlags();
+  const {
+    preset,
+    eraSystemEnabled,
+    currentYear,
+    startingYear,
+    incomeBandIndexByCountry,
+    incomeStartVintages,
+  } = useWorldFlags();
   // Live year for era-aware score bands; null while the flag is off (legacy path).
   const eraYear = eraSystemEnabled ? currentYear : null;
   const countryId = code.toUpperCase();
@@ -142,7 +148,16 @@ export default function MetricDetailPage({
       : undefined;
 
   const hasHistory = history.length > 0;
-  const score = scoreMetric(metricId, value, countryId, preset, eraYear, incomeIndex, startingYear);
+  const score = scoreMetric(
+    metricId,
+    value,
+    countryId,
+    preset,
+    eraYear,
+    incomeIndex,
+    startingYear,
+    incomeStartVintages
+  );
   const badge = score !== null ? getMetricBadge(score) : null;
 
   const accentVars = {

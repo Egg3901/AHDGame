@@ -6,11 +6,9 @@ import { STATE_PASSIVE_PS_PER_TURN } from "@/lib/politicalStrength/strengthConst
 import {
   DOLLARS_PER_TURNOUT_POINT,
   calculateAlignmentMultiplier,
-  getTargetableDemographics,
-  getTargetableCategories,
-  getCategoryLabels,
-  getDemographicLabels,
 } from "@/lib/utils/demographicAlignment";
+import { buildPartyTurnoutTargetCatalog } from "@/lib/demographics/partyTurnoutTarget";
+import { useTurnoutTargetSections } from "@/hooks/useTurnoutTargetSections";
 import { getMessageStyle } from "@/lib/utils/formatters";
 import type { StatePartyData } from "./types";
 import { fmt } from "./helpers";
@@ -127,11 +125,12 @@ export function FundraisingManagementSection({
   // oversight rather than the national party's.
   const statePartyOfficers = stateParty.seatedOfficers;
 
-  // Country-aware demographics
-  const targetableDemos = getTargetableDemographics(countryId);
-  const targetableCategories = getTargetableCategories(countryId);
-  const CATEGORY_LABELS = getCategoryLabels(countryId);
-  const DEMOGRAPHIC_LABELS = getDemographicLabels(countryId);
+  // Same country- and era-specific census buckets shown on the region's
+  // Demographics tab. The catalog is served so historical worlds do not fall
+  // back to modern groups in the client bundle.
+  const targetSections = useTurnoutTargetSections(countryId);
+  const { categories: targetableCategories, targets: targetableDemos } =
+    buildPartyTurnoutTargetCatalog(countryId, targetSections);
 
   // GOTV computed
   const gotvSpend = Math.floor(stateParty.expectedHourlyIncome * (gotvPercent / 100));
@@ -314,9 +313,9 @@ export function FundraisingManagementSection({
               className="rounded-lg border border-card-border bg-background px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             >
               <option value="">Category…</option>
-              {targetableCategories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {CATEGORY_LABELS[cat] ?? cat}
+              {targetableCategories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.label}
                 </option>
               ))}
             </select>
@@ -329,7 +328,7 @@ export function FundraisingManagementSection({
               <option value="">Demographic…</option>
               {groupsForGotvCat.map((d) => (
                 <option key={d.group} value={d.group}>
-                  {DEMOGRAPHIC_LABELS[d.group] ?? d.group}
+                  {d.label}
                 </option>
               ))}
             </select>
@@ -438,9 +437,9 @@ export function FundraisingManagementSection({
               className="rounded-lg border border-card-border bg-background px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             >
               <option value="">Category…</option>
-              {targetableCategories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {CATEGORY_LABELS[cat] ?? cat}
+              {targetableCategories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.label}
                 </option>
               ))}
             </select>
@@ -453,7 +452,7 @@ export function FundraisingManagementSection({
               <option value="">Demographic…</option>
               {groupsForSupCat.map((d) => (
                 <option key={d.group} value={d.group}>
-                  {DEMOGRAPHIC_LABELS[d.group] ?? d.group}
+                  {d.label}
                 </option>
               ))}
             </select>

@@ -18,6 +18,8 @@ export interface EraContext {
    * first flag-on turn (scoring falls back to the full legacy band).
    */
   incomeBandIndexByCountry: Partial<Record<string, number>> | null;
+  /** Income vintage provenance for the medianIncome anchor; null flag-off or legacy data. */
+  incomeStartVintages: Partial<Record<string, string>> | null;
   /** Cached configuration mirrored by the admin route for zero-read law gates. */
   mediaRegulation: {
     enabled: boolean;
@@ -66,6 +68,7 @@ export async function getEraContext(db: Db): Promise<EraContext> {
         startingYear: 1,
         eraSystemEnabled: 1,
         incomeBandIndexByCountry: 1,
+        incomeStartVintages: 1,
         mediaRegulationSnapshot: 1,
       },
     }
@@ -85,6 +88,7 @@ export async function getEraContext(db: Db): Promise<EraContext> {
       preset,
       startingYear: null,
       incomeBandIndexByCountry: null,
+      incomeStartVintages: null,
       mediaRegulation,
     };
   }
@@ -94,6 +98,7 @@ export async function getEraContext(db: Db): Promise<EraContext> {
     preset,
     startingYear: gs.startingYear ?? null,
     incomeBandIndexByCountry: gs.incomeBandIndexByCountry ?? null,
+    incomeStartVintages: gs.incomeStartVintages ?? null,
     mediaRegulation,
   };
 }

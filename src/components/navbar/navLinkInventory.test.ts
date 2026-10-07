@@ -21,8 +21,10 @@ describe("nav link inventory parity", () => {
     const hrefs = buildWorldNavItems({
       countryId: "US",
       myCorporationId: 1,
+      myUnionId: "u1",
       conflictsEnabled: true,
       unionsEnabled: true,
+      settlementCrisisLive: true,
     })
       .filter((i) => i.show)
       .map((i) => i.href);
@@ -31,7 +33,9 @@ describe("nav link inventory parity", () => {
     expect(hrefs).toContain("/world/trade");
     expect(hrefs).toContain("/world/conflicts");
     expect(hrefs).toContain("/unions");
+    expect(hrefs).toContain("/unions/u1");
     expect(hrefs).toContain("/corporation/1");
+    expect(hrefs).toContain("/world/german-question");
   });
 
   it("staff builder matches canonical staff routes", () => {

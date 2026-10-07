@@ -18,6 +18,7 @@ import { loadRegionalCampaignCells } from "@/lib/campaignTargeting/audience";
 import { isPrimaryEnded } from "@/lib/elections/phases";
 import { loadApportionment } from "./apportionment";
 import { parseSeatId } from "@/lib/seats/seatId";
+import { findVoluntaryWithdrawals } from "@/lib/elections/voluntaryWithdrawal";
 import type { Db, ObjectId as MongoObjectId } from "mongodb";
 import { ObjectId } from "mongodb";
 import type {
@@ -190,7 +191,13 @@ export async function resolveElection(
       .toArray();
   }
 
-  return _enrichElection(election, deps, options, gameTime, gameState, db, adjacentElections);
+  const [response, withdrew] = await Promise.all([
+    _enrichElection(election, deps, options, gameTime, gameState, db, adjacentElections),
+    options.activeCharacterId && ObjectId.isValid(options.activeCharacterId)
+      ? findVoluntaryWithdrawals(db, new ObjectId(options.activeCharacterId), [election._id])
+      : Promise.resolve(new Set<string>()),
+  ]);
+  return withdrew.size > 0 ? { ...response, viewerWithdrew: true } : response;
 }
 
 // ---------------------------------------------------------------------------
@@ -651,5 +658,21 @@ export async function resolveElections(
     })
   );
 
-  return results;
+  // Every candidacy row is already loaded, so the viewer's voluntary
+  // withdrawals cost no extra query.
+  const { activeCharacterId } = options;
+  if (!activeCharacterId) return results;
+  const withdrewFrom = new Set(
+    allCandidatesRaw
+      .filter(
+        (c) =>
+          c.status === "withdrawn" &&
+          c.withdrawnBy === "candidate" &&
+          c.characterId.toString() === activeCharacterId
+      )
+      .map((c) => c.electionId.toString())
+  );
+  return withdrewFrom.size > 0
+    ? results.map((r) => (withdrewFrom.has(r.id) ? { ...r, viewerWithdrew: true } : r))
+    : results;
 }

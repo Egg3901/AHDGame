@@ -680,6 +680,14 @@ export interface GameState {
    */
   incomeBandIndexByCountry?: Partial<Record<string, number>>;
   /**
+   * Per-country income vintage provenance: the start-year vintage id this
+   * world's median incomes were seeded or migrated with. Written only by the
+   * seed writer that writes those values (or a reviewed migration that rewrites
+   * them); medianIncome scoring uses the vintage anchor only on a match, and
+   * absent means legacy data on the legacy anchor. Cleared on reset.
+   */
+  incomeStartVintages?: Partial<Record<string, string>>;
+  /**
    * Player-facing decade era id ("2000s"), stamped by the era-crossing turn
    * phase at decade rollover. Display/news only — scoring never reads it
    * (scoring computes continuously from currentYear).

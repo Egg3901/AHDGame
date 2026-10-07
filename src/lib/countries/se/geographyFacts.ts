@@ -1,7 +1,7 @@
 import type { AdjacencyMap } from "@/lib/constants/stateAdjacency";
 import type { CountryMapConfig } from "@/lib/commodity-map/commodityMapRegistry";
 import type { Continent } from "@/lib/constants/countryContinents";
-import type { NormalAnchor } from "@/lib/era/metricCatalog";
+import type { IncomeStartVintage, NormalAnchor } from "@/lib/era/metricCatalog";
 
 import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
 
@@ -129,6 +129,16 @@ export const SE_INCOME_ANCHORS: NormalAnchor[] = [
     value: 8000,
   },
 ];
+
+/**
+ * Income anchor for a world that STARTS in the given year. Used only at the
+ * exact start year; never interpolated, so a 1953 world running forward keeps
+ * its flat 1953 anchor. 1991 is the derived krona household median from
+ * seeds/reference/income1991 (#3393).
+ */
+export const SE_INCOME_START_VINTAGES: Record<number, IncomeStartVintage> = {
+  1991: { value: 182468, id: "se-1991-household-r1" },
+};
 
 /*
  * ⚠ THESE TWO ARE INDEPENDENT, AND NESTING THEM COST ELEVEN COUNTRIES. The

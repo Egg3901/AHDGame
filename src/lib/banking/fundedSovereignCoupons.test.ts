@@ -2,11 +2,14 @@ import { ObjectId, type Db } from "mongodb";
 import { describe, expect, it, vi } from "vitest";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { Bond } from "@/lib/db/types/bond";
-import type { FederalBudget } from "@/lib/db/types/budget";
+import type { FederalBudget, FundedSovereignCouponClaim } from "@/lib/db/types/budget";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { perTurnCouponPayment } from "@/lib/constants/bonds";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
-import { settleFundedSovereignCoupons } from "./fundedSovereignCoupons";
+import {
+  settleFundedSovereignCoupons,
+  type SovereignCouponClaimRecord,
+} from "./fundedSovereignCoupons";
 import { withInjectedCrash } from "@/lib/test-utils/faultyDb";
 
 const bondId = new ObjectId("650000000000000000000010");
@@ -40,6 +43,13 @@ function savedBudget(db: InMemoryDb): FederalBudget & { treasuryCashLocal: numbe
   };
 }
 
+function openClaims(db: InMemoryDb): FundedSovereignCouponClaim[] {
+  return (db.collection("sovereignCouponClaims").docs as unknown as SovereignCouponClaimRecord[])
+    .filter((row) => row.settledTurn === undefined)
+    .sort((a, b) => a.claim.dueTurn - b.claim.dueTurn || a.order - b.order)
+    .map((row) => row.claim);
+}
+
 describe("funded sovereign coupon claims", () => {
   it("debits Treasury once and pays public float plus frozen non-bank holders", async () => {
     const db = world();
@@ -61,13 +71,13 @@ describe("funded sovereign coupon claims", () => {
       (db.collection("bondMarketPools").docs[0] as { lifetime: { couponsIn: number } }).lifetime
         .couponsIn
     ).toBe((amount * 10) / 12);
-    expect(savedBudget(db).sovereignCouponClaims).toEqual([]);
+    expect(openClaims(db)).toEqual([]);
     expect(savedBudget(db).sovereignCouponFrozenThrough).toEqual({
       [`b${bondId.toHexString()}`]: 12,
     });
     await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), args);
     expect(savedBudget(db).treasuryCashLocal).toBe(1_000 - amount);
-    expect(savedBudget(db).sovereignCouponClaims).toEqual([]);
+    expect(openClaims(db)).toEqual([]);
     await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
       ...args,
       bonds: [
@@ -79,7 +89,7 @@ describe("funded sovereign coupon claims", () => {
       anchorRate: 8,
       forexEnabled: true,
     });
-    expect(savedBudget(db).sovereignCouponClaims).toEqual([]);
+    expect(openClaims(db)).toEqual([]);
     expect(savedBudget(db).treasuryCashLocal).toBe(1_000 - amount);
     expect((db.collection("characters").docs[0] as { cashOnHand: number }).cashOnHand).toBe(
       amount / 6
@@ -97,7 +107,7 @@ describe("funded sovereign coupon claims", () => {
       corporateQuotes: new Map(),
     };
     await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), args);
-    const claims = savedBudget(db).sovereignCouponClaims ?? [];
+    const claims = openClaims(db) ?? [];
     expect(claims).toHaveLength(1);
     const frozen = JSON.stringify(claims[0]);
     await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
@@ -112,7 +122,7 @@ describe("funded sovereign coupon claims", () => {
       anchorRate: 7,
       corporateQuotes: new Map(),
     });
-    expect(JSON.stringify(savedBudget(db).sovereignCouponClaims?.[0])).toBe(frozen);
+    expect(JSON.stringify(openClaims(db)?.[0])).toBe(frozen);
     savedBudget(db).treasuryCashLocal = 100;
     await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
       ...args,
@@ -125,7 +135,7 @@ describe("funded sovereign coupon claims", () => {
     expect((db.collection("characters").docs[0] as { cashOnHand: number }).cashOnHand).toBe(
       claims[0].amountLocal / 6
     );
-    expect(savedBudget(db).sovereignCouponClaims).toEqual([]);
+    expect(openClaims(db)).toEqual([]);
     expect(frozen).toContain('"anchorRate":1');
   });
 
@@ -171,7 +181,7 @@ describe("funded sovereign coupon claims", () => {
     expect((db.collection("characters").docs[0] as { cashOnHand: number }).cashOnHand).toBe(
       characterAfterCrash
     );
-    expect(savedBudget(db).sovereignCouponClaims).toEqual([]);
+    expect(openClaims(db)).toEqual([]);
   });
 
   it("keeps a frozen corporate denomination and leaves arrears when the target changes currency", async () => {
@@ -206,7 +216,7 @@ describe("funded sovereign coupon claims", () => {
       corporateQuotes,
     };
     await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), args);
-    const claim = savedBudget(db).sovereignCouponClaims?.[0];
+    const claim = openClaims(db)?.[0];
     expect(claim?.holders.map((holder) => holder.kind)).toEqual(["publicFloat", "corporation"]);
     expect(claim?.holders[1].payeeCurrencyCode).toBe("USD");
     const treasuryAfterFirstAttempt = savedBudget(db).treasuryCashLocal;
@@ -221,7 +231,7 @@ describe("funded sovereign coupon claims", () => {
     expect((db.collection("corporations").docs[0] as { liquidCapital: number }).liquidCapital).toBe(
       0
     );
-    expect(savedBudget(db).sovereignCouponClaims).toEqual([claim]);
+    expect(openClaims(db)).toEqual([claim]);
     db.collection("corporations").docs[0].liquidCurrencyCode = "USD";
     savedBudget(db).treasuryCashLocal = 100;
     await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
@@ -233,7 +243,7 @@ describe("funded sovereign coupon claims", () => {
     expect((db.collection("corporations").docs[0] as { liquidCapital: number }).liquidCapital).toBe(
       claim!.holders[1].amountAnchor
     );
-    expect(savedBudget(db).sovereignCouponClaims).toEqual([]);
+    expect(openClaims(db)).toEqual([]);
   });
 
   it("guards country-derived corporate currency and batches recipient lookups across claims", async () => {
@@ -282,7 +292,7 @@ describe("funded sovereign coupon claims", () => {
     db.collection("federalBudget").docs[0].treasuryCashLocal = 0;
     await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), args);
     expect(characterFind).toHaveBeenCalledTimes(1);
-    const claims = savedBudget(db).sovereignCouponClaims ?? [];
+    const claims = openClaims(db) ?? [];
     expect(claims).toHaveLength(2);
     db.collection("corporations").docs[0].countryId = "FR";
     savedBudget(db).treasuryCashLocal = 100;
@@ -295,7 +305,7 @@ describe("funded sovereign coupon claims", () => {
     expect((db.collection("corporations").docs[0] as { liquidCapital: number }).liquidCapital).toBe(
       0
     );
-    expect(savedBudget(db).sovereignCouponClaims).toEqual([claims[0]]);
+    expect(openClaims(db)).toEqual([claims[0]]);
     const secondCharacter = db
       .collection("characters")
       .docs.find((doc) => (doc._id as ObjectId).equals(secondCharacterId));
@@ -315,7 +325,7 @@ describe("funded sovereign coupon claims", () => {
         turn,
         bonds,
       });
-    const claims = savedBudget(db).sovereignCouponClaims ?? [];
+    const claims = openClaims(db) ?? [];
     expect(claims).toHaveLength(200);
 
     const writes = new Map<string, number>();
@@ -342,7 +352,7 @@ describe("funded sovereign coupon claims", () => {
       turn: 16,
       bonds: [],
     });
-    expect(savedBudget(db).sovereignCouponClaims).toHaveLength(200);
+    expect(openClaims(db)).toHaveLength(200);
     expect(savedBudget(db).treasuryCashLocal).toBe(0);
     expect(db.collection("bankMoneyMoves").docs).toHaveLength(0);
     const commands = [...writes.values()].reduce((sum, n) => sum + n, 0);
@@ -356,9 +366,154 @@ describe("funded sovereign coupon claims", () => {
       bonds: [],
     });
     expect(savedBudget(db).treasuryCashLocal).toBeCloseTo(0, 9);
-    expect(savedBudget(db).sovereignCouponClaims).toEqual(claims.slice(2));
+    expect(openClaims(db)).toEqual(claims.slice(2));
     expect(
       db.collection("bankMoneyMoves").docs.filter((doc) => doc.status === "rejected")
     ).toHaveLength(0);
+  });
+
+  it("keeps the budget document flat while unfunded arrears accumulate", async () => {
+    const db = world(0);
+    const bonds = Array.from({ length: 50 }, (_, i) => ({
+      ...bond(),
+      _id: new ObjectId(`6500000000000000000020${String(i).padStart(2, "0")}`),
+    })) as Bond[];
+    const args = { anchorRate: 1, forexEnabled: false, corporateQuotes: new Map() };
+    const sizes: number[] = [];
+    for (let turn = 12; turn < 16; turn++) {
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn,
+        bonds,
+      });
+      sizes.push(JSON.stringify(savedBudget(db)).length);
+    }
+    expect(openClaims(db)).toHaveLength(200);
+    expect(savedBudget(db).sovereignCouponClaims ?? []).toEqual([]);
+    // Only the per-bond frozen-through mark lives on the budget, so it stops growing.
+    expect(new Set(sizes).size).toBe(1);
+    expect(Object.keys(savedBudget(db).sovereignCouponFrozenThrough ?? {})).toHaveLength(50);
+    expect(savedBudget(db).sovereignCouponFrozenThrough?.[`b${bonds[0]._id.toHexString()}`]).toBe(
+      15
+    );
+  });
+
+  it("freezes a turn's claims with one batched install, not a write per bond", async () => {
+    const db = world(0);
+    const bonds = Array.from({ length: 40 }, (_, i) => ({
+      ...bond(),
+      _id: new ObjectId(`6500000000000000000030${String(i).padStart(2, "0")}`),
+    })) as Bond[];
+    const budgetWrites = vi.spyOn(db.collection("federalBudget"), "updateOne");
+    await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+      turn: 12,
+      bonds,
+      anchorRate: 1,
+      forexEnabled: false,
+      corporateQuotes: new Map(),
+    });
+    expect(openClaims(db)).toHaveLength(40);
+    expect(budgetWrites).toHaveBeenCalledTimes(1);
+    // A replay of the same turn freezes nothing twice.
+    await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+      turn: 12,
+      bonds,
+      anchorRate: 9,
+      forexEnabled: false,
+      corporateQuotes: new Map(),
+    });
+    expect(openClaims(db)).toHaveLength(40);
+    expect(openClaims(db).every((claim) => claim.anchorRate === 1)).toBe(true);
+  });
+
+  it("moves legacy array claims into the store without changing their frozen terms", async () => {
+    const db = world(0);
+    const args = {
+      turn: 12,
+      bonds: [bond()],
+      anchorRate: 1,
+      forexEnabled: false,
+      corporateQuotes: new Map(),
+    };
+    await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), args);
+    const frozen = openClaims(db);
+    expect(frozen).toHaveLength(1);
+    // Put the world back in the pre-store shape: the claim on the budget array only.
+    db.collection("sovereignCouponClaims").docs.length = 0;
+    savedBudget(db).sovereignCouponClaims = frozen;
+
+    await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+      ...args,
+      turn: 13,
+      bonds: [],
+    });
+    expect(savedBudget(db).sovereignCouponClaims).toEqual([]);
+    expect(openClaims(db)).toEqual(frozen);
+    expect(db.collection("bankMoneyMoves").docs).toHaveLength(0);
+
+    savedBudget(db).treasuryCashLocal = 100;
+    await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+      ...args,
+      turn: 14,
+      bonds: [],
+    });
+    expect(savedBudget(db).treasuryCashLocal).toBe(100 - frozen[0].amountLocal);
+    expect(openClaims(db)).toEqual([]);
+    expect((db.collection("characters").docs[0] as { cashOnHand: number }).cashOnHand).toBe(
+      frozen[0].amountLocal / 6
+    );
+  });
+
+  it("leaves a legacy claim with a journaled payout on the array for its own plan to finish", async () => {
+    const db = world(0);
+    const args = {
+      turn: 12,
+      bonds: [bond()],
+      anchorRate: 1,
+      forexEnabled: false,
+      corporateQuotes: new Map(),
+    };
+    await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), args);
+    const [claim] = openClaims(db);
+    db.collection("sovereignCouponClaims").docs.length = 0;
+    savedBudget(db).sovereignCouponClaims = [claim];
+    db.seed("bankMoneyMoves", [
+      { _id: `${claim.id}:attempt:12`, status: "partial", kind: "sovereign_coupon_funded_payout" },
+    ]);
+    const resume = vi.spyOn(await import("@/lib/banking/settlementJournal"), "resumeSettlement");
+    await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+      ...args,
+      turn: 13,
+      bonds: [],
+    }).catch(() => undefined);
+    expect(savedBudget(db).sovereignCouponClaims).toEqual([claim]);
+    expect(openClaims(db)).toEqual([]);
+    expect(resume).toHaveBeenCalledWith(expect.anything(), `${claim.id}:attempt:12`);
+    resume.mockRestore();
+  });
+
+  it("prunes a paid claim record once its receipt is acknowledged", async () => {
+    const db = world();
+    const args = {
+      turn: 12,
+      bonds: [bond()],
+      anchorRate: 1,
+      forexEnabled: false,
+      corporateQuotes: new Map(),
+    };
+    await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), args);
+    const records = db.collection("sovereignCouponClaims")
+      .docs as unknown as SovereignCouponClaimRecord[];
+    expect(records).toHaveLength(1);
+    expect(records[0].settledTurn).toBe(12);
+    await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+      ...args,
+      turn: 13,
+      bonds: [],
+    });
+    expect(db.collection("sovereignCouponClaims").docs).toHaveLength(0);
+    // The frozen-through mark still stops the paid turn from being frozen again.
+    await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), args);
+    expect(db.collection("sovereignCouponClaims").docs).toHaveLength(0);
   });
 });

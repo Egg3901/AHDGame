@@ -8,7 +8,7 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { experimentalUiSchema } from "@/lib/api/schemas/settings";
 import type { User } from "@/lib/db/types";
 
-// PATCH /api/settings/experimental-ui — Updates the authenticated user's opt-in to experimental UI features
+// PATCH /api/settings/experimental-ui — Updates the authenticated user's interface style
 // Auth: requireBasicAuth
 // Errors: 400, 401, 429
 export async function PATCH(request: Request) {

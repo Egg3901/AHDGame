@@ -1,4 +1,4 @@
-import { getTargetableDemographics, getDemographicLabels } from "@/lib/utils/demographicAlignment";
+import { partyTurnoutTargetLabel } from "@/lib/demographics/partyTurnoutTarget";
 import { NATIONAL_PASSIVE_PS_PER_TURN } from "@/lib/politicalStrength/strengthConstants";
 import type { PartyData } from "./types";
 import { Tooltip, fmt } from "./helpers";
@@ -30,21 +30,16 @@ export function TreasuryOverview({
   psPct,
   netPct,
 }: TreasuryOverviewProps) {
-  const targetableDemos = getTargetableDemographics(countryId);
-  const DEMOGRAPHIC_LABELS = getDemographicLabels(countryId);
-
-  const gotvDemo =
+  const gotvTargetLabel =
     party.gotvTargetCategory && party.gotvTargetGroup
-      ? targetableDemos.find(
-          (d) => d.category === party.gotvTargetCategory && d.group === party.gotvTargetGroup
-        )
+      ? partyTurnoutTargetLabel(countryId, party.gotvTargetCategory, party.gotvTargetGroup)
       : null;
-  const supDemo =
+  const suppressionTargetLabel =
     party.suppressionTargetCategory && party.suppressionTargetGroup
-      ? targetableDemos.find(
-          (d) =>
-            d.category === party.suppressionTargetCategory &&
-            d.group === party.suppressionTargetGroup
+      ? partyTurnoutTargetLabel(
+          countryId,
+          party.suppressionTargetCategory,
+          party.suppressionTargetGroup
         )
       : null;
 
@@ -225,9 +220,9 @@ export function TreasuryOverview({
                 <span className="text-xs text-muted px-1.5 py-0.5 rounded bg-card-elevated border border-card-border/50">
                   {party.gotvBudgetPercent}%
                 </span>
-                {gotvDemo && (
+                {gotvTargetLabel && (
                   <span className="text-xs text-muted hidden sm:inline-block">
-                    · {DEMOGRAPHIC_LABELS[gotvDemo.group] ?? gotvDemo.group}
+                    · {gotvTargetLabel}
                   </span>
                 )}
               </div>
@@ -249,9 +244,9 @@ export function TreasuryOverview({
                 <span className="text-xs text-muted px-1.5 py-0.5 rounded bg-card-elevated border border-card-border/50">
                   {party.suppressionBudgetPercent}%
                 </span>
-                {supDemo && (
+                {suppressionTargetLabel && (
                   <span className="text-xs text-muted hidden sm:inline-block">
-                    · {DEMOGRAPHIC_LABELS[supDemo.group] ?? supDemo.group}
+                    · {suppressionTargetLabel}
                   </span>
                 )}
               </div>

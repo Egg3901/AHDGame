@@ -31,8 +31,14 @@ export function CategoryHealthOverview({
   onSelect,
   scopeNote,
 }: CategoryHealthOverviewProps) {
-  const { preset, eraSystemEnabled, currentYear, startingYear, incomeBandIndexByCountry } =
-    useWorldFlags();
+  const {
+    preset,
+    eraSystemEnabled,
+    currentYear,
+    startingYear,
+    incomeBandIndexByCountry,
+    incomeStartVintages,
+  } = useWorldFlags();
   // Live year for era-aware score bands; null while the flag is off (legacy path).
   const eraYear = eraSystemEnabled ? currentYear : null;
   const incomeIndex = eraYear != null ? (incomeBandIndexByCountry?.[countryId] ?? null) : null;
@@ -57,7 +63,8 @@ export function CategoryHealthOverview({
             preset,
             eraYear,
             incomeIndex,
-            startingYear
+            startingYear,
+            incomeStartVintages
           );
           const active = activeCategory === cat.id;
           return (
