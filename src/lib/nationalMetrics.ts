@@ -5,7 +5,7 @@ import type { State } from "@/lib/db/types/state";
 import { NATIONAL_SCOPE, NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import { isMacroMetricPath } from "@/lib/macroMetrics/paths";
 import { aggregateNationalGdp } from "@/lib/utils/nationalGdp";
-import { getIncomeAnchor } from "@/lib/era/metricCatalog";
+import { getStartingIncomeAnchor } from "@/lib/era/metricCatalog";
 
 /**
  * Plausible range for the back-solved income-band index at world start. A seed
@@ -193,7 +193,7 @@ export async function computeNationalMetrics(db: Db): Promise<void> {
       if (gdpPc > 0) {
         let baseline = gdpPcBaselines[countryId];
         if (!Number.isFinite(baseline) || baseline <= 0) {
-          const anchor = getIncomeAnchor(countryId, eraStartingYear);
+          const anchor = getStartingIncomeAnchor(countryId, eraStartingYear);
           if (
             anchor != null &&
             anchor > 0 &&

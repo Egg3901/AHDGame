@@ -1,0 +1,1498 @@
+{
+  "harness": "scripts/sim/income1991Vintages.ts",
+  "scope": "Targeted pure fixture: seed tables, era scoring and the medianIncome node only. Not a worldsim.",
+  "turnsPerYear": 48,
+  "years": 5,
+  "startVintages": {
+    "NG": {
+      "1991": 15084
+    },
+    "CN": {
+      "1991": 3187
+    },
+    "TR": {
+      "1991": 25145041
+    }
+  },
+  "sources": {
+    "gdpPerCapitaLcu": {
+      "url": "https://api.worldbank.org/v2/country/NGA;CHN;TUR/indicator/NY.GDP.PCAP.CN?date=1991&format=json",
+      "note": "WDI GDP per capita, current local currency. TR is reported in post-2005 lira; x 1e6 for old lira.",
+      "values": {
+        "NG": 5917.16,
+        "CN": 1917.91,
+        "TR": 11052765.3
+      }
+    },
+    "population": {
+      "url": "https://api.worldbank.org/v2/country/NGA;CHN;TUR/indicator/SP.POP.TOTL?date=1991&format=json",
+      "note": "WDI total population, 1991.",
+      "values": {
+        "NG": 99720162,
+        "CN": 1150780000,
+        "TR": 57009887
+      }
+    },
+    "privateConsumptionShare": {
+      "url": "https://api.worldbank.org/v2/country/NGA;CHN;TUR/indicator/NE.CON.PRVT.ZS?date=1991&format=json",
+      "note": "WDI household final consumption, % of GDP, 1991. An upper reference for the household income share.",
+      "values": {
+        "NG": null,
+        "CN": 0.4782,
+        "TR": 0.706
+      }
+    },
+    "gini": {
+      "url": "https://api.worldbank.org/v2/country/NGA;CHN;TUR/indicator/SI.POV.GINI?date=1985:1995&format=json",
+      "note": "WDI / Poverty and Inequality Platform Gini, nearest survey year to 1991 (NG 1992, CN 1990, TR 1994).",
+      "portal": "https://pip.worldbank.org/",
+      "values": {
+        "NG": 44.9,
+        "CN": 32.2,
+        "TR": 41.3
+      }
+    },
+    "householdSize": {
+      "url": "https://www.un.org/development/desa/pd/data/household-size-and-composition",
+      "note": "UN DESA Household Size and Composition database, census rounds near 1990. Rounded values used."
+    },
+    "chinaHouseholdSurvey": {
+      "url": "https://www.stats.gov.cn/english/Statisticaldata/yearbook/",
+      "note": "NBS China Statistical Yearbook household survey tables: 1991 urban disposable 1,700.6 and rural net 708.6 CNY per person."
+    }
+  },
+  "assumptions": [
+    "economic.medianIncome is annual household median income in local currency, same vintage as the 1991 regional GDP the seed writes.",
+    "Household median = GDP per resident x household size x household income share x median/mean, each factor bounded (see rules.ts).",
+    "median/mean follows a lognormal income distribution at the stated Gini; this is a modelling convenience, not a survey median.",
+    "Regional shape comes from each country's authored base bundle and is kept by one population-weighted rescale.",
+    "A world that starts in 1991 scores income against the derived national median (start-year vintage). Other start years keep the interpolation series unchanged.",
+    "The engine grid holds GDP fixed (income band index 1) and runs only the medianIncome node; no other system moves.",
+    "No new monetary mechanic: no inflation pass-through, no FX or price-level change."
+  ],
+  "countries": {
+    "NG": {
+      "crossChecks": {
+        "seedGdpPerResident": 6630.46,
+        "wdiGdpPerCapita": 5917.16,
+        "seedOverWdi": 1.121,
+        "seedPopulation": 88992220,
+        "wdiPopulation": 99720162,
+        "proxy": {
+          "householdSize": 5,
+          "householdIncomeShare": 0.65,
+          "medianToMean": 0.7
+        },
+        "giniImpliedMedianToMean": 0.701,
+        "wdiPrivateConsumptionShare": null
+      },
+      "opening": {
+        "before": {
+          "national": 579293,
+          "anchor": 210000,
+          "overGdpPerResident": 87.368,
+          "score": 100
+        },
+        "after": {
+          "national": 15084,
+          "anchor": 15084,
+          "overGdpPerResident": 2.275,
+          "score": 68.75,
+          "withinEngineBounds": true
+        }
+      },
+      "sensitivity": {
+        "baseMedian": 15084,
+        "alternatives": [
+          {
+            "input": "median/mean from WDI Gini",
+            "median": 15102,
+            "score": 68.9
+          },
+          {
+            "input": "GDP per resident at WDI per capita",
+            "median": 13462,
+            "score": 55.3
+          },
+          {
+            "input": "household size -0.5",
+            "median": 13576,
+            "score": 56.25
+          },
+          {
+            "input": "household size +0.5",
+            "median": 16593,
+            "score": 81.25
+          }
+        ],
+        "scoreRange": [55.3, 81.25]
+      },
+      "regionalOpening": {
+        "maxOverMin": 2.53,
+        "bandWidth": 2.78,
+        "insideBand": 5,
+        "atEdge": 1,
+        "poorestRegionFreezeBelowPctPerYear": 0.266,
+        "rows": [
+          {
+            "id": "NORTH_WEST",
+            "income": 10816,
+            "score": 33.38
+          },
+          {
+            "id": "NORTH_EAST",
+            "income": 9014,
+            "score": 18.45
+          },
+          {
+            "id": "NORTH_CENTRAL",
+            "income": 13220,
+            "score": 53.3
+          },
+          {
+            "id": "SOUTH_WEST",
+            "income": 22834,
+            "score": 100
+          },
+          {
+            "id": "SOUTH_SOUTH",
+            "income": 18027,
+            "score": 93.14
+          },
+          {
+            "id": "SOUTH_EAST",
+            "income": 16825,
+            "score": 83.18
+          }
+        ]
+      },
+      "engineGrid": [
+        {
+          "productivity": 0,
+          "unemployment": 3,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 15169,
+              "score": 69.45
+            },
+            {
+              "year": 2,
+              "national": 15256,
+              "score": 70.17
+            },
+            {
+              "year": 3,
+              "national": 15342,
+              "score": 70.89
+            },
+            {
+              "year": 4,
+              "national": 15429,
+              "score": 71.61
+            },
+            {
+              "year": 5,
+              "national": 15516,
+              "score": 72.33
+            }
+          ]
+        },
+        {
+          "productivity": 0,
+          "unemployment": 5,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 2,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 3,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 4,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 5,
+              "national": 15084,
+              "score": 68.75
+            }
+          ]
+        },
+        {
+          "productivity": 0,
+          "unemployment": 10,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 14867,
+              "score": 66.95
+            },
+            {
+              "year": 2,
+              "national": 14649,
+              "score": 65.14
+            },
+            {
+              "year": 3,
+              "national": 14434,
+              "score": 63.37
+            },
+            {
+              "year": 4,
+              "national": 14220,
+              "score": 61.59
+            },
+            {
+              "year": 5,
+              "national": 14005,
+              "score": 59.81
+            }
+          ]
+        },
+        {
+          "productivity": 1.2,
+          "unemployment": 3,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 15351,
+              "score": 70.96
+            },
+            {
+              "year": 2,
+              "national": 15625,
+              "score": 73.24
+            },
+            {
+              "year": 3,
+              "national": 15909,
+              "score": 75.58
+            },
+            {
+              "year": 4,
+              "national": 16194,
+              "score": 77.95
+            },
+            {
+              "year": 5,
+              "national": 16479,
+              "score": 80.31
+            }
+          ]
+        },
+        {
+          "productivity": 1.2,
+          "unemployment": 5,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 15266,
+              "score": 70.26
+            },
+            {
+              "year": 2,
+              "national": 15452,
+              "score": 71.8
+            },
+            {
+              "year": 3,
+              "national": 15639,
+              "score": 73.35
+            },
+            {
+              "year": 4,
+              "national": 15825,
+              "score": 74.89
+            },
+            {
+              "year": 5,
+              "national": 16011,
+              "score": 76.43
+            }
+          ]
+        },
+        {
+          "productivity": 1.2,
+          "unemployment": 10,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 15037,
+              "score": 68.36
+            },
+            {
+              "year": 2,
+              "national": 14989,
+              "score": 67.96
+            },
+            {
+              "year": 3,
+              "national": 14941,
+              "score": 67.57
+            },
+            {
+              "year": 4,
+              "national": 14893,
+              "score": 67.17
+            },
+            {
+              "year": 5,
+              "national": 14845,
+              "score": 66.77
+            }
+          ]
+        },
+        {
+          "productivity": 3,
+          "unemployment": 3,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 15625,
+              "score": 73.23
+            },
+            {
+              "year": 2,
+              "national": 16194,
+              "score": 77.95
+            },
+            {
+              "year": 3,
+              "national": 16792,
+              "score": 82.9
+            },
+            {
+              "year": 4,
+              "national": 17403,
+              "score": 87.97
+            },
+            {
+              "year": 5,
+              "national": 18044,
+              "score": 93.28
+            }
+          ]
+        },
+        {
+          "productivity": 3,
+          "unemployment": 5,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 15535,
+              "score": 72.49
+            },
+            {
+              "year": 2,
+              "national": 16013,
+              "score": 76.45
+            },
+            {
+              "year": 3,
+              "national": 16493,
+              "score": 80.43
+            },
+            {
+              "year": 4,
+              "national": 16995,
+              "score": 84.59
+            },
+            {
+              "year": 5,
+              "national": 17513,
+              "score": 88.88
+            }
+          ]
+        },
+        {
+          "productivity": 3,
+          "unemployment": 10,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 15084,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 15301,
+              "score": 70.55
+            },
+            {
+              "year": 2,
+              "national": 15523,
+              "score": 72.39
+            },
+            {
+              "year": 3,
+              "national": 15749,
+              "score": 74.26
+            },
+            {
+              "year": 4,
+              "national": 15992,
+              "score": 76.28
+            },
+            {
+              "year": 5,
+              "national": 16242,
+              "score": 78.34
+            }
+          ]
+        }
+      ],
+      "anchorRegression": [
+        {
+          "startYear": 1953,
+          "interpolated": 150,
+          "startAnchor": 150,
+          "changed": false
+        },
+        {
+          "startYear": 1979,
+          "interpolated": 90000,
+          "startAnchor": 90000,
+          "changed": false
+        },
+        {
+          "startYear": 1991,
+          "interpolated": 210000,
+          "startAnchor": 15084,
+          "changed": true
+        },
+        {
+          "startYear": 1999,
+          "interpolated": 464285.71,
+          "startAnchor": 464285.71,
+          "changed": false
+        },
+        {
+          "startYear": 2007,
+          "interpolated": 718571.43,
+          "startAnchor": 718571.43,
+          "changed": false
+        },
+        {
+          "startYear": 2019,
+          "interpolated": 1100000,
+          "startAnchor": 1100000,
+          "changed": false
+        },
+        {
+          "startYear": 2023,
+          "interpolated": 1100000,
+          "startAnchor": 1100000,
+          "changed": false
+        }
+      ]
+    },
+    "CN": {
+      "crossChecks": {
+        "seedGdpPerResident": 1864.91,
+        "wdiGdpPerCapita": 1917.91,
+        "seedOverWdi": 0.972,
+        "seedPopulation": 1158230000,
+        "wdiPopulation": 1150780000,
+        "proxy": {
+          "householdSize": 3.96,
+          "householdIncomeShare": 0.52,
+          "medianToMean": 0.83
+        },
+        "giniImpliedMedianToMean": 0.842,
+        "wdiPrivateConsumptionShare": 0.4782
+      },
+      "opening": {
+        "before": {
+          "national": 48415,
+          "anchor": 9000,
+          "overGdpPerResident": 25.961,
+          "score": 100
+        },
+        "after": {
+          "national": 3187,
+          "anchor": 3187,
+          "overGdpPerResident": 1.709,
+          "score": 68.76,
+          "withinEngineBounds": true
+        }
+      },
+      "sensitivity": {
+        "baseMedian": 3187,
+        "alternatives": [
+          {
+            "input": "median/mean from WDI Gini",
+            "median": 3232,
+            "score": 70.52
+          },
+          {
+            "input": "household share = WDI private consumption share",
+            "median": 2931,
+            "score": 58.72
+          },
+          {
+            "input": "GDP per resident at WDI per capita",
+            "median": 3278,
+            "score": 72.32
+          },
+          {
+            "input": "household size -0.5",
+            "median": 2785,
+            "score": 52.98
+          },
+          {
+            "input": "household size +0.5",
+            "median": 3590,
+            "score": 84.55
+          }
+        ],
+        "scoreRange": [52.98, 84.55]
+      },
+      "regionalOpening": {
+        "maxOverMin": 2.39,
+        "bandWidth": 2.78,
+        "insideBand": 5,
+        "atEdge": 2,
+        "poorestRegionFreezeBelowPctPerYear": 1.274,
+        "rows": [
+          {
+            "id": "DB",
+            "income": 2188,
+            "score": 29.57
+          },
+          {
+            "id": "HB",
+            "income": 3342,
+            "score": 74.83
+          },
+          {
+            "id": "HD",
+            "income": 4497,
+            "score": 100
+          },
+          {
+            "id": "HZ",
+            "income": 2431,
+            "score": 39.1
+          },
+          {
+            "id": "HN",
+            "income": 4102,
+            "score": 100
+          },
+          {
+            "id": "XN",
+            "income": 2066,
+            "score": 24.78
+          },
+          {
+            "id": "XB",
+            "income": 1884,
+            "score": 17.64
+          }
+        ]
+      },
+      "engineGrid": [
+        {
+          "productivity": 0,
+          "unemployment": 3,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 1,
+              "national": 3206,
+              "score": 69.48
+            },
+            {
+              "year": 2,
+              "national": 3224,
+              "score": 70.22
+            },
+            {
+              "year": 3,
+              "national": 3243,
+              "score": 70.96
+            },
+            {
+              "year": 4,
+              "national": 3262,
+              "score": 71.69
+            },
+            {
+              "year": 5,
+              "national": 3281,
+              "score": 72.43
+            }
+          ]
+        },
+        {
+          "productivity": 0,
+          "unemployment": 5,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 1,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 2,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 3,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 4,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 5,
+              "national": 3187,
+              "score": 68.76
+            }
+          ]
+        },
+        {
+          "productivity": 0,
+          "unemployment": 10,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 1,
+              "national": 3140,
+              "score": 66.92
+            },
+            {
+              "year": 2,
+              "national": 3092,
+              "score": 65.04
+            },
+            {
+              "year": 3,
+              "national": 3044,
+              "score": 63.16
+            },
+            {
+              "year": 4,
+              "national": 2996,
+              "score": 61.27
+            },
+            {
+              "year": 5,
+              "national": 2948,
+              "score": 59.39
+            }
+          ]
+        },
+        {
+          "productivity": 1.2,
+          "unemployment": 3,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 1,
+              "national": 3253,
+              "score": 71.33
+            },
+            {
+              "year": 2,
+              "national": 3319,
+              "score": 73.95
+            },
+            {
+              "year": 3,
+              "national": 3386,
+              "score": 76.56
+            },
+            {
+              "year": 4,
+              "national": 3453,
+              "score": 79.18
+            },
+            {
+              "year": 5,
+              "national": 3520,
+              "score": 81.8
+            }
+          ]
+        },
+        {
+          "productivity": 1.2,
+          "unemployment": 5,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 1,
+              "national": 3231,
+              "score": 70.48
+            },
+            {
+              "year": 2,
+              "national": 3276,
+              "score": 72.23
+            },
+            {
+              "year": 3,
+              "national": 3320,
+              "score": 73.98
+            },
+            {
+              "year": 4,
+              "national": 3365,
+              "score": 75.73
+            },
+            {
+              "year": 5,
+              "national": 3410,
+              "score": 77.48
+            }
+          ]
+        },
+        {
+          "productivity": 1.2,
+          "unemployment": 10,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 1,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 2,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 3,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 4,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 5,
+              "national": 3187,
+              "score": 68.76
+            }
+          ]
+        },
+        {
+          "productivity": 3,
+          "unemployment": 3,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 1,
+              "national": 3302,
+              "score": 73.25
+            },
+            {
+              "year": 2,
+              "national": 3430,
+              "score": 78.29
+            },
+            {
+              "year": 3,
+              "national": 3563,
+              "score": 83.5
+            },
+            {
+              "year": 4,
+              "national": 3698,
+              "score": 88.78
+            },
+            {
+              "year": 5,
+              "national": 3837,
+              "score": 94.24
+            }
+          ]
+        },
+        {
+          "productivity": 3,
+          "unemployment": 5,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 1,
+              "national": 3285,
+              "score": 72.59
+            },
+            {
+              "year": 2,
+              "national": 3384,
+              "score": 76.49
+            },
+            {
+              "year": 3,
+              "national": 3484,
+              "score": 80.4
+            },
+            {
+              "year": 4,
+              "national": 3584,
+              "score": 84.3
+            },
+            {
+              "year": 5,
+              "national": 3686,
+              "score": 88.31
+            }
+          ]
+        },
+        {
+          "productivity": 3,
+          "unemployment": 10,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 3187,
+              "score": 68.76
+            },
+            {
+              "year": 1,
+              "national": 3234,
+              "score": 70.61
+            },
+            {
+              "year": 2,
+              "national": 3282,
+              "score": 72.49
+            },
+            {
+              "year": 3,
+              "national": 3330,
+              "score": 74.37
+            },
+            {
+              "year": 4,
+              "national": 3378,
+              "score": 76.26
+            },
+            {
+              "year": 5,
+              "national": 3426,
+              "score": 78.14
+            }
+          ]
+        }
+      ],
+      "anchorRegression": [
+        {
+          "startYear": 1953,
+          "interpolated": 80,
+          "startAnchor": 80,
+          "changed": false
+        },
+        {
+          "startYear": 1979,
+          "interpolated": 3500,
+          "startAnchor": 3500,
+          "changed": false
+        },
+        {
+          "startYear": 1991,
+          "interpolated": 9000,
+          "startAnchor": 3187,
+          "changed": true
+        },
+        {
+          "startYear": 1999,
+          "interpolated": 32142.86,
+          "startAnchor": 32142.86,
+          "changed": false
+        },
+        {
+          "startYear": 2007,
+          "interpolated": 55285.71,
+          "startAnchor": 55285.71,
+          "changed": false
+        },
+        {
+          "startYear": 2019,
+          "interpolated": 90000,
+          "startAnchor": 90000,
+          "changed": false
+        },
+        {
+          "startYear": 2023,
+          "interpolated": 90000,
+          "startAnchor": 90000,
+          "changed": false
+        }
+      ]
+    },
+    "TR": {
+      "crossChecks": {
+        "seedGdpPerResident": 11052765.29,
+        "wdiGdpPerCapita": 11052765.3,
+        "seedOverWdi": 1,
+        "seedPopulation": 57009887,
+        "wdiPopulation": 57009887,
+        "proxy": {
+          "householdSize": 5,
+          "householdIncomeShare": 0.65,
+          "medianToMean": 0.7
+        },
+        "giniImpliedMedianToMean": 0.744,
+        "wdiPrivateConsumptionShare": 0.706
+      },
+      "opening": {
+        "before": {
+          "national": 127097,
+          "anchor": 1900,
+          "overGdpPerResident": 0.011,
+          "score": 100
+        },
+        "after": {
+          "national": 25145041,
+          "anchor": 25145041,
+          "overGdpPerResident": 2.275,
+          "score": 68.75,
+          "withinEngineBounds": true
+        }
+      },
+      "sensitivity": {
+        "baseMedian": 25145041,
+        "alternatives": [
+          {
+            "input": "median/mean from WDI Gini",
+            "median": 26743245,
+            "score": 76.69
+          },
+          {
+            "input": "household share = WDI private consumption share",
+            "median": 27311383,
+            "score": 79.52
+          },
+          {
+            "input": "GDP per resident at WDI per capita",
+            "median": 25145041,
+            "score": 68.75
+          },
+          {
+            "input": "household size -0.5",
+            "median": 22630537,
+            "score": 56.25
+          },
+          {
+            "input": "household size +0.5",
+            "median": 27659545,
+            "score": 81.25
+          }
+        ],
+        "scoreRange": [56.25, 81.25]
+      },
+      "regionalOpening": {
+        "maxOverMin": 4,
+        "bandWidth": 2.78,
+        "insideBand": 3,
+        "atEdge": 5,
+        "poorestRegionFreezeBelowPctPerYear": 0,
+        "rows": [
+          {
+            "id": "TR_IST",
+            "income": 39568209,
+            "score": 100
+          },
+          {
+            "id": "TR_ANK",
+            "income": 34622183,
+            "score": 100
+          },
+          {
+            "id": "TR_IZM",
+            "income": 32643772,
+            "score": 100
+          },
+          {
+            "id": "TR_MED",
+            "income": 21762515,
+            "score": 51.93
+          },
+          {
+            "id": "TR_BLA",
+            "income": 18794899,
+            "score": 37.18
+          },
+          {
+            "id": "TR_ESA",
+            "income": 10881257,
+            "score": 0
+          },
+          {
+            "id": "TR_SEA",
+            "income": 9892052,
+            "score": 0
+          },
+          {
+            "id": "TR_CEN",
+            "income": 17805694,
+            "score": 32.26
+          }
+        ]
+      },
+      "engineGrid": [
+        {
+          "productivity": 0,
+          "unemployment": 3,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 25145041,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 25293212,
+              "score": 69.49
+            },
+            {
+              "year": 2,
+              "national": 25445437,
+              "score": 70.24
+            },
+            {
+              "year": 3,
+              "national": 25598578,
+              "score": 71
+            },
+            {
+              "year": 4,
+              "national": 25752641,
+              "score": 71.77
+            },
+            {
+              "year": 5,
+              "national": 25907630,
+              "score": 72.54
+            }
+          ]
+        },
+        {
+          "productivity": 0,
+          "unemployment": 5,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 25145041,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 25145041,
+              "score": 68.75
+            },
+            {
+              "year": 2,
+              "national": 25145041,
+              "score": 68.75
+            },
+            {
+              "year": 3,
+              "national": 25145041,
+              "score": 68.75
+            },
+            {
+              "year": 4,
+              "national": 25145041,
+              "score": 68.75
+            },
+            {
+              "year": 5,
+              "national": 25145041,
+              "score": 68.75
+            }
+          ]
+        },
+        {
+          "productivity": 0,
+          "unemployment": 10,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 25145041,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 24778480,
+              "score": 66.93
+            },
+            {
+              "year": 2,
+              "national": 24409637,
+              "score": 65.09
+            },
+            {
+              "year": 3,
+              "national": 24046285,
+              "score": 63.29
+            },
+            {
+              "year": 4,
+              "national": 23688344,
+              "score": 61.51
+            },
+            {
+              "year": 5,
+              "national": 23335733,
+              "score": 59.76
+            }
+          ]
+        },
+        {
+          "productivity": 1.2,
+          "unemployment": 3,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 25145041,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 25592234,
+              "score": 70.97
+            },
+            {
+              "year": 2,
+              "national": 26057150,
+              "score": 73.28
+            },
+            {
+              "year": 3,
+              "national": 26530506,
+              "score": 75.64
+            },
+            {
+              "year": 4,
+              "national": 27012460,
+              "score": 78.03
+            },
+            {
+              "year": 5,
+              "national": 27503167,
+              "score": 80.47
+            }
+          ]
+        },
+        {
+          "productivity": 1.2,
+          "unemployment": 5,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 25145041,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 25442274,
+              "score": 70.23
+            },
+            {
+              "year": 2,
+              "national": 25749458,
+              "score": 71.75
+            },
+            {
+              "year": 3,
+              "national": 26060350,
+              "score": 73.3
+            },
+            {
+              "year": 4,
+              "national": 26374994,
+              "score": 74.86
+            },
+            {
+              "year": 5,
+              "national": 26693436,
+              "score": 76.45
+            }
+          ]
+        },
+        {
+          "productivity": 1.2,
+          "unemployment": 10,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 25145041,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 25071288,
+              "score": 68.38
+            },
+            {
+              "year": 2,
+              "national": 24996189,
+              "score": 68.01
+            },
+            {
+              "year": 3,
+              "national": 24921315,
+              "score": 67.64
+            },
+            {
+              "year": 4,
+              "national": 24846666,
+              "score": 67.27
+            },
+            {
+              "year": 5,
+              "national": 24772240,
+              "score": 66.9
+            }
+          ]
+        },
+        {
+          "productivity": 3,
+          "unemployment": 3,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 25145041,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 26047542,
+              "score": 73.24
+            },
+            {
+              "year": 2,
+              "national": 27002665,
+              "score": 77.98
+            },
+            {
+              "year": 3,
+              "national": 27992784,
+              "score": 82.91
+            },
+            {
+              "year": 4,
+              "national": 29019181,
+              "score": 88.01
+            },
+            {
+              "year": 5,
+              "national": 30083188,
+              "score": 93.3
+            }
+          ]
+        },
+        {
+          "productivity": 3,
+          "unemployment": 5,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 25145041,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 25894863,
+              "score": 72.48
+            },
+            {
+              "year": 2,
+              "national": 26683708,
+              "score": 76.4
+            },
+            {
+              "year": 3,
+              "national": 27496569,
+              "score": 80.44
+            },
+            {
+              "year": 4,
+              "national": 28334177,
+              "score": 84.6
+            },
+            {
+              "year": 5,
+              "national": 29197286,
+              "score": 88.89
+            }
+          ]
+        },
+        {
+          "productivity": 3,
+          "unemployment": 10,
+          "yearly": [
+            {
+              "year": 0,
+              "national": 25145041,
+              "score": 68.75
+            },
+            {
+              "year": 1,
+              "national": 25517142,
+              "score": 70.6
+            },
+            {
+              "year": 2,
+              "national": 25902843,
+              "score": 72.52
+            },
+            {
+              "year": 3,
+              "national": 26294369,
+              "score": 74.46
+            },
+            {
+              "year": 4,
+              "national": 26691814,
+              "score": 76.44
+            },
+            {
+              "year": 5,
+              "national": 27095264,
+              "score": 78.44
+            }
+          ]
+        }
+      ],
+      "anchorRegression": [
+        {
+          "startYear": 1953,
+          "interpolated": 1900,
+          "startAnchor": 1900,
+          "changed": false
+        },
+        {
+          "startYear": 1979,
+          "interpolated": 1900,
+          "startAnchor": 1900,
+          "changed": false
+        },
+        {
+          "startYear": 1991,
+          "interpolated": 1900,
+          "startAnchor": 25145041,
+          "changed": true
+        },
+        {
+          "startYear": 1999,
+          "interpolated": 1900,
+          "startAnchor": 1900,
+          "changed": false
+        },
+        {
+          "startYear": 2007,
+          "interpolated": 1900,
+          "startAnchor": 1900,
+          "changed": false
+        },
+        {
+          "startYear": 2019,
+          "interpolated": 1900,
+          "startAnchor": 1900,
+          "changed": false
+        },
+        {
+          "startYear": 2023,
+          "interpolated": 1900,
+          "startAnchor": 1900,
+          "changed": false
+        }
+      ]
+    }
+  }
+}

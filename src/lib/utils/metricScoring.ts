@@ -1,5 +1,5 @@
 import { metricCategories } from "@/lib/constants/metricDefinitions";
-import { getEraBand, getIncomeAnchor, isMetricActive } from "@/lib/era/metricCatalog";
+import { getEraBand, getStartingIncomeAnchor, isMetricActive } from "@/lib/era/metricCatalog";
 import { toUsd } from "./fxNormalize";
 import { JP_MEDIAN_INCOME_BAND } from "@/lib/countries/jp/economy";
 import { US_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/us/geographyFacts";
@@ -232,7 +232,7 @@ export function getMetricThreshold(
 ): ScoreThreshold | null {
   if (metricId === "medianIncome") {
     if (year != null && incomeIndex != null && Number.isFinite(incomeIndex) && incomeIndex > 0) {
-      const anchor = getIncomeAnchor(countryId, startingYear ?? null);
+      const anchor = getStartingIncomeAnchor(countryId, startingYear ?? null);
       if (anchor != null) {
         return {
           best: anchor * INCOME_BAND_SHAPE.best * incomeIndex,

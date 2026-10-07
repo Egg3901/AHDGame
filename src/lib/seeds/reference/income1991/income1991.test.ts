@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CountryId } from "@/lib/constants/countries";
-import { getIncomeAnchor } from "@/lib/era/metricCatalog";
+import { getStartingIncomeAnchor } from "@/lib/era/metricCatalog";
 import { loadSeededStateMetrics } from "@/lib/states/conditions/seedMetricsLoader";
 import { ngStateBaselines } from "@/lib/seeds/ng/ngStateBaselines";
 import { cnStateBaselines } from "@/lib/seeds/cn/cnStateBaselines";
@@ -124,9 +124,10 @@ describe("1991 income vintages (#3370 #3371 #3376)", () => {
     });
   }
 
-  it("era scoring anchors for NG and CN use the derived 1991 level", () => {
-    expect(getIncomeAnchor("NG", 1991)).toBe(Math.round(nationalHouseholdMedian1991("NG")));
-    expect(getIncomeAnchor("CN", 1991)).toBe(Math.round(nationalHouseholdMedian1991("CN")));
+  it("start-year income anchors for NG, CN and TR use the derived 1991 level", () => {
+    for (const c of FIXED) {
+      expect(getStartingIncomeAnchor(c, 1991)).toBe(Math.round(nationalHouseholdMedian1991(c)));
+    }
   });
 
   it("leaves every other country's 1991 income untouched (23-country coverage)", () => {

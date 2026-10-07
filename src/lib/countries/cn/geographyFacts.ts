@@ -258,15 +258,26 @@ export const CN_INCOME_ANCHORS: NormalAnchor[] = [
   },
   {
     year: 1991,
-    // Derived 1991 household median (seeds/reference/income1991, #3316); was
-    // 9,000 CNY, which did not share the 1991 GDP currency scale.
-    value: 3187,
+    // Interpolation point only. A world STARTING in 1991 scores against
+    // CN_INCOME_START_VINTAGES instead; this value stays so worlds starting
+    // in 1999 and 2007 keep their existing bands (#3316).
+    value: 9000,
   },
   {
     year: 2019,
     value: 90000,
   },
 ];
+
+/**
+ * Income anchor for a world that STARTS in the given year, when that year's
+ * seed is dated to a different currency vintage than the interpolation series
+ * above. Used only at the exact start year; never interpolated. 1991 is the
+ * derived household median from seeds/reference/income1991 (#3376).
+ */
+export const CN_INCOME_START_VINTAGES: Record<number, number> = {
+  1991: 3187,
+};
 
 /*
  * ⚠ THESE TWO ARE INDEPENDENT, AND NESTING THEM COST ELEVEN COUNTRIES. The
