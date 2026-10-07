@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { useState } from "react";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { InfoTooltip } from "@/components/InfoTooltip";
@@ -27,6 +29,7 @@ export interface FundFinancialsData {
 
 export interface FundBalanceSheetData {
   cashAnchor: number;
+  openOrdersEscrowAnchor?: number;
   holdingsValueAnchor: number;
   bondPrincipalAnchor: number;
   totalBackingAnchor: number;
@@ -110,6 +113,7 @@ export default function FundFinancialsTab({
   formatAmount,
   ccy,
 }: FundFinancialsTabProps) {
+  const t = useTranslations("corporations");
   const [view, setView] = useState<"income_statement" | "balance_sheet">("income_statement");
 
   // ── Income Statement ──────────────────────────────────────────────────────
@@ -257,10 +261,16 @@ export default function FundFinancialsTab({
               tooltip="Mark-to-market value of all stock positions held by the fund."
             />
             <FinRow
-              label="Bond reserve principal"
+              label="Bond holdings"
               value={formatAmount(bs.bondPrincipalAnchor, ccy)}
-              tooltip="Sovereign bond principal held in the fund reserve bucket."
+              tooltip="Mark-to-market value of corporate and sovereign bonds held by the fund."
             />
+            {(bs.openOrdersEscrowAnchor ?? 0) > 0 && (
+              <FinRow
+                label={t("fundBondHoldings.escrow")}
+                value={formatAmount(bs.openOrdersEscrowAnchor ?? 0, ccy)}
+              />
+            )}
             <div className="border-t border-card-border mt-2 pt-2">
               <FinRow label="Total assets" value={formatAmount(bs.totalBackingAnchor, ccy)} bold />
             </div>

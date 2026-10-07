@@ -15,6 +15,7 @@ import FundFinancialsTab, {
 } from "@/components/indexFunds/FundFinancialsTab";
 import FundSubscribersTab from "@/components/indexFunds/FundSubscribersTab";
 import { FundNavChart } from "@/components/indexFunds/FundNavChart";
+import { BondHoldingsPanel } from "@/components/indexFunds/BondHoldingsPanel";
 import { ConstituentsPanel } from "@/components/indexFunds/ConstituentsPanel";
 import { BackingRatioGauge } from "@/components/indexFunds/BackingRatioGauge";
 import { AssetCompositionBar } from "@/components/indexFunds/AssetCompositionBar";
@@ -134,19 +135,18 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
     0
   );
 
-  const bondPrincipalAnchor = Math.max(
-    0,
-    (fund.aumAnchor ?? 0) - fund.cashAnchor - holdingsValueAnchor
-  );
+  const bondPrincipalAnchor = fund.bondHoldingsValueAnchor ?? 0;
 
   const balanceSheet: FundBalanceSheetData | null = {
     cashAnchor: fund.cashAnchor,
+    openOrdersEscrowAnchor: fund.openOrdersEscrowAnchor ?? 0,
     holdingsValueAnchor,
     bondPrincipalAnchor,
     totalBackingAnchor:
-      fund.backingRatio != null && fund.backingRatio > 0
-        ? fund.quotedNav * fund.unitSupply * fund.backingRatio
-        : fund.cashAnchor + holdingsValueAnchor,
+      fund.cashAnchor +
+      holdingsValueAnchor +
+      bondPrincipalAnchor +
+      (fund.openOrdersEscrowAnchor ?? 0),
     quotedLiabilityAnchor: fund.quotedNav * fund.unitSupply,
     backingRatio: fund.backingRatio ?? null,
     unitSupply: fund.unitSupply,
@@ -205,7 +205,8 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
             <p className="mt-2.5 text-[13px] text-muted">
               {fund.scope === "country" ? `${fund.countryId} broad index` : "Global index"} ·{" "}
               {fund.anchorCurrencyCode} anchor
-              {fund.sectorType ? ` · ${fund.sectorType}` : ""} · {fund.holdings.length} constituents
+              {fund.sectorType ? ` · ${fund.sectorType}` : ""} ·{" "}
+              {fund.holdings.length + (fund.bondHoldings?.length ?? 0)} constituents
               {fund.lastRebalancedAt ? ` · rebalances every 24 turns` : ""}
             </p>
           </div>
@@ -345,6 +346,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
                     <AssetCompositionBar
                       holdingsValueAnchor={holdingsValueAnchor}
                       cashAnchor={fund.cashAnchor}
+                      openOrdersEscrowAnchor={fund.openOrdersEscrowAnchor ?? 0}
                       bondPrincipalAnchor={bondPrincipalAnchor}
                       formatAmount={formatAmount}
                       ccy={ccy}
@@ -352,14 +354,22 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
                   </div>
                 </div>
 
-                {/* Constituents donut + tables */}
-                <ConstituentsPanel
-                  holdings={fund.holdings}
-                  targetConstituents={fund.targetConstituents}
+                <BondHoldingsPanel
+                  holdings={fund.bondHoldings ?? []}
                   formatAmount={formatAmount}
-                  formatPrice={formatPrice}
                   ccy={ccy}
                 />
+
+                {/* Constituents donut + tables */}
+                {(fund.kind !== "bond" || fund.holdings.length > 0) && (
+                  <ConstituentsPanel
+                    holdings={fund.holdings}
+                    targetConstituents={fund.targetConstituents}
+                    formatAmount={formatAmount}
+                    formatPrice={formatPrice}
+                    ccy={ccy}
+                  />
+                )}
               </div>
             )}
 
