@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { MongoClient, type Db } from "mongodb";
-import { applyMoneyMove, resumeMoneyMove, type MoneyMoveRecord } from "@/lib/banking/moneyMove";
+import { applyMoneyMove, resumeMoneyMove, type MoneyMoveRecordLeg } from "@/lib/banking/moneyMove";
 import { attachMongoCommandMonitor } from "@/lib/observability/mongoMonitor";
 import { PHASE_ROUND_TRIP_BUDGETS } from "@/simulation/engine/turnPhaseBudgets";
 import {
@@ -118,7 +118,9 @@ async function outcomes(db: Db, holders: number, key: string) {
     holders * 100,
     "unexplained payout imbalance"
   );
-  const journal = await db.collection<MoneyMoveRecord>("bankMoneyMoves").findOne({ _id: key });
+  const journal = await db
+    .collection<{ _id: string; status: string; legs: MoneyMoveRecordLeg[] }>("bankMoneyMoves")
+    .findOne({ _id: key });
   assert.ok(journal, "missing settlement journal");
   assert.equal(journal?.status, "applied");
   assert.equal(journal.legs.length, holders + 1);
@@ -221,9 +223,11 @@ async function main() {
   const receiptPath = argument("--receipt");
   assert.ok(receiptPath, "--receipt is required");
   // Never load .env.local or a configured connection. Remote telemetry is disabled.
-  process.env.NODE_ENV = "test";
-  process.env.AHD_TURN_ROUNDTRIP_PROFILE = "1";
-  process.env.OBSERVABILITY_DB_MONITOR = "false";
+  Object.assign(process.env, {
+    NODE_ENV: "test",
+    AHD_TURN_ROUNDTRIP_PROFILE: "1",
+    OBSERVABILITY_DB_MONITOR: "false",
+  });
   const receipt: Receipt = {
     fixture: FIXTURE_VERSION,
     harnessHash: outcomeHash([
