@@ -22,7 +22,9 @@ import { sexRatioFromVector, dependencyRatio } from "@/lib/demographics/cohortVe
  *
  * This is the shared core called both by `bootstrapGameWorld` (every reset) and the
  * standalone `2026-06-10-seed-cohort-vectors` migration (live worlds). `apply: false`
- * computes coverage stats without writing (the migration's dry-run).
+ * computes coverage stats without writing (the migration's dry-run). `replace: true` (the
+ * reset path) also deletes every stock this run did not rebuild, so no prior-world stock can
+ * survive a reset and overwrite the seeded population on the first demographic turn.
  */
 
 const DEFAULT_MEDIAN_AGE = 38;
@@ -59,7 +61,7 @@ export async function seedCohortVectors(
   db: Db,
   preset: string,
   log: (msg: string) => void,
-  opts: { apply?: boolean } = {}
+  opts: { apply?: boolean; replace?: boolean } = {}
 ): Promise<CohortSeedStats> {
   const apply = opts.apply !== false;
 
@@ -90,6 +92,7 @@ export async function seedCohortVectors(
   const stats: CohortSeedStats = { covered: 0, skipped: [], totalPeople: 0, totalTargetPop: 0 };
   const now = new Date();
   const demoOps: AnyBulkWriteOperation<RegionDemographics>[] = [];
+  const coveredIds: string[] = [];
   const metricOps: AnyBulkWriteOperation<StateMetrics>[] = [];
 
   for (const state of realStates) {
@@ -101,7 +104,9 @@ export async function seedCohortVectors(
     const census = proxyAge ? null : getRegionCensusData(state.countryId, id, preset);
     const age = proxyAge ?? (census as { age: Record<string, number> } | null)?.age;
     if (!age || !(population > 0)) {
-      stats.skipped.push(`${id} (${state.countryId}): ${!(population > 0) ? "no population" : "no census"}`);
+      stats.skipped.push(
+        `${id} (${state.countryId}): ${!(population > 0) ? "no population" : "no census"}`
+      );
       continue;
     }
 
@@ -130,6 +135,7 @@ export async function seedCohortVectors(
     const summed = ages.male.reduce((a, b) => a + b, 0) + ages.female.reduce((a, b) => a + b, 0);
 
     stats.covered++;
+    coveredIds.push(id);
     stats.totalPeople += summed;
     stats.totalTargetPop += population;
 
@@ -179,6 +185,13 @@ export async function seedCohortVectors(
           `dated age profile: ${missing.join(", ")}`
       );
     }
+  }
+
+  if (apply && opts.replace) {
+    const stale = await db
+      .collection<RegionDemographics>("regionDemographics")
+      .deleteMany({ _id: { $nin: coveredIds } });
+    if (stale.deletedCount > 0) log(`Removed ${stale.deletedCount} stale region cohort vectors`);
   }
 
   if (demoOps.length > 0) {

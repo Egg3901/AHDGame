@@ -646,7 +646,7 @@ export async function seedAllCountryData(
   // engine evolves) and stamp turn-0 derived population metrics (sexRatio /
   // dependencyRatio / realizedMigrationRate), now that every country's states and
   // stateMetrics (with era-correct medianAge/birthRate) exist. Era-aware via preset.
-  await seedCohortVectors(db, preset, log);
+  await seedCohortVectors(db, preset, log, { replace: true });
 
   // Normalize regional gdp so Σ state.gdp matches each country's authored
   // national GDP (pre-1999 eras only + tolerance-guarded; see

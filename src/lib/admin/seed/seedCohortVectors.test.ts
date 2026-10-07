@@ -104,4 +104,34 @@ describe("seedCohortVectors", () => {
     expect(db.collectionMocks.regionDemographics!.bulkWrite).not.toHaveBeenCalled();
     expect(db.collectionMocks.macroMetrics!.bulkWrite).not.toHaveBeenCalled();
   });
+
+  it("fails closed before writing when a populated 1991 region has no dated age profile", async () => {
+    withStatesAndMetrics(
+      db,
+      [
+        { _id: "CEN", countryId: "RU", population: 30_279_000 },
+        { _id: "SU_UNKNOWN", countryId: "RU", population: 1_000_000 },
+      ],
+      []
+    );
+    await expect(seedCohortVectors(db as unknown as Db, "1991-default", () => {})).rejects.toThrow(
+      /1991 cohort coverage incomplete: 1 populated region\(s\).*SU_UNKNOWN \(RU\): no census/
+    );
+    expect(db.collectionMocks.regionDemographics!.bulkWrite).not.toHaveBeenCalled();
+    expect(db.collectionMocks.regionDemographics!.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("on reset, deletes every stock it did not rebuild", async () => {
+    withStatesAndMetrics(db, [{ _id: "CEN", countryId: "RU", population: 30_279_000 }], []);
+    await seedCohortVectors(db as unknown as Db, "1991-default", () => {}, { replace: true });
+    expect(db.collectionMocks.regionDemographics!.deleteMany).toHaveBeenCalledWith({
+      _id: { $nin: ["CEN"] },
+    });
+  });
+
+  it("leaves unrelated stocks alone outside a reset", async () => {
+    withStatesAndMetrics(db, [{ _id: "CEN", countryId: "RU", population: 30_279_000 }], []);
+    await seedCohortVectors(db as unknown as Db, "1991-default", () => {});
+    expect(db.collectionMocks.regionDemographics!.deleteMany).not.toHaveBeenCalled();
+  });
 });
