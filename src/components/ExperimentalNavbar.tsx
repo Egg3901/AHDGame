@@ -3,9 +3,8 @@
 /**
  * ExperimentalNavbar — the redesigned primary navigation, imported from the
  * "AHD Navbar" Claude Design doc. This is now the DEFAULT navbar, selected in
- * NavbarWrapper; the classic {@link Navbar} is the opt-out for users who set
- * `enableExperimentalUI === false` (Settings → Appearance → "Use the classic
- * interface"). The name is kept for continuity.
+ * NavbarWrapper; the classic {@link Navbar} is used when a player selects the
+ * classic interface in Settings → Appearance. The name is kept for continuity.
  *
  * Visuals use the app's themed Tailwind tokens (foreground/muted/card/primary…)
  * so it inherits all 11 themes. The desktop bar mirrors the classic {@link Navbar}

@@ -15,6 +15,8 @@ interface ContractProductionArgs {
   priorProducedUnits?: number | null;
   /** Scalar output demand allocated from the supplier's named contracts. */
   guaranteedDemandUnits?: number | null;
+  /** Unmet demand a sold-out plant may add on top of last turn's sales. */
+  marketHeadroomUnits?: number | null;
   soldFraction: number | null;
 }
 
@@ -45,7 +47,8 @@ export function computeContractProduction(args: ContractProductionArgs): {
         actualPlannedUnits,
         args.priorSoldUnits,
         args.priorProducedUnits,
-        args.guaranteedDemandUnits
+        args.guaranteedDemandUnits,
+        args.marketHeadroomUnits
       )
     : 1;
   const actual = computeSectorOutputUnits({
@@ -66,7 +69,8 @@ export function computeContractProduction(args: ContractProductionArgs): {
     involuntaryUnits,
     args.priorSoldUnits,
     args.priorProducedUnits,
-    args.guaranteedDemandUnits
+    args.guaranteedDemandUnits,
+    args.marketHeadroomUnits
   );
   return {
     ...actual,

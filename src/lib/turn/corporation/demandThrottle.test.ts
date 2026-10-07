@@ -3,6 +3,7 @@ import {
   DEMAND_PROBE_MARGIN,
   DEMAND_THROTTLE_FLOOR,
   demandThrottleFactor,
+  soldOutMarketHeadroomUnits,
   throttleSoldUnits,
 } from "./demandThrottle";
 
@@ -176,5 +177,71 @@ describe("throttleSoldUnits (ticket 1370: mixed-output plants)", () => {
       priceRatioFor: (c) => (c === "electronics" ? Number.NaN : undefined),
     })!;
     expect(sold).toBeCloseTo((1_000 * 0.55) / 0.7, 6);
+  });
+});
+
+describe("sold-out plants in a short market (ticket 1393)", () => {
+  // Mixed manufacturing plant: two legs sold out into short books, one into a
+  // balanced book. Mix weights stand in for clearing's rate/base split.
+  const supplyRates = { electronics: 0.4, building_materials: 0.3, steel: 0.3 };
+  const mixWeights: Record<string, number> = {
+    electronics: 0.3,
+    building_materials: 0.3,
+    steel: 0.4,
+  };
+  const balances: Record<string, { supply: number; demand: number }> = {
+    electronics: { supply: 6_479, demand: 11_198 },
+    building_materials: { supply: 4_767, demand: 5_985 },
+    steel: { supply: 2_672, demand: 2_594 },
+  };
+  const base = {
+    supplyRates,
+    mixWeightFor: (c: string) => mixWeights[c] ?? 0,
+    balanceFor: (c: string) => balances[c],
+    priceRatioFor: () => 1,
+  };
+
+  it("lets a plant that sold out into unmet demand run at capacity", () => {
+    const headroom = soldOutMarketHeadroomUnits({
+      ...base,
+      soldByCommodity: { electronics: 1, building_materials: 1, steel: 1 },
+    });
+    expect(headroom).toBeGreaterThan(1_000);
+    // The reported case: 336 sold of ~1,000 capacity, all of it.
+    expect(demandThrottleFactor(990, 336, 336, null, headroom)).toBe(1);
+  });
+
+  it("ignores legs that did not sell out", () => {
+    const headroom = soldOutMarketHeadroomUnits({
+      ...base,
+      soldByCommodity: { electronics: 0.9, building_materials: 0.9, steel: 1 },
+    });
+    expect(headroom).toBe(0);
+    const factor = demandThrottleFactor(990, 336, 336, null, headroom);
+    expect(factor * 990).toBeCloseTo(336 * (1 + DEMAND_PROBE_MARGIN), 6);
+  });
+
+  it("weights short legs by value so a glutted co-product dilutes the step", () => {
+    const glutted = {
+      ...base,
+      balanceFor: (c: string) =>
+        c === "electronics" ? balances.electronics : { supply: 10_000, demand: 5_000 },
+    };
+    const headroom = soldOutMarketHeadroomUnits({
+      ...glutted,
+      soldByCommodity: { electronics: 1, building_materials: 1, steel: 1 },
+    });
+    // Only the electronics leg (40% of value) carries unmet demand.
+    expect(headroom).toBeCloseTo(0.4 * ((11_198 - 6_479) / 0.3), 6);
+  });
+
+  it("adds nothing without per-leg sales history", () => {
+    expect(soldOutMarketHeadroomUnits({ ...base, soldByCommodity: null })).toBe(0);
+  });
+
+  it("keeps the glut throttle unchanged when headroom is absent", () => {
+    expect(demandThrottleFactor(1_000, 200, 1_000, null, 0)).toBe(
+      demandThrottleFactor(1_000, 200, 1_000)
+    );
   });
 });

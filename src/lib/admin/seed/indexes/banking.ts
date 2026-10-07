@@ -1,6 +1,7 @@
 import type { Db } from "mongodb";
 import { ensureIndex } from "./helpers";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
+import { SOVEREIGN_COUPON_CLAIMS_COLLECTION } from "@/lib/banking/fundedSovereignCoupons";
 import { POLITICAL_MEDIA_ORDER_INDEXES } from "@/lib/politicalMedia/indexes";
 
 export const BANK_TREASURY_TRADES_INDEX = {
@@ -58,6 +59,16 @@ export async function seedBankingIndexes(db: Db, log: (msg: string) => void) {
     MONEY_MOVE_COLLECTION,
     { turn: -1 },
     { name: "bankMoneyMoves_turn_desc", background: true },
+    log
+  );
+
+  // Funded sovereign coupon claims: the Treasury phase reads each country's
+  // unpaid claims every turn, and unfunded arrears grow by one claim per bond.
+  await ensureIndex(
+    db,
+    SOVEREIGN_COUPON_CLAIMS_COLLECTION,
+    { budgetId: 1, settledTurn: 1 },
+    { name: "sovereignCouponClaims_budget_settled", background: true },
     log
   );
 

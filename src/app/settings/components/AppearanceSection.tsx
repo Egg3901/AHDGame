@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { useTheme, type Theme } from "@/contexts/ThemeContext";
+import type { InterfaceMode } from "@/contexts/InterfaceContext";
 import { type StatusBarLayout } from "@/components/StatusBar";
 import { LanguageSection } from "./LanguageSection";
 
@@ -197,11 +198,16 @@ const VISIBLE = 4;
 const PAGES = Math.ceil(THEME_OPTIONS.length / VISIBLE);
 
 interface Props {
-  enableExperimentalUI: boolean;
-  onExperimentalUiChange: (value: boolean) => void;
+  interfaceMode: InterfaceMode;
+  interfaceModeSaving: boolean;
+  onInterfaceModeChange: (value: InterfaceMode) => void;
 }
 
-export function AppearanceSection({ enableExperimentalUI, onExperimentalUiChange }: Props) {
+export function AppearanceSection({
+  interfaceMode,
+  interfaceModeSaving,
+  onInterfaceModeChange,
+}: Props) {
   const t = useTranslations("settings");
   const { theme, setTheme } = useTheme();
   const [page, setPage] = useState(0);
@@ -426,20 +432,55 @@ export function AppearanceSection({ enableExperimentalUI, onExperimentalUiChange
         <div className="flex items-center gap-2 mb-3">
           <h3 className="text-sm font-medium">{t("appearance.interfaceTitle")}</h3>
         </div>
-        <label className="flex items-start gap-3 cursor-pointer group">
-          <input
-            type="checkbox"
-            checked={!enableExperimentalUI}
-            onChange={(e) => onExperimentalUiChange(!e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-card-border bg-background text-primary focus:ring-primary"
-          />
-          <div className="flex-1">
-            <span className="text-sm text-foreground group-hover:text-primary transition-colors">
-              {t("appearance.classicUi")}
-            </span>
-            <p className="mt-0.5 text-xs text-muted">{t("appearance.classicUiHint")}</p>
-          </div>
-        </label>
+        <fieldset
+          className="grid gap-3 sm:grid-cols-2"
+          aria-busy={interfaceModeSaving}
+          aria-label={t("appearance.interfaceTitle")}
+        >
+          {(["modern", "classic"] as const).map((mode) => {
+            const selected = interfaceMode === mode;
+            return (
+              <label
+                key={mode}
+                data-interface-option
+                data-selected={selected ? "true" : undefined}
+                className={`relative rounded-xl border px-4 py-3 text-left transition-all ${
+                  interfaceModeSaving ? "cursor-wait opacity-70" : "cursor-pointer"
+                } ${
+                  selected
+                    ? "border-primary bg-primary/10 shadow-sm"
+                    : "border-card-border bg-card hover:border-primary/50 hover:bg-card-elevated"
+                } focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background`}
+              >
+                <input
+                  type="radio"
+                  name="interface-mode"
+                  value={mode}
+                  checked={selected}
+                  disabled={interfaceModeSaving}
+                  onChange={() => onInterfaceModeChange(mode)}
+                  className="sr-only"
+                />
+                <span className="flex items-center justify-between gap-3 text-sm font-semibold text-foreground">
+                  {t(`appearance.${mode}Ui`)}
+                  <span
+                    aria-hidden
+                    className={`flex h-4 w-4 items-center justify-center rounded-full border text-[10px] ${
+                      selected
+                        ? "border-primary bg-primary text-white"
+                        : "border-card-border text-transparent"
+                    }`}
+                  >
+                    ✓
+                  </span>
+                </span>
+                <span className="mt-1 block text-xs leading-relaxed text-muted">
+                  {t(`appearance.${mode}UiHint`)}
+                </span>
+              </label>
+            );
+          })}
+        </fieldset>
       </div>
 
       {/* ── Status Bar ──────────────────────────────────────────────────── */}

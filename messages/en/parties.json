@@ -1,0 +1,12 @@
+{
+  "parties": {
+    "leave": {
+      "button": "Leave party",
+      "pending": "Leaving…",
+      "confirmTitle": "Leave this party?",
+      "confirmMessage": "You will become an Independent.",
+      "confirm": "Leave party",
+      "cancel": "Cancel"
+    }
+  }
+}

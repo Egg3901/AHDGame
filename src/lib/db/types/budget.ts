@@ -540,7 +540,11 @@ export interface BankSovereignClaim {
 export interface FederalBudget {
   treasuryAccrual?: TreasuryAccrualReceipt;
   bankSovereignClaims?: BankSovereignClaim[];
-  /** Frozen, unpaid non-bank sovereign coupon plans for funded Treasury cash. */
+  /**
+   * Legacy home of frozen, unpaid non-bank sovereign coupon plans. New claims
+   * live in the `sovereignCouponClaims` collection; the funded coupon sweep
+   * drains this array into it.
+   */
   sovereignCouponClaims?: FundedSovereignCouponClaim[];
   /** Highest due turn frozen for each sovereign bond, including already-paid claims. */
   sovereignCouponFrozenThrough?: Record<string, number>;

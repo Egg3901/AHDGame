@@ -248,6 +248,12 @@ export interface ElectionCandidate {
    */
   support?: number;
   withdrawnAt?: Date;
+  /**
+   * Set to "candidate" when the player pulled out through the withdraw route.
+   * A voluntary withdrawal bars re-entry into the same election. System
+   * withdrawals (inactivity, party switch, retirement) leave this unset.
+   */
+  withdrawnBy?: "candidate";
   /** For president: running mate character ID. Cannot be current President. */
   runningMateId?: ObjectId;
   /** Bound Russian tickets can pair a player or NPC nominee with an NPC vice-president. */

@@ -137,11 +137,16 @@ describe("DemographicsAndTurnoutTab electorate dossier", () => {
     // Real projection band + preferred-party tile render in the default Simple view.
     expect(screen.getByText("State projection")).toBeTruthy();
     expect(screen.getByText("Leaning toward")).toBeTruthy();
-    // Analyst-only detail is hidden until the view toggles.
-    expect(screen.queryByText("Economic lean")).toBeNull();
-    fireEvent.click(screen.getByText("analyst"));
+    // The selected group's average positions are visible in the default view,
+    // including a plain-language direction and the numeric axis value.
     expect(screen.getByText("Economic lean")).toBeTruthy();
     expect(screen.getByText("Social lean")).toBeTruthy();
+    expect(screen.getByText("Average +1.2 · Left -5 to right +5")).toBeTruthy();
+    // The roster also summarizes both axes without opening every group.
+    expect(screen.getByText("Econ: Center-right · Social: Liberal")).toBeTruthy();
+    // Analyst mode adds the full party-match breakdown.
+    fireEvent.click(screen.getByText("analyst"));
+    expect(screen.getByText("Party match")).toBeTruthy();
   });
 
   it("says there is no breakdown yet when the region has no Layer-1 substrate", async () => {

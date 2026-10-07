@@ -35,6 +35,14 @@ describe("buildWorldNavItems", () => {
     expect(corp?.primary).toBe(true);
   });
 
+  it("shows the player's union shortcut only while unions are enabled", () => {
+    const off = visibleWorldNavItems({ myUnionId: "u1", unionsEnabled: false });
+    expect(off.map((i) => i.id)).not.toContain("myUnion");
+
+    const on = visibleWorldNavItems({ myUnionId: "u1", unionsEnabled: true });
+    expect(on.find((i) => i.id === "myUnion")?.href).toBe("/unions/u1");
+  });
+
   it("scopes news link to country", () => {
     const uk = buildWorldNavItems({ countryId: "UK" }).find((i) => i.id === "news");
     expect(uk?.href).toBe("/news?country=uk");
@@ -54,13 +62,18 @@ describe("buildWorldNavItems", () => {
 });
 
 describe("buildWorldNavSections / looseWorldNavItems", () => {
-  it("puts My Corporation in the loose list, not any group", () => {
-    const items = visibleWorldNavItems({ myCorporationId: 42 });
+  it("puts personal organization shortcuts in the loose list, not any group", () => {
+    const items = visibleWorldNavItems({
+      myCorporationId: 42,
+      myUnionId: "u1",
+      unionsEnabled: true,
+    });
     const loose = looseWorldNavItems(items);
-    expect(loose.map((i) => i.id)).toEqual(["myCorporation"]);
+    expect(loose.map((i) => i.id)).toEqual(["myCorporation", "myUnion"]);
 
     const groups = buildWorldNavSections(items);
     expect(groups.some((g) => g.items.some((i) => i.id === "myCorporation"))).toBe(false);
+    expect(groups.some((g) => g.items.some((i) => i.id === "myUnion"))).toBe(false);
   });
 
   it("groups every non-loose visible item under exactly one category", () => {

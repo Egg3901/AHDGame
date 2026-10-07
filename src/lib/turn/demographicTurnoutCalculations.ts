@@ -125,12 +125,15 @@ export function applyBoost(
   state: StateDemographicTurnout,
   demo: { category: string; group: string },
   boost: number,
-  campaignBoost = boost
-): void {
+  campaignBoost = boost,
+  options: { initializeMissingCategory?: boolean } = {}
+): boolean {
   // DemographicModifiers is Record<string, Record<string, number>> — generic lookup works
   // for both legacy US documents (race/age/...) and new country-specific categories.
-  const categoryModifiers = state.modifiers[demo.category];
-  if (!categoryModifiers) return;
+  const categoryModifiers =
+    state.modifiers[demo.category] ??
+    (options.initializeMissingCategory ? (state.modifiers[demo.category] = {}) : undefined);
+  if (!categoryModifiers) return false;
 
   state.campaignModifiers ??= structuredClone(state.modifiers);
   const modern = (state.campaignModifiers[demo.category] ??= {});
@@ -141,6 +144,7 @@ export function applyBoost(
   // Apply boost and clamp to +/-20
   const newModifier = Math.max(-20, Math.min(20, currentModifier + adjustedBoost));
   categoryModifiers[demo.group] = newModifier;
+  return true;
 }
 
 // ─── Organization Momentum Calculations ──────────────────────────────────────

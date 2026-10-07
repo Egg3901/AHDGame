@@ -17,7 +17,7 @@ import {
   type TreasuryCashFlow,
   type TreasuryCashOptions,
 } from "./treasuryLedger";
-import type { BankingTransition } from "@/lib/banking/rules/boundary";
+import type { BankingTransition, TransitionProjection } from "@/lib/banking/rules/boundary";
 import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
 
 /**
@@ -69,6 +69,58 @@ async function witnessTreasuryLeg(
  */
 
 /**
+ * The durable receipt for a funded Treasury expense: a guarded debit of
+ * spendable cash, the burn that settles it outside Treasury, the signed fiscal
+ * projection, and any noncash effects the expense buys. Effects ride the same
+ * receipt, so a refused or replayed debit can never apply them unpaid or twice.
+ */
+function fundedTreasuryExpenseTransition(input: {
+  countryId: CountryId;
+  amount: number;
+  currency: CurrencyCode;
+  turn: number;
+  now: Date;
+  witness: TreasuryWitness & { key: string };
+  effects?: TransitionProjection[];
+}): BankingTransition {
+  const { countryId, amount, witness } = input;
+  return {
+    key: `treasury-nationalization:${witness.key}`,
+    kind: "treasury_funded_expense",
+    turn: input.turn,
+    currency: input.currency,
+    legs: [
+      {
+        kind: "debit",
+        amount,
+        collection: "federalBudget",
+        filter: { countryId, treasuryCashLocal: { $gte: amount } },
+        path: "treasuryCashLocal",
+        note: "Fund the nationalization or SOE expense from spendable Treasury cash",
+      },
+      { kind: "burn", amount, note: "Settle the expense outside Treasury cash" },
+    ],
+    projections: [
+      {
+        collection: "federalBudget",
+        filter: { countryId },
+        update: { $inc: { treasuryBalance: -amount }, $set: { updatedAt: input.now } },
+        note: "Update signed fiscal position after the funded expense",
+      },
+      ...(input.effects ?? []),
+    ],
+    event: {
+      kind: "monetary.executed",
+      command: witness.site ?? "nationalization.treasury",
+      subjectType: "government",
+      subjectId: countryId,
+      amount,
+      meta: { flow: witness.flow },
+    },
+  };
+}
+
+/**
  * Move `delta` (signed, country-local currency) on the country's treasury balance.
  *
  * Every nationalization/SOE/privatization cash flow funnels through here as a
@@ -92,43 +144,17 @@ async function incTreasuryBalance(
       );
     }
     if (!witness?.key) throw new Error("Funded Treasury movement requires a stable receipt key");
-    const amount = Math.abs(delta);
     const currency =
       ledger.context.treasuryCurrencies.get(countryId) ??
       (await loadTreasuryCurrency(db, countryId));
-    const transition: BankingTransition = {
-      key: `treasury-nationalization:${witness.key}`,
-      kind: "treasury_funded_expense",
-      turn: ledger.context.turn,
+    const transition = fundedTreasuryExpenseTransition({
+      countryId,
+      amount: Math.abs(delta),
       currency,
-      legs: [
-        {
-          kind: "debit",
-          amount,
-          collection: "federalBudget",
-          filter: { countryId, treasuryCashLocal: { $gte: amount } },
-          path: "treasuryCashLocal",
-          note: "Fund the nationalization or SOE expense from spendable Treasury cash",
-        },
-        { kind: "burn", amount, note: "Settle the expense outside Treasury cash" },
-      ],
-      projections: [
-        {
-          collection: "federalBudget",
-          filter: { countryId },
-          update: { $inc: { treasuryBalance: delta }, $set: { updatedAt: now } },
-          note: "Update signed fiscal position after the funded expense",
-        },
-      ],
-      event: {
-        kind: "monetary.executed",
-        command: witness.site ?? "nationalization.treasury",
-        subjectType: "government",
-        subjectId: countryId,
-        amount,
-        meta: { flow: witness.flow },
-      },
-    };
+      turn: ledger.context.turn,
+      now,
+      witness: { ...witness, key: witness.key },
+    });
     const result = await settleTransition(db, transition);
     if (result.status === "rejected" || result.status === "partial") {
       throw new Error(result.error ?? "Funded Treasury expense is incomplete");
@@ -535,9 +561,10 @@ export async function coverSoeOperatingLoss(
  * state pays the builder and the enterprise receives PLANT, so the grant cannot
  * be diverted into a discretionary build order — which is what keeps the P3b
  * anti-exploit ("an SOE cannot have the treasury fund an unbounded build")
- * closed. Unconditional debit, exactly like {@link coverSoeOperatingLoss}: an
- * unaffordable grant pushes the treasury into debt rather than being refused.
- * Returns the local amount debited.
+ * closed. Without funded Treasury cash the debit is unconditional, exactly like
+ * {@link coverSoeOperatingLoss}: an unaffordable grant pushes the signed balance
+ * into debt. With funded cash a grant that buys capacity goes through
+ * {@link settleFundedSoeCapexGrant} instead. Returns the local amount debited.
  */
 export async function debitTreasurySoeCapex(
   db: Db,
@@ -573,6 +600,65 @@ export async function debitTreasurySoeCapex(
     });
   }
   return local;
+}
+
+/**
+ * Settle one country's state capex grant from funded Treasury cash. The debit
+ * and every capacity write it buys share one durable receipt: the capacity
+ * lands only once the cash has, a retry of the same turn finishes the original
+ * plan without paying again, and a Treasury that cannot cover the whole grant
+ * buys nothing. That refusal is a funding constraint, not a failure, so the
+ * caller keeps processing every other country and corporation.
+ */
+export async function settleFundedSoeCapexGrant(
+  db: Db,
+  input: {
+    countryId: CountryId;
+    grantAnchor: number;
+    fxByCurrency: ReadonlyMap<CurrencyCode, number>;
+    now: Date;
+    ledger: TreasuryCashOptions;
+    treasuryCurrency?: CurrencyCode;
+    key: string;
+    capacity: TransitionProjection[];
+  }
+): Promise<{ status: "paid" | "unfunded" | "pending"; amountLocal: number; error?: string }> {
+  const context = input.ledger.context;
+  if (!context?.treasuryCashLedgerEnabled) {
+    throw new Error("Funded SOE capex grant requires the Treasury cash ledger");
+  }
+  if (!(input.grantAnchor > 0) || input.capacity.length === 0) {
+    return { status: "unfunded", amountLocal: 0 };
+  }
+  const currency =
+    input.treasuryCurrency ??
+    context.treasuryCurrencies.get(input.countryId) ??
+    (await loadTreasuryCurrency(db, input.countryId));
+  const rate = input.fxByCurrency.get(currency) ?? 1;
+  const amountLocal = Math.round(writeGovBudgetLocal(input.grantAnchor, currency, rate));
+  if (amountLocal <= 0) return { status: "unfunded", amountLocal: 0 };
+  const result = await settleTransition(
+    db,
+    fundedTreasuryExpenseTransition({
+      countryId: input.countryId,
+      amount: amountLocal,
+      currency,
+      turn: context.turn,
+      now: input.now,
+      witness: { flow: "soe_capex_grant", key: input.key, site: "treasury:debitTreasurySoeCapex" },
+      effects: input.capacity,
+    })
+  );
+  if (result.status === "rejected") {
+    return { status: "unfunded", amountLocal: 0, error: result.error };
+  }
+  if (result.status === "partial") {
+    throw new Error(result.error ?? "Funded SOE capex grant is incomplete");
+  }
+  if (result.status === "replayed" && result.error) {
+    return { status: "pending", amountLocal: 0, error: result.error };
+  }
+  return { status: "paid", amountLocal: result.status === "applied" ? amountLocal : 0 };
 }
 
 /**

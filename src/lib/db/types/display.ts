@@ -52,6 +52,8 @@ export interface ElectionDisplay {
   /** LARP calendar year baked at spawn; absent on legacy rows. */
   electionYear?: number;
   status: string;
+  /** The viewer withdrew from this election and may not re-enter. */
+  viewerWithdrew?: boolean;
   totalSeats?: number;
   candidates: CandidateDisplay[];
   startTime?: string;

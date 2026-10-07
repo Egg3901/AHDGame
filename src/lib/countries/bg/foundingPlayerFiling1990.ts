@@ -200,7 +200,7 @@ export async function materializeBgFoundingPlayerFiling(input: {
       { _id: prior._id, status: "withdrawn" },
       {
         $set: { status: "active" },
-        $unset: { withdrawnAt: "" },
+        $unset: { withdrawnAt: "", withdrawnBy: "" },
       },
       { session }
     );
@@ -278,7 +278,7 @@ export async function materializeBgFoundingPlayerFiling(input: {
           status: "active",
           bulgarianFoundingNomination: { constituencyId: district.constituencyId },
         },
-        $unset: { withdrawnAt: "" },
+        $unset: { withdrawnAt: "", withdrawnBy: "" },
       },
       { session }
     );
