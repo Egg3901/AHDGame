@@ -14,3 +14,4 @@ areas: [backend]
 
 - Queued index fund redemptions are now paid in rotating batches each turn instead of all at once. Redemptions skipped in one turn are first in line the next turn, and the cash they did not draw stays in the fund for them.
 - The share each redemption receives is unchanged: it is still measured against everything waiting in the queue, so no holder can take a larger share by being early.
+- When more funds have waiting redemptions than a turn can serve, the order in which funds are served rotates every turn, so every fund's queue is paid within a few turns.
