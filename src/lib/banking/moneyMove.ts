@@ -834,6 +834,7 @@ async function executeMoneyMove(
   // the credits of a wide fan-out are delivered together; the loop below then
   // skips those and handles any the batch left behind one at a time.
   let batched = new Set<number>();
+  const bookkeeping = new Set<number>();
   for (let n = 0; n < order.length; n++) {
     const i = order[n];
     const leg = record.legs[i];
@@ -850,6 +851,13 @@ async function executeMoneyMove(
       if (!batched.size) batched = new Set([-1]);
     }
     if (batched.has(i)) continue;
+    if (leg.kind === "mint" || leg.kind === "burn") {
+      // Mint and burn touch no document: their only effect is the journal
+      // mark, which the completion write below records. A crash before it
+      // re-reaches this leg on resume and marks it then.
+      if (record.status === "partial") bookkeeping.add(i);
+      continue;
+    }
     const failed = await applyLeg(db, key, i, leg);
     if (failed) {
       failure = failed;
@@ -858,7 +866,9 @@ async function executeMoneyMove(
   }
   const latest = await records.findOne({ _id: key });
   if (!latest) throw new Error(`Money move ${key} disappeared during recovery`);
-  const applied = latest.legs.flatMap((leg, i) => (leg.applied ? [i] : []));
+  const applied = latest.legs.flatMap((leg, i) =>
+    leg.applied || (bookkeeping.has(i) && latest.status === "partial") ? [i] : []
+  );
   const refusal = latest.legs.find((leg) => leg.refusal)?.refusal;
   const status =
     latest.status === "rejected"
