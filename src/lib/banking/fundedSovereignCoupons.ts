@@ -4,8 +4,13 @@ import type { FederalBudget, FundedSovereignCouponClaim } from "@/lib/db/types/b
 import type { Corporation } from "@/lib/db/types/corporation";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { bondAccruesCoupon } from "@/lib/constants/bonds";
-import { settleTransition, resumeSettlement } from "@/lib/banking/settlementJournal";
-import type { BankingTransition } from "@/lib/banking/rules/boundary";
+import {
+  settleTransition,
+  resumeSettlement,
+  type SettlementResult,
+} from "@/lib/banking/settlementJournal";
+import type { BankingTransition, TransitionLeg } from "@/lib/banking/rules/boundary";
+import { checkBalancedTransfer } from "@/lib/banking/rules/invariants";
 import {
   freezeSovereignCouponClaim,
   type SovereignCouponBondSnapshot,
@@ -387,12 +392,36 @@ export async function settleFundedSovereignCoupons(
   const claims = [...claimById.values()].sort((a, b) => a.dueTurn - b.dueTurn);
   const priorMoves = await findPriorPayouts(db, claims);
   const targetReadyClaimIds = await loadCouponTargetReadiness(db, claims);
+  // Claims a grouped receipt already owns settle only through that receipt.
+  // Only a receipt whose every leg and projection landed closes its members;
+  // one refused on resume moved no cash and leaves them owed.
+  const batches = await loadCouponBatches(db, budgetId, claims, input.turn);
+  const landed: CouponBatchRecord[] = [];
+  const batched = new Set<string>();
+  for (const batch of batches) {
+    if (batch.status === "rejected") continue;
+    if (!batchSettled(batch)) {
+      const resumed = await resumeSettlement(db, batch._id);
+      if (resumed.status === "partial") return;
+      if (!settlementLanded(resumed)) continue;
+    }
+    landed.push(batch);
+    for (const id of batchMembers(batch)) batched.add(id);
+  }
+  await markBatchMembersSettled(
+    db,
+    budgetId,
+    landed,
+    claims.filter((claim) => batched.has(claim.id))
+  );
+
   // Unpaid claims stay queued, so an unfunded Treasury carries one claim per
   // bond per turn of arrears. Attempting each through the journal writes a
   // rejected receipt and a failed guarded debit for every one of them, which
   // grows the phase without bound. Skip claims this snapshot of cash cannot
   // cover. The guarded debit remains the authority: a stale snapshot only
-  // defers a claim one turn or lets the guard reject it as before.
+  // defers a claim one turn or lets the guard reject it as before. Read after
+  // resumed batches, so their landed debits are not offered again.
   let fundableCash = 0;
   if (claims.length) {
     const cash = await db
@@ -401,7 +430,15 @@ export async function settleFundedSovereignCoupons(
     const value = (cash as { treasuryCashLocal?: unknown } | null)?.treasuryCashLocal;
     fundableCash = typeof value === "number" && Number.isFinite(value) ? value : 0;
   }
+
+  // At most one grouped receipt per Treasury and turn, holding at most
+  // MAX_BATCH_CLAIMS claims. A claim that could join a batch but finds this
+  // turn's batch already written or full stays owed for the next turn's batch,
+  // so a replayed turn never falls back to one journal receipt per claim.
+  const batchOpen = !batches.some((batch) => batch._id === couponBatchKey(budgetId, input.turn));
+  const grouped: FundedSovereignCouponClaim[] = [];
   for (const claim of claims) {
+    if (batched.has(claim.id)) continue;
     const attempt = Math.max(input.turn, claim.dueTurn);
     const prior =
       priorMoves.find(
@@ -412,12 +449,41 @@ export async function settleFundedSovereignCoupons(
       );
     if (!prior && !targetReadyClaimIds.has(claim.id)) continue;
     if (!prior && claim.amountLocal > fundableCash) continue;
+    // Claims in one currency whose holders are the bond pool, index funds, NPPs
+    // or personal cash share a grouped receipt. A claim with its own journaled
+    // attempt, a corporate holder, or a second currency keeps its own receipt.
+    if (
+      !prior &&
+      isBatchable(claim, budgetId, attempt) &&
+      claim.currencyCode === (grouped[0]?.currencyCode ?? claim.currencyCode)
+    ) {
+      if (batchOpen && grouped.length < MAX_BATCH_CLAIMS) {
+        grouped.push(claim);
+        fundableCash -= claim.amountLocal;
+      }
+      continue;
+    }
     const result = prior
       ? await resumeSettlement(db, prior._id)
       : await settleTransition(db, payoutTransition(claim, budgetId, attempt));
     if (result.status === "partial") return;
     if (!prior && result.status === "applied") fundableCash -= claim.amountLocal;
     // A wholly rejected source guard has no landed cash leg. Keep the immutable claim for the next turn.
+  }
+  if (grouped.length) {
+    const transition = batchPayoutTransition(grouped, budgetId, input.turn);
+    const result = await settleTransition(db, transition);
+    if (result.status === "partial") return;
+    if (settlementLanded(result)) {
+      // A replay keeps the membership the receipt was first written with.
+      const saved = await db
+        .collection<CouponBatchRecord>("bankMoneyMoves")
+        .findOne({ _id: transition.key }, { projection: BATCH_PROJECTION });
+      if (saved && batchSettled(saved))
+        await markBatchMembersSettled(db, budgetId, [saved], grouped);
+    }
+    // A rejected batch moved no cash, and a replay another attempt still owns
+    // has not finished; either way its claims stay queued for the next turn.
   }
 
   // Paid records are only history once their receipt is acknowledged; keep
@@ -427,6 +493,207 @@ export async function settleFundedSovereignCoupons(
     settledTurn: { $lt: input.turn },
     pendingSettlementProjection: { $exists: false },
   });
+}
+
+type CouponBatchRecord = {
+  _id: string;
+  status?: string;
+  projectionsCompletedAt?: Date;
+  projections?: { applied?: boolean }[];
+  event?: { meta?: { claimIds?: unknown } };
+};
+
+const BATCH_PROJECTION = {
+  _id: 1,
+  status: 1,
+  projectionsCompletedAt: 1,
+  "projections.applied": 1,
+  "event.meta.claimIds": 1,
+} as const;
+
+/** Grouped receipt key: one per Treasury and attempt turn. */
+export function couponBatchKey(budgetId: string, turn: number): string {
+  return `sovereign-coupon-batch:${budgetId}:${turn}`;
+}
+
+const batchTurn = (batch: CouponBatchRecord) =>
+  Number(batch._id.slice(batch._id.lastIndexOf(":") + 1));
+
+/**
+ * Every leg and projection of the receipt landed. A batch with no pool credit
+ * carries no projection, and the journal stamps completion only on a receipt
+ * that published projections.
+ */
+const batchSettled = (batch: CouponBatchRecord) =>
+  batch.status === "applied" &&
+  (batch.projectionsCompletedAt !== undefined || (batch.projections?.length ?? 0) === 0);
+
+/**
+ * The settlement delivered its money and projections. A replay carrying an
+ * error is a key another attempt owns and has not finished.
+ */
+const settlementLanded = (result: SettlementResult) =>
+  result.status === "applied" || (result.status === "replayed" && !result.error);
+
+const batchMembers = (batch: CouponBatchRecord): string[] =>
+  String(batch.event?.meta?.claimIds ?? "")
+    .split(",")
+    .filter(Boolean);
+
+/**
+ * Every grouped receipt that could own a queued claim. A batch is attempted on
+ * or after the due turn of each claim it holds, so the exact keys from the
+ * oldest open due turn through this turn cover them all without a prefix scan.
+ */
+async function loadCouponBatches(
+  db: Db,
+  budgetId: string,
+  claims: FundedSovereignCouponClaim[],
+  turn: number
+): Promise<CouponBatchRecord[]> {
+  if (!claims.length) return [];
+  const first = Math.min(...claims.map((claim) => claim.dueTurn));
+  const keys: string[] = [];
+  for (let t = first; t <= turn; t++) keys.push(couponBatchKey(budgetId, t));
+  return db
+    .collection<CouponBatchRecord>("bankMoneyMoves")
+    .find({ _id: { $in: keys } }, { projection: BATCH_PROJECTION })
+    .toArray();
+}
+
+/**
+ * Close the claim records a landed batch paid. The receipt, not the record, is
+ * the authority: a crash before this write leaves the record open and the next
+ * attempt finds it in the batch membership and closes it here, paying nothing.
+ */
+async function markBatchMembersSettled(
+  db: Db,
+  budgetId: string,
+  batches: CouponBatchRecord[],
+  open: FundedSovereignCouponClaim[]
+): Promise<void> {
+  const openIds = new Set(open.map((claim) => claim.id));
+  const ops = batches.flatMap((batch) => {
+    const ids = batchMembers(batch).filter((id) => openIds.has(id));
+    if (!ids.length) return [];
+    return [
+      {
+        updateMany: {
+          filter: { _id: { $in: ids }, budgetId, ...OPEN_CLAIM },
+          update: { $set: { settledTurn: batchTurn(batch) } },
+        },
+      },
+    ];
+  });
+  if (ops.length) await claimStore(db).bulkWrite(ops, { ordered: false });
+}
+
+/**
+ * Claims per grouped receipt. The receipt stores its member ids, so this bounds
+ * the receipt document and the claim close-out write; a larger backlog drains
+ * over the following turns.
+ */
+export const MAX_BATCH_CLAIMS = 2000;
+
+/**
+ * A claim may join a grouped receipt when every credit targets a document by id
+ * alone and its own per-claim receipt balances. Corporate credits carry a payee
+ * currency guard per claim, so they keep the per-claim receipt.
+ */
+function isBatchable(claim: FundedSovereignCouponClaim, budgetId: string, attempt: number) {
+  if (claim.holders.some((holder) => holder.kind === "corporation")) return false;
+  try {
+    return checkBalancedTransfer(payoutTransition(claim, budgetId, attempt).legs).length === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * One balanced receipt for many claims in one currency. It is the per-claim
+ * receipts added together: one Treasury debit for the sum of the claims, and
+ * one credit per payee holding the sum of that payee's per-claim credits, each
+ * valued at the frozen quotes it summed. The debit is valued at the anchor sum
+ * of the credits, so the receipt nets exactly. Each claim keeps its own frozen
+ * quote on its record, and leaves the queue only after the receipt lands.
+ */
+function batchPayoutTransition(
+  claims: FundedSovereignCouponClaim[],
+  budgetId: string,
+  turn: number
+): BankingTransition {
+  const currencyCode = claims[0].currencyCode;
+  const credits = new Map<
+    string,
+    { leg: TransitionLeg; currencyCode: string; amount: number; anchor: number }
+  >();
+  const couponsIn = new Map<string, number>();
+  let amount = 0;
+  for (const claim of claims) {
+    amount += claim.amountLocal;
+    const single = payoutTransition(claim, budgetId, Math.max(turn, claim.dueTurn));
+    for (const leg of single.legs) {
+      if (leg.kind !== "credit" || !leg.valuation) continue;
+      const target = `${leg.collection}|${String((leg.filter as { _id?: unknown })._id)}|${leg.path}|${leg.valuation.currencyCode}`;
+      const row = credits.get(target) ?? {
+        leg,
+        currencyCode: leg.valuation.currencyCode,
+        amount: 0,
+        anchor: 0,
+      };
+      row.amount += leg.amount;
+      row.anchor += leg.amount / leg.valuation.localPerAnchor;
+      credits.set(target, row);
+    }
+    for (const holder of claim.holders) {
+      if (holder.kind !== "publicFloat") continue;
+      couponsIn.set(
+        claim.currencyCode,
+        (couponsIn.get(claim.currencyCode) ?? 0) + holder.amountLocal
+      );
+    }
+  }
+  let creditAnchor = 0;
+  const creditLegs: TransitionLeg[] = [...credits.values()].map((row) => {
+    creditAnchor += row.anchor;
+    return {
+      ...row.leg,
+      amount: row.amount,
+      valuation: { currencyCode: row.currencyCode, localPerAnchor: row.amount / row.anchor },
+    };
+  });
+  return {
+    key: couponBatchKey(budgetId, turn),
+    kind: "sovereign_coupon_funded_batch_payout",
+    turn,
+    currency: currencyCode,
+    legs: [
+      {
+        kind: "debit",
+        amount,
+        valuation: { currencyCode, localPerAnchor: amount / creditAnchor },
+        collection: "federalBudget",
+        filter: { _id: budgetId, treasuryCashLocal: { $gte: amount } },
+        path: "treasuryCashLocal",
+        note: "Pay sovereign coupon claims from funded Treasury cash",
+      },
+      ...creditLegs,
+    ],
+    projections: [...couponsIn].map(([pool, inc]) => ({
+      collection: "bondMarketPools",
+      filter: { _id: pool },
+      update: { $inc: { "lifetime.couponsIn": inc } },
+      note: "Record funded public-float coupon receipts",
+    })),
+    event: {
+      kind: "monetary.executed",
+      command: "turn.sovereignCoupon.fundedBatchPayout",
+      subjectType: "country",
+      subjectId: claims[0].countryId,
+      amount,
+      meta: { claimIds: claims.map((claim) => claim.id).join(","), claims: claims.length },
+    },
+  };
 }
 
 async function loadCouponTargetReadiness(

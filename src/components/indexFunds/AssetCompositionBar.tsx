@@ -1,9 +1,11 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 type Slice = {
-  key: "equity" | "cash" | "bond";
+  key: "equity" | "cash" | "bond" | "escrow";
   label: string;
   color: string; // CSS var or hex
   amountAnchor: number;
@@ -13,6 +15,7 @@ const TOKEN_COLOR: Record<Slice["key"], string> = {
   equity: "var(--secondary)",
   cash: "var(--success)",
   bond: "var(--gold)",
+  escrow: "var(--primary)",
 };
 
 /**
@@ -24,15 +27,18 @@ export function AssetCompositionBar({
   holdingsValueAnchor,
   cashAnchor,
   bondPrincipalAnchor,
+  openOrdersEscrowAnchor = 0,
   formatAmount,
   ccy,
 }: {
   holdingsValueAnchor: number;
   cashAnchor: number;
   bondPrincipalAnchor: number;
+  openOrdersEscrowAnchor?: number;
   formatAmount: (n: number, c?: CurrencyCode) => string;
   ccy: CurrencyCode;
 }) {
+  const t = useTranslations("corporations");
   const slices: Slice[] = [
     {
       key: "equity",
@@ -43,11 +49,19 @@ export function AssetCompositionBar({
     { key: "cash", label: "Cash & equivalents", color: TOKEN_COLOR.cash, amountAnchor: cashAnchor },
     {
       key: "bond",
-      label: "Bond reserve",
+      label: t("fundBondHoldings.title"),
       color: TOKEN_COLOR.bond,
       amountAnchor: bondPrincipalAnchor,
     },
   ];
+
+  if (openOrdersEscrowAnchor > 0)
+    slices.push({
+      key: "escrow",
+      label: t("fundBondHoldings.escrow"),
+      color: TOKEN_COLOR.escrow,
+      amountAnchor: openOrdersEscrowAnchor,
+    });
 
   const total = slices.reduce((s, x) => s + Math.max(0, x.amountAnchor), 0);
   const safeTotal = total > 0 ? total : 1;
