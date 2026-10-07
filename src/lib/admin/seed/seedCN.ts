@@ -179,8 +179,11 @@ export async function seedCNStateMetrics(
   const { applyEra1991Adjustments } = await import("@/lib/seeds/reference/stateMetrics1991");
   const { getRegionMetricPresets, applyMetricPresetToMetrics } =
     await import("@/lib/seeds/metricPresets");
+  const { apply1991IncomeVintage } = await import("@/lib/seeds/reference/income1991");
   const transformed =
-    preset === "1991-default" ? cnStateMetrics.map(applyEra1991Adjustments) : cnStateMetrics;
+    preset === "1991-default"
+      ? cnStateMetrics.map(applyEra1991Adjustments).map((m) => apply1991IncomeVintage("CN", m))
+      : cnStateMetrics;
   // Overlay the per-region/era authored values for the new ROOT metrics (both eras authored).
   const bundle = transformed.map((metric) => {
     const overlay = getRegionMetricPresets("CN", String(metric._id), preset);
@@ -192,6 +195,9 @@ export async function seedCNStateMetrics(
     db,
     bundle.map((m) => ({ ...m, countryId: "CN" }) as StateMetrics)
   );
+  // Provenance for medianIncome scoring: stamped after the write it describes.
+  const { stampSeededIncomeVintage } = await import("@/lib/admin/seed/incomeStartVintage");
+  await stampSeededIncomeVintage(db, "CN", preset);
   log(`Seeded ${bundle.length} CN state metrics (${preset})`);
 }
 
@@ -221,9 +227,10 @@ export async function seedCNBaselines(
   const { applyEra1979BaselineAdjustments } = is1979
     ? await import("@/lib/seeds/reference/stateBaselines1979")
     : { applyEra1979BaselineAdjustments: <T>(x: T): T => x };
+  const { apply1991IncomeVintageBaseline } = await import("@/lib/seeds/reference/income1991");
   for (const raw of cnStateBaselines) {
     const adjusted = is1991
-      ? applyEra1991BaselineAdjustments(raw)
+      ? apply1991IncomeVintageBaseline("CN", applyEra1991BaselineAdjustments(raw))
       : is1953
         ? applyEra1953BaselineAdjustments(raw)
         : is1979

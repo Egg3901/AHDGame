@@ -1020,6 +1020,11 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
       .collection<GameState>("gameState")
       .updateOne({ _id: "current" }, { $set: { startingPartiesMode: startingParties } });
   }
+  // On an empty database the metric seed writers ran before this doc existed,
+  // so their income vintage stamps were dropped. seedAllCountryData above wrote
+  // this preset's incomes in this run; re-apply the matching stamps.
+  const { stampSeededIncomeVintages } = await import("@/lib/admin/seed/incomeStartVintage");
+  await stampSeededIncomeVintages(db, preset);
   log(`Game state ready at turn ${gameState.currentTurn}`);
   const coldWarFoundation = await seedColdWarFoundations(
     db,

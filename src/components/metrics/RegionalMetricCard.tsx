@@ -49,15 +49,30 @@ export function RegionalMetricCard({
   detailHref,
 }: RegionalMetricCardProps) {
   const [open, setOpen] = useState(false);
-  const { preset, eraSystemEnabled, currentYear, startingYear, incomeBandIndexByCountry } =
-    useWorldFlags();
+  const {
+    preset,
+    eraSystemEnabled,
+    currentYear,
+    startingYear,
+    incomeBandIndexByCountry,
+    incomeStartVintages,
+  } = useWorldFlags();
   // Live year for era-aware score bands; null while the flag is off (legacy path).
   const eraYear = eraSystemEnabled ? currentYear : null;
   const incomeIndex = eraYear != null ? (incomeBandIndexByCountry?.[countryId] ?? null) : null;
   const def = getMetricDefinition(category as MetricCategoryId, metricId);
   const name = def ? getEraMetricName(def, eraYear, regionId) : metricId;
   const isHigherBetter = def?.isHigherBetter ?? true;
-  const score = scoreMetric(metricId, value, countryId, preset, eraYear, incomeIndex, startingYear);
+  const score = scoreMetric(
+    metricId,
+    value,
+    countryId,
+    preset,
+    eraYear,
+    incomeIndex,
+    startingYear,
+    incomeStartVintages
+  );
   const badge = score !== null ? getMetricBadge(score) : null;
   // Era existence gate: a metric outside its era window renders nothing at all
   // (self-hiding card — every parent list is covered without per-parent filters).
@@ -70,7 +85,8 @@ export function RegionalMetricCard({
     preset,
     eraYear,
     incomeIndex,
-    startingYear
+    startingYear,
+    incomeStartVintages
   );
 
   const hasNatAvg = nationalAverage !== undefined && nationalAverage !== null;
@@ -228,7 +244,8 @@ export function RegionalMetricCard({
                       preset,
                       eraYear,
                       incomeIndex,
-                      startingYear
+                      startingYear,
+                      incomeStartVintages
                     ) ?? 0
                   }
                   fmt={fmt}

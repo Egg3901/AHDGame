@@ -202,9 +202,10 @@ export async function seedNGStateMetrics(
   const { getRegionMetricPresets, applyMetricPresetToMetrics } =
     await import("@/lib/seeds/metricPresets");
   const { applyEra1953Adjustments } = await import("@/lib/seeds/reference/stateMetricsEra1953");
+  const { apply1991IncomeVintage } = await import("@/lib/seeds/reference/income1991");
   const transformed =
     preset === "1991-default"
-      ? ngStateMetrics.map(applyEra1991Adjustments)
+      ? ngStateMetrics.map(applyEra1991Adjustments).map((m) => apply1991IncomeVintage("NG", m))
       : preset === "1953-default"
         ? // Only the UK had a 1953 metrics branch, so DE/JP/BR/NG seeded MODERN
           // values into a 1953 world (2019 broadband 92/88/78/35, life expectancy
@@ -224,6 +225,9 @@ export async function seedNGStateMetrics(
     db,
     bundle.map((m) => ({ ...m, countryId: "NG" }) as StateMetrics)
   );
+  // Provenance for medianIncome scoring: stamped after the write it describes.
+  const { stampSeededIncomeVintage } = await import("@/lib/admin/seed/incomeStartVintage");
+  await stampSeededIncomeVintage(db, "NG", preset);
   log(`Seeded ${bundle.length} NG state metrics (${preset})`);
 }
 
@@ -253,9 +257,10 @@ export async function seedNGBaselines(
   const { applyEra1979BaselineAdjustments } = is1979
     ? await import("@/lib/seeds/reference/stateBaselines1979")
     : { applyEra1979BaselineAdjustments: <T>(x: T): T => x };
+  const { apply1991IncomeVintageBaseline } = await import("@/lib/seeds/reference/income1991");
   for (const raw of ngStateBaselines) {
     const adjusted = is1991
-      ? applyEra1991BaselineAdjustments(raw)
+      ? apply1991IncomeVintageBaseline("NG", applyEra1991BaselineAdjustments(raw))
       : is1953
         ? applyEra1953BaselineAdjustments(raw)
         : is1979
