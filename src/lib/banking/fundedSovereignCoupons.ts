@@ -240,6 +240,21 @@ export async function settleFundedSovereignCoupons(
         .toArray()
     : [];
   const targetReadyClaimIds = await loadCouponTargetReadiness(db, claims);
+  // Unpaid claims stay queued, so an unfunded Treasury carries one claim per
+  // bond per turn of arrears. Attempting each through the journal writes a
+  // rejected receipt and a failed guarded debit for every one of them, which
+  // grows the phase without bound. Skip claims this snapshot of cash cannot
+  // cover. The guarded debit remains the authority: a stale snapshot only
+  // defers a claim one turn or lets the guard reject it as before.
+  let fundableCash = 0;
+  if (claims.length) {
+    const cash = await collection.findOne(
+      { _id: budget._id },
+      { projection: { treasuryCashLocal: 1 } }
+    );
+    const value = (cash as { treasuryCashLocal?: unknown } | null)?.treasuryCashLocal;
+    fundableCash = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  }
   for (const claim of claims) {
     const attempt = Math.max(input.turn, claim.dueTurn);
     const prior =
@@ -250,10 +265,12 @@ export async function settleFundedSovereignCoupons(
         (move) => move._id.startsWith(`${claim.id}:attempt:`) && move.status === "applied"
       );
     if (!prior && !targetReadyClaimIds.has(claim.id)) continue;
+    if (!prior && claim.amountLocal > fundableCash) continue;
     const result = prior
       ? await resumeSettlement(db, prior._id)
       : await settleTransition(db, payoutTransition(claim, String(budget._id), attempt));
     if (result.status === "partial") return;
+    if (!prior && result.status === "applied") fundableCash -= claim.amountLocal;
     // A wholly rejected source guard has no landed cash leg. Keep the immutable claim for the next turn.
   }
 }
