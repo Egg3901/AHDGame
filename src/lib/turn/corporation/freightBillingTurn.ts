@@ -28,6 +28,10 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { MarketContext } from "@/lib/market/marketContext";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import type { CorporationLookups } from "./types";
+import { COMMODITY_TYPES } from "@/lib/constants/commodities";
+import { commodityDemandCalibration } from "@/lib/constants/commodityDemandCalibration";
+import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { eraForPreset } from "@/lib/seeds/presetSelector";
 
 /**
  * Apportion last turn's freight charges and haul revenue across every sector.
@@ -42,6 +46,7 @@ import type { CorporationLookups } from "./types";
 export function buildFreightBillingBySector(args: {
   lookups: Pick<
     CorporationLookups,
+    | "preset"
     | "sectorsByCorp"
     | "corpById"
     | "eraUnitScale"
@@ -49,6 +54,8 @@ export function buildFreightBillingBySector(args: {
     | "stateResourceCapacityByState"
     | "freightChargesByDestState"
     | "freightHaulRevenueByOriginState"
+    | "freightDemandByDestState"
+    | "freightSupplyByOriginState"
   >;
   currentTurn: number;
   plantsEnabled: boolean;
@@ -82,6 +89,7 @@ export function buildFreightBillingBySector(args: {
           },
           currentTurn,
           {
+            preset: lookups.preset,
             plantsEnabled,
             isNatcorp,
             eraUnitScale: lookups.eraUnitScale,
@@ -106,6 +114,14 @@ export function buildFreightBillingBySector(args: {
   return apportionFreightBilling({
     freightChargesByDestState,
     haulRevenueByOriginState,
+    demandUnitsByDestState: lookups.freightDemandByDestState ?? new Map(),
+    demandCalibrationByCommodity: new Map(
+      COMMODITY_TYPES.map((commodity) => [
+        commodity,
+        commodityDemandCalibration(eraForPreset(lookups.preset ?? DEFAULT_SEED_PRESET), commodity),
+      ])
+    ),
+    freightSupplyUnitsByOriginState: lookups.freightSupplyByOriginState ?? new Map(),
     sectors,
   });
 }
