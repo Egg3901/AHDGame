@@ -229,7 +229,11 @@ export default function CeoBudgetPanel({
   }
 
   const grossProfit =
-    revenue - financials.maintenanceCosts - financials.laborCosts - financials.growthCosts;
+    revenue -
+    financials.maintenanceCosts -
+    financials.laborCosts -
+    financials.growthCosts -
+    (financials.freightCosts ?? 0);
   const tax = financials.federalTax + financials.stateTax;
 
   return (
@@ -277,6 +281,14 @@ export default function CeoBudgetPanel({
             label="Growth investment"
             amount={cost(financials.growthCosts)}
             pct={pctOfRevenue(financials.growthCosts)}
+          />
+        )}
+        {(financials.freightCosts ?? 0) > 0 && (
+          <StatementLine
+            indent
+            label="Freight charges"
+            amount={cost(financials.freightCosts ?? 0)}
+            pct={pctOfRevenue(financials.freightCosts ?? 0)}
           />
         )}
         <StatementLine

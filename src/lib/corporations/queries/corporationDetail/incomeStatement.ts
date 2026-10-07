@@ -215,6 +215,7 @@ export async function computeIncomeStatement(
     totalMaintenanceCosts +
     totalGrowthCosts +
     totalRegulatoryBurden +
+    (totals.totalFreightCosts ?? 0) +
     corporation.marketingBudget +
     logisticsBudget +
     rdBudget +

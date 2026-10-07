@@ -112,7 +112,11 @@ export default function FinancialsTab({
   const pctOf = (daily: number) =>
     revenue > 0 ? `${((daily / revenue) * 100).toFixed(1)}%` : null;
   const grossProfit =
-    revenue - financials.maintenanceCosts - financials.laborCosts - financials.growthCosts;
+    revenue -
+    financials.maintenanceCosts -
+    financials.laborCosts -
+    financials.growthCosts -
+    (financials.freightCosts ?? 0);
   const basis = corpIncomeBasis(financials);
   const settlement = financials.supplyAgreementSettlementDaily ?? 0;
   const unpaidSettlement = financials.supplyAgreementUnpaidAnchor ?? 0;
@@ -215,7 +219,12 @@ export default function FinancialsTab({
       {view === "income" && (
         <div className="grid gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,1fr)_300px]">
           <DenseSection title="Income statement" meta={MONEY_PERIOD_PER_LABEL[periodView]}>
+            <p className="py-2 text-xs text-muted">
+              Current estimates use today&apos;s sectors and budgets. Last-turn income is what the
+              engine recorded before later changes to capacity, production or spending.
+            </p>
             <StatementTable>
+              <StatementGroup>Current estimate</StatementGroup>
               <StatementLine
                 strong
                 label="Gross revenue"
@@ -224,6 +233,14 @@ export default function FinancialsTab({
                 note={`${financials.growthRateIsRealized ? "Grew" : "Growing"} ${(financials.currentGrowthRate ?? 0).toFixed(2)}%${financials.growthRateIsRealized ? " over the past year" : " a turn on average"}`}
                 title="Total gross revenue from every owned sector."
               />
+              {(financials.freightIncome ?? 0) > 0 && (
+                <StatementLine
+                  indent
+                  label="Freight revenue"
+                  amount={fmt(scale(financials.freightIncome ?? 0))}
+                  note="Included in gross revenue"
+                />
+              )}
               <StatementLine
                 indent
                 label="Sector maintenance"
@@ -243,6 +260,15 @@ export default function FinancialsTab({
                   amount={cost(financials.laborCosts)}
                   pct={pctOf(financials.laborCosts)}
                   title="Pay for workers in every sector. Moves with headcount, local pay and union demands."
+                />
+              )}
+              {(financials.freightCosts ?? 0) > 0 && (
+                <StatementLine
+                  indent
+                  label="Freight charges"
+                  amount={cost(financials.freightCosts ?? 0)}
+                  pct={pctOf(financials.freightCosts ?? 0)}
+                  title="Shipping paid for inbound commodities, recorded separately from plant operating costs."
                 />
               )}
               {financials.subsidyBenefit > 0 && (
@@ -430,6 +456,28 @@ export default function FinancialsTab({
                 </>
               )}
 
+              {basis.isRealized && (
+                <>
+                  <StatementLine
+                    strong
+                    label="Net income, current estimate"
+                    amount={fmtSigned(scale(financials.income))}
+                    amountClass={signTone(financials.income)}
+                  />
+                  <StatementGroup>
+                    {financials.realizedIncomeTurn != null
+                      ? `Last turn recorded (turn ${financials.realizedIncomeTurn})`
+                      : "Last turn recorded"}
+                  </StatementGroup>
+                  <StatementLine
+                    indent
+                    label="Difference from current estimate"
+                    amount={fmtSigned(scale(basis.netIncome - financials.income))}
+                    amountClass={signTone(basis.netIncome - financials.income)}
+                    note="Recorded net income less the current estimate"
+                  />
+                </>
+              )}
               <StatementLine
                 strong
                 label={basis.isRealized ? "Net income, last turn" : "Net income"}
