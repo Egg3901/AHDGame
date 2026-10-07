@@ -1,0 +1,22 @@
+{
+  "baseline": {
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "worktree": "qualification-control"
+  },
+  "candidate": {
+    "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "worktree": "qualification-candidate"
+  },
+  "intent": "rules",
+  "question": "Does the changed settlement rule conserve balances across two four-turn payout cycles?",
+  "preset": "1991-default",
+  "seed": "settlement-paired-1",
+  "minimumTurns": 8,
+  "periods": [4],
+  "state": "fresh",
+  "maxEngineSeconds": 18000,
+  "secondsPerTurn": 700,
+  "bootstrapSeconds": 300,
+  "safetyFactor": 1.5,
+  "costBasis": "Planning assumption only; replace with comparable measured engine and bootstrap cost"
+}

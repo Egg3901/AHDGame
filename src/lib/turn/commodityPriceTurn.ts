@@ -279,7 +279,15 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       .collection<Bond>("bonds")
       .find(
         { issuedAtTurn: { $gt: debtIssuanceWindowStart }, matured: false },
-        { projection: { issuerType: 1, countryId: 1, corporationId: 1, totalIssued: 1 } }
+        {
+          projection: {
+            issuerType: 1,
+            countryId: 1,
+            corporationId: 1,
+            totalIssued: 1,
+            currencyCode: 1,
+          },
+        }
       )
       .toArray(),
     db
@@ -645,7 +653,18 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   const statesByCountry = buildStatesByCountry(allStates);
 
   applyLatentFinancialDemand(
-    { statesByCountry, allCorporations, recentBonds, centralBankByCountry },
+    {
+      statesByCountry,
+      allCorporations,
+      recentBonds,
+      centralBankByCountry,
+      // Bonds without a currency stamp predate multi-currency issuance and are in ₳.
+      fxRateForBond: (bond) =>
+        bond.currencyCode
+          ? (fxByCurrency.get(bond.currencyCode) ??
+            (bond.issuerType === "sovereign" ? fxRateForCountry(bond.countryId) : 1))
+          : 1,
+    },
     global,
     byState
   );

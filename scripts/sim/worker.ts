@@ -44,6 +44,7 @@ import {
   type HandoffStore,
 } from "./simJobHandoff";
 import { spawnWithPrefixedLogs, type ChildRunIdentity } from "./childLogPrefix";
+import { assertPlannerRuntime, budgetedJobWindowFilter } from "./worldsimPlanQueue";
 import { assertSafeToken, buildRunWorldArgs } from "./simJobArgs";
 import { resolveSimPreset } from "./simPreset";
 import { buildStatusMirrorUpdate, type SandboxProgress } from "./simStatusMirror";
@@ -118,6 +119,8 @@ if (OPS_MONGODB_URI === SIM_MONGODB_URI && !ALLOW_SHARED_MONGO) {
 }
 
 interface SimJob {
+  engineBudgetSeconds?: number;
+  plannerRuntime?: string;
   preparedSandbox?: PreparedSandbox;
   queuePriority?: number;
   _id: string;
@@ -151,7 +154,7 @@ interface SimJob {
    * Flows into runWorld via planRunWorldSpawn -> buildRunWorldArgs. */
   actors?: "pure-npp" | "synthetic";
   /** Sim turn-phase profile: "elections-only" skips the economy phases. Default full. */
-  mode?: "full" | "elections-only";
+  mode?: "full" | "elections-only" | "full-budgeted-v1";
   /** Elections-only country scope: comma-separated ids (e.g. "US,UK,DE"). Omit for global. */
   countries?: string;
   /** Clone the LIVE world into the sandbox db first, then run --clone-mode.
@@ -216,7 +219,13 @@ function mongoHandoffStore(jobsCol: Collection<SimJob>): HandoffStore {
           ? { status: "queued" }
           : { status: "queued", startPolicy: filter.startPolicy };
       const job = await jobsCol.findOneAndUpdate(
-        { $and: [queued, { dbName: { $nin: filter.excludeDbNames } }] },
+        {
+          $and: [
+            queued,
+            { dbName: { $nin: filter.excludeDbNames } },
+            budgetedJobWindowFilter(new Date()),
+          ],
+        },
         // $unset mirrors update.unset (["error"]): kept as a typed literal
         // because the driver does not accept a computed $unset object.
         {
@@ -228,9 +237,20 @@ function mongoHandoffStore(jobsCol: Collection<SimJob>): HandoffStore {
       return (job ?? null) as unknown as HandoffJob | null;
     },
     async requeueStaleLeases(staleBefore, error, now): Promise<number> {
+      await jobsCol.updateMany(
+        { status: "running", mode: "full-budgeted-v1", heartbeatAt: { $lt: staleBefore } },
+        {
+          $set: {
+            status: "failed",
+            error: "Budgeted worker lease lost; explicit replanning required",
+            updatedAt: now,
+          },
+        }
+      );
       const result = await jobsCol.updateMany(
         {
           status: "running",
+          mode: { $ne: "full-budgeted-v1" },
           workerInstanceId: { $exists: true },
           heartbeatAt: { $lt: staleBefore },
         },
@@ -292,14 +312,16 @@ function run(
   args: string[],
   env: NodeJS.ProcessEnv,
   cwd: string,
-  identity: ChildRunIdentity
-): Promise<{ code: number | null }> {
+  identity: ChildRunIdentity,
+  timeoutMs?: number
+): Promise<{ code: number | null; timedOut?: boolean }> {
   // #2071: pipe (never inherit) so every child line is prefixed with the run
   // identity at ingestion time. Covers the whole child lifetime, not just
   // startup helpers, so slots sharing one journal stay attributable.
   return spawnWithPrefixedLogs(NPX_PATH, ["tsx", script, ...args], identity, undefined, {
     cwd,
     env,
+    timeoutMs,
   });
 }
 
@@ -434,6 +456,7 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
     const runWorldEnv = { ...baseChildEnv(), SIM_MONGODB_URI: SIM_MONGODB_URI as string };
     // Validate all arguments before the prepared copy is activated.
     buildRunWorldArgs(job);
+    assertPlannerRuntime(job, `${process.version}/${process.platform}/${process.arch}`);
     if (job.preparedSandbox) {
       const client = await new MongoClient(SIM_MONGODB_URI as string).connect();
       try {
@@ -517,13 +540,16 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
     if (spawnSource) {
       log(`Running from pinned source ${spawnSource.repoDir} @ ${spawnSource.commit}`);
     }
-    const { code } = await run(
+    const { code, timedOut } = await run(
       "scripts/sim/runWorld.ts",
       spawnPlan.args,
       runWorldEnv,
       spawnPlan.cwd,
-      childIdentity
+      childIdentity,
+      job.mode === "full-budgeted-v1" ? job.engineBudgetSeconds! * 1000 : undefined
     );
+    if (timedOut)
+      throw new Error(`Engine budget exhausted after ${job.engineBudgetSeconds}s; unqualified`);
 
     clearInterval(statusMirror);
     await mirrorSandboxStatus(jobsCol, job);
