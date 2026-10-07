@@ -1737,6 +1737,15 @@ export function getSprawlModifier(
   return Math.floor(excess / 2) * effectivePenalty;
 }
 
+/**
+ * Logistics sectors are the network that carries the sprawl, so they never pay
+ * the sprawl penalty on their own margin. They still count toward the
+ * corporation's sector total, so every other sector's penalty is unchanged.
+ */
+export function isSprawlExemptSectorType(sectorType: string): boolean {
+  return sectorType === "logistics";
+}
+
 export interface MarginModifiers {
   unemploymentModifier: number;
   gridReliabilityModifier: number;
@@ -1906,7 +1915,7 @@ export function computeAllMarginModifiers(
       ? 0
       : getSectorTypeMatchModifier(sectorType, corporationType, secondaryType);
   const sprawlMod =
-    stateOwned || totalSectors == null
+    stateOwned || totalSectors == null || isSprawlExemptSectorType(sectorType)
       ? 0
       : getSprawlModifier(totalSectors, logisticsStrength, !!secondaryType);
 

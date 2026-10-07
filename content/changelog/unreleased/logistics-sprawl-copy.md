@@ -1,18 +1,23 @@
 ---
 date: 2026-10-07
-title: Logistics division text no longer promises sprawl relief from depots
+title: Logistics sectors no longer pay the sprawl penalty
 summary: >-
-  The logistics division blurb said depots offset the corporation's sprawl
-  penalty. They never did. The text now says what actually reduces sprawl.
-tags: [corporations]
-badges: [patch]
-areas: [frontend]
+  The logistics division always said depots offset sprawl, but they paid the
+  penalty like every other sector. Logistics sectors are now exempt on their
+  own margins.
+tags: [corporations, economy]
+badges: [minor]
+areas: [fullstack]
 ---
 
 ## What changed
 
-- Logistics depots count toward the sprawl penalty like any other sector. The
-  division blurb used to say they offset it.
-- The blurb now points to the logistics budget, which is what raises the
-  sector threshold and softens the penalty. The Sprawl relief figure on the
-  same panel already showed the budget-driven number.
+- Logistics sectors no longer take the sprawl margin penalty, however many
+  sectors the corporation runs.
+- Depots still count toward the corporation's sector total, so other sector
+  types keep the normal sprawl penalty and adding depots still raises it.
+- The logistics budget works as before: it raises the sprawl threshold and
+  softens the penalty for every non-logistics sector.
+- The Sectors tab, CEO budget panel, logistics panel and wiki now describe the
+  exemption. A corporation made up only of logistics sectors shows no sprawl
+  penalty.

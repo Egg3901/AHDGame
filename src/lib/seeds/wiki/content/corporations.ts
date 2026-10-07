@@ -280,6 +280,8 @@ If nobody is attacking you and you have no intention of splitting or attacking, 
 
 Corporations with more than **15 sectors** incur a -0.5% margin penalty per 2 sectors over the threshold. With a secondary type set, that doubles to -1.0% per 2 sectors. Logistics & Operations (your distribution reach and operational process quality) spending raises the threshold (up to 30 sectors at max Logistics & Operations Strength of 200) and halves the penalty slope.
 
+Logistics sectors (depots) never pay the sprawl penalty on their own margin. They still count toward the sector total, so adding depots raises the penalty on every other sector you own.
+
 ### Research, tech trees & wages
 
 **Tech tab:** Every corporation has a **Tech** tab with decade-tiered research nodes. Each decade offers a **Corporate** lane (shared business upgrades) and a **Sector** lane (specialist unlocks for your primary type). Nodes cost **R&D Score + cash** and can gate advanced operating strategies. See [Corporate R&D & Tech Trees](/wiki/corporate-r-and-d) for lane commitment, prerequisites, and effects.
