@@ -3,6 +3,7 @@
   "scope": "Targeted pure fixture: seed tables, era scoring and the medianIncome node only. Not a worldsim.",
   "turnsPerYear": 48,
   "years": 5,
+  "provenanceGate": "Scores use scoreMetric with the stamps the fresh 1991 seed writers write. 'before' is the unstamped legacy world scored through the same gate.",
   "sources": {
     "population": {
       "url": "https://api.worldbank.org/v2/country/FRA;ITA;ESP;SWE;GRC;AUT;FIN/indicator/SP.POP.TOTL?date=1991&format=json",
@@ -102,6 +103,7 @@
         },
         "after": {
           "national": 316064,
+          "stamp": "at-1991-household-r1",
           "anchor": 316064,
           "overGdpPerResident": 1.181,
           "score": 68.75,
@@ -518,44 +520,51 @@
         {
           "startYear": 1953,
           "interpolated": 18400,
-          "startAnchor": 18400,
-          "changed": false
+          "unstampedStartAnchor": 18400,
+          "stampedStartAnchor": 18400,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1979,
           "interpolated": 18400,
-          "startAnchor": 18400,
-          "changed": false
+          "unstampedStartAnchor": 18400,
+          "stampedStartAnchor": 18400,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1991,
           "interpolated": 18400,
-          "startAnchor": 316064,
-          "changed": true
+          "unstampedStartAnchor": 18400,
+          "stampedStartAnchor": 316064,
+          "changedWhenStamped": true
         },
         {
           "startYear": 1999,
           "interpolated": 18400,
-          "startAnchor": 18400,
-          "changed": false
+          "unstampedStartAnchor": 18400,
+          "stampedStartAnchor": 18400,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2007,
           "interpolated": 18400,
-          "startAnchor": 18400,
-          "changed": false
+          "unstampedStartAnchor": 18400,
+          "stampedStartAnchor": 18400,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2019,
           "interpolated": 18400,
-          "startAnchor": 18400,
-          "changed": false
+          "unstampedStartAnchor": 18400,
+          "stampedStartAnchor": 18400,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2023,
           "interpolated": 18400,
-          "startAnchor": 18400,
-          "changed": false
+          "unstampedStartAnchor": 18400,
+          "stampedStartAnchor": 18400,
+          "changedWhenStamped": false
         }
       ]
     },
@@ -585,6 +594,7 @@
         },
         "after": {
           "national": 2565869,
+          "stamp": "es-1991-household-r1",
           "anchor": 2565869,
           "overGdpPerResident": 1.668,
           "score": 68.75,
@@ -1022,44 +1032,51 @@
         {
           "startYear": 1953,
           "interpolated": 14000,
-          "startAnchor": 14000,
-          "changed": false
+          "unstampedStartAnchor": 14000,
+          "stampedStartAnchor": 14000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1979,
           "interpolated": 14000,
-          "startAnchor": 14000,
-          "changed": false
+          "unstampedStartAnchor": 14000,
+          "stampedStartAnchor": 14000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1991,
           "interpolated": 14000,
-          "startAnchor": 2565869,
-          "changed": true
+          "unstampedStartAnchor": 14000,
+          "stampedStartAnchor": 2565869,
+          "changedWhenStamped": true
         },
         {
           "startYear": 1999,
           "interpolated": 14000,
-          "startAnchor": 14000,
-          "changed": false
+          "unstampedStartAnchor": 14000,
+          "stampedStartAnchor": 14000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2007,
           "interpolated": 14000,
-          "startAnchor": 14000,
-          "changed": false
+          "unstampedStartAnchor": 14000,
+          "stampedStartAnchor": 14000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2019,
           "interpolated": 14000,
-          "startAnchor": 14000,
-          "changed": false
+          "unstampedStartAnchor": 14000,
+          "stampedStartAnchor": 14000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2023,
           "interpolated": 14000,
-          "startAnchor": 14000,
-          "changed": false
+          "unstampedStartAnchor": 14000,
+          "stampedStartAnchor": 14000,
+          "changedWhenStamped": false
         }
       ]
     },
@@ -1089,6 +1106,7 @@
         },
         "after": {
           "national": 127787,
+          "stamp": "fi-1991-household-r1",
           "anchor": 127787,
           "overGdpPerResident": 1.18,
           "score": 68.75,
@@ -1512,44 +1530,51 @@
         {
           "startYear": 1953,
           "interpolated": 292500,
-          "startAnchor": 292500,
-          "changed": false
+          "unstampedStartAnchor": 292500,
+          "stampedStartAnchor": 292500,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1979,
           "interpolated": 292500,
-          "startAnchor": 292500,
-          "changed": false
+          "unstampedStartAnchor": 292500,
+          "stampedStartAnchor": 292500,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1991,
           "interpolated": 292500,
-          "startAnchor": 127787,
-          "changed": true
+          "unstampedStartAnchor": 292500,
+          "stampedStartAnchor": 127787,
+          "changedWhenStamped": true
         },
         {
           "startYear": 1999,
           "interpolated": 292500,
-          "startAnchor": 292500,
-          "changed": false
+          "unstampedStartAnchor": 292500,
+          "stampedStartAnchor": 292500,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2007,
           "interpolated": 292500,
-          "startAnchor": 292500,
-          "changed": false
+          "unstampedStartAnchor": 292500,
+          "stampedStartAnchor": 292500,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2019,
           "interpolated": 292500,
-          "startAnchor": 292500,
-          "changed": false
+          "unstampedStartAnchor": 292500,
+          "stampedStartAnchor": 292500,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2023,
           "interpolated": 292500,
-          "startAnchor": 292500,
-          "changed": false
+          "unstampedStartAnchor": 292500,
+          "stampedStartAnchor": 292500,
+          "changedWhenStamped": false
         }
       ]
     },
@@ -1579,6 +1604,7 @@
         },
         "after": {
           "national": 146451,
+          "stamp": "fr-1991-household-r1",
           "anchor": 146451,
           "overGdpPerResident": 1.172,
           "score": 68.75,
@@ -2016,44 +2042,51 @@
         {
           "startYear": 1953,
           "interpolated": 420000,
-          "startAnchor": 420000,
-          "changed": false
+          "unstampedStartAnchor": 420000,
+          "stampedStartAnchor": 420000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1979,
           "interpolated": 420000,
-          "startAnchor": 420000,
-          "changed": false
+          "unstampedStartAnchor": 420000,
+          "stampedStartAnchor": 420000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1991,
           "interpolated": 420000,
-          "startAnchor": 146451,
-          "changed": true
+          "unstampedStartAnchor": 420000,
+          "stampedStartAnchor": 146451,
+          "changedWhenStamped": true
         },
         {
           "startYear": 1999,
           "interpolated": 420000,
-          "startAnchor": 420000,
-          "changed": false
+          "unstampedStartAnchor": 420000,
+          "stampedStartAnchor": 420000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2007,
           "interpolated": 420000,
-          "startAnchor": 420000,
-          "changed": false
+          "unstampedStartAnchor": 420000,
+          "stampedStartAnchor": 420000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2019,
           "interpolated": 420000,
-          "startAnchor": 420000,
-          "changed": false
+          "unstampedStartAnchor": 420000,
+          "stampedStartAnchor": 420000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2023,
           "interpolated": 420000,
-          "startAnchor": 420000,
-          "changed": false
+          "unstampedStartAnchor": 420000,
+          "stampedStartAnchor": 420000,
+          "changedWhenStamped": false
         }
       ]
     },
@@ -2083,6 +2116,7 @@
         },
         "after": {
           "national": 3166684,
+          "stamp": "gr-1991-household-r1",
           "anchor": 3166684,
           "overGdpPerResident": 1.592,
           "score": 68.75,
@@ -2506,44 +2540,51 @@
         {
           "startYear": 1953,
           "interpolated": 9300,
-          "startAnchor": 9300,
-          "changed": false
+          "unstampedStartAnchor": 9300,
+          "stampedStartAnchor": 9300,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1979,
           "interpolated": 9300,
-          "startAnchor": 9300,
-          "changed": false
+          "unstampedStartAnchor": 9300,
+          "stampedStartAnchor": 9300,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1991,
           "interpolated": 9300,
-          "startAnchor": 3166684,
-          "changed": true
+          "unstampedStartAnchor": 9300,
+          "stampedStartAnchor": 3166684,
+          "changedWhenStamped": true
         },
         {
           "startYear": 1999,
           "interpolated": 9300,
-          "startAnchor": 9300,
-          "changed": false
+          "unstampedStartAnchor": 9300,
+          "stampedStartAnchor": 9300,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2007,
           "interpolated": 9300,
-          "startAnchor": 9300,
-          "changed": false
+          "unstampedStartAnchor": 9300,
+          "stampedStartAnchor": 9300,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2019,
           "interpolated": 9300,
-          "startAnchor": 9300,
-          "changed": false
+          "unstampedStartAnchor": 9300,
+          "stampedStartAnchor": 9300,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2023,
           "interpolated": 9300,
-          "startAnchor": 9300,
-          "changed": false
+          "unstampedStartAnchor": 9300,
+          "stampedStartAnchor": 9300,
+          "changedWhenStamped": false
         }
       ]
     },
@@ -2573,6 +2614,7 @@
         },
         "after": {
           "national": 38140233,
+          "stamp": "it-1991-household-r1",
           "anchor": 38140233,
           "overGdpPerResident": 1.376,
           "score": 68.75,
@@ -3010,44 +3052,51 @@
         {
           "startYear": 1953,
           "interpolated": 550,
-          "startAnchor": 550,
-          "changed": false
+          "unstampedStartAnchor": 550,
+          "stampedStartAnchor": 550,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1979,
           "interpolated": 550,
-          "startAnchor": 550,
-          "changed": false
+          "unstampedStartAnchor": 550,
+          "stampedStartAnchor": 550,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1991,
           "interpolated": 550,
-          "startAnchor": 38140233,
-          "changed": true
+          "unstampedStartAnchor": 550,
+          "stampedStartAnchor": 38140233,
+          "changedWhenStamped": true
         },
         {
           "startYear": 1999,
           "interpolated": 550,
-          "startAnchor": 550,
-          "changed": false
+          "unstampedStartAnchor": 550,
+          "stampedStartAnchor": 550,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2007,
           "interpolated": 550,
-          "startAnchor": 550,
-          "changed": false
+          "unstampedStartAnchor": 550,
+          "stampedStartAnchor": 550,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2019,
           "interpolated": 550,
-          "startAnchor": 550,
-          "changed": false
+          "unstampedStartAnchor": 550,
+          "stampedStartAnchor": 550,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2023,
           "interpolated": 550,
-          "startAnchor": 550,
-          "changed": false
+          "unstampedStartAnchor": 550,
+          "stampedStartAnchor": 550,
+          "changedWhenStamped": false
         }
       ]
     },
@@ -3077,6 +3126,7 @@
         },
         "after": {
           "national": 182468,
+          "stamp": "se-1991-household-r1",
           "anchor": 182468,
           "overGdpPerResident": 0.95,
           "score": 68.75,
@@ -3514,44 +3564,51 @@
         {
           "startYear": 1953,
           "interpolated": 8000,
-          "startAnchor": 8000,
-          "changed": false
+          "unstampedStartAnchor": 8000,
+          "stampedStartAnchor": 8000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1979,
           "interpolated": 8000,
-          "startAnchor": 8000,
-          "changed": false
+          "unstampedStartAnchor": 8000,
+          "stampedStartAnchor": 8000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1991,
           "interpolated": 8000,
-          "startAnchor": 182468,
-          "changed": true
+          "unstampedStartAnchor": 8000,
+          "stampedStartAnchor": 182468,
+          "changedWhenStamped": true
         },
         {
           "startYear": 1999,
           "interpolated": 8000,
-          "startAnchor": 8000,
-          "changed": false
+          "unstampedStartAnchor": 8000,
+          "stampedStartAnchor": 8000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2007,
           "interpolated": 8000,
-          "startAnchor": 8000,
-          "changed": false
+          "unstampedStartAnchor": 8000,
+          "stampedStartAnchor": 8000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2019,
           "interpolated": 8000,
-          "startAnchor": 8000,
-          "changed": false
+          "unstampedStartAnchor": 8000,
+          "stampedStartAnchor": 8000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2023,
           "interpolated": 8000,
-          "startAnchor": 8000,
-          "changed": false
+          "unstampedStartAnchor": 8000,
+          "stampedStartAnchor": 8000,
+          "changedWhenStamped": false
         }
       ]
     }

@@ -165,6 +165,9 @@ export async function seedSEStateMetrics(
     db,
     bundle.map((m) => ({ ...m, countryId: "SE" }) as StateMetrics)
   );
+  // Provenance for medianIncome scoring: stamped after the write it describes.
+  const { stampSeededIncomeVintage } = await import("@/lib/admin/seed/incomeStartVintage");
+  await stampSeededIncomeVintage(db, "SE", preset);
   log(`Seeded ${bundle.length} SE state metrics (${preset})`);
 }
 

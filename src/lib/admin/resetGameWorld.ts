@@ -300,6 +300,9 @@ export const STALE_PROGRESS_GAME_STATE_UNSET: Readonly<Record<string, "">> = Obj
   // at the DEAD world's price level until the first recompute lands.
   eraGdpPerCapitaBaseline: "",
   incomeBandIndexByCountry: "",
+  // Income vintage provenance describes the outgoing world's seeded incomes. The
+  // new world's metric seed writers stamp their own.
+  incomeStartVintages: "",
   // Presidential term-limit ledger (src/lib/turn/election/presidentialTenureLedger.ts).
   // Counts terms served per country; the previous world's counts would term-limit
   // brand-new presidents in the new one.

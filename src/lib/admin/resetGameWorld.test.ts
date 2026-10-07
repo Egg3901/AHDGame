@@ -852,6 +852,7 @@ describe("resetGameWorld", () => {
       "lastMetricActivationYear",
       "eraGdpPerCapitaBaseline",
       "incomeBandIndexByCountry",
+      "incomeStartVintages",
       "presidentialTenureByCountry",
       "votingAgeEligibleByCountry",
       "votingAgeEligible",

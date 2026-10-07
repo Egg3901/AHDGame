@@ -18,10 +18,11 @@ areas: [backend]
   inequality adjustment. Each region keeps its relative standing.
 - Their resting income targets match the opening values, so the first turn
   carries no income pull.
-- Worlds that start in 1991 score these countries' income against the same
+- Newly seeded 1991 worlds score these countries' income against the same
   1991 level. Before, every region scored 100 in Austria, Spain, Greece, Italy
   and Sweden and 0 in Finland and France. A few regions well above their
   national average, such as Paris, Madrid and the Italian north-west, still
   start at the top of the scale.
 - Worlds that start in any other year keep their income scoring as it was.
-- Existing worlds are unchanged. This applies to newly seeded 1991 worlds.
+- Worlds already running keep their incomes and score them exactly as before.
+  The new scoring applies only to incomes seeded with the 1991 values.

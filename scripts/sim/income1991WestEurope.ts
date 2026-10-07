@@ -20,7 +20,11 @@
  */
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { gdp1991LegacyLcu, FISCAL_ANCHORS_1991 } from "@/lib/constants/fiscalAnchors1991";
-import { getIncomeAnchor, getStartingIncomeAnchor } from "@/lib/era/metricCatalog";
+import {
+  getIncomeAnchor,
+  getStartingIncomeAnchor,
+  incomeVintageStampsFor,
+} from "@/lib/era/metricCatalog";
 import { evaluateRegistry } from "@/lib/metricEngine/evaluate";
 import { medianIncomeNode } from "@/lib/metricEngine/registry/economic";
 import { scoreMetric } from "@/lib/utils/metricScoring";
@@ -168,8 +172,13 @@ function popWeighted(c: West, values: Record<string, number>): number {
   return sum / pop;
 }
 
-function score(c: West, value: number, startingYear = START): number {
-  return round(scoreMetric("medianIncome", value, c, PRESET, START, 1, startingYear)!, 2);
+// Provenance the fresh 1991 seed writers stamp. Scores below go through the
+// runtime gate: the vintage anchor applies only with the matching stamp, and an
+// unstamped (pre-#3393) world keeps the legacy anchor.
+const FRESH = incomeVintageStampsFor(START);
+
+function score(c: West, value: number, stamps: Record<string, string> | null = FRESH): number {
+  return round(scoreMetric("medianIncome", value, c, PRESET, START, 1, START, stamps)!, 2);
 }
 
 /** What the seed writers wrote before #3393: the raw ~1979 bundle, unscaled. */
@@ -242,7 +251,7 @@ function regionalOpening(c: West) {
   const rows = Object.entries(INCOME_1991_REGIONAL[c]).map(([id, v]) => ({
     id,
     before: before[id],
-    beforeScore: score(c, before[id], 1953),
+    beforeScore: score(c, before[id], null),
     after: v,
     afterScore: score(c, v),
   }));
@@ -301,8 +310,9 @@ function anchorRegression(c: West) {
   return [1953, 1979, 1991, 1999, 2007, 2019, 2023].map((year) => ({
     startYear: year,
     interpolated: getIncomeAnchor(c, year),
-    startAnchor: getStartingIncomeAnchor(c, year),
-    changed: getIncomeAnchor(c, year) !== getStartingIncomeAnchor(c, year),
+    unstampedStartAnchor: getStartingIncomeAnchor(c, year),
+    stampedStartAnchor: getStartingIncomeAnchor(c, year, FRESH),
+    changedWhenStamped: getIncomeAnchor(c, year) !== getStartingIncomeAnchor(c, year, FRESH),
   }));
 }
 
@@ -320,11 +330,13 @@ const countries = Object.fromEntries(
             national: round(beforeNational),
             anchor: getIncomeAnchor(c, START),
             overGdpPerResident: round(beforeNational / gdpPc, 3),
-            score: score(c, beforeNational, 1953),
+            // Unstamped world: legacy anchor through the same runtime gate.
+            score: score(c, beforeNational, null),
           },
           after: {
             national: round(afterNational),
-            anchor: getStartingIncomeAnchor(c, START),
+            stamp: FRESH[c],
+            anchor: getStartingIncomeAnchor(c, START, FRESH),
             overGdpPerResident: round(afterNational / gdpPc, 3),
             score: score(c, afterNational),
             factorOverBefore: round(afterNational / beforeNational, 3),
@@ -350,6 +362,8 @@ console.log(
         "Targeted pure fixture: seed tables, era scoring and the medianIncome node only. Not a worldsim.",
       turnsPerYear: TURNS_PER_YEAR,
       years: YEARS,
+      provenanceGate:
+        "Scores use scoreMetric with the stamps the fresh 1991 seed writers write. 'before' is the unstamped legacy world scored through the same gate.",
       sources: SOURCES,
       assumptions: ASSUMPTIONS,
       countries,

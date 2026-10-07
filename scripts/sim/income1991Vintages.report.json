@@ -5,15 +5,67 @@
   "years": 5,
   "startVintages": {
     "NG": {
-      "1991": 15084
+      "1991": {
+        "value": 15084,
+        "id": "ng-1991-household-r1"
+      }
     },
     "CN": {
-      "1991": 3187
+      "1991": {
+        "value": 3187,
+        "id": "cn-1991-household-r1"
+      }
     },
     "TR": {
-      "1991": 25145041
+      "1991": {
+        "value": 25145041,
+        "id": "tr-1991-household-r1"
+      }
+    },
+    "AT": {
+      "1991": {
+        "value": 316064,
+        "id": "at-1991-household-r1"
+      }
+    },
+    "ES": {
+      "1991": {
+        "value": 2565869,
+        "id": "es-1991-household-r1"
+      }
+    },
+    "FI": {
+      "1991": {
+        "value": 127787,
+        "id": "fi-1991-household-r1"
+      }
+    },
+    "FR": {
+      "1991": {
+        "value": 146451,
+        "id": "fr-1991-household-r1"
+      }
+    },
+    "GR": {
+      "1991": {
+        "value": 3166684,
+        "id": "gr-1991-household-r1"
+      }
+    },
+    "IT": {
+      "1991": {
+        "value": 38140233,
+        "id": "it-1991-household-r1"
+      }
+    },
+    "SE": {
+      "1991": {
+        "value": 182468,
+        "id": "se-1991-household-r1"
+      }
     }
   },
+  "rollout": "Vintage anchors apply only when gameState.incomeStartVintages matches the vintage id. Fresh 1991 seed writers stamp it; existing worlds have no stamp and keep legacy anchors.",
   "sources": {
     "gdpPerCapitaLcu": {
       "url": "https://api.worldbank.org/v2/country/NGA;CHN;TUR/indicator/NY.GDP.PCAP.CN?date=1991&format=json",
@@ -92,11 +144,13 @@
           "national": 579293,
           "anchor": 210000,
           "overGdpPerResident": 87.368,
-          "score": 100
+          "score": 100,
+          "unstampedRuntimeScore": 100
         },
         "after": {
           "national": 15084,
           "anchor": 15084,
+          "stamp": "ng-1991-household-r1",
           "overGdpPerResident": 2.275,
           "score": 68.75,
           "withinEngineBounds": true
@@ -497,44 +551,51 @@
         {
           "startYear": 1953,
           "interpolated": 150,
-          "startAnchor": 150,
-          "changed": false
+          "unstampedStartAnchor": 150,
+          "stampedStartAnchor": 150,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1979,
           "interpolated": 90000,
-          "startAnchor": 90000,
-          "changed": false
+          "unstampedStartAnchor": 90000,
+          "stampedStartAnchor": 90000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1991,
           "interpolated": 210000,
-          "startAnchor": 15084,
-          "changed": true
+          "unstampedStartAnchor": 210000,
+          "stampedStartAnchor": 15084,
+          "changedWhenStamped": true
         },
         {
           "startYear": 1999,
           "interpolated": 464285.71,
-          "startAnchor": 464285.71,
-          "changed": false
+          "unstampedStartAnchor": 464285.71,
+          "stampedStartAnchor": 464285.71,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2007,
           "interpolated": 718571.43,
-          "startAnchor": 718571.43,
-          "changed": false
+          "unstampedStartAnchor": 718571.43,
+          "stampedStartAnchor": 718571.43,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2019,
           "interpolated": 1100000,
-          "startAnchor": 1100000,
-          "changed": false
+          "unstampedStartAnchor": 1100000,
+          "stampedStartAnchor": 1100000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2023,
           "interpolated": 1100000,
-          "startAnchor": 1100000,
-          "changed": false
+          "unstampedStartAnchor": 1100000,
+          "stampedStartAnchor": 1100000,
+          "changedWhenStamped": false
         }
       ],
       "precision": {
@@ -581,6 +642,10 @@
             "actualValueErrorUnits": 0.4173
           }
         ]
+      },
+      "runtimeIncomeIndex": {
+        "legacy": true,
+        "freshStamped": true
       }
     },
     "CN": {
@@ -603,11 +668,13 @@
           "national": 48415,
           "anchor": 9000,
           "overGdpPerResident": 25.961,
-          "score": 100
+          "score": 100,
+          "unstampedRuntimeScore": 100
         },
         "after": {
           "national": 3187,
           "anchor": 3187,
+          "stamp": "cn-1991-household-r1",
           "overGdpPerResident": 1.709,
           "score": 68.76,
           "withinEngineBounds": true
@@ -1018,44 +1085,51 @@
         {
           "startYear": 1953,
           "interpolated": 80,
-          "startAnchor": 80,
-          "changed": false
+          "unstampedStartAnchor": 80,
+          "stampedStartAnchor": 80,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1979,
           "interpolated": 3500,
-          "startAnchor": 3500,
-          "changed": false
+          "unstampedStartAnchor": 3500,
+          "stampedStartAnchor": 3500,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1991,
           "interpolated": 9000,
-          "startAnchor": 3187,
-          "changed": true
+          "unstampedStartAnchor": 9000,
+          "stampedStartAnchor": 3187,
+          "changedWhenStamped": true
         },
         {
           "startYear": 1999,
           "interpolated": 32142.86,
-          "startAnchor": 32142.86,
-          "changed": false
+          "unstampedStartAnchor": 32142.86,
+          "stampedStartAnchor": 32142.86,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2007,
           "interpolated": 55285.71,
-          "startAnchor": 55285.71,
-          "changed": false
+          "unstampedStartAnchor": 55285.71,
+          "stampedStartAnchor": 55285.71,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2019,
           "interpolated": 90000,
-          "startAnchor": 90000,
-          "changed": false
+          "unstampedStartAnchor": 90000,
+          "stampedStartAnchor": 90000,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2023,
           "interpolated": 90000,
-          "startAnchor": 90000,
-          "changed": false
+          "unstampedStartAnchor": 90000,
+          "stampedStartAnchor": 90000,
+          "changedWhenStamped": false
         }
       ],
       "precision": {
@@ -1102,6 +1176,10 @@
             "actualValueErrorUnits": 0.0675
           }
         ]
+      },
+      "runtimeIncomeIndex": {
+        "legacy": true,
+        "freshStamped": true
       }
     },
     "TR": {
@@ -1124,11 +1202,13 @@
           "national": 127097,
           "anchor": 1900,
           "overGdpPerResident": 0.011,
-          "score": 100
+          "score": 100,
+          "unstampedRuntimeScore": 100
         },
         "after": {
           "national": 25145041,
           "anchor": 25145041,
+          "stamp": "tr-1991-household-r1",
           "overGdpPerResident": 2.275,
           "score": 68.75,
           "withinEngineBounds": true
@@ -1544,44 +1624,51 @@
         {
           "startYear": 1953,
           "interpolated": 1900,
-          "startAnchor": 1900,
-          "changed": false
+          "unstampedStartAnchor": 1900,
+          "stampedStartAnchor": 1900,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1979,
           "interpolated": 1900,
-          "startAnchor": 1900,
-          "changed": false
+          "unstampedStartAnchor": 1900,
+          "stampedStartAnchor": 1900,
+          "changedWhenStamped": false
         },
         {
           "startYear": 1991,
           "interpolated": 1900,
-          "startAnchor": 25145041,
-          "changed": true
+          "unstampedStartAnchor": 1900,
+          "stampedStartAnchor": 25145041,
+          "changedWhenStamped": true
         },
         {
           "startYear": 1999,
           "interpolated": 1900,
-          "startAnchor": 1900,
-          "changed": false
+          "unstampedStartAnchor": 1900,
+          "stampedStartAnchor": 1900,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2007,
           "interpolated": 1900,
-          "startAnchor": 1900,
-          "changed": false
+          "unstampedStartAnchor": 1900,
+          "stampedStartAnchor": 1900,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2019,
           "interpolated": 1900,
-          "startAnchor": 1900,
-          "changed": false
+          "unstampedStartAnchor": 1900,
+          "stampedStartAnchor": 1900,
+          "changedWhenStamped": false
         },
         {
           "startYear": 2023,
           "interpolated": 1900,
-          "startAnchor": 1900,
-          "changed": false
+          "unstampedStartAnchor": 1900,
+          "stampedStartAnchor": 1900,
+          "changedWhenStamped": false
         }
       ],
       "precision": {
@@ -1628,6 +1715,10 @@
             "actualValueErrorUnits": -0.3691
           }
         ]
+      },
+      "runtimeIncomeIndex": {
+        "legacy": false,
+        "freshStamped": true
       }
     }
   },

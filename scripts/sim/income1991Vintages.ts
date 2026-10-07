@@ -27,8 +27,10 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
   getIncomeAnchor,
   getStartingIncomeAnchor,
+  incomeVintageStampsFor,
   INCOME_START_VINTAGES,
 } from "@/lib/era/metricCatalog";
+import { NATIONAL_SCOPE } from "@/lib/constants/nationalScope";
 import { evaluateRegistry } from "@/lib/metricEngine/evaluate";
 import { medianIncomeNode } from "@/lib/metricEngine/registry/economic";
 import type { RegistryNode } from "@/lib/metricEngine/types";
@@ -52,7 +54,9 @@ import {
   nationalHouseholdMedianFromGdp,
 } from "@/lib/seeds/reference/income1991/rules";
 
-const COUNTRIES: Income1991CountryId[] = ["NG", "CN", "TR"];
+/** This report covers NG/CN/TR; AT/ES/FI/FR/GR/IT/SE are in income1991WestEurope.ts. */
+type Fixed = Extract<Income1991CountryId, "NG" | "CN" | "TR">;
+const COUNTRIES: Fixed[] = ["NG", "CN", "TR"];
 const START = 1991;
 const PRESET = "1991-default";
 const YEARS = 5;
@@ -129,13 +133,13 @@ function medianToMeanFromGini(gini: number): number {
   return Math.exp((-sigma * sigma) / 2);
 }
 
-const REGIONS: Record<Income1991CountryId, Array<{ _id: unknown; population: number }>> = {
+const REGIONS: Record<Fixed, Array<{ _id: unknown; population: number }>> = {
   NG: ngRegions1991,
   CN: cnRegions1991,
   TR: trRegions1991,
 };
 
-function popWeighted(c: Income1991CountryId, values: Record<string, number>): number {
+function popWeighted(c: Fixed, values: Record<string, number>): number {
   let pop = 0;
   let sum = 0;
   for (const r of REGIONS[c]) {
@@ -147,9 +151,17 @@ function popWeighted(c: Income1991CountryId, values: Record<string, number>): nu
   return sum / pop;
 }
 
-function score(c: Income1991CountryId, value: number, anchorOverride?: number): number {
+// Provenance the fresh 1991 seed writers stamp. Unstamped worlds stay legacy.
+const FRESH = incomeVintageStampsFor(START);
+
+function score(
+  c: Fixed,
+  value: number,
+  anchorOverride?: number,
+  stamps: Record<string, string> | null = FRESH
+): number {
   if (anchorOverride === undefined) {
-    return round(scoreMetric("medianIncome", value, c, PRESET, START, 1, START)!, 2);
+    return round(scoreMetric("medianIncome", value, c, PRESET, START, 1, START, stamps)!, 2);
   }
   const best = anchorOverride * 1.25;
   const worst = anchorOverride * 0.45;
@@ -162,7 +174,7 @@ function round(v: number, d = 0): number {
 }
 
 /** The pre-change opening: NG/CN via the US-ratio era adjustment, TR on its base bundle. */
-function previousOpening(c: Income1991CountryId): Record<string, number> {
+function previousOpening(c: Fixed): Record<string, number> {
   const base = c === "NG" ? ngStateMetrics : c === "CN" ? cnStateMetrics : trStateMetrics;
   const rows = c === "TR" ? base : base.map(applyEra1991Adjustments);
   return Object.fromEntries(
@@ -170,13 +182,13 @@ function previousOpening(c: Income1991CountryId): Record<string, number> {
   );
 }
 
-const PREVIOUS_1991_ANCHOR: Record<Income1991CountryId, number> = {
+const PREVIOUS_1991_ANCHOR: Record<Fixed, number> = {
   NG: 210_000,
   CN: 9_000,
   TR: 1_900,
 };
 
-function crossChecks(c: Income1991CountryId) {
+function crossChecks(c: Fixed) {
   const gdpPc = gdpPerResident1991(c);
   const wdiGdpPc = SOURCES.gdpPerCapitaLcu.values[c];
   const proxy = INCOME_1991_PROXIES[c];
@@ -199,7 +211,7 @@ function crossChecks(c: Income1991CountryId) {
   };
 }
 
-function sensitivity(c: Income1991CountryId) {
+function sensitivity(c: Fixed) {
   const gdpPc = gdpPerResident1991(c);
   const proxy = INCOME_1991_PROXIES[c];
   const base = nationalHouseholdMedian1991(c);
@@ -238,7 +250,7 @@ function sensitivity(c: Income1991CountryId) {
   };
 }
 
-function regionalOpening(c: Income1991CountryId) {
+function regionalOpening(c: Fixed) {
   const rows = Object.entries(INCOME_1991_REGIONAL[c]).map(([id, v]) => ({
     id,
     income: v,
@@ -262,7 +274,7 @@ function regionalOpening(c: Income1991CountryId) {
   };
 }
 
-function engineGrid(c: Income1991CountryId) {
+function engineGrid(c: Fixed) {
   const out: Array<{
     productivity: number;
     unemployment: number;
@@ -311,7 +323,7 @@ const LEGACY_MEDIAN_INCOME_NODE: RegistryNode = {
 };
 
 /** One year from a running world (persisted simBaseline equal to the value). */
-function oneYear(node: RegistryNode, c: Income1991CountryId, start: number, annualPct: number) {
+function oneYear(node: RegistryNode, c: Fixed, start: number, annualPct: number) {
   let value = start;
   let simBaseline = start;
   for (let turn = 1; turn <= TURNS_PER_YEAR; turn++) {
@@ -336,7 +348,7 @@ function oneYear(node: RegistryNode, c: Income1991CountryId, start: number, annu
 
 const PRECISION_SIGNALS = [-1, -0.5, 0.5, 1];
 
-function precision(c: Income1991CountryId) {
+function precision(c: Fixed) {
   const poorest = Math.min(...Object.values(INCOME_1991_REGIONAL[c]));
   return {
     poorestRegionIncome: poorest,
@@ -382,12 +394,13 @@ function scaleInvariance() {
   };
 }
 
-function anchorRegression(c: Income1991CountryId) {
+function anchorRegression(c: Fixed) {
   return [1953, 1979, 1991, 1999, 2007, 2019, 2023].map((year) => ({
     startYear: year,
     interpolated: round(getIncomeAnchor(c, year) ?? NaN, 2),
-    startAnchor: round(getStartingIncomeAnchor(c, year) ?? NaN, 2),
-    changed: getIncomeAnchor(c, year) !== getStartingIncomeAnchor(c, year),
+    unstampedStartAnchor: round(getStartingIncomeAnchor(c, year) ?? NaN, 2),
+    stampedStartAnchor: round(getStartingIncomeAnchor(c, year, FRESH) ?? NaN, 2),
+    changedWhenStamped: getIncomeAnchor(c, year) !== getStartingIncomeAnchor(c, year, FRESH),
   }));
 }
 
@@ -406,10 +419,14 @@ const countries = Object.fromEntries(
             anchor: PREVIOUS_1991_ANCHOR[c],
             overGdpPerResident: round(beforeNational / gdpPerResident1991(c), 3),
             score: score(c, beforeNational, PREVIOUS_1991_ANCHOR[c]),
+            // An existing world holding these values carries no stamp, so the
+            // runtime keeps scoring it as before (index 1 shown).
+            unstampedRuntimeScore: score(c, beforeNational, undefined, null),
           },
           after: {
             national: round(afterNational),
-            anchor: getStartingIncomeAnchor(c, START),
+            anchor: getStartingIncomeAnchor(c, START, FRESH),
+            stamp: FRESH[c],
             overGdpPerResident: round(afterNational / gdpPerResident1991(c), 3),
             score: score(c, afterNational),
             withinEngineBounds: Object.values(INCOME_1991_REGIONAL[c]).every(
@@ -422,6 +439,13 @@ const countries = Object.fromEntries(
         engineGrid: engineGrid(c),
         anchorRegression: anchorRegression(c),
         precision: precision(c),
+        // The runtime computes the index for stored national scopes and for
+        // additional countries carrying a matching fresh income stamp.
+        // Actual producer coverage is tested in income1991.provenance.test.ts.
+        runtimeIncomeIndex: {
+          legacy: Object.values(NATIONAL_SCOPE).includes(c),
+          freshStamped: FRESH[c] != null,
+        },
       },
     ];
   })
@@ -436,6 +460,9 @@ console.log(
       turnsPerYear: TURNS_PER_YEAR,
       years: YEARS,
       startVintages: INCOME_START_VINTAGES,
+      rollout:
+        "Vintage anchors apply only when gameState.incomeStartVintages matches the vintage id. " +
+        "Fresh 1991 seed writers stamp it; existing worlds have no stamp and keep legacy anchors.",
       sources: SOURCES,
       assumptions: ASSUMPTIONS,
       countries,

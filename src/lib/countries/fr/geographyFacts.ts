@@ -1,7 +1,7 @@
 import type { AdjacencyMap } from "@/lib/constants/stateAdjacency";
 import type { CountryMapConfig } from "@/lib/commodity-map/commodityMapRegistry";
 import type { Continent } from "@/lib/constants/countryContinents";
-import type { NormalAnchor } from "@/lib/era/metricCatalog";
+import type { IncomeStartVintage, NormalAnchor } from "@/lib/era/metricCatalog";
 
 import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
 
@@ -136,8 +136,8 @@ export const FR_INCOME_ANCHORS: NormalAnchor[] = [
  * its flat 1953 anchor. 1991 is the derived franc household median from
  * seeds/reference/income1991 (#3393). The 1953 point above is in anciens francs.
  */
-export const FR_INCOME_START_VINTAGES: Record<number, number> = {
-  1991: 146451,
+export const FR_INCOME_START_VINTAGES: Record<number, IncomeStartVintage> = {
+  1991: { value: 146451, id: "fr-1991-household-r1" },
 };
 
 /*

@@ -1,12 +1,21 @@
 /**
  * 1991 income vintages for AT, ES, FI, FR, GR, IT and SE (#3393): the seed
  * writers, the audit loader, the start anchor, era scoring, the first engine
- * updates, and the anchors of every other start year.
+ * updates, and the anchors of every other start year. Every score goes through
+ * the provenance gate (#3316): the vintage anchor applies only to a world whose
+ * seed writers stamped the matching id; an unstamped world keeps its old score.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb, bulkOps } from "@/lib/test-utils/mockDb";
-import { getIncomeAnchor, getStartingIncomeAnchor } from "@/lib/era/metricCatalog";
+import {
+  getIncomeAnchor,
+  getStartingIncomeAnchor,
+  incomeVintageStampsFor,
+} from "@/lib/era/metricCatalog";
+import { NATIONAL_SCOPE } from "@/lib/constants/nationalScope";
+import { computeNationalMetrics } from "@/lib/nationalMetrics";
+import { stampSeededIncomeVintages } from "@/lib/admin/seed/incomeStartVintage";
 import { getMetricThreshold, scoreMetric } from "@/lib/utils/metricScoring";
 import { evaluateRegistry } from "@/lib/metricEngine/evaluate";
 import { medianIncomeNode } from "@/lib/metricEngine/registry/economic";
@@ -27,7 +36,12 @@ import { frStateMetrics } from "@/lib/seeds/fr/frStateMetrics";
 import { grStateMetrics } from "@/lib/seeds/gr/grStateMetrics";
 import { itStateMetrics } from "@/lib/seeds/it/itStateMetrics";
 import { seStateMetrics } from "@/lib/seeds/se/seStateMetrics";
-import { INCOME_1991_REGIONAL, gdpPerResident1991, nationalHouseholdMedian1991 } from "./index";
+import {
+  INCOME_1991_REGIONAL,
+  gdpPerResident1991,
+  nationalHouseholdMedian1991,
+  seededIncomeVintageId,
+} from "./index";
 
 const WEST = ["AT", "ES", "FI", "FR", "GR", "IT", "SE"] as const;
 type West = (typeof WEST)[number];
@@ -62,6 +76,9 @@ const ANCHOR_1953: Record<West, number> = {
   SE: 8_000,
 };
 
+// Provenance a fresh 1991 world's seed writers stamp; legacy worlds have none.
+const FRESH = incomeVintageStampsFor(1991);
+
 type MacroSet = { economic?: { medianIncome?: { value: number } } };
 type BaselineSet = { baselines: { economic: { medianIncome: number } } };
 type Writer = (db: Db, reset: boolean, log: (s: string) => void, preset: string) => Promise<void>;
@@ -95,7 +112,8 @@ async function seededIncome(c: West, preset: string) {
     const id = String((call[0] as { _id: unknown })._id);
     baselines.set(id, (call[1] as { $set: BaselineSet }).$set.baselines.economic.medianIncome);
   }
-  return { metrics, baselines };
+  const stamps = (db.collectionMocks.gameState?.updateOne.mock.calls ?? []).map((call) => call[1]);
+  return { metrics, baselines, stamps };
 }
 
 function popWeighted(c: West, values: Map<string, number>): number {
@@ -111,7 +129,7 @@ function popWeighted(c: West, values: Map<string, number>): number {
 }
 
 const score = (c: West, v: number, year = 1991) =>
-  scoreMetric("medianIncome", v, c, "1991-default", year, 1, 1991)!;
+  scoreMetric("medianIncome", v, c, "1991-default", year, 1, 1991, FRESH)!;
 
 describe("#3393 vintage inputs share the 1991 GDP currency", () => {
   for (const c of WEST) {
@@ -133,7 +151,10 @@ describe("#3393 seed writers and loader", { timeout: 60_000 }, () => {
 
   for (const c of WEST) {
     it(`${c}: writes the vintage to macroMetrics and stateBaselines, region by region`, async () => {
-      const { metrics, baselines } = await seededIncome(c, "1991-default");
+      const { metrics, baselines, stamps } = await seededIncome(c, "1991-default");
+      // The writer stamps, after its write, the id that activates the anchor.
+      expect(FRESH[c]).toBe(`${c.toLowerCase()}-1991-household-r1`);
+      expect(stamps).toEqual([{ $set: { [`incomeStartVintages.${c}`]: FRESH[c] } }]);
       expect(metrics.size).toBe(REGIONS[c].length);
       expect(Object.keys(INCOME_1991_REGIONAL[c]).length).toBe(REGIONS[c].length);
       for (const [id, v] of metrics) {
@@ -142,7 +163,7 @@ describe("#3393 seed writers and loader", { timeout: 60_000 }, () => {
       }
       // The national back-solve reads this population-weighted value against
       // the start anchor: index 1, inside the plausible band.
-      expect(popWeighted(c, metrics) / getStartingIncomeAnchor(c, 1991)!).toBeCloseTo(1, 3);
+      expect(popWeighted(c, metrics) / getStartingIncomeAnchor(c, 1991, FRESH)!).toBeCloseTo(1, 3);
     });
 
     it(`${c}: the audit loader reports what the writer writes`, async () => {
@@ -163,9 +184,11 @@ describe("#3393 seed writers and loader", { timeout: 60_000 }, () => {
       }
     });
 
-    it(`${c}: 1953 and 1979 seeds are not touched`, async () => {
-      for (const preset of ["1953-default", "1979-default"]) {
-        const { metrics } = await seededIncome(c, preset);
+    it(`${c}: 1953, 1979 and 2019 seeds are not touched and clear the stamp`, async () => {
+      for (const preset of ["1953-default", "1979-default", "2019-default"]) {
+        const { metrics, stamps } = await seededIncome(c, preset);
+        expect(stamps).toEqual([{ $unset: { [`incomeStartVintages.${c}`]: "" } }]);
+        expect(seededIncomeVintageId(c, preset)).toBeNull();
         const hits = [...metrics].filter(([id, v]) => INCOME_1991_REGIONAL[c][id] === v);
         expect(hits).toHaveLength(0);
       }
@@ -178,7 +201,9 @@ describe("#3393 era income scoring at the 1991 start", () => {
 
   for (const c of WEST) {
     it(`${c}: start anchor is the derived median; regions leave the 0/100 pin`, () => {
-      expect(getStartingIncomeAnchor(c, 1991)).toBe(Math.round(nationalHouseholdMedian1991(c)));
+      expect(getStartingIncomeAnchor(c, 1991, FRESH)).toBe(
+        Math.round(nationalHouseholdMedian1991(c))
+      );
       expect(score(c, nationalHouseholdMedian1991(c))).toBeCloseTo(AT_ANCHOR, 1);
       const scores = Object.values(INCOME_1991_REGIONAL[c]).map((v) => score(c, v));
       // Most regions score strictly inside the band. An authored region above
@@ -187,8 +212,8 @@ describe("#3393 era income scoring at the 1991 start", () => {
       const inside = scores.filter((s) => s > 0 && s < 100).length;
       expect(inside).toBeGreaterThanOrEqual(Math.ceil(scores.length / 2));
       expect(Math.max(...scores) - Math.min(...scores)).toBeGreaterThan(25);
-      // Before: the ~1979 bundle against the flat 1953 anchor pins every region
-      // at one edge.
+      // Before, and still for any unstamped world: the ~1979 bundle against the
+      // flat 1953 anchor pins every region at one edge.
       const before = BASE[c].map((m) =>
         scoreMetric(
           "medianIncome",
@@ -197,7 +222,7 @@ describe("#3393 era income scoring at the 1991 start", () => {
           "1991-default",
           1991,
           1,
-          1953
+          1991
         )
       );
       expect(new Set(before).size).toBe(1);
@@ -261,15 +286,126 @@ describe("#3393 other start years keep their anchors", () => {
     it(`${c}: 1953, 1979, 1999 and 2007 starts read the unchanged 1953 point`, () => {
       for (const start of [1953, 1979, 1999, 2007]) {
         expect(getIncomeAnchor(c, start)).toBe(ANCHOR_1953[c]);
+        // Even a world carrying the 1991 stamps keeps these anchors.
         expect(getStartingIncomeAnchor(c, start)).toBe(ANCHOR_1953[c]);
-        const band = getMetricThreshold("medianIncome", c, undefined, start + 5, 1.2, start)!;
+        expect(getStartingIncomeAnchor(c, start, FRESH)).toBe(ANCHOR_1953[c]);
+        const band = getMetricThreshold(
+          "medianIncome",
+          c,
+          undefined,
+          start + 5,
+          1.2,
+          start,
+          FRESH
+        )!;
         expect(band.best).toBeCloseTo(ANCHOR_1953[c] * 1.25 * 1.2, 4);
       }
     });
 
     it(`${c}: flag-off legacy scoring ignores the start vintage`, () => {
       expect(getMetricThreshold("medianIncome", c, "1991-default", null, null, null)).toEqual(
-        getMetricThreshold("medianIncome", c, "1991-default", null, null, 1991)
+        getMetricThreshold("medianIncome", c, "1991-default", null, null, 1991, FRESH)
+      );
+    });
+  }
+});
+
+describe("#3393 provenance gate through computeNationalMetrics", { timeout: 60_000 }, () => {
+  const AT_ANCHOR = ((1 - 0.45) / (1.25 - 0.45)) * 100;
+
+  /** Band index the real back-solve stores for `c`, from real regions and incomes. */
+  async function bandIndex(
+    c: West,
+    incomes: Map<string, number>,
+    stamps?: Record<string, string>
+  ): Promise<number | undefined> {
+    const db = createMockDb();
+    db.collection("states").find.mockReturnValue({
+      toArray: () =>
+        Promise.resolve(
+          REGIONS[c].map((r) => ({
+            _id: r._id,
+            countryId: c,
+            population: r.population,
+            gdp: r.gdp,
+          }))
+        ),
+    });
+    db.collection("macroMetrics").find.mockReturnValue({
+      toArray: () =>
+        Promise.resolve(
+          [...incomes].map(([id, value]) => ({
+            _id: id,
+            countryId: c,
+            economic: { medianIncome: { value } },
+          }))
+        ),
+    });
+    db.collection("federalBudget").find.mockReturnValue({ toArray: () => Promise.resolve([]) });
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      eraSystemEnabled: true,
+      startingYear: 1991,
+      ...(stamps ? { incomeStartVintages: stamps } : {}),
+    });
+    await computeNationalMetrics(db as unknown as Db);
+    const call = db.collectionMocks.gameState?.updateOne.mock.calls.at(-1);
+    return call
+      ? (call[1].$set as { incomeBandIndexByCountry: Record<string, number> })
+          .incomeBandIndexByCountry[c]
+      : undefined;
+  }
+
+  it("none of the seven has a national scope document", () => {
+    for (const c of WEST) expect(Object.values(NATIONAL_SCOPE)).not.toContain(c);
+  });
+
+  it("bootstrap re-applies all seven stamps for a 1991 world and clears them otherwise", async () => {
+    const db = createMockDb();
+    await stampSeededIncomeVintages(db as unknown as Db, "1991-default");
+    await stampSeededIncomeVintages(db as unknown as Db, "1979-default");
+    const [fresh, other] = db.collectionMocks.gameState!.updateOne.mock.calls.map((c) => c[1]);
+    for (const c of WEST) {
+      expect(fresh.$set[`incomeStartVintages.${c}`]).toBe(FRESH[c]);
+      expect(other.$unset[`incomeStartVintages.${c}`]).toBe("");
+    }
+    expect(other.$set).toBeUndefined();
+  });
+
+  for (const c of WEST) {
+    it(`${c}: freshly seeded and stamped, the producer stores index ~1 and scores mid-band`, async () => {
+      const { metrics, stamps } = await seededIncome(c, "1991-default");
+      const stored = Object.assign({}, ...stamps.map((u) => u.$set)) as Record<string, string>;
+      const worldStamps = { [c]: stored[`incomeStartVintages.${c}`] };
+      const index = await bandIndex(c, metrics, worldStamps);
+      expect(index).toBeCloseTo(1, 3);
+      const national = popWeighted(c, metrics);
+      expect(
+        scoreMetric("medianIncome", national, c, "1991-default", 1991, index, 1991, worldStamps)
+      ).toBeCloseTo(AT_ANCHOR, 1);
+    });
+
+    it(`${c}: an unstamped existing world gets no index and keeps its old score`, async () => {
+      // What a 1991 world seeded before #3393 holds: the old writer's bundle.
+      const legacy = new Map(BASE[c].map((m) => [String(m._id), m.economic.medianIncome!.value]));
+      expect(await bandIndex(c, legacy)).toBeUndefined();
+      expect(await bandIndex(c, legacy, {})).toBeUndefined();
+      expect(await bandIndex(c, legacy, { [c]: `${FRESH[c]}-stale` })).toBeUndefined();
+      const national = popWeighted(c, legacy);
+      // No index: the same score as before, whatever stamps other countries carry.
+      expect(scoreMetric("medianIncome", national, c, "1991-default", 1991, undefined, 1991)).toBe(
+        scoreMetric("medianIncome", national, c, "1991-default", 1991, undefined, 1991, FRESH)
+      );
+      // Even with an index, an unstamped world scores against the legacy anchor.
+      const legacyAnchor = getIncomeAnchor(c, 1991)!;
+      expect(getStartingIncomeAnchor(c, 1991)).toBe(legacyAnchor);
+      const legacyScore = Math.max(
+        0,
+        Math.min(100, ((national - legacyAnchor * 0.45) / (legacyAnchor * 0.8)) * 100)
+      );
+      expect(scoreMetric("medianIncome", national, c, "1991-default", 1991, 1, 1991)).toBeCloseTo(
+        legacyScore,
+        9
       );
     });
   }
