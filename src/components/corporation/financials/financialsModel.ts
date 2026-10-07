@@ -114,6 +114,7 @@ export function valuation(
 export type AllocTone =
   | "maintenance"
   | "labor"
+  | "freight"
   | "growth"
   | "marketing"
   | "logistics"
@@ -177,6 +178,7 @@ export function buildAllocation(
     ["maintenance", "Maintenance", f.maintenanceCosts],
     ["labor", "Wages", f.laborCosts],
     ["growth", "Growth", f.growthCosts],
+    ["freight", "Freight charges", f.freightCosts ?? 0],
     ["marketing", "Marketing", f.marketingCosts],
     ["logistics", "Logistics", f.logisticsCosts],
     ["rd", "R&D", f.rdCosts],

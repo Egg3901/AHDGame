@@ -108,6 +108,8 @@ export function applyFogToFinancials(financials: Financials, factor: number): Fi
     totalRevenue: fog(financials.totalRevenue, factor),
     maintenanceCosts: fog(financials.maintenanceCosts, factor),
     laborCosts: fog(financials.laborCosts, factor),
+    freightCosts: fog(financials.freightCosts ?? 0, factor),
+    freightIncome: fog(financials.freightIncome ?? 0, factor),
     growthCosts: fog(financials.growthCosts, factor),
     marketingCosts: fog(financials.marketingCosts, factor),
     logisticsCosts: fog(financials.logisticsCosts, factor),

@@ -1,4 +1,4 @@
-import type { Db } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
@@ -252,6 +252,29 @@ async function settleCorporateOperatingCashBatched(
       allTreasuryKeys.add(treasuryKey(country));
     }
   }
+
+  // Resolve each Treasury document once for the pass. A settlement whose legs
+  // and projections name a selector (countryId) makes the journal look the
+  // document up again, twice, before it can claim the receipt; naming the same
+  // document by id up front writes the identical journal binding without those
+  // reads. A country with no Treasury keeps its selector, so the journal still
+  // refuses it exactly as before.
+  const treasuryIdByCountry = new Map<string, ObjectId>();
+  const treasuryCountries = [...allTreasuryKeys]
+    .filter((key) => key.startsWith("federalBudget:"))
+    .map((key) => key.slice("federalBudget:".length));
+  if (treasuryCountries.length) {
+    const rows = await db
+      .collection<{ _id: ObjectId; countryId: string }>("federalBudget")
+      .find({ countryId: { $in: treasuryCountries } }, { projection: { _id: 1, countryId: 1 } })
+      .toArray();
+    for (const row of rows)
+      if (!treasuryIdByCountry.has(row.countryId)) treasuryIdByCountry.set(row.countryId, row._id);
+  }
+  const treasuryFilter = (country: string) => {
+    const id = treasuryIdByCountry.get(country);
+    return id ? { countryId: country, _id: id } : { countryId: country };
+  };
 
   const settleSnapshot = async (snapshot: CorpSnapshot): Promise<void> => {
     const baseKey = `corp-operating-cash:${turn}:${snapshot.corpId.toString()}`;
@@ -582,13 +605,13 @@ async function settleCorporateOperatingCashBatched(
         amount: treasuryLocal,
         valuation: treasuryValuation,
         collection: "federalBudget",
-        filter: { countryId: country },
+        filter: treasuryFilter(country),
         path: "treasuryCashLocal",
         note: "Deliver the payer-funded tax into spendable Treasury cash",
       });
       taxProjections.push({
         collection: "federalBudget",
-        filter: { countryId: country },
+        filter: treasuryFilter(country),
         update: { $inc: { treasuryBalance: treasuryLocal }, $set: { updatedAt: now } },
         note: "Record the Treasury tax receipt in signed fiscal-position analytics",
       });
