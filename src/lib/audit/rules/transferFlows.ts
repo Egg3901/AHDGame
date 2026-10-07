@@ -205,7 +205,8 @@ export function detectCircularWire(rows: readonly AnomalyAuditRow[]): TransferDe
 
 export function detectWireFanInFanOut(
   rows: readonly AnomalyAuditRow[],
-  config: TransferFlowConfig
+  config: TransferFlowConfig,
+  options: { additionalExcludedSettlementRows?: number } = {}
 ): TransferDetectorResult {
   const flaggedIds = new Set<string>();
   const events = buildTransferEvents(rows);
@@ -244,10 +245,12 @@ export function detectWireFanInFanOut(
     }
   }
 
-  const excludedSettlementRows = rows.filter(
-    (row) =>
-      row.category === "money" && (SYSTEM_SETTLEMENT_ACTIONS.has(row.action) || !isActorDriven(row))
-  ).length;
+  const excludedSettlementRows =
+    rows.filter(
+      (row) =>
+        row.category === "money" &&
+        (SYSTEM_SETTLEMENT_ACTIONS.has(row.action) || !isActorDriven(row))
+    ).length + (options.additionalExcludedSettlementRows ?? 0);
   const parts: string[] = [];
   if (fanInHubs > 0)
     parts.push(`${fanInHubs} fan-in hub(s) (>= ${config.fanInThreshold} distinct senders)`);
