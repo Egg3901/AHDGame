@@ -691,7 +691,8 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
           db,
           gameState,
           turn: newTurn,
-          ownerReadings: (boards) => collectResetMetricOwnerReadings(db, boards, newTurn),
+          ownerReadings: (boards) =>
+            collectResetMetricOwnerReadings(db, boards, newTurn, currentYear),
         })
       );
     } else {

@@ -65,6 +65,7 @@ export async function refreshResetMetricSnapshotsTurn(input: {
           regionId: 1,
           sourceTurn: 1,
           asOfTurn: 1,
+          lastRefreshFromTurn: 1,
           observations: 1,
           ...(recordHistory ? { history: 1 } : {}),
         },
@@ -103,7 +104,7 @@ export async function refreshResetMetricSnapshotsTurn(input: {
   }
   const next = current.map((board) => {
     const readings = ownerReadings[board._id]!;
-    const result = refreshResetMetricBoard({ board, turn, ...readings });
+    const result = refreshResetMetricBoard({ board, turn, ...readings, allowCatchUp: true });
     if (result.missingDueIds.length > 0) {
       throw new Error(
         `Reset metric owners did not refresh ${board._id}: ${result.missingDueIds.join(", ")}`
@@ -123,11 +124,12 @@ export async function refreshResetMetricSnapshotsTurn(input: {
             filter: {
               _id: board._id,
               worldId: board.worldId,
-              asOfTurn: turn - 1,
+              asOfTurn: board.lastRefreshFromTurn!,
             },
             update: {
               $set: {
                 asOfTurn: turn,
+                lastRefreshFromTurn: board.lastRefreshFromTurn,
                 observations: board.observations,
                 ...(history ? { history } : {}),
               },

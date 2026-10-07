@@ -11,6 +11,8 @@ export interface ResetMetricSnapshot {
   regionId?: string;
   sourceTurn: number;
   asOfTurn: number;
+  /** Prior observed turn for exact replay after a missed refresh; never fabricated history. */
+  lastRefreshFromTurn?: number;
   observations: Record<string, OpeningMetricObservation>;
   history?: ResetMetricHistory;
 }
