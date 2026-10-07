@@ -2,6 +2,7 @@ import {
   treasuryAccrualWithBankCouponReserve,
   treasuryAnchorValuation,
 } from "@/lib/budget/rules/treasuryAccrual";
+import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { publishTreasuryAccrualReceipt } from "@/lib/budget/treasuryAccrualReceipt";
 import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
 import { expireFinancialCrisisAusterity } from "@/lib/crises/financialCrisisBudgetPolicy";
@@ -54,6 +55,8 @@ import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
  */
 export async function processTreasuryTurn(_turn: number): Promise<{ countriesProcessed: number }> {
   const db = await getDb();
+  // Persisted per-stage timings and round trips for this phase (#2689).
+  const steps = substepMarker();
 
   // Self-heal: a country with a live central bank but no federalBudget doc
   // (e.g. a world bootstrapped via a partial seed path) would otherwise never
@@ -206,6 +209,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   // A missing rate cannot partially advance an earlier, valid treasury.
   if (ledgerShadow) for (const budget of budgets) valuationFor(budget);
 
+  steps.mark("load");
   let countriesProcessed = 0;
   for (const initial of budgets) {
     let b = initial;
@@ -437,5 +441,6 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       if (attempt === 3) throw new Error(`Treasury accrual ${b._id}:${_turn} could not claim cash`);
     }
   }
+  steps.mark("budgets");
   return { countriesProcessed };
 }
