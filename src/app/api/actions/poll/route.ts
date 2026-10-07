@@ -229,6 +229,8 @@ async function handleGET(request: NextRequest) {
       ? campaignLocalRate(character.countryId ?? "US", campaignRates)
       : 1;
 
+    const toLocal = (anchor: number) => Math.round(forexEnabled ? anchor * campaignRate : anchor);
+
     const partyColors = await loadPollPartyColors(db, character.countryId ?? "US", [
       character.party,
       ...(electionContext?.opponents?.map((o) => o.party) ?? []),
@@ -250,6 +252,11 @@ async function handleGET(request: NextRequest) {
       actionCost,
       fundCostSmall: smallFundCost,
       fundCostLarge: largeFundCost,
+      // LOCAL twins of the anchor quotes at the frozen campaign rate, the exact
+      // amounts POST debits, so the page never prices at live forex or shows ₳.
+      fundCostLocal: toLocal(fundCost),
+      fundCostSmallLocal: toLocal(smallFundCost),
+      fundCostLargeLocal: toLocal(largeFundCost),
       // Flat canonical AP cost per tier, same owner as hasActions* below, so
       // the page tier cards can never restate a stale literal.
       actionCostSmall: getPollActionCost("small"),

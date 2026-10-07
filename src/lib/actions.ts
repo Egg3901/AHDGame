@@ -759,9 +759,13 @@ export function canPerformAction(
   // Check funds for actions that cost money. effect.fundsChange is ANCHOR; the
   // stored balance is LOCAL. Compare and report in LOCAL home currency — campaign
   // funds live in local and the UI must never surface anchor (₳) to the player.
+  // The effect must price with the same era price level the quote and the
+  // debit use; omitting it re-prices historical worlds at the modern level
+  // and rejects players who can afford the quoted cost (ticket 1392).
   const effect = action.effect(character, state, {
     formatFunds: plainFunds,
     preset: options?.preset,
+    priceLevel: options?.priceLevel,
   });
   if (effect.fundsChange && effect.fundsChange < 0) {
     const costAnchor = Math.abs(effect.fundsChange);

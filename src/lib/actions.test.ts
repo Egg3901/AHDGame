@@ -251,6 +251,42 @@ describe("canPerformAction — insufficient-funds message currency", () => {
   });
 });
 
+describe("canPerformAction — era price level (ticket 1392)", () => {
+  // 1991 world, JPY at the frozen 134.5 basis, intellect 1. The page quoted
+  // the deflated Full Poll (~¥4.4M) but the funds check re-priced at the
+  // modern level (~¥12.3M) and rejected a player holding ¥7.4M.
+  const PRICE_LEVEL_1991 = 0.35808;
+  const JPY_BASIS = 134.5;
+
+  it("checks funds against the same deflated poll cost the quote charges", () => {
+    const char = makeCharacter({ actions: 8, stats: { intellect: 1 } as Character["stats"] });
+    char.currencyBalances = { campaign: 7_375_666, personal: {} } as Character["currencyBalances"];
+    const result = canPerformAction(char, "pollLarge", undefined, {
+      forexEnabled: true,
+      homeFxRate: JPY_BASIS,
+      priceLevel: PRICE_LEVEL_1991,
+    });
+    expect(result).toEqual({ canPerform: true });
+  });
+
+  it("still rejects below the deflated cost and reports the deflated amount", () => {
+    const char = makeCharacter({ actions: 8, stats: { intellect: 1 } as Character["stats"] });
+    char.currencyBalances = { campaign: 1_000_000, personal: {} } as Character["currencyBalances"];
+    const result = canPerformAction(char, "pollLarge", undefined, {
+      forexEnabled: true,
+      homeFxRate: JPY_BASIS,
+      priceLevel: PRICE_LEVEL_1991,
+    });
+    expect(result.canPerform).toBe(false);
+    const quoted = ACTIONS.pollLarge.effect(char, undefined, {
+      formatFunds: String,
+      priceLevel: PRICE_LEVEL_1991,
+    });
+    const requiredLocal = Math.abs(quoted.fundsChange ?? 0) * JPY_BASIS;
+    expect(result.reason).toContain(Math.round(requiredLocal).toLocaleString());
+  });
+});
+
 describe("action effect messages — local currency", () => {
   // Formatter the execute route supplies: anchor → local (rate 0.9), local symbol.
   const ctx: ActionEffectContext = {
