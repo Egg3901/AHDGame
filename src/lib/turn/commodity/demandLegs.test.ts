@@ -7,6 +7,7 @@ import {
   applyDemographicsUplift,
   applyGovernmentDemand,
   applyLatentFinancialDemand,
+  bondIssuanceAnchor,
   applyRateSensitiveDemand,
   buildStatesByCountry,
 } from "./demandLegs";
@@ -207,6 +208,7 @@ describe("applyLatentFinancialDemand", () => {
         allCorporations: [],
         recentBonds: [{ issuerType: "sovereign", countryId: "US", totalIssued: 10000000 }] as never,
         centralBankByCountry: new Map([["US", 5]]),
+        fxRateForBond: () => 1,
       },
       global,
       byState
@@ -225,12 +227,99 @@ describe("applyLatentFinancialDemand", () => {
         allCorporations: [],
         recentBonds: [{ issuerType: "sovereign", countryId: "US", totalIssued: 10000000 }] as never,
         centralBankByCountry: new Map(),
+        fxRateForBond: () => 1,
       },
       global,
       byState
     );
     expect(global.get("financial_services")!.demand).toBe(0);
     expect(byState.has("s1")).toBe(false);
+  });
+});
+
+describe("latent financial demand currency", () => {
+  const run = (bonds: unknown[], fx: (code?: string) => number, corps: unknown[] = []) => {
+    const { global, byState } = blankLedgers();
+    applyLatentFinancialDemand(
+      {
+        statesByCountry: new Map([
+          ["US", new Map([["s1", 100]])],
+          ["IT", new Map([["it1", 100]])],
+        ]),
+        allCorporations: corps as never,
+        recentBonds: bonds as never,
+        centralBankByCountry: new Map([
+          ["US", 5],
+          ["IT", 5],
+        ]),
+        fxRateForBond: (bond) => fx(bond.currencyCode),
+      },
+      global,
+      byState
+    );
+    return global.get("financial_services")!.demand;
+  };
+
+  it("converts a lira issue to anchor before it becomes demand", () => {
+    // 1.358 trillion lira at 1,358 lira per anchor is a 1 billion anchor issue.
+    const lira = run(
+      [
+        {
+          issuerType: "sovereign",
+          countryId: "IT",
+          currencyCode: "ITL",
+          totalIssued: 1_358_000_000_000,
+        },
+      ],
+      (code) => (code === "ITL" ? 1358 : 1)
+    );
+    const dollars = run(
+      [
+        {
+          issuerType: "sovereign",
+          countryId: "US",
+          currencyCode: "USD",
+          totalIssued: 1_000_000_000,
+        },
+      ],
+      () => 1
+    );
+    expect(dollars).toBeGreaterThan(0);
+    expect(lira).toBeCloseTo(dollars, 1);
+  });
+
+  it("converts corporate issues at the bond's currency", () => {
+    const corps = [{ _id: { toString: () => "c1" }, headquartersState: "it1", countryId: "IT" }];
+    const lira = run(
+      [
+        {
+          issuerType: "corporate",
+          corporationId: "c1",
+          currencyCode: "ITL",
+          totalIssued: 135_800_000_000,
+        },
+      ],
+      (code) => (code === "ITL" ? 1358 : 1),
+      corps
+    );
+    const anchor = run(
+      [{ issuerType: "corporate", corporationId: "c1", totalIssued: 100_000_000 }],
+      () => 1,
+      corps
+    );
+    expect(lira).toBeCloseTo(anchor, 1);
+  });
+
+  it("treats a missing or non-positive rate as anchor", () => {
+    expect(
+      bondIssuanceAnchor(
+        { totalIssued: 500, issuerType: "sovereign", countryId: "US" } as never,
+        () => 0
+      )
+    ).toBe(500);
+    expect(
+      bondIssuanceAnchor({ totalIssued: 500, currencyCode: "JPY" } as never, () => 136)
+    ).toBeCloseTo(500 / 136, 9);
   });
 });
 

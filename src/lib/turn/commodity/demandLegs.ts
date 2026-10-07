@@ -262,6 +262,21 @@ export interface LatentFinancialDemandInputs {
   allCorporations: Corporation[];
   recentBonds: Bond[];
   centralBankByCountry: Map<string, number>;
+  /**
+   * Local units per ₳ for a bond's currency. Face value is booked in the
+   * bond's own currency, while the demand formula is calibrated in ₳, so
+   * every issue is converted before it becomes demand.
+   */
+  fxRateForBond: (bond: Pick<Bond, "currencyCode" | "issuerType" | "countryId">) => number;
+}
+
+/** ₳ face value of a bond issue. A non-positive or missing rate counts as ₳. */
+export function bondIssuanceAnchor(
+  bond: Pick<Bond, "totalIssued" | "currencyCode" | "issuerType" | "countryId">,
+  fxRateForBond: LatentFinancialDemandInputs["fxRateForBond"]
+): number {
+  const rate = fxRateForBond(bond);
+  return rate > 0 ? bond.totalIssued / rate : bond.totalIssued;
 }
 
 /**
@@ -275,7 +290,8 @@ export function applyLatentFinancialDemand(
   global: GlobalLedger,
   byState: StateLedger
 ): void {
-  const { statesByCountry, allCorporations, recentBonds, centralBankByCountry } = inputs;
+  const { statesByCountry, allCorporations, recentBonds, centralBankByCountry, fxRateForBond } =
+    inputs;
 
   const corporateHqById = new Map(
     allCorporations.map((corporation: Corporation) => [
@@ -292,6 +308,7 @@ export function applyLatentFinancialDemand(
   const stateDebtIssuanceByCountry = new Map<string, Map<string, number>>();
 
   for (const bond of recentBonds) {
+    const issuedAnchor = bondIssuanceAnchor(bond, fxRateForBond);
     if (bond.issuerType === "sovereign" && bond.countryId) {
       const stateGdp = statesByCountry.get(bond.countryId);
       if (!stateGdp || stateGdp.size === 0) continue;
@@ -303,7 +320,7 @@ export function applyLatentFinancialDemand(
       }
       const issuanceByState = stateDebtIssuanceByCountry.get(bond.countryId)!;
       for (const [stateId, gdp] of stateGdp) {
-        const allocation = bond.totalIssued * (gdp / countryTotalGdp);
+        const allocation = issuedAnchor * (gdp / countryTotalGdp);
         issuanceByState.set(stateId, (issuanceByState.get(stateId) ?? 0) + allocation);
       }
       continue;
@@ -317,7 +334,7 @@ export function applyLatentFinancialDemand(
       stateDebtIssuanceByCountry.set(countryId, new Map());
     }
     const issuanceByState = stateDebtIssuanceByCountry.get(countryId)!;
-    issuanceByState.set(hqState, (issuanceByState.get(hqState) ?? 0) + bond.totalIssued);
+    issuanceByState.set(hqState, (issuanceByState.get(hqState) ?? 0) + issuedAnchor);
   }
 
   for (const [countryId, stateDebtIssuance] of stateDebtIssuanceByCountry) {
