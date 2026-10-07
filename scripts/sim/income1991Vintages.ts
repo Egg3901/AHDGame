@@ -27,8 +27,10 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
   getIncomeAnchor,
   getStartingIncomeAnchor,
+  incomeVintageStampsFor,
   INCOME_START_VINTAGES,
 } from "@/lib/era/metricCatalog";
+import { NATIONAL_SCOPE } from "@/lib/constants/nationalScope";
 import { evaluateRegistry } from "@/lib/metricEngine/evaluate";
 import { medianIncomeNode } from "@/lib/metricEngine/registry/economic";
 import type { RegistryNode } from "@/lib/metricEngine/types";
@@ -147,9 +149,17 @@ function popWeighted(c: Income1991CountryId, values: Record<string, number>): nu
   return sum / pop;
 }
 
-function score(c: Income1991CountryId, value: number, anchorOverride?: number): number {
+// Provenance the fresh 1991 seed writers stamp. Unstamped worlds stay legacy.
+const FRESH = incomeVintageStampsFor(START);
+
+function score(
+  c: Income1991CountryId,
+  value: number,
+  anchorOverride?: number,
+  stamps: Record<string, string> | null = FRESH
+): number {
   if (anchorOverride === undefined) {
-    return round(scoreMetric("medianIncome", value, c, PRESET, START, 1, START)!, 2);
+    return round(scoreMetric("medianIncome", value, c, PRESET, START, 1, START, stamps)!, 2);
   }
   const best = anchorOverride * 1.25;
   const worst = anchorOverride * 0.45;
@@ -386,8 +396,9 @@ function anchorRegression(c: Income1991CountryId) {
   return [1953, 1979, 1991, 1999, 2007, 2019, 2023].map((year) => ({
     startYear: year,
     interpolated: round(getIncomeAnchor(c, year) ?? NaN, 2),
-    startAnchor: round(getStartingIncomeAnchor(c, year) ?? NaN, 2),
-    changed: getIncomeAnchor(c, year) !== getStartingIncomeAnchor(c, year),
+    unstampedStartAnchor: round(getStartingIncomeAnchor(c, year) ?? NaN, 2),
+    stampedStartAnchor: round(getStartingIncomeAnchor(c, year, FRESH) ?? NaN, 2),
+    changedWhenStamped: getIncomeAnchor(c, year) !== getStartingIncomeAnchor(c, year, FRESH),
   }));
 }
 
@@ -406,10 +417,14 @@ const countries = Object.fromEntries(
             anchor: PREVIOUS_1991_ANCHOR[c],
             overGdpPerResident: round(beforeNational / gdpPerResident1991(c), 3),
             score: score(c, beforeNational, PREVIOUS_1991_ANCHOR[c]),
+            // An existing world holding these values carries no stamp, so the
+            // runtime keeps scoring it as before (index 1 shown).
+            unstampedRuntimeScore: score(c, beforeNational, undefined, null),
           },
           after: {
             national: round(afterNational),
-            anchor: getStartingIncomeAnchor(c, START),
+            anchor: getStartingIncomeAnchor(c, START, FRESH),
+            stamp: FRESH[c],
             overGdpPerResident: round(afterNational / gdpPerResident1991(c), 3),
             score: score(c, afterNational),
             withinEngineBounds: Object.values(INCOME_1991_REGIONAL[c]).every(
@@ -422,6 +437,13 @@ const countries = Object.fromEntries(
         engineGrid: engineGrid(c),
         anchorRegression: anchorRegression(c),
         precision: precision(c),
+        // The runtime computes the index for stored national scopes and for
+        // additional countries carrying a matching fresh income stamp.
+        // Actual producer coverage is tested in income1991.provenance.test.ts.
+        runtimeIncomeIndex: {
+          legacy: Object.values(NATIONAL_SCOPE).includes(c),
+          freshStamped: FRESH[c] != null,
+        },
       },
     ];
   })
@@ -436,6 +458,9 @@ console.log(
       turnsPerYear: TURNS_PER_YEAR,
       years: YEARS,
       startVintages: INCOME_START_VINTAGES,
+      rollout:
+        "Vintage anchors apply only when gameState.incomeStartVintages matches the vintage id. " +
+        "Fresh 1991 seed writers stamp it; existing worlds have no stamp and keep legacy anchors.",
       sources: SOURCES,
       assumptions: ASSUMPTIONS,
       countries,

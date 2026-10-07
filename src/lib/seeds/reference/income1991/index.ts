@@ -21,6 +21,7 @@
  */
 
 import type { CountryId } from "@/lib/constants/countries";
+import { getIncomeStartVintage } from "@/lib/era/metricCatalog";
 import type { StateMetrics } from "@/lib/db/types";
 import type { StateMetricBaseline } from "@/lib/db/types/statePolicy";
 import { ngRegions1991 } from "@/lib/countries/ng/data/ngRegions1991";
@@ -128,6 +129,19 @@ export const INCOME_1991_REGIONAL: Record<Income1991CountryId, Record<string, nu
 function regionalIncome(countryId: string, regionId: string): number | undefined {
   const table = INCOME_1991_REGIONAL[countryId as Income1991CountryId];
   return table?.[regionId];
+}
+
+/** Start year whose income vintage these tables write (see INCOME_START_VINTAGES). */
+export const INCOME_1991_VINTAGE_YEAR = 1991;
+
+/**
+ * Provenance id of the incomes the seed writers write for `preset`, or null when
+ * they write the legacy bundle. Writers stamp this on gameState next to the
+ * values, so scoring switches anchors only for data that carries it.
+ */
+export function seededIncomeVintageId(countryId: string, preset: string): string | null {
+  if (preset !== "1991-default" || !(countryId in INCOME_1991_REGIONAL)) return null;
+  return getIncomeStartVintage(countryId, INCOME_1991_VINTAGE_YEAR)?.id ?? null;
 }
 
 /** Replace a 1991 metric doc's median income with its dated vintage, if authored. */

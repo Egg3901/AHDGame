@@ -1,5 +1,10 @@
 import { metricCategories } from "@/lib/constants/metricDefinitions";
-import { getEraBand, getStartingIncomeAnchor, isMetricActive } from "@/lib/era/metricCatalog";
+import {
+  getEraBand,
+  getStartingIncomeAnchor,
+  isMetricActive,
+  type IncomeVintageStamps,
+} from "@/lib/era/metricCatalog";
 import { toUsd } from "./fxNormalize";
 import { JP_MEDIAN_INCOME_BAND } from "@/lib/countries/jp/economy";
 import { US_MEDIAN_INCOME_THRESHOLDS } from "@/lib/countries/us/geographyFacts";
@@ -217,7 +222,9 @@ const INCOME_BAND_SHAPE = { best: 1.25, worst: 0.45 };
  * anchor(country, startingYear) × INCOME_BAND_SHAPE × incomeBandIndex — the
  * band follows the economy the players built, never the calendar; when the
  * index or anchor is unavailable it falls back to the FULL legacy band (never
- * a half-era band).
+ * a half-era band). `incomeVintages` is the world's income provenance
+ * (`gameState.incomeStartVintages`); a start-year vintage anchor applies only
+ * when it matches, so omitting it keeps the legacy anchor.
  *
  * Flag OFF (`year` null/undefined): byte-identical legacy behavior, including
  * the per-country medianIncome band and its preset ×0.4 scaling.
@@ -228,11 +235,12 @@ export function getMetricThreshold(
   preset?: string,
   year?: number | null,
   incomeIndex?: number | null,
-  startingYear?: number | null
+  startingYear?: number | null,
+  incomeVintages?: IncomeVintageStamps | null
 ): ScoreThreshold | null {
   if (metricId === "medianIncome") {
     if (year != null && incomeIndex != null && Number.isFinite(incomeIndex) && incomeIndex > 0) {
-      const anchor = getStartingIncomeAnchor(countryId, startingYear ?? null);
+      const anchor = getStartingIncomeAnchor(countryId, startingYear ?? null, incomeVintages);
       if (anchor != null) {
         return {
           best: anchor * INCOME_BAND_SHAPE.best * incomeIndex,
@@ -271,12 +279,21 @@ export function scoreMetric(
   preset?: string,
   year?: number | null,
   incomeIndex?: number | null,
-  startingYear?: number | null
+  startingYear?: number | null,
+  incomeVintages?: IncomeVintageStamps | null
 ): number | null {
   // Era existence gate: an inactive metric scores null everywhere (callers
   // already skip null scores). year null (flag off) ⇒ always active.
   if (!isMetricActive(metricId, countryId, year ?? null)) return null;
-  const t = getMetricThreshold(metricId, countryId, preset, year, incomeIndex, startingYear);
+  const t = getMetricThreshold(
+    metricId,
+    countryId,
+    preset,
+    year,
+    incomeIndex,
+    startingYear,
+    incomeVintages
+  );
   if (!t) return null;
 
   const higherBetter = IS_HIGHER_BETTER[metricId] ?? true;

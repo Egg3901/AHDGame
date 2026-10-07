@@ -85,6 +85,7 @@ export async function GET(request: Request) {
         startingYear?: number;
         eraSystemEnabled?: boolean;
         incomeBandIndexByCountry?: Partial<Record<string, number>>;
+        incomeStartVintages?: Partial<Record<string, string>>;
       }>("gameState")
       .findOne({ _id: "current" });
     const preset = gameStateDoc?.preset ?? DEFAULT_SEED_PRESET;
@@ -94,6 +95,7 @@ export async function GET(request: Request) {
     const startingYear = year != null ? (gameStateDoc?.startingYear ?? null) : null;
     const incomeIndexByCountry =
       year != null ? (gameStateDoc?.incomeBandIndexByCountry ?? null) : null;
+    const incomeVintages = year != null ? (gameStateDoc?.incomeStartVintages ?? null) : null;
 
     // Fetch all national-scope documents
     const nationalDocIds = Object.keys(NATIONAL_SCOPE);
@@ -183,7 +185,8 @@ export async function GET(request: Request) {
             preset,
             year,
             incomeIndexByCountry?.[countryId] ?? null,
-            startingYear
+            startingYear,
+            incomeVintages
           );
           metricEntries[key] = { value: mv.value, score };
           if (score !== null) {

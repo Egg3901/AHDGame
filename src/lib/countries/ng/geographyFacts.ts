@@ -2,7 +2,7 @@ import type { AdjacencyMap } from "@/lib/constants/stateAdjacency";
 import type { CountryMapConfig } from "@/lib/commodity-map/commodityMapRegistry";
 import type { Continent } from "@/lib/constants/countryContinents";
 import type { ConscriptionPolicy } from "@/lib/demographics/conscription";
-import type { NormalAnchor } from "@/lib/era/metricCatalog";
+import type { IncomeStartVintage, NormalAnchor } from "@/lib/era/metricCatalog";
 import type { ScoreThreshold } from "@/lib/utils/metricScoring";
 import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
 
@@ -274,8 +274,8 @@ export const NG_INCOME_ANCHORS: NormalAnchor[] = [
  * above. Used only at the exact start year; never interpolated. 1991 is the
  * derived household median from seeds/reference/income1991 (#3370).
  */
-export const NG_INCOME_START_VINTAGES: Record<number, number> = {
-  1991: 15084,
+export const NG_INCOME_START_VINTAGES: Record<number, IncomeStartVintage> = {
+  1991: { value: 15084, id: "ng-1991-household-r1" },
 };
 
 /*

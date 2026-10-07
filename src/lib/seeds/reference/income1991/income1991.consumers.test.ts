@@ -10,6 +10,7 @@ import {
   INCOME_START_VINTAGES,
   getIncomeAnchor,
   getStartingIncomeAnchor,
+  incomeVintageStampsFor,
 } from "@/lib/era/metricCatalog";
 import { getMetricThreshold, scoreMetric } from "@/lib/utils/metricScoring";
 import { evaluateRegistry } from "@/lib/metricEngine/evaluate";
@@ -35,6 +36,8 @@ const REGIONS = { NG: ngRegions1991, CN: cnRegions1991, TR: trRegions1991 } as R
   Array<{ _id: unknown; population: number }>
 >;
 const BASE = { NG: ngStateMetrics, CN: cnStateMetrics, TR: trStateMetrics };
+// Provenance a fresh 1991 world's seed writers stamp; legacy worlds have none.
+const FRESH = incomeVintageStampsFor(1991);
 
 type MacroSet = { economic?: { medianIncome?: { value: number } } };
 type BaselineSet = { baselines: { economic: { medianIncome: number } } };
@@ -68,7 +71,8 @@ async function seededIncome(c: Income1991CountryId, preset: string) {
     const id = String((call[0] as { _id: unknown })._id);
     baselines.set(id, (call[1] as { $set: BaselineSet }).$set.baselines.economic.medianIncome);
   }
-  return { metrics, baselines };
+  const stamps = (db.collectionMocks.gameState?.updateOne.mock.calls ?? []).map((call) => call[1]);
+  return { metrics, baselines, stamps };
 }
 
 function popWeighted(c: Income1991CountryId, values: Map<string, number>): number {
@@ -89,7 +93,9 @@ describe("1991 income vintages through the real seed writers", { timeout: 60_000
 
   for (const c of FIXED) {
     it(`${c}: writes the vintage to macroMetrics and stateBaselines, region by region`, async () => {
-      const { metrics, baselines } = await seededIncome(c, "1991-default");
+      const { metrics, baselines, stamps } = await seededIncome(c, "1991-default");
+      // The writer stamps the provenance that activates the vintage anchor.
+      expect(stamps).toEqual([{ $set: { [`incomeStartVintages.${c}`]: FRESH[c] } }]);
       expect(metrics.size).toBe(Object.keys(INCOME_1991_REGIONAL[c]).length);
       for (const [id, v] of metrics) {
         expect(v).toBe(INCOME_1991_REGIONAL[c][id]);
@@ -97,14 +103,15 @@ describe("1991 income vintages through the real seed writers", { timeout: 60_000
       }
       // The population-weighted national value the nationalMetrics back-solve
       // reads equals the start anchor, so the band index starts at 1.
-      const implied = popWeighted(c, metrics) / getStartingIncomeAnchor(c, 1991)!;
+      const implied = popWeighted(c, metrics) / getStartingIncomeAnchor(c, 1991, FRESH)!;
       expect(implied).toBeCloseTo(1, 3);
       expect(implied).toBeGreaterThanOrEqual(INCOME_BAND_BACKSOLVE_MIN);
       expect(implied).toBeLessThanOrEqual(INCOME_BAND_BACKSOLVE_MAX);
     });
 
     it(`${c}: 2019-default seeds are not touched by the 1991 vintage`, async () => {
-      const { metrics } = await seededIncome(c, "2019-default");
+      const { metrics, stamps } = await seededIncome(c, "2019-default");
+      expect(stamps).toEqual([{ $unset: { [`incomeStartVintages.${c}`]: "" } }]);
       const vintageHits = [...metrics].filter(([id, v]) => INCOME_1991_REGIONAL[c][id] === v);
       expect(vintageHits).toHaveLength(0);
     });
@@ -170,7 +177,7 @@ describe("first medianIncome engine updates on a fresh 1991 world", { timeout: 6
       expect(ratio).toBeGreaterThan(1);
       expect(ratio).toBeLessThan(4);
       // And the national value still scores mid-band, not pinned.
-      const score = scoreMetric("medianIncome", national, c, "1991-default", 1991, 1, 1991)!;
+      const score = scoreMetric("medianIncome", national, c, "1991-default", 1991, 1, 1991, FRESH)!;
       expect(score).toBeGreaterThan(60);
       expect(score).toBeLessThan(80);
     });
@@ -183,7 +190,9 @@ describe("era income scoring for worlds starting in 1991", () => {
 
   for (const c of FIXED) {
     it(`${c}: start anchor equals the derived national household median`, () => {
-      expect(getStartingIncomeAnchor(c, 1991)).toBe(Math.round(nationalHouseholdMedian1991(c)));
+      expect(getStartingIncomeAnchor(c, 1991, FRESH)).toBe(
+        Math.round(nationalHouseholdMedian1991(c))
+      );
       expect(
         scoreMetric(
           "medianIncome",
@@ -192,7 +201,8 @@ describe("era income scoring for worlds starting in 1991", () => {
           "1991-default",
           1991,
           1,
-          1991
+          1991,
+          FRESH
         )
       ).toBeCloseTo(AT_ANCHOR, 1);
     });
@@ -200,7 +210,7 @@ describe("era income scoring for worlds starting in 1991", () => {
 
   it("TR 1991 regional scores leave the old 1,900-lira saturation", () => {
     const scores = Object.values(INCOME_1991_REGIONAL.TR).map((v) =>
-      scoreMetric("medianIncome", v, "TR", "1991-default", 1991, 1, 1991)!
+      scoreMetric("medianIncome", v, "TR", "1991-default", 1991, 1, 1991, FRESH)!
     );
     // Three of eight regions score strictly inside the band. The others sit at
     // an edge because the authored regional shape spans 4.0x richest to
@@ -218,9 +228,27 @@ describe("era income scoring for worlds starting in 1991", () => {
 
   it("a policy-driven income gain or loss moves the TR score both ways", () => {
     const median = nationalHouseholdMedian1991("TR");
-    const at = scoreMetric("medianIncome", median, "TR", "1991-default", 1991, 1, 1991)!;
-    const up = scoreMetric("medianIncome", median * 1.1, "TR", "1991-default", 1993, 1, 1991)!;
-    const down = scoreMetric("medianIncome", median * 0.9, "TR", "1991-default", 1993, 1, 1991)!;
+    const at = scoreMetric("medianIncome", median, "TR", "1991-default", 1991, 1, 1991, FRESH)!;
+    const up = scoreMetric(
+      "medianIncome",
+      median * 1.1,
+      "TR",
+      "1991-default",
+      1993,
+      1,
+      1991,
+      FRESH
+    )!;
+    const down = scoreMetric(
+      "medianIncome",
+      median * 0.9,
+      "TR",
+      "1991-default",
+      1993,
+      1,
+      1991,
+      FRESH
+    )!;
     expect(up).toBeGreaterThan(at);
     expect(down).toBeLessThan(at);
   });
@@ -249,8 +277,17 @@ describe("other start years keep their pre-#3316 anchors and bands", () => {
       const start = Number(yearStr);
       it(`${c} start ${start}: anchor and band unchanged`, () => {
         expect(getIncomeAnchor(c, start)).toBeCloseTo(expected, 6);
-        expect(getStartingIncomeAnchor(c, start)).toBeCloseTo(expected, 6);
-        const band = getMetricThreshold("medianIncome", c, undefined, start + 5, 1.3, start)!;
+        // Even a world carrying the 1991 stamps keeps these anchors.
+        expect(getStartingIncomeAnchor(c, start, FRESH)).toBeCloseTo(expected, 6);
+        const band = getMetricThreshold(
+          "medianIncome",
+          c,
+          undefined,
+          start + 5,
+          1.3,
+          start,
+          FRESH
+        )!;
         expect(band.best).toBeCloseTo(expected * 1.25 * 1.3, 4);
         expect(band.worst).toBeCloseTo(expected * 0.45 * 1.3, 4);
       });
@@ -270,7 +307,7 @@ describe("other start years keep their pre-#3316 anchors and bands", () => {
   it("flag-off legacy scoring (no start year) is unchanged by the vintage", () => {
     for (const c of FIXED) {
       expect(getMetricThreshold("medianIncome", c, "1991-default", null, null, null)).toEqual(
-        getMetricThreshold("medianIncome", c, "1991-default", null, null, 1991)
+        getMetricThreshold("medianIncome", c, "1991-default", null, null, 1991, FRESH)
       );
     }
   });
