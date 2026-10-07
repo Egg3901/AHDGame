@@ -698,6 +698,78 @@ describe("funded sovereign coupon claims", () => {
       expect(batch.event.meta.claimIds).not.toContain(first._id.toHexString());
     });
 
+    // A batch receipt written but crashed before its Treasury debit landed.
+    const unstartedBatch = async (db: InMemoryDb, bonds: Bond[], turn: number) => {
+      const crash = withInjectedCrash(db, {
+        collection: "federalBudget",
+        op: "updateOne",
+        matches: (callArgs) => JSON.stringify(callArgs[1] ?? {}).includes("treasuryCashLocal"),
+        onCall: 1,
+      });
+      await expect(
+        settleFundedSovereignCoupons(crash.db, savedBudget(db), { ...args, turn, bonds })
+      ).rejects.toThrow("crash");
+      const receipt = moves(db).find((doc) => doc._id === couponBatchKey("US", turn));
+      expect(receipt?.status).toBe("partial");
+      expect((receipt as unknown as { legs: { applied: boolean }[] }).legs).toEqual([
+        expect.objectContaining({ applied: false }),
+        expect.objectContaining({ applied: false }),
+      ]);
+    };
+
+    it("keeps claims owed when a resumed batch is refused by its Treasury guard", async () => {
+      const db = world(1_000_000);
+      const bonds = floatBonds(4, "6500000000000000000046");
+      await unstartedBatch(db, bonds, 12);
+      const claims = openClaims(db);
+      expect(claims).toHaveLength(4);
+
+      // Cash drained before the resume: the stored debit guard refuses.
+      savedBudget(db).treasuryCashLocal = 0;
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 13,
+        bonds: [],
+      });
+      expect(moves(db).find((doc) => doc._id === couponBatchKey("US", 12))?.status).toBe(
+        "rejected"
+      );
+      expect(openClaims(db)).toEqual(claims);
+      expect(savedBudget(db).treasuryCashLocal).toBe(0);
+      expect(pool(db).cashLocal).toBe(0);
+
+      // Once funded, the same claims pay exactly once through a fresh receipt.
+      const total = claims.reduce((sum, claim) => sum + claim.amountLocal, 0);
+      savedBudget(db).treasuryCashLocal = total;
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 14,
+        bonds: [],
+      });
+      expect(openClaims(db)).toEqual([]);
+      expect(savedBudget(db).treasuryCashLocal).toBe(0);
+      expect(pool(db).cashLocal).toBe(total);
+    });
+
+    it("sizes new claims against Treasury cash after a resumed batch lands", async () => {
+      const db = world(1_000_000);
+      const bonds = floatBonds(2, "6500000000000000000047");
+      await unstartedBatch(db, bonds, 12);
+      const owed = openClaims(db);
+      const coupon = owed[0].amountLocal;
+      // Enough for the resumed batch plus exactly one of the two new claims.
+      savedBudget(db).treasuryCashLocal = coupon * 3;
+      await settleFundedSovereignCoupons(db as unknown as Db, savedBudget(db), {
+        ...args,
+        turn: 13,
+        bonds,
+      });
+      expect(moves(db).filter((doc) => doc.status === "rejected")).toHaveLength(0);
+      expect(openClaims(db)).toHaveLength(1);
+      expect(savedBudget(db).treasuryCashLocal).toBe(0);
+      expect(pool(db).cashLocal).toBe(coupon * 3);
+    });
+
     it("conserves cash exactly at national-currency scale", async () => {
       const db = world(1e15);
       const bonds = floatBonds(32, "6500000000000000000045", 7_777_777_777);

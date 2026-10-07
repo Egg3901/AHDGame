@@ -4,7 +4,11 @@ import type { FederalBudget, FundedSovereignCouponClaim } from "@/lib/db/types/b
 import type { Corporation } from "@/lib/db/types/corporation";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { bondAccruesCoupon } from "@/lib/constants/bonds";
-import { settleTransition, resumeSettlement } from "@/lib/banking/settlementJournal";
+import {
+  settleTransition,
+  resumeSettlement,
+  type SettlementResult,
+} from "@/lib/banking/settlementJournal";
 import type { BankingTransition } from "@/lib/banking/rules/boundary";
 import {
   freezeSovereignCouponClaim,
@@ -387,12 +391,36 @@ export async function settleFundedSovereignCoupons(
   const claims = [...claimById.values()].sort((a, b) => a.dueTurn - b.dueTurn);
   const priorMoves = await findPriorPayouts(db, claims);
   const targetReadyClaimIds = await loadCouponTargetReadiness(db, claims);
+  // Claims a grouped receipt already owns settle only through that receipt.
+  // Only a receipt whose every leg and projection landed closes its members;
+  // one refused on resume moved no cash and leaves them owed.
+  const batches = await loadCouponBatches(db, budgetId, claims, input.turn);
+  const landed: CouponBatchRecord[] = [];
+  const batched = new Set<string>();
+  for (const batch of batches) {
+    if (batch.status === "rejected") continue;
+    if (!batchSettled(batch)) {
+      const resumed = await resumeSettlement(db, batch._id);
+      if (resumed.status === "partial") return;
+      if (!settlementLanded(resumed)) continue;
+    }
+    landed.push(batch);
+    for (const id of batchMembers(batch)) batched.add(id);
+  }
+  await markBatchMembersSettled(
+    db,
+    budgetId,
+    landed,
+    claims.filter((claim) => batched.has(claim.id))
+  );
+
   // Unpaid claims stay queued, so an unfunded Treasury carries one claim per
   // bond per turn of arrears. Attempting each through the journal writes a
   // rejected receipt and a failed guarded debit for every one of them, which
   // grows the phase without bound. Skip claims this snapshot of cash cannot
   // cover. The guarded debit remains the authority: a stale snapshot only
-  // defers a claim one turn or lets the guard reject it as before.
+  // defers a claim one turn or lets the guard reject it as before. Read after
+  // resumed batches, so their landed debits are not offered again.
   let fundableCash = 0;
   if (claims.length) {
     const cash = await db
@@ -401,25 +429,6 @@ export async function settleFundedSovereignCoupons(
     const value = (cash as { treasuryCashLocal?: unknown } | null)?.treasuryCashLocal;
     fundableCash = typeof value === "number" && Number.isFinite(value) ? value : 0;
   }
-  // Claims a grouped receipt already owns settle only through that receipt.
-  const batches = await loadCouponBatches(db, budgetId, claims, input.turn);
-  const batched = new Set<string>();
-  for (const batch of batches) {
-    let status = batch.status;
-    if (status !== "rejected" && !batch.projectionsCompletedAt) {
-      const resumed = await resumeSettlement(db, batch._id);
-      if (resumed.status === "partial") return;
-      status = resumed.status;
-    }
-    if (status === "rejected") continue;
-    for (const id of batchMembers(batch)) batched.add(id);
-  }
-  await markBatchMembersSettled(
-    db,
-    budgetId,
-    batches.filter((batch) => batch.status !== "rejected"),
-    claims.filter((claim) => batched.has(claim.id))
-  );
 
   // At most one grouped receipt per Treasury and turn. A replay of a turn whose
   // batch already exists pays anything left over through the per-claim path.
@@ -461,14 +470,16 @@ export async function settleFundedSovereignCoupons(
     const transition = batchPayoutTransition(grouped, budgetId, input.turn);
     const result = await settleTransition(db, transition);
     if (result.status === "partial") return;
-    if (result.status !== "rejected") {
+    if (settlementLanded(result)) {
       // A replay keeps the membership the receipt was first written with.
       const saved = await db
         .collection<CouponBatchRecord>("bankMoneyMoves")
         .findOne({ _id: transition.key }, { projection: BATCH_PROJECTION });
-      if (saved) await markBatchMembersSettled(db, budgetId, [saved], grouped);
+      if (saved && batchSettled(saved))
+        await markBatchMembersSettled(db, budgetId, [saved], grouped);
     }
-    // A rejected batch moved no cash; its claims stay queued for the next turn.
+    // A rejected batch moved no cash, and a replay another attempt still owns
+    // has not finished; either way its claims stay queued for the next turn.
   }
 
   // Paid records are only history once their receipt is acknowledged; keep
@@ -501,6 +512,17 @@ export function couponBatchKey(budgetId: string, turn: number): string {
 
 const batchTurn = (batch: CouponBatchRecord) =>
   Number(batch._id.slice(batch._id.lastIndexOf(":") + 1));
+
+/** Every leg and projection of the receipt landed. */
+const batchSettled = (batch: CouponBatchRecord) =>
+  batch.status === "applied" && batch.projectionsCompletedAt !== undefined;
+
+/**
+ * The settlement delivered its money and projections. A replay carrying an
+ * error is a key another attempt owns and has not finished.
+ */
+const settlementLanded = (result: SettlementResult) =>
+  result.status === "applied" || (result.status === "replayed" && !result.error);
 
 const batchMembers = (batch: CouponBatchRecord): string[] =>
   String(batch.event?.meta?.claimIds ?? "")
