@@ -261,9 +261,9 @@ export default function FundFinancialsTab({
               tooltip="Mark-to-market value of all stock positions held by the fund."
             />
             <FinRow
-              label="Bond holdings"
+              label={t("fundBondHoldings.title")}
               value={formatAmount(bs.bondPrincipalAnchor, ccy)}
-              tooltip="Mark-to-market value of corporate and sovereign bonds held by the fund."
+              tooltip={t("fundBondHoldings.valuationTooltip")}
             />
             {(bs.openOrdersEscrowAnchor ?? 0) > 0 && (
               <FinRow

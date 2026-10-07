@@ -249,7 +249,8 @@
       "coupon": "Annual coupon",
       "maturity": "Maturity turn",
       "value": "Market value",
-      "escrow": "Open buy-order escrow"
+      "escrow": "Open buy-order escrow",
+      "valuationTooltip": "Mark-to-market value of corporate and sovereign bonds held by the fund."
     }
   }
 }

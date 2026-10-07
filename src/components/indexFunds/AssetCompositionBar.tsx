@@ -49,7 +49,7 @@ export function AssetCompositionBar({
     { key: "cash", label: "Cash & equivalents", color: TOKEN_COLOR.cash, amountAnchor: cashAnchor },
     {
       key: "bond",
-      label: "Bond holdings",
+      label: t("fundBondHoldings.title"),
       color: TOKEN_COLOR.bond,
       amountAnchor: bondPrincipalAnchor,
     },
