@@ -111,6 +111,7 @@ import { STRIKE_REVENUE_THROTTLE } from "@/lib/labour/strikes";
 import { calculatePlantSectorSplit } from "@/lib/corporations/plantSectorSplit";
 import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
 import { isNppOwned } from "@/lib/corporations/nppOwned";
+import { SOLD_OUT_FILL } from "@/lib/turn/corporation/demandThrottle";
 import { plantsNetMarginPct } from "@/lib/corporations/rules/netMargin";
 import type { RetoolHint } from "@/lib/corporations/retoolHint";
 import {
@@ -1129,7 +1130,15 @@ export function computeSectorMarginSection(args: {
 export interface PlantIdleCause {
   /** Stable key the UI maps to a label, colour and tooltip. */
   cause:
-    "inputs" | "demand" | "strike" | "disaster" | "policy" | "deposits" | "mothballed" | "other";
+    | "inputs"
+    | "demand"
+    | "ramping"
+    | "strike"
+    | "disaster"
+    | "policy"
+    | "deposits"
+    | "mothballed"
+    | "other";
   /** Capacity units that did not run for this reason, units/day. */
   units: number;
 }
@@ -1600,7 +1609,8 @@ export function buildSectorPlantsSection(args: {
     }
     const demandThrottle = num(sector.demandThrottleFactor);
     if (demandThrottle != null && demandThrottle < 1) {
-      weights.push({ cause: "demand", w: 1 - Math.max(0, demandThrottle) });
+      const cause = fillRate != null && fillRate >= SOLD_OUT_FILL ? "ramping" : "demand";
+      weights.push({ cause, w: 1 - Math.max(0, demandThrottle) });
     }
     if (sector.strikeStartedAtTurn != null) {
       weights.push({ cause: "strike", w: 1 - STRIKE_REVENUE_THROTTLE });

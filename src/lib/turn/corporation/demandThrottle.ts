@@ -106,6 +106,64 @@ export function throttleSoldUnits(args: {
   return producedUnits * (soldWeight / weightSum);
 }
 
+/** Fill at or above this counts as a leg that sold everything it offered. */
+export const SOLD_OUT_FILL = 0.999;
+
+/**
+ * Extra units a sold-out plant can put into a market that left buyers unserved
+ * (ticket 1393).
+ *
+ * The throttle reads last turn's sales as the demand it can count on. That is
+ * the right floor in a glut, but a plant that sold every unit it made into a
+ * book where lagged demand exceeded lagged supply learned nothing about the
+ * ceiling: buyers wanted more than anyone offered. Ramping 15% a turn from
+ * there left a plant at a third of capacity for many turns while its own
+ * market stayed short, and showed it as "Demand limited" beside "100% sold".
+ *
+ * Per output leg that sold out, the book's unmet demand (demand minus supply)
+ * converts to sector units through the leg's share of the output mix. Legs are
+ * blended by the same value weights `throttleSoldUnits` uses, so a plant whose
+ * valuable output is short ramps and a glutted co-product still holds it back.
+ * Every seller that sold out may claim the same unmet demand; a collective
+ * overshoot lands as a sub-1 fill next turn, and the throttle settles those
+ * plants back on what they actually sold.
+ */
+export function soldOutMarketHeadroomUnits(args: {
+  /** Last turn's fill per output commodity (persisted with `soldUnits`). */
+  soldByCommodity?: Partial<Record<string, number>> | null;
+  /** The sector's output mix. */
+  supplyRates?: Partial<Record<string, number>> | null;
+  /** Share of one sector unit that is this output, as clearing splits offers. */
+  mixWeightFor: (commodity: string) => number;
+  /** Lagged balance of the book this output clears in. */
+  balanceFor: (commodity: string) => { supply: number; demand: number } | null | undefined;
+  /** Lagged price over base for one output, in the sector's own market. */
+  priceRatioFor: (commodity: string) => number | null | undefined;
+}): number {
+  const { soldByCommodity, supplyRates } = args;
+  if (!soldByCommodity || !supplyRates) return 0;
+  let weightSum = 0;
+  let headroomWeight = 0;
+  for (const [commodity, rate] of Object.entries(supplyRates)) {
+    if (!(typeof rate === "number" && rate > 0)) continue;
+    const fill = soldByCommodity[commodity];
+    if (!(typeof fill === "number" && Number.isFinite(fill))) continue;
+    const ratio = args.priceRatioFor(commodity);
+    const weight =
+      rate * (typeof ratio === "number" && Number.isFinite(ratio) && ratio > 0 ? ratio : 1);
+    weightSum += weight;
+    if (fill < SOLD_OUT_FILL) continue;
+    const share = args.mixWeightFor(commodity);
+    const balance = args.balanceFor(commodity);
+    if (!(share > 0) || !balance) continue;
+    const unmet = balance.demand - balance.supply;
+    if (!(Number.isFinite(unmet) && unmet > 0)) continue;
+    headroomWeight += weight * (unmet / share);
+  }
+  if (!(weightSum > 0)) return 0;
+  return headroomWeight / weightSum;
+}
+
 /**
  * How far above last turn's sales a plant keeps producing, so it can discover
  * demand it is not currently meeting and ramp back into a recovering market.
@@ -135,12 +193,15 @@ export const DEMAND_THROTTLE_FLOOR = 0.1;
  * @param priorProducedUnits units it made last turn (persisted)
  * @param guaranteedDemandUnits named-buyer demand that must be met, in the
  * same scalar output units as `plannedUnits`
+ * @param marketHeadroomUnits unmet demand a sold-out plant may add on top of
+ * what it sold, from `soldOutMarketHeadroomUnits`
  */
 export function demandThrottleFactor(
   plannedUnits: number,
   priorSoldUnits: number | null | undefined,
   priorProducedUnits: number | null | undefined,
-  guaranteedDemandUnits?: number | null
+  guaranteedDemandUnits?: number | null,
+  marketHeadroomUnits?: number | null
 ): number {
   if (!Number.isFinite(plannedUnits) || plannedUnits <= 0) return 1;
   // No usable history: nothing to infer demand from, so do not throttle. This
@@ -165,7 +226,11 @@ export function demandThrottleFactor(
   // its target then exceeds what it can physically make and the cap below
   // returns 1.
   const sold = Math.max(0, priorSoldUnits);
-  const marketTarget = sold * (1 + DEMAND_PROBE_MARGIN);
+  const headroom =
+    typeof marketHeadroomUnits === "number" && Number.isFinite(marketHeadroomUnits)
+      ? Math.max(0, marketHeadroomUnits)
+      : 0;
+  const marketTarget = Math.max(sold * (1 + DEMAND_PROBE_MARGIN), sold + headroom);
   const contractTarget =
     typeof guaranteedDemandUnits === "number" && Number.isFinite(guaranteedDemandUnits)
       ? Math.max(0, guaranteedDemandUnits)
