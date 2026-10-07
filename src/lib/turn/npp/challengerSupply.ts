@@ -1,3 +1,8 @@
+/**
+ * Challenger supply fields existing regional NPPs into uncovered primaries.
+ * Only non-player countries receive generated replacements, including during
+ * Founding. See processChallengerGeneration.
+ */
 import { buildNppElectionEligiblePartyKeys } from "@/lib/parties/antiAbuseGuards";
 import { getDb } from "@/lib/mongodb";
 import type {
@@ -13,6 +18,8 @@ import { createNPP, calculateQualityBonus, type NPPGenerationContext } from "@/l
 import { canPartyFieldInState } from "@/lib/turn/nppEntryLogic";
 import { DEFAULT_CANDIDATE_SUPPORT } from "@/lib/electionEngine/electionFormulaFactors";
 import { isActiveElectionCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
+import { getAllCountryAccess } from "@/lib/countryAccess";
+import { getChallengerSupplyPolicy } from "./rules/challengerSupply";
 
 /**
  * Directly-elected SINGLE-SEAT offices that need a bench challenger to be
@@ -129,9 +136,10 @@ const MAX_CHALLENGERS_PER_TURN = 400;
  * This phase runs just before nppBehavior and files the challenger DIRECTLY into
  * the specific primary (not via the priority-ordered Phase-2 fill), so the
  * lowest-priority race is guaranteed a candidate. It reuses an available free
- * NPP from that (party, home-state) bucket when one exists, else generates one
- * via the canonical `createNPP` (positions inherited from the party doc, so a
- * correctly-seeded party yields a correctly-positioned challenger).
+ * NPP from that (party, home-state) bucket when one exists. Only non-player
+ * countries may generate a replacement via `createNPP` (positions inherited
+ * from the party doc, so a correctly-seeded party yields a correctly-positioned
+ * challenger).
  *
  * Bounded + self-extinguishing: only fires for an open single-seat primary that
  * (a) has no candidate for that major party, (b) where the party has genuine
@@ -176,6 +184,9 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
     )
     .toArray();
   if (openPrimaries.length === 0) return 0;
+  // Runtime access overrides matter: a country can be opened to players without
+  // a deploy. Resolve once for the phase, never once per race or party.
+  const countryAccess = await getAllCountryAccess(db);
 
   // Top-2 default ("major") parties per country — same convention as the admin
   // generator and the party-fielding gate.
@@ -282,6 +293,11 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
   for (const primary of openPrimaries) {
     if (filed >= MAX_CHALLENGERS_PER_TURN) break;
     const country = String(primary.countryId ?? "US");
+    const supply = getChallengerSupplyPolicy(
+      countryAccess[country as CountryId],
+      primary.electionType
+    );
+    if (!supply.canReuse) continue;
     const state = primary.state;
     const countryParties = majorsByCountry.get(country) ?? [];
     let raceHasCandidate = electionsWithCandidate.has(String(primary._id));
@@ -304,10 +320,12 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
       if (!canPartyFieldInState(spo, statesWithOrg.has(`${country}:${state}`), party)) continue; // regional presence
 
       // Reuse a free NPP from this (country,party,state) bucket if available,
-      // else generate one. Either way it becomes this primary's challenger.
+      // else generate one only in a non-player country. Paid recruitment and
+      // roster limits must not be bypassed by empty races in player countries.
       const bucket = `${country}:${party}:${state}`;
       let npp = freeByBucket.get(bucket)?.pop();
       if (!npp) {
+        if (!supply.canGenerate) continue;
         npp = await createNPP(
           {
             state,
@@ -347,13 +365,13 @@ export async function processChallengerGeneration(now: Date): Promise<number> {
       }
     }
 
-    // Founding cannot converge while a cycle-0 race has no candidate or vote
+    // AI-only Founding cannot converge while a cycle-0 race has no candidate or vote
     // coverage. Regional presence still controls which parties normally field,
     // but incomplete seed org data must not strand the office forever. Give a
     // wholly-empty founding race one fallback candidate from the country's first
     // default party. This also covers national executive races, whose state is
     // the country code and therefore has no statePartyOrg row by design.
-    if (founding && !raceHasCandidate && filed < MAX_CHALLENGERS_PER_TURN) {
+    if (founding && supply.canGenerate && !raceHasCandidate && filed < MAX_CHALLENGERS_PER_TURN) {
       const party = countryParties.find((id) =>
         partyDocs.some(
           (p) =>
