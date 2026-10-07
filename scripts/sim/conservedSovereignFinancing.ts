@@ -22,12 +22,10 @@ import { writeFileSync } from "node:fs";
 import { MongoClient, ObjectId, type Db } from "mongodb";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { BOND_UNIT_FACE_VALUE, perTurnCouponPayment } from "@/lib/constants/bonds";
-import {
-  COUNTRY_CURRENCY_MAP,
-  FOREX_ACTIVE_COUNTRIES,
-  getCountryIdForCurrency,
-} from "@/lib/constants/currencies";
+import { getSeedCurrencyCode, getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { getPresetMonetaryScope } from "@/lib/monetaryPolicy/presetMonetaryScope";
+import type { CountryId } from "@/lib/constants/countries";
 
 const BONDS_PER_COUNTRY = 32;
 const UNITS_PER_BOND = 1_000;
@@ -44,6 +42,15 @@ if (!dbName.startsWith("ahd_test_") || !uri) {
 const outIndex = process.argv.indexOf("--out");
 const outPath = outIndex > 0 ? process.argv[outIndex + 1] : undefined;
 
+const turnsIndex = process.argv.indexOf("--turns");
+const turnCount = turnsIndex > 0 ? Number(process.argv[turnsIndex + 1]) : TURNS_PER_YEAR;
+if (!Number.isSafeInteger(turnCount) || turnCount < 1 || turnCount > TURNS_PER_YEAR) {
+  throw new Error("--turns must be an integer between 1 and TURNS_PER_YEAR");
+}
+const PRESET = "1991-default";
+const currencyFor = (country: string) => getSeedCurrencyCode(country as CountryId, PRESET);
+let lastCommand = "none";
+
 type Counter = { total: number; byOp: Record<string, number> };
 let counter: Counter = { total: 0, byOp: {} };
 
@@ -53,122 +60,144 @@ async function main() {
     if (["hello", "isMaster", "ping", "endSessions"].includes(event.commandName)) return;
     const target = event.command[event.commandName];
     const op = `${event.commandName}:${typeof target === "string" ? target : "-"}`;
+    lastCommand = op;
     counter.total += 1;
     counter.byOp[op] = (counter.byOp[op] ?? 0) + 1;
   });
   await client.connect();
-  // The engine's getDb() reuses this client, so its commands are counted too.
-  (globalThis as { _mongoClientPromise?: Promise<MongoClient> })._mongoClientPromise =
-    Promise.resolve(client);
   const db = client.db(dbName);
-  await db.dropDatabase();
+  try {
+    // The engine's getDb() reuses this client, so its commands are counted too.
+    (globalThis as { _mongoClientPromise?: Promise<MongoClient> })._mongoClientPromise =
+      Promise.resolve(client);
+    await db.dropDatabase();
 
-  const { processTreasuryTurn } = await import("@/lib/turn/treasuryTurn");
-  const { processBondMarketPoolTurn } = await import("@/lib/bonds/marketPoolTurn");
+    const { processTreasuryTurn } = await import("@/lib/turn/treasuryTurn");
+    const { processBondMarketPoolTurn } = await import("@/lib/bonds/marketPoolTurn");
 
-  // The ECB is a monetary authority, not a fiscal country with a budget.
-  const countries = FOREX_ACTIVE_COUNTRIES.filter((id) => id !== "ECB");
-  const couponPerTurn = perTurnCouponPayment(COUPON_RATE, BOND_UNIT_FACE_VALUE) * UNITS_PER_BOND;
-  const couponsPerCountryPerTurn = couponPerTurn * BONDS_PER_COUNTRY;
-  // Revenue covers coupons 3x; primary spending takes 60% of revenue.
-  const annualRevenue = couponsPerCountryPerTurn * TURNS_PER_YEAR * 3;
-  const annualPrimary = annualRevenue * 0.6;
-  const householdOpening = annualRevenue * 20;
+    // The ECB is a monetary authority, not a fiscal country with a budget.
+    const countries = getPresetMonetaryScope(PRESET).centralBankCountries;
+    const couponPerTurn = perTurnCouponPayment(COUPON_RATE, BOND_UNIT_FACE_VALUE) * UNITS_PER_BOND;
+    const couponsPerCountryPerTurn = couponPerTurn * BONDS_PER_COUNTRY;
+    // Revenue covers coupons 3x; primary spending takes 60% of revenue.
+    const annualRevenue = couponsPerCountryPerTurn * TURNS_PER_YEAR * 3;
+    const annualPrimary = annualRevenue * 0.6;
+    const householdOpening = annualRevenue * 20;
 
-  const currencies = [...new Set(countries.map((id) => COUNTRY_CURRENCY_MAP[id]))];
-  const bankIds = [...new Set(currencies.map((c) => getBankId(getCountryIdForCurrency(c))))];
-  await seed(db, countries, bankIds, currencies, annualRevenue, annualPrimary, householdOpening);
+    const currencies = [...new Set(countries.map(currencyFor))];
+    const bankIds = [...new Set(currencies.map((c) => getBankId(getCountryIdForCurrency(c))))];
+    await seed(db, countries, bankIds, currencies, annualRevenue, annualPrimary, householdOpening);
 
-  const opening = await stockByBank(db, countries);
-  const turns: Array<Record<string, unknown>> = [];
-  let maxResidual = 0;
-  for (let turn = 1; turn <= TURNS_PER_YEAR; turn += 1) {
-    counter = { total: 0, byOp: {} };
-    let started = Date.now();
-    await processTreasuryTurn(turn);
-    const treasury = { commands: counter.total, ms: Date.now() - started, byOp: counter.byOp };
-    counter = { total: 0, byOp: {} };
-    started = Date.now();
-    await processBondMarketPoolTurn(db, turn, new Date());
-    const pool = { commands: counter.total, ms: Date.now() - started };
+    const opening = await stockByBank(db);
+    const turns: Array<Record<string, unknown>> = [];
+    let maxResidual = 0;
+    for (let turn = 1; turn <= turnCount; turn += 1) {
+      counter = { total: 0, byOp: {} };
+      let started = Date.now();
+      const heartbeat = setInterval(() => {
+        console.log(
+          `turn ${turn}: Treasury pending, ${counter.total} commands, last ${lastCommand}`
+        );
+      }, 30_000);
+      try {
+        await processTreasuryTurn(turn);
+      } finally {
+        clearInterval(heartbeat);
+      }
+      const treasury = { commands: counter.total, ms: Date.now() - started, byOp: counter.byOp };
+      counter = { total: 0, byOp: {} };
+      started = Date.now();
+      await processBondMarketPoolTurn(db, turn, new Date());
+      const pool = { commands: counter.total, ms: Date.now() - started };
 
-    const stock = await stockByBank(db, countries);
-    for (const [bank, value] of stock) {
-      maxResidual = Math.max(maxResidual, Math.abs(value - (opening.get(bank) ?? 0)));
+      const stock = await stockByBank(db);
+      for (const [bank, value] of stock) {
+        maxResidual = Math.max(maxResidual, Math.abs(value - (opening.get(bank) ?? 0)));
+      }
+      const budgets = await db
+        .collection("federalBudget")
+        .find(
+          {},
+          { projection: { treasuryCashLocal: 1, sovereignCouponClaims: 1, conservedFiscalCash: 1 } }
+        )
+        .toArray();
+      turns.push({
+        turn,
+        treasuryCommands: treasury.commands,
+        treasuryMs: treasury.ms,
+        poolCommands: pool.commands,
+        poolMs: pool.ms,
+        openCouponClaims: budgets.reduce(
+          (n, b) => n + ((b.sovereignCouponClaims as unknown[] | undefined)?.length ?? 0),
+          0
+        ),
+        treasuryCashTotal: round(budgets.reduce((n, b) => n + (b.treasuryCashLocal ?? 0), 0)),
+        householdTaxArrears: round(
+          budgets.reduce((n, b) => n + (b.conservedFiscalCash?.householdTaxArrearsLocal ?? 0), 0)
+        ),
+        primarySpendingArrears: round(
+          budgets.reduce((n, b) => n + (b.conservedFiscalCash?.primarySpendingArrearsLocal ?? 0), 0)
+        ),
+        ...(turn === 1 ? { treasuryCommandsByOp: treasury.byOp } : {}),
+      });
+      console.log(
+        `turn ${turn}: treasury ${treasury.commands} cmds ${treasury.ms}ms, pool ${pool.commands} cmds`
+      );
     }
-    const budgets = await db
-      .collection("federalBudget")
-      .find(
-        {},
-        { projection: { treasuryCashLocal: 1, sovereignCouponClaims: 1, conservedFiscalCash: 1 } }
-      )
-      .toArray();
-    turns.push({
-      turn,
-      treasuryCommands: treasury.commands,
-      treasuryMs: treasury.ms,
-      poolCommands: pool.commands,
-      poolMs: pool.ms,
-      openCouponClaims: budgets.reduce(
-        (n, b) => n + ((b.sovereignCouponClaims as unknown[] | undefined)?.length ?? 0),
-        0
-      ),
-      treasuryCashTotal: round(budgets.reduce((n, b) => n + (b.treasuryCashLocal ?? 0), 0)),
-      householdTaxArrears: round(
-        budgets.reduce((n, b) => n + (b.conservedFiscalCash?.householdTaxArrearsLocal ?? 0), 0)
-      ),
-      primarySpendingArrears: round(
-        budgets.reduce((n, b) => n + (b.conservedFiscalCash?.primarySpendingArrearsLocal ?? 0), 0)
-      ),
-      ...(turn === 1 ? { treasuryCommandsByOp: treasury.byOp } : {}),
-    });
-    console.log(
-      `turn ${turn}: treasury ${treasury.commands} cmds ${treasury.ms}ms, pool ${pool.commands} cmds`
-    );
-  }
 
-  const pools = await db.collection("bondMarketPools").find({}).toArray();
-  const report = {
-    scope:
-      "Bounded financing simulation: real Treasury and bond-pool phases only, fixed macro fixtures. Not a full world engine run.",
-    source: "scripts/sim/conservedSovereignFinancing.ts",
-    assumptions: {
-      countries: countries.length,
-      currencies: currencies.length,
-      householdStocks: bankIds.length,
-      bondsPerCountry: BONDS_PER_COUNTRY,
-      unitsPerBond: UNITS_PER_BOND,
-      couponRatePct: COUPON_RATE,
-      couponClaimsPerTurn: countries.length * BONDS_PER_COUNTRY,
-      couponsPerCountryPerTurn: round(couponsPerCountryPerTurn),
-      annualRevenuePerCountry: round(annualRevenue),
-      annualPrimarySpendingPerCountry: round(annualPrimary),
-      householdOpeningPerStock: round(householdOpening),
-      holders: "public float only (bond market pool); bank-held claims not exercised",
-      turnsPerYear: TURNS_PER_YEAR,
-    },
-    limits: { commandBudget: COMMAND_BUDGET, timeoutMs: TIMEOUT_MS },
-    summary: {
-      maxTreasuryCommands: Math.max(...turns.map((t) => t.treasuryCommands as number)),
-      maxTreasuryMs: Math.max(...turns.map((t) => t.treasuryMs as number)),
-      maxPoolCommands: Math.max(...turns.map((t) => t.poolCommands as number)),
-      maxConservationResidual: maxResidual,
-      finalOpenCouponClaims: turns.at(-1)?.openCouponClaims,
-      finalPoolCash: Object.fromEntries(pools.map((p) => [p._id, round(p.cashLocal ?? 0)])),
-    },
-    turns,
-  };
-  if (outPath) writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`);
-  console.log(JSON.stringify(report.summary, null, 2));
-  await db.dropDatabase();
-  await client.close();
+    const pools = await db.collection("bondMarketPools").find({}).toArray();
+    const report = {
+      scope:
+        "Bounded financing simulation: real Treasury and bond-pool phases only, fixed macro fixtures. Not a full world engine run.",
+      source: "scripts/sim/conservedSovereignFinancing.ts",
+      assumptions: {
+        countries: countries.length,
+        currencies: currencies.length,
+        householdStocks: bankIds.length,
+        bondsPerCountry: BONDS_PER_COUNTRY,
+        unitsPerBond: UNITS_PER_BOND,
+        couponRatePct: COUPON_RATE,
+        couponClaimsPerTurn: countries.length * BONDS_PER_COUNTRY,
+        couponsPerCountryPerTurn: round(couponsPerCountryPerTurn),
+        annualRevenuePerCountry: round(annualRevenue),
+        annualPrimarySpendingPerCountry: round(annualPrimary),
+        householdOpeningPerStock: round(householdOpening),
+        holders: "public float only (bond market pool); bank-held claims not exercised",
+        turnsPerYear: TURNS_PER_YEAR,
+        turnsRun: turnCount,
+      },
+      limits: { commandBudget: COMMAND_BUDGET, timeoutMs: TIMEOUT_MS },
+      summary: {
+        maxTreasuryCommands: Math.max(...turns.map((t) => t.treasuryCommands as number)),
+        maxTreasuryMs: Math.max(...turns.map((t) => t.treasuryMs as number)),
+        maxPoolCommands: Math.max(...turns.map((t) => t.poolCommands as number)),
+        maxConservationResidual: maxResidual,
+        finalOpenCouponClaims: turns.at(-1)?.openCouponClaims,
+        finalPoolCash: Object.fromEntries(pools.map((p) => [p._id, round(p.cashLocal ?? 0)])),
+      },
+      turns,
+    };
+    const qualification = {
+      conserved: Number.isFinite(maxResidual) && maxResidual < 0.01,
+      allCouponsPaid: report.summary.finalOpenCouponClaims === 0,
+      commandBudget: report.summary.maxTreasuryCommands <= COMMAND_BUDGET,
+      localTimeout: report.summary.maxTreasuryMs < TIMEOUT_MS,
+    };
+    Object.assign(report, { qualification });
+    if (outPath) writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`);
+    console.log(JSON.stringify({ ...report.summary, qualification }, null, 2));
+    if (Object.values(qualification).some((passed) => !passed)) process.exitCode = 1;
+  } finally {
+    await db.dropDatabase();
+    await client.close();
+  }
 }
 
 function round(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-async function stockByBank(db: Db, countries: string[]): Promise<Map<string, number>> {
+async function stockByBank(db: Db): Promise<Map<string, number>> {
   const [banks, budgets, pools] = await Promise.all([
     db.collection("centralBanks").find({}).toArray(),
     db.collection("federalBudget").find({}).toArray(),
@@ -178,7 +207,7 @@ async function stockByBank(db: Db, countries: string[]): Promise<Map<string, num
   const add = (bank: string, value: number) => stock.set(bank, (stock.get(bank) ?? 0) + value);
   for (const bank of banks) add(String(bank._id), bank.externalBroadMoney ?? 0);
   for (const budget of budgets) {
-    const currency = COUNTRY_CURRENCY_MAP[budget.countryId as (typeof countries)[number] as never];
+    const currency = currencyFor(String(budget.countryId));
     add(getBankId(getCountryIdForCurrency(currency)), budget.treasuryCashLocal ?? 0);
   }
   for (const pool of pools) {
@@ -202,14 +231,22 @@ async function seed(
     conservedSovereignFinancingEnabled: true,
     ledgerShadow: false,
   });
-  await db.collection("gameState").insertOne({ _id: "current" as never, currentTurn: 1 });
+  await db.collection("gameState").insertOne({
+    _id: "current" as never,
+    currentTurn: 1,
+    preset: PRESET,
+    startingYear: 1991,
+    currentYear: 1991,
+    forexEnabled: true,
+    eurozoneEnabled: false,
+  });
   await db
     .collection("exchangeRates")
     .insertMany(currencies.map((c) => ({ _id: c as never, currencyCode: c, rate: 1 })));
   await db.collection("centralBanks").insertMany(
     bankIds.map((id) => ({
       _id: id as never,
-      countryId: id,
+      countryId: countries.find((country) => getBankId(country as CountryId) === id),
       primeRate: 5,
       externalBroadMoney: householdOpening,
     }))
@@ -223,7 +260,7 @@ async function seed(
     countries.map((id) => ({
       _id: (id === "US" ? "federal" : id) as never,
       countryId: id,
-      currencyCode: COUNTRY_CURRENCY_MAP[id as never],
+      currencyCode: currencyFor(id),
       gdp: annualRevenue * 4,
       debtToGdpRatio: 0.6,
       creditRating: "A",
@@ -241,7 +278,7 @@ async function seed(
         _id: new ObjectId(),
         issuerType: "sovereign",
         countryId: id,
-        currencyCode: COUNTRY_CURRENCY_MAP[id as never],
+        currencyCode: currencyFor(id),
         couponRate: COUPON_RATE,
         maturityTurn: 10_000,
         matured: false,
