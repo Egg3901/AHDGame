@@ -3,7 +3,18 @@ import type { GameState } from "@/lib/db/types/gameState";
 import { seededIncomeVintageId } from "@/lib/seeds/reference/income1991";
 
 /** Countries whose 1991 metric seed writers can write a dated income vintage. */
-export const INCOME_VINTAGE_SEED_COUNTRIES = ["NG", "CN", "TR"] as const;
+export const INCOME_VINTAGE_SEED_COUNTRIES = [
+  "NG",
+  "CN",
+  "TR",
+  "AT",
+  "ES",
+  "FI",
+  "FR",
+  "GR",
+  "IT",
+  "SE",
+] as const;
 
 /**
  * Record the income vintage a metric seed writer just wrote for `countryId`, or

@@ -2,20 +2,20 @@ import type { CountryId } from "@/lib/constants/countries";
 import { metricCategories, type MetricDefinition } from "@/lib/constants/metricDefinitions";
 import { JP_INCOME_ANCHORS } from "@/lib/countries/jp/geographyFacts";
 import { JP_NUCLEAR_SAFETY_WINDOW } from "@/lib/countries/jp/data/jpMetricOverrides";
-import { AT_INCOME_ANCHORS } from "@/lib/countries/at/geographyFacts";
+import { AT_INCOME_ANCHORS, AT_INCOME_START_VINTAGES } from "@/lib/countries/at/geographyFacts";
 import { BR_INCOME_ANCHORS } from "@/lib/countries/br/geographyFacts";
 import { CN_INCOME_ANCHORS, CN_INCOME_START_VINTAGES } from "@/lib/countries/cn/geographyFacts";
 import { DD_INCOME_ANCHORS } from "@/lib/countries/dd/geographyFacts";
 import { DE_INCOME_ANCHORS } from "@/lib/countries/de/geographyFacts";
-import { ES_INCOME_ANCHORS } from "@/lib/countries/es/geographyFacts";
-import { FI_INCOME_ANCHORS } from "@/lib/countries/fi/geographyFacts";
-import { FR_INCOME_ANCHORS } from "@/lib/countries/fr/geographyFacts";
-import { GR_INCOME_ANCHORS } from "@/lib/countries/gr/geographyFacts";
+import { ES_INCOME_ANCHORS, ES_INCOME_START_VINTAGES } from "@/lib/countries/es/geographyFacts";
+import { FI_INCOME_ANCHORS, FI_INCOME_START_VINTAGES } from "@/lib/countries/fi/geographyFacts";
+import { FR_INCOME_ANCHORS, FR_INCOME_START_VINTAGES } from "@/lib/countries/fr/geographyFacts";
+import { GR_INCOME_ANCHORS, GR_INCOME_START_VINTAGES } from "@/lib/countries/gr/geographyFacts";
 import { IE_INCOME_ANCHORS } from "@/lib/countries/ie/geographyFacts";
-import { IT_INCOME_ANCHORS } from "@/lib/countries/it/geographyFacts";
+import { IT_INCOME_ANCHORS, IT_INCOME_START_VINTAGES } from "@/lib/countries/it/geographyFacts";
 import { NG_INCOME_ANCHORS, NG_INCOME_START_VINTAGES } from "@/lib/countries/ng/geographyFacts";
 import { RU_INCOME_ANCHORS } from "@/lib/countries/ru/geographyFacts";
-import { SE_INCOME_ANCHORS } from "@/lib/countries/se/geographyFacts";
+import { SE_INCOME_ANCHORS, SE_INCOME_START_VINTAGES } from "@/lib/countries/se/geographyFacts";
 import { TR_INCOME_ANCHORS, TR_INCOME_START_VINTAGES } from "@/lib/countries/tr/geographyFacts";
 import { UK_INCOME_ANCHORS } from "@/lib/countries/uk/geographyFacts";
 import { US_INCOME_ANCHORS } from "@/lib/countries/us/geographyFacts";
@@ -597,6 +597,13 @@ export const INCOME_START_VINTAGES: Partial<Record<CountryId, Record<number, Inc
     NG: NG_INCOME_START_VINTAGES,
     CN: CN_INCOME_START_VINTAGES,
     TR: TR_INCOME_START_VINTAGES,
+    AT: AT_INCOME_START_VINTAGES,
+    ES: ES_INCOME_START_VINTAGES,
+    FI: FI_INCOME_START_VINTAGES,
+    FR: FR_INCOME_START_VINTAGES,
+    GR: GR_INCOME_START_VINTAGES,
+    IT: IT_INCOME_START_VINTAGES,
+    SE: SE_INCOME_START_VINTAGES,
   };
 
 /** The authored start-year vintage for a country, or null when none exists. */

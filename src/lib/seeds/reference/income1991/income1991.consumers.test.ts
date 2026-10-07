@@ -30,9 +30,11 @@ import {
   type Income1991CountryId,
 } from "./index";
 
-const FIXED: Income1991CountryId[] = ["NG", "CN", "TR"];
+// The #3393 countries have their own suite (income1991.westEurope.test.ts).
+type Fixed = Extract<Income1991CountryId, "NG" | "CN" | "TR">;
+const FIXED: Fixed[] = ["NG", "CN", "TR"];
 const REGIONS = { NG: ngRegions1991, CN: cnRegions1991, TR: trRegions1991 } as Record<
-  Income1991CountryId,
+  Fixed,
   Array<{ _id: unknown; population: number }>
 >;
 const BASE = { NG: ngStateMetrics, CN: cnStateMetrics, TR: trStateMetrics };
@@ -42,7 +44,7 @@ const FRESH = incomeVintageStampsFor(1991);
 type MacroSet = { economic?: { medianIncome?: { value: number } } };
 type BaselineSet = { baselines: { economic: { medianIncome: number } } };
 
-async function seedWriters(c: Income1991CountryId) {
+async function seedWriters(c: Fixed) {
   const mod =
     c === "NG"
       ? await import("@/lib/admin/seed/seedNG")
@@ -56,7 +58,7 @@ async function seedWriters(c: Income1991CountryId) {
   return { metrics: m[`seed${c}StateMetrics`], baselines: m[`seed${c}Baselines`] };
 }
 
-async function seededIncome(c: Income1991CountryId, preset: string) {
+async function seededIncome(c: Fixed, preset: string) {
   const db: MockDb = createMockDb();
   const writers = await seedWriters(c);
   await writers.metrics(db as unknown as Db, true, () => {}, preset);
@@ -75,7 +77,7 @@ async function seededIncome(c: Income1991CountryId, preset: string) {
   return { metrics, baselines, stamps };
 }
 
-function popWeighted(c: Income1991CountryId, values: Map<string, number>): number {
+function popWeighted(c: Fixed, values: Map<string, number>): number {
   let pop = 0;
   let sum = 0;
   for (const r of REGIONS[c]) {
@@ -258,7 +260,7 @@ describe("other start years keep their pre-#3316 anchors and bands", () => {
   // Literal values from the interpolation series as it stood before this
   // change: NG 1979 90,000 / 1991 210,000 / 2019 1,100,000; CN 1979 3,500 /
   // 1991 9,000 / 2019 90,000; TR flat 1,900.
-  const EXPECTED: Record<Income1991CountryId, Record<number, number>> = {
+  const EXPECTED: Record<Fixed, Record<number, number>> = {
     NG: {
       1979: 90_000,
       1999: 210_000 + (890_000 * 8) / 28,
@@ -299,9 +301,12 @@ describe("other start years keep their pre-#3316 anchors and bands", () => {
     expect(getIncomeAnchor("CN", 1991)).toBe(9_000);
   });
 
-  it("start vintages exist only for NG, CN and TR at 1991", () => {
-    expect(Object.keys(INCOME_START_VINTAGES).sort()).toEqual(["CN", "NG", "TR"]);
-    for (const c of FIXED) expect(Object.keys(INCOME_START_VINTAGES[c]!)).toEqual(["1991"]);
+  it("start vintages exist only at 1991, for NG, CN, TR and the #3393 countries", () => {
+    const west = ["AT", "ES", "FI", "FR", "GR", "IT", "SE"] as const;
+    expect(Object.keys(INCOME_START_VINTAGES).sort()).toEqual([...FIXED, ...west].sort());
+    for (const c of [...FIXED, ...west]) {
+      expect(Object.keys(INCOME_START_VINTAGES[c]!)).toEqual(["1991"]);
+    }
   });
 
   it("flag-off legacy scoring (no start year) is unchanged by the vintage", () => {
