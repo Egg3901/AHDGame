@@ -74,6 +74,8 @@ async function main() {
 
     const { processTreasuryTurn } = await import("@/lib/turn/treasuryTurn");
     const { processBondMarketPoolTurn } = await import("@/lib/bonds/marketPoolTurn");
+    const { SOVEREIGN_COUPON_CLAIMS_COLLECTION } =
+      await import("@/lib/banking/fundedSovereignCoupons");
 
     // The ECB is a monetary authority, not a fiscal country with a budget.
     const countries = getPresetMonetaryScope(PRESET).centralBankCountries;
@@ -121,16 +123,23 @@ async function main() {
           { projection: { treasuryCashLocal: 1, sovereignCouponClaims: 1, conservedFiscalCash: 1 } }
         )
         .toArray();
+      // Open claims live in the claim store; a claim pinned by a pre-store
+      // partial receipt can still sit on the budget's legacy array.
+      const storedOpenClaims = await db
+        .collection(SOVEREIGN_COUPON_CLAIMS_COLLECTION)
+        .countDocuments({ settledTurn: { $exists: false } });
       turns.push({
         turn,
         treasuryCommands: treasury.commands,
         treasuryMs: treasury.ms,
         poolCommands: pool.commands,
         poolMs: pool.ms,
-        openCouponClaims: budgets.reduce(
-          (n, b) => n + ((b.sovereignCouponClaims as unknown[] | undefined)?.length ?? 0),
-          0
-        ),
+        openCouponClaims:
+          storedOpenClaims +
+          budgets.reduce(
+            (n, b) => n + ((b.sovereignCouponClaims as unknown[] | undefined)?.length ?? 0),
+            0
+          ),
         treasuryCashTotal: round(budgets.reduce((n, b) => n + (b.treasuryCashLocal ?? 0), 0)),
         householdTaxArrears: round(
           budgets.reduce((n, b) => n + (b.conservedFiscalCash?.householdTaxArrearsLocal ?? 0), 0)

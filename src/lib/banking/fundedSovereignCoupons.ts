@@ -401,7 +401,32 @@ export async function settleFundedSovereignCoupons(
     const value = (cash as { treasuryCashLocal?: unknown } | null)?.treasuryCashLocal;
     fundableCash = typeof value === "number" && Number.isFinite(value) ? value : 0;
   }
+  // Claims a grouped receipt already owns settle only through that receipt.
+  const batches = await loadCouponBatches(db, budgetId, claims, input.turn);
+  const batched = new Set<string>();
+  for (const batch of batches) {
+    let status = batch.status;
+    if (status !== "rejected" && !batch.projectionsCompletedAt) {
+      const resumed = await resumeSettlement(db, batch._id);
+      if (resumed.status === "partial") return;
+      status = resumed.status;
+    }
+    if (status === "rejected") continue;
+    for (const id of batchMembers(batch)) batched.add(id);
+  }
+  await markBatchMembersSettled(
+    db,
+    budgetId,
+    batches.filter((batch) => batch.status !== "rejected"),
+    claims.filter((claim) => batched.has(claim.id))
+  );
+
+  // At most one grouped receipt per Treasury and turn. A replay of a turn whose
+  // batch already exists pays anything left over through the per-claim path.
+  const batchOpen = !batches.some((batch) => batch._id === couponBatchKey(budgetId, input.turn));
+  const grouped: FundedSovereignCouponClaim[] = [];
   for (const claim of claims) {
+    if (batched.has(claim.id)) continue;
     const attempt = Math.max(input.turn, claim.dueTurn);
     const prior =
       priorMoves.find(
@@ -412,12 +437,38 @@ export async function settleFundedSovereignCoupons(
       );
     if (!prior && !targetReadyClaimIds.has(claim.id)) continue;
     if (!prior && claim.amountLocal > fundableCash) continue;
+    // Pure public-float claims in one currency share a grouped receipt. A claim
+    // with its own journaled attempt, a personal, corporate, fund or NPP holder,
+    // or a second currency keeps the per-claim receipt.
+    if (
+      !prior &&
+      batchOpen &&
+      isPurePublicFloat(claim) &&
+      claim.currencyCode === (grouped[0]?.currencyCode ?? claim.currencyCode)
+    ) {
+      grouped.push(claim);
+      fundableCash -= claim.amountLocal;
+      continue;
+    }
     const result = prior
       ? await resumeSettlement(db, prior._id)
       : await settleTransition(db, payoutTransition(claim, budgetId, attempt));
     if (result.status === "partial") return;
     if (!prior && result.status === "applied") fundableCash -= claim.amountLocal;
     // A wholly rejected source guard has no landed cash leg. Keep the immutable claim for the next turn.
+  }
+  if (grouped.length) {
+    const transition = batchPayoutTransition(grouped, budgetId, input.turn);
+    const result = await settleTransition(db, transition);
+    if (result.status === "partial") return;
+    if (result.status !== "rejected") {
+      // A replay keeps the membership the receipt was first written with.
+      const saved = await db
+        .collection<CouponBatchRecord>("bankMoneyMoves")
+        .findOne({ _id: transition.key }, { projection: BATCH_PROJECTION });
+      if (saved) await markBatchMembersSettled(db, budgetId, [saved], grouped);
+    }
+    // A rejected batch moved no cash; its claims stay queued for the next turn.
   }
 
   // Paid records are only history once their receipt is acknowledged; keep
@@ -427,6 +478,153 @@ export async function settleFundedSovereignCoupons(
     settledTurn: { $lt: input.turn },
     pendingSettlementProjection: { $exists: false },
   });
+}
+
+type CouponBatchRecord = {
+  _id: string;
+  status?: string;
+  projectionsCompletedAt?: Date;
+  event?: { meta?: { claimIds?: unknown } };
+};
+
+const BATCH_PROJECTION = {
+  _id: 1,
+  status: 1,
+  projectionsCompletedAt: 1,
+  "event.meta.claimIds": 1,
+} as const;
+
+/** Grouped receipt key: one per Treasury and attempt turn. */
+export function couponBatchKey(budgetId: string, turn: number): string {
+  return `sovereign-coupon-batch:${budgetId}:${turn}`;
+}
+
+const batchTurn = (batch: CouponBatchRecord) =>
+  Number(batch._id.slice(batch._id.lastIndexOf(":") + 1));
+
+const batchMembers = (batch: CouponBatchRecord): string[] =>
+  String(batch.event?.meta?.claimIds ?? "")
+    .split(",")
+    .filter(Boolean);
+
+/**
+ * Every grouped receipt that could own a queued claim. A batch is attempted on
+ * or after the due turn of each claim it holds, so the exact keys from the
+ * oldest open due turn through this turn cover them all without a prefix scan.
+ */
+async function loadCouponBatches(
+  db: Db,
+  budgetId: string,
+  claims: FundedSovereignCouponClaim[],
+  turn: number
+): Promise<CouponBatchRecord[]> {
+  if (!claims.length) return [];
+  const first = Math.min(...claims.map((claim) => claim.dueTurn));
+  const keys: string[] = [];
+  for (let t = first; t <= turn; t++) keys.push(couponBatchKey(budgetId, t));
+  return db
+    .collection<CouponBatchRecord>("bankMoneyMoves")
+    .find({ _id: { $in: keys } }, { projection: BATCH_PROJECTION })
+    .toArray();
+}
+
+/**
+ * Close the claim records a landed batch paid. The receipt, not the record, is
+ * the authority: a crash before this write leaves the record open and the next
+ * attempt finds it in the batch membership and closes it here, paying nothing.
+ */
+async function markBatchMembersSettled(
+  db: Db,
+  budgetId: string,
+  batches: CouponBatchRecord[],
+  open: FundedSovereignCouponClaim[]
+): Promise<void> {
+  const openIds = new Set(open.map((claim) => claim.id));
+  const ops = batches.flatMap((batch) => {
+    const ids = batchMembers(batch).filter((id) => openIds.has(id));
+    if (!ids.length) return [];
+    return [
+      {
+        updateMany: {
+          filter: { _id: { $in: ids }, budgetId, ...OPEN_CLAIM },
+          update: { $set: { settledTurn: batchTurn(batch) } },
+        },
+      },
+    ];
+  });
+  if (ops.length) await claimStore(db).bulkWrite(ops, { ordered: false });
+}
+
+function isPurePublicFloat(claim: FundedSovereignCouponClaim): boolean {
+  return (
+    claim.holders.length === 1 &&
+    claim.holders[0].kind === "publicFloat" &&
+    claim.holders[0].amountLocal === claim.amountLocal
+  );
+}
+
+/**
+ * One balanced receipt for many pure public-float claims in one currency. The
+ * Treasury debit and the pool credit are the same sum, so the pair nets
+ * exactly. Its anchor valuation is the sum of the claims' frozen anchor
+ * amounts, and each claim keeps its own frozen quote on its record. Claims
+ * leave the queue only after the receipt lands.
+ */
+function batchPayoutTransition(
+  claims: FundedSovereignCouponClaim[],
+  budgetId: string,
+  turn: number
+): BankingTransition {
+  const currencyCode = claims[0].currencyCode;
+  let amount = 0;
+  let amountAnchor = 0;
+  for (const claim of claims) {
+    amount += claim.amountLocal;
+    amountAnchor += claim.amountLocal / claim.anchorRate;
+  }
+  const valuation = { currencyCode, localPerAnchor: amount / amountAnchor };
+  return {
+    key: couponBatchKey(budgetId, turn),
+    kind: "sovereign_coupon_funded_batch_payout",
+    turn,
+    currency: currencyCode,
+    legs: [
+      {
+        kind: "debit",
+        amount,
+        valuation,
+        collection: "federalBudget",
+        filter: { _id: budgetId, treasuryCashLocal: { $gte: amount } },
+        path: "treasuryCashLocal",
+        note: "Pay sovereign coupon claims from funded Treasury cash",
+      },
+      {
+        kind: "credit",
+        amount,
+        valuation,
+        collection: "bondMarketPools",
+        filter: { _id: currencyCode },
+        path: "cashLocal",
+        note: "Pay public-float sovereign coupons to their bond pool",
+      },
+    ],
+    projections: [
+      {
+        collection: "bondMarketPools",
+        filter: { _id: currencyCode },
+        update: { $inc: { "lifetime.couponsIn": amount } },
+        note: "Record funded public-float coupon receipts",
+      },
+    ],
+    event: {
+      kind: "monetary.executed",
+      command: "turn.sovereignCoupon.fundedBatchPayout",
+      subjectType: "country",
+      subjectId: claims[0].countryId,
+      amount,
+      meta: { claimIds: claims.map((claim) => claim.id).join(","), claims: claims.length },
+    },
+  };
 }
 
 async function loadCouponTargetReadiness(
