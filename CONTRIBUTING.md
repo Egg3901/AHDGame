@@ -87,7 +87,9 @@ start only in the overnight window, never clone production, and retain their
 sandbox output for inspection. The versioned `full-budgeted-v1` mode is rejected
 by older workers rather than run without a cap. A standalone watchdog enforces
 the engine deadline even if the queue worker exits; expiration means unqualified.
-Repeated submission does not reset failed jobs or duplicate existing jobs. Stale
+Repeated submission does not reset failed jobs or duplicate existing jobs. An
+explicit higher `attempt` reserves a new budget and separate sandbox for a retry.
+The worker must match the plan's Node version, platform and architecture. Stale
 budgeted leases fail instead of automatically spending another reservation.
 
 For reuse, supply `acceptedEvidence` entries with `fingerprint`, `verdict: passed`,

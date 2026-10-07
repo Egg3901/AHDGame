@@ -14,6 +14,7 @@ export const planRequestSchema = z
     question: z.string().min(8).max(1000),
     preset: z.string(),
     seed: token,
+    attempt: z.number().int().min(1).max(100).default(1),
     state: z.enum(["fresh", "aged"]).default("fresh"),
     minimumTurns: z.number().int().min(1).max(5000).optional(),
     // Two occurrences of each declared cadence, regardless of initial offset.
@@ -55,6 +56,7 @@ export interface PlannedArm {
 }
 export interface WorldsimPlan {
   version: 1;
+  attempt: number;
   question: string;
   changedPaths: string[];
   selection: "no-worldsim" | "matched-world";
@@ -160,6 +162,7 @@ export function makeWorldsimPlan(
     );
   return {
     version: 1,
+    attempt: r.attempt,
     question: r.question,
     changedPaths: paths,
     selection: noWorld ? "no-worldsim" : "matched-world",

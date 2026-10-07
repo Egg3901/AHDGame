@@ -44,7 +44,7 @@ import {
   type HandoffStore,
 } from "./simJobHandoff";
 import { spawnWithPrefixedLogs, type ChildRunIdentity } from "./childLogPrefix";
-import { budgetedJobWindowFilter } from "./worldsimPlanQueue";
+import { assertPlannerRuntime, budgetedJobWindowFilter } from "./worldsimPlanQueue";
 import { assertSafeToken, buildRunWorldArgs } from "./simJobArgs";
 import { resolveSimPreset } from "./simPreset";
 import { buildStatusMirrorUpdate, type SandboxProgress } from "./simStatusMirror";
@@ -120,6 +120,7 @@ if (OPS_MONGODB_URI === SIM_MONGODB_URI && !ALLOW_SHARED_MONGO) {
 
 interface SimJob {
   engineBudgetSeconds?: number;
+  plannerRuntime?: string;
   preparedSandbox?: PreparedSandbox;
   queuePriority?: number;
   _id: string;
@@ -455,6 +456,7 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob, slotId: numb
     const runWorldEnv = { ...baseChildEnv(), SIM_MONGODB_URI: SIM_MONGODB_URI as string };
     // Validate all arguments before the prepared copy is activated.
     buildRunWorldArgs(job);
+    assertPlannerRuntime(job, `${process.version}/${process.platform}/${process.arch}`);
     if (job.preparedSandbox) {
       const client = await new MongoClient(SIM_MONGODB_URI as string).connect();
       try {

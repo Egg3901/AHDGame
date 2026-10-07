@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { makeWorldsimPlan, planRequestSchema } from "./worldsimPlan";
-import { plannedJobs, budgetedJobWindowFilter } from "./worldsimPlanQueue";
+import {
+  assertExistingJobCompatible,
+  assertPlannerRuntime,
+  plannedJobs,
+  budgetedJobWindowFilter,
+} from "./worldsimPlanQueue";
 import { buildRunWorldArgs } from "./simJobArgs";
 const request = () =>
   planRequestSchema.parse({
@@ -135,4 +140,45 @@ describe("queue safety", () => {
     expect(budgetedJobWindowFilter(new Date("2026-10-08T12:00:00Z"))).toHaveProperty("mode");
     expect(budgetedJobWindowFilter(new Date("2026-12-08T08:00:00Z"))).toEqual({});
   });
+});
+
+it("an explicit retry reserves a new attempt without overwriting the old sandbox", () => {
+  const r = { ...request(), minimumTurns: 4 };
+  const first = makeWorldsimPlan(r, ["src/lib/rules.ts"], "node");
+  const retry = makeWorldsimPlan({ ...r, attempt: 2 }, ["src/lib/rules.ts"], "node");
+  expect(retry.reservedEngineSeconds).toBe(first.reservedEngineSeconds);
+  expect(plannedJobs(retry, new Date())[0]._id).not.toBe(plannedJobs(first, new Date())[0]._id);
+  expect(plannedJobs(retry, new Date())[0].dbName).not.toBe(
+    plannedJobs(first, new Date())[0].dbName
+  );
+  expect(plannedJobs(retry, new Date())[0].plannerRuntime).toBe("node");
+});
+it("an explicit horizon is respected even for presentation paths", () => {
+  const p = makeWorldsimPlan(
+    { ...request(), minimumTurns: 8 },
+    ["messages/en/actions.json"],
+    "node"
+  );
+  expect(p.selection).toBe("matched-world");
+  expect(p.turns).toBe(8);
+});
+
+it("rejects runtime drift and missing budget runtime metadata", () => {
+  expect(() => assertPlannerRuntime({ mode: "full-budgeted-v1" }, "node")).toThrow();
+  expect(() =>
+    assertPlannerRuntime({ mode: "full-budgeted-v1", plannerRuntime: "other" }, "node")
+  ).toThrow();
+  expect(() =>
+    assertPlannerRuntime({ mode: "full-budgeted-v1", plannerRuntime: "node" }, "node")
+  ).not.toThrow();
+  expect(() => assertPlannerRuntime({ mode: "full" }, "node")).not.toThrow();
+});
+it("does not silently reuse a queued job with a different cap", () => {
+  const p = makeWorldsimPlan({ ...request(), minimumTurns: 4 }, ["src/lib/rules.ts"], "node");
+  const job = plannedJobs(p, new Date())[0];
+  expect(() => assertExistingJobCompatible(null, job)).not.toThrow();
+  expect(() => assertExistingJobCompatible({ ...job, status: "failed" }, job)).not.toThrow();
+  expect(() =>
+    assertExistingJobCompatible({ ...job, engineBudgetSeconds: job.engineBudgetSeconds + 1 }, job)
+  ).toThrow();
 });

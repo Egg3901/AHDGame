@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { MongoClient } from "mongodb";
 import { makeWorldsimPlan, planRequestSchema, type AcceptedEvidence } from "./worldsimPlan";
-import { plannedJobs } from "./worldsimPlanQueue";
+import { assertExistingJobCompatible, plannedJobs } from "./worldsimPlanQueue";
 import { defaultSimSourceDeps, verifySimSource } from "./simSource";
 
 async function main() {
@@ -73,12 +73,16 @@ async function main() {
     await client.connect();
     const jobs = client
       .db(process.env.OPS_DB_NAME || "a-house-divided")
-      .collection<{ _id: string; status: string }>("simJobs");
+      .collection<{ _id: string; status: string; [key: string]: unknown }>("simJobs");
     const statuses: Array<{ id: string; status: unknown }> = [];
-    for (const job of plannedJobs(plan, new Date())) {
+    const requestedJobs = plannedJobs(plan, new Date());
+    for (const job of requestedJobs)
+      assertExistingJobCompatible(await jobs.findOne({ _id: job._id }), job);
+    for (const job of requestedJobs) {
       // Existing failed/running/completed jobs are never reset or retried automatically.
       await jobs.updateOne({ _id: job._id }, { $setOnInsert: job }, { upsert: true });
       const stored = await jobs.findOne({ _id: job._id });
+      assertExistingJobCompatible(stored, job);
       statuses.push({ id: job._id, status: stored?.status });
     }
     console.log(
