@@ -1609,14 +1609,8 @@ export function buildSectorPlantsSection(args: {
     }
     const demandThrottle = num(sector.demandThrottleFactor);
     if (demandThrottle != null && demandThrottle < 1) {
-      // A plant that sold every unit it made is not short of buyers: it is
-      // stepping back up toward capacity. Calling that "demand limited" next
-      // to "100% sold" read as a contradiction (ticket 1393).
-      const soldOut = fillRate != null && fillRate >= SOLD_OUT_FILL;
-      weights.push({
-        cause: soldOut ? "ramping" : "demand",
-        w: 1 - Math.max(0, demandThrottle),
-      });
+      const cause = fillRate != null && fillRate >= SOLD_OUT_FILL ? "ramping" : "demand";
+      weights.push({ cause, w: 1 - Math.max(0, demandThrottle) });
     }
     if (sector.strikeStartedAtTurn != null) {
       weights.push({ cause: "strike", w: 1 - STRIKE_REVENUE_THROTTLE });
