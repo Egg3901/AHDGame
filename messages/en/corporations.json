@@ -240,6 +240,17 @@
       "explanation": "Forex fees grow with the bank's recent trade size and market liquidity. Quote the cash cost before buying.",
       "closeQuote": "Receive {proceeds} after a {fee} forex fee. Sell this position?",
       "opened": "Position opened. Vault cash paid {cost}, including a {fee} forex fee."
+    },
+    "fundBondHoldings": {
+      "title": "Bond holdings",
+      "empty": "No active bond holdings.",
+      "issuer": "Issuer",
+      "units": "Units",
+      "coupon": "Annual coupon",
+      "maturity": "Maturity turn",
+      "value": "Market value",
+      "escrow": "Open buy-order escrow",
+      "valuationTooltip": "Mark-to-market value of corporate and sovereign bonds held by the fund."
     }
   }
 }

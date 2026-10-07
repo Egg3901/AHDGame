@@ -30,9 +30,11 @@ interface Decision {
 export default function FederationDecisionPanel({
   countryId,
   legislatureName,
+  embedded = false,
 }: {
   countryId: "CS" | "YU" | "RU";
   legislatureName: string;
+  embedded?: boolean;
 }) {
   const [decision, setDecision] = useState<Decision | null>(null);
   const [custodians, setCustodians] = useState<Record<string, string>>({});
@@ -114,10 +116,11 @@ export default function FederationDecisionPanel({
     }
   }
 
+  const Container = embedded ? "div" : "main";
   return (
-    <main className="min-h-screen bg-background p-6 text-foreground">
+    <Container className={embedded ? undefined : "min-h-screen bg-background p-6 text-foreground"}>
       <div className="mx-auto max-w-3xl space-y-5">
-        <h1 className="text-2xl font-bold">{legislatureName}</h1>
+        {!embedded && <h1 className="text-2xl font-bold">{legislatureName}</h1>}
         <section className="rounded-lg border border-border bg-card p-5 space-y-4">
           <h2 className="text-xl font-semibold">Federation settlement</h2>
           {!decision && !error && <p>Loading the decision…</p>}
@@ -222,10 +225,13 @@ export default function FederationDecisionPanel({
                   )}
                 </fieldset>
               ))}
-              {(decision.sharedAssets ?? []).map((asset) => (
+              {(decision.sharedAssets ?? []).map((asset, index) => (
                 <label key={asset.assetId} className="block space-y-1">
                   <span className="block text-sm">
-                    Custodian for {asset.kind} {asset.assetId}
+                    {t("custodian", {
+                      asset: t(`assetKinds.${asset.kind}`),
+                      number: index + 1,
+                    })}
                   </span>
                   <select
                     className="w-full rounded border border-border bg-background p-2"
@@ -237,7 +243,7 @@ export default function FederationDecisionPanel({
                       }))
                     }
                   >
-                    <option value="">Choose a successor</option>
+                    <option value="">{t("chooseSuccessor")}</option>
                     {(decision.participants ?? []).map((id) => (
                       <option key={id} value={id}>
                         {id}
@@ -267,6 +273,6 @@ export default function FederationDecisionPanel({
           )}
         </section>
       </div>
-    </main>
+    </Container>
   );
 }

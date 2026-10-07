@@ -38,6 +38,20 @@ export interface FundHoldingRow {
   marketCapAnchor?: number;
 }
 
+export interface FundBondHoldingRow {
+  bondId: string;
+  corporationId: string | null;
+  sequentialId: number | null;
+  issuerType: "corporation" | "sovereign";
+  issuerName: string;
+  countryId: string | null;
+  units: number;
+  couponRate: number;
+  marketPrice: number;
+  maturityTurn: number;
+  valueAnchor: number;
+}
+
 export interface FundDetail {
   id: string;
   slug: string;
@@ -59,6 +73,9 @@ export interface FundDetail {
   navChange1: number | null;
   navChange24: number | null;
   navChange48: number | null;
+  openOrdersEscrowAnchor?: number;
+  bondHoldings?: FundBondHoldingRow[];
+  bondHoldingsValueAnchor?: number;
   holdings: FundHoldingRow[];
   targetConstituents: FundHoldingRow[];
   // A5 sponsorship — all null on the seeded system funds.
