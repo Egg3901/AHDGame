@@ -6,88 +6,137 @@ import { allocateSeats, getMultiSeatMinShare, type RankedCandidate } from "./sea
 import { HOUSE_SEATS_1991, UK_COMMONS_SEATS_1953 } from "@/lib/constants/states";
 import { getElectionMethod } from "@/lib/elections/electionMethod";
 
-describe("1991 Japan single non-transferable vote", () => {
-  it("uses SNTV only for the 1991 lower chamber", () => {
-    expect(getElectionMethod("JP", "shugiin", "1991-default")).toBe("sntv");
-    expect(getElectionMethod("JP", "snap_shugiin", "1991-default")).toBe("sntv");
+describe("Japan Shugiin proportional allocation", () => {
+  it("uses proportional allocation for the 1991 lower chamber", () => {
+    expect(getElectionMethod("JP", "shugiin", "1991-default")).toBe("pr_hareQuota");
+    expect(getElectionMethod("JP", "snap_shugiin", "1991-default")).toBe("pr_hareQuota");
     expect(getElectionMethod("JP", "sangiin", "1991-default")).toBe("pr_hareQuota");
     expect(getElectionMethod("JP", "shugiin", "2019-default")).toBe("pr_hareQuota");
   });
 
-  it("awards one seat to each highest-voted candidate, even from the same party", () => {
-    const ranked: RankedCandidate[] = [
-      { id: "ldp-a", votes: 500, party: "LDP" },
-      { id: "ldp-b", votes: 400, party: "LDP" },
-      { id: "opposition", votes: 300, party: "JSP" },
-      { id: "ldp-c", votes: 100, party: "LDP" },
-    ];
+  it("fills every regional seat when one eligible party has all votes", () => {
     const result = allocateSeats(
       "shugiin",
-      "tokyo",
-      3,
-      ranked,
-      1300,
+      "CGK",
+      34,
+      [{ id: "only", votes: 91_818, party: "IDP" }],
+      91_818,
+      undefined,
+      undefined,
+      undefined,
+      "JP",
+      "pr_hareQuota"
+    );
+    expect(result.seatsEstimate).toEqual({ only: 34 });
+  });
+
+  it("interprets already-open JP SNTV snapshots through the proportional compatibility path", () => {
+    const result = allocateSeats(
+      "shugiin",
+      "TOH",
+      50,
+      [
+        { id: "idp", votes: 56_988, party: "IDP" },
+        { id: "dsp", votes: 56_830, party: "DSP" },
+        { id: "independent", votes: 2_412, party: "independent" },
+      ],
+      116_230,
       undefined,
       undefined,
       undefined,
       "JP",
       "sntv"
     );
-    expect(result.seatsEstimate).toEqual({ "ldp-a": 1, "ldp-b": 1, opposition: 1, "ldp-c": 0 });
-    expect(result.winners).toHaveLength(3);
+    expect(result.seatsEstimate).toEqual({ idp: 25, dsp: 25, independent: 0 });
+    expect(Object.values(result.seatsEstimate).reduce((sum, seats) => sum + seats, 0)).toBe(50);
   });
 
-  it("leaves unfilled seats vacant instead of awarding several to one candidate", () => {
+  it("uses the same compatibility path for already-open snap elections", () => {
+    const result = allocateSeats(
+      "snap_shugiin",
+      "CGK",
+      34,
+      [{ id: "only", votes: 1_000, party: "IDP" }],
+      1_000,
+      undefined,
+      undefined,
+      undefined,
+      "JP",
+      "sntv"
+    );
+    expect(result.seatsEstimate).toEqual({ only: 34 });
+  });
+
+  it("keeps the 10% boundary inclusive and excludes a party below it", () => {
     const result = allocateSeats(
       "shugiin",
-      "osaka",
+      "KAN",
+      34,
+      [
+        { id: "major", votes: 890, party: "major" },
+        { id: "boundary", votes: 100, party: "boundary" },
+        { id: "minor", votes: 10, party: "minor" },
+      ],
+      1000,
+      undefined,
+      undefined,
+      undefined,
+      "JP",
+      "pr_hareQuota"
+    );
+    expect(result.seatsEstimate).toEqual({ major: 31, boundary: 3, minor: 0 });
+  });
+
+  it("preserves candidate-limited SNTV outside the JP Shugiin compatibility path", () => {
+    const result = allocateSeats(
+      "nationalAssembly",
+      "region",
       4,
       [{ id: "only", votes: 100 }],
       100,
       undefined,
       undefined,
       undefined,
-      "JP",
+      "OTHER",
       "sntv"
     );
     expect(result.seatsEstimate).toEqual({ only: 1 });
   });
 
-  it("uses bounded NPP slates while a player candidate can win only one seat", () => {
-    const ranked: RankedCandidate[] = [
-      { id: "ldp-slate", votes: 600, isNPP: true },
-      { id: "jsp-slate", votes: 400, isNPP: true },
-      { id: "player", votes: 250, isNPP: false },
-    ];
+  it("preserves candidate ranking and bounded NPP slates for non-JP SNTV", () => {
     const result = allocateSeats(
-      "shugiin",
-      "KAN",
+      "nationalAssembly",
+      "region",
       4,
-      ranked,
-      1250,
+      [
+        { id: "party-a-slate", votes: 600, isNPP: true },
+        { id: "party-b-slate", votes: 400, isNPP: true },
+        { id: "player", votes: 250 },
+      ],
+      1_250,
       undefined,
       undefined,
       undefined,
-      "JP",
+      "OTHER",
       "sntv"
     );
-    expect(result.seatsEstimate).toEqual({ "ldp-slate": 2, "jsp-slate": 1, player: 1 });
+    expect(result.seatsEstimate).toEqual({ "party-a-slate": 2, "party-b-slate": 1, player: 1 });
   });
 
-  it("fills a large 1991 region with finite virtual NPP candidates", () => {
+  it("still fills a large non-JP SNTV region from finite virtual NPP candidates", () => {
     const ranked: RankedCandidate[] = [45_000, 30_000, 15_000, 7_000, 3_000].map(
       (votes, index) => ({ id: `slate-${index}`, votes, isNPP: true })
     );
     const result = allocateSeats(
-      "shugiin",
-      "KAN",
+      "nationalAssembly",
+      "region",
       145,
       ranked,
       100_000,
       undefined,
       undefined,
       undefined,
-      "JP",
+      "OTHER",
       "sntv"
     );
     expect(Object.values(result.seatsEstimate).reduce((sum, seats) => sum + seats, 0)).toBe(145);
@@ -141,13 +190,15 @@ describe("getMultiSeatMinShare", () => {
     expect(getMultiSeatMinShare("localCouncil")).toBe(0.1);
   });
 
-  it("uses 10% for UK Commons while keeping the US House safe default at 20%", () => {
+  it("uses 10% for UK Commons and JP Shugiin while keeping the US House safe default at 20%", () => {
     expect(getMultiSeatMinShare("house")).toBe(0.2);
     expect(getMultiSeatMinShare("house", 5, "US")).toBeCloseTo(1 / 6, 10);
     expect(getMultiSeatMinShare("house", 9, "US")).toBe(0.1);
     expect(getMultiSeatMinShare("house", 9, "NG")).toBe(0.2);
     expect(getMultiSeatMinShare("commons")).toBe(0.1);
     expect(getMultiSeatMinShare("snap_commons")).toBe(0.1);
+    expect(getMultiSeatMinShare("shugiin")).toBe(0.1);
+    expect(getMultiSeatMinShare("snap_shugiin")).toBe(0.1);
     expect(getMultiSeatMinShare("governor")).toBe(0.2);
   });
 

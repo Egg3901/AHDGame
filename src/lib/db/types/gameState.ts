@@ -520,6 +520,10 @@ export interface GameState {
   cabinetSystemVersion?: "v1" | "v2";
   cabinetSystemVersionBy?: string;
   cabinetSystemVersionAt?: string;
+  /** Unified live-population electorate, participation ledger, and issue salience. */
+  demographicsSystemVersion?: "v1" | "v2";
+  demographicsSystemVersionBy?: string;
+  demographicsSystemVersionAt?: string;
   /**
    * Master gate for the new-player onboarding checklist (profile checklist
    * card, page-visit step tracking, welcome mail, completion reward). When

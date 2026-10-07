@@ -25,6 +25,7 @@ import type {
 } from "@/lib/elections/candidateEnrichment";
 import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
 import type { DemocraticHealthElectionSnapshot } from "@/lib/electionEngine/democraticHealth";
+import type { ParticipationSummary } from "@/lib/demographics/v2/rules";
 
 export interface PollingData {
   leaderId: string | null;
@@ -63,6 +64,7 @@ export interface GeneralVotesData {
     cumulativeVotes: Record<string, number>;
     sharesPct: Record<string, number>;
     seatsEstimate?: Record<string, number>;
+    participation?: ParticipationSummary;
   }>;
   // Electoral-vote fields (president only) — shape comes from electoralVoteService
   electoralVotesByCandidate?: Record<string, number>;

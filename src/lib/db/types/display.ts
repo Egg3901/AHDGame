@@ -87,6 +87,7 @@ export interface ElectionDisplay {
       sharesPct: Record<string, number>;
       cumulativeVotes: Record<string, number>;
       seatsEstimate?: Record<string, number>;
+      participation?: import("@/lib/demographics/v2/rules").ParticipationSummary;
     }[];
   };
 }

@@ -229,6 +229,7 @@ export async function resetAndBootstrapGameWorld(
         metricsSystemVersion: 1,
         legislationSystemVersion: 1,
         cabinetSystemVersion: 1,
+        demographicsSystemVersion: 1,
         resetSystemSelections: 1,
       },
     }
@@ -561,6 +562,49 @@ export async function resetAndBootstrapGameWorld(
         throw new Error("Cabinet v2 world changed before its seed receipt could be stamped");
       }
       collect("Verified 1991 v2 Cabinet opening claims for US, UK, and JP");
+    }
+    if (selectedVersions.demographics === "v2") {
+      phaseReached = "v2 demographics opening";
+      if (run.status(false) !== "succeeded") {
+        throw new Error("Cannot certify demographics v2 after a partial reset");
+      }
+      const freshState = await db.collection<GameState>("gameState").findOne(
+        { _id: "current" },
+        {
+          projection: {
+            resetWorldId: 1,
+            currentTurn: 1,
+            demographicsSystemVersion: 1,
+          },
+        }
+      );
+      if (
+        freshState?.demographicsSystemVersion !== "v2" ||
+        typeof freshState.resetWorldId !== "string" ||
+        !Number.isSafeInteger(freshState.currentTurn) ||
+        freshState.currentTurn < 1
+      ) {
+        throw new Error("Fresh reset state is missing the demographics v2 world identity");
+      }
+      const { verifyDemographicsV2Opening } = await import("@/lib/demographics/v2/verifyOpening");
+      const receipt = await verifyDemographicsV2Opening(
+        db,
+        freshState.resetWorldId,
+        freshState.currentTurn
+      );
+      const stamped = await db.collection<GameState>("gameState").updateOne(
+        {
+          _id: "current",
+          resetWorldId: freshState.resetWorldId,
+          currentTurn: freshState.currentTurn,
+          demographicsSystemVersion: "v2",
+        },
+        { $set: { "resetVersionSeeds.demographics": receipt } }
+      );
+      if (stamped.matchedCount !== 1) {
+        throw new Error("Demographics v2 world changed before its receipt could be stamped");
+      }
+      collect("Verified 1991 v2 demographics opening for US, UK, and JP");
     }
 
     if (preIteration && startingParties === "none") {

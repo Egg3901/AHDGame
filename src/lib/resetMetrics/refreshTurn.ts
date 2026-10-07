@@ -5,7 +5,7 @@ import { RESET_V2_READY } from "@/lib/resetVersions/availability";
 import {
   RESET_V2_COUNTRIES,
   resetSystemVersionsForCountry,
-  type ResetSystem,
+  type ResetV2Readiness,
 } from "@/lib/resetVersions/rules";
 import type { OpeningMetricObservation } from "./rules/openingObservation";
 import { refreshResetMetricBoard } from "./rules/refresh";
@@ -32,7 +32,7 @@ export async function refreshResetMetricSnapshotsTurn(input: {
   gameState: GameState;
   turn: number;
   ownerReadings: MetricOwnerTurnReadingsByBoard | MetricOwnerTurnReader;
-  ready?: Record<ResetSystem, boolean>;
+  ready?: ResetV2Readiness;
 }): Promise<{ boards: number; advanced: number; replayed: number }> {
   const { db, gameState, turn } = input;
   const ready = input.ready ?? RESET_V2_READY;

@@ -54,6 +54,7 @@ export function CampaignRoomBriefing({ campaign }: CampaignRoomBriefingProps) {
       <div className="blend-briefing-grid">
         <PathToVictoryCard path={briefing.path} />
         <CoalitionWeaknessCard buckets={briefing.coalitionWeakness} />
+        <ParticipationPlanCard plan={briefing.participationPlan} />
       </div>
 
       <style>{`
@@ -64,6 +65,64 @@ export function CampaignRoomBriefing({ campaign }: CampaignRoomBriefingProps) {
         }
       `}</style>
     </section>
+  );
+}
+
+export function ParticipationPlanCard({ plan }: { plan: CampaignBriefing["participationPlan"] }) {
+  if (!plan) return null;
+  const actionLabel = {
+    canvass: "Canvass",
+    targeted_ads: "Targeted ads",
+    hold: "Hold",
+  } as const;
+  return (
+    <div className="blend-briefing-wide">
+      <CardShell title="Method 4 turnout plan">
+        <p
+          style={{
+            margin: "0 0 10px",
+            fontFamily: FONT.sans,
+            fontSize: 12.5,
+            color: BLEND.mutedDim,
+          }}
+        >
+          Expected turnout {plan.expectedTurnout.toFixed(1)}%. Campaign contact adds{" "}
+          {plan.contactLift.toFixed(1)} points and repeated contact gives back{" "}
+          {Math.abs(plan.saturationDrag).toFixed(1)} points.
+        </p>
+        {plan.targets.length > 0 ? (
+          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+            {plan.targets.map((target) => (
+              <li
+                key={target.bucket}
+                style={{ padding: "7px 0", borderBottom: "1px solid rgba(34,34,47,.7)" }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <strong style={{ fontFamily: FONT.sans, fontSize: 13.5 }}>
+                    {prettyBucket(target.bucket)}
+                  </strong>
+                  <span style={{ ...BLEND_LABEL, color: BLEND.positive }}>
+                    {actionLabel[target.action]}
+                  </span>
+                </div>
+                <p
+                  style={{
+                    margin: "3px 0 0",
+                    fontFamily: FONT.sans,
+                    fontSize: 12.5,
+                    color: BLEND.muted,
+                  }}
+                >
+                  {target.reason}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <Muted>No group-level recommendation is available yet.</Muted>
+        )}
+      </CardShell>
+    </div>
   );
 }
 

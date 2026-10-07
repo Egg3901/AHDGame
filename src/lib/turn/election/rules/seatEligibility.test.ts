@@ -40,6 +40,8 @@ describe("getMultiSeatMinShare", () => {
     expect(getMultiSeatMinShare("house", 5, "NG")).toBe(0.2);
     expect(getMultiSeatMinShare("house", 5)).toBe(0.2);
     expect(getMultiSeatMinShare("commons", 5)).toBe(0.1);
+    expect(getMultiSeatMinShare("shugiin", 34, "JP")).toBe(0.1);
+    expect(getMultiSeatMinShare("snap_shugiin", 34, "JP")).toBe(0.1);
     expect(getMultiSeatMinShare("stateSenate", 5)).toBe(0.1);
     expect(getMultiSeatMinShare("governor", 5)).toBe(0.2);
   });

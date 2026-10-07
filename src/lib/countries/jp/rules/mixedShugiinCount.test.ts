@@ -122,6 +122,26 @@ describe("Japan mixed Shūgiin count", () => {
     expect(result.vacancies).toEqual([]);
   });
 
+  it("applies a 10% party threshold to the mixed-system regional list", () => {
+    const input = fullBallot();
+    const region = "TOH";
+    const districts = JP_SHUGIIN_1994_CONSTITUENCIES.filter((row) => row.regionId === region);
+    input.districtVotes = Object.fromEntries(
+      districts.map((district) => [district.id, input.districtVotes[district.id]])
+    );
+    input.listVotesByRegion[region] = { major: 890, boundary: 100, minor: 10 };
+    input.regionalLists[region] = [
+      { candidateId: "major-npp", partyId: "major", listOrder: 1, isNPP: true },
+      { candidateId: "boundary-npp", partyId: "boundary", listOrder: 1, isNPP: true },
+      { candidateId: "minor-npp", partyId: "minor", listOrder: 1, isNPP: true },
+    ];
+
+    const result = countJapanMixedShugiin(input, region);
+    expect(result.partySeatsByRegion[region]).toEqual({ major: 15, boundary: 1, minor: 0 });
+    expect(result.listWinners[region]).toHaveLength(16);
+    expect(result.vacancies).toEqual([]);
+  });
+
   it("reconciles merged party list ranks and second-vote totals deterministically", () => {
     const rows = buildJapanMixedRegionalList([
       { candidateId: "old-rank-1", partyId: "survivor", listOrder: 1 },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCoalitionWeakness } from "./briefing";
+import { buildCoalitionWeakness, buildParticipationPlan } from "./briefing";
 import type { CandidateNationalLedger } from "@/lib/electionEngine/factorLedger";
 
 function candidate(
@@ -79,5 +79,27 @@ describe("buildCoalitionWeakness", () => {
     const owner = candidate("me", 1_000, { "race:white": 0.4 });
     expect(buildCoalitionWeakness([owner], null)).toEqual([]);
     expect(buildCoalitionWeakness([owner], "someone-else")).toEqual([]);
+  });
+});
+
+describe("buildParticipationPlan", () => {
+  it("recommends persuasion when repeat contact is losing efficiency", () => {
+    const plan = buildParticipationPlan(
+      {
+        calibrationId: "US-v1",
+        baseline: 60,
+        salience: 1,
+        competitiveness: 2,
+        access: -1,
+        contact: 3,
+        saturation: -1,
+        resolvedTurnout: 64,
+        economicSalience: 1,
+        socialSalience: 1,
+        competitivenessScore: 0.8,
+      },
+      [{ bucket: "age:young", appealShare: 0.2, bucketShare: 0.35, demoEP: -1, demoSP: 0 }]
+    );
+    expect(plan?.targets[0]).toMatchObject({ bucket: "age:young", action: "targeted_ads" });
   });
 });

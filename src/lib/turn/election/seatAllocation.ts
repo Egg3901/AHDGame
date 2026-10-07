@@ -2,7 +2,7 @@ import { HOUSE_SEATS, UK_COMMONS_SEATS, UK_REGIONAL_COUNCIL_SEATS } from "@/lib/
 import { allocateBlocListSeats } from "./blocListAllocation";
 import { MULTI_SEAT_TYPES } from "@/lib/utils/electionLabels";
 import { getMultiSeatMinShare } from "./rules/seatEligibility";
-import type { ElectionMethod } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type ElectionMethod } from "@/lib/constants/countries";
 
 export { getMultiSeatMinShare } from "./rules/seatEligibility";
 
@@ -246,8 +246,15 @@ export function allocateSeats(
           : totalSeats;
 
   const seatsEstimate: Record<string, number> = {};
+  // Deployed 1991 JP races may still carry the former SNTV snapshot until the
+  // perpetual-election healer runs. Interpret those documents through the
+  // current proportional rule so projections and final resolution agree
+  // throughout the rollout.
+  const isJapanShugiin =
+    countryId === COUNTRY_CONFIGS.JP.id &&
+    (electionType === "shugiin" || electionType === "snap_shugiin");
 
-  if (isMultiSeat && allocationMethod === "sntv") {
+  if (isMultiSeat && allocationMethod === "sntv" && !isJapanShugiin) {
     // Player candidates win at most one seat; NPP entries represent finite
     // slates of virtual individuals. There is no proportional seat quota.
     Object.assign(seatsEstimate, sntvSeats(ranked, authoritativeSeats));

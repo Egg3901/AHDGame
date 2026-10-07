@@ -22,6 +22,7 @@ export async function transferResetV2RegionToIreland(db: Db, regionId: string): 
         metricsSystemVersion: 1,
         legislationSystemVersion: 1,
         cabinetSystemVersion: 1,
+        demographicsSystemVersion: 1,
         resetVersionSeeds: 1,
       },
     }

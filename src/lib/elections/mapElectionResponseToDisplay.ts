@@ -36,6 +36,7 @@ export function mapElectionResponseToDisplay(election: ElectionResponse): Electi
             sharesPct: snapshot.sharesPct,
             cumulativeVotes: snapshot.cumulativeVotes,
             seatsEstimate: snapshot.seatsEstimate,
+            participation: snapshot.participation,
           })),
         }
       : undefined,

@@ -48,6 +48,18 @@ const delegateBriefing: CampaignBriefing = {
     { bucket: "race:black", appealShare: 0.1, bucketShare: 0.12, demoEP: -0.3, demoSP: -0.2 },
     { bucket: "race:white", appealShare: 0.5, bucketShare: 0.61, demoEP: 0.1, demoSP: 0.2 },
   ],
+  participationPlan: {
+    expectedTurnout: 64.2,
+    contactLift: 3.1,
+    saturationDrag: -0.4,
+    targets: [
+      {
+        bucket: "race:black",
+        action: "targeted_ads",
+        reason: "You are losing this group. Improve support before asking more of it to vote.",
+      },
+    ],
+  },
 };
 
 describe("CampaignRoomBriefing", () => {
@@ -59,7 +71,9 @@ describe("CampaignRoomBriefing", () => {
     expect(screen.getByText(/80 more to clinch/i)).toBeTruthy();
     expect(screen.getByText("Rival")).toBeTruthy();
     // Weakest bucket leads the coalition card.
-    expect(screen.getByText(/Black · Race/i)).toBeTruthy();
+    expect(screen.getAllByText(/Black · Race/i)).toHaveLength(2);
+    expect(screen.getByText(/Method 4 turnout plan/i)).toBeTruthy();
+    expect(screen.getByText(/Targeted ads/i)).toBeTruthy();
     // The runway rides on the war-chest vital now, beside the balance and burn
     // rate the card here was quoting back.
     expect(screen.queryByText(/Cash runway/i)).toBeNull();

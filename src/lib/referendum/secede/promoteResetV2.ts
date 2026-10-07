@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Db } from "mongodb";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { GameState } from "@/lib/db/types/gameState";
@@ -29,6 +30,7 @@ import {
 import { groupOpeningDepartmentClaims } from "@/lib/resetFinance/rules/departmentOpening";
 import type { SecedingCountryId } from "./subRegions";
 import { buildSuccessorMetricRows, buildSuccessorRegionalRows } from "./rules/resetV2Promotion";
+import { verifyDemographicsV2Opening } from "@/lib/demographics/v2/verifyOpening";
 
 function rekeyReference(
   reference: OpeningLawReference,
@@ -58,25 +60,35 @@ export async function promoteResetV2ForIndependence(
         metricsSystemVersion: 1,
         legislationSystemVersion: 1,
         cabinetSystemVersion: 1,
+        demographicsSystemVersion: 1,
         resetVersionSeeds: 1,
       },
     }
   );
   if (!gameState?.resetWorldId) return { promoted: false };
   const versions = resetSystemVersionsForCountry(gameState, RESET_V2_READY, "UK");
-  if (versions.metrics !== "v2") return { promoted: false };
+  if (!Object.values(versions).some((version) => version === "v2")) {
+    return { promoted: false };
+  }
   const worldId = gameState.resetWorldId;
   const alreadyPromoted =
-    gameState.resetVersionSeeds?.metrics?.countries?.includes(countryId) === true &&
+    (versions.metrics !== "v2" ||
+      gameState.resetVersionSeeds?.metrics?.countries?.includes(countryId) === true) &&
     (versions.legislation !== "v2" ||
       gameState.resetVersionSeeds?.legislation?.countries?.includes(countryId) === true) &&
     (versions.cabinet !== "v2" ||
-      gameState.resetVersionSeeds?.cabinet?.countries?.includes(countryId) === true);
+      gameState.resetVersionSeeds?.cabinet?.countries?.includes(countryId) === true) &&
+    (versions.demographics !== "v2" ||
+      gameState.resetVersionSeeds?.demographics?.countries?.includes(countryId) === true);
   if (alreadyPromoted) {
     await Promise.all([
-      db
-        .collection<ResetMetricSnapshot>("resetMetricSnapshots")
-        .deleteOne({ _id: `UK:${countryId}`, worldId }),
+      ...(versions.metrics === "v2"
+        ? [
+            db
+              .collection<ResetMetricSnapshot>("resetMetricSnapshots")
+              .deleteOne({ _id: `UK:${countryId}`, worldId }),
+          ]
+        : []),
       ...(versions.legislation === "v2"
         ? [
             db
@@ -97,22 +109,36 @@ export async function promoteResetV2ForIndependence(
   if (states.length === 0) throw new Error(`${countryId} v2 promotion has no sub-regions`);
 
   const metricCollection = db.collection<ResetMetricSnapshot>("resetMetricSnapshots");
-  const aggregateMetric = await metricCollection.findOne({ _id: `UK:${countryId}`, worldId });
-  if (!aggregateMetric) {
+  const aggregateMetric =
+    versions.metrics === "v2"
+      ? await metricCollection.findOne({ _id: `UK:${countryId}`, worldId })
+      : null;
+  if (versions.metrics === "v2" && !aggregateMetric) {
     throw new Error(`${countryId} v2 promotion is missing its UK metric source`);
   }
   const regionSeeds = states.map((state) => ({ id: state._id, population: state.population }));
-  const metricRows: ResetMetricSnapshot[] = buildSuccessorMetricRows({
-    countryId,
-    aggregate: aggregateMetric,
-    regions: regionSeeds,
-  });
-  await metricCollection.bulkWrite(
-    metricRows.map((row) => ({
-      replaceOne: { filter: { _id: row._id }, replacement: row, upsert: true },
-    })),
-    { ordered: true }
-  );
+  const demographicsReceipt =
+    versions.demographics === "v2"
+      ? await verifyDemographicsV2Opening(
+          db,
+          worldId,
+          gameState.currentTurn ?? gameState.resetVersionSeeds?.demographics?.sourceTurn ?? 1,
+          [countryId]
+        )
+      : null;
+  if (versions.metrics === "v2") {
+    const metricRows: ResetMetricSnapshot[] = buildSuccessorMetricRows({
+      countryId,
+      aggregate: aggregateMetric!,
+      regions: regionSeeds,
+    });
+    await metricCollection.bulkWrite(
+      metricRows.map((row) => ({
+        replaceOne: { filter: { _id: row._id }, replacement: row, upsert: true },
+      })),
+      { ordered: true }
+    );
+  }
   const sourcesToDelete: Array<Promise<unknown>> = [];
 
   if (versions.legislation === "v2") {
@@ -260,12 +286,12 @@ export async function promoteResetV2ForIndependence(
     );
   }
 
-  const additions: Record<string, string[]> = {
-    "resetVersionSeeds.metrics.countries": mergeResetReceiptCountries(
+  const additions: Record<string, unknown> = {};
+  if (versions.metrics === "v2")
+    additions["resetVersionSeeds.metrics.countries"] = mergeResetReceiptCountries(
       gameState.resetVersionSeeds?.metrics?.countries,
       [countryId]
-    ),
-  };
+    );
   if (versions.legislation === "v2")
     additions["resetVersionSeeds.legislation.countries"] = mergeResetReceiptCountries(
       gameState.resetVersionSeeds?.legislation?.countries,
@@ -276,10 +302,29 @@ export async function promoteResetV2ForIndependence(
       gameState.resetVersionSeeds?.cabinet?.countries,
       [countryId]
     );
+  if (versions.demographics === "v2") {
+    const existing = gameState.resetVersionSeeds?.demographics;
+    if (!existing || !demographicsReceipt) {
+      throw new Error(`${countryId} v2 promotion is missing its demographics receipt`);
+    }
+    additions["resetVersionSeeds.demographics"] = {
+      ...existing,
+      revision: demographicsReceipt.revision,
+      completedAt: demographicsReceipt.completedAt,
+      verificationHash: createHash("sha256")
+        .update(existing.verificationHash)
+        .update("\n")
+        .update(demographicsReceipt.verificationHash)
+        .digest("hex"),
+      countries: mergeResetReceiptCountries(existing.countries, [countryId]),
+    };
+  }
   await db
     .collection<GameState>("gameState")
     .updateOne({ _id: "current", resetWorldId: worldId }, { $set: additions });
-  sourcesToDelete.push(metricCollection.deleteOne({ _id: `UK:${countryId}`, worldId }));
+  if (versions.metrics === "v2") {
+    sourcesToDelete.push(metricCollection.deleteOne({ _id: `UK:${countryId}`, worldId }));
+  }
   await Promise.all(sourcesToDelete);
   return { promoted: true };
 }

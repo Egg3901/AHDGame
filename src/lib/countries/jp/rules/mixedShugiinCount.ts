@@ -4,6 +4,7 @@
  */
 import { JP_SHUGIIN_1994_CONSTITUENCIES } from "../data/jpShugiinConstituencies1994";
 import { JP_SHUGIIN_1994_LIST_SEATS } from "./shugiinElectoralLaw";
+import { STANDARD_MULTI_SEAT_MIN_SHARE } from "@/lib/turn/election/rules/seatEligibility";
 
 export interface ShugiinDistrictCandidate {
   candidateId: string;
@@ -239,8 +240,15 @@ export function countJapanMixedShugiin(
     const allocation: Record<string, number> = Object.fromEntries(
       [...parties].map((id) => [id, 0])
     );
+    const totalPartyVotes = [...partyVotes.values()].reduce((sum, count) => sum + count, 0);
+    const eligibleParties = [...parties].filter(
+      (partyId) =>
+        totalPartyVotes > 0 &&
+        (partyVotes.get(partyId) ?? 0) / totalPartyVotes >= STANDARD_MULTI_SEAT_MIN_SHARE
+    );
+    const allocationPool = eligibleParties.length > 0 ? eligibleParties : [...parties];
     for (let seat = 0; seat < capacity; seat++) {
-      const ordered = [...parties].sort((left, right) => {
+      const ordered = [...allocationPool].sort((left, right) => {
         const quotientLeft = (partyVotes.get(left) ?? 0) / (allocation[left] + 1);
         const quotientRight = (partyVotes.get(right) ?? 0) / (allocation[right] + 1);
         return quotientRight - quotientLeft || left.localeCompare(right);

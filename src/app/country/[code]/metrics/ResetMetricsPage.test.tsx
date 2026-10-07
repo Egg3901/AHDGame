@@ -161,7 +161,12 @@ describe("v2 metrics page", () => {
           ok: true,
           json: async () => ({
             resetV2Countries: ["US", "UK", "JP", "IE"],
-            resetSystemVersions: { metrics: "v2", legislation: "v2", cabinet: "v2" },
+            resetSystemVersions: {
+              metrics: "v2",
+              legislation: "v2",
+              cabinet: "v2",
+              demographics: "v1",
+            },
           }),
         };
       }

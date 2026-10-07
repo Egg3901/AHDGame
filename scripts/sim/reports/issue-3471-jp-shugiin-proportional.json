@@ -1,0 +1,55 @@
+{
+  "issue": 3471,
+  "method": "Deterministic aggregate ballot replay through production portable rules",
+  "limitation": "Aggregate regional vote shapes only; no campaign trajectory, historical microdistrict model, or production write",
+  "scenarios": {
+    "screenshotChugokuShape": {
+      "seats": 34,
+      "votes": 91818,
+      "formerSntvFilledSeats": 1,
+      "proportionalFilledSeats": 34,
+      "allocation": {
+        "party-a": 34
+      }
+    },
+    "screenshotTohokuShape": {
+      "seats": 50,
+      "votes": 116230,
+      "formerSntvFilledSeats": 5,
+      "proportionalFilledSeats": 50,
+      "allocation": {
+        "party-a": 25,
+        "party-b": 25,
+        "independent-a": 0,
+        "independent-b": 0,
+        "independent-c": 0
+      }
+    },
+    "thresholdBoundary": {
+      "seats": 34,
+      "sharesPct": {
+        "major": 89,
+        "boundary": 10,
+        "minor": 1
+      },
+      "allocation": {
+        "major": 31,
+        "boundary": 3,
+        "minor": 0
+      }
+    },
+    "mixedRegionalListThreshold": {
+      "seats": 16,
+      "sharesPct": {
+        "major": 89,
+        "boundary": 10,
+        "minor": 1
+      },
+      "allocation": {
+        "major": 15,
+        "boundary": 1,
+        "minor": 0
+      }
+    }
+  }
+}

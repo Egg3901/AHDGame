@@ -20,6 +20,7 @@ import type {
   PrimaryResults,
   State,
   StateDemographics,
+  GameState,
   VoteTurnSnapshot,
 } from "@/lib/db/types";
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
@@ -69,7 +70,11 @@ import {
 } from "./candidateEnrichment";
 import type { AccumulateVoteTurnPreload } from "./types";
 import { loadPartyGroupFavorability } from "@/lib/governorOffice/address/partyGroupFavorabilityLoader";
-import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
+import {
+  buildGranularElectorateSubstrate,
+  campaignContactByBucket,
+} from "@/lib/demographics/granularElectorate";
+import type { ParticipationSummary } from "@/lib/demographics/v2/rules";
 import { eraYearContextFromGameState } from "@/lib/era/context";
 import {
   resolveTurnout,
@@ -80,6 +85,11 @@ import {
 import { isPrimaryEnded } from "@/lib/elections/phases";
 import type { GameTimeContext } from "@/lib/time/gameTime";
 import { STARTING_YEAR } from "@/lib/constants/turnTime";
+import type { RegionDemographics } from "@/lib/db/types/regionDemographics";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { resolveVotingAgeEligible } from "@/lib/constants/votingAge";
+import { loadElectionRegionDemographicsV2 } from "./demographicsV2Preload";
 import {
   buildMidtermOppositionModifierByParty,
   isMidtermOppositionBoostEligible,
@@ -200,6 +210,9 @@ export async function accumulateVoteTurn(
   let registrationPool: StateRegistrationPool | null = null;
   let preset: string | undefined;
   let eraYear: { year: number | null; startingYear: number | null };
+  let regionDemographics: RegionDemographics | null = null;
+  let demographicsV2Active = false;
+  let votingAge = 18;
 
   if (options?.preload) {
     state = options.preload.stateMap.get(stateId) ?? null;
@@ -214,6 +227,10 @@ export async function accumulateVoteTurn(
       startingYear: options.preload.startingYear,
       eraSystemEnabled: options.preload.eraSystemEnabled,
     });
+    regionDemographics = options.preload.regionDemographicsByState?.get(stateId) ?? null;
+    demographicsV2Active =
+      options.preload.demographicsV2Countries?.has(election.countryId ?? "US") === true;
+    votingAge = options.preload.votingAgeByCountry?.get(election.countryId ?? "US") ?? 18;
   } else {
     const [s, d, c, spo, t, rp, gs] = await Promise.all([
       db.collection<State>("states").findOne({ _id: stateId, countryId: election.countryId }),
@@ -234,27 +251,23 @@ export async function accumulateVoteTurn(
       db
         .collection<StateRegistrationPool>("stateRegistrationPool")
         .findOne({ stateId, countryId: election.countryId }),
-      db
-        .collection<{
-          _id: string;
-          preset?: string;
-          currentYear?: number;
-          currentTurn?: number;
-          startingYear?: number;
-          eraSystemEnabled?: boolean;
-        }>("gameState")
-        .findOne(
-          { _id: "current" },
-          {
-            projection: {
-              preset: 1,
-              currentYear: 1,
-              currentTurn: 1,
-              startingYear: 1,
-              eraSystemEnabled: 1,
-            },
-          }
-        ),
+      db.collection<GameState>("gameState").findOne(
+        { _id: "current" },
+        {
+          projection: {
+            preset: 1,
+            currentYear: 1,
+            currentTurn: 1,
+            startingYear: 1,
+            eraSystemEnabled: 1,
+            votingAgeEligible: 1,
+            votingAgeEligibleByCountry: 1,
+            resetWorldId: 1,
+            resetVersionSeeds: 1,
+            demographicsSystemVersion: 1,
+          },
+        }
+      ),
     ]);
     state = s;
     demographics = d;
@@ -264,6 +277,16 @@ export async function accumulateVoteTurn(
     registrationPool = rp;
     preset = gs?.preset;
     eraYear = eraYearContextFromGameState(gs);
+    demographicsV2Active =
+      resetSystemVersionsForCountry(gs, RESET_V2_READY, election.countryId ?? "US").demographics ===
+      "v2";
+    votingAge = resolveVotingAgeEligible(gs ?? undefined, eraYear.year, election.countryId ?? "US");
+    regionDemographics = await loadElectionRegionDemographicsV2({
+      db,
+      countryId: election.countryId ?? "US",
+      stateId,
+      gameState: gs,
+    });
   }
 
   if (!state || !demographics) return;
@@ -314,6 +337,9 @@ export async function accumulateVoteTurn(
   // SHARES are invariant to this basis (the F-4 guarantee), only magnitude differs.
   const electorate = state.votingEligiblePopulation ?? state.population;
 
+  const campaignContact = demographicsV2Active
+    ? campaignContactByBucket(turnoutDoc, election.countryId ?? "US")
+    : {};
   turnoutDoc = turnoutForElection(turnoutDoc, election) ?? null;
   // GOTV/canvassing/suppression from turnoutDoc overlay the static demographic turnouts.
   const { totalPool: resolvedTotalPool, byGroup: liveTurnouts } = resolveTurnout(
@@ -379,6 +405,7 @@ export async function accumulateVoteTurn(
   let effEffectiveTurnPool = effectiveTurnPool;
   let effEnriched = enriched;
   let effPartyGroupFavorabilityByKey = partyGroupFavorabilityByKey;
+  let participationSummary: ParticipationSummary | undefined;
   {
     // Seeded snapshot for the legislation lean-drift fold. Preloaded on the
     // batched general path; a single extra read on the standalone path (only
@@ -406,6 +433,20 @@ export async function accumulateVoteTurn(
       demographicDefaults,
       year: eraYear.year,
       startingYear: eraYear.startingYear,
+      ...(demographicsV2Active && regionDemographics
+        ? {
+            v2: {
+              regionAges: regionDemographics.ages,
+              votingAge,
+              registeredShare:
+                typeof registrationPool?.unregistered === "number" &&
+                Number.isFinite(registrationPool.unregistered)
+                  ? 1 - Math.max(0, Math.min(100, registrationPool.unregistered)) / 100
+                  : 1,
+              contactByBucket: campaignContact,
+            },
+          }
+        : {}),
     });
     if (substrate) {
       effDemographics = substrate.demographics;
@@ -417,6 +458,7 @@ export async function accumulateVoteTurn(
       effEnriched = substrate.enriched;
       effPartyGroupFavorabilityByKey =
         substrate.partyGroupFavorabilityByKey ?? partyGroupFavorabilityByKey;
+      participationSummary = substrate.participationSummary;
     } else if (stateId === electionCountryId) {
       effEnriched = await applyNationalAds(
         db,
@@ -457,10 +499,12 @@ export async function accumulateVoteTurn(
   // each group as `contribution / totalPool` and then multiply by the turn
   // pool, so scaling both cancels to the ballot and the gate would be a no-op
   // (verified live before this comment existed).
-  effEffectiveTurnPool = scalePoolToRegistered(
-    effEffectiveTurnPool,
-    registrationPool?.unregistered
-  );
+  if (!participationSummary) {
+    effEffectiveTurnPool = scalePoolToRegistered(
+      effEffectiveTurnPool,
+      registrationPool?.unregistered
+    );
+  }
   // ── Cumulative ceiling ────────────────────────────────────────────────────
   // The strength multiplier above sits outside both caps, so the closing
   // surge could still carry the race past the registered electorate. Ballots
@@ -1067,6 +1111,7 @@ export async function accumulateVoteTurn(
             ])
           ),
     ...(seatsEstimate ? { seatsEstimate } : {}),
+    ...(participationSummary ? { participation: participationSummary } : {}),
     ...(councilTotals
       ? {
           russianCouncilBallot: {
