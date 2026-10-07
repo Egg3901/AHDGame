@@ -34,6 +34,12 @@ export interface TurnPhaseRuntime {
   runPhase<T>(name: string, fn: () => Promise<T>): Promise<T | null>;
   markPhaseSkipped(phase: string, reason: TurnPhaseSkipReason, message: string): Promise<void>;
   /**
+   * Resolves once every phase that timed out has actually stopped. A timeout
+   * does not cancel the phase function, so the turn must await this before it
+   * commits or releases its lock (#3385).
+   */
+  drainTimedOutPhases?(): Promise<void>;
+  /**
    * The phase result a dependent phase needs, or an explicit failure. On a crash
    * resume, distinguishes an interrupted phase from a completed one whose stored
    * result is missing; neither reruns and neither becomes a zero flow (#3429).
