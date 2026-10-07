@@ -200,7 +200,9 @@ export async function settleCorporateOperatingCash(
   // and both paths are rare recovery work.
   const treasuryLock = new KeyedQueue();
   const treasuryKey = (country: string) => `federalBudget:${country}`;
-  const allTreasuryKeys = new Set<string>();
+  // Unknown destinations must also serialize with each other when the
+  // current snapshots and quotes name no Treasury countries.
+  const allTreasuryKeys = new Set<string>(["legacy-treasury-recovery"]);
   for (const snapshot of snapshots) {
     for (const [country] of snapshot.federalTaxByCountryAnchor ?? []) {
       allTreasuryKeys.add(treasuryKey(country));

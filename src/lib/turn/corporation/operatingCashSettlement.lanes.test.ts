@@ -1,6 +1,7 @@
 import { ObjectId, type Db } from "mongodb";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
+import * as settlementJournal from "@/lib/banking/settlementJournal";
 import type { CorpSnapshot } from "./types";
 import { settleCorporateOperatingCash } from "./operatingCashSettlement";
 
@@ -117,6 +118,41 @@ function outcome(db: ReturnType<typeof createInMemoryDb>) {
 }
 
 describe("corporate operating cash settlement lanes", () => {
+  it("serializes legacy recovery even when no current Treasury destinations are known", async () => {
+    const { db, snapshots } = seedWorld(3);
+    const input = snapshots.map((row) => ({ ...row, federalTaxByCountryAnchor: new Map() }));
+    db.seed(
+      "bankMoneyMoves",
+      input.map((row) => ({
+        _id: `corp-operating-cash:13:${row.corpId.toString()}`,
+      }))
+    );
+    let active = 0;
+    let peak = 0;
+    const resume = vi
+      .spyOn(settlementJournal, "resumeSettlement")
+      .mockImplementation(async (_db, key) => {
+        active++;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active--;
+        return {
+          status: "applied",
+          key,
+          appliedLegs: [],
+          appliedProjections: [],
+          newlyAppliedProjections: [],
+        };
+      });
+    try {
+      await settleCorporateOperatingCash(db as unknown as Db, input, 13, new Date(0));
+      expect(resume).toHaveBeenCalledTimes(3);
+      expect(peak).toBe(1);
+    } finally {
+      resume.mockRestore();
+    }
+  });
+
   it("settles a full corporate turn in overlapping lanes with the sequential outcome", async () => {
     const corpCount = 150;
     const sequentialWorld = seedWorld(corpCount);
@@ -150,7 +186,7 @@ describe("corporate operating cash settlement lanes", () => {
     expect(laned.stats.commands).toBe(sequential.stats.commands);
     expect(laned.stats.maxInFlight).toBeGreaterThan(1);
     expect(laneMs).toBeLessThan(sequentialMs / 2);
-    // 6 Treasury credits per 150 corps were paid exactly once per receipt.
+    // Every taxed corporation pays its Treasury exactly once.
     const taxed = laneWorld.snapshots.filter((s) => (s.federalTaxByCountryAnchor?.size ?? 0) > 0);
     const totalTreasury = laneWorld.db
       .collection("federalBudget")
