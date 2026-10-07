@@ -8,6 +8,7 @@ import type { CorpSnapshot } from "./types";
 import type { Corporation } from "@/lib/db/types/corporation";
 import { loadTreasuryCashContext } from "@/lib/nationalization/treasuryLedger";
 import { settleTransition, resumeSettlement } from "@/lib/banking/settlementJournal";
+import { withBankingTelemetryBatch } from "@/lib/banking/telemetry";
 import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
 import { settlePriorCorporateCashArrears } from "./cashArrears";
 
@@ -153,6 +154,18 @@ export async function settleCorporateOperatingCash(
   turn: number,
   now: Date,
   lanes: number = OPERATING_CASH_LANES
+): Promise<void> {
+  return withBankingTelemetryBatch(db, turn, () =>
+    settleCorporateOperatingCashBatched(db, snapshots, turn, now, lanes)
+  );
+}
+
+async function settleCorporateOperatingCashBatched(
+  db: Db,
+  snapshots: readonly CorpSnapshot[],
+  turn: number,
+  now: Date,
+  lanes: number
 ): Promise<void> {
   if (snapshots.length === 0) return;
   const context = await loadTreasuryCashContext(db, turn);

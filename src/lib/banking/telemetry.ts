@@ -13,6 +13,7 @@
  */
 
 import * as Sentry from "@sentry/nextjs";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { Db } from "mongodb";
 
 export const BANKING_TELEMETRY_COLLECTION = "bankingTelemetry";
@@ -62,6 +63,20 @@ export interface BankingTelemetryDoc {
   updatedAt?: Date;
 }
 
+interface BankingTelemetryBatch {
+  db: Db;
+  turn: number;
+  increments: Record<string, number>;
+}
+
+declare global {
+  var _ahdBankingTelemetryBatch: AsyncLocalStorage<BankingTelemetryBatch> | undefined;
+}
+
+const bankingTelemetryBatch =
+  globalThis._ahdBankingTelemetryBatch ??
+  (globalThis._ahdBankingTelemetryBatch = new AsyncLocalStorage<BankingTelemetryBatch>());
+
 function swallow(write: () => unknown, phase: string): void {
   try {
     Promise.resolve(write()).catch((err) => {
@@ -72,9 +87,53 @@ function swallow(write: () => unknown, phase: string): void {
   }
 }
 
+function addToCurrentBatch(db: Db, turn: number, field: string, by: number): boolean {
+  const batch = bankingTelemetryBatch.getStore();
+  if (!batch || batch.db !== db || batch.turn !== turn) return false;
+  batch.increments[field] = (batch.increments[field] ?? 0) + by;
+  return true;
+}
+
+function flushBatch(batch: BankingTelemetryBatch): void {
+  const increments = { ...batch.increments };
+  if (Object.keys(increments).length === 0) return;
+  swallow(
+    () =>
+      batch.db
+        .collection<BankingTelemetryDoc>(BANKING_TELEMETRY_COLLECTION)
+        .updateOne(
+          { _id: batch.turn },
+          { $inc: increments, $set: { updatedAt: new Date() } },
+          { upsert: true }
+        ),
+    "bankingTelemetry.batch"
+  );
+}
+
+/**
+ * Coalesce telemetry emitted by one high-volume operation into a single write.
+ * The scope follows concurrent async lanes, and its best-effort flush never
+ * converts a telemetry failure into a gameplay failure.
+ */
+export async function withBankingTelemetryBatch<T>(
+  db: Db,
+  turn: number,
+  fn: () => Promise<T>
+): Promise<T> {
+  const current = bankingTelemetryBatch.getStore();
+  if (current?.db === db && current.turn === turn) return fn();
+  const batch: BankingTelemetryBatch = { db, turn, increments: {} };
+  try {
+    return await bankingTelemetryBatch.run(batch, fn);
+  } finally {
+    flushBatch(batch);
+  }
+}
+
 /** Bump a counter for `turn`. Never awaited, never throws. */
 export function countBankingEvent(db: Db, turn: number, counter: BankingCounter, by = 1): void {
-  if (!(by > 0) || !Number.isFinite(turn)) return;
+  if (!(by > 0) || !Number.isFinite(by) || !Number.isFinite(turn)) return;
+  if (addToCurrentBatch(db, turn, `counters.${counter}`, by)) return;
   swallow(
     () =>
       db
@@ -91,12 +150,16 @@ export function countBankingEvent(db: Db, turn: number, counter: BankingCounter,
 /** Record time spent in a lifecycle stage. Never awaited, never throws. */
 export function recordBankingStage(db: Db, turn: number, stage: BankingStage, ms: number): void {
   if (!Number.isFinite(ms) || ms < 0 || !Number.isFinite(turn)) return;
+  const roundedMs = Math.round(ms);
+  const batchedMs = addToCurrentBatch(db, turn, `stageMs.${stage}`, roundedMs);
+  const batchedRuns = addToCurrentBatch(db, turn, `stageRuns.${stage}`, 1);
+  if (batchedMs && batchedRuns) return;
   swallow(
     () =>
       db.collection<BankingTelemetryDoc>(BANKING_TELEMETRY_COLLECTION).updateOne(
         { _id: turn },
         {
-          $inc: { [`stageMs.${stage}`]: Math.round(ms), [`stageRuns.${stage}`]: 1 },
+          $inc: { [`stageMs.${stage}`]: roundedMs, [`stageRuns.${stage}`]: 1 },
           $set: { updatedAt: new Date() },
         },
         { upsert: true }

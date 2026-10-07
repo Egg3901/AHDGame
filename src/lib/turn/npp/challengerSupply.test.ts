@@ -29,6 +29,9 @@ vi.mock("@/lib/npp/generator", () => ({
 
 interface WorldFixture {
   currentTurn: number;
+  /** Existing floor fixtures model AI countries, including AI-only US/JP sims. */
+  playerEnabled?: boolean;
+  countryAccessRows?: Record<string, unknown>[];
   founding?: boolean;
   elections: Election[];
   parties: PoliticalParty[];
@@ -40,6 +43,15 @@ interface WorldFixture {
 
 function mountWorld(db: MockDb, w: WorldFixture) {
   const insertedCandidates: Record<string, unknown>[] = [];
+  db.collection("countryGameStates").find = vi.fn().mockReturnValue({
+    toArray: vi.fn().mockResolvedValue(
+      w.countryAccessRows ??
+        [...new Set(w.elections.map((e) => e.countryId ?? "US"))].map((_id) => ({
+          _id,
+          enabledForPlayers: w.playerEnabled ?? false,
+        }))
+    ),
+  });
 
   db.collection("gameState").findOne = vi.fn().mockResolvedValue({
     currentTurn: w.currentTurn,
@@ -438,5 +450,123 @@ describe("custom-party challenger supply", () => {
       });
       expect(await processChallengerGeneration(new Date())).toBe(0);
     }
+  });
+});
+
+describe("player-country challenger supply safeguards", () => {
+  let db: MockDb;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+  });
+
+  function fixture(countryId = "US", state = "CA"): WorldFixture {
+    return {
+      currentTurn: 21,
+      founding: true,
+      playerEnabled: true,
+      elections: [
+        { ...cnPeoplesCongress(state), countryId, electionType: "senate", cycle: 0 } as Election,
+      ],
+      parties: [
+        {
+          ...defaultParty(countryId, 7),
+          isDefault: false,
+          nppElectionMatureAtTurn: 20,
+        },
+      ],
+      freeNpps: [],
+      officials: [],
+      statePartyOrgs: [{ ...spo(state, "7"), countryId } as StatePartyOrg],
+    };
+  }
+
+  it.each([true, false])(
+    "never generates free NPPs for matured custom parties (founding=%s)",
+    async (founding) => {
+      const { insertedCandidates } = mountWorld(db, { ...fixture(), founding });
+      expect(await processChallengerGeneration(new Date())).toBe(0);
+      expect(insertedCandidates).toHaveLength(0);
+      const { createNPP } = await import("@/lib/npp/generator");
+      expect(createNPP).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ["US", "CA"],
+    ["UK", "SCO"],
+    ["JP", "KAN"],
+    ["CN", "DB"],
+  ])("honors player access in %s, including runtime overrides", async (country, state) => {
+    mountWorld(db, fixture(country, state));
+    expect(await processChallengerGeneration(new Date())).toBe(0);
+    const { createNPP } = await import("@/lib/npp/generator");
+    expect(createNPP).not.toHaveBeenCalled();
+    expect(db.collection("countryGameStates").find).toHaveBeenCalledTimes(1);
+  });
+
+  it("cannot bypass the guard through the empty-race default-party founding fallback", async () => {
+    const world = fixture();
+    world.parties = [defaultParty("US", 7)];
+    world.statePartyOrgs = [{ ...spo("CA", "7"), countryId: "US", hasPresence: false }];
+    mountWorld(db, world);
+    expect(await processChallengerGeneration(new Date())).toBe(0);
+    const { createNPP } = await import("@/lib/npp/generator");
+    expect(createNPP).not.toHaveBeenCalled();
+  });
+
+  it("reuses an existing free regional NPP without generating a replacement", async () => {
+    const world = fixture();
+    const npp = {
+      _id: new ObjectId(),
+      name: "Existing NPP",
+      countryId: "US",
+      party: "7",
+      homeState: "CA",
+    } as NPP;
+    world.freeNpps = [npp];
+    // A second uncovered race must not generate a replacement for the used NPP.
+    world.elections.push({ ...world.elections[0], _id: new ObjectId() });
+    const { insertedCandidates } = mountWorld(db, world);
+    expect(await processChallengerGeneration(new Date())).toBe(1);
+    expect(insertedCandidates[0].nppId).toEqual(npp._id);
+    const { createNPP } = await import("@/lib/npp/generator");
+    expect(createNPP).not.toHaveBeenCalled();
+  });
+
+  it("does not reuse an NPP in a player presidential race", async () => {
+    const world = fixture("US", "US");
+    world.elections[0].electionType = "president";
+    world.freeNpps = [
+      {
+        _id: new ObjectId(),
+        name: "Existing NPP",
+        countryId: "US",
+        party: "7",
+        homeState: "US",
+      } as NPP,
+    ];
+    mountWorld(db, world);
+    expect(await processChallengerGeneration(new Date())).toBe(0);
+  });
+
+  it.each([{ absentInEra: true }, { dissolvedTurn: 20 }])(
+    "does not populate removed countries: %j",
+    async (excluded) => {
+      const world = fixture();
+      world.countryAccessRows = [{ _id: "US", enabledForPlayers: false, ...excluded }];
+      mountWorld(db, world);
+      expect(await processChallengerGeneration(new Date())).toBe(0);
+      const { createNPP } = await import("@/lib/npp/generator");
+      expect(createNPP).not.toHaveBeenCalled();
+    }
+  );
+
+  it("uses static player-enabled defaults when the runtime override is absent", async () => {
+    mountWorld(db, { ...fixture(), countryAccessRows: [] });
+    expect(await processChallengerGeneration(new Date())).toBe(0);
   });
 });

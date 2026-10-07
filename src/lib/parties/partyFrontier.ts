@@ -119,12 +119,12 @@ export async function getPartyFrontier(
   return { presence, frontier: expandFrontier(countryId, presence) };
 }
 
-/** Batch the same live-presence reads for the character creation party picker. */
-export async function getPartyFrontiers(
+/** Batch live presence for a country's parties without expanding adjacency. */
+export async function getPartyPresenceMap(
   db: Db,
   countryId: CountryId,
   partyIds: string[]
-): Promise<Map<string, string[] | null>> {
+): Promise<Map<string, Set<string>>> {
   if (partyIds.length === 0) return new Map();
   const regions = await getCountryRegionIds(db, countryId);
   const party = { $in: partyIds };
@@ -154,6 +154,16 @@ export async function getPartyFrontiers(
   for (const row of officials) {
     if (row.party && row.state) presence.get(row.party)?.add(row.state);
   }
+  return presence;
+}
+
+/** Batch the same live-presence reads for the character creation party picker. */
+export async function getPartyFrontiers(
+  db: Db,
+  countryId: CountryId,
+  partyIds: string[]
+): Promise<Map<string, string[] | null>> {
+  const presence = await getPartyPresenceMap(db, countryId, partyIds);
   return new Map(
     [...presence].map(([id, states]) => [
       id,

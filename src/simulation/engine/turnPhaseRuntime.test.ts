@@ -138,6 +138,48 @@ describe("createTurnPhaseRuntime", () => {
     expect(warnings).toEqual(["bondTurn: coupon mismatch"]);
   });
 
+  it("publishes completed substeps on the lock heartbeat while a phase is running", async () => {
+    vi.useFakeTimers();
+    try {
+      const { substepMarker } = await import("@/lib/observability/phaseSubsteps");
+      const { db, updateOne } = createMockDb();
+      let finishPhase: (() => void) | undefined;
+      const inFlight = new Promise<void>((resolve) => {
+        finishPhase = resolve;
+      });
+      const runtime = createTurnPhaseRuntime({
+        db,
+        phaseStatuses: {},
+        warnings: [],
+        currentPhaseRef: { current: null },
+      });
+
+      const resultPromise = runtime.runPhase("corporationTurn", async () => {
+        substepMarker().mark("load");
+        await inFlight;
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(TURN_LOCK_HEARTBEAT_MS);
+
+      expect(updateOne).toHaveBeenCalledWith(
+        { _id: "current", isProcessing: true },
+        {
+          $set: expect.objectContaining({
+            "processingPhaseStatuses.corporationTurn.substeps": expect.objectContaining({
+              load: expect.objectContaining({ calls: 1 }),
+            }),
+          }),
+        }
+      );
+
+      finishPhase?.();
+      await resultPromise;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("marks skipped phases without mutating the active phase ref", async () => {
     const phaseStatuses: TurnPhaseTelemetryMap = {};
     const warnings: string[] = [];
@@ -310,7 +352,7 @@ describe("phase sub-steps and top collections (#2689)", () => {
     resetRoundTripProfiler();
   });
 
-  it("records nothing for small phases, outside a phase, or when a phase fails", async () => {
+  it("records nothing for small phases or outside a phase, and preserves failed progress", async () => {
     resetRoundTripProfiler();
     const { substepMarker } = await import("@/lib/observability/phaseSubsteps");
     substepMarker().mark("outside");
@@ -332,7 +374,7 @@ describe("phase sub-steps and top collections (#2689)", () => {
     await flushAsyncStatusWrites();
     expect(phaseStatuses.small).not.toHaveProperty("topCollections");
     expect(phaseStatuses.small).not.toHaveProperty("substeps");
-    expect(phaseStatuses.broken).not.toHaveProperty("substeps");
+    expect(phaseStatuses.broken.substeps?.partial).toMatchObject({ calls: 1 });
     resetRoundTripProfiler();
   });
 });
@@ -461,6 +503,67 @@ describe("phase timeout drain (#3385)", () => {
     updateOne.mockClear();
     await vi.advanceTimersByTimeAsync(TURN_LOCK_HEARTBEAT_MS * 2);
     expect(updateOne).not.toHaveBeenCalled();
+  });
+
+  it("serializes the prompt timeout marker before the final drained substeps", async () => {
+    const { substepMarker } = await import("@/lib/observability/phaseSubsteps");
+    const { db, updateOne } = createMockDb();
+    const firstFailureWrite = deferred();
+    let failedWrites = 0;
+    updateOne.mockImplementation((_filter, update) => {
+      const status = (update as { $set?: Record<string, { status?: string }> }).$set?.[
+        "processingPhaseStatuses.corporationTurn"
+      ];
+      if (status?.status === "failed" && failedWrites++ === 0) {
+        return firstFailureWrite.promise;
+      }
+      return Promise.resolve({ acknowledged: true });
+    });
+    const runtime = createTurnPhaseRuntime({
+      db,
+      phaseStatuses: {},
+      warnings: [],
+      currentPhaseRef: { current: null },
+    });
+    const callbackGate = deferred();
+    let phaseSettled = false;
+    const slow = runtime
+      .runPhase("corporationTurn", async () => {
+        const marker = substepMarker();
+        marker.mark("beforeTimeout");
+        await callbackGate.promise;
+        marker.mark("whileDraining");
+      })
+      .finally(() => {
+        phaseSettled = true;
+      });
+    await settle();
+
+    await vi.advanceTimersByTimeAsync(PHASE_TIMEOUT_MS);
+    await settle();
+    expect(failedWrites).toBe(1);
+
+    callbackGate.resolve();
+    await settle();
+    expect(phaseSettled).toBe(false);
+    expect(failedWrites).toBe(1);
+
+    firstFailureWrite.resolve();
+    await expect(slow).resolves.toBeNull();
+    expect(failedWrites).toBe(2);
+    const finalFailure = updateOne.mock.calls
+      .map(
+        ([, update]) =>
+          (update as { $set?: Record<string, { status?: string; substeps?: object }> }).$set?.[
+            "processingPhaseStatuses.corporationTurn"
+          ]
+      )
+      .filter((status) => status?.status === "failed")
+      .at(-1);
+    expect(finalFailure?.substeps).toMatchObject({
+      beforeTimeout: { calls: 1 },
+      whileDraining: { calls: 1 },
+    });
   });
 
   it("holds every later phase and the turn drain while a timed-out phase never settles", async () => {
