@@ -23,7 +23,7 @@ export type EntryAction =
   | "enter"
   /** Race type has a spawner but no resolver yet, so it resolves vacant. */
   | "blocked"
-  /** Nothing to offer: wrong region, already standing elsewhere, or filing shut. */
+  /** Nothing to offer: wrong region, already standing elsewhere, withdrew, or filing shut. */
   | "none";
 
 export interface EntryEligibilityInput {
@@ -57,6 +57,8 @@ export function resolveEntryAction({
   )
     return "none";
   if (inThisRace) return "withdraw";
+  // Withdrawing bars re-entry into the same election; the enter route refuses it.
+  if (election.viewerWithdrew) return "none";
   if (isElectionTypeEntryBlocked(election.electionType)) return "blocked";
 
   const isHomeState = character.homeState === stateId;

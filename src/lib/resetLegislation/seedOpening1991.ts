@@ -5,6 +5,7 @@ import type { State } from "@/lib/db/types/state";
 import type { StateBudget } from "@/lib/db/types/budget";
 import type { ResetSystemSeedReceipt } from "@/lib/resetVersions/rules";
 import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
+import { RESET_V2_OPENING_COUNTRIES } from "@/lib/resetVersions/rules";
 import { buildOpeningLawBoards1991 } from "./openingBoards1991";
 import { resetLawOpeningBoardPayload, type ResetLawOpeningBoard } from "./rules/openingBoard";
 import { buildOpeningRegionalBoards1991 } from "@/lib/resetFinance/openingRegionalBoards1991";
@@ -12,17 +13,23 @@ import {
   regionalOpeningBoardPayload,
   type ResetRegionalOpeningBoard,
 } from "@/lib/resetFinance/rules/regionalOpeningBoard";
+import type { ResetOpeningCountry } from "@/lib/resetFinance/opening1991";
 
 export async function seedOpeningLawBoards1991(
   db: Db,
   worldId: string,
-  sourceTurn: number
+  sourceTurn: number,
+  countries: readonly ResetOpeningCountry[] = RESET_V2_OPENING_COUNTRIES
 ): Promise<ResetSystemSeedReceipt> {
-  const expected = buildOpeningLawBoards1991(worldId, sourceTurn);
-  const expectedRegional = buildOpeningRegionalBoards1991(worldId, sourceTurn);
+  const expected = buildOpeningLawBoards1991(worldId, sourceTurn).filter((board) =>
+    countries.includes(board.countryId as ResetOpeningCountry)
+  );
+  const expectedRegional = buildOpeningRegionalBoards1991(worldId, sourceTurn).filter((board) =>
+    countries.includes(board.countryId as ResetOpeningCountry)
+  );
   const seededRegions = await db
     .collection<State>("states")
-    .find({ countryId: { $in: ["US", "UK", "JP"] } }, { projection: { _id: 1, countryId: 1 } })
+    .find({ countryId: { $in: [...countries] } }, { projection: { _id: 1, countryId: 1 } })
     .toArray();
   const actualIds = seededRegions.map((region) => `${region.countryId}:${region._id}`).sort();
   const expectedIds = expected
@@ -37,21 +44,23 @@ export async function seedOpeningLawBoards1991(
   ) {
     throw new Error("The seeded 1991 regions do not match v2 regional fiscal claims");
   }
-  const ukBudgetRows = await db
-    .collection<StateBudget>("stateBudgets")
-    .find(
-      { countryId: "UK" },
-      {
-        projection: {
-          stateId: 1,
-          countryId: 1,
-          "revenue.propertyTax": 1,
-          "revenue.domesticCorporateTax": 1,
-          "revenue.foreignCorporateTax": 1,
-        },
-      }
-    )
-    .toArray();
+  const ukBudgetRows = countries.includes("UK")
+    ? await db
+        .collection<StateBudget>("stateBudgets")
+        .find(
+          { countryId: "UK" },
+          {
+            projection: {
+              stateId: 1,
+              countryId: 1,
+              "revenue.propertyTax": 1,
+              "revenue.domesticCorporateTax": 1,
+              "revenue.foreignCorporateTax": 1,
+            },
+          }
+        )
+        .toArray()
+    : [];
   const expectedUk = expected.filter((board) => board.ukTerritorialTax);
   const actualUkByRegion = new Map(ukBudgetRows.map((budget) => [budget.stateId, budget]));
   if (ukBudgetRows.length !== expectedUk.length || actualUkByRegion.size !== expectedUk.length) {
@@ -81,7 +90,7 @@ export async function seedOpeningLawBoards1991(
   );
   const persisted = await collection
     .find(
-      {},
+      { countryId: { $in: [...countries] } },
       {
         projection: {
           _id: 1,
@@ -110,7 +119,9 @@ export async function seedOpeningLawBoards1991(
     })),
     { ordered: true }
   );
-  const persistedRegional = await regionalCollection.find({}).toArray();
+  const persistedRegional = await regionalCollection
+    .find({ countryId: { $in: [...countries] } })
+    .toArray();
   const regionalPayload = regionalOpeningBoardPayload(expectedRegional);
   if (
     persistedRegional.length !== expectedRegional.length ||
@@ -128,5 +139,6 @@ export async function seedOpeningLawBoards1991(
       .update("\n")
       .update(regionalPayload)
       .digest("hex"),
+    countries: [...countries],
   };
 }

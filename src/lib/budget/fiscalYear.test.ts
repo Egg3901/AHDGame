@@ -269,6 +269,7 @@ function makeDb(options: {
   stateMetrics?: Record<string, unknown>[];
   stateBudgets?: Record<string, unknown>[];
   resetPrograms?: Record<string, unknown>[];
+  gameState?: Record<string, unknown> | null;
 }) {
   const {
     federalBudget = makeFederalBudget(),
@@ -277,6 +278,7 @@ function makeDb(options: {
     stateMetrics = [],
     stateBudgets = [],
     resetPrograms = [],
+    gameState = null,
   } = options;
   const resolvedFederalBudgets = federalBudgets ?? (federalBudget === null ? [] : [federalBudget]);
 
@@ -337,6 +339,10 @@ function makeDb(options: {
         case "resetLawPrograms":
           return {
             find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(resetPrograms) }),
+          };
+        case "gameState":
+          return {
+            findOne: vi.fn().mockResolvedValue(gameState),
           };
         case "federalBudgetSnapshots":
           return {
@@ -891,6 +897,28 @@ describe("processFiscalYear", () => {
           annualAgencyAllocation: 250_000_000,
         },
       ],
+      gameState: {
+        _id: "current",
+        resetWorldId: "world",
+        metricsSystemVersion: "v2",
+        legislationSystemVersion: "v2",
+        resetVersionSeeds: {
+          metrics: {
+            worldId: "world",
+            revision: 3,
+            sourceTurn: 1,
+            completedAt: "2026-10-04T00:00:00.000Z",
+            verificationHash: "metrics",
+          },
+          legislation: {
+            worldId: "world",
+            revision: 6,
+            sourceTurn: 1,
+            completedAt: "2026-10-04T00:00:00.000Z",
+            verificationHash: "legislation",
+          },
+        },
+      },
     });
 
     await processFiscalYear(db as unknown as Db, 2026, 600);

@@ -90,6 +90,30 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
   );
   await ensureIndex(db, "bills", { proposedAt: -1 }, { name: "bills_proposedAt" }, log);
 
+  // stateBills — per-turn atomic lifecycle claims. Each query prefers the
+  // game-clock deadline and falls back to the wall-clock field for legacy rows.
+  await ensureIndex(
+    db,
+    "stateBills",
+    { status: 1, votingEndsOnTurn: 1, votingEndsAt: 1 },
+    { name: "stateBills_status_votingDeadline" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "stateBills",
+    { status: 1, governorActionDeadlineOnTurn: 1, governorActionDeadline: 1 },
+    { name: "stateBills_status_governorDeadline" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "stateBills",
+    { status: 1, overrideVotingEndsOnTurn: 1, overrideVotingEndsAt: 1 },
+    { name: "stateBills_status_overrideDeadline" },
+    log
+  );
+
   // notifications — per-user list + unread counter
   await ensureIndex(
     db,

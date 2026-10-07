@@ -24,7 +24,9 @@
  *    the shadow ledger dark after the default said otherwise. Past that window
  *    a differing value is treated as intent and left alone. Numeric tuning
  *    (startingFunds, turnLengthMinutes, the action bonuses) is never touched by
- *    either case: those are economy settings, not rollout gates.
+ *    either case: those are economy settings, not rollout gates. Neither is any
+ *    NON_GAMEPLAY_GAME_CONFIG_FIELDS key (ops switches, security tooling,
+ *    era-derived values such as `commandEconomyEnabled`).
  *
  * 2. FOSSIL MARKET TIER. `marketSystemMode` is the one gate a seed cannot
  *    write on a non-reset run (the D14 protection), so a world can carry a tier
@@ -55,7 +57,10 @@
 import type { Db } from "mongodb";
 import { connectDb, closeDb } from "../utils/db";
 import { gameConfig as referenceGameConfig } from "../../src/lib/seeds/reference/gameConfig";
-import { FRESH_WORLD_GAME_CONFIG_FLAGS } from "../../src/lib/seeds/reference/featureFlagDefaults";
+import {
+  FRESH_WORLD_GAME_CONFIG_FLAGS,
+  NON_GAMEPLAY_GAME_CONFIG_FIELDS,
+} from "../../src/lib/seeds/reference/featureFlagDefaults";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "../../src/lib/market/modes";
 import { TURNS_PER_DAY } from "../../src/lib/constants/corporations";
 import type { MigrationResult } from "../../src/lib/migrations/types";
@@ -107,6 +112,13 @@ export async function runAdoptReferenceGameConfigGates(
     // `marketSystemMode` is pass 2's business — it has provenance stamps and a
     // ladder, and must never be moved by a blunt value comparison.
     if (key === "marketSystemMode") continue;
+    // Ops switches, security tooling and era-derived values keep their own
+    // value. The reference carries placeholders for some of them
+    // (`commandEconomyEnabled: true`, which bootstrap overwrites from the
+    // preset; `adminRegistrationEnabled: true`, for a first-ever seed), so
+    // copying them here flipped a 1991 world into a command economy and could
+    // reopen admin registration.
+    if (key in NON_GAMEPLAY_GAME_CONFIG_FIELDS) continue;
     // Fresh-world gameplay flags reach a world through its reset, never through
     // this fill: an absent flag on a running world means "off", and filling it
     // here would flip that world.

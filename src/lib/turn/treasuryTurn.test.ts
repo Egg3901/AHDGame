@@ -97,6 +97,38 @@ describe("processTreasuryTurn", () => {
     expect(upd).not.toHaveProperty("debt.principal");
   });
 
+  it("does not accrue the legacy primary fiscal slice for a Cabinet-v2 country", async () => {
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      resetWorldId: "world-1",
+      metricsSystemVersion: "v2",
+      cabinetSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "world-1",
+          revision: 3,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "metrics",
+        },
+        cabinet: {
+          worldId: "world-1",
+          revision: 8,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "cabinet",
+        },
+      },
+    });
+    mockBudgets([budgetDoc({ _id: "US", countryId: "US" })]);
+
+    const { processTreasuryTurn } = await import("./treasuryTurn");
+    await processTreasuryTurn(10);
+
+    const update = db.collectionMocks.federalBudget.updateOne.mock.calls[0][1].$set;
+    expect(update.treasuryBalance).toBe(0);
+  });
+
   it("charges crackdown administration once per treasury turn and stops after repeal", async () => {
     mockBudgets([
       budgetDoc({

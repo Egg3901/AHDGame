@@ -58,6 +58,7 @@ import {
   loadRegionalDeliveryMultipliersByRegion,
 } from "@/lib/governmentFinance/deliveryMultipliers";
 import { clampRatio } from "@/lib/governmentFinance/rules/implementation";
+import { RESET_V2_COUNTRIES } from "@/lib/resetVersions/rules";
 
 /**
  * Map of legislation type IDs to their documents
@@ -531,7 +532,8 @@ export async function processStatePolicyEffects(
   // countries (JP), so avoid decoding unrelated national and regional ledgers.
   const legacyFinanceStates = states.filter(
     (state) =>
-      !isPoliticalApprovalCountry(state.countryId) && ["US", "UK", "JP"].includes(state.countryId)
+      !isPoliticalApprovalCountry(state.countryId) &&
+      (RESET_V2_COUNTRIES as readonly string[]).includes(state.countryId)
   );
   const legacyFinanceCountryIds = [...new Set(legacyFinanceStates.map((state) => state.countryId))];
   const [nationalDeliveryByCountry, regionalDeliveryByRegion] = await Promise.all([

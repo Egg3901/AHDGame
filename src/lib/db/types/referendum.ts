@@ -75,9 +75,9 @@ export interface Referendum {
   /** Turn the post-pass conversion window closes (auto-converts at/after this).
    *  Set when a referendum passes into `actuating`; null otherwise. */
   conversionDeadlineTurn: number | null;
-  /** For reunification: the two concurrent consent bills that must BOTH pass
-   *  within the conversion window for the transfer to take effect — a Westminster
-   *  Commons bill (UK releases NI) and a Dáil bill (Ireland admits NI). */
+  /** Parliamentary consent for a territorial change. Westminster is always
+   *  required. The Dáil bill is present only when Ireland was already open to
+   *  players when a reunification referendum passed. */
   westminsterBillId: ObjectId | null;
   dailBillId: ObjectId | null;
   /** Set once each consent bill's vote outcome has been posted to Discord, so

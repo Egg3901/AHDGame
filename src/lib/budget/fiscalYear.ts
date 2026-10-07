@@ -55,6 +55,8 @@ import {
 import { withLawAdministration } from "@/lib/governmentFinance/lawAdministrationCatalog";
 import type { ResetLawProgramDocument } from "@/lib/resetLegislation/program";
 import { buildResetRegionalProgramClaims } from "@/lib/resetLegislation/rules/regionalClaims";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 
 // The current turn engine still processes fiscal-year rollover as one shared phase.
 // Pulling the anchor from country-systems makes the rule source explicit now, while
@@ -112,10 +114,21 @@ export async function processFiscalYear(
     return;
   }
 
-  const financeState = await db
-    .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { regionalLegislationFinanceEnabled: 1 } });
+  const financeState = await db.collection<GameState>("gameState").findOne(
+    { _id: "current" },
+    {
+      projection: {
+        regionalLegislationFinanceEnabled: 1,
+        resetWorldId: 1,
+        metricsSystemVersion: 1,
+        legislationSystemVersion: 1,
+        resetVersionSeeds: 1,
+      },
+    }
+  );
   const regionalFinanceEnabled = financeState?.regionalLegislationFinanceEnabled === true;
+  const usResetLegislationV2 =
+    resetSystemVersionsForCountry(financeState, RESET_V2_READY, "US").legislation === "v2";
   const regionalLegislationTypes = regionalFinanceEnabled
     ? await db
         .collection<LegislationType>("legislationTypes")
@@ -147,21 +160,24 @@ export async function processFiscalYear(
     db.collection<State>("states").find({}).toArray(),
     db.collection<StateMetrics>("macroMetrics").find({}).toArray(),
   ]);
-  const usResetRegionalPrograms = await db
-    .collection<ResetLawProgramDocument>("resetLawPrograms")
-    .find(
-      { country: "US", scope: "regional" },
-      {
-        projection: {
-          _id: 1,
-          regionId: 1,
-          familyId: 1,
-          choice: 1,
-          annualAgencyAllocation: 1,
-        },
-      }
-    )
-    .toArray();
+  const usResetRegionalPrograms =
+    usResetLegislationV2 && financeState?.resetWorldId
+      ? await db
+          .collection<ResetLawProgramDocument>("resetLawPrograms")
+          .find(
+            { country: "US", scope: "regional", worldId: financeState.resetWorldId },
+            {
+              projection: {
+                _id: 1,
+                regionId: 1,
+                familyId: 1,
+                choice: 1,
+                annualAgencyAllocation: 1,
+              },
+            }
+          )
+          .toArray()
+      : [];
   const usResetProgramsByRegion = new Map<string, ResetLawProgramDocument[]>();
   for (const program of usResetRegionalPrograms) {
     if (!program.regionId) continue;

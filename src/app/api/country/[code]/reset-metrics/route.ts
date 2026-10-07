@@ -22,6 +22,8 @@ import { resetLawFamilies, resetLawFamilyById } from "@/lib/resetLegislation/cat
 import { resetCabinetActions } from "@/lib/resetCabinet/catalog";
 import type { ResetLawOpeningBoard } from "@/lib/resetLegislation/rules/openingBoard";
 import { buildMetricLawStatuses } from "@/lib/resetLegislation/rules/metricPolicyStatus";
+import { isResetV2Country } from "@/lib/resetVersions/rules";
+import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 
 const cabinetActionTitles = new Map(resetCabinetActions.map((action) => [action.id, action.title]));
 
@@ -41,7 +43,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
   try {
     const { code } = await params;
     const countryId = code.toUpperCase();
-    if (countryId !== "US" && countryId !== "UK" && countryId !== "JP") {
+    if (!isResetV2Country(countryId)) {
       return errorResponse(404, "V2 metrics are not available for this country");
     }
     const regionId = new URL(request.url).searchParams.get("region") ?? undefined;
@@ -70,7 +72,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
       db
         .collection<ResetCabinetActionState>("resetCabinetActionStates")
         .findOne(
-          { _id: countryId as "US" | "UK" | "JP", worldId: board.board.worldId },
+          { _id: countryId as ResetCountry, worldId: board.board.worldId },
           { projection: { active: 1 } }
         ),
       db

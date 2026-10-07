@@ -27,7 +27,19 @@ export interface LawFamilyDefinition {
   levels: readonly LawLevelDefinition[];
 }
 
-export const resetLawFamilies: readonly LawFamilyDefinition[] = catalog as LawFamilyDefinition[];
+export const resetLawFamilies: readonly LawFamilyDefinition[] = (
+  catalog as LawFamilyDefinition[]
+).map((family) => ({
+  ...family,
+  availability: {
+    national: family.availability.national.includes("UK")
+      ? [...family.availability.national, "IE", "SCO", "WAL"]
+      : family.availability.national,
+    regional: family.availability.regional.includes("UK")
+      ? [...family.availability.regional, "IE", "SCO", "WAL"]
+      : family.availability.regional,
+  },
+}));
 
 export function resetLawFamilyById(id: string): LawFamilyDefinition | undefined {
   return resetLawFamilies.find((family) => family.id === id);

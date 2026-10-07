@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./animations.css";
+@import "./interface-modes.css";
 
 /* Default theme — premium dark, slightly warmed graphite.
    Surfaces tuned to separate cards from page without a dashboardy feel:
@@ -862,6 +863,13 @@ html[data-store-app="true"] .store-purchase-cta {
    serves accounts already moved to the unified issuer. */
 html[data-store-app="true"] .store-app-hidden {
   display: none !important;
+}
+
+/* iPad runs the iPhone app in a window whose controls (the three dots) sit
+   over the top-left corner without reporting a top safe-area inset. Keep the
+   navbar clear of them in the store app; iPhones already inset by more. */
+html[data-store-app="true"] .ahd-navbar-enter {
+  padding-top: max(env(safe-area-inset-top, 0px), 28px);
 }
 html:not([data-store-app="true"]) .store-app-only {
   display: none !important;

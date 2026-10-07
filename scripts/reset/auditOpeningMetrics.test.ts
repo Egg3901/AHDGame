@@ -7,18 +7,20 @@ import { openingNationalFiscalObservations1991 } from "../../src/lib/resetMetric
 import { states1991 } from "../../src/lib/countries/us/data/usStates1991";
 import { ukRegions1991 } from "../../src/lib/countries/uk/data/ukRegions1991";
 import { jpRegions1991 } from "../../src/lib/countries/jp/data/jpRegions1991";
+import { ieRegions1991 } from "../../src/lib/countries/ie/data/ieRegions1991";
 import { opening1991Anchors } from "../../src/lib/resetMetrics/rules/provisionalOpening";
 
 describe("1991 opening metric source audit", () => {
   it("keeps source observations separate from explicitly provisional opening estimates", () => {
     const rows = auditOpeningMetricSources();
-    expect(rows).toHaveLength(71);
+    expect(rows).toHaveLength(79);
     expect(rows.filter((row) => row.country === "US")).toHaveLength(51);
     expect(rows.filter((row) => row.country === "UK")).toHaveLength(12);
     expect(rows.filter((row) => row.country === "JP")).toHaveLength(8);
+    expect(rows.filter((row) => row.country === "IE")).toHaveLength(8);
     for (const row of rows) {
-      expect(row.observed).toBe(row.country === "UK" ? 46 : 45);
-      expect(row.provisional).toBe(row.country === "UK" ? 7 : 8);
+      expect(row.observed).toBe(row.country === "UK" || row.country === "IE" ? 46 : 45);
+      expect(row.provisional).toBe(row.country === "UK" || row.country === "IE" ? 7 : 8);
       expect(row.openingValues["07"]).toBeUndefined();
       expect(row.openingValues["09"]).toBeUndefined();
       expect(row.openingValues["10"]).toBeUndefined();
@@ -42,9 +44,9 @@ describe("1991 opening metric source audit", () => {
 
   it("rebases v2 fertility to the 1991 country anchors without changing v1 seeds", () => {
     const rows = auditOpeningMetricSources();
-    const regions = { US: states1991, UK: ukRegions1991, JP: jpRegions1991 };
-    const targets = { US: 2.07, UK: 1.82, JP: 1.53 };
-    for (const country of ["US", "UK", "JP"] as const) {
+    const regions = { US: states1991, UK: ukRegions1991, JP: jpRegions1991, IE: ieRegions1991 };
+    const targets = { US: 2.07, UK: 1.82, JP: 1.53, IE: 2.09 };
+    for (const country of ["US", "UK", "JP", "IE"] as const) {
       const populationByRegion = new Map(
         regions[country].map((region) => [region._id, region.population])
       );
@@ -65,8 +67,8 @@ describe("1991 opening metric source audit", () => {
 
   it("preserves national 1991 life and population-change anchors across regional proxies", () => {
     const rows = auditOpeningMetricSources();
-    const regions = { US: states1991, UK: ukRegions1991, JP: jpRegions1991 };
-    for (const country of ["US", "UK", "JP"] as const) {
+    const regions = { US: states1991, UK: ukRegions1991, JP: jpRegions1991, IE: ieRegions1991 };
+    for (const country of ["US", "UK", "JP", "IE"] as const) {
       const weights = new Map(regions[country].map((region) => [region._id, region.population]));
       const countryRows = rows.filter((row) => row.country === country);
       const total = countryRows.reduce((sum, row) => sum + (weights.get(row.regionId) ?? 0), 0);
@@ -97,10 +99,11 @@ describe("1991 opening metric source audit", () => {
       "49": [0, 100],
       "54": [-3, 4],
     };
-    const purchasingPowerBounds: Record<"US" | "UK" | "JP", [number, number]> = {
+    const purchasingPowerBounds: Record<"US" | "UK" | "JP" | "IE", [number, number]> = {
       US: [1_000, 500_000],
       UK: [1_000, 500_000],
       JP: [100_000, 100_000_000],
+      IE: [1_000, 500_000],
     };
     for (const row of auditOpeningMetricSources()) {
       const purchasingPower = row.openingValues["02"];
@@ -129,7 +132,9 @@ describe("1991 opening metric source audit", () => {
     expect(national.UK.debt.value).toBeCloseTo(32.353, 3);
     expect(national.JP.balance.value).toBeCloseTo(0.6115, 3);
     expect(national.JP.debt.value).toBeCloseTo(36.596, 2);
-    for (const country of ["US", "UK", "JP"] as const) {
+    expect(national.IE.balance.value).toBeCloseTo(-0.5, 2);
+    expect(national.IE.debt.value).toBeCloseTo(91.666, 2);
+    for (const country of ["US", "UK", "JP", "IE"] as const) {
       expect(national[country].balance.owner).toBe("ledger");
       expect(national[country].debt.owner).toBe("ledger");
     }
@@ -137,7 +142,7 @@ describe("1991 opening metric source audit", () => {
 
   it("reports all five national metrics separately and marks fuel risk as provisional", () => {
     const national = auditOpeningNationalMetricSources1991();
-    for (const country of ["US", "UK", "JP"] as const) {
+    for (const country of ["US", "UK", "JP", "IE"] as const) {
       expect(Object.keys(national[country]).sort()).toEqual(["07", "09", "10", "57", "58"]);
       expect(national[country]["07"]?.value).not.toBeNull();
       expect(national[country]["09"]?.value).not.toBeNull();

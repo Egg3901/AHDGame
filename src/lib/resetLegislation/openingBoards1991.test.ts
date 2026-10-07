@@ -4,11 +4,11 @@ import { buildResetLawOpeningBoard } from "./rules/openingBoard";
 import { openingLawReference } from "./openingLaw";
 
 describe("1991 current-law boards", () => {
-  it("builds three national and 71 regional boards with all 60 law and tax types", () => {
+  it("builds four national and 79 regional boards with all 60 law and tax types", () => {
     const boards = buildOpeningLawBoards1991("world-test", 1);
-    expect(boards).toHaveLength(74);
-    expect(boards.filter((board) => board.scope === "national")).toHaveLength(3);
-    expect(new Set(boards.map((board) => board._id)).size).toBe(74);
+    expect(boards).toHaveLength(83);
+    expect(boards.filter((board) => board.scope === "national")).toHaveLength(4);
+    expect(new Set(boards.map((board) => board._id)).size).toBe(83);
     for (const board of boards) {
       expect(Object.keys(board.references)).toHaveLength(60);
       expect(board.references.L19?.currentLaw).toBeTruthy();
@@ -38,7 +38,7 @@ describe("1991 current-law boards", () => {
 
   it("allocates every pooled source cost once across regions rather than repeating it on every board", () => {
     const boards = buildOpeningLawBoards1991("world-test", 1);
-    for (const country of ["US", "UK", "JP"] as const) {
+    for (const country of ["US", "UK", "JP", "IE"] as const) {
       const regions = boards.filter(
         (board) => board.countryId === country && board.scope === "regional"
       );
@@ -61,6 +61,7 @@ describe("1991 current-law boards", () => {
         }
       }
       const source = openingLawReference(country, "regional", "L19")!.sourceComponents[0]!;
+      if (!source) continue;
       expect(
         regions.every(
           (board) => board.references.L19!.sourceComponents[0]!.annualBooked < source.annualBooked

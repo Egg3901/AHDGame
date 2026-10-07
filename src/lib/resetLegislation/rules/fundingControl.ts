@@ -49,6 +49,9 @@ const REQUIRED_OPENING_FAMILIES: Readonly<Record<ResetCountry, ReadonlySet<strin
   US: new Set(["L02", "L08", "L16", "L17", "L37"]),
   UK: new Set(["L02", "L08", "L10", "L16", "L17"]),
   JP: new Set(["L01", "L02", "L08", "L10", "L16", "L21", "L43", "L46"]),
+  IE: new Set(["L01", "L02", "L08", "L10", "L16", "L21", "L43", "L45", "L49"]),
+  SCO: new Set(["L02", "L08", "L10", "L16", "L17"]),
+  WAL: new Set(["L02", "L08", "L10", "L16", "L17"]),
 };
 
 export function openingLawFundingControl(input: {

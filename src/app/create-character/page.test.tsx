@@ -37,6 +37,8 @@ let partyRows: {
   socialPosition: number;
   color: string;
   isDefault: boolean;
+  frontierRegions?: string[] | null;
+  membershipMode?: "open" | "approval";
 }[] = [];
 const countries = [
   { id: "us", name: "United States" },
@@ -61,6 +63,15 @@ beforeEach(() => {
       else if (url === "/api/game/states?playableHome=1")
         body = [
           {
+            _id: "OR",
+            countryId: "US",
+            name: "Oregon",
+            population: 1000000,
+            gdp: 1000000,
+            houseDistricts: 1,
+            stateSenateSeats: 1,
+          },
+          {
             _id: "CA",
             countryId: "US",
             name: "California",
@@ -79,7 +90,8 @@ beforeEach(() => {
           startDate: "1991",
           flavorText: "",
         };
-      else if (/^\/api\/country\/(us|uk|jp)\/parties$/.test(url)) body = { parties: partyRows };
+      else if (/^\/api\/country\/(us|uk|jp)\/parties\?includeFrontier=1$/.test(url))
+        body = { parties: partyRows };
       else if (url === "/api/auth/character")
         body = { characterId: "000000000000000000002799", createdTurn: 1 };
       else throw new Error(`Unexpected qualification request: ${url}`);
@@ -93,10 +105,46 @@ afterEach(() => {
 });
 
 describe("No Parties character creation", () => {
+  it("filters remote and approval-only parties and clears a selection when home changes", async () => {
+    const base = {
+      abbreviation: "SYN",
+      playerCount: 3,
+      economicPosition: 0,
+      socialPosition: 0,
+      color: "#336699",
+      isDefault: false,
+    };
+    partyRows = [
+      { ...base, id: "1", name: "Local Party", frontierRegions: ["CA"] },
+      { ...base, id: "2", name: "Remote Party", frontierRegions: ["NY"] },
+      {
+        ...base,
+        id: "3",
+        name: "Approval Party",
+        frontierRegions: null,
+        membershipMode: "approval",
+      },
+      { ...base, id: "4", name: "Empty Party", frontierRegions: null },
+    ];
+    render(<CreateCharacterPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /United States/ }));
+    fireEvent.click(await screen.findByRole("radio", { name: /California/ }));
+    const panel = screen.getByRole("region", { name: "Party" });
+    fireEvent.click(await within(panel).findByRole("button", { name: /Local Party/ }));
+    expect(within(panel).queryByRole("button", { name: /Remote Party/ })).toBeNull();
+    expect(within(panel).queryByRole("button", { name: /Approval Party/ })).toBeNull();
+    expect(within(panel).getByRole("button", { name: /Empty Party/ })).toBeTruthy();
+    expect(within(panel).getByText("Done")).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: /Oregon/ }));
+    await waitFor(() => expect(within(panel).queryByText("Done")).toBeNull());
+    expect(within(panel).queryByRole("button", { name: /Local Party/ })).toBeNull();
+  });
   it.each(countries)("hides party selection when $name has no founded parties", async (country) => {
     render(<CreateCharacterPage />);
     fireEvent.click(await screen.findByRole("button", { name: new RegExp(country.name) }));
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith(`/api/country/${country.id}/parties`));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(`/api/country/${country.id}/parties?includeFrontier=1`)
+    );
     await waitFor(() => expect(screen.queryByRole("region", { name: "Party" })).toBeNull());
     fireEvent.click(screen.getByRole("button", { name: "Try guided chat" }));
     expect(
@@ -147,11 +195,13 @@ describe("No Parties character creation", () => {
         socialPosition: 0,
         color: "#336699",
         isDefault: true,
+        frontierRegions: ["CA"],
       },
     ];
     render(<CreateCharacterPage />);
     fireEvent.click(await screen.findByRole("button", { name: /United States/ }));
     const panel = screen.getByRole("region", { name: "Party" });
+    fireEvent.click(await screen.findByRole("radio", { name: /California/ }));
     const party = await within(panel).findByRole("button", { name: /Synthetic Existing Party/ });
     expect(within(panel).getByRole("button", { name: /Independent/ })).toBeTruthy();
     fireEvent.click(party);

@@ -35,6 +35,7 @@ import { captureProductEvent } from "@/lib/analytics/capture";
 import { getStoredConsent } from "@/components/CookieConsent";
 import { huDistrictIds } from "@/lib/countries/hu/rules/constituencies2014";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 
 interface ElectionDetailClientProps {
   id: string;
@@ -48,6 +49,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   const searchParams = useSearchParams();
   const cycle = searchParams.get("cycle");
   const { showToast } = useToast();
+  const { confirm: confirmDialog, dialog: confirmDialogNode } = useConfirmDialog();
 
   const [election, setElection] = useState<ElectionDetail | null>(initialElection);
   const [wire, setWire] = useState<string[]>([]);
@@ -311,7 +313,14 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
         return;
       }
     }
-    if (!confirm("Enter this race? This will register your character as a candidate.")) return;
+    if (
+      !(await confirmDialog({
+        title: "Enter this race?",
+        message: "This will register your character as a candidate.",
+        confirmLabel: "Enter race",
+      }))
+    )
+      return;
     setActionLoading(true);
     try {
       const res = await fetch(`/api/elections/${id}/enter`, {
@@ -365,7 +374,15 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       : election.isEnded
         ? "unknown"
         : "general";
-    if (!confirm(buildWithdrawalConfirmMessage(phase))) return;
+    if (
+      !(await confirmDialog({
+        title: "Confirm withdrawal",
+        message: buildWithdrawalConfirmMessage(phase),
+        confirmLabel: "Withdraw",
+        destructive: true,
+      }))
+    )
+      return;
     setActionLoading(true);
     try {
       const res = await fetch(`/api/elections/${id}/withdraw`, {
@@ -462,6 +479,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
         {blendNav}
+        {confirmDialogNode}
         <ResultsBlendView data={currentResults} route="concluded" />
 
         <BlendScope title="Also on this race">
@@ -503,6 +521,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
         {blendNav}
+        {confirmDialogNode}
         <GeneralBlendView
           election={election}
           electionId={id}
@@ -603,6 +622,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
         {blendNav}
+        {confirmDialogNode}
         <PrimaryBlendView election={election} wire={wire} />
 
         <BlendScope
@@ -686,6 +706,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     <div className="min-h-screen bg-background">
       <main className="mx-auto max-w-6xl overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8">
         <ElectionNavigation election={election} />
+        {confirmDialogNode}
 
         {canEnter &&
           (election.bulgarianFoundingRound?.round === 1 ||

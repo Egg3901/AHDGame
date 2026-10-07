@@ -178,7 +178,11 @@ export async function getStateOverview(
   // a state-row may have 0 values for parties that aren't seeded for this
   // state's lane (per design doc §4.4 invariant). Independent /
   // Unregistered come from the state-level pool row.
-  const regSeeded = regSource === "field";
+  // Pool existence is the bootstrap gate, as in regDriftDecay. New parties
+  // may omit registration (meaning 0), and a seeded pool can contain only
+  // Independent / Unregistered voters before any parties exist. Neither
+  // case should hide the chart based on the Org leader's field provenance.
+  const regSeeded = regPool != null;
   const registrationPool = {
     parties: regSeeded
       ? partyOrg

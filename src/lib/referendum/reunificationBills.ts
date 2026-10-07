@@ -1,13 +1,12 @@
 /**
- * Create the two concurrent consent bills for a passed NI reunification
- * referendum — one in each parliament:
+ * Create the parliamentary consent bills for a passed NI reunification
+ * referendum:
  *   - a Westminster (Commons) bill for the UK to RELEASE Northern Ireland, and
  *   - a Dáil bill for Ireland to ADMIT Northern Ireland.
  *
  * Both are real, procedural (provision-less) national bills voted on through the
- * normal bill lifecycle (the unified engine, per-country config for UK and IE).
- * The region only transfers if BOTH pass within the conversion window — the
- * North's referendum plus both legislatures' consent.
+ * normal bill lifecycle. Ireland's bill is required only when Ireland is already
+ * open to players. A dormant Ireland must not block the player-run UK process.
  */
 import { getNationalDocId } from "@/lib/constants/nationalScope";
 import type { Db } from "mongodb";
@@ -16,6 +15,7 @@ import type { Bill } from "@/lib/db/types";
 import type { Referendum } from "@/lib/db/types/referendum";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { CONVERSION_WINDOW_TURNS } from "@/lib/constants/referendum";
+import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 
 /** Display-only votingEndsAt offset; turn-based resolution uses votingEndsOnTurn. */
 const APPROX_TURN_MS = 3_600_000;
@@ -67,7 +67,7 @@ export async function createReunificationConsentBills(
   db: Db,
   ref: Referendum,
   currentTurn: number
-): Promise<{ westminsterBillId: ObjectId; dailBillId: ObjectId }> {
+): Promise<{ westminsterBillId: ObjectId; dailBillId: ObjectId | null }> {
   const fromCountry = ref.countryId; // UK (releasing)
   const toCountry = (ref.targetCountryId ?? "IE") as CountryId; // IE (admitting)
 
@@ -82,15 +82,18 @@ export async function createReunificationConsentBills(
     currentTurn,
   });
 
-  const dailBillId = await createConsentBill(db, {
-    countryId: toCountry,
-    title: "Reunification with Northern Ireland",
-    summary:
-      "A bill to admit Northern Ireland into the Republic of Ireland following its reunification " +
-      "referendum. The Dáil must consent for the union to take effect.",
-    sponsorName: "Government of Ireland",
-    currentTurn,
-  });
+  const irelandIsPlayerEnabled = await isCountryEnabledForPlayers(db, toCountry);
+  const dailBillId = irelandIsPlayerEnabled
+    ? await createConsentBill(db, {
+        countryId: toCountry,
+        title: "Reunification with Northern Ireland",
+        summary:
+          "A bill to admit Northern Ireland into the Republic of Ireland following its reunification " +
+          "referendum. The Dáil must consent for the union to take effect.",
+        sponsorName: "Government of Ireland",
+        currentTurn,
+      })
+    : null;
 
   return { westminsterBillId, dailBillId };
 }

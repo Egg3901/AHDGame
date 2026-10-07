@@ -31,18 +31,28 @@ vi.mock("@/lib/presidentialElectionEngine", () => ({
   initPresidentVoteTally: vi.fn(),
   accumulatePresidentVoteTurn: vi.fn(),
 }));
-vi.mock("@/lib/primaryScore", () => ({
-  calcPrimaryScore: vi.fn().mockReturnValue(50),
-  calcPresidentPrimaryScore: vi.fn(),
-  primarySharePctSoftmax: (scores: number[]) =>
-    scores.map(() => (scores.length ? Math.round(10000 / scores.length) / 100 : 0)),
-  buildPartyChairMaps: () => ({
-    nationalChairIds: new Set<string>(),
-    stateChairStatesByCharacterId: new Map<string, string[]>(),
-  }),
-  resolvePartyChairPrimaryRole: () => null,
-  effectivePartyInfluenceForPresidentialPrimary: (v: number) => Math.max(0, v),
-}));
+vi.mock("@/lib/primaryScore", () => {
+  const calcPrimaryScore = vi.fn().mockReturnValue(50);
+  const calcPresidentPrimaryScore = vi.fn();
+  return {
+    calcPrimaryScore,
+    calcPresidentPrimaryScore,
+    scorePrimaryCandidate: vi.fn(
+      (input: { isPresidential: boolean; isNPP: boolean; hasPlayerInParty: boolean }) => {
+        const score = input.isPresidential ? calcPresidentPrimaryScore() : calcPrimaryScore();
+        return input.isNPP && input.hasPlayerInParty ? score * 0.75 : score;
+      }
+    ),
+    primarySharePctSoftmax: (scores: number[]) =>
+      scores.map(() => (scores.length ? Math.round(10000 / scores.length) / 100 : 0)),
+    buildPartyChairMaps: () => ({
+      nationalChairIds: new Set<string>(),
+      stateChairStatesByCharacterId: new Map<string, string[]>(),
+    }),
+    resolvePartyChairPrimaryRole: () => null,
+    effectivePartyInfluenceForPresidentialPrimary: (v: number) => Math.max(0, v),
+  };
+});
 vi.mock("@/lib/utils/getStateApprovalForElection", () => ({
   getAllStateApprovalsForElection: vi.fn().mockResolvedValue(new Map()),
 }));

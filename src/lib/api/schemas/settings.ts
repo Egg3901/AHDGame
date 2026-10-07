@@ -126,6 +126,7 @@ export const statusBarLayoutSchema = z.object({
 export const policyShiftSchema = z.object({
   axis: z.enum(["economic", "social"]),
   direction: z.union([z.literal(-1), z.literal(1)]),
+  useVoucher: z.boolean().optional(),
 });
 
 export const profileBioSchema = z.object({
@@ -189,11 +190,22 @@ export const partyDonateSchema = z.object({
 
 export const MAX_GOTV_PERCENT = 25;
 
-// Valid GOTV/suppression target categories — US Layer-1 dimensions plus every
-// country's `<cc>_voterGroups` bucket. Derived from the demographics SSOT so new
-// countries are covered automatically (previously hardcoded to UK+JP, which
-// rejected de/ie/cn/br treasurers — bug #0700).
-const demographicCategories = getAllDemographicCategoryKeys() as [string, ...string[]];
+// Valid GOTV/suppression target categories. Layer-1 dimensions power new
+// selections; the legacy voter-group categories remain accepted so existing
+// live budgets can still be edited while they are migrated.
+const demographicCategories = [
+  ...new Set([
+    "race",
+    "age",
+    "education",
+    "wealth",
+    "ethnicity",
+    "income",
+    "religion",
+    "urbanization",
+    ...getAllDemographicCategoryKeys(),
+  ]),
+] as [string, ...string[]];
 
 export const gotvBudgetSchema = z.object({
   gotvBudgetPercent: z.coerce

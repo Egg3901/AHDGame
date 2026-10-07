@@ -15,6 +15,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useUserData } from "@/hooks/useUserData";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useInterface, type InterfaceMode } from "@/contexts/InterfaceContext";
+import { useToast } from "@/contexts/ToastContext";
 import { buildCharacterHref } from "@/lib/utils/profileUrls";
 import { type CountryId } from "@/lib/constants/countries";
 import {
@@ -118,6 +120,8 @@ export function SettingsPageContent() {
   );
   const { refetch: refetchNav } = useAuthMe();
   const { theme } = useTheme();
+  const { mode: interfaceMode, setMode: setInterfaceMode } = useInterface();
+  const { showToast } = useToast();
   // Guards against a false "signed out" redirect when the user lands on /settings
   // via client-side navigation from /profile. The shared AuthDataContext can
   // briefly have stale/null user state if its initial /api/auth/me fetch lost
@@ -127,11 +131,13 @@ export function SettingsPageContent() {
   const authRetryAttemptedRef = useRef(false);
   const characterSyncAttemptedRef = useRef(false);
   const deepLinkScrolledRef = useRef(false);
+  const interfaceSaveInFlightRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
   // Supporter perks are bought outside the App Store, so the phone app does
   // not show them (guideline 3.1.1). The server snapshot keeps hydration stable.
   const storeApp = useSyncExternalStore(subscribeNever, isStoreAppDocument, () => false);
   const [oauthBannerDismissed, setOauthBannerDismissed] = useState(false);
+  const [interfaceModeSaving, setInterfaceModeSaving] = useState(false);
   const discord = searchParams.get("discord");
   const google = searchParams.get("google");
   const reason = searchParams.get("reason");
@@ -172,7 +178,6 @@ export function SettingsPageContent() {
       ? (requested as SectionId)
       : null;
   });
-  const [enableExperimentalUI, setEnableExperimentalUI] = useState(true);
   const [referralCount, setReferralCount] = useState(0);
   const [userId, setUserId] = useState("");
   const [username, setUsername] = useState("");
@@ -280,7 +285,6 @@ export function SettingsPageContent() {
   useEffect(() => {
     if (!rawUser) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time initialisation from already-fetched server data
-    setEnableExperimentalUI(rawUser.enableExperimentalUI !== false);
     setReferralCount(rawUser.referralCount ?? 0);
     setUserId(rawUser.id ?? "");
     setUsername(rawUser.username ?? "");
@@ -359,18 +363,29 @@ export function SettingsPageContent() {
     };
   }, [loading, isImperial, activeRegularCharacterId, rawUser]);
 
-  const handleExperimentalUiPreference = async (value: boolean) => {
-    setEnableExperimentalUI(value);
+  const handleInterfaceModeChange = async (nextMode: InterfaceMode) => {
+    if (nextMode === interfaceMode || interfaceSaveInFlightRef.current) return;
+
+    const previousMode = interfaceMode;
+    interfaceSaveInFlightRef.current = true;
+    setInterfaceModeSaving(true);
+    setInterfaceMode(nextMode);
     try {
-      await fetch("/api/settings/experimental-ui", {
+      const response = await fetch("/api/settings/experimental-ui", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enableExperimentalUI: value }),
+        body: JSON.stringify({ enableExperimentalUI: nextMode === "modern" }),
       });
-      // Refresh the nav bootstrap so NavbarWrapper switches navbars without a reload.
+      if (!response.ok) throw new Error(`Interface preference update failed: ${response.status}`);
+      // Keep the shared account snapshot consistent for consumers that still
+      // inspect the persisted preference directly.
       refetchNav();
     } catch {
-      // Silently fail
+      setInterfaceMode(previousMode);
+      showToast(t("appearance.interfaceSaveError"), "error");
+    } finally {
+      interfaceSaveInFlightRef.current = false;
+      setInterfaceModeSaving(false);
     }
   };
 
@@ -556,8 +571,9 @@ export function SettingsPageContent() {
       case "appearance":
         return (
           <AppearanceSection
-            enableExperimentalUI={enableExperimentalUI}
-            onExperimentalUiChange={handleExperimentalUiPreference}
+            interfaceMode={interfaceMode}
+            interfaceModeSaving={interfaceModeSaving}
+            onInterfaceModeChange={handleInterfaceModeChange}
           />
         );
       case "patreon":

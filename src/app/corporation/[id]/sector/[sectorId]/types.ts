@@ -541,7 +541,15 @@ export interface ForSaleInfo {
 // `formatAmount` with no currency code. UNITS: output units per financial day.
 
 export type PlantIdleCauseKey =
-  "inputs" | "demand" | "strike" | "disaster" | "policy" | "deposits" | "mothballed" | "other";
+  | "inputs"
+  | "demand"
+  | "ramping"
+  | "strike"
+  | "disaster"
+  | "policy"
+  | "deposits"
+  | "mothballed"
+  | "other";
 
 export interface PlantIdleCause {
   cause: PlantIdleCauseKey;

@@ -1,6 +1,7 @@
 import { states1991 } from "@/lib/countries/us/data/usStates1991";
 import { ukRegions1991 } from "@/lib/countries/uk/data/ukRegions1991";
 import { jpRegions1991 } from "@/lib/countries/jp/data/jpRegions1991";
+import { ieRegions1991 } from "@/lib/countries/ie/data/ieRegions1991";
 import {
   generateStateBudgets,
   getInitialNationalBudgetsForPreset,
@@ -9,7 +10,12 @@ import { openingLawReferences } from "@/lib/resetLegislation/openingLaw";
 import { openingFiscalBooks1991, type ResetOpeningCountry } from "./opening1991";
 import { allocateRegionalOpeningClaims } from "./rules/regionalOpeningAllocation";
 
-const REGIONS = { US: states1991, UK: ukRegions1991, JP: jpRegions1991 } as const;
+const REGIONS = {
+  US: states1991,
+  UK: ukRegions1991,
+  JP: jpRegions1991,
+  IE: ieRegions1991,
+} as const;
 
 /** Pooled source costs are allocated by each region's opening service envelope.
  * This is a seed audit, not a future law price or a regional Cabinet account.
@@ -18,7 +24,7 @@ export function openingRegionalFiscalOwnership1991() {
   const national = getInitialNationalBudgetsForPreset("1991-default");
   const books = openingFiscalBooks1991();
   return Object.fromEntries(
-    (["US", "UK", "JP"] as const).map((country: ResetOpeningCountry) => {
+    (["US", "UK", "JP", "IE"] as const).map((country: ResetOpeningCountry) => {
       const nationalBudget = national.find((budget) => budget.countryId === country);
       if (!nationalBudget) throw new Error(`${country} national 1991 budget missing`);
       const regions = generateStateBudgets(

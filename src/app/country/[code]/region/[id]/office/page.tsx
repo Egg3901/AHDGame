@@ -32,7 +32,7 @@ import type {
 import { resolveGameYear } from "@/lib/era/era";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import type { DevolutionPolicy } from "@/lib/db/types/governorOfficeState";
-import { isUKDevolutionRegion, proIndyHighDesireBonus } from "@/lib/constants/devolution";
+import { highDesireElectionBonus, isUKDevolutionRegion } from "@/lib/constants/devolution";
 import { referendumRequestEligibility } from "@/lib/constants/referendum";
 import { getReferendumCollection } from "@/lib/db/collections/referendum";
 import type { ReferendumPanelData } from "./tabs/devolution/ReferendumPanel";
@@ -410,7 +410,7 @@ export default async function GovernorOfficePage({ params }: Props) {
     currentTrend: number;
     currentPolicy: DevolutionPolicy;
     policyChangedAtTurn: number | null;
-    proIndyElectionBonus: number;
+    highDesireElectionBonus: number;
     driverPreview: {
       drivers: {
         policy: number;
@@ -526,7 +526,8 @@ export default async function GovernorOfficePage({ params }: Props) {
         currentTrend: trend,
         currentPolicy: policy,
         policyChangedAtTurn: officeState?.devolutionPolicyChangedAtTurn ?? null,
-        proIndyElectionBonus: proIndyHighDesireBonus(previous),
+        highDesireElectionBonus:
+          policy === "independence" && hasHolderParty ? highDesireElectionBonus(previous) : 0,
         driverPreview: {
           drivers: snapshot.drivers,
           delta: snapshot.delta,

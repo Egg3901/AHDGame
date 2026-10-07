@@ -512,6 +512,8 @@ export async function monetizeUnsoldSovereignUnits(
   const currency = bondPoolCurrency(bond);
   const face = args.units * BOND_UNIT_FACE_VALUE;
   const accounting = await loadPrimaryAccounting(db);
+  // Funded Treasury cash forbids minting (#3401); the units stay unsold.
+  if (accounting.treasuryCashLedgerEnabled) return false;
   const budget = await db
     .collection<FederalBudget>("federalBudget")
     .findOne({ _id: getNationalBudgetId(bond.countryId) }, { projection: { treasuryBalance: 1 } });

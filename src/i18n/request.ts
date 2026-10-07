@@ -40,6 +40,7 @@ const NAMESPACES = [
   "worldConflicts",
   "worldOrganizations",
   "centralBank",
+  "parties",
 ] as const;
 
 async function loadCatalog(locale: string): Promise<Messages> {

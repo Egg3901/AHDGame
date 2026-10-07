@@ -32,6 +32,7 @@ import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { POLITICAL_METRIC_COUNTRY_IDS } from "@/lib/politicalMetrics/types";
 import { getMetricDefinition } from "@/lib/constants/metricDefinitions";
 import { ResetMetricsPage } from "./ResetMetricsPage";
+import { RESET_V2_COUNTRIES } from "@/lib/resetVersions/rules";
 
 /**
  * Internal simulation values (e.g. population.realizedMigrationRate) have no
@@ -176,7 +177,7 @@ export default function MetricsPage() {
   const isPoliticalPipelineCountry = (POLITICAL_METRIC_COUNTRY_IDS as readonly string[]).includes(
     country
   );
-  const resetCountry = (["US", "UK", "JP"] as const).find((id) => id === country);
+  const resetCountry = RESET_V2_COUNTRIES.find((id) => id === country);
   const v2MetadataMismatch =
     flagsLoaded &&
     resetCountry !== undefined &&

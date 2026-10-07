@@ -181,3 +181,37 @@ describe("GET /api/auth/google/callback — existing-user reauth", () => {
     expect(cookieState.map.has(AUTH_COOKIE_NAME)).toBe(false);
   });
 });
+
+describe("GET /api/auth/google/callback — new-user signup gates", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cookieState.reset({
+      google_oauth_mode: "login",
+      google_oauth_state: "state-1",
+    });
+    process.env.GOOGLE_CLIENT_ID = "test-client";
+    process.env.GOOGLE_CLIENT_SECRET = "test-secret";
+    process.env.GOOGLE_REDIRECT_URI = "https://ahousedividedgame.com/api/auth/google/callback";
+    exchangeGoogleCode.mockResolvedValue({ access_token: "tok", id_token: "id" });
+    fetchGoogleUser.mockResolvedValue(googleUser);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("refuses to create an account while test mode is on", async () => {
+    const insertOne = vi.fn().mockResolvedValue({});
+    getDb.mockResolvedValue({
+      collection: (name: string) =>
+        name === "gameConfig"
+          ? { findOne: vi.fn().mockResolvedValue({ maintenanceMode: "off", testMode: true }) }
+          : { findOne: vi.fn().mockResolvedValue(null), updateOne: vi.fn(), insertOne },
+    });
+    const { GET } = await import("./route");
+    const res = await GET(
+      new Request("https://ahousedividedgame.com/api/auth/google/callback?code=abc&state=state-1")
+    );
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("reason=test_mode");
+    expect(insertOne).not.toHaveBeenCalled();
+    expect(cookieState.map.has(AUTH_COOKIE_NAME)).toBe(false);
+  });
+});

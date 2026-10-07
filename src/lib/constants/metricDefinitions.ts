@@ -89,8 +89,11 @@ export const metricCategories: MetricCategory[] = [
         // scale). Floor at 1000 was a modern-USD assumption that snapped every
         // low-income 1953 region up on turn 1 (NG NORTH_EAST 100). 0 still
         // bounds nonsense while leaving every historical value the eras author.
+        // Ceiling 10M clipped 1991 Turkey, whose household medians are 10M-40M
+        // pre-2005 lira (#3371). The bound is a clamp only: effect scaling reads
+        // the current value, not this span.
         minValue: 0,
-        maxValue: 10_000_000,
+        maxValue: 1_000_000_000,
       },
       {
         id: "gdpGrowth",

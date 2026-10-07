@@ -21,12 +21,26 @@ import {
   settleQueuedPayout,
 } from "./queuedPayoutSettlement";
 
+/**
+ * Queue claims one redemption pass may make, shared by every fund in the pass.
+ * Each settlement is a durable money move of ~30 round trips, and the pro-rata
+ * gate gives every waiting entry a slice, so an uncapped pass re-settled the
+ * whole queue each turn (#3366). Entries past the budget stay untouched and go
+ * first next turn; cash they did not draw stays in the fund for them.
+ */
+export const QUEUED_REDEMPTION_CLAIMS_PER_PASS = 250;
+
+export interface QueuedRedemptionClaimBudget {
+  claimsLeft: number;
+}
+
 export async function processQueuedRedemptions(
   db: Db,
   fund: IndexFund,
   forexEnabled: boolean,
   currentTurn: number,
-  recoveryAlreadyRun = false
+  recoveryAlreadyRun = false,
+  budget: QueuedRedemptionClaimBudget = { claimsLeft: QUEUED_REDEMPTION_CLAIMS_PER_PASS }
 ): Promise<number> {
   const recovery = recoveryAlreadyRun
     ? { changed: false, recovered: 0 }
@@ -36,6 +50,16 @@ export async function processQueuedRedemptions(
   }
   const pending = await listPendingRedemptions(db, fund._id);
   if (pending.length === 0) return recovery.recovered;
+  if (budget.claimsLeft <= 0) return recovery.recovered;
+  // Least recently touched first, so the entries a budgeted pass skipped are
+  // served before the ones it just paid. Every claim, payout and restore stamps
+  // updatedAt. The pro-rata share below still measures against the whole queue.
+  const ordered = [...pending].sort(
+    (a, b) =>
+      new Date(a.updatedAt ?? a.createdAt).getTime() -
+        new Date(b.updatedAt ?? b.createdAt).getTime() ||
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
 
   // #992 tranche 6: one batched NPP lookup for the pass so each NPP
   // redemption below can be denominated in the NPP home currency (the
@@ -98,7 +122,9 @@ export async function processQueuedRedemptions(
   // the share is measured against who is still waiting, not the original queue.
   let unservedUnits = pending.reduce((sum, e) => sum + Math.max(0, e.units ?? 0), 0);
 
-  for (const pendingEntry of pending) {
+  for (const pendingEntry of ordered) {
+    if (budget.claimsLeft <= 0) break;
+    budget.claimsLeft--;
     // Fence this claim before liquidation or payout. Its frozen journal, not
     // current prices or an acknowledgement, determines every recovery.
     const claimId = randomUUID();

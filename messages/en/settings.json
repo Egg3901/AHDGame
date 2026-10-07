@@ -101,7 +101,7 @@
       },
       "appearance": {
         "label": "Appearance",
-        "summary": "Theme, experimental UI"
+        "summary": "Theme and interface style"
       },
       "patreon": {
         "label": "Patreon",
@@ -277,8 +277,11 @@
         "solarized": "Solarized"
       },
       "interfaceTitle": "Interface",
-      "classicUi": "Use the classic interface",
-      "classicUiHint": "The redesigned navigation bar and the CEO Command Center dashboard are now the default. Turn this on to switch back to the classic navigation bar and corporation pages.",
+      "modernUi": "Modern",
+      "modernUiHint": "The current layout with a cleaner hierarchy, compact navigation, and stronger mobile color cues.",
+      "classicUi": "Classic",
+      "classicUiHint": "The richer typography, color, depth, and navigation style used before the October 3 redesign. Current game features remain available.",
+      "interfaceSaveError": "Could not save the interface preference. Your previous choice was restored.",
       "statusBar": "Status Bar",
       "statusBarHint": "Choose what's shown in the bottom status bar.",
       "layouts": {
@@ -442,9 +445,13 @@
     },
     "politics": {
       "actionsCount": "{count, plural, one {# action} other {# actions}}",
+      "voucherCount": "{count, plural, one {# Positions Update Voucher} other {# Positions Update Vouchers}}",
       "intro": "Shift your stance on economic and social issues. Costs 15 actions per shift.",
       "shifted": "Policy shifted. Infamy +5, Influence -5%.",
+      "shiftedWithVoucher": "Policy shifted with a Positions Update Voucher at no additional cost.",
       "shiftFailed": "Shift failed.",
+      "useVoucher": "Use a Positions Update Voucher",
+      "useVoucherHint": "Your next shift uses one voucher and applies no action cost, penalties, or cooldown.",
       "electionPreferences": "Election Preferences",
       "autoReelection": "Automatically run for re-election",
       "autoReelectionHint": "When enabled, you will be automatically entered into new elections in your home district each cycle. You can still withdraw manually. Does not apply to presidential races."

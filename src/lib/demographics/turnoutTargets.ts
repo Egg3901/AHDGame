@@ -1,6 +1,7 @@
 import { ALL_COUNTRY_IDS } from "@/lib/constants/countries";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { getCountryLayer1Model } from "@/lib/seeds/international";
+import { getEraPositions } from "@/lib/seeds/demographicCategories";
 import { eraForPreset } from "@/lib/seeds/presetSelector";
 import { GRANULAR_DIMENSIONS } from "./granularCells";
 import { BUCKET_LABELS, bucketLabel, dimensionLabelFor } from "./bucketLabels";
@@ -25,7 +26,12 @@ import { BUCKET_LABELS, bucketLabel, dimensionLabelFor } from "./bucketLabels";
 export interface TurnoutTargetSection {
   dim: string;
   dimLabel: string;
-  options: Array<{ id: string; label: string }>;
+  options: Array<{
+    id: string;
+    label: string;
+    economicLean: number;
+    socialLean: number;
+  }>;
 }
 
 /**
@@ -40,21 +46,22 @@ export function getTurnoutTargetsForCountry(
   countryId: string,
   preset?: string | null
 ): TurnoutTargetSection[] {
+  const era = eraForPreset(preset ?? DEFAULT_SEED_PRESET);
   if (countryId.toUpperCase() === "US") {
+    const positions = getEraPositions(era);
     return GRANULAR_DIMENSIONS.map((dim) => ({
       dim,
       dimLabel: dimensionLabelFor(dim, countryId),
       options: Object.entries(BUCKET_LABELS[dim]).map(([key, label]) => ({
         id: `${dim}:${key}`,
         label,
+        economicLean: positions[dim]?.[key]?.economicLean ?? 0,
+        socialLean: positions[dim]?.[key]?.socialLean ?? 0,
       })),
     }));
   }
 
-  const model = getCountryLayer1Model(
-    countryId.toUpperCase(),
-    eraForPreset(preset ?? DEFAULT_SEED_PRESET)
-  );
+  const model = getCountryLayer1Model(countryId.toUpperCase(), era);
   if (!model) return [];
   return model.dims.map((dim) => ({
     dim,
@@ -62,8 +69,47 @@ export function getTurnoutTargetsForCountry(
     options: Object.keys(model.turnoutRates[dim] ?? {}).map((key) => ({
       id: `${dim}:${key}`,
       label: bucketLabel(`${dim}:${key}`, countryId),
+      economicLean: model.positions[dim]?.[key]?.economicLean ?? 0,
+      socialLean: model.positions[dim]?.[key]?.socialLean ?? 0,
     })),
   }));
+}
+
+export interface PartyTurnoutTarget {
+  category: string;
+  group: string;
+  label: string;
+  economicLean: number;
+  socialLean: number;
+}
+
+/** Flatten served sections into the category/group shape stored on party budgets. */
+export function flattenPartyTurnoutTargets(sections: TurnoutTargetSection[]): PartyTurnoutTarget[] {
+  return sections.flatMap((section) =>
+    section.options.map((option) => ({
+      category: section.dim,
+      group: option.id.startsWith(`${section.dim}:`)
+        ? option.id.slice(section.dim.length + 1)
+        : option.id,
+      label: option.label,
+      economicLean: option.economicLean,
+      socialLean: option.socialLean,
+    }))
+  );
+}
+
+/** Resolve one party-budget target against the current country's Layer-1 rules. */
+export function resolvePartyTurnoutTarget(
+  countryId: string,
+  category: string,
+  group: string,
+  preset?: string | null
+): PartyTurnoutTarget | null {
+  return (
+    flattenPartyTurnoutTargets(getTurnoutTargetsForCountry(countryId, preset)).find(
+      (target) => target.category === category && target.group === group
+    ) ?? null
+  );
 }
 
 /**

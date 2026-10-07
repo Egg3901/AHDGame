@@ -7,6 +7,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getReferendumCollection } from "@/lib/db/collections/referendum";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
+import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 
 // GET /api/country/[code]/referendum
 // Returns in-flight UK referendums (awaiting the PM's decision, campaigning, or
@@ -36,9 +37,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
       .toArray();
     const isAdmin = auth.user.isAdmin === true;
 
-    const [pmId, currentTurn] = await Promise.all([
+    const [pmId, currentTurn, irelandPlayerEnabled] = await Promise.all([
       getHeadOfGovernmentCharacterId(db, countryId),
       getCurrentTurn(db),
+      isCountryEnabledForPlayers(db, "IE"),
     ]);
     const isPM = pmId != null && String(pmId) === viewerId;
 
@@ -62,6 +64,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
       status: r.status,
       campaignCloseTurn: r.campaignCloseTurn,
       conversionDeadlineTurn: r.conversionDeadlineTurn,
+      dailConsentRequired: r.status === "actuating" ? r.dailBillId != null : irelandPlayerEnabled,
       yesShare: r.yesShare,
       desire: desireByRegion.get(r.regionId) ?? null,
     }));

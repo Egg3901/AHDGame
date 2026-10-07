@@ -16,7 +16,15 @@ vi.mock("@/lib/referendum/referendumWebhooks", () => ({
 }));
 
 vi.mock("@/lib/referendum/wire", () => ({ recordWireEvent: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/lib/countryAccess", () => ({
+  isCountryEnabledForPlayers: vi.fn().mockResolvedValue(false),
+}));
+vi.mock("@/lib/world/playerHandoff", () => ({
+  enterCountryForPlayers: vi.fn().mockResolvedValue({ countryId: "IE" }),
+}));
 import { recordWireEvent } from "@/lib/referendum/wire";
+import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
+import { enterCountryForPlayers } from "@/lib/world/playerHandoff";
 
 import { actuateReferendumTransfer } from "./actuateReferendum";
 import { transferRegion } from "./transferRegion";
@@ -65,6 +73,23 @@ describe("actuateReferendumTransfer", () => {
       expect.anything(),
       expect.objectContaining({ kind: "reunified" })
     );
+    expect(enterCountryForPlayers).toHaveBeenCalledWith(
+      expect.anything(),
+      "IE",
+      expect.objectContaining({ status: "active" })
+    );
+  });
+
+  it("does not reopen Ireland when it is already player enabled", async () => {
+    vi.mocked(isCountryEnabledForPlayers).mockResolvedValueOnce(true);
+    setRef(db, reunification);
+    const res = await actuateReferendumTransfer(db as unknown as Db, {
+      referendumId: REF_ID,
+      currentTurn: 300,
+      action: "resolve",
+    });
+    expect(res.status).toBe(200);
+    expect(enterCountryForPlayers).not.toHaveBeenCalled();
   });
 
   it("block: cancels the conversion without transferring, sets a cooldown", async () => {

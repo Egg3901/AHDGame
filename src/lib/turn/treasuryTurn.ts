@@ -29,13 +29,18 @@ import { getRegisteredCountryIdSet } from "@/lib/country/registeredCountries";
 import { enforcementTreasuryCostPerTurn } from "@/lib/unions/enforcementCosts";
 import { settleBankSovereignClaims } from "@/lib/banking/bankSovereignClaims";
 import { bankCouponClaim, bankCouponPlanForCountry } from "@/lib/banking/rules/sovereignClaims";
-import { settleFundedSovereignCoupons } from "@/lib/banking/fundedSovereignCoupons";
+import {
+  budgetIdsWithOpenSovereignCouponClaims,
+  settleFundedSovereignCoupons,
+} from "@/lib/banking/fundedSovereignCoupons";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import {
   fxRateForCorpFromMap,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import type { SovereignCouponCorporationQuote } from "@/lib/banking/rules/sovereignCoupons";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 
 /**
  * Per-turn fiscal accrual (spec §4). For each country's federalBudget, move a
@@ -58,7 +63,18 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       .collection<CentralBank>("centralBanks")
       .find({}, { projection: { countryId: 1 } })
       .toArray(),
-    db.collection<GameState>("gameState").findOne({ _id: "current" }),
+    db.collection<GameState>("gameState").findOne(
+      { _id: "current" },
+      {
+        projection: {
+          preset: 1,
+          resetWorldId: 1,
+          metricsSystemVersion: 1,
+          cabinetSystemVersion: 1,
+          resetVersionSeeds: 1,
+        },
+      }
+    ),
   ]);
   const preset = gameStateDoc?.preset ?? DEFAULT_SEED_PRESET;
   // Shared banks (ECB) cover multiple member countries; heal every member's
@@ -76,10 +92,14 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   const allBudgets = await db.collection<FederalBudget>("federalBudget").find({}).toArray();
   // Dissolved countries keep their budget doc but must not be simulated against
   // it; see `getRegisteredCountryIdSet`.
-  const liveCountries = await getRegisteredCountryIdSet(db);
+  const [liveCountries, budgetsOwingCoupons] = await Promise.all([
+    getRegisteredCountryIdSet(db),
+    budgetIdsWithOpenSovereignCouponClaims(db),
+  ]);
+  const owesCoupons = (b: FederalBudget) =>
+    (b.sovereignCouponClaims?.length ?? 0) > 0 || budgetsOwingCoupons.has(String(b._id));
   const budgets = allBudgets.filter(
-    (b) =>
-      liveCountries.has(String(b.countryId ?? b._id)) || (b.sovereignCouponClaims?.length ?? 0) > 0
+    (b) => liveCountries.has(String(b.countryId ?? b._id)) || owesCoupons(b)
   );
 
   const [config, rates] = await Promise.all([
@@ -190,11 +210,12 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   for (const initial of budgets) {
     let b = initial;
     if (!liveCountries.has(String(b.countryId ?? b._id))) {
-      if (treasuryCashLedgerEnabled && b.sovereignCouponClaims?.length) {
+      if (treasuryCashLedgerEnabled && owesCoupons(b)) {
+        // No bonds are passed, so nothing new is frozen and the rate is unused.
         await settleFundedSovereignCoupons(db, b, {
           turn: _turn,
           bonds: [],
-          anchorRate: b.sovereignCouponClaims[0].anchorRate,
+          anchorRate: b.sovereignCouponClaims?.[0]?.anchorRate ?? 0,
           forexEnabled,
           corporateQuotes: corporationQuotes,
         });
@@ -247,6 +268,13 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
       const revenue = b.revenue?.total ?? 0;
       const spendingTotal = b.spending?.total ?? 0;
       const debtInterest = b.spending?.debtInterest ?? 0;
+      const countryId = String(b.countryId ?? b._id);
+      // A Cabinet-v2 country settles its revenue and department authority in
+      // resetFinance. Keep this legacy shell for debt service, enforcement,
+      // bank claims, and tax phase-in only. Accruing its primary fiscal slice
+      // here as well would spend the same revenue and appropriations twice.
+      const primaryFiscalSliceOwnedByV2 =
+        resetSystemVersionsForCountry(gameStateDoc, RESET_V2_READY, countryId).cabinet === "v2";
 
       // Live debt-service on the bond-owned stock (the per-turn cash leg of coupon
       // service). Uses the PRE-slice stock so the rate reflects this turn's opening
@@ -288,8 +316,8 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
         currencyCode,
         ...valuation,
         ledgerShadow,
-        annualRevenue: revenue,
-        annualPrimarySpending: spendingTotal - debtInterest,
+        annualRevenue: primaryFiscalSliceOwnedByV2 ? 0 : revenue,
+        annualPrimarySpending: primaryFiscalSliceOwnedByV2 ? 0 : spendingTotal - debtInterest,
         debtService: debtServiceTurn,
         enforcement: enforcementCost,
       };

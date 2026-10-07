@@ -14,8 +14,10 @@ export function WorldDropdown({
   isUKContext: _isUKContext = false,
   countryId = "US",
   myCorporationId = null,
+  myUnionId = null,
   conflictsEnabled = false,
   unionsEnabled = false,
+  settlementCrisisLive = false,
 }: WorldDropdownProps) {
   const t = useTranslations("nav");
   const [isOpen, setIsOpen] = useState(false);
@@ -45,8 +47,10 @@ export function WorldDropdown({
   const items = visibleWorldNavItems({
     countryId,
     myCorporationId,
+    myUnionId,
     conflictsEnabled,
     unionsEnabled,
+    settlementCrisisLive,
   });
   const corporate = items.filter((i) => i.section === "corporate");
   const leaderboard = items.filter((i) => i.section === "leaderboard");

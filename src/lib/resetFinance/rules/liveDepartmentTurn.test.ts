@@ -11,13 +11,18 @@ const fiscal = openingFiscalBooks1991();
 const { accounts } = buildOpeningDepartmentFundingPartition(
   buildOpeningDepartmentBoards1991("world-1991", 1),
   DEPARTMENT_DEFINITIONS,
-  { US: fiscal.US.grants, UK: fiscal.UK.grants, JP: fiscal.JP.grants },
+  {
+    US: fiscal.US.grants,
+    UK: fiscal.UK.grants,
+    JP: fiscal.JP.grants,
+    IE: fiscal.IE.grants,
+  },
   openingNamedGrantClaims1991()
 );
 
 describe("v2 live Cabinet period settlement", () => {
   it("accrues each country's ordinary 1991 authority exactly over 240 turns", () => {
-    for (const countryId of ["US", "UK", "JP"] as const) {
+    for (const countryId of ["US", "UK", "JP", "IE"] as const) {
       let paid = 0;
       let outlaid = 0;
       for (const original of accounts.filter(

@@ -107,7 +107,7 @@
     "sections": {
       "accountProfile": { "label": "Profil", "summary": "Benutzername & E-Mail" },
       "identity": { "label": "Verknüpfte Konten", "summary": "Discord, Google" },
-      "appearance": { "label": "Darstellung", "summary": "Design, experimentelle Oberfläche" },
+      "appearance": { "label": "Darstellung", "summary": "Design und Oberflächenstil" },
       "patreon": { "label": "Patreon", "summary": "Unterstützervorteile" },
       "supporterPerks": {
         "label": "Unterstützer-Extras",
@@ -247,8 +247,11 @@
         "solarized": "Solarized"
       },
       "interfaceTitle": "Oberfläche",
-      "classicUi": "Klassische Oberfläche verwenden",
-      "classicUiHint": "Die neue Navigationsleiste und das CEO Command Center sind jetzt Standard. Aktiviere dies, um zur klassischen Navigationsleiste und den alten Konzernseiten zurückzukehren.",
+      "modernUi": "Modern",
+      "modernUiHint": "Das aktuelle Layout mit klarerer Hierarchie, kompakter Navigation und stärkeren Farbakzenten auf Mobilgeräten.",
+      "classicUi": "Klassisch",
+      "classicUiHint": "Die reichere Typografie, Farbe, Tiefe und Navigation von vor der Neugestaltung am 3. Oktober. Aktuelle Spielfunktionen bleiben verfügbar.",
+      "interfaceSaveError": "Die Oberflächeneinstellung konnte nicht gespeichert werden. Die vorherige Auswahl wurde wiederhergestellt.",
       "statusBar": "Statusleiste",
       "statusBarHint": "Wähle, was in der unteren Statusleiste angezeigt wird.",
       "layouts": {
@@ -412,9 +415,13 @@
     },
     "politics": {
       "actionsCount": "{count, plural, one {# Aktion} other {# Aktionen}}",
+      "voucherCount": "{count, plural, one {# Gutschein zur Positionsänderung} other {# Gutscheine zur Positionsänderung}}",
       "intro": "Verschiebe deine Haltung zu wirtschaftlichen und gesellschaftlichen Fragen. Kostet 15 Aktionen pro Verschiebung.",
       "shifted": "Position verschoben. Verruf +5, Einfluss -5%.",
+      "shiftedWithVoucher": "Position mit einem Gutschein zur Positionsänderung ohne zusätzliche Kosten verschoben.",
       "shiftFailed": "Verschiebung fehlgeschlagen.",
+      "useVoucher": "Gutschein zur Positionsänderung verwenden",
+      "useVoucherHint": "Die nächste Verschiebung verbraucht einen Gutschein und verursacht keine Aktionskosten, Nachteile oder Abklingzeit.",
       "electionPreferences": "Wahleinstellungen",
       "autoReelection": "Automatisch zur Wiederwahl antreten",
       "autoReelectionHint": "Wenn aktiviert, wirst du in jedem Zyklus automatisch für neue Wahlen in deinem Heimatwahlkreis aufgestellt. Du kannst dich weiterhin manuell zurückziehen. Gilt nicht für Präsidentschaftswahlen."

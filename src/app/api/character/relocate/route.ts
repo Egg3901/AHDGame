@@ -3,7 +3,8 @@
  *
  * Relocate character to a new state/region.
  * - Regional political capital (politicalInfluence, donorBaseLevel, groupFavorability) always resets to 0.
- * - nationalInfluence, partyInfluence, and party only reset on country change.
+ * - nationalInfluence resets on country change; party and partyInfluence also reset
+ *   on a confirmed move outside the party's live frontier.
  * - Active candidacies (general/primary, state-party, national-party, committee) are auto-withdrawn.
  * - State/region-bound currentOffice seats auto-resign; country-scoped offices (VP, President,
  *   cabinet, …) only resign on country change. CEO role always resigns (unless NatCorp same-country
@@ -27,6 +28,8 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { z } from "zod";
 import { getActiveCandidacySummary } from "@/lib/character/relocationCampaigns";
 import { performRelocation } from "@/lib/character/performRelocation";
+import { relocationLeavesParty, PARTY_DEPARTURE_WARNING } from "@/lib/character/relocationParty";
+import { getPartyFrontier } from "@/lib/parties/partyFrontier";
 import { getCountryAccess } from "@/lib/countryAccess";
 import { getGameState } from "@/lib/gameState";
 import { getGameTime } from "@/lib/time/gameTime";
@@ -53,6 +56,7 @@ const relocateBodySchema = z.object({
   // (in-country relocations only). Required to enable cross-country moves
   // safely against cross-country state-ID collisions.
   targetCountryId: z.string().min(2).max(3).optional(),
+  confirmPartyDeparture: z.boolean().optional(),
 });
 
 // POST /api/character/relocate — Run the relocation pipeline for the authenticated character.
@@ -99,7 +103,10 @@ export async function POST(request: Request) {
       }
     }
 
-    if (auth.character.homeState === normalizedTarget) {
+    if (
+      auth.character.homeState === normalizedTarget &&
+      (auth.character.countryId ?? "US") === targetState.countryId
+    ) {
       return errorResponse(400, "Already in this state/region");
     }
 
@@ -129,7 +136,13 @@ export async function POST(request: Request) {
       }
     }
 
-    const outcome = await performRelocation(db, auth.character, targetState);
+    const leaveParty = await relocationLeavesParty(db, auth.character, targetState);
+    if (leaveParty && !parsed.data.confirmPartyDeparture) {
+      return errorResponse(409, PARTY_DEPARTURE_WARNING, {
+        extra: { partyDepartureRequired: true },
+      });
+    }
+    const outcome = await performRelocation(db, auth.character, targetState, { leaveParty });
 
     const notes: string[] = [];
     if (outcome.resignedFromOffice) notes.push(`Resigned from ${outcome.resignedFromOffice}.`);
@@ -195,6 +208,10 @@ async function handleGET() {
 
     const db = await getDb();
     const characterId = auth.character._id;
+    const hasParty = !!auth.character.party && auth.character.party !== "independent";
+    const partyReach = hasParty
+      ? await getPartyFrontier(db, auth.character.countryId ?? "US", auth.character.party)
+      : null;
 
     const candidacies = await getActiveCandidacySummary(db, characterId);
 
@@ -243,6 +260,10 @@ async function handleGET() {
 
     return NextResponse.json({
       canRelocate: !onCooldown,
+      hasParty,
+      partyCountryId: auth.character.countryId ?? "US",
+      partyFrontierRegions:
+        partyReach && partyReach.presence.size > 0 ? [...partyReach.frontier] : null,
       remainingTurns: cooldown.remainingTurns,
       cooldownRemainingDays,
       cooldownUntil,
