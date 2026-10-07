@@ -19,7 +19,9 @@ import {
 } from "./index";
 import { nationalHouseholdMedianFromGdp, scaleRegionalIncomes } from "./rules";
 
-const FIXED: Income1991CountryId[] = ["NG", "CN", "TR"];
+// The #3393 countries have their own suite (income1991.westEurope.test.ts).
+type Fixed = Extract<Income1991CountryId, "NG" | "CN" | "TR">;
+const FIXED: Fixed[] = ["NG", "CN", "TR"];
 // The 23 countries in the 1991 opening.
 const LIVE_1991: CountryId[] = [
   "AT",
@@ -134,8 +136,11 @@ describe("1991 income vintages (#3370 #3371 #3376)", () => {
 
   it("leaves every other country's 1991 income untouched (23-country coverage)", () => {
     expect(LIVE_1991).toHaveLength(23);
+    // AT/ES/FI/FR/GR/IT/SE carry vintages too (#3393, income1991.westEurope.test.ts).
+    const vintaged: string[] = [...FIXED, "AT", "ES", "FI", "FR", "GR", "IT", "SE"];
+    expect(Object.keys(INCOME_1991_REGIONAL).sort()).toEqual([...vintaged].sort());
     for (const c of LIVE_1991) {
-      if ((FIXED as string[]).includes(c)) continue;
+      if (vintaged.includes(c)) continue;
       const after = loadSeededStateMetrics(c, "1991-default");
       for (const m of after) {
         expect(INCOME_1991_REGIONAL[c as Income1991CountryId]).toBeUndefined();

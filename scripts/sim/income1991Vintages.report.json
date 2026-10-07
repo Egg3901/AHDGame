@@ -21,6 +21,48 @@
         "value": 25145041,
         "id": "tr-1991-household-r1"
       }
+    },
+    "AT": {
+      "1991": {
+        "value": 316064,
+        "id": "at-1991-household-r1"
+      }
+    },
+    "ES": {
+      "1991": {
+        "value": 2565869,
+        "id": "es-1991-household-r1"
+      }
+    },
+    "FI": {
+      "1991": {
+        "value": 127787,
+        "id": "fi-1991-household-r1"
+      }
+    },
+    "FR": {
+      "1991": {
+        "value": 146451,
+        "id": "fr-1991-household-r1"
+      }
+    },
+    "GR": {
+      "1991": {
+        "value": 3166684,
+        "id": "gr-1991-household-r1"
+      }
+    },
+    "IT": {
+      "1991": {
+        "value": 38140233,
+        "id": "it-1991-household-r1"
+      }
+    },
+    "SE": {
+      "1991": {
+        "value": 182468,
+        "id": "se-1991-household-r1"
+      }
     }
   },
   "rollout": "Vintage anchors apply only when gameState.incomeStartVintages matches the vintage id. Fresh 1991 seed writers stamp it; existing worlds have no stamp and keep legacy anchors.",

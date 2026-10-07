@@ -54,7 +54,9 @@ import {
   nationalHouseholdMedianFromGdp,
 } from "@/lib/seeds/reference/income1991/rules";
 
-const COUNTRIES: Income1991CountryId[] = ["NG", "CN", "TR"];
+/** This report covers NG/CN/TR; AT/ES/FI/FR/GR/IT/SE are in income1991WestEurope.ts. */
+type Fixed = Extract<Income1991CountryId, "NG" | "CN" | "TR">;
+const COUNTRIES: Fixed[] = ["NG", "CN", "TR"];
 const START = 1991;
 const PRESET = "1991-default";
 const YEARS = 5;
@@ -131,13 +133,13 @@ function medianToMeanFromGini(gini: number): number {
   return Math.exp((-sigma * sigma) / 2);
 }
 
-const REGIONS: Record<Income1991CountryId, Array<{ _id: unknown; population: number }>> = {
+const REGIONS: Record<Fixed, Array<{ _id: unknown; population: number }>> = {
   NG: ngRegions1991,
   CN: cnRegions1991,
   TR: trRegions1991,
 };
 
-function popWeighted(c: Income1991CountryId, values: Record<string, number>): number {
+function popWeighted(c: Fixed, values: Record<string, number>): number {
   let pop = 0;
   let sum = 0;
   for (const r of REGIONS[c]) {
@@ -153,7 +155,7 @@ function popWeighted(c: Income1991CountryId, values: Record<string, number>): nu
 const FRESH = incomeVintageStampsFor(START);
 
 function score(
-  c: Income1991CountryId,
+  c: Fixed,
   value: number,
   anchorOverride?: number,
   stamps: Record<string, string> | null = FRESH
@@ -172,7 +174,7 @@ function round(v: number, d = 0): number {
 }
 
 /** The pre-change opening: NG/CN via the US-ratio era adjustment, TR on its base bundle. */
-function previousOpening(c: Income1991CountryId): Record<string, number> {
+function previousOpening(c: Fixed): Record<string, number> {
   const base = c === "NG" ? ngStateMetrics : c === "CN" ? cnStateMetrics : trStateMetrics;
   const rows = c === "TR" ? base : base.map(applyEra1991Adjustments);
   return Object.fromEntries(
@@ -180,13 +182,13 @@ function previousOpening(c: Income1991CountryId): Record<string, number> {
   );
 }
 
-const PREVIOUS_1991_ANCHOR: Record<Income1991CountryId, number> = {
+const PREVIOUS_1991_ANCHOR: Record<Fixed, number> = {
   NG: 210_000,
   CN: 9_000,
   TR: 1_900,
 };
 
-function crossChecks(c: Income1991CountryId) {
+function crossChecks(c: Fixed) {
   const gdpPc = gdpPerResident1991(c);
   const wdiGdpPc = SOURCES.gdpPerCapitaLcu.values[c];
   const proxy = INCOME_1991_PROXIES[c];
@@ -209,7 +211,7 @@ function crossChecks(c: Income1991CountryId) {
   };
 }
 
-function sensitivity(c: Income1991CountryId) {
+function sensitivity(c: Fixed) {
   const gdpPc = gdpPerResident1991(c);
   const proxy = INCOME_1991_PROXIES[c];
   const base = nationalHouseholdMedian1991(c);
@@ -248,7 +250,7 @@ function sensitivity(c: Income1991CountryId) {
   };
 }
 
-function regionalOpening(c: Income1991CountryId) {
+function regionalOpening(c: Fixed) {
   const rows = Object.entries(INCOME_1991_REGIONAL[c]).map(([id, v]) => ({
     id,
     income: v,
@@ -272,7 +274,7 @@ function regionalOpening(c: Income1991CountryId) {
   };
 }
 
-function engineGrid(c: Income1991CountryId) {
+function engineGrid(c: Fixed) {
   const out: Array<{
     productivity: number;
     unemployment: number;
@@ -321,7 +323,7 @@ const LEGACY_MEDIAN_INCOME_NODE: RegistryNode = {
 };
 
 /** One year from a running world (persisted simBaseline equal to the value). */
-function oneYear(node: RegistryNode, c: Income1991CountryId, start: number, annualPct: number) {
+function oneYear(node: RegistryNode, c: Fixed, start: number, annualPct: number) {
   let value = start;
   let simBaseline = start;
   for (let turn = 1; turn <= TURNS_PER_YEAR; turn++) {
@@ -346,7 +348,7 @@ function oneYear(node: RegistryNode, c: Income1991CountryId, start: number, annu
 
 const PRECISION_SIGNALS = [-1, -0.5, 0.5, 1];
 
-function precision(c: Income1991CountryId) {
+function precision(c: Fixed) {
   const poorest = Math.min(...Object.values(INCOME_1991_REGIONAL[c]));
   return {
     poorestRegionIncome: poorest,
@@ -392,7 +394,7 @@ function scaleInvariance() {
   };
 }
 
-function anchorRegression(c: Income1991CountryId) {
+function anchorRegression(c: Fixed) {
   return [1953, 1979, 1991, 1999, 2007, 2019, 2023].map((year) => ({
     startYear: year,
     interpolated: round(getIncomeAnchor(c, year) ?? NaN, 2),

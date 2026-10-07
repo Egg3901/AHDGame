@@ -17,6 +17,7 @@ import {
 import { getMetricThreshold, scoreMetric } from "@/lib/utils/metricScoring";
 import { computeNationalMetrics } from "@/lib/nationalMetrics";
 import {
+  INCOME_VINTAGE_SEED_COUNTRIES,
   stampSeededIncomeVintage,
   stampSeededIncomeVintages,
 } from "@/lib/admin/seed/incomeStartVintage";
@@ -30,22 +31,26 @@ import { trStateMetrics } from "@/lib/seeds/tr/trStateMetrics";
 import type { StateMetrics } from "@/lib/db/types";
 import { nationalHouseholdMedian1991, seededIncomeVintageId, type Income1991CountryId } from ".";
 
-const FIXED: Income1991CountryId[] = ["NG", "CN", "TR"];
+// NG/CN/TR here; AT/ES/FI/FR/GR/IT/SE run the same gate in income1991.westEurope.test.ts.
+type Fixed = Extract<Income1991CountryId, "NG" | "CN" | "TR">;
+const FIXED: Fixed[] = ["NG", "CN", "TR"];
+const ALL = Object.keys(INCOME_START_VINTAGES) as Income1991CountryId[];
 const FRESH = incomeVintageStampsFor(1991);
 const AT_ANCHOR = ((1 - 0.45) / (1.25 - 0.45)) * 100;
 
 /** The incomes a 1991 world seeded before this change holds. */
-const LEGACY_BUNDLES: Record<Income1991CountryId, StateMetrics[]> = {
+const LEGACY_BUNDLES: Record<Fixed, StateMetrics[]> = {
   NG: ngStateMetrics.map((m) => applyEra1991Adjustments(m)),
   CN: cnStateMetrics.map((m) => applyEra1991Adjustments(m)),
   TR: trStateMetrics,
 };
-const REGIONS = { NG: ngRegions1991, CN: cnRegions1991, TR: trRegions1991 } as Record<
-  Income1991CountryId,
-  Array<{ _id: unknown; population: number }>
->;
+const REGIONS: Record<Fixed, Array<{ _id: unknown; population: number }>> = {
+  NG: ngRegions1991,
+  CN: cnRegions1991,
+  TR: trRegions1991,
+};
 
-function legacyNational(c: Income1991CountryId): number {
+function legacyNational(c: Fixed): number {
   const byId = new Map(
     LEGACY_BUNDLES[c].map((m) => [String(m._id), m.economic?.medianIncome?.value])
   );
@@ -70,11 +75,12 @@ function legacyScore(c: string, value: number, index = 1): number {
 
 describe("income vintage provenance gate", () => {
   it("stamps exist only for authored vintages and carry their ids", () => {
-    expect(FRESH).toEqual({
-      NG: INCOME_START_VINTAGES.NG![1991].id,
-      CN: INCOME_START_VINTAGES.CN![1991].id,
-      TR: INCOME_START_VINTAGES.TR![1991].id,
-    });
+    expect([...ALL].sort()).toEqual(["AT", "CN", "ES", "FI", "FR", "GR", "IT", "NG", "SE", "TR"]);
+    expect(FRESH).toEqual(
+      Object.fromEntries(ALL.map((c) => [c, INCOME_START_VINTAGES[c]![1991].id]))
+    );
+    // Every id is unique, so one country's stamp can never activate another's.
+    expect(new Set(Object.values(FRESH)).size).toBe(ALL.length);
     expect(incomeVintageStampsFor(1979)).toEqual({});
     expect(incomeVintageStampsFor(2019)).toEqual({});
     expect(incomeVintageStampsFor(null)).toEqual({});
@@ -135,7 +141,7 @@ describe("income vintage provenance gate", () => {
   });
 
   it("other start years ignore the stamps entirely", () => {
-    for (const c of FIXED) {
+    for (const c of ALL) {
       for (const start of [1953, 1979, 1999, 2007, 2019]) {
         expect(getStartingIncomeAnchor(c, start, FRESH)).toBe(getIncomeAnchor(c, start));
         expect(
@@ -157,12 +163,14 @@ describe("seed writers stamp the provenance they write", () => {
   });
 
   it("the stamp id is the vintage the 1991 writers apply, and nothing else", () => {
-    for (const c of FIXED) {
+    for (const c of ALL) {
       expect(seededIncomeVintageId(c, "1991-default")).toBe(FRESH[c]);
       expect(seededIncomeVintageId(c, "2019-default")).toBeNull();
       expect(seededIncomeVintageId(c, "1979-default")).toBeNull();
     }
     expect(seededIncomeVintageId("UK", "1991-default")).toBeNull();
+    // Every authored vintage has a writer that stamps it, and bootstrap re-applies it.
+    expect([...INCOME_VINTAGE_SEED_COUNTRIES].sort()).toEqual([...ALL].sort());
   });
 
   it("a 1991 write sets the country stamp without upserting gameState", async () => {
@@ -183,11 +191,7 @@ describe("seed writers stamp the provenance they write", () => {
     await stampSeededIncomeVintages(db as unknown as Db, "1991-default");
     const [, update] = db.collectionMocks.gameState!.updateOne.mock.calls[0];
     expect(update).toEqual({
-      $set: {
-        "incomeStartVintages.NG": FRESH.NG,
-        "incomeStartVintages.CN": FRESH.CN,
-        "incomeStartVintages.TR": FRESH.TR,
-      },
+      $set: Object.fromEntries(ALL.map((c) => [`incomeStartVintages.${c}`, FRESH[c]])),
     });
   });
 });
