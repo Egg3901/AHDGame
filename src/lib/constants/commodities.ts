@@ -1202,7 +1202,7 @@ export function computeRateEnvironmentMultiplier(primeRate: number): number {
 export interface FinancialServicesDemandInput {
   /** Country's central bank prime rate */
   primeRate: number;
-  /** Recent debt issuance dollars over the current demand window: stateId → issuance */
+  /** Recent debt issuance in ₳ over the current demand window: stateId → issuance */
   stateDebtIssuance: Map<string, number>;
 }
 
@@ -1219,8 +1219,8 @@ export function computeLatentFinancialDemand(
   const basePrice = COMMODITY_BASE_PRICES["financial_services"];
   const result = new Map<string, number>();
 
-  for (const [stateId, issuanceDollars] of input.stateDebtIssuance) {
-    const baseDemandDollars = issuanceDollars * FINANCIAL_DEMAND_ISSUANCE_FRACTION;
+  for (const [stateId, issuanceAnchor] of input.stateDebtIssuance) {
+    const baseDemandDollars = issuanceAnchor * FINANCIAL_DEMAND_ISSUANCE_FRACTION;
     const adjustedDemandDollars = baseDemandDollars * rateMultiplier;
     const units = adjustedDemandDollars / basePrice;
     if (units > 0) {

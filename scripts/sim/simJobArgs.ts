@@ -11,6 +11,7 @@ import { preparedSandboxSchema, type PreparedSandbox } from "./preparedSandbox";
 
 /** Subset of a simJobs document that controls runWorld CLI emission. */
 export interface SimJobExperimentFields {
+  engineBudgetSeconds?: number;
   preparedSandbox?: PreparedSandbox;
   sovereignIssuanceConsolidationEnabled?: boolean;
   domesticSovereignBondCoverageEnabled?: boolean;
@@ -143,10 +144,19 @@ export function buildRunWorldArgs(job: SimJobExperimentFields): string[] {
   // writes gameConfig.simTurnPhaseMode (skips economy phases) and scopes
   // election spawning via countryGameStates.
   if (job.mode) {
-    if (!SIM_TURN_PHASE_MODES.includes(job.mode)) {
+    const mode = job.mode === "full-budgeted-v1" ? "full" : job.mode;
+    if (
+      job.mode === "full-budgeted-v1" &&
+      (!Number.isInteger(job.engineBudgetSeconds) ||
+        job.engineBudgetSeconds! < 1 ||
+        job.engineBudgetSeconds! > 604800)
+    ) {
+      throw new Error("Budgeted jobs require engineBudgetSeconds between 1 and 604800");
+    }
+    if (!SIM_TURN_PHASE_MODES.includes(mode)) {
       throw new Error(`invalid mode "${job.mode}"`);
     }
-    args.push(`--mode=${job.mode}`);
+    args.push(`--mode=${mode}`);
   }
   // Simulation actor mode (#1993). Omitted means pure NPP autonomy (the
   // harness default); an explicit value must be a known mode — a typo can

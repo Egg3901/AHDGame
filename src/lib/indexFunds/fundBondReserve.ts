@@ -397,6 +397,13 @@ async function deployBondReserve(
     );
     const planned: { plan: BondPurchasePlan; now: Date }[] = [];
     const totals = await runPass(async (bond, units, limits) => {
+      // An issue awaiting its maturity claim refuses new holders (the
+      // reservation guard requires no claim), so a planned purchase of it
+      // could only abort the whole transaction and send every purchase down
+      // the per-purchase path, where it is refused anyway. Skip it here, as
+      // that refusal would: the issue keeps its place in the list, so the
+      // budget split across the remaining issues is unchanged.
+      if (bond.sovereignMaturityClaim) return null;
       const result = await planBondUnitsForFund(db, fund, bond, units, {
         bondPools: planPools,
         fxRates,
