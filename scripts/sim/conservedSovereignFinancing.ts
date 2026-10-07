@@ -75,10 +75,21 @@ async function main() {
   });
   client.on("commandSucceeded", (event) => {
     if (["hello", "isMaster", "ping", "endSessions"].includes(event.commandName)) return;
-    counter.replyBytes += BSON.calculateObjectSize(event.reply);
-    const cursor = event.reply.cursor as
-      { firstBatch?: unknown[]; nextBatch?: unknown[] } | undefined;
-    counter.returnedDocuments += cursor?.firstBatch?.length ?? cursor?.nextBatch?.length ?? 0;
+    const reply = event.reply;
+    if (typeof reply !== "object" || reply === null) {
+      throw new Error("Cannot measure a non-document Mongo command reply");
+    }
+    counter.replyBytes += BSON.calculateObjectSize(reply);
+    const cursor = "cursor" in reply ? reply.cursor : undefined;
+    if (typeof cursor === "object" && cursor !== null) {
+      const batch =
+        "firstBatch" in cursor
+          ? cursor.firstBatch
+          : "nextBatch" in cursor
+            ? cursor.nextBatch
+            : undefined;
+      if (Array.isArray(batch)) counter.returnedDocuments += batch.length;
+    }
   });
   await client.connect();
   const db = client.db(dbName);
