@@ -478,6 +478,25 @@ async function finishProjections(
     ownsAllProjections = claim.matchedCount === 1;
   }
 
+  // When this pass owns every projection, its insert projections are
+  // fixed-id receipts that nothing else reads mid-pass. Write them together;
+  // the loop below records each outcome in its usual place, and update
+  // projections keep their sequential receipt protocol.
+  const preInserted = new Map<number, { ok: true } | { ok: false; error: string }>();
+  if (ownsAllProjections) {
+    const inserts = records.flatMap((record, i) =>
+      !record.appliedAt && !record.applied && !isUpdateProjection(record.projection) ? [i] : []
+    );
+    if (inserts.length > 1) {
+      const outcomes = await Promise.all(
+        inserts.map((i) =>
+          applyProjection(db, records[i].projection, projectionStamp(transition.key, i))
+        )
+      );
+      inserts.forEach((i, k) => preInserted.set(i, outcomes[k]));
+    }
+  }
+
   let stuck: string | undefined;
   // Insert projections carry fixed ids, so replaying one after a crash is a
   // duplicate-key no-op. Their "applied" marks therefore ride on the next
@@ -527,7 +546,8 @@ async function finishProjections(
 
     const outcome = isUpdateProjection(projection)
       ? await applyProtectedProjection(db, transition.key, i, projection)
-      : await applyProjection(db, projection, projectionStamp(transition.key, i));
+      : (preInserted.get(i) ??
+        (await applyProjection(db, projection, projectionStamp(transition.key, i))));
     if (!outcome.ok) {
       failed = { index: i, projection, error: outcome.error };
       break;
