@@ -180,10 +180,12 @@ describe("funded SOE remittance against actual corporate cash", () => {
     expect(cash(db, shortCorpId)).toBe(4777);
     const receipt = db.collection("bankMoneyMoves").docs.find((doc) => doc._id === shortKey)!;
     expect(receipt.status).toBe("applied");
+    const partialLegs = partial?.legs;
+    if (!Array.isArray(partialLegs)) throw new Error("Expected frozen partial settlement legs");
     expect(receipt.legs).toEqual(
-      partial!.legs.map((leg: Record<string, unknown>) => ({ ...leg, applied: true }))
+      partialLegs.map((leg: Record<string, unknown>) => ({ ...leg, applied: true }))
     );
-    const frozenCredit = partial!.legs[1].amount as number;
+    const frozenCredit = partialLegs[1].amount as number;
     const flushCredit = (
       db.collection("bankMoneyMoves").docs.find((doc) => doc._id === flushKey)!.legs as {
         amount: number;
