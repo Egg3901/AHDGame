@@ -4,6 +4,7 @@ import type { StateMetrics } from "@/lib/db/types";
 import { applyMetricPresetToMetrics, getRegionMetricPresets } from "@/lib/seeds/metricPresets";
 import { stateMetrics } from "@/lib/seeds/reference/stateMetrics";
 import { applyEra1991Adjustments } from "@/lib/seeds/reference/stateMetrics1991";
+import { apply1991IncomeVintage } from "@/lib/seeds/reference/income1991";
 import { stateMetrics1991 } from "@/lib/seeds/reference/stateMetrics1991";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 import { US_GEOGRAPHY } from "@/lib/countries/us/geography";
@@ -76,7 +77,9 @@ export function loadSeededStateMetrics(countryId: CountryId, preset: string): St
     bundle = is1991 ? stateMetrics1991 : stateMetrics;
   } else {
     const raw = RAW_BUNDLES[countryId] ?? [];
-    bundle = is1991 ? raw.map((m) => applyEra1991Adjustments(m)) : raw;
+    bundle = is1991
+      ? raw.map((m) => apply1991IncomeVintage(countryId, applyEra1991Adjustments(m)))
+      : raw;
   }
 
   return bundle.map((raw) => {

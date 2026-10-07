@@ -67,6 +67,70 @@ describe("1991 player fiscal openings", () => {
     }
   );
 
+  it("BR fills the opening envelope with the authored 1991 category mix (issue 3372)", () => {
+    const authored = {
+      healthcare: 25,
+      education: 30,
+      socialSecurity: 90,
+      defense: 10,
+      infrastructure: 15,
+      other: 60,
+    };
+    const authoredGrants = 70;
+    const authoredTotal = 300;
+    const config = getNationalBudgetSeedConfigsForPreset("1991-default").find(
+      (row) => row.countryId === "BR"
+    )!;
+    const budget = getInitialNationalBudgetsForPreset("1991-default").find(
+      (row) => row.countryId === "BR"
+    )!;
+    expect(config.calibratedSpendingBaseline).toBe(true);
+    expect(budget.spending.byCategory.health).toBeUndefined();
+    expect(budget.surplus / budget.gdp).toBeCloseTo(-0.005, 4);
+    const programs = budget.spending.total - budget.spending.debtInterest;
+    // The 1953 ladder booked 3.2% of GDP; the envelope lands well above it.
+    expect(programs / budget.gdp).toBeGreaterThan(0.1);
+    for (const [category, weight] of Object.entries(authored)) {
+      expect(budget.spending.byCategory[category]! / programs).toBeCloseTo(
+        weight / authoredTotal,
+        6
+      );
+    }
+    expect(budget.spending.stateGrants / programs).toBeCloseTo(authoredGrants / authoredTotal, 6);
+
+    const laws = generateDefaultEnactedLaws("1991-default").filter(
+      (law) => law.countryId === "BR" && law.rate === undefined
+    );
+    // Repricing at the opening GDP and at a later one keeps the same book.
+    for (const gdpGrowth of [1, 1.25]) {
+      const gdp = budget.gdp * gdpGrowth;
+      const byCategory: Record<string, number> = {};
+      let grants = 0;
+      for (const law of laws) {
+        expect(law.gdpPerCapitaMultiplier).toBeDefined();
+        const amount = calculateEnactedLawAnnualCost(law, {
+          budgetCapacity: budget.revenue.total,
+          gdp,
+          population: config.population,
+          countryId: "BR",
+          nationalGdpPerCapita: gdp / config.population,
+          nationalMedianIncome: 1,
+          year: 1991,
+        });
+        if (law.isGrant) grants += amount;
+        else {
+          const category = law.budgetCategory ?? "other";
+          byCategory[category] = (byCategory[category] ?? 0) + amount;
+        }
+      }
+      expect(Object.keys(byCategory).sort()).toEqual(Object.keys(authored).sort());
+      for (const [category, expected] of Object.entries(budget.spending.byCategory)) {
+        expect(byCategory[category]).toBeCloseTo(expected * gdpGrowth, -1);
+      }
+      expect(grants).toBeCloseTo(budget.spending.stateGrants * gdpGrowth, -1);
+    }
+  });
+
   it("leaves later presets and non-player spending at their existing calibration", () => {
     expect(
       getNationalBudgetSeedConfigsForPreset("1999-default").every(

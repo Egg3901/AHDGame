@@ -48,6 +48,7 @@ export async function GET() {
         currentEraId: 1,
         startingYear: 1,
         incomeBandIndexByCountry: 1,
+        incomeStartVintages: 1,
         liveElectionResultsEnabled: 1,
         metricsSystemVersion: 1,
         legislationSystemVersion: 1,
@@ -95,6 +96,7 @@ export async function GET() {
       // so client scoring falls back to the full legacy band.
       startingYear: eraOn ? (gs?.startingYear ?? null) : null,
       incomeBandIndexByCountry: eraOn ? (gs?.incomeBandIndexByCountry ?? null) : null,
+      incomeStartVintages: eraOn ? (gs?.incomeStartVintages ?? null) : null,
       liveElectionResultsEnabled: gs?.liveElectionResultsEnabled === true,
       resetV2Countries,
       resetSystemVersions,
