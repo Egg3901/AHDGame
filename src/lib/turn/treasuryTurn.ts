@@ -41,6 +41,7 @@ import {
 import type { SovereignCouponCorporationQuote } from "@/lib/banking/rules/sovereignCoupons";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
 import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+import { includedAuthorityPerTurn } from "@/lib/governmentFinance/rules/appropriation";
 import {
   conservedFinancingActive,
   loadConservedFiscalContext,
@@ -219,6 +220,30 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
   // A missing rate cannot partially advance an earlier, valid treasury.
   if (ledgerShadow) for (const budget of budgets) valuationFor(budget);
 
+  // Conserved financing for a Cabinet-v2 country (#3381): its signed receipt
+  // carries zero revenue and primary spending (resetFinance owns that slice),
+  // so the household tax cash is its own frozen slice of annual revenue, and
+  // primary spending is paid later as department authority, never here.
+  const v2Country = (budget: FederalBudget) =>
+    resetSystemVersionsForCountry(
+      gameStateDoc,
+      RESET_V2_READY,
+      String(budget.countryId ?? budget._id)
+    ).cabinet === "v2";
+  const conservedTaxReceipt = (
+    budget: FederalBudget,
+    receipt: TreasuryAccrualReceipt
+  ): TreasuryAccrualReceipt =>
+    v2Country(budget)
+      ? {
+          ...receipt,
+          components: {
+            ...receipt.components,
+            revenue: includedAuthorityPerTurn(Math.round(budget.revenue?.total ?? 0), _turn),
+          },
+        }
+      : receipt;
+
   let countriesProcessed = 0;
   for (const initial of budgets) {
     let b = initial;
@@ -249,7 +274,12 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
                 `Cannot fund sovereign coupon claims for ${b.countryId}: missing native FX quote`
               );
             if (conservedCtx && b.treasuryAccrual.turn === _turn)
-              await settleConservedHouseholdTax(db, conservedCtx, b, b.treasuryAccrual);
+              await settleConservedHouseholdTax(
+                db,
+                conservedCtx,
+                b,
+                conservedTaxReceipt(b, b.treasuryAccrual)
+              );
             await settleFundedSovereignCoupons(db, b, {
               turn: _turn,
               bonds: sovereignBonds.filter(
@@ -259,7 +289,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
               forexEnabled,
               corporateQuotes: corporationQuotes,
             });
-            if (conservedCtx && b.treasuryAccrual.turn === _turn)
+            if (conservedCtx && b.treasuryAccrual.turn === _turn && !v2Country(b))
               await settleConservedPrimarySpending(db, conservedCtx, b, b.treasuryAccrual);
           }
           break;
@@ -428,7 +458,8 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
             );
           // Tax cash lands before debt service; primary spending is paid from
           // what the coupon pass leaves, and the rest is an explicit arrear.
-          if (conservedCtx) await settleConservedHouseholdTax(db, conservedCtx, b, receipt);
+          if (conservedCtx)
+            await settleConservedHouseholdTax(db, conservedCtx, b, conservedTaxReceipt(b, receipt));
           await settleFundedSovereignCoupons(
             db,
             {
@@ -447,7 +478,8 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
               corporateQuotes: corporationQuotes,
             }
           );
-          if (conservedCtx) await settleConservedPrimarySpending(db, conservedCtx, b, receipt);
+          if (conservedCtx && !primaryFiscalSliceOwnedByV2)
+            await settleConservedPrimarySpending(db, conservedCtx, b, receipt);
         }
         countriesProcessed += 1;
         break;

@@ -14,6 +14,13 @@ import {
   type ResetSystem,
 } from "@/lib/resetVersions/rules";
 import { settleResetCashTurn } from "./rules/cashTurn";
+import { settleConservedResetCashTurn } from "./rules/conservedCashTurn";
+import { resolveCountryCurrencyCode } from "@/lib/currency/govBudgetFields";
+import { householdMoneyBankId } from "@/lib/budget/conservedFiscalCash";
+import { CONSERVED_FISCAL_SPENDING_KIND } from "@/lib/budget/rules/conservedFiscalCash";
+import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
+import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJournal";
+import type { BankingTransition } from "@/lib/banking/rules/boundary";
 import { buildResetAuthorityClaims } from "./rules/authorityClaims";
 import type { ResetNationalTreasurySnapshot } from "./rules/treasurySnapshot";
 import type {
@@ -33,6 +40,12 @@ export async function settleResetTreasuryCashTurn(input: {
   turn: number;
   bondFlows: BondTurnResult;
   ready?: Record<ResetSystem, boolean>;
+  /**
+   * Conserved sovereign financing (#3381). Claims are paid from funded
+   * `federalBudget.treasuryCashLocal` (already net of this turn's bond flows)
+   * and settled to the household money stock through the journal.
+   */
+  conserved?: boolean;
 }) {
   const { db, gameState, turn, bondFlows } = input;
   const countries = RESET_V2_COUNTRIES.filter(
@@ -62,7 +75,12 @@ export async function settleResetTreasuryCashTurn(input: {
       .find(
         { countryId: { $in: countries } },
         {
-          projection: { countryId: 1, "revenue.total": 1, "debt.ceiling": 1 },
+          projection: {
+            countryId: 1,
+            "revenue.total": 1,
+            "debt.ceiling": 1,
+            ...(input.conserved ? { treasuryCashLocal: 1, currencyCode: 1 } : {}),
+          },
         }
       )
       .toArray(),
@@ -121,21 +139,28 @@ export async function settleResetTreasuryCashTurn(input: {
     const next =
       opening.settledThroughTurn === turn
         ? opening
-        : settleResetCashTurn({
-            treasury: { ...opening, debtCeiling: budget.debt.ceiling },
-            turn,
-            claims,
-            flows: {
-              revenue: includedAuthorityPerTurn(Math.round(budget.revenue.total), turn),
-              annualInterestRate: 0,
-              periodsPerYear: 48,
-              bondProceeds: flow(bondFlows.sovereignCashProceedsByCountry),
-              bondFaceIssued: flow(bondFlows.sovereignDebtFaceIssuedByCountry),
-              bondMaturityCashPaid: flow(bondFlows.sovereignMaturityCashPaidByCountry),
-              bondFaceRetired: flow(bondFlows.sovereignDebtFaceRetiredByCountry),
-              bondCouponCashPaid: flow(bondFlows.sovereignCouponPaidByCountry),
-            },
-          });
+        : input.conserved
+          ? settleConservedResetCashTurn({
+              treasury: opening,
+              turn,
+              claims,
+              fundedCash: budget.treasuryCashLocal ?? 0,
+            })
+          : settleResetCashTurn({
+              treasury: { ...opening, debtCeiling: budget.debt.ceiling },
+              turn,
+              claims,
+              flows: {
+                revenue: includedAuthorityPerTurn(Math.round(budget.revenue.total), turn),
+                annualInterestRate: 0,
+                periodsPerYear: 48,
+                bondProceeds: flow(bondFlows.sovereignCashProceedsByCountry),
+                bondFaceIssued: flow(bondFlows.sovereignDebtFaceIssuedByCountry),
+                bondMaturityCashPaid: flow(bondFlows.sovereignMaturityCashPaidByCountry),
+                bondFaceRetired: flow(bondFlows.sovereignDebtFaceRetiredByCountry),
+                bondCouponCashPaid: flow(bondFlows.sovereignCouponPaidByCountry),
+              },
+            });
     if (!next.lastPaidByClaim) throw new Error("V2 cash replay is missing its payment receipt");
     const deliveries = roster
       .filter((account) => !account.externallySettled)
@@ -162,7 +187,7 @@ export async function settleResetTreasuryCashTurn(input: {
           throw new Error("Department unpaid authority does not reconcile to treasury");
         return { account, result };
       });
-    return { opening, next, deliveries };
+    return { opening, next, deliveries, budget };
   });
   // Freeze cash payments first. If account persistence fails part way through,
   // the next attempt consumes the same receipt, not a new revenue or bond flow.
@@ -179,6 +204,21 @@ export async function settleResetTreasuryCashTurn(input: {
     );
     if (write.matchedCount !== advancing.length)
       throw new Error("V2 treasury lost its compare-and-swap");
+  }
+  // The frozen receipt fixes the amount; the journal key makes the cash leg
+  // exactly-once across retries. Departments are credited only after it lands.
+  if (input.conserved) {
+    for (const { next, budget } of planned) {
+      if (next.conservedFunding?.turn !== turn)
+        throw new Error(`Conserved v2 receipt missing for ${next.countryId}`);
+      await settleConservedAuthorityCash(db, {
+        turn,
+        countryId: next.countryId,
+        budgetId: String(budget._id),
+        currency: resolveCountryCurrencyCode(budget) ?? "USD",
+        amount: next.conservedFunding.paidTotal,
+      });
+    }
   }
   const deliveries = planned.flatMap((plan) => plan.deliveries);
   const pending = deliveries.filter(({ account }) => account.accruedThroughTurn !== turn);
@@ -216,4 +256,67 @@ export async function settleResetTreasuryCashTurn(input: {
     advanced: pending.length,
     replayed: deliveries.length - pending.length,
   };
+}
+
+export function conservedAuthorityTransition(input: {
+  turn: number;
+  countryId: string;
+  budgetId: string;
+  currency: string;
+  amount: number;
+}): BankingTransition {
+  return {
+    key: `conserved-fiscal:${input.turn}:${input.countryId}:v2authority`,
+    kind: CONSERVED_FISCAL_SPENDING_KIND,
+    turn: input.turn,
+    currency: input.currency,
+    legs:
+      input.amount > 0
+        ? [
+            {
+              kind: "debit",
+              amount: input.amount,
+              collection: "federalBudget",
+              filter: { _id: input.budgetId, treasuryCashLocal: { $gte: input.amount } },
+              path: "treasuryCashLocal",
+              note: "Pay Cabinet department authority from funded Treasury cash",
+            },
+            {
+              kind: "credit",
+              amount: input.amount,
+              collection: "centralBanks",
+              filter: { _id: householdMoneyBankId(input.currency) },
+              path: "externalBroadMoney",
+              note: "Department spending reaches the household money stock",
+            },
+          ]
+        : [],
+    projections: [],
+    event: {
+      kind: "monetary.executed",
+      command: "turn.resetTreasuryCash.conservedAuthority",
+      subjectType: "country",
+      subjectId: input.countryId,
+      amount: input.amount,
+    },
+  };
+}
+
+async function settleConservedAuthorityCash(
+  db: Db,
+  input: Parameters<typeof conservedAuthorityTransition>[0]
+): Promise<void> {
+  const transition = conservedAuthorityTransition(input);
+  if (transition.legs.length === 0) return;
+  const existing = await db
+    .collection<{ _id: string; status?: string }>(MONEY_MOVE_COLLECTION)
+    .findOne({ _id: transition.key }, { projection: { status: 1 } });
+  const result =
+    existing && existing.status !== "rejected"
+      ? await resumeSettlement(db, transition.key)
+      : await settleTransition(db, transition);
+  if (result.status !== "applied" && result.status !== "replayed")
+    // Treasury cash fell below the frozen receipt between read and settle.
+    // Fail loud: crediting departments without the cash would mint money.
+    throw new Error(result.error ?? `Conserved v2 authority ${transition.key} did not settle`);
 }

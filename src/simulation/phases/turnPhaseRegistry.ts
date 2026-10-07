@@ -104,6 +104,7 @@ import { isProspectingEnabled, isContractIssuanceEnabled } from "@/lib/extractio
 import { processBondTurn } from "@/lib/turn/bondTurn";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
 import { settleResetTreasuryCashTurn } from "@/lib/resetFinance/settleCashTurn";
+import { conservedFinancingActive } from "@/lib/budget/conservedFiscalCash";
 import { resetSystemVersionsFrom } from "@/lib/resetVersions/rules";
 import { reconcileResetLawEnactments } from "@/lib/resetLegislation/reconcileEnactments";
 import { processFederationFacilityPaymentTurn } from "@/lib/world/succession/facilityPaymentTurn";
@@ -555,6 +556,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
                 gameState: context.gameState,
                 turn: newTurn,
                 bondFlows: bondTurnResult,
+                conserved: conservedFinancingActive(context.config ?? null),
               })
           );
         }

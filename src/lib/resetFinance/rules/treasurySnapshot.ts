@@ -19,6 +19,12 @@ export interface ResetNationalTreasurySnapshot extends NationalTreasuryState {
   claimArrears?: Record<string, number>;
   lastPaidByClaim?: Record<string, number>;
   fiscalCrisis?: { sinceTurn: number; reason: "emergency_advance" | "debt_ceiling" };
+  /**
+   * Conserved financing (#3381) receipt: the funded Treasury cash the claims
+   * were paid from and the whole-unit total settled to the household stock.
+   * When present, `cash` is a legacy projection, not spendable money.
+   */
+  conservedFunding?: { turn: number; fundedCash: number; paidTotal: number };
 }
 
 export function openingNationalTreasurySnapshots(
