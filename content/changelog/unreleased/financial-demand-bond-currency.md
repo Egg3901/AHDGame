@@ -7,7 +7,7 @@ summary: >-
   lira, yen, zloty and Turkish lira issues no longer count hundreds or
   thousands of times too large.
 tags: [economy, markets, fix]
-badges: [fix]
+badges: [patch]
 areas: [backend]
 ---
 
