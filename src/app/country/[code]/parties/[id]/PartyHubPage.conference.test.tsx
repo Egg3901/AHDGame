@@ -3,7 +3,17 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { PartyHubPage } from "./PartyHubPage";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "@/../messages/en/parties.json";
+import { PartyHubPage as PartyHubPageInner } from "./PartyHubPage";
+
+function PartyHubPage(props: React.ComponentProps<typeof PartyHubPageInner>) {
+  return (
+    <NextIntlClientProvider locale="en" messages={messages}>
+      <PartyHubPageInner {...props} />
+    </NextIntlClientProvider>
+  );
+}
 
 let query = "";
 vi.mock("next/navigation", () => ({
