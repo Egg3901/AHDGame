@@ -7,7 +7,13 @@ import { getAnalyticsAccount, setAnalyticsAccount } from "@/lib/analytics/accoun
 
 const state = vi.hoisted(() => ({
   consent: "accepted",
-  user: null as null | { id: string; signupDate: string; isAdmin: boolean; isModerator: boolean },
+  user: null as null | {
+    id: string;
+    signupDate: string;
+    isAdmin: boolean;
+    isModerator: boolean;
+    character?: { id: string };
+  },
   init: vi.fn(() => ({ promise: Promise.resolve() })),
   track: vi.fn(),
   setUserId: vi.fn(),
@@ -50,6 +56,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
@@ -80,6 +87,48 @@ describe("account tracker lifecycle", () => {
     });
     expect(getAnalyticsAccount().account).toBeNull();
     expect(state.track).not.toHaveBeenCalledWith("after_logout", expect.anything());
+  });
+
+  it("does not continue an old character milestone chain after switching accounts", async () => {
+    state.user = {
+      id: "account-one",
+      signupDate: "2026-01-01",
+      isAdmin: false,
+      isModerator: false,
+      character: { id: "old-character" },
+    };
+    window.localStorage.setItem(
+      "ahd-posthog-first-turn",
+      JSON.stringify({ characterId: "old-character", createdTurn: 7, creationCaptured: false })
+    );
+    let release!: (response: Response) => void;
+    const fetcher = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            release = resolve;
+          })
+      )
+      .mockResolvedValue(new Response(JSON.stringify({ iterationId: "alpha-1", currentTurn: 8 })));
+    vi.stubGlobal("fetch", fetcher);
+    // Expire the shared clock cache without changing identity.
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 60_000);
+    const view = render(<PostHogTracker />);
+    await waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+    state.user = {
+      id: "account-two",
+      signupDate: "2025-01-01",
+      isAdmin: false,
+      isModerator: false,
+    };
+    view.rerender(<PostHogTracker />);
+    await act(async () => {
+      release(new Response(JSON.stringify({ iterationId: "alpha-1", currentTurn: 8 })));
+    });
+    await waitFor(() => expect(state.track).toHaveBeenCalledWith("game_visit", expect.anything()));
+    expect(state.track).not.toHaveBeenCalledWith("first_turn_completed", expect.anything());
+    expect(fetcher).toHaveBeenCalledOnce();
   });
 
   it("withdraws consent immediately and identifies again only after opt-in", async () => {

@@ -390,7 +390,7 @@ export async function capturePendingWarDeclaration(
   force = false
 ): Promise<void> {
   const { account, generation } = getAnalyticsAccount();
-  if (!account) return;
+  if (!account || account.id !== accountId) return;
   if (getStoredConsent() !== "accepted" || warDeclarationCaptureInFlight.has(accountId)) return;
   warDeclarationCaptureInFlight.add(accountId);
   try {

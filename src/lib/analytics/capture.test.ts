@@ -240,6 +240,27 @@ describe("analytics fan-out", () => {
     expect(state.amplitude.setOptOut).toHaveBeenCalledWith(true);
   });
 
+  it("ignores a stale war caller from a previous account", async () => {
+    state.consent = "accepted";
+    await identifyPlayer();
+    const { capturePendingWarDeclaration } = await import("./capture");
+    window.localStorage.setItem(
+      "ahd:pending-war-declaration",
+      JSON.stringify({
+        accountId: "previous-account",
+        billId: "bill-1",
+        declarer: "US",
+        defender: "CN",
+      })
+    );
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await capturePendingWarDeclaration("previous-account", true);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(state.posthog.capture).not.toHaveBeenCalled();
+    expect(state.amplitude.track).not.toHaveBeenCalled();
+  });
+
   it("records a filed war only after its declaration bill creates a conflict", async () => {
     const { capturePendingWarDeclaration } = await import("./capture");
     state.consent = "accepted";

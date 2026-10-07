@@ -205,9 +205,11 @@ export function PostHogTracker() {
       if (userId) void capturePendingAccountCreated();
       if (userId) void capturePendingWarDeclaration(userId);
       if (userId && characterId) {
-        void capturePendingCharacterCreated(characterId).then(() =>
-          captureFirstTurnIfReady(characterId)
-        );
+        void capturePendingCharacterCreated(characterId).then(() => {
+          if (isAnalyticsGenerationCurrent(generation)) {
+            return captureFirstTurnIfReady(characterId);
+          }
+        });
       }
     });
     return () => {
