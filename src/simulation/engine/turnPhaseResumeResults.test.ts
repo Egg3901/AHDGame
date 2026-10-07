@@ -3,14 +3,22 @@ import type { TurnPhaseTelemetryMap } from "@/lib/db/types";
 import type { BondTurnResult } from "@/lib/turn/bondTurn";
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 import {
+  isResumeFailClosedError,
   readCrashedTurnPhaseState,
+  TurnPhaseCompletionPersistError,
   TurnResumeResultUnavailableError,
 } from "@/simulation/engine/turnPhaseResumeResults";
+import {
+  bootstrapPhaseRecord,
+  lockAcquisitionSet,
+  staleRecoveryEvidenceReset,
+  validateLockedResume,
+} from "@/simulation/engine/turnResumeBootstrap";
 
 vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn() }));
 
 /** A gameState document that applies the runtime's dotted `$set` writes. */
-function createGameStateDb() {
+function createGameStateDb(failWhen?: (set: Record<string, unknown>) => boolean) {
   const doc: Record<string, unknown> = {
     _id: "current",
     isProcessing: true,
@@ -18,6 +26,7 @@ function createGameStateDb() {
     processingPhaseResults: {},
   };
   const updateOne = vi.fn(async (_filter: unknown, update: { $set: Record<string, unknown> }) => {
+    if (failWhen?.(update.$set)) throw new Error("primary stepped down");
     for (const [path, value] of Object.entries(update.$set)) {
       const parts = path.split(".");
       let target = doc;
@@ -209,5 +218,173 @@ describe("crash resume of result-carrying phases (#3429)", () => {
       currentPhaseRef: { current: null },
     }).runPhase("corporationTurn", async () => ({ huge: "x".repeat(10_000) }));
     expect(doc.processingPhaseResults).toEqual({});
+  });
+
+  it("treats the legacy skipped/upstreamAbort marker as interrupted and never reruns it", async () => {
+    const { doc, db } = createGameStateDb();
+    // Exactly the marker an older release left on the affected world.
+    doc.processingPhaseStatuses = {
+      bondTurn: {
+        status: "skipped",
+        reason: "upstreamAbort",
+        message: "skipped: already applied before crash",
+      },
+    };
+    doc.processingPhaseResults = null;
+    const state = readCrashedTurnPhaseState(
+      doc.processingPhaseStatuses as TurnPhaseTelemetryMap,
+      null
+    );
+    expect([...state.interrupted]).toEqual(["bondTurn"]);
+
+    const bondWrite = vi.fn(async () => BOND_RESULT);
+    const settle = vi.fn(async () => ({ countries: 1 }));
+    const runtime = resumedRuntime(doc, db);
+    await expect(runBondAndTreasury(runtime, bondWrite, settle)).rejects.toThrow(
+      /bondTurn was interrupted mid-phase/
+    );
+    expect(bondWrite).not.toHaveBeenCalled();
+    expect(settle).not.toHaveBeenCalled();
+  });
+
+  it("treats a failed phase as interrupted", () => {
+    const state = readCrashedTurnPhaseState(
+      { bondTurn: { status: "failed" } } as unknown as TurnPhaseTelemetryMap,
+      { bondTurn: BOND_RESULT }
+    );
+    expect([...state.interrupted]).toEqual(["bondTurn"]);
+    expect(state.results).toEqual({});
+  });
+
+  it("stops the turn when the completion result cannot be stored, and never records completed without it", async () => {
+    const { doc, db } = createGameStateDb((set) => "processingPhaseResults.bondTurn" in set);
+    const phaseStatuses: TurnPhaseTelemetryMap = {};
+    const warnings: string[] = [];
+    const runtime = createTurnPhaseRuntime({
+      db,
+      phaseStatuses,
+      warnings,
+      currentPhaseRef: { current: null },
+    });
+    const run = runtime.runPhase("bondTurn", async () => BOND_RESULT);
+    await expect(run).rejects.toBeInstanceOf(TurnPhaseCompletionPersistError);
+    await expect(run).rejects.toSatisfy(isResumeFailClosedError);
+    // Neither memory (which the failure path writes whole) nor gameState says completed.
+    expect(phaseStatuses.bondTurn?.status).toBe("running");
+    expect(doc.processingPhaseStatuses).toMatchObject({ bondTurn: { status: "running" } });
+    expect(doc.processingPhaseResults).toEqual({});
+    expect(warnings[0]).toMatch(/completion result could not be stored/);
+    // A later resume reads it as interrupted, not completed.
+    const state = readCrashedTurnPhaseState(
+      doc.processingPhaseStatuses as TurnPhaseTelemetryMap,
+      doc.processingPhaseResults
+    );
+    expect([...state.interrupted]).toEqual(["bondTurn"]);
+  });
+});
+
+describe("lock takeover and setup preserve crash evidence (#3429)", () => {
+  function crashedWorld() {
+    const { doc, db } = createGameStateDb();
+    Object.assign(doc, {
+      currentTurn: 11,
+      processingKind: "turn",
+      processingTargetTurn: 12,
+      processingPhase: "resetTreasuryCash",
+    });
+    return { doc, db };
+  }
+
+  /** processTurn's takeover: lock $set only, then validation on the locked doc. */
+  function takeOver(doc: Record<string, unknown>, preLockTarget: number | null) {
+    Object.assign(doc, lockAcquisitionSet(new Date()));
+    return validateLockedResume(doc as never, preLockTarget);
+  }
+
+  /** processTurn's first status write after setup. */
+  function setupWrite(doc: Record<string, unknown>, resume: ReturnType<typeof takeOver>) {
+    const record = bootstrapPhaseRecord({}, resume, new Date());
+    Object.assign(doc, {
+      processingTargetTurn: 12,
+      processingPhaseStatuses: structuredClone(record.statuses),
+      processingPhaseResults: structuredClone(record.results),
+    });
+    return record;
+  }
+
+  it("survives a second crash during takeover and setup, then settles once from the stored flows", async () => {
+    const { doc, db } = crashedWorld();
+    const bondWrite = vi.fn(async () => BOND_RESULT);
+    await createTurnPhaseRuntime({
+      db,
+      phaseStatuses: {},
+      warnings: [],
+      currentPhaseRef: { current: null },
+    }).runPhase("bondTurn", bondWrite);
+    doc.processingPhase = "resetTreasuryCash";
+
+    // Holder 2 takes the lock and dies before setup writes anything.
+    expect(takeOver(doc, 12)).not.toBeNull();
+    // Holder 3 takes over, writes setup, and dies before reaching bondTurn.
+    setupWrite(doc, takeOver(doc, 12));
+    expect(doc.processingPhase).toBe("resetTreasuryCash");
+    expect(doc.processingPhaseResults).toEqual({ bondTurn: BOND_RESULT });
+    expect(doc.processingPhaseStatuses).toMatchObject({
+      bondTurn: { status: "skipped", resumeCarried: "completed" },
+    });
+
+    // Holder 4 completes the turn.
+    const resume = takeOver(doc, 12)!;
+    const record = setupWrite(doc, resume);
+    const settle = vi.fn(async () => ({ countries: 1 }));
+    const runtime = createTurnPhaseRuntime({
+      db,
+      phaseStatuses: record.statuses,
+      warnings: [],
+      currentPhaseRef: { current: null },
+      alreadyApplied: resume.appliedPhases,
+      resumed: resume.phaseState,
+    });
+    await runBondAndTreasury(runtime, bondWrite, settle);
+    expect(bondWrite).toHaveBeenCalledTimes(1);
+    expect(settle).toHaveBeenCalledExactlyOnceWith(BOND_RESULT);
+  });
+
+  it("reads phase state from the locked document, not a stale pre-lock target", () => {
+    const { doc } = crashedWorld();
+    doc.processingPhaseStatuses = { bondTurn: { status: "completed" } };
+    // The turn advanced between the pre-lock read and the lock.
+    doc.currentTurn = 12;
+    expect(takeOver(doc, 12)).toBeNull();
+    expect(staleRecoveryEvidenceReset(doc as never)).toMatchObject({
+      processingTargetTurn: null,
+      processingPhaseStatuses: null,
+      processingPhaseResults: null,
+    });
+    // A pre-lock read that named a different target never resumes either.
+    const other = crashedWorld().doc;
+    expect(takeOver(other, 13)).toBeNull();
+  });
+
+  it("does not resume or clear anything for a world released cleanly", () => {
+    const doc = {
+      currentTurn: 11,
+      processingTargetTurn: null,
+      processingPhase: null,
+      processingPhaseStatuses: null,
+      processingPhaseResults: null,
+    };
+    expect(validateLockedResume(doc as never, null)).toBeNull();
+    expect(staleRecoveryEvidenceReset(doc as never)).toBeNull();
+  });
+
+  it("never touches crash evidence in the lock acquisition write", () => {
+    expect(Object.keys(lockAcquisitionSet(new Date())).sort()).toEqual([
+      "isProcessing",
+      "processingAbandonedAt",
+      "processingHeartbeatAt",
+      "processingKind",
+      "processingStartedAt",
+    ]);
   });
 });

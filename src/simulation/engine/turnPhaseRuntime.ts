@@ -26,6 +26,7 @@ import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import {
   encodeResumeResult,
   phaseRequiresResumeResult,
+  TurnPhaseCompletionPersistError,
   TurnResumeResultUnavailableError,
   type CrashedTurnPhaseState,
   type ResumeResultOutcome,
@@ -195,7 +196,11 @@ export function createTurnPhaseRuntime(input: {
           ? null
           : (options.message ?? current.message),
     };
-    phaseStatuses[phase] = next;
+    // A result-carrying completion is recorded in memory only after its marker
+    // and result land together. Otherwise a later whole-map write (the failure
+    // path) could persist "completed" with no result (#3429).
+    const stagedCompletion = phaseRequiresResumeResult(phase) && status === "completed";
+    if (!stagedCompletion) phaseStatuses[phase] = next;
 
     // Decide whether to flush this transition to gameState now, or coalesce it
     // (the in-memory update above already happened, so nothing durable is lost).
@@ -231,6 +236,7 @@ export function createTurnPhaseRuntime(input: {
     await db
       .collection<GameState>("gameState")
       .updateOne({ _id: "current", isProcessing: true }, { $set: setFields });
+    if (stagedCompletion) phaseStatuses[phase] = next;
   }
 
   async function markPhaseSkipped(
@@ -400,20 +406,38 @@ export function createTurnPhaseRuntime(input: {
         roundTrips != null && roundTrips >= TOP_COLLECTIONS_MIN_ROUND_TRIPS
           ? phaseTopCollectionsByRoundTrips(name, 3)
           : undefined;
-      const completion = setPhaseStatus(name, "completed", {
+      const completionTelemetry = {
         ...(roundTrips == null ? {} : { roundTrips, roundTripBudget }),
         ...(topCollections ? { topCollections } : {}),
         ...(substeps ? { substeps } : {}),
-        ...(phaseRequiresResumeResult(name)
-          ? { result: encodeResumeResult(name, result) ?? undefined }
-          : {}),
-      }).catch((err) => console.warn(`[Turn] Failed to mark phase "${name}" completed`, err));
-      // A dependent phase may consume this result, so its completed marker and
-      // stored copy must land before the turn moves on. If that write fails, a
-      // later resume sees the phase as interrupted and fails closed.
-      if (phaseRequiresResumeResult(name)) await completion;
+      };
+      if (phaseRequiresResumeResult(name)) {
+        // A dependent phase consumes this result, so the completed marker and
+        // its stored copy land together before the turn moves on, or the turn
+        // stops. Two awaited writes per turn (running, completed) for this one
+        // phase; every other phase keeps the coalesced flush.
+        const stored = encodeResumeResult(name, result);
+        try {
+          if (!stored) throw new Error("result is not a storable completion result");
+          await setPhaseStatus(name, "completed", { ...completionTelemetry, result: stored });
+        } catch (persistErr) {
+          throw new TurnPhaseCompletionPersistError(name, persistErr);
+        }
+        return result;
+      }
+      void setPhaseStatus(name, "completed", completionTelemetry).catch((err) =>
+        console.warn(`[Turn] Failed to mark phase "${name}" completed`, err)
+      );
       return result;
     } catch (err) {
+      if (err instanceof TurnPhaseCompletionPersistError) {
+        // Writes landed, so this is not a phase failure to log and continue past.
+        // The in-memory status stays "running"; the turn aborts and a resume
+        // treats the phase as interrupted.
+        discardPhaseSubsteps(name);
+        warnings.push(`${name}: ${err.message}`);
+        throw err;
+      }
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[Turn] Phase "${name}" failed: ${message}`, err);
       Sentry.captureException(err, { extra: { phase: name } });

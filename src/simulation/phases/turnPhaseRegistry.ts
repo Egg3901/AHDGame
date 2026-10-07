@@ -611,15 +611,25 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           );
         }
 
-        const lineOfCreditResult = await runtime.runPhase("lineOfCreditTurn", () =>
-          processLineOfCreditTurn(
+        const lineOfCreditResult = await runtime.runPhase("lineOfCreditTurn", async () => {
+          // Currency income comes only from this turn's corporationTurn result.
+          // When that phase ran but left no result (it failed, or a crash resume
+          // skipped it), the income is unknown, not zero: stop before auto-pay
+          // can size anything from an empty map (#3429). A paused corporation
+          // turn really earned nothing.
+          if (gameState.forexEnabled === true && !corpActionsPaused && !corpTurnResults) {
+            throw new Error(
+              "lineOfCreditTurn needs this turn's corporationTurn currency income, which is unavailable"
+            );
+          }
+          return processLineOfCreditTurn(
             context.db,
             newTurn,
             corpTurnResults?.currencyIncomeInternalByCharacterId ?? new Map(),
             corpTurnResults?.currencyIncomeFaceByCharacterId ?? new Map(),
             gameState.forexEnabled === true
-          )
-        );
+          );
+        });
         if (lineOfCreditResult) {
           phaseResults.lineOfCreditTurn = {
             charactersProcessed: lineOfCreditResult.charactersProcessed,

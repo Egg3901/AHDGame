@@ -97,6 +97,31 @@ export function encodeResumeResult(name: string, result: unknown): Record<string
  * Neither may run again. Only a completed phase with a valid stored result can
  * hand that result to a dependent phase.
  */
+/**
+ * Whether a dead holder's marker means the phase applied writes. A resumed
+ * holder records inherited phases as skipped and carries their state forward.
+ * A skip from a release before that carry existed (`upstreamAbort` with no
+ * `resumeCarried`) proves the phase applied but not that it finished, so it is
+ * treated as interrupted: never rerun, never a source of a result. A `failed`
+ * phase may have written part of its work, so it is interrupted too.
+ */
+function appliedState(
+  telemetry: TurnPhaseTelemetryMap[string] | null | undefined
+): "completed" | "interrupted" | null {
+  switch (telemetry?.status) {
+    case "completed":
+      return "completed";
+    case "running":
+    case "failed":
+      return "interrupted";
+    case "skipped":
+      if (telemetry.resumeCarried) return telemetry.resumeCarried;
+      return telemetry.reason === "upstreamAbort" ? "interrupted" : null;
+    default:
+      return null;
+  }
+}
+
 export interface CrashedTurnPhaseState {
   completed: Set<string>;
   interrupted: Set<string>;
@@ -110,12 +135,9 @@ export function readCrashedTurnPhaseState(
   const completed = new Set<string>();
   const interrupted = new Set<string>();
   for (const [phase, telemetry] of Object.entries(statuses ?? {})) {
-    // A resumed holder records the phases it inherited as skipped and carries
-    // the inherited state forward, so a second crash still sees them applied.
-    const state =
-      telemetry?.status === "skipped" ? telemetry.resumeCarried : (telemetry?.status ?? null);
+    const state = appliedState(telemetry);
     if (state === "completed") completed.add(phase);
-    else if (state === "running" || state === "interrupted") interrupted.add(phase);
+    else if (state === "interrupted") interrupted.add(phase);
   }
   const results: Record<string, unknown> = {};
   const stored = isRecord(rawResults) ? rawResults : {};
@@ -128,6 +150,42 @@ export function readCrashedTurnPhaseState(
 }
 
 export type ResumeResultOutcome = "restored" | "missing" | "interrupted";
+
+/**
+ * A result-carrying phase committed its writes but its completed marker and
+ * result could not be stored together. The turn must stop: continuing would
+ * leave a later status flush able to record the phase completed with no result.
+ */
+export class TurnPhaseCompletionPersistError extends Error {
+  constructor(
+    readonly phase: string,
+    cause: unknown
+  ) {
+    super(
+      `${phase} committed its writes but its completion result could not be stored; ` +
+        `the turn stops so a resume treats it as interrupted.`,
+      { cause }
+    );
+    this.name = "TurnPhaseCompletionPersistError";
+  }
+}
+
+/** A validated resume no longer matches the turn setup is about to run. */
+export class TurnResumeRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TurnResumeRefusedError";
+  }
+}
+
+/** Errors after which the turn keeps its lock and evidence instead of releasing. */
+export function isResumeFailClosedError(err: unknown): boolean {
+  return (
+    err instanceof TurnResumeResultUnavailableError ||
+    err instanceof TurnPhaseCompletionPersistError ||
+    err instanceof TurnResumeRefusedError
+  );
+}
 
 export class TurnResumeResultUnavailableError extends Error {
   constructor(

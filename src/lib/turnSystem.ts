@@ -51,9 +51,16 @@ import {
 } from "@/lib/observability/mongoRoundTrips";
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 import {
-  readCrashedTurnPhaseState,
-  type CrashedTurnPhaseState,
+  isResumeFailClosedError,
+  TurnResumeRefusedError,
 } from "@/simulation/engine/turnPhaseResumeResults";
+import {
+  bootstrapPhaseRecord,
+  lockAcquisitionSet,
+  staleRecoveryEvidenceReset,
+  validateLockedResume,
+  type ValidatedTurnResume,
+} from "@/simulation/engine/turnResumeBootstrap";
 import { buildTurnExecutionContext } from "@/simulation/engine/turnExecutionContext";
 import { recoverDemographicFlowsBeforeContext } from "@/lib/demographics/recoverFlows";
 import { getTurnPhaseRegistry } from "@/simulation/phases/turnPhaseRegistry";
@@ -227,14 +234,7 @@ export async function releaseLocalProcessingLock(reason: string): Promise<boolea
 }
 
 /** What a crashed previous holder left behind, for a resumed turn. */
-interface CrashedTurnRecovery {
-  targetTurn: number;
-  lastPhase: string;
-  /** Phases the dead holder already applied; the resumed turn must not repeat them. */
-  appliedPhases: Set<string>;
-  /** Completed versus interrupted phases, and stored results dependents consume. */
-  phaseState: CrashedTurnPhaseState;
-}
+type CrashedTurnRecovery = ValidatedTurnResume;
 
 export function processTurn(options: Parameters<typeof processTurnImpl>[0] = {}) {
   return withServerTurnAnalytics(() => processTurnImpl(options));
@@ -268,7 +268,7 @@ async function processTurnImpl(
   // committing writes), we must NOT re-run that turn — that would double-apply
   // committed income phases. Captured from the pre-lock snapshot, acted on once
   // we hold the lock.
-  let crashedTurnRecovery: CrashedTurnRecovery | null = null;
+  let preLockRecoveryTarget: number | null = null;
   /** Set when this turn is a resume; drives the phase skip set below. */
   let resumedFromCrash: CrashedTurnRecovery | null = null;
 
@@ -322,19 +322,10 @@ async function processTurnImpl(
           // that single phase is the price of resuming, against losing the ~150 the
           // turn had not reached yet, which is what consuming the turn cost.
           //
-          // The two are kept apart (#3429): only a completed phase can hand its stored
-          // result to a dependent phase. A phase an earlier resume inherited carries
-          // its original state, so a second crash never reruns it either.
-          const phaseState = readCrashedTurnPhaseState(
-            preLockState.processingPhaseStatuses,
-            preLockState.processingPhaseResults
-          );
-          crashedTurnRecovery = {
-            targetTurn: preLockState.processingTargetTurn,
-            lastPhase: preLockState.processingPhase,
-            appliedPhases: new Set([...phaseState.completed, ...phaseState.interrupted]),
-            phaseState,
-          };
+          // Only the target is taken from this pre-lock read. The phase state is read
+          // from the locked document after takeover, which must name the same target
+          // (#3429).
+          preLockRecoveryTarget = preLockState.processingTargetTurn;
         }
         const lastTp = new Date(preLockState.lastTurnProcessed);
         const latestCronFire = localSingleplayer
@@ -432,18 +423,10 @@ async function processTurnImpl(
         ],
       },
       {
-        $set: {
-          isProcessing: true,
-          processingKind: "turn",
-          processingStartedAt: lockAcquiredAt,
-          processingTargetTurn: null,
-          processingHeartbeatAt: lockAcquiredAt,
-          processingPhase: TURN_BOOTSTRAP_PHASE,
-          processingPhaseStatuses: null,
-          processingPhaseResults: null,
-          // Never inherit the previous holder's abandon marker: this lock is live.
-          processingAbandonedAt: null,
-        },
+        // Lock fields only. The crash evidence (target, phase, statuses, results)
+        // stays as the dead holder left it until the locked document validates the
+        // resume, so a crash during takeover or setup cannot erase it (#3429).
+        $set: lockAcquisitionSet(lockAcquiredAt),
       },
       { returnDocument: "after" }
     );
@@ -489,7 +472,8 @@ async function processTurnImpl(
     // The race guard (target === currentTurn+1 against the freshly locked state) still
     // ensures a concurrent completion between the pre-lock read and lock acquisition
     // cannot cause a spurious resume.
-    if (crashedTurnRecovery && crashedTurnRecovery.targetTurn === gameState.currentTurn + 1) {
+    const crashedTurnRecovery = validateLockedResume(gameState, preLockRecoveryTarget);
+    if (crashedTurnRecovery) {
       resumedFromCrash = crashedTurnRecovery;
       const message =
         `Resuming crashed turn ${crashedTurnRecovery.targetTurn}: skipping ` +
@@ -506,6 +490,15 @@ async function processTurnImpl(
         },
       });
       warnings.push(message);
+    } else {
+      // Evidence that does not describe a resumable turn is cleared before setup
+      // writes anything. Absent on a turn after a clean release: no round trip.
+      const reset = staleRecoveryEvidenceReset(gameState);
+      if (reset) {
+        await db
+          .collection<GameState>("gameState")
+          .updateOne({ _id: "current", isProcessing: true }, { $set: reset });
+      }
     }
 
     const repairedClock = await reconcileGameStateClock(gameState);
@@ -518,7 +511,14 @@ async function processTurnImpl(
     await recoverDemographicFlowsBeforeContext(db, gameState, resumedFromCrash?.appliedPhases);
 
     const config = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
-    const phaseStatuses = createInitialTurnPhaseStatuses();
+    // A resume starts from the inherited markers and stored results, so the
+    // first status write below rewrites them rather than erasing them.
+    const bootstrapRecord = bootstrapPhaseRecord(
+      createInitialTurnPhaseStatuses(),
+      resumedFromCrash,
+      lockAcquiredAt
+    );
+    const phaseStatuses = bootstrapRecord.statuses;
     phaseStatusesForFailure = phaseStatuses;
     // Per-phase Mongo round-trip counts start from zero every turn; runPhase
     // checks each phase against src/simulation/engine/turnPhaseBudgets.ts.
@@ -526,14 +526,20 @@ async function processTurnImpl(
     currentPhaseRef.current = "turn_bootstrap";
 
     const nextTurnNumber = gameState.currentTurn + 1;
+    if (resumedFromCrash && resumedFromCrash.targetTurn !== nextTurnNumber) {
+      throw new TurnResumeRefusedError(
+        `Crash resume target ${resumedFromCrash.targetTurn} no longer matches turn ` +
+          `${nextTurnNumber} after clock reconciliation; refusing to resume`
+      );
+    }
     await db.collection<GameState>("gameState").updateOne(
       { _id: "current", isProcessing: true },
       {
         $set: {
           processingTargetTurn: nextTurnNumber,
+          ...(resumedFromCrash ? {} : { processingPhase: TURN_BOOTSTRAP_PHASE }),
           processingPhaseStatuses: phaseStatuses,
-          // Restored results are rewritten as their skips land; start empty.
-          processingPhaseResults: {},
+          processingPhaseResults: bootstrapRecord.results,
           updatedAt: lockAcquiredAt,
         },
       }
@@ -798,18 +804,40 @@ async function processTurnImpl(
           )
         : null;
 
+      // A fail-closed resume stop keeps the lock held and marked abandoned, with
+      // its evidence, so the next attempt resumes and stops again instead of
+      // rerunning the turn from scratch over committed writes (#3429).
+      const holdForRepair = isResumeFailClosedError(error);
+      const committedPhase =
+        currentPhaseRef.current && currentPhaseRef.current !== TURN_BOOTSTRAP_PHASE
+          ? currentPhaseRef.current
+          : (resumedFromCrash?.lastPhase ?? currentPhaseRef.current);
       await db.collection<GameState>("gameState").updateOne(
         { _id: "current" },
         {
-          $set: {
-            isProcessing: false,
-            processingKind: null,
-            processingHeartbeatAt: failureTime,
-            processingPhase: currentPhaseRef.current,
-            processingTargetTurn: activeTurn > 0 ? activeTurn : null,
-            processingPhaseStatuses: finalizedPhaseStatuses,
-            updatedAt: failureTime,
-          },
+          $set: holdForRepair
+            ? {
+                isProcessing: true,
+                processingKind: "turn",
+                processingHeartbeatAt: failureTime,
+                processingAbandonedAt: failureTime,
+                processingPhase: committedPhase,
+                processingTargetTurn:
+                  resumedFromCrash?.targetTurn ?? (activeTurn > 0 ? activeTurn : null),
+                ...(finalizedPhaseStatuses
+                  ? { processingPhaseStatuses: finalizedPhaseStatuses }
+                  : {}),
+                updatedAt: failureTime,
+              }
+            : {
+                isProcessing: false,
+                processingKind: null,
+                processingHeartbeatAt: failureTime,
+                processingPhase: currentPhaseRef.current,
+                processingTargetTurn: activeTurn > 0 ? activeTurn : null,
+                processingPhaseStatuses: finalizedPhaseStatuses,
+                updatedAt: failureTime,
+              },
         }
       );
       localTurnLockHeld = false;
