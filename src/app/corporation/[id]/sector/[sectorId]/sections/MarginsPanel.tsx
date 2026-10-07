@@ -30,10 +30,12 @@ import {
   PackageX,
 } from "lucide-react";
 import ModifierRow from "../components/ModifierRow";
-import type { Margins } from "../types";
+import type { Margins, PlantsData } from "../types";
+import { plantsNetMarginPct } from "@/lib/corporations/rules/netMargin";
 
 interface MarginsPanelProps {
   margins: Margins;
+  pnl?: PlantsData["pnl"] | null;
   defaultExpanded?: boolean;
   /** Labels of this sector's input commodities (from the commodities panel),
    *  used to attribute tariff friction to the imported inputs causing it. */
@@ -113,6 +115,7 @@ function GroupHeader({ label }: { label: string }) {
 
 export default function MarginsPanel({
   margins,
+  pnl = null,
   defaultExpanded = false,
   inputLabels = [],
   fillAdjustedMarginPct = null,
@@ -137,7 +140,26 @@ export default function MarginsPanel({
   // a lot of big warnings and it's hard to see which ones are actually affecting
   // me" (#gameplay-advisors, 2026-07-29). Rank by absolute impact and lead with
   // it; the full breakdown stays underneath for anyone who wants it.
-  const drivers = topMarginDrivers(margins);
+  const drivers = pnl ? [] : topMarginDrivers(margins);
+  const netMargin = pnl
+    ? plantsNetMarginPct({
+        revenue: pnl.revenueAnchor,
+        profit: pnl.profitAnchor,
+        totalCost: pnl.revenueAnchor - pnl.profitAnchor,
+      })
+    : (fillAdjustedMarginPct ?? margins.effective);
+  const physicalCosts = pnl
+    ? ([
+        ["Inputs at market prices", pnl.inputsAnchor],
+        ["Wages", pnl.labourAnchor],
+        ["Freight charges", pnl.freightCostAnchor ?? 0],
+        ["Upkeep", pnl.upkeepAnchor],
+        ["Compliance", pnl.complianceAnchor],
+        ["Other operating costs", pnl.otherOperatingAnchor],
+        ["Growth and construction", pnl.growthAndBuildAnchor],
+        ["Policy and technology credit", -(pnl.policyAnchor ?? 0)],
+      ] as const)
+    : [];
 
   return (
     <div className="rounded-xl border border-card-border bg-card">
@@ -150,16 +172,22 @@ export default function MarginsPanel({
         <div>
           <h2 className="text-lg font-bold text-foreground">Profit margin breakdown</h2>
           <p className="text-xs text-muted">
-            Base {margins.base}% · state, corporate & national modifiers
+            {pnl
+              ? "Revenue less physical costs"
+              : `Base ${margins.base}% · state, corporate & national modifiers`}
           </p>
         </div>
         <div className="flex items-center gap-3">
           <span
             className={`text-lg font-bold tabular-nums ${
-              margins.effective >= margins.base ? "text-success" : "text-error"
+              (pnl ? (netMargin ?? 0) >= 0 : margins.effective >= margins.base)
+                ? "text-success"
+                : "text-error"
             }`}
           >
-            {margins.effective}%
+            {pnl && netMargin == null
+              ? "n/a"
+              : `${pnl ? netMargin?.toFixed(1) : margins.effective}%`}
           </span>
           <ChevronRight
             className={`h-4 w-4 shrink-0 text-muted transition-transform duration-150 ${
@@ -172,14 +200,58 @@ export default function MarginsPanel({
       {/* Expanded body */}
       {isExpanded && (
         <div className="border-t border-card-border px-6 pb-6 pt-4">
+          {pnl && (
+            <div className="mb-4 rounded-lg border border-card-border p-3">
+              <h3 className="mb-2 text-sm font-semibold">Revenue less all costs</h3>
+              <p className="mb-3 text-xs text-muted">
+                Net margin comes from sales revenue less the cost of everything produced, including
+                unsold output. Positive modifiers can still leave a loss when costs exceed sales.
+              </p>
+              {pnl.revenueAnchor > 0 ? (
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between">
+                    <span>
+                      {pnl.freightIncomeAnchor ? "Sales and freight revenue" : "Sales revenue"}
+                    </span>
+                    <span>100.0%</span>
+                  </div>
+                  {physicalCosts
+                    .filter(([, value]) => value !== 0)
+                    .map(([label, value]) => (
+                      <div key={label} className="flex justify-between gap-3">
+                        <span className="text-muted">{label}</span>
+                        <span
+                          className={`tabular-nums ${value < 0 ? "text-success" : "text-error"}`}
+                        >
+                          {value < 0 ? "+" : "-"}
+                          {((Math.abs(value) / pnl.revenueAnchor) * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    ))}
+                  <div className="flex justify-between border-t border-card-border pt-2 font-semibold">
+                    <span>Net margin</span>
+                    <span>{netMargin?.toFixed(1) ?? "n/a"}%</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted">
+                  No sales revenue was recorded, so a percentage margin is unavailable. See the
+                  operating profit and loss for cash costs.
+                </p>
+              )}
+            </div>
+          )}
           <p className="mb-4 text-xs text-muted">
-            State conditions affect operating costs. Margin determines what share of revenue becomes
-            profit.
+            {pnl
+              ? "These modifiers affect costs and sales. They do not add up to the physical net margin above. Commodity markets are already reflected in input costs and sales prices."
+              : "State conditions affect operating costs. Margin determines what share of revenue becomes profit."}
           </p>
 
           {/* Base margin */}
           <div className="mb-4 flex items-center justify-between border-b border-card-border pb-3 text-sm">
-            <span className="text-body-sm font-medium text-muted">Base margin</span>
+            <span className="text-body-sm font-medium text-muted">
+              {pnl ? "Reference base margin" : "Base margin"}
+            </span>
             <span className="text-base font-bold tabular-nums text-foreground">
               {margins.base}%
             </span>
@@ -577,7 +649,7 @@ export default function MarginsPanel({
               leads and the effective margin is demoted to a secondary row: the
               effective figure divides by SOLD revenue only, so at a low fill it
               reads healthy while the sector loses money (ticket #1027 family). */}
-          {fillAdjustedMarginPct != null ? (
+          {pnl ? null : fillAdjustedMarginPct != null ? (
             <>
               <div className="mt-2 flex items-center justify-between rounded-lg border border-card-border bg-card-elevated px-3 py-2.5">
                 <span className="text-sm font-semibold text-foreground">Net margin</span>
@@ -591,9 +663,11 @@ export default function MarginsPanel({
               </div>
               <div
                 className="mt-1.5 flex items-center justify-between px-3"
-                title="Counts only the units that sold. When part of your output goes unsold this number overstates how the sector is really doing. The net margin above is profit over revenue after paying for everything you made."
+                title="The engine operating margin excludes upkeep, compliance, growth and inventory carry. Net margin includes all costs."
               >
-                <span className="text-xs text-muted">Effective margin (sold units only)</span>
+                <span className="text-xs text-muted">
+                  Operating margin before upkeep and other costs
+                </span>
                 <span className="text-xs tabular-nums text-muted">{margins.effective}%</span>
               </div>
             </>

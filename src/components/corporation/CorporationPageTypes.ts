@@ -494,6 +494,10 @@ export interface Financials {
   maintenanceCosts: number;
   /** Labour/wage cost across sectors, carved out of maintenance (0 when wages are disabled). */
   laborCosts: number;
+  /** Recorded inbound shipping bill, daily, in the corporation currency. */
+  freightCosts?: number;
+  /** Recorded haul revenue, already included in totalRevenue. */
+  freightIncome?: number;
   growthCosts: number;
   marketingCosts: number;
   logisticsCosts: number;

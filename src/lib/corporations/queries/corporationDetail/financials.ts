@@ -92,6 +92,8 @@ export function buildFinancials(inputs: FinancialsInputs) {
     // credit without wrapping a minus inside parentheses.
     maintenanceCosts: Math.round(totals.totalMaintenanceCosts - totals.totalLaborCosts),
     laborCosts: Math.round(totals.totalLaborCosts),
+    freightCosts: Math.round(totals.totalFreightCosts ?? 0),
+    freightIncome: Math.round(totals.totalFreightIncome ?? 0),
     growthCosts: Math.round(totals.totalGrowthCosts),
     regulatoryBurden: Math.round(totals.totalRegulatoryBurden),
     marketingCosts: corporation.marketingBudget,
