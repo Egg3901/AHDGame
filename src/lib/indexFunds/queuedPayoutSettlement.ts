@@ -14,6 +14,7 @@ import { resumeSettlement, settleTransition } from "@/lib/banking/settlementJour
 import type { BankingTransition } from "@/lib/banking/rules/boundary";
 import { prepareAuditRecord } from "@/lib/audit/recordAudit";
 import { redemptionEntryStatusAfterPayout } from "./fundRedemptionQueue";
+import { recoverPayoutBatches, type PayoutBatchMarker } from "./queuedPayoutBatch";
 
 const QUEUE = "indexFundRedemptionQueue";
 type PayoutJournalRecord = {
@@ -25,6 +26,8 @@ export type ClaimedRedemption = IndexFundRedemptionQueueEntry & {
   settlementClaimId?: string;
   processingTurn?: number;
   payoutPlan?: BankingTransition & { legacyUnitsBurned?: number };
+  /** Set while this claim is a member of a batched payout; see queuedPayoutBatch.ts. */
+  payoutBatch?: PayoutBatchMarker;
 };
 export async function loadQueuedPayoutAuditContext(db: Db) {
   const [thresholds, turnLength, config, ledgerTurn] = await Promise.all([
@@ -43,8 +46,15 @@ export async function loadQueuedPayoutAuditContext(db: Db) {
   };
 }
 type AuditContext = Awaited<ReturnType<typeof loadQueuedPayoutAuditContext>>;
+export type QueuedPayoutAuditContext = AuditContext;
 function receiptId(key: string, kind: string) {
   return new ObjectId(createHash("sha256").update(`${key}:${kind}`).digest("hex").slice(0, 24));
+}
+/** Every receipt id one payout can publish under `receiptKey`, as strings. */
+export function payoutReceiptIds(receiptKey: string): string[] {
+  return ["fund", "audit", ...Array.from({ length: 8 }, (_, i) => `ledger:${i}`)].map((kind) =>
+    String(receiptId(receiptKey, kind))
+  );
 }
 async function finish(db: Db, plan: BankingTransition) {
   const result = await settleTransition(db, plan);
@@ -149,9 +159,17 @@ export async function recoverAllQueuedPayouts(db: Db, turn: number) {
   return recoverPayoutEntries(db, entries, turn);
 }
 async function recoverPayoutEntries(db: Db, entries: ClaimedRedemption[], turn: number) {
-  let changed = false,
-    recovered = 0;
+  const batched = await recoverPayoutBatches(
+    db,
+    entries.flatMap((entry) =>
+      entry.payoutBatch ? [{ ...entry, payoutBatch: entry.payoutBatch }] : []
+    ),
+    turn
+  );
+  let changed = batched.changed,
+    recovered = batched.recovered;
   for (const entry of entries) {
+    if (entry.payoutBatch) continue;
     if (entry.payoutPlan) {
       const result = await finish(db, entry.payoutPlan);
       if (!result.error && ["applied", "replayed"].includes(result.status)) {
@@ -201,6 +219,106 @@ async function recoverPayoutEntries(db: Db, entries: ClaimedRedemption[], turn: 
   return { changed, recovered };
 }
 
+/**
+ * The receipts one queued payout publishes: the fund transaction, the cash
+ * witness, its shadow ledger rows and the action audit. Ids derive from
+ * `receiptKey`, so a replay of the same payout inserts nothing twice.
+ */
+export function payoutReceiptDocs(input: {
+  fund: IndexFund;
+  entry: ClaimedRedemption;
+  receiptKey: string;
+  settlementKey: string;
+  holderId: ObjectId;
+  holder: Document;
+  credit: number;
+  paidAmount: number;
+  units: number;
+  remainingUnits: number;
+  nav: number;
+  turn: number;
+  audit: AuditContext;
+  nppCurrency: CurrencyCode;
+  now: Date;
+}) {
+  const { fund, entry, receiptKey, holderId, holder, credit, paidAmount, units, nav, turn, audit } =
+    input;
+  const npp = !entry.characterId && !entry.imperialCharacterId;
+  const txId = receiptId(receiptKey, "fund");
+  const tx: TxInput = {
+    type: "index_fund_redeem",
+    turn,
+    createdAt: input.now,
+    subjectType: npp ? "npp" : "character",
+    subjectId: holderId,
+    subjectName: npp ? `NPP ${holderId}` : String(holder.name ?? "Fund holder"),
+    amount: credit,
+    anchorAmount: paidAmount,
+    currencyCode: npp ? input.nppCurrency : fund.anchorCurrencyCode,
+    counterpartyType: "system",
+    counterpartyName: fund.name,
+    meta: {
+      fundId: String(fund._id),
+      fundName: fund.name,
+      fundSlug: fund.slug,
+      fundTicker: fund.tickerSymbol,
+      fundCurrency: fund.anchorCurrencyCode,
+      units,
+      navAnchor: nav,
+      source: "cron_queue",
+      queuedRemainder: input.remainingUnits,
+      settlementKey: input.settlementKey,
+      ...(entry.imperialCharacterId ? { imperial: true } : {}),
+    },
+  };
+  const [financial] = buildTxDocs([tx], audit.thresholds, audit.turnLength, new Map());
+  financial._id = txId;
+  return {
+    fund: {
+      _id: txId,
+      fundId: fund._id,
+      kind: "redemption",
+      holderKind: entry.holderKind,
+      ...(entry.characterId ? { characterId: entry.characterId } : {}),
+      ...(entry.imperialCharacterId ? { imperialCharacterId: entry.imperialCharacterId } : {}),
+      ...(entry.nppId ? { nppId: entry.nppId } : {}),
+      units,
+      navAnchor: nav,
+      amountAnchor: paidAmount,
+      note: "Paid from queued redemption",
+      createdAt: input.now,
+    } as Record<string, unknown>,
+    financial: { ...financial } as Record<string, unknown>,
+    ledger: (audit.shadow ? deriveLedgerEntries([financial]) : []).map(
+      (row, index) =>
+        ({
+          ...finalizeLedgerEntry({ ...row, turn: audit.ledgerTurn ?? row.turn }),
+          _id: receiptId(receiptKey, `ledger:${index}`),
+        }) as Record<string, unknown>
+    ),
+    audit: audit.auditEnabled
+      ? ({
+          ...prepareAuditRecord(
+            {
+              source: "system",
+              action: "fund.sell",
+              category: "money",
+              subject: { type: npp ? "npp" : "character", id: holderId, name: tx.subjectName },
+              amount: credit,
+              anchorAmount: paidAmount,
+              currencyCode: tx.currencyCode,
+              meta: tx.meta,
+              refs: { financialTxLogId: txId },
+              outcome: "ok",
+            },
+            { turn, ts: input.now, turnLengthMinutes: audit.turnLength }
+          ),
+          _id: receiptId(receiptKey, "audit"),
+        } as Record<string, unknown>)
+      : undefined,
+  };
+}
+
 export async function settleQueuedPayout(
   db: Db,
   input: {
@@ -237,35 +355,23 @@ export async function settleQueuedPayout(
     : Object.keys(buildPersonalBalanceInc(credit, fund.anchorCurrencyCode, input.forexEnabled))[0];
   const now = new Date(),
     key = `fund-redemption:${entry._id}:${claimId}`;
-  const txId = receiptId(key, "fund");
-  const tx: TxInput = {
-    type: "index_fund_redeem",
+  const receipts = payoutReceiptDocs({
+    fund,
+    entry,
+    receiptKey: key,
+    settlementKey: key,
+    holderId,
+    holder,
+    credit,
+    paidAmount,
+    units,
+    remainingUnits,
+    nav,
     turn,
-    createdAt: now,
-    subjectType: npp ? "npp" : "character",
-    subjectId: holderId,
-    subjectName: npp ? `NPP ${holderId}` : String(holder.name ?? "Fund holder"),
-    amount: credit,
-    anchorAmount: paidAmount,
-    currencyCode: npp ? input.nppCurrency : fund.anchorCurrencyCode,
-    counterpartyType: "system",
-    counterpartyName: fund.name,
-    meta: {
-      fundId: String(fund._id),
-      fundName: fund.name,
-      fundSlug: fund.slug,
-      fundTicker: fund.tickerSymbol,
-      fundCurrency: fund.anchorCurrencyCode,
-      units,
-      navAnchor: nav,
-      source: "cron_queue",
-      queuedRemainder: remainingUnits,
-      settlementKey: key,
-      ...(entry.imperialCharacterId ? { imperial: true } : {}),
-    },
-  };
-  const [financial] = buildTxDocs([tx], audit.thresholds, audit.turnLength, new Map());
-  financial._id = txId;
+    audit,
+    nppCurrency: input.nppCurrency,
+    now,
+  });
   const burnUnits = entry.unitsBurnedAtRequest !== true;
   const plan: BankingTransition & { legacyUnitsBurned: number } = {
     key,
@@ -310,63 +416,24 @@ export async function settleQueuedPayout(
     projections: [
       {
         collection: "indexFundTransactions",
-        insert: {
-          _id: txId,
-          fundId: fund._id,
-          kind: "redemption",
-          holderKind: entry.holderKind,
-          ...(entry.characterId ? { characterId: entry.characterId } : {}),
-          ...(entry.imperialCharacterId ? { imperialCharacterId: entry.imperialCharacterId } : {}),
-          ...(entry.nppId ? { nppId: entry.nppId } : {}),
-          units,
-          navAnchor: nav,
-          amountAnchor: paidAmount,
-          note: "Paid from queued redemption",
-          createdAt: now,
-        },
+        insert: receipts.fund,
         note: "Original fund payout receipt",
       },
       {
         collection: "financialTxLog",
-        insert: { ...financial },
+        insert: receipts.financial,
         note: "Original native and anchor cash witness",
       },
-      ...(audit.shadow
-        ? deriveLedgerEntries([financial]).map((row, index) => ({
-            collection: "ledgerEntries",
-            insert: {
-              ...finalizeLedgerEntry({ ...row, turn: audit.ledgerTurn ?? row.turn }),
-              _id: receiptId(key, `ledger:${index}`),
-            },
-            note: "Original payout ledger witness",
-          }))
-        : []),
-      ...(audit.auditEnabled
+      ...receipts.ledger.map((row) => ({
+        collection: "ledgerEntries",
+        insert: row,
+        note: "Original payout ledger witness",
+      })),
+      ...(receipts.audit
         ? [
             {
               collection: "actionAuditLog",
-              insert: {
-                ...prepareAuditRecord(
-                  {
-                    source: "system",
-                    action: "fund.sell",
-                    category: "money",
-                    subject: {
-                      type: npp ? "npp" : "character",
-                      id: holderId,
-                      name: tx.subjectName,
-                    },
-                    amount: credit,
-                    anchorAmount: paidAmount,
-                    currencyCode: tx.currencyCode,
-                    meta: tx.meta,
-                    refs: { financialTxLogId: txId },
-                    outcome: "ok",
-                  },
-                  { turn, ts: now, turnLengthMinutes: audit.turnLength }
-                ),
-                _id: receiptId(key, "audit"),
-              },
+              insert: receipts.audit,
               note: "Original queued payout action audit",
             },
           ]
