@@ -483,6 +483,7 @@ async function finishProjections(
   // duplicate-key no-op. Their "applied" marks therefore ride on the next
   // journal write this pass makes instead of costing one write each.
   const insertMarks: Record<string, unknown> = {};
+  let failed: { index: number; projection: TransitionProjection; error: string } | undefined;
   for (let i = 0; i < records.length; i += 1) {
     const record = records[i];
     if (record?.appliedAt || record?.applied) {
@@ -528,26 +529,8 @@ async function finishProjections(
       ? await applyProtectedProjection(db, transition.key, i, projection)
       : await applyProjection(db, projection, projectionStamp(transition.key, i));
     if (!outcome.ok) {
-      // Keep update claims intact: a legacy ambiguity must never become a
-      // fresh admission on the next recovery attempt. New protocols may retry
-      // their original guard without losing the protected outcome.
-      result.status = "partial";
-      result.error = outcome.error;
-      if (Number.isFinite(transition.turn)) {
-        countBankingEvent(db, transition.turn, "partialSettlements");
-      }
-      await journal.updateOne(
-        { _id: transition.key, [`projections.${i}.applied`]: { $ne: true } },
-        {
-          $set: {
-            ...insertMarks,
-            status: "partial",
-            error: outcome.error,
-            ...(!isUpdateProjection(projection) ? { [`projections.${i}.claimedAt`]: null } : {}),
-          },
-        }
-      );
-      return result;
+      failed = { index: i, projection, error: outcome.error };
+      break;
     }
     result.appliedProjections.push(i);
     if (!("newlyApplied" in outcome) || outcome.newlyApplied)
@@ -555,6 +538,31 @@ async function finishProjections(
     if (isUpdateProjection(projection)) continue;
     insertMarks[`projections.${i}.appliedAt`] = new Date();
     insertMarks[`projections.${i}.applied`] = true;
+  }
+
+  if (failed) {
+    // Keep update claims intact: a legacy ambiguity must never become a
+    // fresh admission on the next recovery attempt. New protocols may retry
+    // their original guard without losing the protected outcome.
+    result.status = "partial";
+    result.error = failed.error;
+    if (Number.isFinite(transition.turn)) {
+      countBankingEvent(db, transition.turn, "partialSettlements");
+    }
+    await journal.updateOne(
+      { _id: transition.key, [`projections.${failed.index}.applied`]: { $ne: true } },
+      {
+        $set: {
+          ...insertMarks,
+          status: "partial",
+          error: failed.error,
+          ...(!isUpdateProjection(failed.projection)
+            ? { [`projections.${failed.index}.claimedAt`]: null }
+            : {}),
+        },
+      }
+    );
+    return result;
   }
 
   if (stuck) {
