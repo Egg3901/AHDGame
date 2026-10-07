@@ -479,6 +479,10 @@ async function finishProjections(
   }
 
   let stuck: string | undefined;
+  // Insert projections carry fixed ids, so replaying one after a crash is a
+  // duplicate-key no-op. Their "applied" marks therefore ride on the next
+  // journal write this pass makes instead of costing one write each.
+  const insertMarks: Record<string, unknown> = {};
   for (let i = 0; i < records.length; i += 1) {
     const record = records[i];
     if (record?.appliedAt || record?.applied) {
@@ -536,6 +540,7 @@ async function finishProjections(
         { _id: transition.key, [`projections.${i}.applied`]: { $ne: true } },
         {
           $set: {
+            ...insertMarks,
             status: "partial",
             error: outcome.error,
             ...(!isUpdateProjection(projection) ? { [`projections.${i}.claimedAt`]: null } : {}),
@@ -548,29 +553,30 @@ async function finishProjections(
     if (!("newlyApplied" in outcome) || outcome.newlyApplied)
       result.newlyAppliedProjections.push(i);
     if (isUpdateProjection(projection)) continue;
-    await journal.updateOne(
-      { _id: transition.key },
-      {
-        $set: {
-          [`projections.${i}.appliedAt`]: new Date(),
-          [`projections.${i}.applied`]: true,
-        },
-      }
-    );
+    insertMarks[`projections.${i}.appliedAt`] = new Date();
+    insertMarks[`projections.${i}.applied`] = true;
   }
 
   if (stuck) {
     result.status = "partial";
     result.error = stuck;
-    await journal.updateOne({ _id: transition.key }, { $set: { status: "partial", error: stuck } });
+    await journal.updateOne(
+      { _id: transition.key },
+      { $set: { ...insertMarks, status: "partial", error: stuck } }
+    );
     return result;
   }
 
   if (result.appliedProjections.length === records.length) {
     await journal.updateOne(
       { _id: transition.key },
-      { $set: { projectionsCompletedAt: new Date(), status: "applied" }, $unset: { error: "" } }
+      {
+        $set: { ...insertMarks, projectionsCompletedAt: new Date(), status: "applied" },
+        $unset: { error: "" },
+      }
     );
+  } else if (Object.keys(insertMarks).length) {
+    await journal.updateOne({ _id: transition.key }, { $set: insertMarks });
   }
   return result;
 }
