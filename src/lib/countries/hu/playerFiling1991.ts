@@ -246,7 +246,7 @@ export async function materializeHu1991PlayerFiling(input: {
       { _id: prior._id, status: "withdrawn" },
       {
         $set: { status: "active" },
-        $unset: { withdrawnAt: "" },
+        $unset: { withdrawnAt: "", withdrawnBy: "" },
       },
       { session }
     );
@@ -315,7 +315,7 @@ export async function materializeHu1991PlayerFiling(input: {
           status: "active",
           hungarianAssemblyNomination: { constituencyId: district.constituencyId },
         },
-        $unset: { withdrawnAt: "" },
+        $unset: { withdrawnAt: "", withdrawnBy: "" },
       },
       { session }
     );

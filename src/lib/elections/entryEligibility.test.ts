@@ -62,6 +62,11 @@ describe("First-Duma filing display", () => {
     input.election.totalSeats = 1;
     expect(resolveEntryAction(input)).toBe("enter");
   });
+  it("offers no re-entry after the viewer withdrew from this election", () => {
+    const input = scenario();
+    input.election.viewerWithdrew = true;
+    expect(resolveEntryAction(input)).toBe("none");
+  });
   it("permits withdrawal before resolution and hides it after resolution", () => {
     const input = scenario();
     input.inThisRace = true;
