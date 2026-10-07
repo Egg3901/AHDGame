@@ -93,6 +93,14 @@ interface JournalProjectionRecord {
  * Retry enters the publication protocol: inserts use their id, while updates
  * require protected target proof and a fresh journal/generation check.
  */
+/** Append-only receipt collections: written by settlements, never read back mid-pass. */
+const RECEIPT_COLLECTIONS: ReadonlySet<string> = new Set([
+  "ledgerEntries",
+  "financialTxLog",
+  "actionAuditLog",
+  "indexFundTransactions",
+]);
+
 function safeToRetryBlind(_projection: TransitionProjection): boolean {
   return true;
 }
@@ -478,14 +486,21 @@ async function finishProjections(
     ownsAllProjections = claim.matchedCount === 1;
   }
 
-  // When this pass owns every projection, its insert projections are
-  // fixed-id receipts that nothing else reads mid-pass. Write them together;
-  // the loop below records each outcome in its usual place, and update
-  // projections keep their sequential receipt protocol.
+  // When this pass owns every projection, its inserts into append-only
+  // receipt collections (fixed ids, read by no settlement logic) are written
+  // together; the loop below records each outcome in its usual place. Inserts
+  // that create business documents, such as loan tranches, and every update
+  // projection keep their strict order, so a failure still leaves nothing
+  // after it.
   const preInserted = new Map<number, { ok: true } | { ok: false; error: string }>();
   if (ownsAllProjections) {
     const inserts = records.flatMap((record, i) =>
-      !record.appliedAt && !record.applied && !isUpdateProjection(record.projection) ? [i] : []
+      !record.appliedAt &&
+      !record.applied &&
+      !isUpdateProjection(record.projection) &&
+      RECEIPT_COLLECTIONS.has(record.projection.collection)
+        ? [i]
+        : []
     );
     if (inserts.length > 1) {
       const outcomes = await Promise.all(
