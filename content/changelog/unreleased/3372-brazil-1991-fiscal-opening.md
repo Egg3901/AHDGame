@@ -3,10 +3,10 @@ date: 2026-10-07
 title: Brazil's 1991 budget opens at a realistic size
 summary: >-
   New 1991 worlds now open Brazil with public programs sized to its tax
-  receipts and split the way its 1991 budget was, instead of a tiny program
+  receipts and split according to the 1991 scenario, instead of a tiny program
   book and a huge surplus.
-tags: [budget, seed, brazil]
-badges: [balance]
+tags: [budget, seed, brazil, balance]
+badges: [patch]
 areas: [backend]
 ---
 
