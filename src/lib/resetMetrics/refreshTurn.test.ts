@@ -4,6 +4,7 @@ import type { GameState } from "@/lib/db/types/gameState";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { buildOpeningMetricSnapshots1991 } from "./seedOpening1991";
 import { dueResetMetricIds, refreshResetMetricBoard } from "./rules/refresh";
+import type { ResetMetricSnapshot } from "./rules/snapshot";
 import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
 import {
   refreshResetMetricSnapshotsTurn,
@@ -30,7 +31,7 @@ const state = {
 const ready = { metrics: true, legislation: false, cabinet: false };
 
 function ownerReadings(
-  sourceBoards: readonly (typeof boards)[number][] = boards,
+  sourceBoards: readonly ResetMetricSnapshot[] = boards,
   turn = 2
 ): MetricOwnerTurnReadingsByBoard {
   return Object.fromEntries(
@@ -168,7 +169,11 @@ describe("v2 metric turn persistence shell", () => {
     });
     const replayReadings = ownerReadings(completed, 12);
     const ctUpdates = replayReadings["US:CT"]!.updates;
-    const changedMetricId = Object.keys(ctUpdates)[0]!;
+    const changedMetricId = Object.keys(ctUpdates).find((id) => ctUpdates[id]?.value !== null);
+    if (!changedMetricId) throw new Error("Fixture has no numeric metric to change");
+    const changedObservation = ctUpdates[changedMetricId]!;
+    if (changedObservation.value === null) throw new Error("Fixture metric value is missing");
+    const changedValue = changedObservation.value + 1;
     const ownerReader = vi.fn(async () => ({
       ...replayReadings,
       "US:CT": {
@@ -176,8 +181,8 @@ describe("v2 metric turn persistence shell", () => {
         updates: {
           ...ctUpdates,
           [changedMetricId]: {
-            ...ctUpdates[changedMetricId]!,
-            value: ctUpdates[changedMetricId]!.value + 1,
+            ...changedObservation,
+            value: changedValue,
           },
         },
       },
