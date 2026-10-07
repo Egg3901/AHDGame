@@ -1,0 +1,122 @@
+{
+  "scope": "Bounded financing simulation: real Treasury and bond-pool phases only, fixed macro fixtures. Not a full world engine run.",
+  "source": "scripts/sim/conservedSovereignFinancing.ts",
+  "assumptions": {
+    "countries": 23,
+    "currencies": 23,
+    "householdStocks": 23,
+    "bondsPerCountry": 32,
+    "unitsPerBond": 1000,
+    "couponRatePct": 6,
+    "couponClaimsPerTurn": 736,
+    "couponsPerCountryPerTurn": 40000,
+    "annualRevenuePerCountry": 5760000,
+    "annualPrimarySpendingPerCountry": 3456000,
+    "householdOpeningPerStock": 115200000,
+    "holders": "public float only (bond market pool); bank-held claims not exercised",
+    "turnsPerYear": 48,
+    "turnsRun": 2
+  },
+  "limits": {
+    "commandBudget": 2500,
+    "timeoutMs": 240000
+  },
+  "summary": {
+    "maxTreasuryCommands": 1830,
+    "maxTreasuryMs": 13239,
+    "maxPoolCommands": 79,
+    "maxConservationResidual": 0,
+    "finalOpenCouponClaims": 0,
+    "finalPoolCash": {
+      "USD": 80000,
+      "GBP": 80000,
+      "JPY": 80000,
+      "EUR": 80000,
+      "IEP": 80000,
+      "CNY": 80000,
+      "BRL": 80000,
+      "NGN": 80000,
+      "SUR": 80000,
+      "FRF": 80000,
+      "ITL": 80000,
+      "ESP": 80000,
+      "SEK": 80000,
+      "TRL": 80000,
+      "GRD": 80000,
+      "ATS": 80000,
+      "FIM": 80000,
+      "PLZ": 80000,
+      "HUF": 80000,
+      "ROL": 80000,
+      "BGL": 80000,
+      "CSK": 80000,
+      "YUD": 80000
+    }
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "treasuryCommands": 1830,
+      "treasuryMs": 11311,
+      "treasuryReplyBytes": 966286,
+      "treasuryReturnedDocuments": 1474,
+      "poolCommands": 79,
+      "poolMs": 271,
+      "openCouponClaims": 0,
+      "treasuryCashTotal": 184000,
+      "householdTaxArrears": 0,
+      "primarySpendingArrears": 0,
+      "treasuryCommandsByOp": {
+        "find:centralBanks": 48,
+        "find:gameState": 1,
+        "find:organizationMemberships": 1,
+        "find:federalBudget": 185,
+        "find:countryGameStates": 1,
+        "createIndexes:sovereignCouponClaims": 1,
+        "distinct:sovereignCouponClaims": 1,
+        "find:gameConfig": 1,
+        "find:exchangeRates": 1,
+        "find:bankMoneyMoves": 461,
+        "find:bonds": 1,
+        "getMore:-": 1,
+        "update:federalBudget": 276,
+        "insert:bankMoneyMoves": 69,
+        "update:centralBanks": 92,
+        "update:bankMoneyMoves": 414,
+        "find:sovereignCouponClaims": 46,
+        "insert:sovereignCouponClaims": 23,
+        "update:bondMarketPools": 115,
+        "find:bondMarketPools": 46,
+        "update:sovereignCouponClaims": 23,
+        "delete:sovereignCouponClaims": 23
+      }
+    },
+    {
+      "turn": 2,
+      "treasuryCommands": 1829,
+      "treasuryMs": 13239,
+      "treasuryReplyBytes": 1085929,
+      "treasuryReturnedDocuments": 1474,
+      "poolCommands": 79,
+      "poolMs": 277,
+      "openCouponClaims": 0,
+      "treasuryCashTotal": 368000,
+      "householdTaxArrears": 0,
+      "primarySpendingArrears": 0
+    }
+  ],
+  "qualification": {
+    "conserved": true,
+    "allCouponsPaid": true,
+    "commandBudget": true,
+    "localTimeout": true
+  },
+  "sourceCommit": "3e680ed46d4e66edebbe624a315f30c2b26e59e5",
+  "limitations": [
+    "Two-turn fixed-flow native Mongo fixture, not full-world or long-horizon balance qualification.",
+    "Uniform macro flows and 1,000 units per bond are command-volume fixtures, not actual national fiscal calibrations.",
+    "Cabinet-v2 cash ownership and interruptions are covered separately by the opt-in native integration suites.",
+    "Local duration does not guarantee remote production latency.",
+    "The 500-command prior default was recalibrated to 2,500 after measured funded-flow growth; raw command counts are retained."
+  ]
+}
