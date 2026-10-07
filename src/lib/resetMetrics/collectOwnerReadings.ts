@@ -7,6 +7,8 @@ import type { FederalBudget } from "@/lib/db/types/budget";
 import type { MacroMetricsDoc } from "@/lib/db/types/macroMetrics";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
+import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
+import { healthOwnerInputs } from "./rules/healthOwner";
 import {
   openingGrossPurchasingInputs1991,
   openingLifeCalibration1991,
@@ -63,7 +65,8 @@ const FAIL_CLOSED_OWNER_IDS = new Set([
 export async function collectResetMetricOwnerReadings(
   db: Db,
   boards: readonly ResetMetricSnapshot[],
-  turn: number
+  turn: number,
+  year?: number
 ): Promise<MetricOwnerTurnReadingsByBoard> {
   const { gross: openingGross, life: openingLife, health: openingHealth } = openingCalibration();
   const regionalIds = boards
@@ -79,7 +82,7 @@ export async function collectResetMetricOwnerReadings(
       board.scope === "regional" &&
       dueResetMetricIds(board, turn, true, false).some((id) => id === "16" || id === "18")
   );
-  const [macro, budgets, units, healthStocks] = await Promise.all([
+  const [macro, budgets, units, healthStocks, healthBoards] = await Promise.all([
     db
       .collection<MacroMetricsDoc>("macroMetrics")
       .find(
@@ -147,15 +150,23 @@ export async function collectResetMetricOwnerReadings(
                 "healthcare.physicianRate.value": 1,
                 "healthcare.publicHealthPreparedness.value": 1,
                 "healthcare.nhsWaitingTime.value": 1,
+                "healthcare.hseWaitingListMonths.value": 1,
               },
             }
           )
+          .toArray()
+      : Promise.resolve([]),
+    healthDue
+      ? db
+          .collection<PoliticalMetricsDoc>("politicalMetrics")
+          .find({ _id: { $in: regionalIds } }, { projection: { _id: 1, countryId: 1, values: 1 } })
           .toArray()
       : Promise.resolve([]),
   ]);
   const macroById = new Map(macro.map((row) => [String(row._id), row]));
   const budgetByCountry = new Map(budgets.map((row) => [row.countryId, row]));
   const healthById = new Map(healthStocks.map((row) => [String(row._id), row]));
+  const healthBoardById = new Map(healthBoards.map((row) => [String(row._id), row]));
   const unitsByCountry = new Map(
     countryIds.map((countryId) => [countryId, units.filter((unit) => unit.countryId === countryId)])
   );
@@ -218,15 +229,32 @@ export async function collectResetMetricOwnerReadings(
       } else {
         const healthRow = healthById.get(board.regionId!);
         const health = healthRow?.countryId === board.countryId ? healthRow.healthcare : undefined;
+        const healthBoard = healthBoardById.get(board.regionId!);
+        const boardInputs =
+          healthBoard?.countryId === board.countryId
+            ? healthOwnerInputs(healthBoard.values, board.countryId, year)
+            : null;
+        // Regions with a board no longer persist the legacy health store.
+        // Never hide an incomplete or mismatched board behind stale legacy data.
+        const inputs = healthBoard
+          ? boardInputs
+          : {
+              physicianRate: health?.physicianRate?.value ?? null,
+              preparedness: health?.publicHealthPreparedness?.value ?? null,
+              uninsuredPercent: health?.uninsuredRate?.value ?? null,
+              waitingTime:
+                board.countryId === "IE"
+                  ? health?.hseWaitingListMonths?.value
+                  : health?.nhsWaitingTime?.value,
+            };
         const reference = openingHealth[board.countryId as keyof typeof openingHealth];
-        const physicianReference = reference?.physicianRate ?? health?.physicianRate?.value ?? null;
-        const preparednessReference =
-          reference?.preparedness ?? health?.publicHealthPreparedness?.value ?? null;
+        const physicianReference = reference?.physicianRate ?? inputs?.physicianRate ?? null;
+        const preparednessReference = reference?.preparedness ?? inputs?.preparedness ?? null;
         const access = liveHealthProxies({
           countryId: board.countryId,
-          physicianRate: health?.physicianRate?.value ?? null,
-          preparedness: health?.publicHealthPreparedness?.value ?? null,
-          uninsuredPercent: health?.uninsuredRate?.value ?? null,
+          physicianRate: inputs?.physicianRate ?? null,
+          preparedness: inputs?.preparedness ?? null,
+          uninsuredPercent: inputs?.uninsuredPercent ?? null,
           openingPhysicianReference: physicianReference ?? Number.NaN,
           openingPreparednessReference: preparednessReference ?? Number.NaN,
         });
@@ -235,23 +263,24 @@ export async function collectResetMetricOwnerReadings(
             ...board.observations["16"]!,
             value: access.effectiveCoverage,
             status: "proxy",
-            source: "current eligibility and physician/preparedness service-reach estimate",
+            source: boardInputs
+              ? "current political board converted to eligibility and service-reach proxy inputs"
+              : "current eligibility and physician/preparedness service-reach estimate",
             note: "Game-calibrated reachable-care estimate using fixed 1991 reference stocks, not observed patient access.",
           };
         }
         const delay =
-          board.countryId === "UK"
-            ? health?.nhsWaitingTime?.value
-            : board.countryId === "IE"
-              ? health?.hseWaitingListMonths?.value
-              : access?.treatmentDelayIndex;
+          board.countryId === "UK" || board.countryId === "IE"
+            ? inputs?.waitingTime
+            : access?.treatmentDelayIndex;
         if (due.has("18") && typeof delay === "number" && Number.isFinite(delay) && delay >= 0) {
           updates["18"] = {
             ...board.observations["18"]!,
             value: delay,
             status: "proxy",
-            source:
-              board.countryId === "UK" || board.countryId === "IE"
+            source: boardInputs
+              ? "current political board converted to treatment-delay proxy inputs"
+              : board.countryId === "UK" || board.countryId === "IE"
                 ? "current national health-service waiting index"
                 : "current physician/preparedness delay estimate",
             note: "Comparable treatment-delay proxy, not median waiting days. Fixed opening references preserve nationwide capacity changes.",

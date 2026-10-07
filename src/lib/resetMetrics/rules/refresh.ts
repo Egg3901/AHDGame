@@ -10,6 +10,8 @@ export interface MetricRefreshInput {
   updates: Readonly<Record<string, OpeningMetricObservation>>;
   cohortDue: boolean;
   electionDue: boolean;
+  /** Refresh overdue owners from current readings without manufacturing missed turns. */
+  allowCatchUp?: boolean;
 }
 
 export interface MetricRefreshResult {
@@ -20,14 +22,20 @@ export interface MetricRefreshResult {
   missingDueIds: readonly string[];
 }
 
-function isDue(refresh: string, elapsedTurns: number, cohortDue: boolean, electionDue: boolean) {
+function isDue(
+  refresh: string,
+  elapsedTurns: number,
+  previousElapsedTurns: number,
+  cohortDue: boolean,
+  electionDue: boolean
+) {
   if (refresh === "cohort") return cohortDue;
   if (refresh === "election") return electionDue;
   const cadence = Number(refresh);
   if (!Number.isSafeInteger(cadence) || cadence < 1) {
     throw new Error(`Unknown reset metric refresh cadence ${refresh}`);
   }
-  return elapsedTurns % cadence === 0;
+  return Math.floor(elapsedTurns / cadence) > Math.floor(previousElapsedTurns / cadence);
 }
 
 function sameObservation(a: OpeningMetricObservation | undefined, b: OpeningMetricObservation) {
@@ -52,13 +60,24 @@ export function dueResetMetricIds(
     throw new Error("Reset metric due calculation needs a turn after the opening");
   }
   const elapsedTurns = turn - board.sourceTurn;
+  const previousTurn =
+    turn === board.asOfTurn ? (board.lastRefreshFromTurn ?? turn - 1) : board.asOfTurn;
+  if (
+    !Number.isSafeInteger(previousTurn) ||
+    previousTurn < board.sourceTurn ||
+    previousTurn >= turn
+  ) {
+    throw new Error("Reset metric cadence has an invalid prior observation turn");
+  }
   return primaryMetrics
     .filter((metric) =>
       board.scope === "national"
         ? metric.aggregation === "national"
         : metric.aggregation !== "national"
     )
-    .filter((metric) => isDue(metric.refresh, elapsedTurns, cohortDue, electionDue))
+    .filter((metric) =>
+      isDue(metric.refresh, elapsedTurns, previousTurn - board.sourceTurn, cohortDue, electionDue)
+    )
     .map((metric) => metric.id);
 }
 
@@ -68,7 +87,11 @@ export function dueResetMetricIds(
  */
 export function refreshResetMetricBoard(input: MetricRefreshInput): MetricRefreshResult {
   const { board, turn, updates, cohortDue, electionDue } = input;
-  if (!Number.isSafeInteger(turn) || (turn !== board.asOfTurn + 1 && turn !== board.asOfTurn)) {
+  if (
+    !Number.isSafeInteger(turn) ||
+    turn < board.asOfTurn ||
+    (!input.allowCatchUp && turn > board.asOfTurn + 1)
+  ) {
     throw new Error("Reset metric board must advance by exactly one turn or replay the same turn");
   }
   const expected = primaryMetrics.filter((metric) =>
@@ -118,6 +141,7 @@ export function refreshResetMetricBoard(input: MetricRefreshInput): MetricRefres
   const next: ResetMetricSnapshot = {
     ...board,
     asOfTurn: turn,
+    lastRefreshFromTurn: board.asOfTurn,
     observations: { ...board.observations, ...updates },
   };
   return { board: next, replayed: false, dueIds, changedIds, missingDueIds };

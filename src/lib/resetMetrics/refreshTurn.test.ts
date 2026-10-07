@@ -3,7 +3,7 @@ import type { Db } from "mongodb";
 import type { GameState } from "@/lib/db/types/gameState";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { buildOpeningMetricSnapshots1991 } from "./seedOpening1991";
-import { refreshResetMetricBoard } from "./rules/refresh";
+import { dueResetMetricIds, refreshResetMetricBoard } from "./rules/refresh";
 import { RESET_V2_SEED_REVISION } from "@/lib/resetVersions/rules";
 import {
   refreshResetMetricSnapshotsTurn,
@@ -55,6 +55,50 @@ function ownerReadings(
 }
 
 describe("v2 metric turn persistence shell", () => {
+  it("recovers a failed prior refresh using its actual CAS turn without backfilling history", async () => {
+    const db = createMockDb();
+    const stalled = boards.map((board) => ({ ...board, asOfTurn: 12 }));
+    db.collection("resetMetricSnapshots").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue(stalled),
+    });
+    db.collection("resetMetricSnapshots").bulkWrite.mockResolvedValue({
+      matchedCount: stalled.length,
+    });
+    const readings = Object.fromEntries(
+      stalled.map((board) => [
+        board._id,
+        {
+          updates: Object.fromEntries(
+            dueResetMetricIds(board, 14, false, false).map((id) => [
+              id,
+              { ...board.observations[id]!, source: "current owner at turn 14" },
+            ])
+          ),
+          cohortDue: false,
+          electionDue: false,
+        },
+      ])
+    );
+    await refreshResetMetricSnapshotsTurn({
+      db: db as unknown as Db,
+      gameState: { ...state, currentTurn: 13 },
+      turn: 14,
+      ownerReadings: readings,
+      ready,
+    });
+    const operations = db.collectionMocks.resetMetricSnapshots!.bulkWrite.mock.calls[0]![0];
+    for (const operation of operations) {
+      expect(operation).toMatchObject({
+        updateOne: {
+          filter: { worldId, asOfTurn: 12 },
+          update: { $set: { asOfTurn: 14, lastRefreshFromTurn: 12 } },
+        },
+      });
+      expect(operation.updateOne.update.$set).not.toHaveProperty("history");
+    }
+    expect(readings["US:CT"]!.updates).toHaveProperty("16");
+    expect(readings["US:CT"]!.updates).toHaveProperty("18");
+  });
   it("does nothing while the effective version remains v1", async () => {
     const db = createMockDb();
     expect(
