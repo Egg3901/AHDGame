@@ -32,7 +32,7 @@ export function negotiateHref(corpId: string, offer: NegotiateDraft): string {
   });
   if (offer.stateId) params.set("respondState", offer.stateId);
   if (offer.durationTurns != null) params.set("respondTerm", String(offer.durationTurns));
-  return `/corporation/${corpId}?${params.toString()}#supply-agreements`;
+  return `/corporation/${encodeURIComponent(corpId)}?${params.toString()}#supply-agreements`;
 }
 
 /** Inverse of `negotiateHref`; null when the query does not name a usable offer. */
