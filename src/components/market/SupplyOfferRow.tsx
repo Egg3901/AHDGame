@@ -2,9 +2,19 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { COMMODITY_LABELS, COMMODITY_UNITS, type CommodityType } from "@/lib/constants/commodities";
+import { useCurrency } from "@/contexts/CurrencyContext";
+import { COMMODITY_LABELS, COMMODITY_UNITS } from "@/lib/constants/commodities";
 import type { SupplyListingView } from "@/lib/db/types/supplyListing";
 import { apiErrorText } from "@/lib/errors/catalog";
+import {
+  OfferIdentity,
+  PremiumChip,
+  SideBadge,
+  formatVolume,
+  offerValuePerTurn,
+} from "./supplyOfferUi";
+
+export { offerPremiumLabel } from "./supplyOfferUi";
 
 export interface OfferCorporation {
   id: string;
@@ -15,31 +25,47 @@ export interface OfferCorporation {
 const control =
   "h-8 rounded-md border border-card-border bg-background px-2 text-[13px] text-foreground focus:border-foreground focus:outline-none";
 
-export function offerPremiumLabel(premium: number): string {
-  const value = Math.round(premium * 1000) / 10;
-  return `${value > 0 ? "+" : ""}${value}%`;
+/** Column template shared by the header and every row (md and up). */
+export const OFFER_GRID =
+  "md:grid md:grid-cols-[minmax(11rem,1.6fr)_5.5rem_minmax(7rem,1fr)_minmax(6rem,0.9fr)_minmax(6rem,0.9fr)_5.5rem_minmax(7rem,1fr)] md:items-center md:gap-3";
+
+export function SupplyOfferHeader() {
+  const cell = "text-[11px] font-semibold uppercase tracking-wide text-muted";
+  return (
+    <div className={`hidden border-b border-card-border pb-1.5 ${OFFER_GRID}`} aria-hidden>
+      <span className={cell}>Company</span>
+      <span className={cell}>Side</span>
+      <span className={cell}>Commodity</span>
+      <span className={`${cell} text-right`}>Volume / turn</span>
+      <span className={`${cell} text-right`}>Est. value / turn</span>
+      <span className={cell}>Vs market</span>
+      <span className={cell}>Term</span>
+    </div>
+  );
 }
 
 export function SupplyOfferRow({
   offer,
   commodity,
-  showCommodity = false,
+  marketPrice,
   corporations,
   onTaken,
 }: {
   offer: SupplyListingView;
-  commodity: CommodityType;
-  /** Name the commodity in the row, for lists that span commodities. */
-  showCommodity?: boolean;
+  commodity: SupplyListingView["commodity"];
+  /** Current market price per unit, for the value estimate. */
+  marketPrice?: number;
   corporations: OfferCorporation[];
   onTaken: () => void;
 }) {
+  const { formatAmount } = useCurrency();
   const takers = corporations.filter((c) => c.id !== offer.corporationId);
   const [corpId, setCorpId] = useState(takers[0]?.id ?? "");
   const [volume, setVolume] = useState(String(offer.volumeCap));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
+  const value = offerValuePerTurn(offer, marketPrice);
 
   async function take() {
     setBusy(true);
@@ -65,36 +91,36 @@ export function SupplyOfferRow({
 
   return (
     <li className="space-y-2 border-b border-card-border/60 py-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-medium text-foreground">
-          {showCommodity && (
-            <span className="mr-2 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
-              {COMMODITY_LABELS[commodity]}
-            </span>
-          )}
-          {offer.corporationName}
-          {offer.ai && (
-            <span className="ml-1.5 rounded bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning">
-              AI
-            </span>
-          )}
-          {offer.stateId ? ` (${offer.stateId})` : ""}
+      <div className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 ${OFFER_GRID}`}>
+        <OfferIdentity offer={offer} />
+        <span>
+          <SideBadge side={offer.side} />
         </span>
-        <span className="text-sm tabular-nums text-foreground">
-          {offer.volumeCap.toLocaleString()} {COMMODITY_UNITS[commodity]} per turn at{" "}
-          {offerPremiumLabel(offer.pricePremium)} to market
+        <span className="text-sm font-semibold text-foreground">
+          {COMMODITY_LABELS[commodity]}
+          {offer.stateId ? <span className="font-normal text-muted"> ({offer.stateId})</span> : ""}
+        </span>
+        <span className="text-sm font-semibold tabular-nums text-foreground md:text-right">
+          {formatVolume(offer.volumeCap)}{" "}
+          <span className="text-xs font-normal text-muted">{COMMODITY_UNITS[commodity]}/turn</span>
+        </span>
+        <span className="text-sm tabular-nums text-foreground md:text-right">
+          {value == null ? "n/a" : `~${formatAmount(Math.round(value))}`}
+        </span>
+        <span>
+          <PremiumChip premium={offer.pricePremium} side={offer.side} />
+        </span>
+        <span className="text-xs text-muted">
+          {offer.durationTurns ? `${offer.durationTurns} turns` : "Open-ended"}
+          <br />
+          {[
+            offer.corporationCountryId,
+            offer.creditRating ? `rated ${offer.creditRating}` : "unrated",
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </span>
       </div>
-      <p className="text-xs text-muted">
-        {[
-          offer.corporationCountryId,
-          offer.creditRating ? `rating ${offer.creditRating}` : "unrated",
-          offer.durationTurns ? `${offer.durationTurns} turns` : "open-ended",
-          `expires turn ${offer.expiresAtTurn}`,
-        ]
-          .filter(Boolean)
-          .join(" · ")}
-      </p>
       {offer.own ? (
         <p className="text-xs text-muted">This is your offer.</p>
       ) : takers.length === 0 ? (
@@ -135,13 +161,13 @@ export function SupplyOfferRow({
             type="button"
             disabled={busy || !corpId}
             onClick={() => void take()}
-            className="inline-flex h-7 items-center rounded-md border border-primary bg-primary px-2.5 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex h-8 items-center rounded-md border border-primary bg-primary px-3 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50"
           >
             {busy ? "Taking..." : "Take offer"}
           </button>
           <Link
             href={`/corporation/${corpId}?tab=commodities#supply-agreements`}
-            className="inline-flex h-7 items-center rounded-md border border-card-border px-2.5 text-xs font-medium text-foreground hover:bg-card-elevated"
+            className="inline-flex h-8 items-center rounded-md border border-card-border px-3 text-xs font-medium text-foreground hover:bg-card-elevated"
           >
             Negotiate
           </Link>

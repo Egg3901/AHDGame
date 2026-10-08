@@ -454,6 +454,19 @@ export function aggregateByCountry(
   return byCountry;
 }
 
+/** World total of a per-state household demand map, per commodity. */
+export function sumHouseholdDemand(
+  byState: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>
+): Map<CommodityType, number> {
+  const totals = new Map<CommodityType, number>();
+  for (const contribution of byState.values()) {
+    for (const [commodity, units] of contribution) {
+      totals.set(commodity, (totals.get(commodity) ?? 0) + units);
+    }
+  }
+  return totals;
+}
+
 export interface GovernmentDemandInputs {
   federalBudgets: FederalBudget[];
   ledgerBasePrices: Record<CommodityType, number>;
@@ -470,13 +483,23 @@ export interface GovernmentDemandInputs {
    * (legacy worlds) leaves demand uncapped.
    */
   priorGlobalSupply?: Map<CommodityType, number>;
+  /**
+   * Household final demand already booked this turn, per commodity. Households
+   * and governments are buyers of the same finished goods, so they share ONE
+   * ceiling of GOVERNMENT_DEMAND_SUPPLY_CAP x prior supply instead of each
+   * getting their own: with two independent 1.5x caps a saturated market read
+   * 3x its supply (healthcare services, entertainment) and its supply/demand
+   * ratio could never rise above a third however much capacity was built.
+   * Households are served first; government gets the room that is left.
+   */
+  householdDemand?: ReadonlyMap<CommodityType, number>;
   /** The era calibration applied after every leg; the cap bounds calibrated demand. */
   demandCalibration?: (commodity: CommodityType) => number;
 }
 
 /**
  * Government purchases of a commodity may not exceed this multiple of last
- * turn's world supply. Health and defense budgets were bought as commodity
+ * turn's world supply, less whatever households already take of it. Health and defense budgets were bought as commodity
  * demand with no bound, so in the 1991 world health care ran at 10% of demand
  * met and ordnance at 15%, pinning both near three times their base price.
  * A government cannot buy what was never produced: like households, demand
@@ -509,6 +532,7 @@ export function applyGovernmentDemand(
     statesByCountry,
     stateToCountry,
     priorGlobalSupply,
+    householdDemand,
     demandCalibration,
   } = inputs;
   const turnsPerYear = inputs.turnsPerYear ?? 48;
@@ -541,7 +565,8 @@ export function applyGovernmentDemand(
     purchases,
     priorGlobalSupply,
     demandCalibration,
-    truncated
+    truncated,
+    householdDemand
   );
   for (const purchase of purchases) {
     const { commodity, cid, regional } = purchase;
@@ -571,7 +596,8 @@ export function applyGovernmentDemand(
 /**
  * Per-commodity scale factor that holds total government purchases to
  * GOVERNMENT_DEMAND_SUPPLY_CAP x last turn's world supply (in calibrated
- * units). Every government keeps its share; only the total is cut. Commodities
+ * units) minus the household demand already booked against that same ceiling.
+ * Every government keeps its share; only the total is cut. Commodities
  * with no recorded supply are left unscaled, as for households. The removed
  * units are added to `truncated` so latent-shortage signals still see them.
  */
@@ -579,7 +605,8 @@ export function governmentSupplyCapFactors(
   purchases: ReadonlyArray<{ commodity: CommodityType; units: number }>,
   priorGlobalSupply: Map<CommodityType, number> | undefined,
   demandCalibration: ((commodity: CommodityType) => number) | undefined,
-  truncated?: Map<CommodityType, number>
+  truncated?: Map<CommodityType, number>,
+  householdDemand?: ReadonlyMap<CommodityType, number>
 ): Map<CommodityType, number> {
   const factors = new Map<CommodityType, number>();
   if (!priorGlobalSupply) return factors;
@@ -591,7 +618,10 @@ export function governmentSupplyCapFactors(
     const supply = priorGlobalSupply.get(commodity);
     if (!(typeof supply === "number" && supply > 0)) continue;
     const calibration = calibrationMultiplier(demandCalibration, commodity);
-    const cap = (supply * GOVERNMENT_DEMAND_SUPPLY_CAP) / calibration;
+    const cap = Math.max(
+      0,
+      (supply * GOVERNMENT_DEMAND_SUPPLY_CAP) / calibration - (householdDemand?.get(commodity) ?? 0)
+    );
     if (total <= cap) continue;
     factors.set(commodity, cap / total);
     if (truncated)

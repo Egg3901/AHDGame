@@ -7,6 +7,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { PlayerSelector } from "@/components/PlayerSelector";
 import { CentralBankSection } from "./CentralBankSection";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { widenedCapSentence, type RateLimits } from "@/lib/centralBank/rateLimits";
 
 interface BoardSeat {
   seatId: string;
@@ -73,6 +74,7 @@ interface GovernanceState {
   nextDeadline: { turn: number; kind: string } | null;
   normalizedRateChoices: number[];
   primeRateOnGrid: number;
+  rateLimits?: RateLimits;
 }
 
 interface CommitteeState {
@@ -289,6 +291,14 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
               (turnsToTermEnd != null
                 ? ` The budget resets when the term ends in ${turnsToTermEnd} turn${turnsToTermEnd === 1 ? "" : "s"}.`
                 : " The budget resets when the term ends.")}
+            {state.governance?.rateLimits && (
+              <span className="mt-1 block">
+                Allowed range per motion: hike up to +
+                {state.governance.rateLimits.maxHike.toFixed(2)}pp, cut up to -
+                {state.governance.rateLimits.maxCut.toFixed(2)}pp.{" "}
+                {widenedCapSentence(state.governance.rateLimits)}
+              </span>
+            )}
           </span>
         }
       >

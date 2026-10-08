@@ -12,6 +12,7 @@ import {
 import { withCorporationSettlementLock } from "@/lib/corporations/settlementLock";
 import { executeCorporationBondDefaultDissolution } from "@/lib/bonds/executeCorporationBondDefaultDissolution";
 import { corporateCashArrearsAnchor } from "@/lib/bonds/corporateCredit";
+import { isMateriallyInsolvent } from "./nppInsolvencyRules";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 
@@ -170,7 +171,10 @@ export async function processNppInsolventCorpDissolution(
     effectiveAnchorById.set(idStr, effectiveAnchor);
 
     const stamped = corp.nppInsolventSinceTurn;
-    if (effectiveAnchor < 0) {
+    // Immaterial dust against a profitable corp does not start the clock, and
+    // clears a stamp it already set.
+    const clockRuns = isMateriallyInsolvent(effectiveAnchor, corp.earningsHistory?.at(-1));
+    if (clockRuns) {
       const since = stamped ?? turn;
       insolventSinceById.set(idStr, since);
       if (stamped == null) {
@@ -213,11 +217,7 @@ export async function processNppInsolventCorpDissolution(
       // Trigger 2: persistently insolvent past the grace window and still
       // effectively cashless this turn.
       const since = insolventSinceById.get(idStr);
-      if (
-        since != null &&
-        turn - since >= PERSISTENT_INSOLVENCY_GRACE_TURNS &&
-        (effectiveAnchorById.get(idStr) ?? 0) < 0
-      ) {
+      if (since != null && turn - since >= PERSISTENT_INSOLVENCY_GRACE_TURNS) {
         return true;
       }
       // Trigger 3: a bond default the auto-resolver could never cure.

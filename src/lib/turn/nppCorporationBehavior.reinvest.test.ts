@@ -239,16 +239,68 @@ describe("NPP capacity reinvestment — a selling-out, fully-utilized plant grow
     expect(JSON.stringify(write.update)).not.toContain('"unitsOrdered":5,');
   });
 
-  it("does not clog growth slots with replacement-only orders", () => {
+  it("does not add replacement slices on top of a full pair of pending orders", () => {
     const existing = Array.from({ length: 2 }, (_, index) => ({
       unitsOrdered: 5,
       costPaidAnchor: 1_000,
       startTurn: TURN - index,
       onlineTurn: TURN + 10 + index,
     }));
+    const s = sector();
+    const decision = decide(corp(), [s], [pool()]);
+    const withPending = decide(corp(), [{ ...s, buildQueue: existing }], [pool()]);
+
+    // Replacement is dropped at depth 2, so the order is growth alone.
+    const order = pushedOrder(queueWrites(withPending)[0]);
+    const growthOnly = Math.floor((s.producedUnits ?? 0) * NPP_GROWTH_MAX_STEP_OF_RUN);
+    expect(order.unitsOrdered).toBe(growthOnly);
+    expect(pushedOrder(queueWrites(decision)[0]).unitsOrdered).toBeGreaterThan(growthOnly);
+  });
+
+  it("still grows a healthy plant whose two pending orders are replacement-sized", () => {
+    const existing = Array.from({ length: 2 }, (_, index) => ({
+      unitsOrdered: 0.5,
+      costPaidAnchor: 100,
+      startTurn: TURN - index,
+      onlineTurn: TURN + 20 + index,
+    }));
     const decision = decide(corp(), [sector({ buildQueue: existing })], [pool()]);
 
-    expect(queueWrites(decision)).toHaveLength(0);
+    const writes = queueWrites(decision);
+    expect(writes).toHaveLength(1);
+    // Growth is trimmed by the in-flight units already pending, not refused.
+    const step = Math.floor(1_000 * NPP_GROWTH_MAX_STEP_OF_RUN);
+    expect(pushedOrder(writes[0]).unitsOrdered).toBe(step);
+  });
+
+  it("caps capacity in flight at two growth steps, however many orders carry it", () => {
+    const step = Math.floor(1_000 * NPP_GROWTH_MAX_STEP_OF_RUN);
+    const order = (units: number, index: number) => ({
+      unitsOrdered: units,
+      costPaidAnchor: 1_000,
+      startTurn: TURN - index,
+      onlineTurn: TURN + 20 + index,
+    });
+
+    // One full step pending: a second full step still fits (the old two-slot rule).
+    const one = decide(corp(), [sector({ buildQueue: [order(step, 1)] })], [pool()]);
+    expect(pushedOrder(queueWrites(one)[0]).unitsOrdered).toBeGreaterThanOrEqual(step);
+
+    // Two full steps pending: nothing left to grow into.
+    const two = decide(
+      corp(),
+      [sector({ buildQueue: [order(step, 1), order(step, 2)] })],
+      [pool()]
+    );
+    expect(queueWrites(two)).toHaveLength(0);
+
+    // Three small orders carrying two steps between them hit the same ceiling.
+    const three = decide(
+      corp(),
+      [sector({ buildQueue: [order(step, 1), order(step - 1, 2), order(1, 3)] })],
+      [pool()]
+    );
+    expect(queueWrites(three)).toHaveLength(0);
   });
 
   it("expands several owned plants in one turn, as a player would", () => {

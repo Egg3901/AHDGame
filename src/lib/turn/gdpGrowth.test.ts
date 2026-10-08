@@ -118,7 +118,7 @@ describe("computeRealizedRevenueGrowthRate (plants mode)", () => {
   });
 
   it("clamps an explosive delta to the sector-signal ceiling before the EMA", () => {
-    expect(computeRealizedRevenueGrowthRate(2000, 1000, 1, 48)).toBe(SECTOR_SIGNAL_MAX);
+    expect(computeRealizedRevenueGrowthRate(1010, 1000, 1, 48)).toBe(SECTOR_SIGNAL_MAX);
   });
 
   it("clamps a collapse to the sector-signal floor before the EMA", () => {
@@ -315,7 +315,7 @@ describe("computeTrailingRevenueGrowthRate", () => {
   });
 
   it("clamps to the shared signal bounds", () => {
-    expect(computeTrailingRevenueGrowthRate(3000, { value: 1000, spanTurns: 48 }, 48)).toBe(
+    expect(computeTrailingRevenueGrowthRate(1400, { value: 1000, spanTurns: 48 }, 48)).toBe(
       SECTOR_SIGNAL_MAX
     );
     expect(computeTrailingRevenueGrowthRate(100, { value: 1000, spanTurns: 48 }, 48)).toBe(

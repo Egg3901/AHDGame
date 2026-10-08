@@ -883,8 +883,18 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
     const countryId = opts.countryId ?? "US";
     setupCollection("federalBudget", [
       countryId === "UK"
-        ? { _id: "UK", countryId: "UK", taxRates: { salesTax: 20 } }
-        : { _id: "federal", countryId: "US", taxRates: { salesTax: 0 } },
+        ? {
+            _id: "UK",
+            countryId: "UK",
+            taxRates: { salesTax: 20 },
+            economicFactors: { inflationRate: 0 },
+          }
+        : {
+            _id: "federal",
+            countryId: "US",
+            taxRates: { salesTax: 0 },
+            economicFactors: { inflationRate: 0 },
+          },
     ]);
     setupCollection("stateBudgets", [
       { _id: "s1", taxRates: { salesTax: countryId === "UK" ? 0 : 6 } },
@@ -966,10 +976,10 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
     );
   });
 
-  it("keeps a revenue explosion inside the node bounds through the EMA", async () => {
+  it("keeps a revenue surge inside the node bounds through the EMA", async () => {
     seedWorld({
       mode: "plants",
-      revenue: 100_000,
+      revenue: 1010,
       currentGrowthRate: 3,
       prevRealized: 1000,
       prevRealizedTurn: 9,
@@ -988,6 +998,20 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
     const value = metricOps[0].updateOne.update.$set["economic.sectorGrowth.value"];
     expect(value).toBeGreaterThan(2); // the boom is visible…
     expect(value).toBeLessThanOrEqual(15); // …but bounded by the node ceiling
+  });
+
+  it("reads a founding-window revenue ramp from a near-empty base as neutral, not a boom", async () => {
+    seedWorld({
+      mode: "plants",
+      revenue: 100_000,
+      currentGrowthRate: 3,
+      prevRealized: 1000,
+      prevRealizedTurn: 9,
+    });
+    const { metricOps } = captureOps();
+    await runMetricEngine(db as unknown as Db, 10);
+    const value = metricOps[0].updateOne.update.$set["economic.sectorGrowth.value"];
+    expect(value).toBeCloseTo(0.5, 6);
   });
 
   it("persists the host-currency snapshot + unit tag under plants (ticket #1084)", async () => {

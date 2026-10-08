@@ -662,6 +662,8 @@ export default function CentralBankClient({ countryId, apiBasePath, members }: P
                 committeeSeated={data.committeeSeated ?? false}
                 committeeDead={data.committeeDead ?? false}
                 onOpenCommittee={() => setActiveTab("committee")}
+                inflationRate={data.rateInflation}
+                targetInflation={data.rateTargetInflation}
                 lastRateChangeTurn={data.lastRateChangeTurn}
                 currentTurn={data.currentTurn}
                 bankApiBasePath={bankApiBasePath}
