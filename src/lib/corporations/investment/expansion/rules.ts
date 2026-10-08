@@ -4,6 +4,25 @@
  * profitable operating scenario; missing figures leave the choice manual.
  */
 import { forecastSectorInvestment, type InvestmentForecastInput } from "../rules";
+import { PRICE_REALIZATION_MAX, PRICE_REALIZATION_MIN } from "@/lib/market/priceRealization";
+
+/**
+ * Clearing's realization bounds cover the sale-price drop as scarcity eases.
+ * Stress physical input prices in the opposite direction, leaving wages and
+ * other observed costs unchanged. Missing input detail stresses all costs.
+ */
+export function stressExpansionForecast(input: InvestmentForecastInput): InvestmentForecastInput {
+  const saleFactor = PRICE_REALIZATION_MIN / PRICE_REALIZATION_MAX;
+  const inputs = Math.max(0, input.inputsCostDailyAnchor ?? input.operatingCostDailyAnchor);
+  return {
+    ...input,
+    revenueDailyAnchor: input.revenueDailyAnchor * saleFactor,
+    policyCreditDailyAnchor:
+      Math.max(0, input.policyCreditDailyAnchor ?? 0) * saleFactor +
+      Math.min(0, input.policyCreditDailyAnchor ?? 0),
+    operatingCostDailyAnchor: input.operatingCostDailyAnchor + inputs * (1 / saleFactor - 1),
+  };
+}
 
 /** Every output must have measured buyers; latent demand is excluded by the caller. */
 export function sellableExpansionUnits(legs: readonly { weight: number; gap: number }[]): number {
@@ -68,9 +87,9 @@ export function recommendSectorExpansion(input: {
     reason,
     reserveAnchor: input.operatingReserveAnchor,
   });
-  const f = input.forecast;
+  const observed = input.forecast;
   if (
-    !f ||
+    !observed ||
     input.operatingReserveAnchor == null ||
     input.measuredDemandUnits == null ||
     ![
@@ -86,6 +105,7 @@ export function recommendSectorExpansion(input: {
   )
     return empty("history");
   if (input.constrained) return empty("constraints");
+  const f = stressExpansionForecast(observed);
   const room = Math.max(
     0,
     Math.min(input.shareHeadroomUnits, input.measuredDemandUnits) - Math.max(0, input.queuedUnits)

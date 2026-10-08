@@ -312,7 +312,7 @@ export default function BuildCapacityDialog({
             {t("currentFacilities", {
               count: ownedFacilities,
               facilities: ownedFacilities === 1 ? site : sites,
-              units: plants.capacityUnits,
+              units: plants.capacityUnits ?? 0,
             })}
           </p>
         </div>

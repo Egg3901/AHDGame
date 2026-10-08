@@ -141,6 +141,8 @@ export interface InvestmentForecastInput {
   demandGapUnits: number;
   revenueDailyAnchor: number;
   operatingCostDailyAnchor: number;
+  /** Price-sensitive physical inputs, within operatingCostDailyAnchor. */
+  inputsCostDailyAnchor?: number;
   /** Revenue-linked policy credits or charges, excluded from operating costs above. */
   policyCreditDailyAnchor?: number;
   overheadDailyAnchor: number;

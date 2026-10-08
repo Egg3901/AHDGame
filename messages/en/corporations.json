@@ -159,14 +159,14 @@
       "loanPledgeHelp": "Cancellation refunds and sale proceeds repay secured principal first. Default can lead to foreclosure.",
       "contributionShortfall": "Available cash does not cover your contribution.",
       "loanStartsAfterApproval": "The build starts after the lender approves and delivers funding.",
-      "sizingReserve": "Keeps at least {amount} for company running costs, plus one turn of costs for the new capacity. Uses current prices and measured demand; queued builds are deducted.",
+      "sizingReserve": "Keeps at least {amount} for company running costs, plus one turn of costs for the new capacity. Checks lower sale prices and higher input costs; uses current measured demand after queued builds.",
       "sizingFinance": "Automatic sizing uses a cash budget. Review loan repayments and choose the financed quantity manually.",
       "measuredDemandTitle": "Buyer demand unavailable",
       "measuredDemandUnavailable": "Measured demand for every output is unavailable. Choose a quantity manually after checking the market.",
       "sizingReasons": {
         "history": "Automatic sizing is unavailable without current operating figures and a running-cost budget. Outstanding debt needs a manual repayment budget.",
         "constraints": "Resolve staffing, parked capacity, delivery or production limits before using automatic sizing.",
-        "unprofitable": "At current sales and costs, expansion does not produce positive cash in the operating scenario. No quantity is recommended.",
+        "unprofitable": "Expansion does not produce positive cash when sale prices fall and input costs rise in the operating scenario. No quantity is recommended.",
         "cash": "There is not enough cash to build one facility while retaining the operating reserve.",
         "demand": "Measured buyers and queued builds leave room for less than one additional facility."
       },

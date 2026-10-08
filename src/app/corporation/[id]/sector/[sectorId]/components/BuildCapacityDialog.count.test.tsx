@@ -128,6 +128,19 @@ describe("BuildCapacityDialog count control", () => {
     ).toBeTruthy();
   });
 
+  it("does not offer Match demand for a build that fails the lower-price scenario", () => {
+    renderDialog(vi.fn(), {
+      ...plants,
+      pnl: { ...plants.pnl, labourAnchor: 6000 },
+    });
+    expect(
+      (screen.getByRole("button", { name: "Match demand" }) as HTMLButtonElement).disabled
+    ).toBe(true);
+    expect(
+      screen.getByText(/Expansion does not produce positive cash when sale prices fall/)
+    ).toBeTruthy();
+  });
+
   it("keeps a funded build disabled until the loan pledge is reviewed", async () => {
     vi.stubGlobal(
       "fetch",

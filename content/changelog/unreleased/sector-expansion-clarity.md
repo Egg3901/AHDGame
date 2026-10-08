@@ -11,7 +11,7 @@ areas: [frontend]
 
 ## What changed
 
-- Match demand sizes whole-facility builds using measured buyers for every output, queued capacity, current cash margins and an operating reserve. It explains when a recommendation is unavailable.
+- Match demand sizes whole-facility builds using current measured buyers for every output, queued capacity and an operating reserve. It checks that cash remains positive under lower sale prices and higher input costs, and explains when a recommendation is unavailable.
 - See added capacity, completion time and staff needs together. Open the price breakdown when you need its modifiers.
 - The build total and action stay visible while the details scroll on smaller screens.
 - Bank financing now has clear input fields and separate amounts for principal, the withheld fee, bank proceeds, your cash contribution and remaining cash.

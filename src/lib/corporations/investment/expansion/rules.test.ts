@@ -4,6 +4,7 @@ import {
   expansionOperatingReserve,
   recommendSectorExpansion,
   sellableExpansionUnits,
+  stressExpansionForecast,
 } from "./rules";
 const forecast: InvestmentForecastInput = {
   units: 100,
@@ -17,8 +18,9 @@ const forecast: InvestmentForecastInput = {
   producedUnits: 1000,
   soldUnits: 1000,
   demandGapUnits: 10000,
-  revenueDailyAnchor: 10000,
+  revenueDailyAnchor: 20000,
   operatingCostDailyAnchor: 4800,
+  inputsCostDailyAnchor: 0,
   overheadDailyAnchor: 0,
   upkeepDailyAnchor: 0,
   taxRatePercent: 0,
@@ -73,8 +75,33 @@ describe("automatic expansion sizing", () => {
     expect(cashAfterBuild).toBeGreaterThanOrEqual(
       input.operatingReserveAnchor + fullNewRunningCosts
     );
-    const nextTurn = forecastSectorInvestment({ ...forecast, units }, [1])![0];
+    const nextTurn = forecastSectorInvestment(
+      { ...stressExpansionForecast(forecast), units },
+      [1]
+    )![0];
     expect(nextTurn.availableCashAnchor).toBeGreaterThan(0);
+  });
+  it("refuses a profitable shortage-price build that loses cash when prices normalize", () => {
+    const fragile = { ...forecast, revenueDailyAnchor: 10000 };
+    expect(forecastSectorInvestment(fragile, [1])![0].availableCashAnchor).toBeGreaterThan(0);
+    const result = recommendSectorExpansion({ ...input, forecast: fragile });
+    expect(result.reason).toBe("unprofitable");
+    expect(result.demandFacilities).toBe(0);
+  });
+  it("reserves the stressed input bill and keeps next-turn cash positive under both price moves", () => {
+    const priceSensitive = { ...forecast, inputsCostDailyAnchor: 2400 };
+    const result = recommendSectorExpansion({ ...input, forecast: priceSensitive });
+    expect(result.demandFacilities).toBe(5);
+    const stressed = stressExpansionForecast(priceSensitive);
+    const units = result.demandFacilities * input.unitsPerFacility;
+    const running =
+      (units * stressed.operatingCostDailyAnchor) / stressed.producedUnits / stressed.turnsPerDay;
+    expect(
+      input.cashAnchor - units * stressed.chargedPerUnitAnchor - running
+    ).toBeGreaterThanOrEqual(input.operatingReserveAnchor);
+    expect(
+      forecastSectorInvestment({ ...stressed, units }, [1])![0].availableCashAnchor
+    ).toBeGreaterThan(0);
   });
   it("accounts for output above nominal capacity when matching the buyer limit", () => {
     const result = recommendSectorExpansion({

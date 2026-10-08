@@ -1158,7 +1158,7 @@ export function buildSectorPlantsSection(args: {
   /** True buyers' room (see SectorPlantsSection.demandGapUnits). Optional so
    *  test fixtures predating the field keep compiling; defaults to 0. */
   demandGapUnits?: number;
-  measuredDemandGapUnits?: number;
+  measuredDemandGapUnits?: number | null;
   /** Owned capacity in this (state, sectorType) cell, every producer, units/day. */
   ownedCellCapacityUnits?: number;
   /** Strategy suggestion when the plant's valuable output is oversupplied (computeRetoolHint). */

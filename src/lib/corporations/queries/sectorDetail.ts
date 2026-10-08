@@ -33,6 +33,8 @@ import type {
   UnownedSector,
   Subsidy,
   Union,
+  BankLoan,
+  Bond,
 } from "@/lib/db/types";
 import {
   getTariffBlendWeights,
@@ -330,6 +332,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
                 currentGrowthCost: 1,
                 "plantsPnl.totalCost": 1,
                 "plantsPnl.turn": 1,
+                "plantsPnl.policyCredit": 1,
                 operatingCapacityUnits: 1,
                 capitalStock: 1,
                 buildQueue: 1,
@@ -864,7 +867,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       // embargoed and untraded supply the sector can neither buy from nor lose
       // a sale to, so a sector in a real shortage was told it was oversupplied
       // (ticket #1077). Falls back to the aggregate when no book is persisted.
-      const reachableBooks = await loadReachableBooks(db);
+      const reachableBooks = await loadReachableBooks(db, currentTurn);
       const priceDocByCommodity = new Map(commodityPrices.map((cp) => [cp.commodity, cp]));
       const demandGapUnits = sectorDemandGapUnits(effectiveSupply, (gapCommodity) => {
         // Demand audit step 1: restore the 1.5x-cap-hidden demand to the
@@ -896,46 +899,56 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           ),
         0
       );
-      const measuredDemandGapUnits = Math.max(
-        0,
-        sellableExpansionUnits(
-          Object.entries(effectiveSupply)
-            .filter(([, rate]) => (rate ?? 0) > 0)
-            .map(([commodity]) => {
-              const key = commodity as CommodityType;
-              return {
-                weight: commodityMixWeight(effectiveSupply, COMMODITY_BASE_PRICES, key),
-                gap: (
-                  isStateScopedCommodity(key)
-                    ? stateBalances.has(key)
-                    : !!bookFor(reachableBooks, sectorCountryId, key)
-                )
-                  ? commodityDemandGap({
-                      commodity: key,
-                      stateBalance: stateBalances.get(key),
-                      reachableBook: bookFor(reachableBooks, sectorCountryId, key),
-                      globalBalance: globalBalances.get(key),
-                      latentDemandTopUp: 0,
-                    })
-                  : 0,
-              };
-            })
-        ) - queuedMarketUnits
-      );
+      const currentDemand = Object.entries(effectiveSupply)
+        .filter(([, rate]) => (rate ?? 0) > 0)
+        .every(([commodity]) => {
+          const key = commodity as CommodityType;
+          return isStateScopedCommodity(key)
+            ? priceDocByCommodity.get(key)?.turn === currentTurn
+            : !!bookFor(reachableBooks, sectorCountryId, key);
+        });
+      const measuredDemandGapUnits = currentDemand
+        ? Math.max(
+            0,
+            sellableExpansionUnits(
+              Object.entries(effectiveSupply)
+                .filter(([, rate]) => (rate ?? 0) > 0)
+                .map(([commodity]) => {
+                  const key = commodity as CommodityType;
+                  return {
+                    weight: commodityMixWeight(effectiveSupply, COMMODITY_BASE_PRICES, key),
+                    gap: (
+                      isStateScopedCommodity(key)
+                        ? stateBalances.has(key)
+                        : !!bookFor(reachableBooks, sectorCountryId, key)
+                    )
+                      ? commodityDemandGap({
+                          commodity: key,
+                          stateBalance: stateBalances.get(key),
+                          reachableBook: bookFor(reachableBooks, sectorCountryId, key),
+                          globalBalance: globalBalances.get(key),
+                          latentDemandTopUp: 0,
+                        })
+                      : 0,
+                  };
+                })
+            ) - queuedMarketUnits
+          )
+        : null;
       // Existing debt needs a repayment budget, which this operating scenario
       // does not model. Do not offer automatic sizing for an indebted company.
       const [activeLoan, activeBond] = await Promise.all([
-        db.collection("bankLoans").findOne(
+        db.collection<BankLoan>("bankLoans").findOne(
           {
             borrowerType: "corporation",
             borrowerId: corporation._id,
-            status: { $in: ["current", "arrears"] },
-            outstanding: { $gt: 0 },
+            status: { $in: ["pending", "current", "arrears", "defaulted"] },
+            $or: [{ outstanding: { $gt: 0 } }, { principal: { $gt: 0 } }],
           },
           { projection: { _id: 1 } }
         ),
         db
-          .collection("bonds")
+          .collection<Bond>("bonds")
           .findOne({ corporationId: corporation._id, matured: false }, { projection: { _id: 1 } }),
       ]);
       const unsettled =
@@ -949,31 +962,34 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         Object.values(corporation.federalTaxArrearsAnchorByCountry ?? {}).some(
           (value) => value > 0
         );
-      const operatingReserveAnchor = unsettled
-        ? null
-        : expansionOperatingReserve({
-            overheadPerTurnAnchor:
-              corpLiquidCapitalToAnchor(
-                corpLevelCosts + (corporation.rdBudget ?? 0),
-                corporation,
-                corporationFxRate
-              ) / TURNS_PER_DAY,
-            sectors: allCorpSectors.map((s) => ({
-              current: s.plantsPnl?.turn === currentTurn,
-              capacityUnits: s.operatingCapacityUnits ?? s.capitalStock ?? 0,
-              queuedUnits: (s.buildQueue ?? []).reduce(
-                (sum, order) =>
-                  sum + order.unitsOrdered * (1 - deliveredFraction(order, currentTurn)),
-                0
-              ),
-              costPerTurnAnchor:
-                readCorpEconomicAnchor(
-                  (s.plantsPnl?.totalCost ?? NaN) + Math.max(0, s.freightBillingCharge ?? 0),
-                  resolveSectorHostCurrencyCode(s, corporation),
-                  fxRateForSectorHostFromMap(s, corporation, siblingFxByCurrency)
+      const operatingReserveAnchor =
+        unsettled || !enginePnl
+          ? null
+          : expansionOperatingReserve({
+              overheadPerTurnAnchor:
+                corpLiquidCapitalToAnchor(
+                  corpLevelCosts + (corporation.rdBudget ?? 0),
+                  corporation,
+                  corporationFxRate
                 ) / TURNS_PER_DAY,
-            })),
-          });
+              sectors: allCorpSectors.map((s) => ({
+                current: s.plantsPnl?.turn === currentTurn,
+                capacityUnits: s.operatingCapacityUnits ?? s.capitalStock ?? 0,
+                queuedUnits: (s.buildQueue ?? []).reduce(
+                  (sum, order) =>
+                    sum + order.unitsOrdered * (1 - deliveredFraction(order, currentTurn)),
+                  0
+                ),
+                costPerTurnAnchor:
+                  readCorpEconomicAnchor(
+                    (s.plantsPnl?.totalCost ?? NaN) +
+                      Math.max(0, s.plantsPnl?.policyCredit ?? 0) +
+                      Math.max(0, s.freightBillingCharge ?? 0),
+                    resolveSectorHostCurrencyCode(s, corporation),
+                    fxRateForSectorHostFromMap(s, corporation, siblingFxByCurrency)
+                  ) / TURNS_PER_DAY,
+              })),
+            });
 
       // Ticket 1370 follow-up: when the plant is held back because the
       // valuable part of its output is oversupplied, name the strategy whose

@@ -33,6 +33,7 @@ export function investmentForecastInput(
           pnl.otherOperatingAnchor +
           pnl.growthAndBuildAnchor +
           (assumptions.freightNetCostDailyAnchor ?? 0),
+        inputsCostDailyAnchor: pnl.inputsAnchor,
         policyCreditDailyAnchor: pnl.policyAnchor ?? 0,
         overheadDailyAnchor: assumptions.overheadDailyAnchor,
         upkeepDailyAnchor: pnl.upkeepAnchor,
