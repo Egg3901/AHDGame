@@ -146,6 +146,13 @@ export interface PhysicalCostsInput {
    * anchor, which must keep settling exits at cash actually spent.
    */
   npvBoostMultiplier?: number;
+  /**
+   * Canonical freight billing, net of the sector's own haul income (credit
+   * less charge, ₳/turn). It rides the corp's costs and revenue rails outside
+   * the physical P&L, so the going-concern value must take it here or NPV and
+   * the capital book value a sector on a profit its corp never earns.
+   */
+  freightNetHourly?: number;
 }
 
 export interface PhysicalCostsResult {
@@ -200,6 +207,7 @@ export function decomposePhysicalCosts(input: PhysicalCostsInput): PhysicalCosts
     capitalEnabled,
     prevCapitalBookAnchor,
     npvBoostMultiplier = 1,
+    freightNetHourly = 0,
   } = input;
 
   // ─── P3.5: physical cost decomposition (plants only) ──────────────────────
@@ -369,7 +377,8 @@ export function decomposePhysicalCosts(input: PhysicalCostsInput): PhysicalCosts
   // NPV on a yearly basis: 1 game year = TURNS_PER_YEAR turns (48h).
   // The stock-market boost scales the capitalized value, never the cash
   // profit above: profit is money, NPV is what the market pays for it.
-  const yearlyProfit = hourlyProfit * TURNS_PER_YEAR;
+  const yearlyProfit =
+    (hourlyProfit + (Number.isFinite(freightNetHourly) ? freightNetHourly : 0)) * TURNS_PER_YEAR;
   const unboostedSectorNPV =
     yearlyProfit > 0 ? Math.round(yearlyProfit / NPV_ANNUAL_DISCOUNT_RATE) : 0;
   const sectorNPV =
