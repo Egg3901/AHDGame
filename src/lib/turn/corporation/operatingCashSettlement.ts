@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Db, ObjectId } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
@@ -63,6 +64,9 @@ function readOperatingCashQuote(
  * whole phase as slow as the sum of every corporation's chain.
  */
 const OPERATING_CASH_LANES = 8;
+
+/** Corporations per batched net receipt; bounds one journal document. */
+const NET_BATCH_SIZE = 64;
 
 /**
  * Settle modeled gross operating receipts before federal withholding. These
@@ -199,6 +203,54 @@ async function settleCorporateOperatingCashBatched(
     return id ? { countryId: country, _id: id } : { countryId: country };
   };
 
+  // A fresh quote from this turn's snapshot; a resumed receipt uses the quote
+  // frozen in its journal instead.
+  const freshQuote = (snapshot: CorpSnapshot): OperatingCashQuote => {
+    const netLocal = snapshot.operatingCashIncomeLocal;
+    const sourceCurrency = snapshot.operatingCashCurrency;
+    const sourceRate = snapshot.operatingCashLocalPerAnchor;
+    if (
+      !Number.isFinite(netLocal) ||
+      !sourceCurrency ||
+      !Number.isFinite(sourceRate) ||
+      !(sourceRate! > 0)
+    ) {
+      throw new Error(`Missing frozen operating cash quote for corporation ${snapshot.corpId}`);
+    }
+    const taxByCountryAnchor = [
+      ...(snapshot.federalTaxByCountryAnchor ?? new Map<string, number>()).entries(),
+    ];
+    const taxAnchor = taxByCountryAnchor.reduce((sum, [, amount]) => sum + amount, 0);
+    const taxDestinations = taxByCountryAnchor
+      .filter(([, amount]) => amount > 0)
+      .map(([country, amountAnchor]) => {
+        const treasuryCurrency =
+          context.treasuryCurrencies.get(country) ??
+          COUNTRY_CURRENCY_MAP[country as CountryId] ??
+          snapshotTreasuryCurrency({ countryId: country as CountryId });
+        const treasuryRate = treasuryAnchorValuation({
+          countryId: country,
+          currencyCode: treasuryCurrency,
+          preset: context.preset,
+          observedRate: context.rates.get(treasuryCurrency),
+        }).anchorRate;
+        return {
+          country,
+          amountAnchor,
+          currencyCode: treasuryCurrency,
+          localPerAnchor: treasuryRate,
+        };
+      });
+    return {
+      netLocal: netLocal!,
+      grossLocal: netLocal! + taxAnchor * sourceRate!,
+      sourceCurrency: sourceCurrency as CurrencyCode,
+      sourceLocalPerAnchor: sourceRate!,
+      taxByCountryAnchor,
+      taxDestinations,
+    } satisfies OperatingCashQuote;
+  };
+
   const settleSnapshot = async (snapshot: CorpSnapshot): Promise<void> => {
     const baseKey = `corp-operating-cash:${turn}:${snapshot.corpId.toString()}`;
 
@@ -240,53 +292,7 @@ async function settleCorporateOperatingCashBatched(
       }
       return;
     }
-    const quote =
-      savedQuote ??
-      (() => {
-        const netLocal = snapshot.operatingCashIncomeLocal;
-        const sourceCurrency = snapshot.operatingCashCurrency;
-        const sourceRate = snapshot.operatingCashLocalPerAnchor;
-        if (
-          !Number.isFinite(netLocal) ||
-          !sourceCurrency ||
-          !Number.isFinite(sourceRate) ||
-          !(sourceRate! > 0)
-        ) {
-          throw new Error(`Missing frozen operating cash quote for corporation ${snapshot.corpId}`);
-        }
-        const taxByCountryAnchor = [
-          ...(snapshot.federalTaxByCountryAnchor ?? new Map<string, number>()).entries(),
-        ];
-        const taxAnchor = taxByCountryAnchor.reduce((sum, [, amount]) => sum + amount, 0);
-        const taxDestinations = taxByCountryAnchor
-          .filter(([, amount]) => amount > 0)
-          .map(([country, amountAnchor]) => {
-            const treasuryCurrency =
-              context.treasuryCurrencies.get(country) ??
-              COUNTRY_CURRENCY_MAP[country as CountryId] ??
-              snapshotTreasuryCurrency({ countryId: country as CountryId });
-            const treasuryRate = treasuryAnchorValuation({
-              countryId: country,
-              currencyCode: treasuryCurrency,
-              preset: context.preset,
-              observedRate: context.rates.get(treasuryCurrency),
-            }).anchorRate;
-            return {
-              country,
-              amountAnchor,
-              currencyCode: treasuryCurrency,
-              localPerAnchor: treasuryRate,
-            };
-          });
-        return {
-          netLocal: netLocal!,
-          grossLocal: netLocal! + taxAnchor * sourceRate!,
-          sourceCurrency: sourceCurrency as CurrencyCode,
-          sourceLocalPerAnchor: sourceRate!,
-          taxByCountryAnchor,
-          taxDestinations,
-        } satisfies OperatingCashQuote;
-      })();
+    const quote = savedQuote ?? freshQuote(snapshot);
     const {
       sourceCurrency,
       sourceLocalPerAnchor: sourceRate,
@@ -675,12 +681,181 @@ async function settleCorporateOperatingCashBatched(
     }
   };
 
+  // Solvent profitable corporations with no payables settle many at a time.
+  // Their receipt is credit-only (mint gross; credit the corporation its net
+  // and each Treasury its tax), so no leg can be refused, and corporations
+  // owing the same Treasuries can share one receipt. The batch key hashes its
+  // members; any batch already claimed this turn resumes first and fences its
+  // members out of new work, so a retried pass never settles a corporation
+  // twice. Everything else keeps its own receipts below.
+  const batchPrefix = `corp-operating-net-batch:${turn}:`;
+  const claimedBatches = await journals
+    .find({ _id: { $regex: `^${batchPrefix}` } }, { projection: { _id: 1, legs: 1 } })
+    .toArray();
+  const batchedCorpIds = new Set<string>();
+  for (const row of claimedBatches as unknown as {
+    _id: string;
+    legs?: { collection?: string; filter?: { _id?: unknown } }[];
+  }[]) {
+    for (const leg of row.legs ?? [])
+      if (leg.collection === "corporations" && leg.filter?._id !== undefined)
+        batchedCorpIds.add(String(leg.filter._id));
+  }
+  await runInLanes(
+    claimedBatches.map((row) => row._id),
+    lanes,
+    async (key) => {
+      const resumed = await treasuryLock.run(allTreasuryKeys, () => resumeSettlement(db, key));
+      if (resumed.status !== "applied" && resumed.status !== "replayed") {
+        throw new Error(resumed.error ?? `Corporate net operating batch ${key} is incomplete`);
+      }
+    }
+  );
+
+  const snapshotCount = new Map<string, number>();
+  for (const snapshot of snapshots) {
+    const id = snapshot.corpId.toString();
+    snapshotCount.set(id, (snapshotCount.get(id) ?? 0) + 1);
+  }
+  const batchable = new Map<string, { snapshot: CorpSnapshot; quote: OperatingCashQuote }[]>();
+  for (const snapshot of snapshots) {
+    const id = snapshot.corpId.toString();
+    if (snapshotCount.get(id) !== 1 || batchedCorpIds.has(id)) continue;
+    const baseKey = `corp-operating-cash:${turn}:${id}`;
+    if (
+      [baseKey, `${baseKey}:net`, `${baseKey}:gross`, `${baseKey}:tax`, `${baseKey}:arrears`].some(
+        (key) => existingKeys.has(key)
+      )
+    )
+      continue;
+    const corp = corporationById.get(id);
+    if (
+      Object.values(corp?.operatingCashArrearsByCurrency ?? {}).some((amount) => amount > 0) ||
+      Object.values(corp?.federalTaxArrearsAnchorByCountry ?? {}).some((amount) => amount > 0)
+    )
+      continue;
+    let quote: OperatingCashQuote;
+    try {
+      quote = freshQuote(snapshot);
+    } catch {
+      // The corporation's own receipts below report the missing quote.
+      continue;
+    }
+    const taxAnchor = quote.taxByCountryAnchor.reduce((sum, [, amount]) => sum + amount, 0);
+    const taxSourceLocal = taxAnchor * quote.sourceLocalPerAnchor;
+    if (
+      !(quote.grossLocal > 0) ||
+      !(taxSourceLocal > 0) ||
+      !(quote.netLocal >= 0) ||
+      !((cashByCorpId.get(id) ?? 0) >= 0) ||
+      !quote.taxByCountryAnchor.every(([, amount]) => amount >= 0) ||
+      quote.taxDestinations.length === 0 ||
+      !quote.taxDestinations.every((destination) => treasuryIdByCountry.has(destination.country))
+    )
+      continue;
+    // One mint leg per batch: members share a source currency and rate, and
+    // the same Treasury set.
+    const group = [
+      quote.sourceCurrency,
+      quote.sourceLocalPerAnchor,
+      quote.taxDestinations
+        .map((d) => `${d.country}:${d.currencyCode}:${d.localPerAnchor}`)
+        .sort()
+        .join(","),
+    ].join("|");
+    batchable.set(group, [...(batchable.get(group) ?? []), { snapshot, quote }]);
+  }
+
+  const batches = [...batchable.values()].flatMap((members) =>
+    Array.from({ length: Math.ceil(members.length / NET_BATCH_SIZE) }, (_, i) =>
+      members.slice(i * NET_BATCH_SIZE, (i + 1) * NET_BATCH_SIZE)
+    )
+  );
+  for (const members of batches)
+    for (const { snapshot } of members) batchedCorpIds.add(snapshot.corpId.toString());
+  await runInLanes(batches, lanes, async (members) => {
+    const { sourceCurrency, sourceLocalPerAnchor: sourceRate } = members[0].quote;
+    const valuation = { currencyCode: sourceCurrency, localPerAnchor: sourceRate };
+    const ids = members.map(({ snapshot }) => snapshot.corpId.toString());
+    const key = `${batchPrefix}${createHash("sha256").update(ids.join(",")).digest("hex").slice(0, 32)}`;
+    let grossLocal = 0;
+    const legs: BankingTransition["legs"] = [];
+    const treasuryLocal = new Map<string, number>();
+    for (const { snapshot, quote } of members) {
+      const taxAnchor = quote.taxByCountryAnchor.reduce((sum, [, amount]) => sum + amount, 0);
+      const corporationLocal = quote.grossLocal - taxAnchor * sourceRate;
+      grossLocal += quote.grossLocal;
+      if (corporationLocal > 0)
+        legs.push({
+          kind: "credit",
+          amount: corporationLocal,
+          valuation,
+          collection: "corporations",
+          filter: { _id: oid(snapshot.corpId.toString()) },
+          path: "liquidCapital",
+          note: "Credit realized operating receipts net of tax withholding",
+        });
+      for (const destination of quote.taxDestinations)
+        treasuryLocal.set(
+          destination.country,
+          (treasuryLocal.get(destination.country) ?? 0) +
+            destination.amountAnchor * destination.localPerAnchor
+        );
+    }
+    legs.unshift({
+      kind: "mint",
+      amount: grossLocal,
+      valuation,
+      note: "Realized modeled gross operating receipts",
+    });
+    for (const destination of members[0].quote.taxDestinations) {
+      const amount = treasuryLocal.get(destination.country) ?? 0;
+      legs.push({
+        kind: "credit",
+        amount,
+        valuation: {
+          currencyCode: destination.currencyCode,
+          localPerAnchor: destination.localPerAnchor,
+        },
+        collection: "federalBudget",
+        filter: treasuryFilter(destination.country),
+        path: "treasuryCashLocal",
+        inc: { treasuryBalance: amount },
+        note: "Deliver withheld corporate tax into spendable Treasury cash and fiscal position",
+      });
+    }
+    const transition: BankingTransition = {
+      key,
+      kind: "corporate_operating_net_batch",
+      turn,
+      currency: sourceCurrency,
+      legs,
+      projections: [],
+      event: {
+        kind: "monetary.executed",
+        command: "turn.corporation.operatingNetCashBatch",
+        subjectType: "corporation",
+        subjectId: ids[0],
+        amount: grossLocal,
+        meta: { corporations: ids.length, sourceCurrency, sourceLocalPerAnchor: sourceRate },
+      },
+    };
+    const settled = await treasuryLock.run(
+      members[0].quote.taxDestinations.map((destination) => treasuryKey(destination.country)),
+      () => settleTransition(db, transition)
+    );
+    if (settled.status !== "applied" && settled.status !== "replayed") {
+      throw new Error(settled.error ?? `Corporate net operating batch ${key} is incomplete`);
+    }
+  });
+
   // A corporation's receipts stay strictly ordered (gross, prior arrears,
   // loss, tax), and a corporation listed twice settles its entries in input
   // order inside one task, so its idempotency keys never race themselves.
   const snapshotsByCorp = new Map<string, CorpSnapshot[]>();
   for (const snapshot of snapshots) {
     const id = snapshot.corpId.toString();
+    if (batchedCorpIds.has(id)) continue;
     const group = snapshotsByCorp.get(id);
     if (group) group.push(snapshot);
     else snapshotsByCorp.set(id, [snapshot]);
