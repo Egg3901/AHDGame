@@ -46,7 +46,13 @@ export function BlendShell({
   const frame = (
     /* Rails are lg-and-up only; the grid template is applied by the class. */
     <div
-      className={fullBleed ? "blend-shell blend-shell--bleed" : "blend-shell"}
+      className={[
+        "blend-shell",
+        fullBleed ? "blend-shell--bleed" : "",
+        left ? "" : "blend-shell--no-left",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       style={
         {
           "--blend-right-width": `${rightWidth}px`,
@@ -79,6 +85,7 @@ export function BlendShell({
             display: grid;
             grid-template-columns: 206px minmax(0, 1fr) var(--blend-right-width);
           }
+          .blend-shell--no-left { grid-template-columns: minmax(0, 1fr) var(--blend-right-width); }
           .blend-shell__rail { display: block; }
           /*
            * Full bleed: the rail cell stretches the full height of the row and

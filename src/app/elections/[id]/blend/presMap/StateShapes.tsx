@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { BLEND, FONT } from "@/components/blend/tokens";
 import type { StateGeo } from "./usStatesGeo";
-import type { PresMapState } from "./presMapModel";
+import type { PresMapOverlay, PresMapState } from "./presMapModel";
 import { CALLOUT_STATES } from "./usStates";
 import { labelFits } from "./mapView";
 
@@ -9,7 +9,50 @@ import { labelFits } from "./mapView";
 export const FOG_FILL = "#171722";
 
 const LABEL_PX = 10;
+const PATTERN_PERIOD = 7;
 const CALLOUT_SET = new Set(CALLOUT_STATES);
+
+/** Stable id for an overlay, so equal overlays share one `<pattern>`. */
+export function overlayId(o: PresMapOverlay): string {
+  return `pm-${o.kind}-${[o.base, ...o.colors].map((c) => c.replace(/[^0-9a-zA-Z]/g, "")).join("-")}`;
+}
+
+/** `<pattern>` defs for every distinct overlay in use. */
+export const OverlayDefs = memo(function OverlayDefs({
+  states,
+}: {
+  states: Record<string, PresMapState>;
+}) {
+  const unique = new Map<string, PresMapOverlay>();
+  for (const s of Object.values(states)) if (s.overlay) unique.set(overlayId(s.overlay), s.overlay);
+  if (unique.size === 0) return null;
+  return (
+    <defs>
+      {[...unique].map(([id, o]) => {
+        const w = o.kind === "stripe" ? PATTERN_PERIOD * o.colors.length : PATTERN_PERIOD;
+        return (
+          <pattern
+            key={id}
+            id={id}
+            width={w}
+            height={w}
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(45)"
+          >
+            <rect width={w} height={w} fill={o.base} />
+            {o.kind === "hatch" ? (
+              <rect width={w} height={2} fill={o.colors[0]} />
+            ) : (
+              o.colors.map((c, i) => (
+                <rect key={i} x={i * PATTERN_PERIOD} width={PATTERN_PERIOD} height={w} fill={c} />
+              ))
+            )}
+          </pattern>
+        );
+      })}
+    </defs>
+  );
+});
 
 interface ShapesProps {
   geo: StateGeo[];
@@ -30,7 +73,7 @@ export const StatePaths = memo(function StatePaths({ geo, states }: ShapesProps)
           <path
             key={g.id}
             d={g.d}
-            fill={s?.fill ?? FOG_FILL}
+            fill={s?.overlay ? `url(#${overlayId(s.overlay)})` : (s?.fill ?? FOG_FILL)}
             stroke={BLEND.page}
             strokeWidth={0.8}
             strokeLinejoin="round"
@@ -40,7 +83,9 @@ export const StatePaths = memo(function StatePaths({ geo, states }: ShapesProps)
             tabIndex={s ? 0 : undefined}
             aria-label={
               s
-                ? `${s.name}, ${s.ev} electoral votes, ${s.leaderName} leads by ${s.margin.toFixed(1)} points`
+                ? s.caption
+                  ? `${s.name}, ${s.ev} electoral votes, ${s.caption}`
+                  : `${s.name}, ${s.ev} electoral votes, ${s.leaderName} leads by ${s.margin.toFixed(1)} points`
                 : undefined
             }
             style={{ cursor: s ? "pointer" : "default", outline: "none" }}

@@ -7,14 +7,16 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type ReactNode,
   type MouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { BLEND, BLEND_LABEL, FONT } from "@/components/blend/tokens";
+import styles from "@/components/blend/blend.module.css";
 import { shadeColorForTier } from "@/lib/elections/marginTierShade";
 import { TIER_BANDS } from "../generalBlendViewModel";
 import { StatePanel } from "./StatePanel";
-import { FOG_FILL, StateLabels, StatePaths } from "./StateShapes";
+import { FOG_FILL, OverlayDefs, StateLabels, StatePaths } from "./StateShapes";
 import type { PresMapModel, PresMapState } from "./presMapModel";
 import { CALLOUT_STATES } from "./usStates";
 import { loadUsStateGeo, MAP_HEIGHT, MAP_WIDTH, type StateGeo } from "./usStatesGeo";
@@ -36,6 +38,10 @@ export interface PresidentialMapProps {
   countryId: string;
   /** Changes when the race re-tallies, so county results are fetched fresh. */
   turn: number | null;
+  /** Replaces the default state overview (the broadcast view swaps in its own). */
+  renderPanel?: (state: PresMapState, onClose: () => void) => ReactNode;
+  /** Replaces the margin-tier colour key. */
+  legend?: ReactNode;
 }
 
 type Hover = { id: string; x: number; y: number } | null;
@@ -63,7 +69,14 @@ function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
  * Locked means the page owns the wheel and the touch: no gesture on the map is
  * captured until the reader unlocks it.
  */
-export function PresidentialMap({ model, electionId, countryId, turn }: PresidentialMapProps) {
+export function PresidentialMap({
+  model,
+  electionId,
+  countryId,
+  turn,
+  renderPanel,
+  legend,
+}: PresidentialMapProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -148,6 +161,25 @@ export function PresidentialMap({ model, electionId, countryId, turn }: Presiden
   const hoverGeo = hover && hover.id !== selected ? geoById.get(hover.id) : undefined;
   const hoverState = hover ? states[hover.id] : undefined;
   const atRest = isIdentityView(pz.view);
+  const pulsing = useMemo(() => Object.values(states).filter((s) => s.pulse), [states]);
+
+  const panel = selectedState ? (
+    renderPanel ? (
+      <div ref={panelRef} tabIndex={-1} style={{ outline: "none" }}>
+        {renderPanel(selectedState, () => select(null))}
+      </div>
+    ) : (
+      <StatePanel
+        ref={panelRef}
+        state={selectedState}
+        model={model}
+        electionId={electionId}
+        countryId={countryId}
+        turn={turn}
+        onClose={() => select(null)}
+      />
+    )
+  ) : null;
 
   const callouts = CALLOUT_STATES.map((id) => states[id]).filter((s): s is PresMapState => !!s);
 
@@ -189,7 +221,23 @@ export function PresidentialMap({ model, electionId, countryId, turn }: Presiden
         >
           {geo ? (
             <g transform={`translate(${pz.view.x} ${pz.view.y}) scale(${pz.view.k})`}>
+              <OverlayDefs states={states} />
               <StatePaths geo={geo} states={states} />
+              {pulsing.map((s) => {
+                const g = geoById.get(s.id);
+                return g ? (
+                  <path
+                    key={`${s.id}:${s.pulse}`}
+                    d={g.d}
+                    className={styles.callPulse}
+                    fill="none"
+                    stroke={s.leaderColor}
+                    strokeWidth={3}
+                    vectorEffect="non-scaling-stroke"
+                    pointerEvents="none"
+                  />
+                ) : null;
+              })}
               <StateLabels geo={geo} states={states} k={pz.view.k} scale={scale} />
               {hoverGeo ? (
                 <path
@@ -282,20 +330,12 @@ export function PresidentialMap({ model, electionId, countryId, turn }: Presiden
               boxShadow: "-12px 0 24px rgba(0,0,0,.35)",
             }}
           >
-            <StatePanel
-              ref={panelRef}
-              state={selectedState}
-              model={model}
-              electionId={electionId}
-              countryId={countryId}
-              turn={turn}
-              onClose={() => select(null)}
-            />
+            {panel}
           </aside>
         ) : null}
       </div>
 
-      <MapKey model={model} />
+      {legend ?? <MapKey model={model} />}
 
       {callouts.length > 0 ? (
         <div style={{ marginTop: 14 }}>
@@ -306,8 +346,16 @@ export function PresidentialMap({ model, electionId, countryId, turn }: Presiden
                 key={s.id}
                 type="button"
                 onClick={() => select(s.id === selected ? null : s.id)}
-                title={`${s.name}: ${s.leaderName} +${s.margin.toFixed(1)}pp`}
-                aria-label={`${s.name}, ${s.ev} electoral votes, ${s.leaderName} leads by ${s.margin.toFixed(1)} points`}
+                title={
+                  s.caption
+                    ? `${s.name}: ${s.caption}`
+                    : `${s.name}: ${s.leaderName} +${s.margin.toFixed(1)}pp`
+                }
+                aria-label={
+                  s.caption
+                    ? `${s.name}, ${s.ev} electoral votes, ${s.caption}`
+                    : `${s.name}, ${s.ev} electoral votes, ${s.leaderName} leads by ${s.margin.toFixed(1)} points`
+                }
                 aria-pressed={s.id === selected}
                 style={{
                   display: "inline-flex",
@@ -325,7 +373,9 @@ export function PresidentialMap({ model, electionId, countryId, turn }: Presiden
               >
                 <b style={{ fontWeight: 700 }}>{s.id}</b>
                 <span style={{ opacity: 0.8 }}>{s.ev}</span>
-                <span style={{ opacity: 0.65, fontSize: 10 }}>+{s.margin.toFixed(1)}</span>
+                {s.broadcast ? null : (
+                  <span style={{ opacity: 0.65, fontSize: 10 }}>+{s.margin.toFixed(1)}</span>
+                )}
               </button>
             ))}
           </div>
@@ -334,15 +384,7 @@ export function PresidentialMap({ model, electionId, countryId, turn }: Presiden
 
       {selectedState && !wide ? (
         <BottomSheet label={`${selectedState.name} overview`} onClose={() => select(null)}>
-          <StatePanel
-            ref={panelRef}
-            state={selectedState}
-            model={model}
-            electionId={electionId}
-            countryId={countryId}
-            turn={turn}
-            onClose={() => select(null)}
-          />
+          {panel}
         </BottomSheet>
       ) : null}
     </div>
@@ -499,17 +541,26 @@ function HoverTip({
           {state.ev} EV
         </span>
       </div>
-      <div
-        style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6, color: BLEND.muted }}
-      >
-        <i
-          aria-hidden
-          style={{ width: 8, height: 8, display: "block", background: state.leaderColor }}
-        />
-        {state.leaderName}
-      </div>
+      {state.leaderName ? (
+        <div
+          style={{
+            marginTop: 4,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            color: BLEND.muted,
+          }}
+        >
+          <i
+            aria-hidden
+            style={{ width: 8, height: 8, display: "block", background: state.leaderColor }}
+          />
+          {state.leaderName}
+        </div>
+      ) : null}
       <div style={{ marginTop: 2, fontFamily: FONT.mono, fontSize: 11, color: BLEND.mutedDim }}>
-        +{state.margin.toFixed(1)}pp / {TIER_BANDS.find((t) => t.tier === state.tier)?.label}
+        {state.caption ??
+          `+${state.margin.toFixed(1)}pp / ${TIER_BANDS.find((t) => t.tier === state.tier)?.label}`}
       </div>
     </div>
   );

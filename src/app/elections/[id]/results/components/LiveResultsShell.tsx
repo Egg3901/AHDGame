@@ -2,6 +2,8 @@
 
 import BackButton from "@/components/BackButton";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
+import { NightBroadcast } from "../../night/NightBroadcast";
+import { useNightHold } from "../../night/useNightBroadcast";
 import { LiveTurnBadge } from "./LiveTurnBadge";
 import { ResultsProgressBar } from "./ResultsProgressBar";
 import { ResultsViewRouter } from "./ResultsViewRouter";
@@ -58,6 +60,36 @@ export function LiveResultsShell({
     TYPE_TITLES[election.electionType] ?? "Election"
   }`.trim();
   const updatedAgo = timeAgoLabel(lastFetchedAt);
+  const night = useNightHold(data);
+
+  const simBanner = simulating ? (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-warning/50 bg-warning/10 px-4 py-2.5">
+      <span className="inline-flex items-center gap-2 text-sm font-semibold text-warning">
+        <span className="h-2 w-2 rounded-full bg-warning" aria-hidden />
+        SIMULATION — test data, not real results
+      </span>
+      <button
+        type="button"
+        onClick={onStopSimulation}
+        className="rounded-lg border border-warning/50 px-3 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/20"
+      >
+        Exit simulation
+      </button>
+    </div>
+  ) : null;
+
+  // US presidential final hour: the election-night broadcast takes the whole
+  // screen, and stays up as the settled board once the race resolves.
+  if (night.show) {
+    return (
+      <NightBroadcast
+        data={data}
+        concludedHref={`/elections/${election.id}`}
+        onContinue={night.dismiss}
+        banner={simBanner ? <div className="px-4 pt-3">{simBanner}</div> : undefined}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -95,21 +127,7 @@ export function LiveResultsShell({
           </div>
         </div>
 
-        {simulating && (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-warning/50 bg-warning/10 px-4 py-2.5">
-            <span className="inline-flex items-center gap-2 text-sm font-semibold text-warning">
-              <span className="h-2 w-2 rounded-full bg-warning" aria-hidden />
-              SIMULATION — test data, not real results
-            </span>
-            <button
-              type="button"
-              onClick={onStopSimulation}
-              className="rounded-lg border border-warning/50 px-3 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/20"
-            >
-              Exit simulation
-            </button>
-          </div>
-        )}
+        {simBanner}
 
         {election.status === "upcoming" && !simulating ? (
           <div className="rounded-xl border border-card-border bg-card p-8 text-center">
