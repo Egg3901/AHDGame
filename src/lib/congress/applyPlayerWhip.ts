@@ -525,21 +525,22 @@ export async function applyPlayerWhipToImpeachment(
 }
 
 /**
- * Force-cast for/against votes on a cabinet nomination. Same snapshot
+ * Force-cast for/against votes on a cabinet or Supreme Court nomination. Same snapshot
  * semantics as applyPlayerWhipToBill (for/against/abstain/unvoted).
  */
 export async function applyPlayerWhipToCabinet(
   db: Db,
   nominationId: ObjectId,
   direction: "for" | "against",
-  eligibleCharacterIds: ObjectId[]
+  eligibleCharacterIds: ObjectId[],
+  collectionName: "cabinetNominations" | "scotusNominations" = "cabinetNominations"
 ): Promise<PlayerWhipResult> {
   if (eligibleCharacterIds.length === 0) {
     return { overridden: 0, alreadyAligned: 0 };
   }
 
   const nomination = await db
-    .collection<CabinetNomination>("cabinetNominations")
+    .collection<Pick<CabinetNomination, "_id" | "status" | "votes">>(collectionName)
     .findOne({ _id: nominationId });
   if (!nomination || nomination.status !== "active") {
     return { overridden: 0, alreadyAligned: 0 };
@@ -554,6 +555,7 @@ export async function applyPlayerWhipToCabinet(
   let incAgainst = 0;
   let decFor = 0;
   let decAgainst = 0;
+  let decAbstain = 0;
 
   const setFields: Record<string, unknown> = { updatedAt: now };
 
@@ -573,6 +575,7 @@ export async function applyPlayerWhipToCabinet(
 
     if (prev === "for") decFor++;
     else if (prev === "against") decAgainst++;
+    else if (prev === "abstain") decAbstain++;
 
     if (direction === "for") incFor++;
     else incAgainst++;
@@ -583,9 +586,10 @@ export async function applyPlayerWhipToCabinet(
   const incFields: Record<string, number> = {};
   if (netFor !== 0) incFields.votesFor = netFor;
   if (netAgainst !== 0) incFields.votesAgainst = netAgainst;
+  if (decAbstain !== 0) incFields.votesAbstain = -decAbstain;
 
   await db
-    .collection<CabinetNomination>("cabinetNominations")
+    .collection<Pick<CabinetNomination, "_id" | "status" | "votes">>(collectionName)
     .updateOne(
       { _id: nominationId },
       Object.keys(incFields).length > 0 ? { $set: setFields, $inc: incFields } : { $set: setFields }

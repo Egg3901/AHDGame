@@ -95,7 +95,7 @@ function pickFallbackGovernmentVote(
 
 function pickFallbackCabinetVote(
   npp: NPP,
-  nomination: CabinetNomination
+  nomination: Pick<CabinetNomination, "nomineeParty">
 ): "for" | "against" | "abstain" {
   if (!npp.party) return "abstain";
   if (nomination.nomineeParty && nomination.nomineeParty === npp.party) return "for";
@@ -938,11 +938,10 @@ export async function applyWhipVotesToImpeachment(
 }
 
 /**
- * Cast votes for NPPs who haven't voted yet on a cabinet nomination.
+ * Apply NPP Senate confirmation whips to cabinet or Supreme Court nominations.
  *
- * Cabinet whips use the same hidden loyalty/stubbornness roll as the other
- * NPP whip targets; on resistance, the NPP reverts to the normal cabinet
- * fallback heuristic instead of blindly obeying.
+ * Hard nomination whips are binding; soft whips use the existing compliance
+ * roll and nomination party preference on resistance.
  * Uses seat weights. Vote key format: `npp_${nppId}`.
  */
 export async function applyWhipVotesToCabinet(
@@ -952,10 +951,13 @@ export async function applyWhipVotesToCabinet(
   nppOfficials: ElectedOfficial[],
   nppMap: Map<string, NPP>,
   mode: NppWhipMode = "hard",
-  statecraftBonus = 0
+  statecraftBonus = 0,
+  collectionName: "cabinetNominations" | "scotusNominations" = "cabinetNominations"
 ): Promise<ApplyWhipResult> {
   const nomination = await db
-    .collection<CabinetNomination>("cabinetNominations")
+    .collection<Pick<CabinetNomination, "_id" | "status" | "votes" | "nomineeParty">>(
+      collectionName
+    )
     .findOne({ _id: nominationId });
   if (!nomination || nomination.status !== "active") return { fellInLine: 0, ignored: 0 };
 
@@ -1034,7 +1036,9 @@ export async function applyWhipVotesToCabinet(
     if (netAbstain !== 0) incFields.votesAbstain = netAbstain;
 
     await db
-      .collection<CabinetNomination>("cabinetNominations")
+      .collection<Pick<CabinetNomination, "_id" | "status" | "votes" | "nomineeParty">>(
+        collectionName
+      )
       .updateOne(
         { _id: nominationId },
         { $set: setFields, ...(Object.keys(incFields).length > 0 ? { $inc: incFields } : {}) }

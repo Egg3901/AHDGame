@@ -70,7 +70,7 @@ export function WhipTabsLayout({
   const targets: Array<{ key: WhipSubTarget; label: string; show: boolean }> = [
     { key: "bills", label: "Bills", show: true },
     { key: "leadership", label: "Leadership", show: true },
-    { key: "cabinet", label: "Cabinet", show: showCabinet },
+    { key: "cabinet", label: config.id === "US" ? "Nominations" : "Cabinet", show: showCabinet },
   ];
 
   return (
