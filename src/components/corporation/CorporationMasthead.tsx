@@ -32,6 +32,8 @@ interface CorporationMastheadProps {
   creditRating?: string;
   /** Retained income after dividends, daily basis, corp currency. */
   retainedDaily: number | null;
+  /** Revenue growth: realized over the past year, else the per-turn rate. */
+  revenueGrowth?: { pct: number; realized: boolean } | null;
   /** What the corp pays out: max(CEO rate, legal floor, parent floor). */
   effectiveDividendRate: number | null;
   periodView: MoneyPeriod;
@@ -91,6 +93,7 @@ export function CorporationMasthead({
   exchangeLabel,
   creditRating,
   retainedDaily,
+  revenueGrowth,
   effectiveDividendRate,
   periodView,
   financialFogOfWar,
@@ -424,6 +427,23 @@ export function CorporationMasthead({
         )}
 
         <dl className="grid min-w-0 flex-1 grid-cols-3 gap-x-6 gap-y-3 md:grid-cols-5">
+          {revenueGrowth && Number.isFinite(revenueGrowth.pct) && (
+            <Figure
+              label="Growth"
+              title={
+                revenueGrowth.realized
+                  ? "Revenue growth over the past year."
+                  : "Average revenue growth per turn."
+              }
+            >
+              <span className={signTone(revenueGrowth.pct)}>
+                {revenueGrowth.pct >= 0 ? "▲" : "▼"} {Math.abs(revenueGrowth.pct).toFixed(1)}%
+                <span className="ml-1 text-[11px] font-normal text-muted">
+                  {revenueGrowth.realized ? "/yr" : "/turn"}
+                </span>
+              </span>
+            </Figure>
+          )}
           {priceVisible && Number.isFinite(corporation.marketCapitalization) && (
             <Figure label="Mkt cap">{money.fmt(corporation.marketCapitalization)}</Figure>
           )}

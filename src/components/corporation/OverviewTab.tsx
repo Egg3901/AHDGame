@@ -18,6 +18,7 @@ import { CorpEconomicModelBadge } from "@/components/economy/CorpEconomicModelBa
 import { GameMonthTime } from "@/components/time/GameMonthTime";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { corpIncomeBasis, netMarginPct } from "./financials/financialsModel";
+import { OwnershipDonut, buildOwnershipSlices } from "./OwnershipDonut";
 import { CAPACITY_UNIT_LABEL, formatUnits } from "./plantsPresentation";
 import {
   DenseSection,
@@ -61,6 +62,41 @@ interface OverviewTabProps {
 }
 
 const PERIOD_OPTIONS = MONEY_PERIODS.map((p) => ({ value: p, label: MONEY_PERIOD_LABEL[p] }));
+
+/**
+ * A headline figure in a tinted box, so the four numbers most players want
+ * read at a glance before the full statement below.
+ */
+function StatTile({
+  label,
+  value,
+  sub,
+  tone = "text-foreground",
+  meter,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: string;
+  /** Percentage drawn as a bar under the value, clamped to 0..100. */
+  meter?: number;
+}) {
+  return (
+    <div className="min-w-0 rounded-md border border-card-border bg-card-border/15 px-3 py-2">
+      <div className="truncate text-[11px] text-muted">{label}</div>
+      <div className={`truncate font-mono text-lg font-semibold tabular-nums ${tone}`}>{value}</div>
+      {meter != null && (
+        <div className="mt-1 h-1 overflow-hidden rounded-full bg-card-border/50">
+          <div
+            className={`h-full rounded-full ${meter >= 0 ? "bg-success" : "bg-error"}`}
+            style={{ width: `${Math.min(100, Math.abs(meter))}%` }}
+          />
+        </div>
+      )}
+      {sub && <div className="text-[11px] text-muted">{sub}</div>}
+    </div>
+  );
+}
 
 /** Links styled as quiet inline actions inside a table or list row. */
 function RowLink({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
@@ -405,12 +441,8 @@ export default function OverviewTab({
   const myShares = myHolding?.shares ?? 0;
   const canSeeMarket = !corporation.isPrivate || isCeo;
 
-  const topHolders = [...(corporation.shareholders ?? [])]
-    .filter((sh) => sh.shares > 0)
-    .sort((a, b) => b.shares - a.shares)
-    .slice(0, 6);
   // Same destinations as the full shareholder register on the Shares tab.
-  const holderHref = (sh: (typeof topHolders)[number]) =>
+  const holderHref = (sh: CorporationDetail["shareholders"][number]) =>
     sh.corporationId
       ? `/corporation/${sh.sequentialId ?? sh.corporationId}`
       : sh.isFund && sh.fundSlug
@@ -420,6 +452,7 @@ export default function OverviewTab({
         : sh.isNpp || sh.isFund
           ? null
           : `/character/${sh.sequentialId ?? sh.characterId}`;
+  const ownershipSlices = buildOwnershipSlices(corporation, holderHref, myCharacterId);
 
   const brand =
     corporation.brandLoyaltyLabel ??
@@ -442,6 +475,35 @@ export default function OverviewTab({
               />
             }
           >
+            <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+              <StatTile
+                label={`Revenue${suffix}`}
+                value={est(fmt(scale(financials.totalRevenue)))}
+              />
+              {basis && (
+                <StatTile
+                  label={`Net income${suffix}`}
+                  value={est(fmtSigned(scale(basis.netIncome)))}
+                  tone={signTone(basis.netIncome)}
+                />
+              )}
+              {netMargin != null && (
+                <StatTile
+                  label="Net margin"
+                  value={`${netMargin.toFixed(1)}%`}
+                  tone={signTone(netMargin)}
+                  meter={netMargin}
+                />
+              )}
+              <StatTile
+                label={financials.growthRateIsRealized ? "Revenue growth" : "Growth rate"}
+                value={`${financials.currentGrowthRate >= 0 ? "▲" : "▼"} ${Math.abs(
+                  financials.currentGrowthRate
+                ).toFixed(1)}%`}
+                sub={financials.growthRateIsRealized ? "past year" : "per turn"}
+                tone={signTone(financials.currentGrowthRate)}
+              />
+            </div>
             <div className="grid gap-x-8 sm:grid-cols-2 xl:grid-cols-3">
               <KVList>
                 {canSeeMarket && (
@@ -746,39 +808,13 @@ export default function OverviewTab({
           </KVList>
         </DenseSection>
 
-        {topHolders.length > 0 && (
+        {ownershipSlices.length > 0 && (
           <DenseSection
-            title="Shareholders"
+            title="Ownership"
             meta={`${corporation.shareholders.filter((sh) => sh.shares > 0).length}`}
             actions={<SmallButton onClick={() => onTabChange("shares")}>All</SmallButton>}
           >
-            <table className="w-full table-fixed border-collapse">
-              <tbody>
-                {topHolders.map((sh) => {
-                  const href = holderHref(sh);
-                  const pct = (sh.shares / Math.max(1, corporation.totalShares)) * 100;
-                  return (
-                    <tr key={`${sh.characterId ?? sh.corporationId ?? sh.name}`}>
-                      <Td className="truncate">
-                        {href ? (
-                          <Link href={href} className="text-foreground hover:underline">
-                            {sh.name}
-                          </Link>
-                        ) : (
-                          <span className="text-foreground">{sh.name}</span>
-                        )}
-                        {sh.characterId === myCharacterId && (
-                          <span className="ml-1 text-[11px] text-muted">you</span>
-                        )}
-                      </Td>
-                      <Td align="right" className="w-20 text-muted">
-                        {pct.toFixed(1)}%
-                      </Td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <OwnershipDonut slices={ownershipSlices} />
           </DenseSection>
         )}
 
