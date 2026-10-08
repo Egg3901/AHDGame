@@ -210,8 +210,13 @@ export async function closeDueContingentHouseVotes(
     })
     .toArray()) as TallyWithVote[];
 
+  const dueElections =
+    due.length > 0
+      ? await elections.find({ _id: { $in: due.map((t) => t.electionId) } }).toArray()
+      : [];
+  const electionById = new Map(dueElections.map((e) => [e._id.toString(), e]));
   for (const tally of due) {
-    const election = await elections.findOne({ _id: tally.electionId });
+    const election = electionById.get(tally.electionId.toString());
     if (!election || (election.countryId ?? "US") !== "US") continue;
     try {
       if (await takeBallot(db, election, tally, now, currentTurn)) handled += 1;

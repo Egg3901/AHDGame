@@ -96,6 +96,9 @@ describe("closeDueContingentHouseVotes", () => {
       toArray: async () => [],
     });
     db.collection("elections").findOne.mockResolvedValue({ _id: electionId, countryId: "US" });
+    db.collection("elections").find.mockReturnValue({
+      toArray: async () => [{ _id: electionId, countryId: "US" }],
+    });
     db.collection("electionCandidates").findOne.mockResolvedValue({
       _id: winnerCandidateId,
       electionId,
@@ -354,7 +357,9 @@ describe("closeDueContingentHouseVotes", () => {
   });
 
   it("stays inert for a non-US election", async () => {
-    db.collectionMocks.elections!.findOne.mockResolvedValue({ _id: electionId, countryId: "UK" });
+    db.collectionMocks.elections!.find.mockReturnValue({
+      toArray: async () => [{ _id: electionId, countryId: "UK" }],
+    });
     openVotes(openTally());
     expect(await run(40)).toBe(0);
     expect(standingsMock).not.toHaveBeenCalled();
