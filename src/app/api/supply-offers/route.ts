@@ -1,3 +1,4 @@
+import type { SupplyListing } from "@/lib/db/types/supplyListing";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
@@ -90,7 +91,7 @@ export async function GET(request: Request) {
         limit: query.data.pageSize,
         page: query.data.page,
       }),
-      db.collection("supplyListings").countDocuments(
+      db.collection<SupplyListing>("supplyListings").countDocuments(
         openOffersFilter({
           commodities: query.data.commodity,
           kind: query.data.kind,
