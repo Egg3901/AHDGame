@@ -283,15 +283,9 @@ export default function OwnershipHistoryPanel({
                   <thead>
                     <tr>
                       <Th>{t("holder")}</Th>
-                      <Th numeric align="right">
-                        {t("start")}
-                      </Th>
-                      <Th numeric align="right">
-                        {t("end")}
-                      </Th>
-                      <Th numeric align="right">
-                        {t("stakeChange")}
-                      </Th>
+                      <Th align="right">{t("start")}</Th>
+                      <Th align="right">{t("end")}</Th>
+                      <Th align="right">{t("stakeChange")}</Th>
                     </tr>
                   </thead>
                   <tbody>
