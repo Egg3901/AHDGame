@@ -1,4 +1,3 @@
-import type { ObjectId } from "mongodb";
 import type {
   Corporation,
   CorporationExit,
@@ -36,7 +35,7 @@ export function buildCorporationExit(input: {
   turn: number;
   /** Revenue on the corporation's last history row, if any. */
   lastRevenue?: number | null;
-  successorId?: ObjectId;
+  successorId?: CorporationExit["successorId"];
   now: Date;
 }): CorporationExit {
   const { corporation: corp } = input;
