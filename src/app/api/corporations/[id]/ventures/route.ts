@@ -119,12 +119,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       parsed.data.fundingPerTurnAnchor ?? venture.fundingPerTurnAnchor
     );
     try {
-      await db
-        .collection<ProductVenture>(PRODUCT_VENTURES)
-        .insertOne({
-          _id: venture._id,
-          ...ventureDocument({ ...venture, fundingPerTurnAnchor: funding }),
-        });
+      await db.collection<ProductVenture>(PRODUCT_VENTURES).insertOne({
+        _id: venture._id,
+        ...ventureDocument({ ...venture, fundingPerTurnAnchor: funding }),
+      });
     } catch (error) {
       if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
         return errorResponse(409, "You already have a product in development in this area");

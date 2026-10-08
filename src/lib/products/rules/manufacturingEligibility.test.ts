@@ -121,9 +121,9 @@ describe("vehicle lines on ordinary manufacturing", () => {
     expect(isLegalManufacturingProductForPlant("passenger_car", plant("vehicle_assembly"))).toBe(
       true
     );
-    expect(
-      isLegalManufacturingProductForPlant("truck", plant("vehicle_heavy_machinery"))
-    ).toBe(true);
+    expect(isLegalManufacturingProductForPlant("truck", plant("vehicle_heavy_machinery"))).toBe(
+      true
+    );
   });
 
   it("does not offer vehicle products to a steel plant", () => {
