@@ -29,7 +29,7 @@ describe("computeRateLimits", () => {
     expect(sentence).toContain("16.0%");
     expect(sentence).toContain("2.0%");
     expect(sentence).toContain("3.00");
-    expect(sentence).not.toMatch(/[–—]/);
+    expect(sentence).not.toMatch(new RegExp("[\u2013\u2014]"));
   });
 
   it("clips the ceiling and the steps at the 25% policy-rate limit", () => {
