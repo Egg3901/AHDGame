@@ -139,6 +139,26 @@ describe("registration heal database shell", () => {
     f.data.npps.push({ party: "2", countryId: "UK", homeState: "SCO", retiredAt: new Date() });
     expect((await runRegistrationHeal(f.client)).transfers).toHaveLength(1);
   });
+  it("ignores national NPC countries with no regional registration to heal", async () => {
+    const f = fixture();
+    f.data.npps.push({ party: "2", countryId: "BR", homeState: "BR" });
+    f.data.electedOfficials.push({ party: "2", countryId: "IE", state: "IE" });
+    expect((await runRegistrationHeal(f.client)).transfers).toHaveLength(1);
+    expect(f.writes).not.toHaveBeenCalled();
+  });
+  it("does not treat country-code NPC homes as regional presence in regionalized countries", async () => {
+    const f = fixture();
+    f.data.npps.push({ party: "2", countryId: "UK", homeState: "UK" });
+    f.data.electedOfficials.push({ party: "2", countryId: "UK", state: "UK" });
+    expect((await runRegistrationHeal(f.client)).transfers).toHaveLength(1);
+    expect(f.writes).not.toHaveBeenCalled();
+  });
+  it("still rejects unknown home regions in countries included in the heal", async () => {
+    const f = fixture();
+    f.data.npps.push({ party: "2", countryId: "UK", homeState: "MISSING" });
+    await expect(runRegistrationHeal(f.client)).rejects.toThrow("Ambiguous or unknown");
+    expect(f.writes).not.toHaveBeenCalled();
+  });
   it("blocks ambiguous legacy rosters rather than deleting potentially valid registration", async () => {
     const f = fixture();
     f.data.states.push({ _id: "SCO", countryId: "US" });

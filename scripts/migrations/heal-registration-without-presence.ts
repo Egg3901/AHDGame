@@ -75,11 +75,18 @@ export async function inspectRegistrationHeal(db: Db, session: ClientSession) {
   // Unlike the spending gate, a destructive heal must stop on ambiguous legacy
   // rosters rather than assuming that a missing country means no presence.
   const members = [...players, ...npps, ...officials.map((o) => ({ ...o, homeState: o.state }))];
+  const representedCountries = new Set(rows.map((row) => row.countryId));
   for (const member of members) {
     if (!member.party || member.party === "independent" || !member.homeState) continue;
+    // Non-regional NPC countries use their country code as a home region.
+    // They cannot protect or lose any registration in another country's rows.
+    if (member.countryId && !representedCountries.has(member.countryId)) continue;
     const matches = regions.filter(
       (r) => r._id === member.homeState && (!member.countryId || r.countryId === member.countryId)
     );
+    // Some national NPCs use the country code even in countries with regional
+    // data. That placeholder is not a regional foothold, nor an ambiguous one.
+    if (matches.length === 0 && member.countryId === member.homeState) continue;
     if (matches.length !== 1)
       throw new Error("Ambiguous or unknown roster region; resolve before healing");
   }
