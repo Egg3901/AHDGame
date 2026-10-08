@@ -547,7 +547,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
           >
             <span>{vm.kicker}</span>
             <span style={{ fontFamily: FONT.mono, letterSpacing: ".06em" }}>
-              {vm.closesIn != null ? `${vm.closesIn} TURNS` : ""}
+              {vm.closesIn != null ? `${vm.closesIn} TURN${vm.closesIn === 1 ? "" : "S"}` : ""}
             </span>
           </div>
           <div
