@@ -154,6 +154,19 @@ export interface Bond {
           replacementCouponRate: number;
           residualAmountLocal: number;
         };
+    /**
+     * One-shot receipt for a forced pool rollover: the Treasury could not fund
+     * the claim, so the pool's remaining units moved to a par replacement bond
+     * and this claim was rebased by the same face.
+     */
+    forcedRollover?: {
+      replacementBondId: ObjectId;
+      units: number;
+      faceLocal: number;
+      replacementCouponRate: number;
+      replacementMaturityTurns: BondMaturityTurns;
+      rolledAtTurn: number;
+    };
     /** Bank epoch claims already paid or routed to insurance for this due quote. */
     paidBankClaimIds?: string[];
     sourceHolders: BondHolder[];

@@ -105,7 +105,7 @@ async function settleCorporateOperatingCashBatched(
   }>("bankMoneyMoves");
   const keys = snapshots.flatMap((snapshot) => {
     const base = `corp-operating-cash:${turn}:${snapshot.corpId.toString()}`;
-    return [base, `${base}:gross`, `${base}:tax`, `${base}:arrears`];
+    return [base, `${base}:net`, `${base}:gross`, `${base}:tax`, `${base}:arrears`];
   });
   const existingRows = await journals
     .find({ _id: { $in: keys } }, { projection: { _id: 1, event: 1 } })
@@ -215,6 +215,17 @@ async function settleCorporateOperatingCashBatched(
       return;
     }
 
+    // A combined receipt is complete on its own: it never pairs with a later
+    // withholding, so a resume finishes it and stops.
+    const netKey = `${baseKey}:net`;
+    if (existingKeys.has(netKey)) {
+      const resumed = await treasuryLock.run(allTreasuryKeys, () => resumeSettlement(db, netKey));
+      if (resumed.status !== "applied" && resumed.status !== "replayed") {
+        throw new Error(resumed.error ?? `Corporate net operating receipt ${netKey} is incomplete`);
+      }
+      return;
+    }
+
     const grossKey = `${baseKey}:gross`;
     const taxKey = `${baseKey}:tax`;
     const frozenRecord = journalByKey.get(grossKey) ?? journalByKey.get(taxKey);
@@ -287,6 +298,105 @@ async function settleCorporateOperatingCashBatched(
     const taxAnchor = taxByCountryAnchor.reduce((sum, [, amount]) => sum + amount, 0);
     const taxSourceLocal = taxAnchor * sourceRate;
     let availableCash = cashByCorpId.get(snapshot.corpId.toString()) ?? 0;
+    const originalCorp = corporationById.get(snapshot.corpId.toString());
+    const hasOperatingArrears = Object.values(
+      originalCorp?.operatingCashArrearsByCurrency ?? {}
+    ).some((amount) => amount > 0);
+    const hasTaxArrears = Object.values(originalCorp?.federalTaxArrearsAnchorByCountry ?? {}).some(
+      (amount) => amount > 0
+    );
+
+    // One receipt instead of two when the outcome cannot differ. The split
+    // protocol credits gross, then withholds tax guarded by cash >= tax. With
+    // no prior payables to settle in between, non-negative net income and
+    // non-negative cash, that guard always passes, so minting gross and
+    // crediting the corporation its net and each Treasury its tax in one move
+    // lands the same balances with about half the journal round trips. Every
+    // other case, and any replay of the split protocol, keeps the two moves.
+    const settlesNet =
+      !savedQuote &&
+      !existingKeys.has(grossKey) &&
+      !existingKeys.has(taxKey) &&
+      !hasOperatingArrears &&
+      !hasTaxArrears &&
+      grossLocal > 0 &&
+      taxSourceLocal > 0 &&
+      quote.netLocal >= 0 &&
+      availableCash >= 0 &&
+      taxByCountryAnchor.every(([, amount]) => amount >= 0) &&
+      taxDestinations.length > 0 &&
+      taxDestinations.every((destination) => treasuryIdByCountry.has(destination.country));
+    if (settlesNet) {
+      const valuation = { currencyCode: sourceCurrency, localPerAnchor: sourceRate };
+      const corporationLocal = grossLocal - taxSourceLocal;
+      const legs: BankingTransition["legs"] = [
+        {
+          kind: "mint",
+          amount: grossLocal,
+          valuation,
+          note: "Realized modeled gross operating receipts",
+        },
+      ];
+      if (corporationLocal > 0) {
+        legs.push({
+          kind: "credit",
+          amount: corporationLocal,
+          valuation,
+          collection: "corporations",
+          filter: { _id: oid(snapshot.corpId.toString()) },
+          path: "liquidCapital",
+          note: "Credit realized operating receipts net of tax withholding",
+        });
+      }
+      for (const destination of taxDestinations) {
+        const treasuryLocal = destination.amountAnchor * destination.localPerAnchor;
+        legs.push({
+          kind: "credit",
+          amount: treasuryLocal,
+          valuation: {
+            currencyCode: destination.currencyCode,
+            localPerAnchor: destination.localPerAnchor,
+          },
+          collection: "federalBudget",
+          filter: treasuryFilter(destination.country),
+          path: "treasuryCashLocal",
+          inc: { treasuryBalance: treasuryLocal },
+          note: "Deliver withheld corporate tax into spendable Treasury cash and fiscal position",
+        });
+      }
+      const transition: BankingTransition = {
+        key: netKey,
+        kind: "corporate_operating_net_receipt",
+        turn,
+        currency: sourceCurrency as CurrencyCode,
+        legs,
+        projections: [],
+        event: {
+          kind: "monetary.executed",
+          command: "turn.corporation.operatingNetCash",
+          subjectType: "corporation",
+          subjectId: snapshot.corpId.toString(),
+          amount: corporationLocal,
+          meta: {
+            grossOperatingCashLocal: grossLocal,
+            federalTaxAnchor: taxAnchor,
+            sourceCurrency,
+            sourceLocalPerAnchor: sourceRate,
+            operatingCashQuote: JSON.stringify(quote),
+          },
+        },
+      };
+      const destinationKeys = taxDestinations.map((destination) =>
+        treasuryKey(destination.country)
+      );
+      const settled = await treasuryLock.run(destinationKeys, () =>
+        settleTransition(db, transition)
+      );
+      if (settled.status !== "applied" && settled.status !== "replayed") {
+        throw new Error(settled.error ?? `Corporate net operating receipt ${netKey} is incomplete`);
+      }
+      return;
+    }
     if (existingKeys.has(grossKey)) {
       // Existing quote is restored from the durable gross/loss journal above;
       // cash was refreshed in one batched corporation read after resume.
@@ -336,13 +446,6 @@ async function settleCorporateOperatingCashBatched(
       availableCash += grossLocal;
     }
 
-    const originalCorp = corporationById.get(snapshot.corpId.toString());
-    const hasOperatingArrears = Object.values(
-      originalCorp?.operatingCashArrearsByCurrency ?? {}
-    ).some((amount) => amount > 0);
-    const hasTaxArrears = Object.values(originalCorp?.federalTaxArrearsAnchorByCountry ?? {}).some(
-      (amount) => amount > 0
-    );
     if (hasOperatingArrears || hasTaxArrears) {
       availableCash = await treasuryLock.run(allTreasuryKeys, () =>
         settlePriorCorporateCashArrears({

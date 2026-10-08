@@ -151,8 +151,8 @@ export interface EconomySummary {
    * secondary) so the card always has something to show.
    *
    * `specializationBonus` flags entries that match the state's seed
-   * `sectorSpecializations` — `"primary"` carries the +10pp regional
-   * margin bonus, `"secondary"` carries +5pp.
+   * `sectorSpecializations` — `"primary"` carries the +5pp regional
+   * margin bonus, `"secondary"` carries +2.5pp.
    */
   topSectors: Array<{
     id: string;

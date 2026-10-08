@@ -2,8 +2,8 @@
  * Corporate specialization rewards sectors in the company's chosen industries.
  * The operating bonus reduces costs without lowering the payroll cost basis.
  */
-export const SECTOR_TYPE_MATCH_BONUS = 10;
-export const SECTOR_TYPE_SECONDARY_MATCH_BONUS = 5;
+export const SECTOR_TYPE_MATCH_BONUS = 5;
+export const SECTOR_TYPE_SECONDARY_MATCH_BONUS = 2.5;
 export const SECTOR_TYPE_MISMATCH_PENALTY = -15;
 
 export function getSectorTypeMatchModifier(

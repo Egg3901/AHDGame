@@ -19,7 +19,7 @@ The 1991 long-run economic layer (regional populations, GDPs, fiscal-year budget
 
 ## Economy and sector markets
 
-Each country seeds an **unowned sector market** for all 17 sector types across every region. Corporations acquire slices of this pool; the remainder stays unowned until other players move in. Regional sector specialties add starting margin bonuses on top of that market shape: primary specialties grant +10 percentage points and secondary specialties grant +5 percentage points. Extractable resources use separate per-region capacity ceilings, shown in the dashboard above and mapped in more detail below.
+Each country seeds an **unowned sector market** for all 17 sector types across every region. Corporations acquire slices of this pool; the remainder stays unowned until other players move in. Regional sector specialties add starting margin bonuses on top of that market shape: primary specialties grant +5 percentage points and secondary specialties grant +2.5 percentage points. Extractable resources use separate per-region capacity ceilings, shown in the dashboard above and mapped in more detail below.
 
 Sector market sizes are seeded proportionally to real-world GDP composition rather than split evenly. A region's seeded market for any given sector is:
 
@@ -37,7 +37,7 @@ Examples:
 - Dublin leans technology and finance; Ireland's southwest leans chemical industries and technology.
 - Brazil splits sharply: Norte favors extraction, Centro-Oeste favors agriculture, and Sudeste favors finance and manufacturing.
 
-The dashboard's **Specialties** section is the canonical opening audit for the countries with authored regional bonus coverage in the selected preset. It lists each region's primary +10pp and secondary +5pp sector margin bonuses and shows the local sector seed share behind both choices.
+The dashboard's **Specialties** section is the canonical opening audit for the countries with authored regional bonus coverage in the selected preset. It lists each region's primary +5pp and secondary +2.5pp sector margin bonuses and shows the local sector seed share behind both choices.
 
 Use the map below to inspect sector weight by region and country.
 

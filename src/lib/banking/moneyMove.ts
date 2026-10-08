@@ -36,8 +36,8 @@
 import { isDeepStrictEqual } from "node:util";
 import { ObjectId, type Db, type Filter } from "mongodb";
 import {
-  NET_TOLERANCE,
   legsNet,
+  netTolerance,
   moneyMoveValuationError,
   type ValueLegKind,
 } from "@/lib/banking/rules/invariants";
@@ -249,7 +249,7 @@ export async function claimMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
   if (legs.length === 0) return { status: "claimed", legs: [] };
 
   const net = legsNet(legs);
-  if (Math.abs(net) > NET_TOLERANCE) {
+  if (Math.abs(net) > netTolerance(legs)) {
     // Refuse rather than move: an unbalanced move is the exact bug class this
     // module exists to make impossible, so it must never be half-written.
     return {
