@@ -95,6 +95,8 @@ export function resolvePresidentialWinnerCandidateId(
   evNeeded = PRESIDENTIAL_EV_NEEDED
 ): string | null {
   if (isContingentResolutionMode(resolutionMode)) {
+    // A deadlocked House has elected nobody; an acting president serves.
+    if (contingentResult?.houseDeadlocked) return null;
     return contingentResult?.presidentWinnerId ?? null;
   }
   if (!electoralVotesByCandidate) return null;

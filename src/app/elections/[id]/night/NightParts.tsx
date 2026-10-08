@@ -644,7 +644,10 @@ export function SettledPanel({
 }: {
   view: NightView;
   candidateName: (id: string) => string;
-  contingent?: { result?: ContingentElectionDisplay };
+  contingent?: {
+    result?: ContingentElectionDisplay;
+    houseVote?: { actingPresidentName: string; closesTurn: number; status: "open" | "closed" };
+  };
   href: string;
   onContinue?: () => void;
 }) {
@@ -653,7 +656,11 @@ export function SettledPanel({
     !view.noMajority && view.winnerId
       ? view.candidates.find((c) => c.id === view.winnerId)
       : undefined;
-  const houseWinnerId = result?.presidentWinnerId ?? (view.noMajority ? view.winnerId : null);
+  const houseVote = contingent?.houseVote;
+  const deadlocked = Boolean(result?.houseDeadlocked);
+  const houseWinnerId = deadlocked
+    ? null
+    : (result?.presidentWinnerId ?? (view.noMajority ? view.winnerId : null));
   const houseVotes = houseWinnerId ? (result?.houseVoteTotals[houseWinnerId] ?? null) : null;
   const houseColor = view.candidates.find((c) => c.id === houseWinnerId)?.color;
   const linkStyle: CSSProperties = {
@@ -693,18 +700,22 @@ export function SettledPanel({
           <div style={{ fontSize: 22, fontWeight: 600, marginTop: 2 }}>
             {houseWinnerId
               ? `The House elects ${candidateName(houseWinnerId)}`
-              : `No candidate reached ${view.evNeeded} electoral votes`}
+              : deadlocked
+                ? "The House has not chosen a president"
+                : `No candidate reached ${view.evNeeded} electoral votes`}
           </div>
           <p style={{ margin: "4px 0 0", fontSize: 14, color: BLEND.muted }}>
             No candidate reached {view.evNeeded} electoral votes, so the House chose from the top
             three, one vote per state delegation.{" "}
-            {houseWinnerId && result && houseVotes != null
-              ? result.deadlockBreakerUsed
-                ? `No one reached ${result.houseThreshold} delegations; ${candidateName(houseWinnerId)} led with ${houseVotes} and was seated under the deadlock rule.`
-                : `${candidateName(houseWinnerId)} won ${houseVotes} of the ${result.houseThreshold} delegations needed.`
-              : houseWinnerId
-                ? ""
-                : "The presidency goes to a contingent election in the House of Representatives."}{" "}
+            {deadlocked && result
+              ? `No one reached ${result.houseThreshold} delegations. ${houseVote?.actingPresidentName ?? "The vice president the Senate elected"} serves as acting president while the House keeps voting${houseVote ? `, until turn ${houseVote.closesTurn}` : ""}.`
+              : houseWinnerId && result && houseVotes != null
+                ? result.deadlockBreakerUsed
+                  ? `No one reached ${result.houseThreshold} delegations; ${candidateName(houseWinnerId)} led with ${houseVotes} and was seated under the deadlock rule.`
+                  : `${candidateName(houseWinnerId)} won ${houseVotes} of the ${result.houseThreshold} delegations needed.`
+                : houseWinnerId
+                  ? ""
+                  : "The presidency goes to a contingent election in the House of Representatives."}{" "}
             All {view.totalStates} states called, 100% reporting.
           </p>
         </>

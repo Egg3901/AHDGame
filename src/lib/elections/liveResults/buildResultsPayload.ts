@@ -474,6 +474,15 @@ export async function buildResultsPayload(
       tally?.contingentResult
         ? { contingentResult: tally.contingentResult }
         : {}),
+      ...(usCollegeResolution && tally?.contingentHouseVote
+        ? {
+            contingentHouseVote: {
+              status: tally.contingentHouseVote.status,
+              actingPresidentName: tally.contingentHouseVote.actingPresidentName,
+              closesTurn: tally.contingentHouseVote.closesTurn,
+            },
+          }
+        : {}),
     },
     isAdmin,
     // During the final-hour drip the payload legitimately changes every poll;

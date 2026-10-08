@@ -142,6 +142,12 @@ export interface ResultsSummary {
   resolutionMode?: PresidentialResolutionMode;
   /** Resolved US president decided by the House: the contingent ballot. */
   contingentResult?: ContingentElectionDisplay;
+  /** House deadlock: who is acting president and how long the House keeps voting. */
+  contingentHouseVote?: {
+    status: "open" | "closed";
+    actingPresidentName: string;
+    closesTurn: number;
+  };
 }
 
 /** One sibling region election in a national parliamentary aggregation. */
