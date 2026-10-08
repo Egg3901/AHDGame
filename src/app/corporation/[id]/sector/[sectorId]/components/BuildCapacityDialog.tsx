@@ -216,12 +216,13 @@ export default function BuildCapacityDialog({
           <label htmlFor="build-count" className="text-body-sm font-medium text-muted">
             {capitalizeFacility(sites)} to {vocab.buildVerb}
           </label>
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 grid grid-cols-[3rem_minmax(0,1fr)_3rem] gap-2 min-[400px]:flex min-[400px]:items-center">
             <StepButton
               label={`${vocab.buildVerb} 10 fewer ${sites}`}
               disabled={count <= 1}
               onClick={(e) => nudge(-10, e)}
               wide
+              className="col-start-1 row-start-2"
             >
               −10
             </StepButton>
@@ -229,10 +230,11 @@ export default function BuildCapacityDialog({
               label={`${vocab.buildVerb} one fewer ${site}`}
               disabled={count <= 1}
               onClick={(e) => nudge(-1, e)}
+              className="col-start-1 row-start-1 justify-self-center"
             >
               −
             </StepButton>
-            <div className="min-w-0 flex-1 rounded-lg border border-card-border bg-background px-3 py-2 text-center">
+            <div className="col-start-2 row-span-2 row-start-1 flex min-w-0 flex-1 flex-col justify-center rounded-lg border border-card-border bg-background px-3 py-2 text-center min-[400px]:block">
               <input
                 id="build-count"
                 // Text, not number: the spinners and the scroll wheel nudge a
@@ -276,13 +278,18 @@ export default function BuildCapacityDialog({
                 {count === 1 ? site : sites} · {fmtUnits(unitsPerFacility)} units/day each
               </p>
             </div>
-            <StepButton label={`${vocab.buildVerb} one more ${site}`} onClick={(e) => nudge(1, e)}>
+            <StepButton
+              label={`${vocab.buildVerb} one more ${site}`}
+              onClick={(e) => nudge(1, e)}
+              className="col-start-3 row-start-1 justify-self-center"
+            >
               +
             </StepButton>
             <StepButton
               label={`${vocab.buildVerb} 10 more ${sites}`}
               onClick={(e) => nudge(10, e)}
               wide
+              className="col-start-3 row-start-2"
             >
               +10
             </StepButton>
@@ -617,12 +624,14 @@ function StepButton({
   onClick,
   disabled = false,
   wide = false,
+  className = "",
   children,
 }: {
   label: string;
   onClick: (e: React.MouseEvent) => void;
   disabled?: boolean;
   wide?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -632,9 +641,9 @@ function StepButton({
       disabled={disabled}
       aria-label={label}
       title={label}
-      className={`flex h-10 shrink-0 items-center justify-center rounded-lg border border-card-border bg-background font-bold text-foreground transition-colors hover:bg-card-elevated disabled:cursor-not-allowed disabled:opacity-40 ${
-        wide ? "w-12 text-body-sm" : "w-10 text-body-lg"
-      }`}
+      className={`flex h-11 shrink-0 items-center justify-center rounded-lg border border-card-border bg-background font-bold text-foreground transition-colors hover:bg-card-elevated disabled:cursor-not-allowed disabled:opacity-40 ${
+        wide ? "w-12 text-body-sm" : "w-11 text-body-lg"
+      } ${className}`}
     >
       {children}
     </button>
