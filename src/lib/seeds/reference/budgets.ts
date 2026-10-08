@@ -5873,8 +5873,9 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
             IRISH_GROSS_GOVERNMENT_DEBT_1991_IEP * (rebased.debt.ceiling / rebased.debt.principal),
         },
       };
-      // Ireland enacts no spending laws, so this book is what it spends every
-      // turn. The derived book runs about 46% of GDP before about 9% of debt
+      // The seeded Irish law book is rescaled to this baseline (deriveEnactedLaws),
+      // and enacted laws are what calculateFederalSpending prices every turn, so
+      // the baseline is what Ireland spends. The derived book runs about 46% of GDP before about 9% of debt
       // service against 42% receipts, a 13% of GDP deficit no 1991 Irish
       // government ran. Size it to receipts after debt service like the other
       // openings; the mix is kept and the book only shrinks.
