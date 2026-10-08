@@ -5864,7 +5864,7 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
       if (config.countryId !== "IE") return rebased;
       // CSO's gross debt stock is an absolute EUR observation restored to IEP.
       // Preserve the authored ceiling headroom, not the stale 133.3% debt share.
-      return {
+      const ireland = {
         ...rebased,
         debt: {
           ...rebased.debt,
@@ -5872,6 +5872,25 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
           ceiling:
             IRISH_GROSS_GOVERNMENT_DEBT_1991_IEP * (rebased.debt.ceiling / rebased.debt.principal),
         },
+      };
+      // Ireland enacts no spending laws, so this book is what it spends every
+      // turn. The derived book runs about 46% of GDP before about 9% of debt
+      // service against 42% receipts, a 13% of GDP deficit no 1991 Irish
+      // government ran. Size it to receipts after debt service like the other
+      // openings; the mix is kept and the book only shrinks.
+      const irelandBudget = buildNationalBudgetSeed(ireland);
+      const envelope = fitOpeningFiscalEnvelope({
+        gdp: ireland.gdp,
+        annualRevenue: irelandBudget.revenue.total,
+        annualDebtService: irelandBudget.spending.debtInterest,
+        byCategory: ireland.baselineSpendingByCategory,
+        stateGrants: ireland.baselineStateGrants,
+        maximumDeficitGdpShare: PLAYER_RESET_DEFICIT_GDP_SHARE_1991,
+      });
+      return {
+        ...ireland,
+        baselineSpendingByCategory: envelope.byCategory,
+        baselineStateGrants: envelope.stateGrants,
       };
     }
     const budget = buildNationalBudgetSeed(config);
