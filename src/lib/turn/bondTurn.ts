@@ -1162,10 +1162,11 @@ export async function processBondTurn(
   const lock = new KeyedQueue();
   const settleDueSovereignBond = (bond: Bond): Promise<PartialTxEntry[] | null> => {
     if (!bond.countryId) return Promise.resolve(null);
+    const countryId = bond.countryId;
     const bondCcy = resolveBondCurrency(bond);
-    const budgetId = getNationalBudgetId(bond.countryId);
+    const budgetId = getNationalBudgetId(countryId);
     const treasuryValuation = treasuryAnchorValuation({
-      countryId: bond.countryId,
+      countryId: countryId,
       currencyCode: bondCcy,
       preset: gameState?.preset ?? DEFAULT_SEED_PRESET,
       observedRate: authoritativeRates?.get(bondCcy),
@@ -1356,7 +1357,7 @@ export async function processBondTurn(
     if ((bond.centralBankHoldings ?? 0) > 0) {
       addHolderLeg(
         "centralBanks",
-        bond.countryId,
+        countryId,
         "reserveBalance",
         (bond.centralBankHoldings ?? 0) * BOND_UNIT_FACE_VALUE,
         bondCcy,
@@ -1393,7 +1394,7 @@ export async function processBondTurn(
 
       const newClaims = await addBankMaturityClaims(db, {
         budgetId,
-        countryId: bond.countryId,
+        countryId: countryId,
         currencyCode: bondCcy,
         turn,
         bond,
@@ -1459,7 +1460,7 @@ export async function processBondTurn(
           turn,
           createdAt: now,
           subjectType: "government",
-          countryId: bond.countryId,
+          countryId: countryId,
           amount: -nonBankRepaymentLocal,
           currencyCode: bondCcy,
           anchorAmount: -nonBankRepaymentLocal / treasuryValuation.anchorRate,
