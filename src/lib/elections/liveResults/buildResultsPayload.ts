@@ -415,9 +415,17 @@ export async function buildResultsPayload(
       evNeeded
     );
   }
+  // A US college race that has ended but not yet been resolved names nobody:
+  // the engine may still be running a House contingent ballot.
+  const usCollegeAwaitingResolution =
+    isPresident &&
+    election.status === "completed" &&
+    election.countryId === "US" &&
+    !usCollegeResolution;
   if (
     !projectedWinner &&
     !usCollegeResolution &&
+    !usCollegeAwaitingResolution &&
     isEnded &&
     singleWinnerRace &&
     totalCastVotes > 0

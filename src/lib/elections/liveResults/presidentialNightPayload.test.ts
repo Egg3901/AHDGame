@@ -160,6 +160,17 @@ describe("resolved US president winner", () => {
     expect(p.summary.contingentResult?.presidentWinnerId).toBe(b);
   });
 
+  it("names nobody while a completed race awaits the engine's resolution", async () => {
+    const { db, race, gs } = setup("US", "completed");
+    const p = await buildResultsPayload(db, race, gs, { isAdmin: false, apportionmentYear: null });
+    // Candidate 0 leads the popular vote but the House may still decide.
+    expect(p.summary.projectedWinner ?? null).toBe(
+      p.candidates.some((c) => (c.electoralVotes ?? 0) >= (p.election.evNeeded ?? Infinity))
+        ? String(CANDS[0])
+        : null
+    );
+  });
+
   it("names the EV majority winner on a majority resolution", async () => {
     const { db, race, gs } = setup("US", "resolved");
     const tallies = (db as unknown as ReturnType<typeof createMockDb>).collection(

@@ -109,6 +109,9 @@ type WatchState =
   | { kind: "failed" }
   | { kind: "ready"; data: ElectionResultsResponse };
 
+/** Statuses after which the payload no longer changes. */
+const FINAL_STATUSES = new Set(["resolved", "cancelled"]);
+
 /**
  * Election detail page: from the last turn interval, watch the results
  * payload. `pending` holds the page back while the first payload loads, so the
@@ -121,8 +124,12 @@ export function useNightWatch(
   const [state, setState] = useState<WatchState>({ kind: "idle" });
   const data = state.kind === "ready" ? state.data : null;
   const hold = useNightHold(data);
-  const finished = data != null && isResolvedStatus(data.election.status);
+  // `completed` means voting closed but the engine may still be resolving the
+  // race (a House contingent ballot included); keep watching until `resolved`
+  // so the settled board shows the winner the engine actually seated.
+  const finished = data != null && FINAL_STATUSES.has(data.election.status);
   const nightOn = hasNight(data);
+  const resolving = data != null && isResolvedStatus(data.election.status) && !finished;
   // Once armed the watch stays on through the hand-off, even after the detail
   // payload reports the race ended and `enabled` drops.
   const [armed, setArmed] = useState(enabled);
@@ -153,7 +160,10 @@ export function useNightWatch(
       }
     };
     void load();
-    const interval = setInterval(() => void load(), nightOn ? NIGHT_POLL_MS : IDLE_POLL_MS);
+    const interval = setInterval(
+      () => void load(),
+      nightOn || resolving ? NIGHT_POLL_MS : IDLE_POLL_MS
+    );
     const onVisible = () => void load();
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -161,7 +171,7 @@ export function useNightWatch(
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [active, electionId, nightOn]);
+  }, [active, electionId, nightOn, resolving]);
 
   return { data, pending: armed && state.kind === "idle", hold };
 }
