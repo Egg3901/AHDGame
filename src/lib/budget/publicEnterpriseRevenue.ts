@@ -31,6 +31,7 @@ import { MARKET_REALIZATION_RAMP_TURNS } from "@/lib/market/capital";
 import type { GameConfig } from "@/lib/db/types";
 import type { GameState } from "@/lib/db/types/gameState";
 import { soeCapacityReplacementCostAnchor } from "@/lib/economy/soe";
+import { SETTLEMENT_HISTORY_EXCLUDED } from "@/lib/banking/settlementHistory";
 
 /**
  * Safety ceiling for a SYNTHETIC *scaled* national corp's per-turn budget impact,
@@ -334,7 +335,7 @@ export async function calculateCountryOwnedBudgetRevenue(
 ): Promise<Partial<Record<keyof FederalRevenue, number>>> {
   const corporations = await db
     .collection<Corporation>("corporations")
-    .find({ countryOwnerId: countryId })
+    .find({ countryOwnerId: countryId }, { projection: SETTLEMENT_HISTORY_EXCLUDED })
     .toArray();
 
   if (corporations.length === 0) {
@@ -464,7 +465,7 @@ export async function estimateCountryOwnedBudgetNetLocal(
 ): Promise<number> {
   const corporations = await db
     .collection<Corporation>("corporations")
-    .find({ countryOwnerId: countryId })
+    .find({ countryOwnerId: countryId }, { projection: SETTLEMENT_HISTORY_EXCLUDED })
     .toArray();
   if (corporations.length === 0) return 0;
 
