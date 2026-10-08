@@ -21,6 +21,7 @@
  * in a state nothing enumerates.
  */
 import { recordCorporationExit } from "@/lib/corporations/exits/recordCorporationExit";
+import type { CorporationExitSnapshot } from "@/lib/corporations/exits/rules";
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation, CorporateSector, State } from "@/lib/db/types";
 import type { BillStatus } from "@/lib/db/types/legislation";
@@ -576,7 +577,7 @@ async function mergeNationalCorporations(
     const hasOwnHolders = Array.isArray(shell.shareholders) && shell.shareholders.length > 0;
     if ((cash === 0 || sameCurrency) && !hasOwnHolders) {
       await corps.deleteOne({ _id: shell._id });
-      await recordCorporationExit(db, shell, {
+      await recordCorporationExit(db, shell as unknown as CorporationExitSnapshot, {
         reason: "national_corporation_merged",
         successorId: survivor._id,
         now,
