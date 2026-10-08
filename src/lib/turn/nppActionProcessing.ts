@@ -48,7 +48,6 @@ import { careerArchetypeModifiersContinuous } from "@/lib/nppAutonomy/v3/careerA
 import { nppBuyBond } from "@/lib/nppAutonomy/v3/finance/nppBonds";
 import { nppBuyShares, nppSellShares } from "@/lib/nppAutonomy/v3/finance/nppShares";
 import { nppFoundCorporation } from "@/lib/nppAutonomy/v3/finance/nppFoundCorporation";
-import { localToAnchor } from "@/lib/nppAutonomy/v3/finance/nppEconomicAccount";
 import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
 import {
   nppBuildPartyOrg,
@@ -182,10 +181,14 @@ export function nppStockCandidateWeight(
 // than cautious/costCutter) rather than the political careerArchetype,
 // since "should I become a CEO" is thematically a corporate-behavior
 // decision. Funds threshold is FOUNDING_FEE × a buffer so an NPP doesn't
-// spend down to exactly zero on a single roll. Flat local-currency-
-// equivalent constant, not anchor-converted — same simplification the
-// bond/stock reserve floors above already use.
-const NPP_FOUNDING_FEE = 100_000;
+// spend down to exactly zero on a single roll. The fee is denominated in ₳
+// and converted to local at the founder's home rate, so it costs the same real
+// value everywhere. Sized from the live NPP cash distribution: cash clusters
+// tightly per country (median ~₳10.7k, p90 ~₳11.2k in the typical country), so
+// a ₳7,500 fee with the 1.5x buffer puts the bar at ₳11,250, about the richest
+// 5 to 10% of NPPs. The old flat 100k local fee was ~₳20 in Turkey and ~₳89k in
+// the US.
+export const NPP_FOUNDING_FEE_ANCHOR = 7_500;
 const NPP_FOUNDING_FUNDS_BUFFER = 1.5;
 const NPP_FOUNDING_BASE_PROBABILITY_BY_ARCHETYPE: Record<
   ReturnType<typeof deriveCeoArchetype>,
@@ -1241,9 +1244,9 @@ export async function foundNppCorporationsSurplus(
   preset?: string
 ): Promise<void> {
   // Founding draws from the personal forex account (₳). Pre-filter the pool by
-  // ₳ investment capital; the core enforces exact per-NPP affordability (fee is
-  // FX-converted there). minFunds doubles as a rough ₳ threshold.
-  const minFunds = NPP_FOUNDING_FEE * NPP_FOUNDING_FUNDS_BUFFER;
+  // ₳ investment capital; the core enforces exact per-NPP affordability (the
+  // local fee is converted back at the home rate there).
+  const minFunds = NPP_FOUNDING_FEE_ANCHOR * NPP_FOUNDING_FUNDS_BUFFER;
   const fxByCcy = await loadFxRatesByCurrency(db);
   const homeRateOf = (countryId: CountryId): number => {
     const currency = preset
@@ -1259,23 +1262,12 @@ export async function foundNppCorporationsSurplus(
   // change. One gameState read plus one federalBudget $in, once per sweep.
   const blockedSet = await loadPrivateEnterpriseBlockedCountries(db);
   const blockedCountries = [...blockedSet];
-  const knownCountries = Object.keys(COUNTRY_CURRENCY_MAP) as CountryId[];
   const candidates = await db
     .collection<NPP>("npps")
     .find(
       {
         retiredAt: null,
-        // The fee is quoted in local currency and charged in ₳, so what an NPP
-        // needs in ₳ depends on its home rate. A flat ₳ bar excluded every NPP
-        // in a cheap-fee currency (a 100k fee is a few hundred ₳ in yen or lira)
-        // and every NPP in a dear one fell short of it anyway.
-        $or: [
-          ...knownCountries.map((countryId) => ({
-            countryId,
-            nppInvestmentCashAnchor: { $gte: localToAnchor(minFunds, homeRateOf(countryId)) },
-          })),
-          { countryId: { $nin: knownCountries }, nppInvestmentCashAnchor: { $gte: minFunds } },
-        ],
+        nppInvestmentCashAnchor: { $gte: minFunds },
         ...countryScopeFilter(countryScope),
         // Applied last and combined explicitly: `countryScopeFilter` writes its
         // own `countryId` key, so a second one here would silently clobber it.
@@ -1367,7 +1359,7 @@ export async function foundNppCorporationsSurplus(
       db,
       npp,
       sectorType,
-      NPP_FOUNDING_FEE,
+      NPP_FOUNDING_FEE_ANCHOR * homeRate,
       currentTurn,
       homeRate,
       blockedSet,

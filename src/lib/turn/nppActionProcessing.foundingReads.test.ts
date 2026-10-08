@@ -7,7 +7,7 @@ vi.mock("@/lib/admin/spawnNppCorporation", () => ({
 }));
 
 import { spawnNppCorporation } from "@/lib/admin/spawnNppCorporation";
-import { foundNppCorporationsSurplus } from "./nppActionProcessing";
+import { foundNppCorporationsSurplus, NPP_FOUNDING_FEE_ANCHOR } from "./nppActionProcessing";
 
 /**
  * Deterministic read-count test for the NPP corporation-founding sweep.
@@ -27,7 +27,7 @@ describe("foundNppCorporationsSurplus read budget", () => {
       party: "1",
       homeState: "CA",
       personality: { loyalty: 50, ambition: 70, stubbornness: 20 },
-      nppInvestmentCashAnchor: 200_000,
+      nppInvestmentCashAnchor: 20_000,
     }));
 
     const corpAggregate = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
@@ -37,7 +37,7 @@ describe("foundNppCorporationsSurplus read budget", () => {
     const corpUpdateOne = vi.fn().mockResolvedValue({ matchedCount: 1 });
     const nppDebit = vi.fn().mockImplementation(async (filter: { _id: ObjectId }) => ({
       _id: filter._id,
-      nppInvestmentCashAnchor: 100_000,
+      nppInvestmentCashAnchor: 12_500,
     }));
     const gameStateFindOne = vi.fn().mockResolvedValue({ currentYear: 1970 });
     const fedBudgetFind = vi.fn().mockReturnValue({ toArray: async () => [] });
@@ -122,19 +122,15 @@ describe("foundNppCorporationsSurplus read budget", () => {
     // No price docs means no shortage pressure: the calm per-sweep cap holds.
     expect(attempts).toBeLessThanOrEqual(3);
 
-    // The cash prefilter is per country in FX terms, not one flat bar: a 1.5x
-    // buffer on the 100k fee at the live EUR rate for a French NPP.
-    const poolFilter = nppFilters[0] as {
-      $or: { countryId: unknown; nppInvestmentCashAnchor: { $gte: number } }[];
-    };
-    const fr = poolFilter.$or.find((c) => c.countryId === "FR");
-    expect(fr?.nppInvestmentCashAnchor.$gte).toBeCloseTo((150_000 / 0.92) * 1, 0);
-    // A 2027 French founder's fee uses the live EUR rate, not the obsolete
-    // FRF rate (or the missing-rate fallback of 1).
+    // The fee is denominated in anchor: the prefilter is one flat anchor bar
+    // (fee x 1.5 buffer), and the guarded debit asks for the same anchor fee
+    // whatever the home rate, so a weak currency is not cheaper in real terms.
+    const poolFilter = nppFilters[0] as { nppInvestmentCashAnchor: { $gte: number } };
+    expect(poolFilter.nppInvestmentCashAnchor.$gte).toBe(NPP_FOUNDING_FEE_ANCHOR * 1.5);
     const firstDebitFilter = nppDebit.mock.calls[0][0] as {
       nppInvestmentCashAnchor: { $gte: number };
     };
-    expect(firstDebitFilter.nppInvestmentCashAnchor.$gte).toBeCloseTo(100_000 / 0.92, 2);
+    expect(firstDebitFilter.nppInvestmentCashAnchor.$gte).toBeCloseTo(NPP_FOUNDING_FEE_ANCHOR, 2);
 
     // One batched already-CEO exclusion over the whole pool, not one findOne
     // per RNG-passing candidate.
