@@ -9,6 +9,7 @@ import { findMergedRegionMetrics } from "@/lib/macroMetrics/merge";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
+import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { buildPoliticalBaseModifiers } from "@/lib/politicalLegislation/marginAdapter";
@@ -207,12 +208,30 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       !viewerIsAdmin &&
       user?.isModerator === true &&
       new URL(request.url).searchParams.get("modView") === "1";
-    const shouldRedact = shouldRedactCorporation(
-      corporation,
-      user?.userId ?? undefined,
-      viewerIsAdmin,
-      modViewEnabled
-    );
+    // The CEO of the controlling parent is an insider of its subsidiary, same
+    // rule GET /api/corporations/[id] applies (ticket 1423).
+    let isParentCeo = false;
+    const controllingParent = user && !isCeo ? getControllingCorporateParent(corporation) : null;
+    if (user && controllingParent) {
+      const parentCorp = await db
+        .collection<Corporation>("corporations")
+        .findOne(
+          { _id: controllingParent.corporationId },
+          { projection: { userId: 1, ceoVacant: 1 } }
+        );
+      isParentCeo =
+        !!parentCorp &&
+        parentCorp.ceoVacant !== true &&
+        parentCorp.userId?.toString() === user.userId;
+    }
+    const shouldRedact =
+      !isParentCeo &&
+      shouldRedactCorporation(
+        corporation,
+        user?.userId ?? undefined,
+        viewerIsAdmin,
+        modViewEnabled
+      );
     // Financial fog of war (public corps only, non-insiders), mirrors the
     // protection GET /api/corporations/[id] already applies, so a competitor
     // can't see a public corp's live sector financials through this page when
@@ -220,11 +239,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
     // Unlike the corp page, there is no per-sector historical snapshot to
     // build a jittered quarterly estimate from, so this takes the stricter
     // path of hiding the figures outright rather than approximating them.
-    // Does not check for CEO-of-controlling-parent (the corp page's other
-    // insider case), a parent-corp CEO sees this sector fogged too, which is
-    // overly cautious but not a leak.
     const isPublicCorp = !corporation.isPrivate && !corporation.countryOwnerId;
-    const isInsider = isCeo || viewerIsAdmin;
+    const isInsider = isCeo || isParentCeo || viewerIsAdmin;
     const publicFinancialFog = isPublicCorp && !shouldRedact && !isInsider;
 
     // Look up the viewer's corporation (for attack/split UI)
