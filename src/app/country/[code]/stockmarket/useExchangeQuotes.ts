@@ -1,5 +1,6 @@
 "use client";
 
+import { MARKET_POLLING_TEARDOWN } from "@/lib/observability/sentryFilters";
 import { useEffect, useState } from "react";
 import type { ExchangeData } from "./types";
 
@@ -46,7 +47,7 @@ export function useExchangeQuotes(exchange: string, currentTurn: number) {
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      controller.abort();
+      controller.abort(new DOMException(MARKET_POLLING_TEARDOWN, "AbortError"));
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisible);
     };

@@ -86,6 +86,43 @@ describe("banking charter", () => {
       expect(required).not.toBe(CORPORATION_FOUNDING_COST);
     });
 
+    it("reads the preset once when quoting the bank console charter choices", async () => {
+      const { loadCharterCapitalRequirements, checkCharterEligibility } = await importCharter();
+      const requirements = await loadCharterCapitalRequirements(db as unknown as Db, "USD");
+      expect(requirements.retail).toBeGreaterThan(requirements.investment);
+      expect(requirements.universal).toBe(requirements.retail);
+      const corporation = makeCorp({ liquidCapital: 0 });
+      for (const type of ["retail", "investment", "universal"] as const) {
+        const result = await checkCharterEligibility(
+          db as unknown as Db,
+          corporation,
+          type,
+          "USD",
+          {
+            capitalRequirements: requirements,
+          }
+        );
+        expect(result.requirement).toBe(requirements[type]);
+        expect(result.eligible).toBe(false);
+        expect(result.reasons).toContain(
+          `Insufficient treasury: need ${requirements[type].toLocaleString()} USD posted capital`
+        );
+      }
+      const presetReads = db.collectionMocks.gameState!.findOne.mock.calls.filter(
+        ([, options]) => JSON.stringify(options?.projection) === JSON.stringify({ preset: 1 })
+      );
+      expect(presetReads).toHaveLength(1);
+    });
+
+    it("reloads the preset for each independent capital requirement", async () => {
+      const { getCharterCapitalRequirement } = await importCharter();
+      const modern = await getCharterCapitalRequirement(db as unknown as Db, "USD");
+      db.collectionMocks.gameState!.findOne.mockResolvedValue({ preset: "1953-default" });
+      const historical = await getCharterCapitalRequirement(db as unknown as Db, "USD");
+      expect(historical).toBeLessThan(modern);
+      expect(db.collectionMocks.gameState!.findOne).toHaveBeenCalledTimes(2);
+    });
+
     it("deflates for a 1953 world via era unit scale", async () => {
       db.collectionMocks.gameState!.findOne.mockResolvedValue({
         _id: "current",
