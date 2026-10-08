@@ -14,12 +14,39 @@ import type { CorporationType } from "@/lib/constants/corporations";
 export const SOE_GROWTH_MIN_SHORTAGE = 1.25;
 
 /**
- * Size of one growth order, as a share of the sector's current capacity. The
- * order is the only one a state sector holds (see `eligible`), so this is also
- * the growth per build cycle: roughly the pace the private reinvestment brain
- * adds in a chronic shortage, not a crash programme.
+ * Smallest growth order, as a share of the sector's current capacity: what a
+ * sector just over {@link SOE_GROWTH_MIN_SHORTAGE} gets. The order is the only
+ * one a state sector holds (see `eligible`), so this is also the growth per
+ * build cycle.
  */
-export const SOE_GROWTH_ORDER_SHARE = 0.05;
+export const SOE_GROWTH_MIN_ORDER_SHARE = 0.05;
+
+/**
+ * Largest growth order, as a share of current capacity. The private
+ * reinvestment brain may keep up to two half-run steps in flight at once
+ * (`NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH` x `NPP_GROWTH_MAX_STEP_OF_RUN`), and on
+ * the live 1991 world its energy plants had about 90% of their stock on order
+ * while the state plants, one flat 5% order per 96-turn cycle, had 5%. Half the
+ * private ceiling is the state's cap.
+ */
+export const SOE_GROWTH_MAX_ORDER_SHARE = 0.5;
+
+/** Extra order share per point of price-over-base above the shortage threshold. */
+export const SOE_GROWTH_SHARE_PER_SHORTAGE = 0.25;
+
+/**
+ * Growth order share for a sector at this shortage: the minimum at the
+ * threshold, rising linearly with how far above base its outputs are priced
+ * (2x base is a 24% order, 3x and over the 50% cap). A sector 2x short and a
+ * sector 1.3x short no longer get the same 5% a build cycle.
+ */
+export function soeGrowthOrderShare(shortage: number): number {
+  if (!Number.isFinite(shortage)) return SOE_GROWTH_MIN_ORDER_SHARE;
+  const share =
+    SOE_GROWTH_MIN_ORDER_SHARE +
+    Math.max(0, shortage - SOE_GROWTH_MIN_SHORTAGE) * SOE_GROWTH_SHARE_PER_SHORTAGE;
+  return Math.min(SOE_GROWTH_MAX_ORDER_SHARE, share);
+}
 
 /** Growth is skipped once sovereign debt is this close to its ceiling. */
 export const SOE_GROWTH_MAX_DEBT_TO_CEILING = 0.9;
@@ -89,7 +116,7 @@ function eligible(s: SoeGrowthSectorInput): boolean {
 
 /**
  * Plan one treasury's growth orders: every eligible short sector gets one order
- * of {@link SOE_GROWTH_ORDER_SHARE} of its capacity, shortest-supplied first,
+ * of {@link soeGrowthOrderShare} of its capacity, shortest-supplied first,
  * until the budget runs out. A sector is skipped whole when its order does not
  * fit, so the plan never exceeds `budgetAnchor`.
  */
@@ -104,7 +131,7 @@ export function planSoeCapexGrowth(
     .filter(eligible)
     .sort((a, b) => (b.shortage ?? 0) - (a.shortage ?? 0) || a.id.localeCompare(b.id));
   for (const s of ranked) {
-    const units = s.capitalStock * SOE_GROWTH_ORDER_SHARE;
+    const units = s.capitalStock * soeGrowthOrderShare(s.shortage ?? 0);
     const costAnchor = units * s.unitPriceAnchor;
     if (!(costAnchor > 0) || growthAnchor + costAnchor > budgetAnchor) continue;
     orders.push({ sectorId: s.id, units, costAnchor });
