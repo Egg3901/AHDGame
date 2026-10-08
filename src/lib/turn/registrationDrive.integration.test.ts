@@ -26,6 +26,7 @@ interface CapturedOp {
 describe("processPartyGOTV — voter registration drive (#81) DB path", () => {
   const bulkWrites: Record<string, CapturedOp[]> = {};
   const inserted: Record<string, unknown[]> = {};
+  const reads: string[] = [];
 
   const data: Record<string, unknown[]> = {
     statePartyOrg: [
@@ -34,9 +35,10 @@ describe("processPartyGOTV — voter registration drive (#81) DB path", () => {
         countryId: "US",
         stateId: "PA",
         partyId: "1",
-        organization: 20,
+        organization: 0,
+        hasPresence: false,
         registration: 5,
-        treasury: 0,
+        treasury: 1_000_000,
       },
       {
         _id: "CA_1",
@@ -44,8 +46,9 @@ describe("processPartyGOTV — voter registration drive (#81) DB path", () => {
         stateId: "CA",
         partyId: "1",
         organization: 20,
+        hasPresence: true,
         registration: 5,
-        treasury: 0,
+        treasury: 1_000_000,
       },
     ],
     politicalParties: [
@@ -60,7 +63,10 @@ describe("processPartyGOTV — voter registration drive (#81) DB path", () => {
         socialPosition: 0,
       },
     ],
-    characters: [],
+    characters: [
+      { countryId: "US", party: "1", homeState: "PA" },
+      { countryId: "US", party: "1", homeState: "CA" },
+    ],
     npps: [],
     states: [
       { _id: "PA", population: 1000, gdp: 100, votingEligiblePopulation: 800 },
@@ -86,7 +92,7 @@ describe("processPartyGOTV — voter registration drive (#81) DB path", () => {
     ],
   };
 
-  const budget: PartyBudget = {
+  const initialBudget: PartyBudget = {
     _id: new ObjectId(),
     partyId: "1",
     countryId: "US",
@@ -100,13 +106,26 @@ describe("processPartyGOTV — voter registration drive (#81) DB path", () => {
     updatedAt: new Date(),
   };
 
+  let budget: PartyBudget = { ...initialBudget };
+
   beforeEach(async () => {
     vi.clearAllMocks();
+    reads.length = 0;
+    budget = { ...initialBudget };
+    data.characters = [
+      { countryId: "US", party: "1", homeState: "PA" },
+      { countryId: "US", party: "1", homeState: "CA" },
+    ];
+    data.npps = [];
+    data.electedOfficials = [];
     for (const k of Object.keys(bulkWrites)) delete bulkWrites[k];
     for (const k of Object.keys(inserted)) delete inserted[k];
 
     const collection = (name: string) => ({
-      find: () => ({ toArray: async () => data[name] ?? [] }),
+      find: () => {
+        reads.push(name);
+        return { toArray: async () => data[name] ?? [] };
+      },
       findOne: async () =>
         name === "gameConfig" ? { _id: "default", nppEconomyEnabled: false } : null,
       bulkWrite: async (ops: CapturedOp[]) => {
@@ -172,6 +191,71 @@ describe("processPartyGOTV — voter registration drive (#81) DB path", () => {
     expect(emitTreasuryTransactionsBulk).toHaveBeenCalledWith(
       expect.anything(),
       expect.arrayContaining([expect.objectContaining({ category: "operations", amount: 100 })])
+    );
+  });
+
+  it("splits national spending only among regions with live presence, ignoring stale flags", async () => {
+    data.characters = [{ countryId: "US", party: "1", homeState: "PA" }];
+    const { processPartyGOTV } = await import("@/lib/turn/demographicTurnoutTurn");
+    await processPartyGOTV(undefined, [], undefined, 1000, undefined, undefined, undefined, 42);
+    const ops = bulkWrites.statePartyOrg ?? [];
+    expect(ops).toHaveLength(1);
+    expect(ops[0].updateOne).toMatchObject({
+      filter: { _id: "PA_1" },
+      update: { $inc: { registration: 0.02 } },
+    });
+    expect(bulkWrites.stateRegistrationPool).toHaveLength(1);
+    expect(reads.filter((name) => name === "electedOfficials")).toHaveLength(1);
+    expect(inserted.orgRegLedger).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ stateId: "CA" })])
+    );
+  });
+
+  it.each(["national", "state"] as const)(
+    "does not charge an absent party's %s drive",
+    async (scope) => {
+      data.characters = [];
+      if (scope === "state") budget = { ...budget, scope: "state", stateId: "PA" };
+      const { processPartyGOTV } = await import("@/lib/turn/demographicTurnoutTurn");
+      await processPartyGOTV(undefined, [], undefined, 1000, undefined, undefined, undefined, 42);
+      expect(bulkWrites.stateRegistrationPool ?? []).toEqual([]);
+      expect(inserted.orgRegLedger ?? []).toEqual([]);
+      expect(bulkWrites.politicalParties ?? []).toEqual([]);
+      expect(bulkWrites.statePartyOrg ?? []).toEqual([]);
+    }
+  );
+
+  it.each(["npp", "official"])("recognizes %s-only presence", async (kind) => {
+    data.characters = [];
+    if (kind === "npp")
+      data.npps = [{ countryId: "US", party: "1", homeState: "PA", funds: 0, donorBaseLevel: 0 }];
+    else data.electedOfficials = [{ countryId: "US", party: "1", state: "PA" }];
+    const { processPartyGOTV } = await import("@/lib/turn/demographicTurnoutTurn");
+    await processPartyGOTV(undefined, [], undefined, 1000, undefined, undefined, undefined, 42);
+    expect(bulkWrites.statePartyOrg).toHaveLength(1);
+    expect(bulkWrites.statePartyOrg[0].updateOne?.filter).toEqual({ _id: "PA_1" });
+  });
+
+  it("does not add presence queries when registration drives are disabled", async () => {
+    budget.registrationBudgetPercent = 0;
+    const { processPartyGOTV } = await import("@/lib/turn/demographicTurnoutTurn");
+    await processPartyGOTV(undefined, [], undefined, 1000, undefined, undefined, undefined, 42);
+    expect(reads).not.toContain("electedOfficials");
+  });
+
+  it("allows a regional drive with live presence despite a stale false flag and zero Org", async () => {
+    budget = { ...budget, scope: "state", stateId: "PA" };
+    const { processPartyGOTV } = await import("@/lib/turn/demographicTurnoutTurn");
+    await processPartyGOTV(undefined, [], undefined, 1000, undefined, undefined, undefined, 42);
+    expect(bulkWrites.statePartyOrg).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: { _id: "PA_1" },
+            update: { $inc: { registration: 0.02 }, $set: expect.anything() },
+          }),
+        }),
+      ])
     );
   });
 });
