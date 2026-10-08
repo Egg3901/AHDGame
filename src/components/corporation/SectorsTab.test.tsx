@@ -225,16 +225,12 @@ describe("SectorsTab type select and dossier", () => {
     expect(screen.getByTestId("expand-modal").getAttribute("data-sector-type")).toBe("energy");
   });
 
-  it("leaves the proposed type levers on screen but disabled", () => {
+  it("shows no placeholder levers for controls the game does not have", () => {
     render(<SectorsTab {...baseProps} sectors={mixedSectors} isCeo />);
     pickType("manufacturing");
 
-    for (const button of screen.getAllByRole("button", { name: "Retool line" })) {
-      expect((button as HTMLButtonElement).disabled).toBe(true);
-    }
-    expect((screen.getByRole("button", { name: "Switch ▾" }) as HTMLButtonElement).disabled).toBe(
-      true
-    );
+    expect(screen.queryByRole("button", { name: "Retool line" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Switch ▾" })).toBeNull();
   });
 
   it("offers exactly one build button, pointed at the open division", () => {

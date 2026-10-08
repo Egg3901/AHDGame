@@ -28,11 +28,9 @@ import {
   type SectorStrategy,
 } from "@/lib/constants/sectorStrategies";
 import { facilityPlural, facilitySingular } from "@/lib/constants/facilityVocabulary";
-import { PROPOSED_ACTION_NOTE, proposedSectorActions } from "@/lib/constants/sectorTypeDossier";
 import type { SectorDetail } from "./CorporationPageTypes";
 import { StateFlag } from "./SectorRowComponents";
 import { resolveSectorStrategy, typeFacilityCount } from "./sectorTypeMetrics";
-import { SmallButton } from "./dense/DenseKit";
 
 /** The design shows the five heaviest inputs; past that the list stops scanning. */
 const MAX_DEMAND_ROWS = 5;
@@ -67,16 +65,16 @@ function CommodityChain({
         <tr>
           <th
             scope="col"
-            className="border-b border-card-border py-1 text-left text-[11px] font-medium text-muted"
+            className="border-b border-card-border py-1 text-left text-xs font-medium text-muted"
           >
             {title}
           </th>
           <th
             scope="col"
-            className="border-b border-card-border py-1 text-right text-[11px] font-medium text-muted"
+            className="border-b border-card-border py-1 text-right text-xs font-medium text-muted"
             title="Units per 100 units of output"
           >
-            per 100
+            Per 100 output
           </th>
         </tr>
       </thead>
@@ -106,7 +104,6 @@ function CommodityChain({
 export function SectorStrategyPanel({
   sectorType,
   sectors,
-  isCeo,
   corpId,
   mediaOperatingModelsEnabled,
 }: SectorStrategyPanelProps) {
@@ -163,7 +160,6 @@ export function SectorStrategyPanel({
   const sites = byStrategy.get(active.id) ?? [];
   const plural = facilityPlural(sectorType);
   const singular = facilitySingular(sectorType);
-  const actions = proposedSectorActions(sectorType);
 
   // The tab counts SITES, not facilities: the badge selects the group of
   // locations listed as chips below it, and in an early-era world a site holds
@@ -190,7 +186,8 @@ export function SectorStrategyPanel({
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
           <h2 className="text-sm font-semibold text-foreground">Operating strategies</h2>
           <span className="text-xs text-muted">
-            available strategies and active methods for {label}; the count is sites running it
+            pick a strategy to see what {label} sites make and use with it. The number is how many
+            of your sites run it
           </span>
         </div>
         <button
@@ -236,7 +233,7 @@ export function SectorStrategyPanel({
                   }`}
                 >
                   {strategy.name}
-                  <span className="font-mono text-[11px] tabular-nums text-muted">{count}</span>
+                  <span className="font-mono text-xs tabular-nums text-muted">{count}</span>
                 </button>
               );
             })}
@@ -251,24 +248,16 @@ export function SectorStrategyPanel({
                   >
                     {active.name}
                   </span>
-                  <span className="block text-[11px] text-muted">{countLine}</span>
+                  <span className="block text-xs text-muted">{countLine}</span>
                 </div>
-                {isCeo && (
-                  <SmallButton
-                    disabled
-                    title={`Switch every ${singular} on this strategy at once. ${PROPOSED_ACTION_NOTE} Change strategy one site at a time in the table below.`}
-                  >
-                    Switch ▾
-                  </SmallButton>
-                )}
               </div>
 
               <p className="m-0 text-xs text-muted">{active.description}</p>
 
               {sites.length === 0 && (
                 <p className="m-0 text-xs text-muted">
-                  None of your {plural} currently run {active.name}. Pick a {singular} below and use
-                  its strategy dropdown, or build a new one and switch it over.
+                  None of your {plural} currently run {active.name}. Pick a {singular} in the table
+                  below and change its strategy there, or build a new one and switch it over.
                 </p>
               )}
 
@@ -283,23 +272,6 @@ export function SectorStrategyPanel({
                       <StateFlag stateId={site.stateId} stateName={site.stateName} />
                       {site.displayName || site.stateName}
                     </Link>
-                  ))}
-                </div>
-              )}
-
-              {/* No build button here on purpose. The toolbar above already
-                  carries one, and a second that only differs by pre-selecting a
-                  strategy is a build affordance the expand flow does not have. */}
-              {isCeo && actions.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {actions.map((action) => (
-                    <SmallButton
-                      key={action.label}
-                      disabled
-                      title={`${action.help} ${PROPOSED_ACTION_NOTE}`}
-                    >
-                      {action.label}
-                    </SmallButton>
                   ))}
                 </div>
               )}

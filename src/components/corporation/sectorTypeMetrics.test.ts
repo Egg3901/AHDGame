@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 import { getSectorStrategies, SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
-import { proposedSectorActions } from "@/lib/constants/sectorTypeDossier";
 import type { SectorDetail } from "./CorporationPageTypes";
 import {
   sectorTypeMetrics,
@@ -166,27 +165,6 @@ describe("typeFossilShare", () => {
     // Renewables buys electronics and rare earths, so it must sit lower.
     expect(renewable!).toBeLessThan(conventional!);
     expect(renewable!).toBeCloseTo(0);
-  });
-});
-
-describe("proposed sector actions", () => {
-  it("gives every sector type exactly two levers, so no dossier renders an empty action row", () => {
-    for (const type of CORPORATION_TYPES) {
-      const actions = proposedSectorActions(type);
-      expect(actions, type).toHaveLength(2);
-      for (const action of actions) {
-        expect(action.label.length, `${type} label`).toBeGreaterThan(0);
-        expect(action.help.length, `${type} help`).toBeGreaterThan(0);
-      }
-    }
-  });
-
-  it("carries no em or en dashes, which player-facing copy forbids", () => {
-    for (const type of CORPORATION_TYPES) {
-      for (const action of proposedSectorActions(type)) {
-        expect(`${action.label} ${action.help}`, type).not.toMatch(/[—–]/);
-      }
-    }
   });
 });
 
