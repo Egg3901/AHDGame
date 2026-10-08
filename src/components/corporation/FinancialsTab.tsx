@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import {
   MONEY_PERIODS,
@@ -94,6 +95,7 @@ export default function FinancialsTab({
   financialFogOfWar,
 }: FinancialsTabProps) {
   const money = useCorpMoney(corporation.liquidCurrencyCode);
+  const tArrears = useTranslations("corporations.arrears");
   const [view, setView] = useState<StatementView>("income");
   const [npvPage, setNpvPage] = useState(0);
 
@@ -163,6 +165,19 @@ export default function FinancialsTab({
           onChange={onPeriodViewChange}
         />
       </div>
+
+      {!fogged && financials.arrears && (
+        <DenseSection
+          title={tArrears("title")}
+          meta={tArrears("turn", { turn: financials.arrears.turn })}
+        >
+          <KVList>
+            <KVRow label={tArrears("paid")} value={money.fmt(financials.arrears.paidLastTurn)} />
+            <KVRow label={tArrears("remaining")} value={money.fmt(financials.arrears.remaining)} />
+          </KVList>
+          <p className="mt-2 text-xs text-muted">{tArrears("explanation")}</p>
+        </DenseSection>
+      )}
 
       {fogged && financialFogOfWar && (
         <DenseSection

@@ -1,5 +1,12 @@
 {
   "corporations": {
+    "arrears": {
+      "title": "Cash arrears",
+      "turn": "Payments recorded for turn {turn}",
+      "paid": "Arrears paid last turn",
+      "remaining": "Arrears remaining",
+      "explanation": "Includes unpaid operating costs and federal taxes. Available cash automatically pays prior arrears, so positive income may not increase your cash balance. Repayments are cash deductions, not new expenses. These amounts do not scale with the selected period."
+    },
     "supplyAgreements": {
       "settlement": {
         "shortfallDamages": "Shortfall damages",

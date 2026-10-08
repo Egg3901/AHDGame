@@ -118,6 +118,27 @@ describe("loadCorporationDetailView", () => {
     expect(result.sectors).toEqual([]);
     expect(result.financials.totalRevenue).toBe(0);
     expect(result.balanceSheet.assets.cashOnHand).toBe(corporation.liquidCapital);
+    expect(result.financials).not.toHaveProperty("arrears");
+
+    db.collection("bankMoneyMoves");
+    db.collectionMocks.bankMoneyMoves.find.mockReturnValue({
+      toArray: async () => [{ status: "applied", currency: "USD", event: { amount: 75 } }],
+    } as never);
+    const ownerView = await loadCorporationDetailView({
+      db: db as unknown as Db,
+      corporation: {
+        ...corporation,
+        operatingCashArrearsByCurrency: { USD: 100 },
+        federalTaxArrearsAnchorByCountry: { US: 25 },
+      },
+      currentTurn: 10,
+      viewerUserId: ceo.userId!.toString(),
+    });
+    expect(ownerView.financials.arrears).toEqual({
+      turn: 10,
+      paidLastTurn: 75,
+      remaining: 125,
+    });
   });
 
   it("includes recorded freight and complete physical costs in the corporate statement", async () => {

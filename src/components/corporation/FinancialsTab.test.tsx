@@ -2,7 +2,14 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import FinancialsTab from "./FinancialsTab";
-import type { CorporationDetail, Financials } from "./CorporationPageTypes";
+import type { CorporationDetail, Financials, FinancialFogMeta } from "./CorporationPageTypes";
+import messages from "../../../messages/en/corporations.json";
+
+vi.mock("next-intl", () => ({
+  useTranslations:
+    () => (key: keyof typeof messages.corporations.arrears, values?: { turn: number }) =>
+      messages.corporations.arrears[key].replace("{turn}", String(values?.turn ?? "")),
+}));
 
 vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({
@@ -48,6 +55,33 @@ const financials = {
 } as Financials;
 
 describe("corporation income statement", () => {
+  it("shows arrears separately without annualizing the balance or last-turn payment", () => {
+    const props = {
+      corporation: { countryId: "US", liquidCurrencyCode: "USD" } as CorporationDetail,
+      financials: { ...financials, arrears: { turn: 23, paidLastTurn: 123, remaining: 456 } },
+      balanceSheet: null,
+      bondInfo: null,
+      corpId: "test",
+      periodView: "daily" as const,
+      onPeriodViewChange: vi.fn(),
+      sectors: [],
+    };
+    const view = render(<FinancialsTab {...props} />);
+    expect(screen.getByText("Arrears paid last turn")).toBeTruthy();
+    expect(screen.getByText("Arrears remaining")).toBeTruthy();
+    expect(screen.getByText("M123")).toBeTruthy();
+    expect(screen.getByText("M456")).toBeTruthy();
+    view.rerender(<FinancialsTab {...props} periodView="annual" />);
+    expect(screen.getByText("M123")).toBeTruthy();
+    expect(screen.getByText("M456")).toBeTruthy();
+    view.rerender(<FinancialsTab {...props} periodView="turn" />);
+    expect(screen.getByText("M123")).toBeTruthy();
+    expect(screen.getByText("M456")).toBeTruthy();
+    view.rerender(<FinancialsTab {...props} financialFogOfWar={{} as FinancialFogMeta} />);
+    expect(screen.queryByText("Arrears remaining")).toBeNull();
+    view.rerender(<FinancialsTab {...props} financials={financials} />);
+    expect(screen.queryByText("Arrears remaining")).toBeNull();
+  });
   it("shows the estimate-to-recorded change before a retained loss", () => {
     render(
       <FinancialsTab
