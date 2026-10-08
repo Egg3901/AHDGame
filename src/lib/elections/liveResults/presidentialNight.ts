@@ -19,7 +19,11 @@ import {
   turnVoteWeight,
 } from "@/lib/electionEngine/voteCalculations";
 import { hashFraction } from "./computeResults";
-import { FIRST_CLOSE_ET_HOUR, LAST_CLOSE_ET_HOUR, pollCloseEtHour } from "./usPollClosing";
+import {
+  FIRST_CLOSE_ET_HOUR,
+  LAST_CLOSE_ET_HOUR,
+  pollCloseEtHour,
+} from "@/lib/countries/us/data/usPollClosing";
 import type {
   PresidentialNight,
   PresidentialNightEvent,

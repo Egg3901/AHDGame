@@ -11,7 +11,7 @@ import {
   FIRST_CLOSE_ET_HOUR,
   LAST_CLOSE_ET_HOUR,
   pollCloseEtHour,
-} from "@/lib/elections/liveResults/usPollClosing";
+} from "@/lib/countries/us/data/usPollClosing";
 import {
   NIGHT_FIRST_CLOSE_FRACTION,
   NIGHT_LAST_CLOSE_FRACTION,

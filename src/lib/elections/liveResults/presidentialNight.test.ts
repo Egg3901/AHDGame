@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { ELECTION_DAY_TURNS, FINAL_POOL_SHARE } from "@/lib/electionEngine/voteCalculations";
 import { mulberry32 } from "./simulateResults";
 import { computeUnitResult } from "./computeResults";
-import { US_POLL_CLOSE_ET_HOURS, pollCloseEtHour } from "./usPollClosing";
+import { US_POLL_CLOSE_ET_HOURS, pollCloseEtHour } from "@/lib/countries/us/data/usPollClosing";
 import {
   NIGHT_CALL_SAFETY,
   NIGHT_COUNTING_FLOOR,
