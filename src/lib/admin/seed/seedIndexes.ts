@@ -25,6 +25,7 @@ import { seedConflictIndexes } from "./indexes/conflicts";
 import { seedNavairIndexes } from "./indexes/navair";
 import { seedBankingIndexes } from "./indexes/banking";
 import { seedSettlementIndexes } from "./indexes/settlement";
+import { seedProductVentureIndexes } from "./indexes/productVentures";
 import { seedIntelligenceIndexes } from "./indexes/intelligence";
 import { seedIdentityHistoryIndexes } from "./indexes/identityHistory";
 import { seedTelemetryIndexes } from "./indexes/telemetry";
@@ -78,6 +79,7 @@ const INDEX_RUNNERS: Record<IndexTargetId, IndexModule> = {
   indexesNavair: seedNavairIndexes,
   indexesBanking: seedBankingIndexes,
   indexesSettlement: seedSettlementIndexes,
+  indexesProductVentures: seedProductVentureIndexes,
   indexesIntelligence: seedIntelligenceIndexes,
   indexesIdentityHistory: seedIdentityHistoryIndexes,
   indexesTelemetry: seedTelemetryIndexes,
@@ -157,4 +159,5 @@ export {
   seedConflictIndexes,
   seedBankingIndexes,
   seedSettlementIndexes,
+  seedProductVentureIndexes,
 };
