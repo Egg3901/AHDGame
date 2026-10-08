@@ -533,10 +533,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             per-ticket tally and the deadline strip all appear up there, so the
             blocks below are asked to leave them out rather than print the same
             standing twice on one page. */}
-        <BlendScope
-          title="Also on this race"
-          lede="The full map, the trends, and your campaign operations."
-        >
+        <BlendScope title="Also on this race" lede="The full map and the trends.">
           {canEnter &&
             (election.bulgarianFoundingRound?.round === 1 ||
               Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
@@ -601,10 +598,10 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             onSuccess={fetchElection}
           />
 
-          {/* "Your Campaign" used to follow this, repeating the funds, actions
-              and levels the list already shows against your own row, behind a
-              second link to the same page. */}
-          {election.countryId === "US" && <CampaignsListPanel electionId={id} />}
+          {/* Campaign operations used to close this block as their own list.
+              They are columns of the tickets table in the hero above now, so
+              each ticket's funds, actions, levels and campaign link sit beside
+              its standing. */}
         </BlendScope>
       </div>
     );

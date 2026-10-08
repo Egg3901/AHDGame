@@ -1,60 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
-import type { CurrencyCode } from "@/lib/constants/currencies";
-
-interface CampaignSummary {
-  id: string;
-  candidateId: string;
-  candidateName: string;
-  candidateIsNPP?: boolean;
-  party: string;
-  partyName?: string;
-  currencyCode: CurrencyCode;
-  funds: number;
-  actions: number;
-  levels: {
-    fundraising: number;
-    oppositionResearch: number;
-    groundGame: number;
-    mediaSpending: number;
-  };
-  managerName: string | null;
-  isExact: boolean;
-  isMine?: boolean;
-}
+import { totalCampaignLevels, useElectionCampaigns } from "./useElectionCampaigns";
 
 interface CampaignsListPanelProps {
   electionId: string;
 }
 
 export function CampaignsListPanel({ electionId }: CampaignsListPanelProps) {
-  const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function fetchCampaigns() {
-      try {
-        setLoading(true);
-        const res = await fetch(`/api/elections/${electionId}/campaigns`);
-        if (res.ok) {
-          const data = await res.json();
-          setCampaigns(data.campaigns || []);
-        } else {
-          setCampaigns([]);
-        }
-      } catch (error) {
-        console.error("Failed to fetch campaigns:", error);
-        setCampaigns([]);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchCampaigns();
-  }, [electionId]);
+  const { campaigns, loading } = useElectionCampaigns(electionId);
 
   if (loading) {
     return (
@@ -77,9 +32,7 @@ export function CampaignsListPanel({ electionId }: CampaignsListPanelProps) {
           .filter((c) => c.candidateId)
           .map((campaign) => {
             const partyLabel = campaign.partyName ?? campaign.party;
-            const totalLevels = campaign.levels
-              ? Object.values(campaign.levels).reduce((a, b) => a + b, 0)
-              : 0;
+            const totalLevels = totalCampaignLevels(campaign);
 
             return (
               <div

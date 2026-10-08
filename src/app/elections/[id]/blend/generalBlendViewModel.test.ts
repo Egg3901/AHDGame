@@ -343,26 +343,31 @@ describe("the masthead does not cry election night early", () => {
   });
 });
 
-describe("when the tickets table earns its place", () => {
-  // The hero pair carries the top two in full — name, party, running mate,
-  // electoral votes, share, popular vote, endorse. A two-way race needs no
-  // table; a third ticket is what the table exists for.
-  it("draws no table, and no rail pane, for a two-way race", () => {
+describe("the tickets table", () => {
+  // One table for standing and campaign operations, so it is drawn for a
+  // two-way race as well: the hero carries the top two's figures, but only the
+  // table carries their manager, funds, actions and levels.
+  it("is drawn, with a rail pane, for a two-way race", () => {
     const twoWay = election({
       allCandidates: (election().allCandidates as unknown[]).slice(0, 2),
     } as never);
     const vm = buildGeneralBlendViewModel(input({ election: twoWay }));
     expect(vm.tickets).toHaveLength(2);
-    expect(vm.showTicketsTable).toBe(false);
-    expect(vm.railItems.some((i) => i.id === "tickets")).toBe(false);
+    expect(vm.showTicketsTable).toBe(true);
+    expect(vm.railItems.some((i) => i.id === "tickets")).toBe(true);
   });
 
-  it("draws it once a third ticket exists, which the hero cannot show", () => {
+  it("is drawn for a field of three, which the hero cannot show", () => {
     // The default fixture already runs three candidates.
     const vm = buildGeneralBlendViewModel(input());
     expect(vm.tickets.length).toBeGreaterThan(2);
     expect(vm.showTicketsTable).toBe(true);
     expect(vm.railItems.some((i) => i.id === "tickets")).toBe(true);
+  });
+
+  it("keys each ticket by the id its campaign uses", () => {
+    const vm = buildGeneralBlendViewModel(input());
+    for (const t of vm.tickets) expect(t.candidateKey).toBeTruthy();
   });
 });
 

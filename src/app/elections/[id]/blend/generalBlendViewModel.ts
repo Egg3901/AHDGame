@@ -35,6 +35,12 @@ export interface GeneralTicketVM {
   /** Country-scoped party page. */
   partyHref: string;
   mate: string | null;
+  /**
+   * The id a campaign keys this candidate by: the NPP id for an NPP, the
+   * character id otherwise. Lets the tickets table join each row to its
+   * campaign operations.
+   */
+  candidateKey: string;
   ev: number;
   pct: string;
   votes: string;
@@ -270,6 +276,7 @@ export function buildGeneralBlendViewModel(inp: GeneralBlendInput): GeneralBlend
         partyId: c.party,
         partyHref: `/country/${countryCode}/parties/${c.party}`,
         mate: c.runningMateName ?? null,
+        candidateKey: c.isNPP && c.nppId ? c.nppId : c.characterId,
         ev: evByCandidate[c.id] ?? 0,
         pct: ballots > 0 ? ((votes / ballots) * 100).toFixed(1) : "0.0",
         votes: compactVotes(votes),
@@ -494,9 +501,10 @@ export function buildGeneralBlendViewModel(inp: GeneralBlendInput): GeneralBlend
       ? `${turnsLeft}, closes ${endsLocal}`
       : (turnsLeft ?? (endsLocal ? `Closes ${endsLocal}` : null));
 
-  // A third ticket is what the table exists for; below that the hero is the
-  // ticket list, so a "Tickets" pane would open on an empty column.
-  const showTicketsTable = tickets.length > 2;
+  // The table is the one place each ticket's campaign operations (manager,
+  // funds, actions, levels) live next to its standing, so it is drawn for any
+  // race with a ticket in it, not only once the hero overflows.
+  const showTicketsTable = tickets.length > 0;
 
   const railItems: GeneralBlendVM["railItems"] = [
     { id: "overview", label: "Overview" },

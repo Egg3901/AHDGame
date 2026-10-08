@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { CandidateDetail, ElectionDetail } from "../components/ElectionDetailTypes";
 import { GeneralBlendView } from "./GeneralBlendView";
 
@@ -25,6 +25,7 @@ const CANDIDATES = [
   candidate({ id: "c1", characterName: "First Ticket", isYou: true }),
   candidate({
     id: "c2",
+    characterId: "ch2",
     characterName: "Second Ticket",
     party: "2",
     partyName: "Republican Party",
@@ -74,6 +75,38 @@ function election(): ElectionDetail {
   } as unknown as ElectionDetail;
 }
 
+/**
+ * The campaign operations the tickets table joins on. Only the first ticket
+ * (the reader, character `ch1`) has a campaign: a rival without one must still
+ * get a row.
+ */
+const CAMPAIGNS = [
+  {
+    id: "camp1",
+    candidateId: "ch1",
+    candidateName: "First Ticket",
+    party: "1",
+    partyName: "Democratic Party",
+    currencyCode: "USD",
+    funds: 1_250_000,
+    actions: 3,
+    levels: { fundraising: 2, oppositionResearch: 1, groundGame: 3, mediaSpending: 0 },
+    managerName: "Casey Manager",
+    isExact: true,
+    isMine: true,
+  },
+];
+
+function stubCampaigns(campaigns: unknown[] = CAMPAIGNS) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({ ok: true, json: async () => ({ campaigns }) })
+  );
+}
+
+beforeEach(() => stubCampaigns());
+afterEach(() => vi.unstubAllGlobals());
+
 function renderView() {
   return render(
     <GeneralBlendView election={election()} electionId="e1" wire={[]} onRefresh={() => {}} />
@@ -105,7 +138,7 @@ describe("GeneralBlendView", () => {
   });
 
   it("shows democratic health and both presidential drag levels on both layouts", () => {
-    render(
+    const { container } = render(
       <GeneralBlendView
         election={{
           ...election(),
@@ -127,7 +160,11 @@ describe("GeneralBlendView", () => {
         onRefresh={() => {}}
       />
     );
+    // The desktop rail shows it open; the phone offers a chip that opens it.
     expect(screen.getAllByText("Democratic health")).toHaveLength(2);
+    expect(screen.getAllByText("Ruling party drag")).toHaveLength(1);
+    const phone = container.querySelector<HTMLElement>(".lg\\:hidden")!;
+    fireEvent.click(within(phone).getByRole("button", { name: "Democratic health" }));
     expect(screen.getAllByText("Ruling party drag")).toHaveLength(2);
     expect(screen.getAllByText("Sitting President drag")).toHaveLength(2);
     expect(screen.getAllByText(/Temporary constitutional relief/)).toHaveLength(2);
@@ -159,27 +196,137 @@ describe("nothing on this screen is won", () => {
   });
 });
 
+describe("the tickets and the campaign operations are one table", () => {
+  it("draws the tickets for a two-way race, which the hero alone could not carry", () => {
+    renderView();
+    // One heading per tree.
+    expect(screen.getAllByText("The tickets")).toHaveLength(2);
+  });
+
+  it("offers the Tickets pane in the rail", () => {
+    renderView();
+    expect(screen.getAllByRole("button", { name: /^Tickets/ }).length).toBeGreaterThan(0);
+  });
+
+  it("no longer draws a separate campaign operations list", () => {
+    renderView();
+    expect(screen.queryByText("Campaign operations")).toBeNull();
+  });
+
+  it("puts every column on a row: ticket, mate, manager, standing and campaign", async () => {
+    renderView();
+    const table = screen.getByRole("table");
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent)
+    ).toEqual([
+      "Ticket",
+      "Mate and manager",
+      "Proj. EV",
+      "Share",
+      "Votes",
+      "Funds",
+      "Actions",
+      "Levels",
+      "Endorse and campaign",
+    ]);
+    // Campaigns load after mount; the manager is the first thing to land.
+    await waitFor(() => expect(within(table).getByText("Manager: Casey Manager")).toBeTruthy());
+    const row = within(table).getByRole("link", { name: "First Ticket" }).closest("tr")!;
+    const cells = within(row).getAllByRole("cell");
+    expect(cells[0].textContent).toContain("Democratic Party");
+    expect(cells[2].textContent).toBe("276");
+    expect(cells[3].textContent).toBe("50.8%");
+    expect(cells[4].textContent).toBe("69.5M");
+    expect(cells[5].textContent).toMatch(/1[.,]25|1\.3M|1,250,000/);
+    // Levels are summed across the four operations.
+    expect(cells[7].textContent).toBe("6");
+    expect(cells[6].textContent).toBe("3");
+    expect(within(row).getByRole("link", { name: "View campaign" }).getAttribute("href")).toBe(
+      "/campaign/camp1"
+    );
+  });
+
+  it("keeps a rival without a campaign as a row, with no campaign link", async () => {
+    renderView();
+    const table = screen.getByRole("table");
+    await waitFor(() => expect(within(table).getByText("Manager: Casey Manager")).toBeTruthy());
+    const row = within(table).getByRole("link", { name: "Second Ticket" }).closest("tr")!;
+    expect(within(row).queryByRole("link", { name: "View campaign" })).toBeNull();
+    expect(within(row).getByRole("button", { name: /Endorse/ })).toBeTruthy();
+  });
+
+  it("draws a compact card per ticket on the phone, with the same fields", async () => {
+    const { container } = renderView();
+    const cards = Array.from(container.querySelectorAll("article"));
+    expect(cards).toHaveLength(2);
+    await waitFor(() => expect(within(cards[0]).getByText("Manager: Casey Manager")).toBeTruthy());
+    expect(within(cards[0]).getByRole("link", { name: "View campaign" })).toBeTruthy();
+    expect(within(cards[0]).getByText("Funds")).toBeTruthy();
+    expect(within(cards[0]).getByText("Levels")).toBeTruthy();
+    expect(within(cards[1]).getByRole("button", { name: /Endorse/ })).toBeTruthy();
+    expect(within(cards[1]).queryByRole("link", { name: "View campaign" })).toBeNull();
+  });
+
+  it("notes that campaign levels are approximate when none are exact", async () => {
+    stubCampaigns([{ ...CAMPAIGNS[0], isExact: false }]);
+    renderView();
+    await waitFor(() =>
+      expect(screen.getAllByText("Campaign levels are approximate (fog of war)")).toHaveLength(2)
+    );
+  });
+
+  it("skips the campaign request outside the US", () => {
+    const e = election();
+    (e as unknown as Record<string, unknown>).countryId = "GB";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(<GeneralBlendView election={e} electionId="e1" wire={[]} onRefresh={() => {}} />);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getAllByText("The tickets")).toHaveLength(2);
+  });
+});
+
+describe("the phone folds the right rail behind a chip strip", () => {
+  const withMood = () => {
+    const e = election();
+    (e as unknown as Record<string, unknown>).democraticHealth = {
+      value: 42.5,
+      label: "Fragile democracy",
+      rulingPartyId: "1",
+      rulingPartyName: "Democratic Party",
+      partyPenaltyPct: 4.2,
+      currentRulerPenaltyPct: 6.3,
+      economicDragPctPoints: 1.25,
+      currentRulerReliefPct: 40,
+      currentRulerInRace: true,
+      recordedTurn: 412,
+    };
+    return e;
+  };
+
+  it("opens one panel at a time and closes it again", () => {
+    const { container } = render(
+      <GeneralBlendView election={withMood()} electionId="e1" wire={[]} onRefresh={() => {}} />
+    );
+    const phone = container.querySelector<HTMLElement>(".lg\\:hidden")!;
+    expect(within(phone).queryByRole("region")).toBeNull();
+    fireEvent.click(within(phone).getByRole("button", { name: "Democratic health" }));
+    expect(within(phone).getByRole("region", { name: "Democratic health" })).toBeTruthy();
+    fireEvent.click(within(phone).getByRole("button", { name: "Close" }));
+    expect(within(phone).queryByRole("region")).toBeNull();
+  });
+});
+
 describe("the hero is the ticket list in a two-way race", () => {
-  // The table repeated the hero's name, electoral votes, share and popular vote
-  // for the same two people, adding only the running mate and the endorse
-  // button. Both of those now live on the hero, so the table earns its place
-  // only once a third ticket exists.
-  it("draws no separate tickets table for two tickets", () => {
-    renderView();
-    expect(screen.queryByText("The tickets")).toBeNull();
-  });
-
-  it("offers no dead Tickets pane in the rail", () => {
-    renderView();
-    expect(screen.queryByRole("button", { name: /^Tickets/ })).toBeNull();
-  });
-
   it("puts the endorse control on both layouts, which the table never did", () => {
     // The table was desktop-only, so a player on a phone could not endorse
     // anybody at all. One button per rival per tree: the fixture's c1 is the
     // reader, so only c2 gets one.
     renderView();
-    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(2);
+    // Hero and tickets table, one tree each way: 2 hero + 1 table + 1 card.
+    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(4);
   });
 
   it("offers no endorse button on the reader's own ticket", () => {
@@ -188,27 +335,27 @@ describe("the hero is the ticket list in a two-way race", () => {
     // was silent. c1 is the reader; two tickets, two trees, so an ungated
     // version of this would render four buttons rather than two.
     renderView();
-    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(4);
     expect(screen.getAllByText("First Ticket").length).toBeGreaterThan(0);
   });
 
   it("still offers it on a rival's ticket", () => {
     // The fixture's c1 is the reader and c2 is the rival, so exactly one
-    // button per tree survives the guard.
+    // button per tree survives the guard, in the hero and in the tickets.
     renderView();
-    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(4);
   });
 
   it("prints the leader's electoral votes only where each one earns its place", () => {
     renderView();
-    // Three bare figures, every one deliberate: the reader's own "Your ticket"
-    // standing once per tree, plus the rail's nav badge. The hero's own two
-    // now carry their unit and sit under a "Current projection" label, so they
-    // read as "276 EV" instead. The bar used to label its own segment too,
-    // ~20px under a 50px rendering of the same number, and the tickets table
-    // repeated it a third time. If either count rises, something started
+    // Five bare figures, every one deliberate: the reader's own "Your ticket"
+    // standing once per tree, the rail's nav badge, and the figure in the
+    // tickets table and card, which is where each ticket's campaign sits next
+    // to its standing. The hero's own two now carry their unit and sit under a
+    // "Current projection" label, so they read as "276 EV" instead. The bar
+    // used to label its own segment too. If the count rises, something started
     // echoing the hero again.
-    expect(screen.getAllByText("276")).toHaveLength(3);
+    expect(screen.getAllByText("276")).toHaveLength(5);
     expect(screen.getAllByText("276 EV")).toHaveLength(2);
   });
 });
@@ -330,7 +477,8 @@ describe("the hero separates what is counted from what is forecast", () => {
 describe("names link out and states open", () => {
   it("links each hero ticket to its candidate profile, on both layouts", () => {
     renderView();
-    expect(screen.getAllByRole("link", { name: "First Ticket" })).toHaveLength(2);
+    // Hero and tickets table or card, in each tree.
+    expect(screen.getAllByRole("link", { name: "First Ticket" })).toHaveLength(4);
     const hrefs = screen
       .getAllByRole("link", { name: "First Ticket" })
       .map((a) => a.getAttribute("href"));
@@ -340,7 +488,7 @@ describe("names link out and states open", () => {
   it("links each hero party to its party page, on both layouts", () => {
     renderView();
     const links = screen.getAllByRole("link", { name: "Democratic Party" });
-    expect(links).toHaveLength(2);
+    expect(links).toHaveLength(4);
     for (const a of links) {
       expect(a.getAttribute("href")).toBe("/country/us/parties/1");
     }
