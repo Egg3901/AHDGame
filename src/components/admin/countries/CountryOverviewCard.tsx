@@ -7,11 +7,17 @@ import { useToast } from "@/contexts/ToastContext";
 import { useRuntimeCountryConfig } from "@/hooks/useRuntimeCountryConfig";
 import { CountryFlag } from "@/components/CountryFlag";
 import { apiErrorText } from "@/lib/errors/catalog";
+import {
+  CountryProfileReadinessCard,
+  type CountryProfileReadiness,
+} from "./CountryProfileReadinessCard";
 
 interface CountrySettings {
   enabledForPlayers: boolean;
   status: CountryStatus;
   economyPreview: boolean;
+  absentFromEra: boolean;
+  readinessProfiles: CountryProfileReadiness;
   stats: {
     currentTurn: number | null;
     currentYear: number | null;
@@ -129,7 +135,7 @@ export default function CountryOverviewCard({ countryId }: Props) {
         const json = await res.json().catch(() => ({}));
         throw new Error(apiErrorText(json, "Failed to update"));
       }
-      setSettings((prev) => (prev ? { ...prev, enabledForPlayers: newEnabled } : prev));
+      await fetchSettings();
       showToast(
         newEnabled ? `${config.name} enabled for players` : `${config.name} disabled for players`,
         "success"
@@ -155,7 +161,7 @@ export default function CountryOverviewCard({ countryId }: Props) {
         const json = await res.json().catch(() => ({}));
         throw new Error(apiErrorText(json, "Failed to update"));
       }
-      setSettings((prev) => (prev ? { ...prev, economyPreview: newPreview } : prev));
+      await fetchSettings();
       showToast(
         newPreview
           ? `${config.name} economy preview enabled`
@@ -231,7 +237,7 @@ export default function CountryOverviewCard({ countryId }: Props) {
                   aria-checked={settings.economyPreview}
                   onClick={handleToggleEconomyPreview}
                   disabled={isToggleDisabled}
-                  title="Allow players to view economy pages (map, metrics, markets) without enabling political features"
+                  title="Expose this autonomous economy in cross-country market lists without enabling player control"
                   className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 ${
                     settings.economyPreview ? "bg-primary" : "bg-muted/30"
                   }`}
@@ -305,6 +311,8 @@ export default function CountryOverviewCard({ countryId }: Props) {
           </>
         )}
       </div>
+
+      {settings && <CountryProfileReadinessCard readiness={settings.readinessProfiles} />}
 
       {/* Details row */}
       <div className="grid gap-4 sm:grid-cols-2">

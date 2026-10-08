@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertCanEnableCountryEconomyPreview,
   assertCanOpenCountryToPlayers,
   canOpenCountryToPlayers,
+  EconomyPreviewBlockedError,
   evaluateCountryReadiness,
   PlayerOpenBlockedError,
   READINESS_PROFILES,
@@ -119,6 +121,48 @@ describe("READINESS_PROFILES per-archetype differences", () => {
 });
 
 describe("evaluateCountryReadiness", () => {
+  it("evaluates the active requirement level without changing legacy readiness results", () => {
+    const evidence = evidenceAllPresent({
+      adminDiagnostics: { present: false, evidence: "Player diagnostic gap." },
+    });
+
+    const background = evaluateCountryReadiness({
+      countryId: "JP",
+      presetId: "1953-default",
+      archetypes: ["presidential", "market"],
+      evidence,
+      requirementLevel: "background",
+    });
+    expect(background.player).toBe("blocked");
+    expect(background.requirementStatus).toBe("ready");
+    expect(background.requirementTarget).toBeNull();
+    expect(background.requirementBlockers).toEqual([]);
+    expect(background.contentStatus).toBe("complete");
+
+    const economyPreview = evaluateCountryReadiness({
+      countryId: "JP",
+      presetId: "1953-default",
+      archetypes: ["presidential", "market"],
+      evidence,
+      requirementLevel: "economy-preview",
+    });
+    expect(economyPreview.requirementStatus).toBe("ready");
+    expect(economyPreview.requirementTarget).toBe("autonomous");
+
+    const playerEnabled = evaluateCountryReadiness({
+      countryId: "JP",
+      presetId: "1953-default",
+      archetypes: ["presidential", "market"],
+      evidence,
+      requirementLevel: "player-enabled",
+    });
+    expect(playerEnabled.requirementStatus).toBe("blocked");
+    expect(playerEnabled.requirementTarget).toBe("player");
+    expect(playerEnabled.requirementBlockers.map((b) => b.capabilityId)).toEqual([
+      "adminDiagnostics",
+    ]);
+  });
+
   it("reports autonomous safety separately from player parity", () => {
     const report = evaluateCountryReadiness({
       countryId: "JP",
@@ -233,12 +277,23 @@ describe("evaluateCountryReadiness", () => {
 describe("assessCountryReadiness (static probes + inventory)", () => {
   it("keeps Japan 1953 autonomous-ready but player-blocked", () => {
     const report = assessCountryReadiness("JP", "1953-default");
+    expect(report.requirementLevel).toBe("economy-preview");
+    expect(report.requirementStatus).toBe("ready");
     expect(report.archetypes).toEqual(["parliamentary", "market"]);
     expect(report.autonomous).toBe("ready");
     expect(report.player).toBe("blocked");
     expect(report.hardBlockers.map((b) => b.capabilityId)).toContain("adminDiagnostics");
     expect(report.hardBlockers[0]?.evidence.length).toBeGreaterThan(0);
     expect(report.flavorGaps.length).toBeGreaterThan(0);
+    expect(report.contentStatus).toBe("gaps");
+  });
+
+  it("derives all three requirement levels from the era roster", () => {
+    expect(assessCountryReadiness("US", "1953-default").requirementLevel).toBe("player-enabled");
+    expect(assessCountryReadiness("PL", "1953-default").requirementLevel).toBe("economy-preview");
+    expect(assessCountryReadiness("ES", "1953-default").requirementLevel).toBe("background");
+    expect(assessCountryReadiness("ES", "1953-default").backgroundMode).toBe("npp");
+    expect(assessCountryReadiness("BLR", "1953-default").backgroundMode).toBe("latent");
   });
 
   it("promotes Nigeria 1953 to autonomous-ready and player-ready", () => {
@@ -314,6 +369,24 @@ describe("player-open gate", () => {
     const result = canOpenCountryToPlayers("FR", "1953-default");
     expect(result.ok).toBe(false);
     expect(result.report.hardBlockers.length).toBeGreaterThan(0);
+  });
+});
+
+describe("economy-preview gate", () => {
+  it("allows an autonomous-ready preview country", () => {
+    expect(assertCanEnableCountryEconomyPreview("JP", "1953-default").autonomous).toBe("ready");
+  });
+
+  it("rejects a preview country whose manifest is not full-autonomous", () => {
+    expect(() => assertCanEnableCountryEconomyPreview("BR", "2019-default")).toThrow(
+      EconomyPreviewBlockedError
+    );
+    try {
+      assertCanEnableCountryEconomyPreview("BR", "2019-default");
+    } catch (err) {
+      expect(err).toBeInstanceOf(EconomyPreviewBlockedError);
+      expect((err as EconomyPreviewBlockedError).message).toMatch(/fullAutonomousTier/);
+    }
   });
 });
 

@@ -18,7 +18,7 @@ import { WAL_2027 } from "./2027";
  *
  * ⚠ WAL HAS NO CONFIG OVERRIDE IN ANY ERA. Every preset uses the base config.
  */
-export const WAL_ERAS: Partial<Record<ShippingPreset, CountryEraOverride>> = {
+export const WAL_ERAS: Record<ShippingPreset, CountryEraOverride> = {
   "1953-default": WAL_1953,
   "1979-default": WAL_1979,
   "1991-default": WAL_1991,
