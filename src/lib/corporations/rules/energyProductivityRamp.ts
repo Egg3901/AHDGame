@@ -26,7 +26,7 @@ export interface EnergyProductivityRamp {
 /** Presets that carry the ramp. Every other preset is untouched. */
 export const ENERGY_PRODUCTIVITY_RAMP_BY_PRESET: Readonly<Record<string, EnergyProductivityRamp>> =
   {
-    "1991-default": { startTurn: 72, rampTurns: 48, gain: 0.3 },
+    "1991-default": { startTurn: 48, rampTurns: 48, gain: 0.3 },
   };
 
 /** Sector type whose plants the ramp applies to. */
