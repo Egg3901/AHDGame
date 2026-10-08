@@ -2,6 +2,7 @@ import { type Db } from "mongodb";
 import {
   withdrawFromMismatchedPrimaries,
   cleanupPartyPositionsOnSwitch,
+  transferIndependentCandidaciesToParty,
 } from "@/lib/utils/electionCandidacy";
 import { updatePartyPresence } from "@/lib/turn/partyOrg/presence";
 import { cleanupCaucusParticipationForCharacters } from "@/lib/caucus/cleanupCaucusParticipationForCharacters";
@@ -39,9 +40,9 @@ export interface ApplyCharacterPartyJoinArgs {
 
 /**
  * Applies a character's membership move into `party`, running the full set of
- * side effects: reset party influence, re-point elected-official rows, withdraw
- * from mismatched primaries, clean up old-party positions, adjust roster counts,
- * refresh presence, optionally auto-promote to a vacant chair, and emit the
+ * side effects: reset party influence, re-point elected-official rows, reconcile
+ * live candidacies, clean up old-party positions, adjust roster counts, refresh
+ * presence, optionally auto-promote to a vacant chair, and emit the
  * party-membership event.
  *
  * Shared by the immediate "open" join path (`join/route.ts`) and the
@@ -100,12 +101,27 @@ export async function applyCharacterPartyJoin(
     .collection("electedOfficials")
     .updateMany({ characterId: character._id }, { $set: { party: partyIdStr, updatedAt: now } });
 
-  // Withdraw from any primaries where the character was registered under a different party
-  const { withdrawnCount } = await withdrawFromMismatchedPrimaries(character._id, partyIdStr);
-  if (withdrawnCount > 0) {
-    console.log(
-      `[Party Join] ${character.name} withdrew from ${withdrawnCount} primary(ies) due to party switch`
+  if (!oldParty || oldParty === "independent") {
+    const { transferredCount } = await transferIndependentCandidaciesToParty(
+      db,
+      character._id,
+      partyIdStr,
+      now
     );
+    if (transferredCount > 0) {
+      console.log(
+        `[Party Join] ${character.name} transferred ${transferredCount} active candidacy(ies) to party ${partyIdStr}`
+      );
+    }
+  } else {
+    // A party-to-party switch still invalidates candidacies filed under the
+    // former party. Only Independent joiners carry their races forward.
+    const { withdrawnCount } = await withdrawFromMismatchedPrimaries(character._id, partyIdStr);
+    if (withdrawnCount > 0) {
+      console.log(
+        `[Party Join] ${character.name} withdrew from ${withdrawnCount} primary(ies) due to party switch`
+      );
+    }
   }
 
   // Clean up old party positions and candidacies

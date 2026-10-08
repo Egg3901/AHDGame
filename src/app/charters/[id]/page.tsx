@@ -225,6 +225,9 @@ export default async function CharterDetailPage({ params }: PageParams) {
             charterId={charter._id.toString()}
             alreadySigned={Boolean(myActiveSig?.signedAt)}
             alreadyRejected={Boolean(myActiveSig?.rejectedAt)}
+            showPartySwitchWarning={Boolean(
+              user.character?.party && user.character.party !== "independent"
+            )}
           />
         </section>
       )}
