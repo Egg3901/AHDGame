@@ -115,6 +115,8 @@ export async function moveSectorToCorp(
           activeCapacityPercent: existing.activeCapacityPercent,
           plantsStartTurn: existing.plantsStartTurn,
           legacyRevenueShadow: existing.legacyRevenueShadow,
+          inventoryUnits: existing.inventoryUnits,
+          inventoryValueAnchor: existing.inventoryValueAnchor,
         },
         {
           sectorType: sector.sectorType,
@@ -126,6 +128,9 @@ export async function moveSectorToCorp(
           activeCapacityPercent: sector.activeCapacityPercent,
           plantsStartTurn: sector.plantsStartTurn,
           legacyRevenueShadow: sector.legacyRevenueShadow,
+          // Goods, not capacity: the strategy ratio does not rescale a pile.
+          inventoryUnits: sector.inventoryUnits,
+          inventoryValueAnchor: sector.inventoryValueAnchor,
         }
       );
       const mergedSurvivor = await sectors.updateOne(

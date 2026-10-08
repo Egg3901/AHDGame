@@ -43,6 +43,11 @@ export const supplyAgreementUpdateSchema = z.discriminatedUnion("action", [
     action: z.literal("counter"),
     ...terms,
   }),
+  /** The author of the current pending offer revises it in place as a new revision. */
+  z.object({
+    action: z.literal("amend"),
+    ...terms,
+  }),
 ]);
 
 export type SupplyAgreementProposalInput = z.infer<typeof supplyAgreementProposalSchema>;
