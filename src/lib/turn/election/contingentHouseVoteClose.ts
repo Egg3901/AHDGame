@@ -1,31 +1,58 @@
 /**
- * Closes the House vote that stays open after a contingent deadlock.
+ * Ballots the House vote that stays open after a contingent deadlock.
  *
- * Once the window has run its full length the standings decide: a delegation
- * majority elects that candidate president (the acting president becomes vice
- * president); otherwise the vote closes with no winner and the acting
- * president keeps serving. The close is claimed with a conditional update
- * before anything is seated, and a winner whose seating did not finish stays
- * flagged `seatingPending` so the next turn retries only the seating.
+ * Like the real House, it ballots again every turn: the moment a candidate
+ * holds a majority of state delegations the House has chosen, that candidate
+ * becomes president and the acting president becomes vice president. The first
+ * ballot that counts is the turn after the vote opened. If the window passes
+ * with no majority the vote closes with no winner and the acting president
+ * keeps serving. Each ballot is claimed with a conditional update before
+ * anything is seated, and a winner whose seating did not finish stays flagged
+ * `seatingPending` so the next turn retries only the seating.
  */
 import { ObjectId } from "mongodb";
 import type { Db } from "@/lib/mongodb";
-import type { Character, Election, ElectionCandidate, ElectionVoteTally } from "@/lib/db/types";
+import type {
+  Character,
+  Election,
+  ElectionCandidate,
+  ElectionVoteTally,
+  NPP,
+} from "@/lib/db/types";
 import { createNotifications } from "@/lib/notifications";
 import { seatPresidentialExecutive } from "@/lib/turn/election/presidentExecutiveSeating";
 import { recordPresidentialTenure } from "@/lib/turn/election/presidentialTenureLedger";
-import { loadHouseVoteStandings } from "@/lib/turn/election/contingentHouseVoteStandings";
+import {
+  loadHouseVoteStandings,
+  type LiveHouseVoteStandings,
+} from "@/lib/turn/election/contingentHouseVoteStandings";
+import {
+  notifyHouseVoteClosed,
+  notifyHouseVoteReminder,
+} from "@/lib/turn/election/contingentHouseVoteNotices";
 import {
   isNppContingentId,
   toCharacterObjectId,
   toNppObjectId,
 } from "@/lib/turn/election/contingentPersonIds";
-import type { HouseVoteStandings } from "@/lib/elections/contingentHouseStandings";
 import { logger } from "../../observability/logger";
 
 type TallyWithVote = ElectionVoteTally & {
   contingentHouseVote: NonNullable<ElectionVoteTally["contingentHouseVote"]>;
 };
+
+async function actingPersonPresent(db: Db, personId: string): Promise<boolean> {
+  if (isNppContingentId(personId)) {
+    const npp = await db
+      .collection<NPP>("npps")
+      .findOne({ _id: toNppObjectId(personId) }, { projection: { retiredAt: 1 } });
+    return Boolean(npp && !npp.retiredAt);
+  }
+  const char = await db
+    .collection<Character>("characters")
+    .findOne({ _id: toCharacterObjectId(personId) }, { projection: { _id: 1 } });
+  return Boolean(char);
+}
 
 async function seatHouseElectedPresident(
   db: Db,
@@ -53,14 +80,17 @@ async function seatHouseElectedPresident(
     return false;
   }
 
-  // The acting president becomes the vice president.
+  // The acting president becomes the vice president, unless they have left
+  // the game since: the vice presidency then stays vacant.
   const actingIsNpp = isNppContingentId(vote.actingPresidentId);
+  const actingPresent = await actingPersonPresent(db, vote.actingPresidentId);
   try {
     await seatPresidentialExecutive(db, {
       election,
       winnerCandidate,
-      vpCharId: actingIsNpp ? undefined : toCharacterObjectId(vote.actingPresidentId),
-      vpNppId: actingIsNpp ? toNppObjectId(vote.actingPresidentId) : undefined,
+      vpCharId:
+        actingPresent && !actingIsNpp ? toCharacterObjectId(vote.actingPresidentId) : undefined,
+      vpNppId: actingPresent && actingIsNpp ? toNppObjectId(vote.actingPresidentId) : undefined,
       now,
       turn,
     });
@@ -98,9 +128,24 @@ async function seatHouseElectedPresident(
   return true;
 }
 
+function ballotEntry(standings: LiveHouseVoteStandings, turn: number) {
+  return {
+    turn,
+    delegationVotes: standings.delegationVotes,
+    totals: standings.delegationTotals,
+    winnerId: standings.majorityWinnerId,
+  };
+}
+
+function sameBallot(a: Record<string, string | null>, b: Record<string, string | null>): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) if ((a[key] ?? null) !== (b[key] ?? null)) return false;
+  return true;
+}
+
 function closedWithWinnerUpdate(
   winnerId: string,
-  standings: HouseVoteStandings,
+  standings: LiveHouseVoteStandings,
   turn: number,
   now: Date,
   ballot: number
@@ -109,6 +154,7 @@ function closedWithWinnerUpdate(
     $set: {
       "contingentHouseVote.status": "closed" as const,
       "contingentHouseVote.closedTurn": turn,
+      "contingentHouseVote.lastBallotTurn": turn,
       "contingentHouseVote.presidentWinnerId": winnerId,
       "contingentHouseVote.seatingPending": true,
       "contingentResult.presidentWinnerId": winnerId,
@@ -119,9 +165,10 @@ function closedWithWinnerUpdate(
       updatedAt: now,
     },
     $push: {
+      "contingentHouseVote.ballots": ballotEntry(standings, turn),
       "contingentResult.houseBallots": {
         ballot,
-        activeCandidateIds: Object.keys(standings.delegationTotals),
+        activeCandidateIds: standings.activeCandidateIds,
         delegationVotes: standings.delegationVotes,
         totals: standings.delegationTotals,
         reason: "House vote held after the deadlock",
@@ -131,9 +178,9 @@ function closedWithWinnerUpdate(
 }
 
 /**
- * Close at most one due House vote and finish at most one pending seating per
- * call (a world has a single US presidential election in flight). Returns how
- * many votes were closed or seated.
+ * Take this turn's ballot of every open House vote past its first turn, and
+ * finish at most one pending seating. Returns how many ballots were taken or
+ * seatings finished.
  */
 export async function closeDueContingentHouseVotes(
   db: Db,
@@ -154,45 +201,118 @@ export async function closeDueContingentHouseVotes(
     }
   }
 
-  const due = (await tallies.findOne({
-    "contingentHouseVote.status": "open",
-    "contingentHouseVote.closesTurn": { $lte: currentTurn },
-  })) as TallyWithVote | null;
-  if (!due) return handled;
-  const election = await elections.findOne({ _id: due.electionId });
-  if (!election || (election.countryId ?? "US") !== "US") return handled;
+  // The vote opens during a turn; the first ballot that counts is the next one.
+  const due = (await tallies
+    .find({
+      "contingentHouseVote.status": "open",
+      "contingentHouseVote.openedTurn": { $lt: currentTurn },
+      "contingentHouseVote.lastBallotTurn": { $ne: currentTurn },
+    })
+    .toArray()) as TallyWithVote[];
 
-  const standings = await loadHouseVoteStandings(db, election, due, due.contingentHouseVote);
-  const winnerId = standings.majorityWinnerId;
-  const claim = await tallies.updateOne(
-    { _id: due._id, "contingentHouseVote.status": "open" },
-    winnerId
-      ? closedWithWinnerUpdate(
-          winnerId,
-          standings,
-          currentTurn,
-          now,
-          (due.contingentResult?.houseBallots?.length ?? 0) + 1
-        )
-      : {
-          $set: {
-            "contingentHouseVote.status": "closed",
-            "contingentHouseVote.closedTurn": currentTurn,
-            updatedAt: now,
-          },
-        }
-  );
-  if (claim.modifiedCount !== 1) return handled;
-  handled += 1;
-  console.log(
-    winnerId
-      ? `[Turn] House vote ${election._id} closed: ${winnerId} elected president`
-      : `[Turn] House vote ${election._id} closed with no majority; ${due.contingentHouseVote.actingPresidentName} keeps serving`
-  );
-
-  if (winnerId) {
-    const claimed = (await tallies.findOne({ _id: due._id })) as TallyWithVote | null;
-    if (claimed) await seatHouseElectedPresident(db, election, claimed, now, currentTurn);
+  for (const tally of due) {
+    const election = await elections.findOne({ _id: tally.electionId });
+    if (!election || (election.countryId ?? "US") !== "US") continue;
+    try {
+      if (await takeBallot(db, election, tally, now, currentTurn)) handled += 1;
+    } catch (err) {
+      logger.error("Turn", `House vote ${election._id}: ballot failed, will retry next turn`, err);
+    }
   }
   return handled;
+}
+
+async function takeBallot(
+  db: Db,
+  election: Election,
+  tally: TallyWithVote,
+  now: Date,
+  currentTurn: number
+): Promise<boolean> {
+  const tallies = db.collection<ElectionVoteTally>("electionVoteTallies");
+  const vote = tally.contingentHouseVote;
+  const standings = await loadHouseVoteStandings(db, election, tally, vote);
+  const winnerId = standings.majorityWinnerId;
+  const windowOver = currentTurn >= vote.closesTurn;
+  const entry = ballotEntry(standings, currentTurn);
+
+  const update = winnerId
+    ? closedWithWinnerUpdate(
+        winnerId,
+        standings,
+        currentTurn,
+        now,
+        (tally.contingentResult?.houseBallots?.length ?? 0) + 1
+      )
+    : {
+        $set: {
+          "contingentHouseVote.lastBallotTurn": currentTurn,
+          ...(windowOver
+            ? {
+                "contingentHouseVote.status": "closed" as const,
+                "contingentHouseVote.closedTurn": currentTurn,
+              }
+            : {}),
+          updatedAt: now,
+        },
+        $push: { "contingentHouseVote.ballots": entry },
+      };
+  const claim = await tallies.updateOne(
+    {
+      _id: tally._id,
+      "contingentHouseVote.status": "open",
+      "contingentHouseVote.lastBallotTurn": { $ne: currentTurn },
+    },
+    update
+  );
+  if (claim.modifiedCount !== 1) return false;
+
+  const nameOf = (id: string) => tally.candidateNames?.[id] ?? id;
+  if (winnerId) {
+    console.log(`[Turn] House vote ${election._id} closed: ${winnerId} elected president`);
+    const claimed = (await tallies.findOne({ _id: tally._id })) as TallyWithVote | null;
+    if (claimed) await seatHouseElectedPresident(db, election, claimed, now, currentTurn);
+    await notifyHouseVoteClosed(db, election, vote, {
+      winnerName: nameOf(winnerId),
+      delegations: standings.delegationTotals[winnerId] ?? 0,
+      threshold: standings.threshold,
+    }).catch((err) => logger.error("Turn", "House vote close notice failed", err));
+  } else if (windowOver) {
+    console.log(
+      `[Turn] House vote ${election._id} closed with no majority; ${vote.actingPresidentName} keeps serving`
+    );
+    await notifyHouseVoteClosed(db, election, vote, {
+      winnerName: null,
+      delegations: 0,
+      threshold: standings.threshold,
+    }).catch((err) => logger.error("Turn", "House vote close notice failed", err));
+  } else {
+    // Remind members who have not voted, once per turn and only when the
+    // board moved since the previous ballot.
+    const previous =
+      vote.ballots?.[vote.ballots.length - 1]?.delegationVotes ??
+      tally.contingentResult?.houseDelegationVotes ??
+      {};
+    if (!sameBallot(previous, standings.delegationVotes)) {
+      const reminder = await tallies.updateOne(
+        { _id: tally._id, "contingentHouseVote.lastReminderTurn": { $ne: currentTurn } },
+        { $set: { "contingentHouseVote.lastReminderTurn": currentTurn } }
+      );
+      if (reminder.modifiedCount === 1) {
+        const leaderId = standings.leaderId;
+        await notifyHouseVoteReminder(
+          db,
+          election,
+          vote,
+          {
+            leaderName: leaderId ? nameOf(leaderId) : null,
+            leaderDelegations: leaderId ? (standings.delegationTotals[leaderId] ?? 0) : 0,
+            threshold: standings.threshold,
+          },
+          currentTurn
+        ).catch((err) => logger.error("Turn", "House vote reminder failed", err));
+      }
+    }
+  }
+  return true;
 }

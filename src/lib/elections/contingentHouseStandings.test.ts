@@ -127,3 +127,139 @@ describe("computeHouseVoteStandings", () => {
     expect(standings.delegationVotes.AA).toBe("c");
   });
 });
+
+describe("computeHouseVoteStandings whips", () => {
+  /** Ten delegations: five party 1 members (lean a) and five party 2 members (lean b), one voter each. */
+  function split(): ContingentHouseDelegation[] {
+    return Array.from({ length: 10 }, (_, i) => ({
+      stateId: `S${i}`,
+      voters: [i < 5 ? voter(`n${i}`, "1", -5) : voter(`npp_${i}`, "2", 5)],
+    }));
+  }
+  const run = (extra: Partial<Parameters<typeof computeHouseVoteStandings>[0]>) =>
+    computeHouseVoteStandings({
+      delegations: split(),
+      candidates,
+      votes: {},
+      tieSeed: "e1",
+      ...extra,
+    });
+
+  it("makes NPP members follow their party whip over preference", () => {
+    const standings = run({ whips: { "party:2": { candidateId: "c" } } });
+    expect(standings.delegationTotals).toEqual({ a: 5, b: 0, c: 5 });
+  });
+
+  it("applies a coalition whip to member parties without their own party whip", () => {
+    const standings = run({
+      whips: {
+        "coalition:7": { candidateId: "c" },
+        "party:1": { candidateId: "a" },
+      },
+      partyCoalition: { "1": "7", "2": "7" },
+    });
+    // Party 1 keeps its own whip; party 2 takes the coalition whip.
+    expect(standings.delegationTotals).toEqual({ a: 5, b: 0, c: 5 });
+  });
+
+  it("lets a party free vote stand against the coalition whip", () => {
+    const standings = run({
+      whips: { "coalition:7": { candidateId: "c" }, "party:2": { candidateId: "free" } },
+      partyCoalition: { "1": "7", "2": "7" },
+    });
+    expect(standings.delegationTotals).toEqual({ a: 0, b: 5, c: 5 });
+  });
+
+  it("ignores a whip for a candidacy that left the ballot", () => {
+    const standings = run({
+      candidates: candidates.filter((c) => c.id !== "c"),
+      whips: { "party:2": { candidateId: "c" } },
+    });
+    expect(standings.delegationTotals).toEqual({ a: 5, b: 5 });
+  });
+
+  it("does not force a player: an explicit vote beats the whip and is reported as defiance", () => {
+    const delegations: ContingentHouseDelegation[] = [
+      { stateId: "AA", voters: [voter("p1", "1", -5)] },
+      { stateId: "BB", voters: [voter("p2", "1", -5)] },
+    ];
+    const standings = computeHouseVoteStandings({
+      delegations,
+      candidates,
+      votes: { p1: "b" },
+      whips: { "party:1": { candidateId: "c" } },
+      tieSeed: "e1",
+    });
+    // p1 defied the whip for c; p2 has not voted and follows it.
+    expect(standings.delegationVotes).toEqual({ AA: "b", BB: "c" });
+    expect(standings.defiances).toEqual([
+      { voterId: "p1", stateId: "AA", candidateId: "b", whipCandidateId: "c", whipKey: "party:1" },
+    ]);
+  });
+
+  it("does not report a player who votes with the whip or under a free vote", () => {
+    const delegations: ContingentHouseDelegation[] = [
+      { stateId: "AA", voters: [voter("p1", "1", -5)] },
+    ];
+    const withWhip = computeHouseVoteStandings({
+      delegations,
+      candidates,
+      votes: { p1: "c" },
+      whips: { "party:1": { candidateId: "c" } },
+      tieSeed: "e1",
+    });
+    expect(withWhip.defiances).toEqual([]);
+    const free = computeHouseVoteStandings({
+      delegations,
+      candidates,
+      votes: { p1: "b" },
+      whips: { "party:1": { candidateId: "free" } },
+      tieSeed: "e1",
+    });
+    expect(free.defiances).toEqual([]);
+  });
+
+  it("ignores explicit votes keyed to NPP ids", () => {
+    const standings = run({ votes: { npp_5: "a" } });
+    expect(standings.explicitVoters).toBe(0);
+  });
+
+  it("lets a lone remaining candidate win only with a majority of delegations", () => {
+    const only = candidates.filter((c) => c.id === "a");
+    const tied: ContingentHouseDelegation[] = roster(0).map((d, i) =>
+      i < 24 ? { ...d, voters: [] } : d
+    );
+    const thin = computeHouseVoteStandings({
+      delegations: tied,
+      candidates: only,
+      votes: {},
+      tieSeed: "e1",
+    });
+    expect(thin.delegationTotals).toEqual({ a: 26 });
+    expect(thin.majorityWinnerId).toBe("a");
+    const empty = computeHouseVoteStandings({
+      delegations: roster(0).map((d, i) => (i < 25 ? { ...d, voters: [] } : d)),
+      candidates: only,
+      votes: {},
+      tieSeed: "e1",
+    });
+    expect(empty.delegationTotals).toEqual({ a: 25 });
+    expect(empty.majorityWinnerId).toBeNull();
+  });
+
+  it("reports tied delegations in the state rows", () => {
+    const standings = computeHouseVoteStandings({
+      delegations: [
+        { stateId: "AA", voters: [voter("t1", "1", -5), voter("t2", "2", 5)] },
+        { stateId: "BB", voters: [voter("t3", "1", -5)] },
+      ],
+      candidates,
+      votes: {},
+      tieSeed: "e1",
+    });
+    expect(standings.delegations).toEqual([
+      { stateId: "AA", backing: null, tied: true, weights: { a: 1, b: 1 } },
+      { stateId: "BB", backing: "a", tied: false, weights: { a: 1 } },
+    ]);
+  });
+});

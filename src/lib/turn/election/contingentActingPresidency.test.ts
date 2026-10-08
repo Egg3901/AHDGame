@@ -3,6 +3,10 @@ import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 const seat = vi.fn();
+const noticeOpened = vi.fn();
+vi.mock("./contingentHouseVoteNotices", () => ({
+  notifyHouseVoteOpened: (...args: unknown[]) => noticeOpened(...args),
+}));
 vi.mock("@/lib/turn/election/presidentExecutiveSeating", () => ({
   seatPresidentialExecutive: (...args: unknown[]) => seat(...args),
 }));
@@ -19,6 +23,7 @@ describe("acting presidency after a House deadlock", () => {
 
   beforeEach(() => {
     seat.mockReset();
+    noticeOpened.mockReset().mockResolvedValue(undefined);
     db = createMockDb();
   });
 
@@ -41,6 +46,7 @@ describe("acting presidency after a House deadlock", () => {
       contingentResult: {
         vicePresidentWinnerId: vpId.toString(),
         eligiblePresidentCandidateIds: ["a", "b", "c"],
+        houseThreshold: 26,
       },
       now: new Date(),
       turn: 49,
@@ -63,6 +69,9 @@ describe("acting presidency after a House deadlock", () => {
     const update = db.collection("electionVoteTallies").updateOne.mock.calls[0][1];
     expect(update.$set.contingentHouseVote.status).toBe("open");
     expect(update.$set.executiveSeatingPending).toBe(false);
+    // The first seating announces the vote, with the majority it needs.
+    expect(noticeOpened).toHaveBeenCalledTimes(1);
+    expect(noticeOpened.mock.calls[0][3]).toBe(26);
   });
 
   it("keeps the original window on a seating retry", async () => {
@@ -82,12 +91,14 @@ describe("acting presidency after a House deadlock", () => {
       contingentResult: {
         vicePresidentWinnerId: `npp_${nppId.toString()}`,
         eligiblePresidentCandidateIds: ["a"],
+        houseThreshold: 26,
       },
       existingVote: existing,
       now: new Date(),
       turn: 50,
     });
     expect(result.closesTurn).toBe(73);
+    expect(noticeOpened).not.toHaveBeenCalled();
     expect(seat.mock.calls[0][1].winnerCandidate.isNPP).toBe(true);
   });
 });

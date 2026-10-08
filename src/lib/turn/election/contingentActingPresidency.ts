@@ -22,6 +22,8 @@ import { DISCORD_COLORS, sendCountryGameEvent } from "@/lib/discordWebhooks";
 import type { ContingentElectionResult } from "@/lib/elections/contingentElection";
 import { seatPresidentialExecutive } from "@/lib/turn/election/presidentExecutiveSeating";
 import { isNppContingentId, toCharacterObjectId, toNppObjectId } from "./contingentPersonIds";
+import { notifyHouseVoteOpened } from "./contingentHouseVoteNotices";
+import { logger } from "../../observability/logger";
 
 /** How long the House keeps voting after a deadlock (hourly turns: about a day). */
 export const CONTINGENT_HOUSE_VOTE_TURNS = 24;
@@ -66,7 +68,7 @@ export async function seatActingPresidencyForHouseVote(
     election: Election;
     contingentResult: Pick<
       ContingentElectionResult,
-      "vicePresidentWinnerId" | "eligiblePresidentCandidateIds"
+      "vicePresidentWinnerId" | "eligiblePresidentCandidateIds" | "houseThreshold"
     >;
     existingVote?: ContingentHouseVote;
     now: Date;
@@ -119,6 +121,12 @@ export async function seatActingPresidencyForHouseVote(
       },
     }
   );
+  // Only the first seating announces the vote; a retry keeps the original window.
+  if (!existingVote) {
+    await notifyHouseVoteOpened(db, election, vote, contingentResult.houseThreshold).catch((err) =>
+      logger.error("Turn", "House vote opening notice failed", err)
+    );
+  }
   return vote;
 }
 

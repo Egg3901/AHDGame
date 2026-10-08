@@ -203,6 +203,27 @@ export interface ElectionVoteTally {
     closedTurn?: number;
     /** Set at close when the House elected a president whose seating has not completed. */
     seatingPending?: boolean;
+    /** Turn of the latest ballot; a ballot is claimed at most once per turn. */
+    lastBallotTurn?: number;
+    /** Latest turn on which House members who had not voted were reminded. */
+    lastReminderTurn?: number;
+    /** One ballot per turn after the opening one, oldest first. */
+    ballots?: Array<{
+      turn: number;
+      delegationVotes: Record<string, string | null>;
+      /** Delegations backing each active candidacy. */
+      totals: Record<string, number>;
+      /** Candidacy holding a delegation majority on this ballot, if any. */
+      winnerId: string | null;
+    }>;
+    /**
+     * Whips set by party chairs (`party:<sequentialId>`) and coalition chairs
+     * (`coalition:<sequentialId>`). `candidateId` is a candidacy id or "free".
+     */
+    whips?: Record<
+      string,
+      { candidateId: string; setBy: string; setByName: string; setAt: Date; turn: number }
+    >;
   };
   /** President only: per-unit turn snapshots for EV projection */
   unitTurnSnapshots?: Record<string, VoteTurnSnapshot[]>;
