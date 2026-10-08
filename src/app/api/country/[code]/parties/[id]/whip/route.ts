@@ -23,6 +23,8 @@ import type {
 import { getGameTime } from "@/lib/time/gameTime";
 import { isLeadershipElectionClosed } from "@/lib/congress/leadershipElections";
 import { impeachmentStageChamberKey } from "@/lib/impeachment/impeachmentTally";
+import type { ScotusNomination } from "@/lib/db/types/scotus";
+import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
 import type { Impeachment } from "@/lib/db/types/impeachment";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import {
@@ -79,6 +81,7 @@ const whipSchema = z.object({
     "pmAppointmentVote",
     "noConfidenceVote",
     "cabinetNomination",
+    "scotusNomination",
     "speakerVacateMotion",
     "impeachmentVote",
   ]),
@@ -420,6 +423,26 @@ export async function POST(request: Request, { params }: RouteParams) {
           { status: 404 }
         );
       }
+    } else if (targetType === "scotusNomination") {
+      if (countryId !== COUNTRY_CONFIGS.US.id || chamber !== "senate") {
+        return errorResponse(400, "Supreme Court nominations can only be whipped in the US Senate");
+      }
+      const nomination = await db
+        .collection<ScotusNomination>("scotusNominations")
+        .findOne({ _id: requireTargetObjectId(), countryId, status: "active" });
+      if (!nomination)
+        return errorResponse(404, "Supreme Court nomination not found or not active");
+      const gameTime = await getGameTime();
+      if (
+        isVotingDeadlinePassed(
+          nomination.votingEndsAt,
+          gameTime.effectiveNow,
+          nomination.votingEndsOnTurn,
+          gameTime.currentTurn
+        )
+      ) {
+        return errorResponse(409, "Voting has ended");
+      }
     } else if (targetType === "cabinetNomination") {
       if (!targetOid) {
         return NextResponse.json(badRequest("Invalid target ID").toJson(), { status: 400 });
@@ -579,12 +602,13 @@ export async function POST(request: Request, { params }: RouteParams) {
           );
           overridden = r.overridden;
           alreadyAligned = r.alreadyAligned;
-        } else if (targetType === "cabinetNomination") {
+        } else if (targetType === "cabinetNomination" || targetType === "scotusNomination") {
           const r = await applyPlayerWhipToCabinet(
             db,
             requireTargetObjectId(),
             direction,
-            eligible
+            eligible,
+            targetType === "scotusNomination" ? "scotusNominations" : "cabinetNominations"
           );
           overridden = r.overridden;
           alreadyAligned = r.alreadyAligned;
@@ -851,7 +875,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       fellInLine = r.fellInLine;
       ignored = r.ignored;
       if (authData.character.stats) await grantStatecraftXp();
-    } else if (targetType === "cabinetNomination") {
+    } else if (targetType === "cabinetNomination" || targetType === "scotusNomination") {
       const r = await applyWhipVotesToCabinet(
         db,
         requireTargetObjectId(),
@@ -859,7 +883,8 @@ export async function POST(request: Request, { params }: RouteParams) {
         nppOfficials,
         nppMap,
         mode,
-        whipStatecraftBonus
+        whipStatecraftBonus,
+        targetType === "scotusNomination" ? "scotusNominations" : "cabinetNominations"
       );
       fellInLine = r.fellInLine;
       ignored = r.ignored;
@@ -1000,6 +1025,20 @@ async function buildPlayerWhipMessage(
       notificationTitle,
     };
   }
+  if (targetType === "scotusNomination") {
+    return {
+      subject:
+        mode === "soft"
+          ? `Party suggestion: Vote ${dir} on Supreme Court nomination`
+          : `Party Whip: Vote ${dir} on Supreme Court nomination`,
+      body:
+        mode === "soft"
+          ? `Your national party suggests that you vote ${dir} on the Supreme Court nomination.`
+          : `Your national party has whipped you to vote ${dir} on the Supreme Court nomination. You may change your vote at any time.`,
+      notificationTitle: `Supreme Court Whip: ${dir}`,
+    };
+  }
+
   if (targetType === "cabinetNomination") {
     return {
       subject: isSoft

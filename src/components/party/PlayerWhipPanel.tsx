@@ -39,6 +39,7 @@ interface CandidacyInfo {
 interface LeadershipElectionItem {
   id: string;
   type?: string;
+  targetType?: "cabinetNomination" | "scotusNomination";
   /** Chamber the item is voted in. Impeachments move chamber between stages. */
   chamber?: string;
   candidacies: CandidacyInfo[];
@@ -121,8 +122,14 @@ export function PlayerWhipPanel({
       .then((data) => {
         if (cancelled) return;
         const all = Object.values(data).flat() as LeadershipElectionItem[];
-        setLeadershipItems(all.filter((e) => !e.type?.startsWith("Cabinet:")));
-        setCabinetItems(all.filter((e) => e.type?.startsWith("Cabinet:")));
+        setLeadershipItems(
+          all.filter(
+            (e) => !(e.targetType === "scotusNomination" || e.type?.startsWith("Cabinet:"))
+          )
+        );
+        setCabinetItems(
+          all.filter((e) => e.targetType === "scotusNomination" || e.type?.startsWith("Cabinet:"))
+        );
       })
       .catch(() => {
         /* non-fatal */
@@ -218,14 +225,15 @@ export function PlayerWhipPanel({
     );
   };
 
-  const handleCabinetWhip = (nominationId: string, direction: "for" | "against") => {
+  const handleCabinetWhip = (item: LeadershipElectionItem, direction: "for" | "against") => {
+    const nominationId = item.id;
     const config = getCountryConfig(resolvedCountryId);
     const chamber = config.upperElectionSystem
       ? (config.legislature.upperChamber?.key ?? config.legislature.lowerChamber.key)
       : config.legislature.lowerChamber.key;
     postWhip(
       {
-        targetType: "cabinetNomination",
+        targetType: item.targetType ?? "cabinetNomination",
         targetId: nominationId,
         chamber,
         direction,
@@ -615,9 +623,7 @@ export function PlayerWhipPanel({
         }}
         renderCabinet={() => {
           if (cabinetItems.length === 0) {
-            return (
-              <p className="text-sm text-muted italic">No active cabinet nominations to whip.</p>
-            );
+            return <p className="text-sm text-muted italic">No active nominations to whip.</p>;
           }
           return (
             <div className="space-y-3">
@@ -629,7 +635,11 @@ export function PlayerWhipPanel({
                   <div key={item.id} className="rounded-lg border border-card-border bg-card p-4">
                     <h4 className="font-medium text-sm mb-3">
                       <Link
-                        href={`/congress/nominations/${item.id}`}
+                        href={
+                          item.targetType === "scotusNomination"
+                            ? `/congress/scotus-nominations/${item.id}`
+                            : `/congress/nominations/${item.id}`
+                        }
                         className="hover:text-primary transition-colors"
                       >
                         {item.type ?? "Cabinet nomination"}
@@ -640,7 +650,7 @@ export function PlayerWhipPanel({
                     )}
                     <div className="flex flex-wrap gap-2">
                       <button
-                        onClick={() => handleCabinetWhip(item.id, "for")}
+                        onClick={() => handleCabinetWhip(item, "for")}
                         disabled={modeAlreadyUsed || whippingId === `cab_${item.id}_for`}
                         title={disabledTitle}
                         className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -652,7 +662,7 @@ export function PlayerWhipPanel({
                         {whippingId === `cab_${item.id}_for` ? "Issuing..." : "Whip FOR"}
                       </button>
                       <button
-                        onClick={() => handleCabinetWhip(item.id, "against")}
+                        onClick={() => handleCabinetWhip(item, "against")}
                         disabled={modeAlreadyUsed || whippingId === `cab_${item.id}_against`}
                         title={disabledTitle}
                         className="px-3 py-1.5 text-xs font-medium rounded-md border border-card-border bg-card hover:bg-muted/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

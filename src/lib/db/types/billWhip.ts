@@ -8,6 +8,7 @@ export type WhipTargetType =
   | "pmAppointmentVote"
   | "noConfidenceVote"
   | "cabinetNomination"
+  | "scotusNomination"
   | "speakerVacateMotion"
   | "impeachmentVote";
 export type WhipDirection = "for" | "against";
