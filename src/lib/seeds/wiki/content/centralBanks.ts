@@ -121,7 +121,7 @@ The selected candidate must **accept** the offer. If they decline, the next elig
 
 ## Setting the prime rate
 
-The Chair sets monetary policy by adjusting the prime rate. The prime rate can be set between **0% and 25%** in **0.25% increments** (e.g., 2.00%, 2.25%, 2.50%). This is done through the character's available actions on the Central Bank page. At the US Federal Reserve the Chair proposes and the FOMC votes (see [FOMC / Rate-Setting Board](/wiki/fomc)); every other bank's governor sets the rate alone, or the government does where the bank is not independent. The prime rate affects:
+The Chair sets monetary policy by adjusting the prime rate. The prime rate can be set between **0% and 25%** in **0.25% increments** (e.g., 2.00%, 2.25%, 2.50%). This is done through the character's available actions on the Central Bank page. A single move can raise the rate by at most **0.75 points** and cut it by at most **1.75 points**, with one change every 6 turns. When inflation is at least **5 points above target**, the hike limit widens to **3 points** for as long as that holds, so a bank can catch up with runaway inflation in a few moves; the Central Bank page shows the range you can use this turn. Cuts below the normal 0.75 point band cost scrutiny. At the US Federal Reserve the Chair proposes and the FOMC votes (see [FOMC / Rate-Setting Board](/wiki/fomc)); every other bank's governor sets the rate alone, or the government does where the bank is not independent. The prime rate affects:
 
 ### 1. Corporate bond costs
 

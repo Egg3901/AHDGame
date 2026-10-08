@@ -87,6 +87,8 @@ export interface StateContext {
   governmentControlled: boolean;
   fxCommitment: JurisdictionState["fxCommitment"];
   commandEconomy: boolean;
+  /** Inflation minus target (pp); see JurisdictionState.inflationGap. */
+  inflationGap?: number | null;
 }
 
 export function bankToJurisdictionState(bank: CentralBank, ctx: StateContext): JurisdictionState {
@@ -113,6 +115,7 @@ export function bankToJurisdictionState(bank: CentralBank, ctx: StateContext): J
     chairSelectionPending: bank.chairSelectionPending != null,
     fxCommitment: ctx.fxCommitment,
     commandEconomy: ctx.commandEconomy,
+    inflationGap: ctx.inflationGap ?? null,
     lastVacancyNoticeAtTurn: bank.lastFomcVacancyNoticeAtTurn ?? null,
   };
 }

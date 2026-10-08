@@ -405,6 +405,61 @@ describe("term rollover and caps", () => {
     expect(cut.reason).toBe("delta-cut");
   });
 
+  it("widens the hike cap for a chair when inflation is 5pp over target", () => {
+    const ask = (rate: number, inflationGap: number | null) =>
+      decideGovernance(
+        baseState({ board: [], inflationGap }),
+        { type: "set_rate", rate, countryId: "US" },
+        CHAIR,
+        clock(108)
+      );
+    const wide = ask(8, 6);
+    expect(wide.allowed).toBe(true);
+    if (wide.allowed) {
+      expect(wide.next.primeRate).toBe(8);
+      // Hikes never carry scrutiny, however large.
+      expect(wide.next.chairInfamy).toBe(baseState().chairInfamy);
+    }
+    const tooFar = ask(8.25, 6);
+    expect(tooFar.allowed).toBe(false);
+    if (!tooFar.allowed) expect(tooFar.reason).toBe("delta-hike");
+    // Just under the threshold, and with no inflation data, the ordinary cap holds.
+    for (const gap of [4.9, null]) {
+      const refused = ask(7, gap);
+      expect(refused.allowed).toBe(false);
+      if (!refused.allowed) expect(refused.reason).toBe("delta-hike");
+    }
+  });
+
+  it("applies the widened hike cap to the government rate setter too", () => {
+    const decision = decideGovernance(
+      baseState({ board: [], governmentControlled: true, inflationGap: 12 }),
+      { type: "set_rate", rate: 8, countryId: "US" },
+      GOVERNMENT,
+      clock(108)
+    );
+    expect(decision.allowed).toBe(true);
+  });
+
+  it("leaves the cut cap alone when inflation is high", () => {
+    const decision = decideGovernance(
+      baseState({ board: [], inflationGap: 12 }),
+      { type: "set_rate", rate: 3, countryId: "US" },
+      CHAIR,
+      clock(108)
+    );
+    expect(decision.allowed).toBe(false);
+    if (!decision.allowed) expect(decision.reason).toBe("delta-cut");
+  });
+
+  it("widens the offered rate grid with the hike cap", () => {
+    const narrow = normalizedRateChoices(baseState({ primeRate: 4, inflationGap: 1 }));
+    const wide = normalizedRateChoices(baseState({ primeRate: 4, inflationGap: 8 }));
+    expect(Math.max(...narrow)).toBe(4.75);
+    expect(Math.max(...wide)).toBe(7);
+    expect(Math.min(...wide)).toBe(Math.min(...narrow));
+  });
+
   it("applies aggressive-cut scrutiny to an oversized cut", () => {
     const decision = decideGovernance(
       baseState({ board: [], chairInfamy: 5 }),

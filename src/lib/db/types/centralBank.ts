@@ -48,6 +48,19 @@ export const NPP_CHAIR_HIGH_INFLATION_HIKE_DELTA = 3;
 /** Highest policy rate a Taylor-driven move may reach (the ceiling every other rate writer already honours). */
 export const PRIME_RATE_CEILING = 25;
 
+/**
+ * Per-move hike cap (pp) given inflation minus target. Autonomous chairs, human
+ * chairs, government rate setters and the committee all read this one rule, so
+ * the widened cap cannot drift between the server checks and the rate UI.
+ */
+export function maxHikeDeltaFor(inflationGap: number | null | undefined): number {
+  return typeof inflationGap === "number" &&
+    Number.isFinite(inflationGap) &&
+    inflationGap >= NPP_CHAIR_HIGH_INFLATION_GAP
+    ? NPP_CHAIR_HIGH_INFLATION_HIKE_DELTA
+    : MAX_RATE_CHANGE_DELTA;
+}
+
 /** Maximum rate cut (percentage points) per chair action — chairs may cut more aggressively at the cost of scrutiny. */
 export const MAX_RATE_CUT_DELTA = 1.75;
 

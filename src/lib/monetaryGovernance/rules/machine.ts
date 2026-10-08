@@ -24,6 +24,7 @@ import {
   MAX_RATE_CUT_DELTA,
   NPP_CHAIR_HIGH_INFLATION_HIKE_DELTA,
   PRIME_RATE_CEILING,
+  maxHikeDeltaFor,
   PRIME_RATE_STEP,
   RATE_CHANGES_PER_TERM,
   RATE_CHANGE_COOLDOWN_TURNS,
@@ -738,10 +739,11 @@ function handleSetRate(
   const delta = requested - stored;
   const isAdmin = actor.kind === "admin";
   if (!isAdmin) {
-    if (delta > MAX_RATE_CHANGE_DELTA + EPSILON) {
+    const maxHike = maxHikeDeltaFor(state.inflationGap);
+    if (delta > maxHike + EPSILON) {
       return refuse(
         "delta-hike",
-        `Rate hikes are limited to +${MAX_RATE_CHANGE_DELTA.toFixed(2)}% per adjustment.`
+        `Rate hikes are limited to +${maxHike.toFixed(2)}% per adjustment.`
       );
     }
     if (delta < -(MAX_RATE_CUT_DELTA + EPSILON)) {
@@ -931,7 +933,7 @@ export function nextCadenceTurn(state: JurisdictionState): number | null {
 export function normalizedRateChoices(state: JurisdictionState): number[] {
   const stored = snapToPrimeRateGrid(state.primeRate);
   const floor = Math.max(0, stored - MAX_RATE_CUT_DELTA);
-  const ceiling = Math.min(25, stored + MAX_RATE_CHANGE_DELTA);
+  const ceiling = Math.min(PRIME_RATE_CEILING, stored + maxHikeDeltaFor(state.inflationGap));
   const choices: number[] = [];
   const start = Math.ceil((floor - EPSILON) / PRIME_RATE_STEP) * PRIME_RATE_STEP;
   for (let rate = start; rate <= ceiling + EPSILON; rate += PRIME_RATE_STEP) {

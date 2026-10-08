@@ -14,10 +14,8 @@ import { getNationalDocId } from "@/lib/constants/nationalScope";
 import {
   NPP_CHAIR_STEP_FRACTION,
   NPP_CHAIR_TARGET_GROWTH,
-  MAX_RATE_CHANGE_DELTA,
   MAX_RATE_CUT_DELTA,
-  NPP_CHAIR_HIGH_INFLATION_GAP,
-  NPP_CHAIR_HIGH_INFLATION_HIKE_DELTA,
+  maxHikeDeltaFor,
   PRIME_RATE_CEILING,
   GOVERNMENT_RATE_IDLE_TURNS,
   RATE_CHANGE_COOLDOWN_TURNS,
@@ -51,10 +49,7 @@ export function computeNppChairRateStep(params: {
   const desired = params.targetRate - params.currentRate;
   let step = NPP_CHAIR_STEP_FRACTION * desired;
   step *= step >= 0 ? policy.hikeStepMult : policy.cutStepMult;
-  const hikeCap =
-    (params.inflationGap ?? 0) >= NPP_CHAIR_HIGH_INFLATION_GAP
-      ? NPP_CHAIR_HIGH_INFLATION_HIKE_DELTA
-      : MAX_RATE_CHANGE_DELTA;
+  const hikeCap = maxHikeDeltaFor(params.inflationGap);
   const headroom = Math.max(0, PRIME_RATE_CEILING - params.currentRate);
   return Math.max(-MAX_RATE_CUT_DELTA, Math.min(hikeCap, headroom, step));
 }
