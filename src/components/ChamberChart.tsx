@@ -441,13 +441,18 @@ export function MajorityBanner({
   total: number;
   chamberLabel: string;
 }) {
-  const majority = Math.floor(total / 2) + 1;
   const sorted = [...seats]
     .filter((p) => p.party !== "__vacant__")
     .sort((a, b) => b.seats - a.seats);
   const leader = sorted[0];
+  // Chamber votes count sitting members, not empty seats (S#362), so the
+  // majority line is half the filled seats plus one.
+  const filled = sorted.reduce((sum, p) => sum + p.seats, 0);
+  const vacant = Math.max(0, total - filled);
+  const majority = Math.floor(filled / 2) + 1;
+  const vacantNote = vacant > 0 ? ` · ${vacant} vacant` : "";
 
-  if (!leader || total === 0) return null;
+  if (!leader || filled === 0) return null;
 
   const hasMajority = leader.seats >= majority;
   const tiedParties = sorted.filter((p) => p.seats === leader.seats);
@@ -470,17 +475,17 @@ export function MajorityBanner({
       {hasMajority ? (
         <>
           <strong>{leader.partyName}</strong>&nbsp;holds {chamberLabel} majority ({leader.seats} /{" "}
-          {majority} needed)
+          {majority} needed{vacantNote})
         </>
       ) : isTied ? (
         <>
           <strong>{tiedParties.map((p) => p.partyName).join(" & ")}</strong>&nbsp;tied in{" "}
-          {chamberLabel} ({leader.seats} seats each · {majority} needed for majority)
+          {chamberLabel} ({leader.seats} seats each · {majority} needed for majority{vacantNote})
         </>
       ) : (
         <>
           <strong>{leader.partyName}</strong>&nbsp;leads {chamberLabel} ({leader.seats} seats ·{" "}
-          {majority} needed for majority)
+          {majority} needed for majority{vacantNote})
         </>
       )}
     </div>
