@@ -55,6 +55,7 @@ export function buildFreightBillingBySector(args: {
     | "freightChargesByDestState"
     | "freightHaulRevenueByOriginState"
     | "freightDemandByDestState"
+    | "freightUnitPriceByDestState"
     | "freightSupplyByOriginState"
   >;
   currentTurn: number;
@@ -115,6 +116,7 @@ export function buildFreightBillingBySector(args: {
     freightChargesByDestState,
     haulRevenueByOriginState,
     demandUnitsByDestState: lookups.freightDemandByDestState ?? new Map(),
+    unitPriceByDestState: lookups.freightUnitPriceByDestState,
     demandCalibrationByCommodity: new Map(
       COMMODITY_TYPES.map((commodity) => [
         commodity,

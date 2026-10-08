@@ -220,6 +220,8 @@ export interface CorporationLookups {
   freightChargesByDestState?: Map<string, Map<CommodityType, number>>;
   /** Full buyer demand from the same sourcing snapshot as freight charges. */
   freightDemandByDestState?: Map<string, Map<CommodityType, number>>;
+  /** Destination unit prices (₳) used to bound each sector's freight bill by goods value. */
+  freightUnitPriceByDestState?: Map<string, Map<CommodityType, number>>;
   /** Full freight supply from the same sourcing snapshot as haul revenue. */
   freightSupplyByOriginState?: Map<string, number>;
   /**

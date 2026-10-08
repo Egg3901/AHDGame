@@ -289,6 +289,7 @@ export async function buildCorporationLookups(
             globalDemand: 1,
             globalPrice: 1,
             basePrice: 1,
+            statePrices: 1,
             stateSupply: 1,
             stateDemand: 1,
             stateInputAvailability: 1,
@@ -1294,6 +1295,7 @@ export async function buildCorporationLookups(
   const freightChargesByDestState = new Map<string, Map<CommodityType, number>>();
   const freightHaulRevenueByOriginState = new Map<string, number>();
   const freightDemandByDestState = new Map<string, Map<CommodityType, number>>();
+  const freightUnitPriceByDestState = new Map<string, Map<CommodityType, number>>();
   const freightSupplyByOriginState = new Map<string, number>();
   if (options?.moneyWiringEnabled || options?.canonicalFreightBillingEnabled) {
     const networkDoc = await db
@@ -1314,12 +1316,20 @@ export async function buildCorporationLookups(
       }
     }
     if (options?.canonicalFreightBillingEnabled) {
+      const priceBookByCommodity = new Map(commodityPrices.map((cp) => [cp.commodity, cp]));
       for (const [stateId, byCommodity] of Object.entries(doc?.freightCharges ?? {})) {
         const m = new Map<CommodityType, number>();
         for (const [commodity, charge] of Object.entries(byCommodity)) {
           if (typeof charge === "number" && charge > 0) m.set(commodity as CommodityType, charge);
         }
         if (m.size > 0) freightChargesByDestState.set(stateId, m);
+        const prices = new Map<CommodityType, number>();
+        for (const commodity of m.keys()) {
+          const book = priceBookByCommodity.get(commodity);
+          const price = book?.statePrices?.[stateId] ?? book?.globalPrice;
+          if (typeof price === "number" && price > 0) prices.set(commodity, price);
+        }
+        if (prices.size > 0) freightUnitPriceByDestState.set(stateId, prices);
       }
       for (const [stateId, revenue] of Object.entries(doc?.freightHaulRevenue ?? {})) {
         if (typeof revenue === "number" && revenue > 0)
@@ -1400,6 +1410,7 @@ export async function buildCorporationLookups(
     landedPremiumByState,
     freightChargesByDestState,
     freightDemandByDestState,
+    freightUnitPriceByDestState,
     freightSupplyByOriginState,
     freightHaulRevenueByOriginState,
     nationalCommodityBalancesByCountry,
