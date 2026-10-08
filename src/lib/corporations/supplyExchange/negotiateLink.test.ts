@@ -42,4 +42,16 @@ describe("negotiateHref", () => {
       )
     ).toBeNull();
   });
+
+  it("keeps a corporation id inside its own path segment", () => {
+    const href = negotiateHref('x"><img src=y>/../admin', {
+      corporationId: "p",
+      corporationName: "P",
+      side: "sell",
+      commodity: "steel",
+      volumeCap: 5,
+      pricePremium: 0,
+    });
+    expect(href.startsWith("/corporation/x%22%3E%3Cimg%20src%3Dy%3E%2F..%2Fadmin?")).toBe(true);
+  });
 });
