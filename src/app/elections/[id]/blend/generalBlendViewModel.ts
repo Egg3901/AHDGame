@@ -64,12 +64,6 @@ export interface BoardTileVM {
   title: string;
 }
 
-export interface TierLegendVM {
-  label: string;
-  band: string;
-  swatch: string;
-}
-
 export interface DriverRowVM {
   label: string;
   value: string;
@@ -120,7 +114,6 @@ export interface GeneralBlendVM {
   threshold: number;
   totalEv: number;
   tiles: BoardTileVM[];
-  tierLegend: TierLegendVM[];
   drivers: DriverRowVM[];
   coattailDrivers: DriverRowVM[];
   /**
@@ -171,7 +164,7 @@ export interface GeneralBlendVM {
   wire: string[];
 }
 
-const TIER_BANDS: { tier: MarginTier; label: string; band: string }[] = [
+export const TIER_BANDS: { tier: MarginTier; label: string; band: string }[] = [
   { tier: "safe", label: "Safe", band: "15pp or more" },
   { tier: "likely", label: "Likely", band: "10 to 15pp" },
   { tier: "lean", label: "Lean", band: "5 to 10pp" },
@@ -333,13 +326,6 @@ export function buildGeneralBlendViewModel(inp: GeneralBlendInput): GeneralBlend
       };
     })
     .sort((a, b) => a.stateId.localeCompare(b.stateId));
-
-  const tierLegend: TierLegendVM[] = TIER_BANDS.map((t) => ({
-    label: t.label,
-    band: t.band,
-    // A neutral grey run through the same shading shows the ramp itself.
-    swatch: shadeColorForTier("#9CA3AF", t.tier, BLEND.page),
-  }));
 
   // ── Persuasion drivers ────────────────────────────────────────────────────
   const persuasionCandidates: PersuasionDriverCandidate[] = election.allCandidates.map((c) => ({
@@ -542,7 +528,6 @@ export function buildGeneralBlendViewModel(inp: GeneralBlendInput): GeneralBlend
     threshold,
     totalEv,
     tiles,
-    tierLegend,
     drivers,
     coattailDrivers,
     driversNote:
