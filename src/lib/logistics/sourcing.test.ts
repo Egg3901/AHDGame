@@ -9,6 +9,8 @@ import {
   SEA_FREIGHT_HOP_EQUIV,
   type SourcingInputs,
   FREIGHT_CONGESTION_OVERFLOW,
+  FREIGHT_SHIPPING_MAX_ASK_SHARE,
+  boundedShippingPerUnit,
   GRID_LOSS_PER_HOP,
   GRID_WHEELING_PER_HOP_FRACTION,
   shortageResponsiveToleranceSlack,
@@ -45,7 +47,7 @@ function makeInputs(overrides: Partial<SourcingInputs> = {}): SourcingInputs {
     statePricesFor: () => ({ A1: 100, A2: 90, B1: 80 }),
     nationalPricesFor: () => ({ US: 95, UK: 80 }),
     basePriceFor: () => 100,
-    freightPrice: 1000,
+    freightPrice: 4000,
     hops: (_c, from, to) => (from === to ? 0 : from[0] === to[0] ? 1 : null),
     tariffRatePct: () => 0,
     isBlocked: () => false,
@@ -230,7 +232,7 @@ describe("runSourcingPass", () => {
     // the 35% buyer ceiling. The original 0.004 price weight charges 0.885 and
     // lets the route clear while still consuming 4 TEU of network capacity.
     const ironPrice = 4.92;
-    const freightPrice = 221.25;
+    const freightPrice = 221.25 * 4;
     const units = 100;
     const r = runSourcingPass(
       makeInputs({
@@ -270,34 +272,67 @@ describe("runSourcingPass", () => {
     expect(iron.toleranceBoundUnits).toBe(0);
   });
 
+  it("prices a typical 2 to 4 hop bulk haul at about 5 to 12 percent of the cargo at base freight", () => {
+    const domesticOnly = (hopCount: number) =>
+      makeInputs({
+        freightPrice: 3000,
+        statePricesFor: () => ({ A1: 140, A2: 110, B1: 80 }),
+        hops: (_c, from, to) => (from === to ? 0 : from[0] === to[0] ? hopCount : null),
+        nationalPricesFor: () => ({ US: 95, UK: 1000 }),
+      });
+    for (const hopCount of [2, 3, 4]) {
+      const flow = coalFlow(runSourcingPass(domesticOnly(hopCount)))[0];
+      expect(flow.originId).toBe("A2");
+      const share = flow.shippingPerUnit / flow.ask;
+      expect(share).toBeGreaterThan(0.05);
+      expect(share).toBeLessThan(0.12);
+    }
+  });
+
+  it("never lets a haul's shipping exceed a share of the ask, however dear freight is", () => {
+    const flow = coalFlow(
+      runSourcingPass(
+        makeInputs({
+          freightPrice: 100000,
+          nationalPricesFor: () => ({ US: 95, UK: 1000 }),
+        })
+      )
+    )[0];
+    expect(flow.originId).toBe("A2");
+    expect(flow.shippingPerUnit).toBeCloseTo(90 * FREIGHT_SHIPPING_MAX_ASK_SHARE);
+    expect(boundedShippingPerUnit(5, 90)).toBe(5);
+    expect(boundedShippingPerUnit(500, 90)).toBeCloseTo(90 * FREIGHT_SHIPPING_MAX_ASK_SHARE);
+    expect(boundedShippingPerUnit(500, -1)).toBe(0);
+  });
+
   it("buys from the cheapest landed seller, not the cheapest ask", () => {
-    // At freightPrice 1000 the sea leg dominates (bulk 0.004 price weight/unit/hop):
+    // At freightPrice 4000 the sea leg dominates (bulk 0.001 price weight/unit/hop):
     // UK landed 80+24=104 > A2 landed 90+4=94, so domestic wins despite
     // the foreign seller's lower ask.
     const r = runSourcingPass(makeInputs());
     const flows = coalFlow(r);
     expect(flows[0].originType).toBe("state");
     expect(flows[0].originId).toBe("A2");
-    expect(flows[0].landedPrice).toBeCloseTo(90 + 1000 * FREIGHT_PRICE_TEU_PER_UNIT_HOP.bulk);
+    expect(flows[0].landedPrice).toBeCloseTo(90 + 4000 * FREIGHT_PRICE_TEU_PER_UNIT_HOP.bulk);
     expect(flows[0].units).toBeCloseTo(100);
   });
 
   it("prefer foreign when sea shipping is cheap enough, then tariffs flip it", () => {
-    // freightPrice 100: UK landed 60+2.4=62.4 < A2 90+0.4=90.4.
+    // freightPrice 400: UK landed 60+2.4=62.4 < A2 90+0.4=90.4.
     const cheapSea = makeInputs({
-      freightPrice: 100,
+      freightPrice: 400,
       nationalPricesFor: () => ({ US: 95, UK: 60 }),
     });
     const cheap = coalFlow(runSourcingPass(cheapSea))[0];
     expect(cheap.originId).toBe("UK");
     expect(cheap.landedPrice).toBeCloseTo(
-      60 + 100 * FREIGHT_PRICE_TEU_PER_UNIT_HOP.bulk * SEA_FREIGHT_HOP_EQUIV
+      60 + 400 * FREIGHT_PRICE_TEU_PER_UNIT_HOP.bulk * SEA_FREIGHT_HOP_EQUIV
     );
 
     // 60% tariff: UK 60×1.6 + 2.4 = 98.4 > A2's 90.4.
     const taxed = runSourcingPass(
       makeInputs({
-        freightPrice: 100,
+        freightPrice: 400,
         nationalPricesFor: () => ({ US: 95, UK: 60 }),
         tariffRatePct: () => 60,
       })
@@ -330,7 +365,7 @@ describe("runSourcingPass", () => {
         statePricesFor: () => ({ [frStateId]: 10, [usStateId]: 10 }),
         nationalPricesFor: () => ({ GR: 1 }),
         basePriceFor: () => 1,
-        freightPrice: 1,
+        freightPrice: 4,
         hops: () => 6,
         tariffRatePct: () => 0,
         isBlocked: () => false,
@@ -356,7 +391,7 @@ describe("runSourcingPass", () => {
     // freightPrice 100 + 10% tariff: UK landed 60 + 6 + 2.4 = 68.4 < 90.4.
     const r = runSourcingPass(
       makeInputs({
-        freightPrice: 100,
+        freightPrice: 400,
         nationalPricesFor: () => ({ US: 95, UK: 60 }),
         tariffRatePct: () => 10,
       })
@@ -372,7 +407,7 @@ describe("runSourcingPass", () => {
   it("aggregates exact country-pair trade and destination outcomes (#2333)", () => {
     const r = runSourcingPass(
       makeInputs({
-        freightPrice: 100,
+        freightPrice: 400,
         nationalPricesFor: () => ({ US: 95, UK: 60 }),
         tariffRatePct: () => 10,
       })
@@ -557,7 +592,7 @@ describe("runSourcingPass", () => {
     const freightSupply = 10;
     const r = runSourcingPass(
       makeInputs({
-        freightPrice: 100,
+        freightPrice: 400,
         byState: new Map([
           [
             "A1",
@@ -644,7 +679,7 @@ describe("runSourcingPass", () => {
   it("importAggregatesByCountry: sums import value and tariff paid by buyer country", () => {
     const r = runSourcingPass(
       makeInputs({
-        freightPrice: 100,
+        freightPrice: 400,
         nationalPricesFor: () => ({ US: 95, UK: 60 }),
         tariffRatePct: () => 10,
       })
@@ -971,8 +1006,8 @@ describe("grid class (energy and natural gas)", () => {
   });
 
   it("prices distance as wheeling off the ask, not off the freight market", () => {
-    const cheapFreight = runSourcingPass(gridInputs({ freightPrice: 1 }));
-    const dearFreight = runSourcingPass(gridInputs({ freightPrice: 100000 }));
+    const cheapFreight = runSourcingPass(gridInputs({ freightPrice: 4 }));
+    const dearFreight = runSourcingPass(gridInputs({ freightPrice: 400000 }));
     const leg = (r: ReturnType<typeof runSourcingPass>) =>
       r.flows.find((f) => f.commodity === "energy")!.shippingPerUnit;
     // A freight-price spike has no business moving the cost of electricity.
@@ -1056,7 +1091,7 @@ describe("freight billing aggregates (canonical freight billing v1)", () => {
     // freightPrice 100: UK wins the coal book (see the cheap-sea test above).
     const r = runSourcingPass(
       makeInputs({
-        freightPrice: 100,
+        freightPrice: 400,
         nationalPricesFor: () => ({ US: 95, UK: 60 }),
       })
     );
