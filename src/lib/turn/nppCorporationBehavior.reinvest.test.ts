@@ -108,6 +108,7 @@ function decide(
     placementSignals?: PlacementSignals;
     prices?: CommodityPriceRatioFn;
     retailExpansionPaused?: boolean;
+    challengerBoostOf?: (sectorType: string, ownCorporationId: string) => number;
   } = {}
 ) {
   return makeNppCorpDecision(
@@ -119,6 +120,7 @@ function decide(
       fxRate: extra.fxRate,
       modifiers: ceoArchetypeModifiers("cautious"),
       retailExpansionPaused: extra.retailExpansionPaused,
+      challengerBoostOf: extra.challengerBoostOf,
     },
     new Map<string, UnownedSector[]>([["US", pools]]),
     extra.stateControlled ?? noState,
@@ -227,6 +229,23 @@ describe("NPP capacity reinvestment — a selling-out, fully-utilized plant grow
     expect(decision.liquidCapitalDelta).toBeLessThan(0);
     expect(decision.reinvestments).toHaveLength(1);
     expect(decision.reinvestments![0].sectorId).toEqual(s._id);
+  });
+
+  it("grows a challenger faster in a sector a rival dominates, and leaves the leader alone", () => {
+    const s = sector();
+    const growthOf = (boost: number) => {
+      const d = decide(corp(), [s], [pool()], plantsCtx, { challengerBoostOf: () => boost });
+      const replacement = (s.capitalStock ?? 0) * CAPITAL_DEPRECIATION_PER_TURN;
+      return pushedOrder(queueWrites(d)[0]).unitsOrdered - replacement;
+    };
+    const base = growthOf(1);
+    expect(base).toBeCloseTo(Math.floor((s.producedUnits ?? 0) * NPP_GROWTH_MAX_STEP_OF_RUN), 6);
+    expect(growthOf(1.5)).toBeCloseTo(
+      Math.floor((s.producedUnits ?? 0) * NPP_GROWTH_MAX_STEP_OF_RUN * 1.5),
+      6
+    );
+    // A sub-1 boost is clamped: the pull never slows a firm.
+    expect(growthOf(0.5)).toBeCloseTo(base, 6);
   });
 
   it("pushes onto an existing queue without restating it", () => {

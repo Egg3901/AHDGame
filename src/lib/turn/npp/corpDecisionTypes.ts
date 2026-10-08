@@ -50,6 +50,11 @@ export interface NppCorpDecisionContext {
    * already holds; absent reads as 0 so pure unit tests stay db-free.
    */
   competitorCountOf?: (stateId: string, sectorType: string, ownCorporationId: string) => number;
+  /**
+   * Growth multiplier (>= 1) for this corporation in a sector type one firm
+   * dominates; 1 for the sector leader and healthy sectors. Absent reads as 1.
+   */
+  challengerBoostOf?: (sectorType: string, ownCorporationId: string) => number;
   /** Player-appointed caretaker mandate. NPP-owned corporations are always active. */
   caretakerMandate?: "active" | "passive";
 }

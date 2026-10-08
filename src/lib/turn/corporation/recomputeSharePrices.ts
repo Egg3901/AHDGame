@@ -10,6 +10,7 @@
  * batch into bondTurn + recompute ensures every downstream snapshot consumer
  * sees the post-recompute price.
  */
+import { formalizedSubsidiaryCountByParentId } from "@/lib/corporations/subsidiaries/helpers";
 import { ObjectId, type Db, type AnyBulkWriteOperation } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Corporation, CorporationHistory } from "@/lib/db/types";
@@ -153,6 +154,7 @@ export async function recomputeSharePricesAfterBondTurn(
     totalSharesById
   );
 
+  const subsidiaryCountByParentId = formalizedSubsidiaryCountByParentId(lookups.corporations);
   const inputs: SharePriceInput[] = [];
   let skipped = 0;
   for (const corp of lookups.corporations) {
@@ -310,6 +312,7 @@ export async function recomputeSharePricesAfterBondTurn(
       ),
       imfBailoutActive: corp.imfBailoutActive === true,
       lastShareStructureTurn: corp.lastShareStructureTurn ?? null,
+      subsidiaryCount: subsidiaryCountByParentId.get(id) ?? 0,
       techAssetValueAnchor: computeTechAssetValueAnchor(corp, currentYear),
     });
   }
