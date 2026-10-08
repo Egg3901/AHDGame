@@ -48,11 +48,7 @@ import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import { fundPoliticalMediaOrder } from "@/lib/politicalMedia/journal";
-import {
-  applySlantToAdvertise,
-  advertisingPriceFactor,
-  loadStateSlant,
-} from "@/lib/mediaEditorial/slant";
+import { applySlantToAdvertise, loadStateSlant } from "@/lib/mediaEditorial/slant";
 
 function clampAddExpression(fieldPath: string, delta: number, min: number, max: number) {
   return {
