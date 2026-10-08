@@ -11,6 +11,8 @@ import { BlendTicker } from "@/components/blend/BlendTicker";
 import { useElectionCampaigns } from "../components/useElectionCampaigns";
 import { TicketCards, TicketsTable } from "./GeneralTicketsTable";
 import { DemocraticHealthBlock } from "./DemocraticHealthBlock";
+import { PresidentialMap } from "./presMap/PresidentialMap";
+import { buildPresMapModel } from "./presMap/presMapModel";
 import {
   buildGeneralBlendViewModel,
   type GeneralRail,
@@ -18,11 +20,9 @@ import {
 } from "./generalBlendViewModel";
 import {
   EvBar,
-  TileBoard,
   YourTicketBlock,
   NationalMoodBlock,
   WhyItMovedBlock,
-  TierLegend,
   type GeneralBlendViewProps,
 } from "./GeneralBlendParts";
 export type { GeneralBlendViewProps } from "./GeneralBlendParts";
@@ -55,6 +55,16 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
   const vm = useMemo(
     () => buildGeneralBlendViewModel({ election, wire, rail }),
     [election, wire, rail]
+  );
+
+  const mapModel = useMemo(() => buildPresMapModel(election), [election]);
+  const presidentialMap = (
+    <PresidentialMap
+      model={mapModel}
+      electionId={electionId}
+      countryId={election.countryId}
+      turn={election.gameState?.currentTurn ?? null}
+    />
   );
 
   /**
@@ -617,10 +627,9 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
                   fontWeight: 600,
                 }}
               >
-                The board
+                The electoral map
               </h2>
-              <TileBoard vm={vm} columns={6} electionId={electionId} />
-              <TierLegend vm={vm} />
+              {presidentialMap}
             </div>
           ) : null}
 
@@ -799,11 +808,10 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
 
           {vm.showBoard && vm.tiles.length > 0 ? (
             <BlendSection
-              title="The battleground board"
-              lede="Margin tiers, the same shading the popular-vote map uses."
+              title="The electoral map"
+              lede="Shaded by margin tier in the leader's colour. Select a state for its detail."
             >
-              <TileBoard vm={vm} columns={11} electionId={electionId} />
-              <TierLegend vm={vm} />
+              {presidentialMap}
             </BlendSection>
           ) : null}
 

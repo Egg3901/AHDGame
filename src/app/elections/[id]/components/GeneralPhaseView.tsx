@@ -229,23 +229,6 @@ export function GeneralPhaseView({
   const isPresidentialGeneral =
     election.countryId !== "RU" && election.electionType === "president" && !localInPrimary;
 
-  const electoralMap = (
-    <PresidentialMapWithStateDetail
-      electionId={electionId}
-      electoralMapData={election.generalVotes?.electoralMapData ?? {}}
-      electoralVotesByCandidate={election.generalVotes?.electoralVotesByCandidate}
-      candidateNames={election.generalVotes?.candidateNames ?? {}}
-      candidateParties={election.generalVotes?.candidateParties ?? {}}
-      candidateColors={election.generalVotes?.candidateColors ?? {}}
-      stateVoteData={election.generalVotes?.stateVoteData}
-      stateVotesOverTime={election.generalVotes?.stateVotesOverTime}
-      candidateTravelStates={Object.fromEntries(
-        election.allCandidates.filter((c) => c.travelState).map((c) => [c.id, c.travelState!])
-      )}
-      showHeading={false}
-    />
-  );
-
   const factorLedger = (
     <FactorLedgerCard
       countryId={election.countryId}
@@ -314,7 +297,6 @@ export function GeneralPhaseView({
 
   const detailPanes: RaceDetailPane[] = tabbedDetail
     ? [
-        ...(isUS ? [{ id: "map", label: "Electoral", content: electoralMap }] : []),
         ...(isUS && election.myCharId
           ? [
               {

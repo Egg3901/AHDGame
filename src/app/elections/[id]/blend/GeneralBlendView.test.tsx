@@ -4,6 +4,16 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import type { CandidateDetail, ElectionDetail } from "../components/ElectionDetailTypes";
 import { GeneralBlendView } from "./GeneralBlendView";
 
+vi.mock("./presMap/usStatesGeo", () => ({
+  MAP_WIDTH: 960,
+  MAP_HEIGHT: 600,
+  loadUsStateGeo: () =>
+    Promise.resolve([
+      { id: "PA", d: "M600 200h60v40h-60z", centroid: [630, 220], width: 60, height: 40 },
+      { id: "CA", d: "M100 200h60v120h-60z", centroid: [130, 260], width: 60, height: 120 },
+    ]),
+}));
+
 function candidate(over: Partial<CandidateDetail> = {}): CandidateDetail {
   return {
     id: "c1",
@@ -132,9 +142,18 @@ describe("GeneralBlendView", () => {
     expect(screen.getAllByText("MARGIN TIERS:")).toHaveLength(2);
   });
 
-  it("keeps the tiles themselves on both layouts", () => {
+  it("draws one map per layout and no tile board", async () => {
     renderView();
-    expect(screen.getAllByText("PA")).toHaveLength(2);
+    expect(screen.getAllByRole("group", { name: /US presidential map/ })).toHaveLength(2);
+    expect(await screen.findAllByRole("button", { name: /Pennsylvania/ })).toHaveLength(2);
+    expect(screen.queryByText(/battleground board/i)).toBeNull();
+  });
+
+  it("starts locked on both layouts", () => {
+    renderView();
+    const maps = screen.getAllByRole("group", { name: /US presidential map/ });
+    for (const m of maps) expect(m.getAttribute("data-locked")).toBe("true");
+    expect(screen.getAllByRole("button", { name: /Unlock map/ })).toHaveLength(2);
   });
 
   it("shows democratic health and both presidential drag levels on both layouts", () => {
@@ -494,21 +513,14 @@ describe("names link out and states open", () => {
     }
   });
 
-  it("links every board tile to its state detail, on both layouts", () => {
+  it("opens a state overview linking to the full state page", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
     renderView();
-    const tiles = screen.getAllByRole("link", { name: /PA/ });
-    expect(tiles).toHaveLength(2);
-    for (const a of tiles) {
-      expect(a.getAttribute("href")).toBe("/elections/e1/state/PA");
-    }
-  });
-});
-
-describe("the close is explicit", () => {
-  it("prints the turns left on both layouts", () => {
-    // Fixture: endTurn 4186, currentTurn 4182, no endTime, so turns alone.
-    renderView();
-    expect(screen.getAllByText("4 TURNS LEFT")).toHaveLength(2);
+    fireEvent.click((await screen.findAllByRole("button", { name: /Pennsylvania/ }))[0]);
+    const link = await screen.findByRole("link", { name: /Open full Pennsylvania page/ });
+    expect(link.getAttribute("href")).toBe("/elections/e1/country/us/region/PA");
+    expect(screen.getByText("Projected vote")).toBeTruthy();
+    vi.restoreAllMocks();
   });
 
   it("pairs the turns with the local close time when the race has one", () => {

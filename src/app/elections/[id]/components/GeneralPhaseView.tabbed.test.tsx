@@ -123,15 +123,14 @@ describe("folding the detail views into tabs", () => {
     expect(screen.getAllByTestId("drivers")).toHaveLength(1);
   });
 
-  it("draws the electoral map once", () => {
+  it("leaves the electoral map to the blend screen's own map", () => {
     renderView(true);
-    expect(screen.getAllByTestId("electoral-map")).toHaveLength(1);
+    expect(screen.queryByTestId("electoral-map")).toBeNull();
   });
 
   it("offers every view as a tab", () => {
     renderView(true);
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
-      "Electoral",
       "Campaign presence",
       "Trends",
       "State drivers",

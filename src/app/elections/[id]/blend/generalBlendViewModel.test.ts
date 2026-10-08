@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import type { CandidateDetail, ElectionDetail } from "../components/ElectionDetailTypes";
-import { buildGeneralBlendViewModel, type GeneralBlendInput } from "./generalBlendViewModel";
+import {
+  buildGeneralBlendViewModel,
+  TIER_BANDS,
+  type GeneralBlendInput,
+} from "./generalBlendViewModel";
 
 function candidate(over: Partial<CandidateDetail> = {}): CandidateDetail {
   return {
@@ -208,14 +212,6 @@ describe("battleground board", () => {
     expect(vm.tiles.find((t) => t.stateId === "CA")?.title).toContain("First Ticket");
   });
 
-  it("legends all four margin tiers", () => {
-    const vm = buildGeneralBlendViewModel(input());
-    expect(vm.tierLegend.map((t) => t.label)).toEqual(["Safe", "Likely", "Lean", "Toss-up"]);
-    expect(vm.tierLegend.every((t) => t.swatch.startsWith("rgb") || t.swatch.startsWith("#"))).toBe(
-      true
-    );
-  });
-
   it("is empty when no state has reported", () => {
     const noStates = election({
       generalVotes: { ...election().generalVotes!, stateVoteData: undefined },
@@ -295,7 +291,7 @@ describe("copy", () => {
       vm.turnReadout,
       vm.liveText,
       vm.yourTicket?.leadText ?? "",
-      ...vm.tierLegend.map((t) => `${t.label} ${t.band}`),
+      ...TIER_BANDS.map((t) => `${t.label} ${t.band}`),
     ];
     for (const s of strings) expect(s).not.toMatch(/[–—]/);
   });
