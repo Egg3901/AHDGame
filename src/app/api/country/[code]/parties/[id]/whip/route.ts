@@ -48,8 +48,8 @@ import {
   applyPlayerWhipToImpeachment,
 } from "@/lib/congress/applyPlayerWhip";
 import { getEligibleCharactersForWhip } from "@/lib/partyWhips/playerWhip";
-import { sendSystemMail } from "@/lib/mail/systemMail";
-import { createNotification } from "@/lib/notifications";
+import { sendSystemMails } from "@/lib/mail/systemMail";
+import { createNotifications } from "@/lib/notifications";
 import type { CountryId } from "@/lib/constants/countries";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -628,10 +628,11 @@ export async function POST(request: Request, { params }: RouteParams) {
           : [];
 
       let mailedCount = 0;
-      for (const char of charDocs) {
-        try {
-          if (mode === "hard") {
-            await sendSystemMail(db, {
+      try {
+        if (mode === "hard") {
+          await sendSystemMails(
+            db,
+            charDocs.map((char) => ({
               toCharacterId: char._id,
               toCharacterName: char.name,
               toCharacterSequentialId: char.sequentialId ?? 0,
@@ -639,11 +640,13 @@ export async function POST(request: Request, { params }: RouteParams) {
               subject,
               body,
               senderName: "Party Whip",
-            });
-          }
-          await createNotification({
+            }))
+          );
+        }
+        await createNotifications(
+          charDocs.map((char) => ({
             userId: char.userId,
-            type: "party_whip_issued",
+            type: "party_whip_issued" as const,
             title: notificationTitle,
             message: subject,
             metadata: {
@@ -653,11 +656,11 @@ export async function POST(request: Request, { params }: RouteParams) {
               direction,
               mode,
             },
-          });
-          mailedCount++;
-        } catch (err) {
-          console.warn("[player-whip] Failed to notify character", String(char._id), err);
-        }
+          }))
+        );
+        mailedCount = charDocs.length;
+      } catch (err) {
+        console.warn("[player-whip] Failed to notify recipients", err);
       }
 
       return NextResponse.json({
