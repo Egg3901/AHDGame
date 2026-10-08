@@ -1065,8 +1065,8 @@ describe("sector revenue and income calculation", () => {
 
     const result = processSectors(lookups, 1, new Date());
 
-    // hourlyRevenue = 1000; 50 base + 10 primary specialization = 60% income.
-    expect(result.totalIncomeGenerated).toBeCloseTo(600, 2);
+    // hourlyRevenue = 1000; 50 base + 5 primary specialization = 55% income.
+    expect(result.totalIncomeGenerated).toBeCloseTo(550, 2);
   });
 
   it("produces zero income when margin is exactly 0 (all revenue consumed by maintenance)", () => {
