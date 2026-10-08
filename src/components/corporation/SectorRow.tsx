@@ -556,7 +556,7 @@ export function SectorRow({
             {plantCount.toLocaleString("en-US")}
           </div>
 
-          <div className="flex flex-col items-end">
+          <div className="flex min-w-0 flex-col items-end">
             <FillChip fill={sector.fillRate} band={sector.fillRateBand} />
             <DeliveryLimitedPill
               fraction={deliveryLimited}
