@@ -16,6 +16,7 @@ import type { Apportionment } from "./apportionment";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
   ContingentElectionDisplay,
+  ContingentProjectionDisplay,
   PresidentialResolutionMode,
 } from "@/lib/elections/presidentialResolutionDisplay";
 import type {
@@ -89,6 +90,8 @@ export interface GeneralVotesData {
   resolutionMode?: PresidentialResolutionMode;
   /** President only: House/Senate contingent breakdown when no EV majority */
   contingentResult?: ContingentElectionDisplay;
+  /** President only, live race: projected contingent ballot when no EV majority is projected */
+  contingentProjection?: ContingentProjectionDisplay;
   /** President only: contingent ballot failed and will retry next turn */
   contingentResolutionPending?: boolean;
   /** President only: tally finalized but executive seating incomplete */

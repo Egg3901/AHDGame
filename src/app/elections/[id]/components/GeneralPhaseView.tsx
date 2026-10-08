@@ -7,12 +7,6 @@ import { GeneralElectionPanel, GeneralElectionNoTallyPanel } from "./ElectionDet
 import { GeneralElectionShellClient } from "./GeneralElectionShellClient";
 import { buildGeneralElectionViewModel } from "@/lib/elections/generalViewModel";
 import { countryHasPresidentialRunningMate } from "@/lib/elections/runningMateEligibility";
-import {
-  assessContingentEvRisk,
-  collegeSizeFromEvByState,
-  electoralMajorityFor,
-} from "@/lib/elections/presidentialResolutionDisplay";
-import { ContingentRiskBanner } from "./ContingentRiskBanner";
 import { CampaignSeasonBanner } from "./CampaignSeasonBanner";
 import type { DriverDisplayInputs } from "@/lib/elections/computePersuasionDriverDisplay";
 import {
@@ -415,28 +409,6 @@ export function GeneralPhaseView({
             </p>
           </div>
         )}
-
-        {/* Phase 5b shell — battleground tiers + Reg / Persuasion side panels.
-            Mounted alongside the existing PresidentialMapWithStateDetail per
-            D5; the two coexist (different emphasis: this one for margin tiers
-            + drivers, the existing one for EV totals + state-detail modal). */}
-        {isUS &&
-          election.electionType === "president" &&
-          !localInPrimary &&
-          !localIsEnded &&
-          (() => {
-            const college = collegeSizeFromEvByState(election.generalVotes?.evByState);
-            const risk = assessContingentEvRisk(
-              election.generalVotes?.electoralVotesByCandidate,
-              college > 0 ? electoralMajorityFor(college) : 270
-            );
-            return risk?.atRisk ? (
-              <ContingentRiskBanner
-                risk={risk}
-                candidateNames={election.generalVotes?.candidateNames ?? {}}
-              />
-            ) : null;
-          })()}
 
         {/* National Mood — the economy's push on the incumbent party, read off
             the tally snapshot the engine wrote. Sits with the driver panels so

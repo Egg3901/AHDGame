@@ -570,7 +570,11 @@ export function GeneralElectionPanel({
           )}
 
         {contingentRisk?.atRisk && (
-          <ContingentRiskBanner risk={contingentRisk} candidateNames={tally.candidateNames} />
+          <ContingentRiskBanner
+            risk={contingentRisk}
+            candidateNames={tally.candidateNames}
+            projection={tally.contingentProjection}
+          />
         )}
 
         {/* Winner Announcement Banner (only when resolved) */}
