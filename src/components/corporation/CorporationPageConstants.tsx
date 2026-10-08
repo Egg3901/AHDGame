@@ -87,7 +87,7 @@ export const CORP_TABS: CorpTab[] = [
   {
     id: "credit",
     label: "Credit & Bonds",
-    tooltip: "Credit rating, bond issuance, and outstanding debt",
+    tooltip: "Leverage rating, bond issuance, and outstanding debt",
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path

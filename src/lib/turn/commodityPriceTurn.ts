@@ -696,10 +696,20 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       ledgerCommandEconomyEnabled,
       statesByCountry,
       stateToCountry,
+      // Plants worlds cap government purchases at last turn's supply, like households.
+      priorGlobalSupply: plantsLedgerEnabled
+        ? new Map(
+            existingPrices
+              .filter((p) => typeof p.globalSupply === "number")
+              .map((p) => [p.commodity as CommodityType, p.globalSupply as number])
+          )
+        : undefined,
+      demandCalibration,
     },
     global,
     byCountry,
-    byState
+    byState,
+    demandTruncated
   );
 
   // ── Era-aware demand calibration ──────────────────────────────────────
