@@ -12,6 +12,10 @@
  * sector already crowded with companies in that country is less likely. Every
  * sector keeps a floor weight, so founding stays varied.
  *
+ * A sector one firm dominates is also pulled up (see rules/sectorConcentration):
+ * a new company there is a rival the sector lacks. The caller passes the boost;
+ * it is 1 everywhere else.
+ *
  * Pure: no database, clock or randomness. The caller passes one uniform roll.
  */
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -27,12 +31,15 @@ export function foundingSectorWeights(args: {
   countryId: string;
   priceRatioOf: CommodityPriceRatioFn;
   existingCount: (countryId: string, type: CorporationType) => number;
+  /** Multiplier for a concentrated sector; absent reads as 1. */
+  challengerBoostOf?: (type: CorporationType) => number;
 }): number[] {
   return args.types.map((type) => {
     const raw = sectorPeakShortageScore(type, args.countryId, args.priceRatioOf);
     const score = Math.max(FOUNDING_MIN_SHORTAGE_SCORE, Number.isFinite(raw) && raw > 0 ? raw : 1);
     const crowding = 1 + Math.max(0, args.existingCount(args.countryId, type));
-    return Math.pow(score, FOUNDING_SHORTAGE_EXPONENT) / crowding;
+    const boost = Math.max(1, args.challengerBoostOf?.(type) ?? 1);
+    return (Math.pow(score, FOUNDING_SHORTAGE_EXPONENT) / crowding) * boost;
   });
 }
 

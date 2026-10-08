@@ -12,7 +12,14 @@ import { boundedParallelMap } from "@/lib/indexFunds/boundedParallelMap";
 import { equityPoolCurrency } from "@/lib/equities/marketPool";
 import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import type { Db, ObjectId } from "mongodb";
-import type { NPP, GameConfig, PoliticalParty, Bond, StatePartyOrg } from "@/lib/db/types";
+import type {
+  NPP,
+  GameConfig,
+  PoliticalParty,
+  Bond,
+  StatePartyOrg,
+  CorporateSector,
+} from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import {
   decideNppAction,
@@ -59,6 +66,10 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
 import { foundingSectorWeights, pickWeightedIndex } from "@/lib/turn/npp/foundingSectorChoice";
+import {
+  challengerBoost,
+  computeSectorConcentration,
+} from "@/lib/turn/npp/rules/sectorConcentration";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 import { resolveShareExecutionPrice } from "@/lib/corporations/marketExecution";
 import { deriveCeoArchetype } from "@/lib/turn/ceoArchetype";
@@ -1310,6 +1321,26 @@ export async function foundNppCorporationsSurplus(
   );
   const existingCount = (countryId: string, type: CorporationType) =>
     existingByCell.get(`${countryId}:${type}`) ?? 0;
+  // Capacity per firm per sector, world-wide, so a sector one firm dominates
+  // draws new founders. One grouped read per sweep.
+  const capacityRows = await db
+    .collection<CorporateSector>("corporateSectors")
+    .aggregate<{ _id: { t: string; c: ObjectId }; w: number }>([
+      {
+        $group: {
+          _id: { t: "$sectorType", c: "$corporationId" },
+          w: { $sum: { $ifNull: ["$capitalStock", 0] } },
+        },
+      },
+    ])
+    .toArray();
+  const concentrationBySector = computeSectorConcentration(
+    capacityRows.map((row) => ({
+      sectorType: row._id.t,
+      corporationId: row._id.c.toString(),
+      weight: row.w,
+    }))
+  );
 
   for (const npp of candidates) {
     const archetype = deriveCeoArchetype(npp.personality);
@@ -1323,6 +1354,7 @@ export async function foundNppCorporationsSurplus(
       countryId: homeCountryForSector,
       priceRatioOf,
       existingCount,
+      challengerBoostOf: (type) => challengerBoost(concentrationBySector.get(type)),
     });
     const sectorType = CORPORATION_TYPES[pickWeightedIndex(weights, rng())] as CorporationType;
     const cell = `${homeCountryForSector}:${sectorType}`;
