@@ -39,7 +39,10 @@ import { resolveContingentElection } from "@/lib/elections/contingentElection";
 import { CONTINGENT_EXCLUDED_HOUSE_STATE } from "@/lib/elections/contingentConstants";
 import { isExecutiveOffice } from "@/lib/elections/executiveOffice";
 import { loadApportionment } from "@/lib/elections/apportionment";
-import { loadSurvivingPartyResolver } from "@/lib/parties/survivingParty";
+import {
+  loadSurvivingPartyResolver,
+  type SurvivingPartyResolver,
+} from "@/lib/parties/survivingParty";
 import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import { districtedHouseResolution } from "@/lib/redistricting/districtedHouseResolution";
 import { allocateSeats } from "@/lib/turn/election/seatAllocation";
@@ -70,7 +73,7 @@ async function projectChamberRace(
   tally: ElectionVoteTally | null,
   gameState: GameState | null,
   houseSeats: Record<string, number>,
-  survivingParty: (party: string | undefined) => string | undefined
+  survivingParty: SurvivingPartyResolver
 ): Promise<ElectedOfficial[]> {
   if (!tally) return [];
   let effectiveVotes: Record<string, number> = { ...tally.totalVotes };
@@ -191,8 +194,11 @@ async function projectChamberRace(
     const c = candidateMap.get(id);
     if (!c || seats <= 0) continue;
     const isNPP = Boolean(c.isNPP && c.nppId);
+    const now = new Date();
     seated.push({
       _id: new ObjectId(),
+      createdAt: now,
+      updatedAt: now,
       countryId: race.countryId,
       officeType: race.electionType,
       state: race.state,

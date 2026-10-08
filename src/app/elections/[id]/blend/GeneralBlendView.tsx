@@ -49,7 +49,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
    */
   const { campaigns, loading: campaignsLoading } = useElectionCampaigns(electionId, {
     enabled: election.countryId === "US",
-    refreshKey: election.gameState?.currentTurn,
+    refreshKey: election.gameState?.currentTurn ?? undefined,
   });
 
   const vm = useMemo(

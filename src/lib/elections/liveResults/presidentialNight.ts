@@ -69,6 +69,11 @@ const REPORTING_CURVE_EXPONENT = 2.2;
  * the final turn). Example: a 12+ turn window gives
  * (0.3 / 4) / (1 - 0.3 / 4) ~= 0.081 of the counted vote.
  */
+/** Maine and Nebraska congressional-district units ("ME_CD1"). */
+function isDistrictUnit(unitId: string): boolean {
+  return /_CD\d$/.test(unitId);
+}
+
 export function finalTurnVoteRatio(totalTurns: number): number {
   const turns = Math.max(1, Math.floor(totalTurns));
   const last = turnVoteWeight(turns, turns - 1, 1);
@@ -412,9 +417,13 @@ export function computePresidentialNight(input: PresidentialNightInput): Preside
       totalEv: input.totalEv,
       evNeeded: input.evNeeded,
       calledEv,
-      statesCalled: units.filter((u) => u.called).length,
-      totalStates: units.length,
-      statesPollsClosed: rows.filter((r) => r.schedule.closeMs <= nowMs).length,
+      // Counted like a news desk: 50 states and DC. Maine and Nebraska
+      // district units still carry their EVs above but are not extra states.
+      statesCalled: units.filter((u) => u.called && !isDistrictUnit(u.id)).length,
+      totalStates: units.filter((u) => !isDistrictUnit(u.id)).length,
+      statesPollsClosed: rows.filter(
+        (r) => r.schedule.closeMs <= nowMs && !isDistrictUnit(r.unit.unitId)
+      ).length,
       nextClose,
       feed: events.map((e) => e.event),
     },

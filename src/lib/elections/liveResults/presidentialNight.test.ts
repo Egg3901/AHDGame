@@ -349,4 +349,18 @@ describe("monotonic night", () => {
     expect(night.totalStates).toBe(STATES.length);
     expect(night.statesCalled).toBe(out.filter((u) => u.called).length);
   });
+
+  it("does not count Maine and Nebraska district units as extra states", () => {
+    const units = makeUnits(9);
+    const districts = ["ME_CD1", "ME_CD2", "NE_CD2"].map((unitId) => ({
+      ...units[0],
+      unitId,
+      name: unitId,
+      weight: 1,
+    }));
+    const { units: out, night } = run([...units, ...districts], START + WINDOW);
+    expect(night.totalStates).toBe(STATES.length);
+    expect(night.statesPollsClosed).toBe(STATES.length);
+    expect(night.statesCalled).toBe(out.filter((u) => u.called && !/_CD\d$/.test(u.id)).length);
+  });
 });
