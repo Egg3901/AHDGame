@@ -59,5 +59,6 @@ describe("ownership tracking", () => {
     expect(ownershipKey("character", "same")).not.toBe(ownershipKey("imperial", "same"));
     expect(ownershipSeries([], "one")).toEqual([]);
     expect(ownershipSeries([snapshot(1, 0, 0)], "character:one")[0].percent).toBeNull();
+    expect(ownershipChanges([snapshot(1, 100, 0), snapshot(2, 100, 0)])?.changes).toEqual([]);
   });
 });

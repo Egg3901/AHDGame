@@ -83,6 +83,7 @@ export function ownershipChanges(snapshots: OwnershipSnapshot[]) {
           ownershipPercent(after, last.totalShares) - ownershipPercent(before, first.totalShares),
       };
     })
+    .filter((change) => change.before > 0 || change.after > 0)
     .sort((a, b) => Math.abs(b.change) - Math.abs(a.change) || a.key.localeCompare(b.key));
   return { firstTurn: first.turn, lastTurn: last.turn, changes };
 }

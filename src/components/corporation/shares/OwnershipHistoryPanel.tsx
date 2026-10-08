@@ -308,7 +308,7 @@ export default function OwnershipHistoryPanel({
                             title={names.get(change.key)}
                           >
                             {names.get(change.key)}
-                            {change.after === 0 && (
+                            {change.after === 0 && change.before > 0 && (
                               <span className="ml-2 text-[10px] text-muted">{t("exited")}</span>
                             )}
                           </button>
