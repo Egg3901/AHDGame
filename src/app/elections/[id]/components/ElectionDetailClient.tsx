@@ -30,6 +30,9 @@ import { ResultsBlendView } from "../blend/ResultsBlendView";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
 import { BLEND } from "@/components/blend/tokens";
 import { BlendScope } from "@/components/blend/BlendScope";
+import { NightBroadcast } from "../night/NightBroadcast";
+import { useNightWatch } from "../night/useNightBroadcast";
+import { isNightWindow } from "../night/nightModel";
 import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning";
 import { captureProductEvent } from "@/lib/analytics/capture";
 import { getStoredConsent } from "@/components/CookieConsent";
@@ -71,6 +74,15 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     startingYear: larpBaseYear,
     preset: turnStatus?.preset ?? DEFAULT_CYCLE_ANCHOR_CONTEXT.preset,
   };
+
+  // US presidential final hour: from the last turn interval the page watches
+  // the results payload and hands the whole screen to the election-night
+  // broadcast while `night` is present. `pending` holds the normal screen back
+  // until the first payload lands, so no pre-night projection flashes.
+  const nightWatch = useNightWatch(
+    election?.id ?? null,
+    election != null && isNightWindow(election)
+  );
 
   const fetchElection = useCallback(async () => {
     try {
@@ -471,6 +483,21 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   );
 
   const currentResults = results?.election.id === election.id ? results : null;
+
+  if (nightWatch.pending) return <ElectionDetailSkeleton />;
+  if (nightWatch.hold.show && nightWatch.data) {
+    return (
+      <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
+        {confirmDialogNode}
+        <NightBroadcast
+          data={nightWatch.data}
+          contingent={{ result: election.generalVotes?.contingentResult }}
+          concludedHref={`/elections/${election.id}`}
+          onContinue={nightWatch.hold.dismiss}
+        />
+      </div>
+    );
+  }
 
   // Concluded presidential race: the same Blend results screen the live
   // dashboard uses, chipped "Concluded". Falls through to the existing view

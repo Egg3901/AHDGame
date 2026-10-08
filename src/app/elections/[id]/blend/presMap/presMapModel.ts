@@ -63,6 +63,32 @@ export interface PresMapChange {
   turnsAgo: number | null;
 }
 
+/**
+ * Pattern drawn over a state instead of a flat fill: diagonal hatch lines in
+ * `colors[0]` over `base`, or alternating diagonal stripes of `colors`.
+ */
+export interface PresMapOverlay {
+  kind: "hatch" | "stripe";
+  base: string;
+  colors: string[];
+}
+
+/** Election-night readout for one state. Absent on the general-screen map. */
+export interface PresMapBroadcast {
+  statusLabel: string;
+  /** 0-100. */
+  reportingPct: number;
+  /** Poll close, e.g. "8:00 PM ET". */
+  closeLabel: string;
+  /** Polls have closed. */
+  closed: boolean;
+  /** The state has numbers to show (past the too-early floor). */
+  showNumbers: boolean;
+  called: boolean;
+  /** County results may be shown: the state is called or the race has resolved. */
+  countiesOpen: boolean;
+}
+
 export interface PresMapState {
   id: string;
   name: string;
@@ -80,6 +106,13 @@ export interface PresMapState {
   trend: PresMapTrend;
   sinceTurn: number | null;
   turnsAgo: number | null;
+  /** Pattern fill (leaning, too close, too early). `fill` stays the flat fallback and the label ground. */
+  overlay?: PresMapOverlay;
+  /** Replaces the "+margin / tier" line in tooltips, chips and aria labels. */
+  caption?: string;
+  broadcast?: PresMapBroadcast;
+  /** A new token replays the call highlight on this state. */
+  pulse?: string;
 }
 
 export interface PresMapCandidate {
