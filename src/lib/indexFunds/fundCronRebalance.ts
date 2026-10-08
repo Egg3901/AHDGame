@@ -47,6 +47,7 @@ import {
 } from "@/lib/indexFunds/fundBidPolicy";
 import { type CurrencyCode } from "@/lib/constants/currencies";
 import { loadEquityPoolsByCurrency } from "@/lib/equities/marketPool";
+import { isStaggeredTurn } from "@/lib/turn/staggerPhase";
 
 export type FundCronResult = {
   fundsProcessed: number;
@@ -186,11 +187,17 @@ export async function applyMarkToMarketIfNeeded(
 
 export function shouldRebalanceIndexFundConstituents(
   currentTurn: number,
-  targetConstituentsLength: number
+  targetConstituentsLength: number,
+  fundId?: string
 ): boolean {
   // Lock market-cap baskets to the financial-day cadence. Intraday recomputes
   // churn positions, trigger sell/buy loops, and repeatedly hit order-flow.
-  return targetConstituentsLength === 0 || (currentTurn > 0 && currentTurn % TURNS_PER_DAY === 0);
+  // Each fund keeps its own fixed turn of the day, so the whole roster no
+  // longer rebalances on one turn (that turn ran ~50-60 s longer).
+  if (targetConstituentsLength === 0) return true;
+  return fundId === undefined
+    ? currentTurn > 0 && currentTurn % TURNS_PER_DAY === 0
+    : isStaggeredTurn(fundId, currentTurn, TURNS_PER_DAY);
 }
 
 /**
