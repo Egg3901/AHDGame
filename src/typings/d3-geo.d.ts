@@ -19,12 +19,19 @@ declare module "d3-geo" {
     fitSize(size: [number, number], object: GeoPermissibleObjects): this;
   }
 
+  /** Path generator: SVG path data, plus planar bounds and centroid in projected units. */
+  export interface GeoPath {
+    (object: GeoPermissibleObjects): string | null;
+    bounds(object: GeoPermissibleObjects): [[number, number], [number, number]];
+    centroid(object: GeoPermissibleObjects): [number, number];
+  }
+
   export function geoEqualEarth(): GeoProjection;
   export function geoOrthographic(): GeoProjection;
+  /** Composite conic US projection with Alaska and Hawaii inset. */
+  export function geoAlbersUsa(): GeoProjection;
   export function geoProjection(raw: RawProjection): GeoProjection;
-  export function geoPath(
-    projection?: GeoProjection
-  ): (object: GeoPermissibleObjects) => string | null;
+  export function geoPath(projection?: GeoProjection): GeoPath;
   export function geoCentroid(object: GeoPermissibleObjects): [number, number];
   /** Spherical area of a GeoJSON object in steradians (0…4π). */
   export function geoArea(object: GeoPermissibleObjects): number;

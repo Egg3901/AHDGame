@@ -1,6 +1,8 @@
 "use client";
 
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
+import { NightBroadcast } from "../../night/NightBroadcast";
+import { hasNight } from "../../night/nightModel";
 import { PresidentialResultsView } from "./PresidentialResultsView";
 import { ParliamentaryResultsView } from "./ParliamentaryResultsView";
 import { SingleWinnerResultsView } from "./SingleWinnerResultsView";
@@ -11,6 +13,9 @@ import { SingleWinnerResultsView } from "./SingleWinnerResultsView";
  * aggregation) get the parliamentary board; everything else is head-to-head.
  */
 export function ResultsViewRouter({ data }: { data: ElectionResultsResponse }) {
+  if (hasNight(data)) {
+    return <NightBroadcast data={data} concludedHref={`/elections/${data.election.id}`} />;
+  }
   if (data.election.electionType === "president") {
     return <PresidentialResultsView data={data} />;
   }

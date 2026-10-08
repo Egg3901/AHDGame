@@ -199,8 +199,14 @@ export function buildResultsBlendViewModel(inp: ResultsBlendInput): ResultsBlend
   const popularMargin = winner && runnerUp ? Math.abs(winner.sharePct - runnerUp.sharePct) : 0;
   const statesWon = rows.filter((r) => r.winner === winner?.name).length;
 
+  // A House-decided presidency explains itself: the president-elect may hold
+  // far fewer electoral votes than the college leader.
+  const house = summary.contingentResult;
+  const houseVotes = winner && house ? (house.houseVoteTotals[winner.id] ?? 0) : null;
   const winnerLine = winner
-    ? `${winner.ev} electoral votes, ${winner.pct} per cent of the vote`
+    ? house && houseVotes != null
+      ? `Elected by the House with ${houseVotes} state delegations${house.deadlockBreakerUsed ? ` (short of ${house.houseThreshold}; seated under the deadlock rule)` : ""}. ${winner.ev} electoral votes, ${winner.pct} per cent of the vote`
+      : `${winner.ev} electoral votes, ${winner.pct} per cent of the vote`
     : "No ticket has been projected yet";
 
   const arrow = (col: StateSortKey) => (sortBy === col ? (sortDesc ? " ↓" : " ↑") : "");

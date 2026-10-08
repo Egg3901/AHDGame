@@ -7,12 +7,6 @@ import { GeneralElectionPanel, GeneralElectionNoTallyPanel } from "./ElectionDet
 import { GeneralElectionShellClient } from "./GeneralElectionShellClient";
 import { buildGeneralElectionViewModel } from "@/lib/elections/generalViewModel";
 import { countryHasPresidentialRunningMate } from "@/lib/elections/runningMateEligibility";
-import {
-  assessContingentEvRisk,
-  collegeSizeFromEvByState,
-  electoralMajorityFor,
-} from "@/lib/elections/presidentialResolutionDisplay";
-import { ContingentRiskBanner } from "./ContingentRiskBanner";
 import { CampaignSeasonBanner } from "./CampaignSeasonBanner";
 import type { DriverDisplayInputs } from "@/lib/elections/computePersuasionDriverDisplay";
 import {
@@ -235,23 +229,6 @@ export function GeneralPhaseView({
   const isPresidentialGeneral =
     election.countryId !== "RU" && election.electionType === "president" && !localInPrimary;
 
-  const electoralMap = (
-    <PresidentialMapWithStateDetail
-      electionId={electionId}
-      electoralMapData={election.generalVotes?.electoralMapData ?? {}}
-      electoralVotesByCandidate={election.generalVotes?.electoralVotesByCandidate}
-      candidateNames={election.generalVotes?.candidateNames ?? {}}
-      candidateParties={election.generalVotes?.candidateParties ?? {}}
-      candidateColors={election.generalVotes?.candidateColors ?? {}}
-      stateVoteData={election.generalVotes?.stateVoteData}
-      stateVotesOverTime={election.generalVotes?.stateVotesOverTime}
-      candidateTravelStates={Object.fromEntries(
-        election.allCandidates.filter((c) => c.travelState).map((c) => [c.id, c.travelState!])
-      )}
-      showHeading={false}
-    />
-  );
-
   const factorLedger = (
     <FactorLedgerCard
       countryId={election.countryId}
@@ -320,7 +297,6 @@ export function GeneralPhaseView({
 
   const detailPanes: RaceDetailPane[] = tabbedDetail
     ? [
-        ...(isUS ? [{ id: "map", label: "Electoral", content: electoralMap }] : []),
         ...(isUS && election.myCharId
           ? [
               {
@@ -415,28 +391,6 @@ export function GeneralPhaseView({
             </p>
           </div>
         )}
-
-        {/* Phase 5b shell — battleground tiers + Reg / Persuasion side panels.
-            Mounted alongside the existing PresidentialMapWithStateDetail per
-            D5; the two coexist (different emphasis: this one for margin tiers
-            + drivers, the existing one for EV totals + state-detail modal). */}
-        {isUS &&
-          election.electionType === "president" &&
-          !localInPrimary &&
-          !localIsEnded &&
-          (() => {
-            const college = collegeSizeFromEvByState(election.generalVotes?.evByState);
-            const risk = assessContingentEvRisk(
-              election.generalVotes?.electoralVotesByCandidate,
-              college > 0 ? electoralMajorityFor(college) : 270
-            );
-            return risk?.atRisk ? (
-              <ContingentRiskBanner
-                risk={risk}
-                candidateNames={election.generalVotes?.candidateNames ?? {}}
-              />
-            ) : null;
-          })()}
 
         {/* National Mood — the economy's push on the incumbent party, read off
             the tally snapshot the engine wrote. Sits with the driver panels so
