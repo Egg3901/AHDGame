@@ -815,3 +815,6 @@ export function MarketOverview({
     </div>
   );
 }
+
+/** The candle chart under a name that does not clash with the hub overview. */
+export { MarketOverview as StockMarketChart };

@@ -221,4 +221,43 @@ describe("decomposePhysicalCosts — P3.5 calibration exactness (#588)", () => {
     expect(r.sectorNPV).toBeGreaterThanOrEqual(0);
     expect(r.capitalBookAnchor).toBe(0);
   });
+
+  describe("freight billing legs in the going-concern value", () => {
+    it("leaves NPV unchanged when no freight is billed", () => {
+      const base = decomposePhysicalCosts(physicalInput());
+      const zero = decomposePhysicalCosts(physicalInput({ freightNetHourly: 0 }));
+      expect(zero.sectorNPV).toBe(base.sectorNPV);
+      expect(zero.yearlyProfit).toBe(base.yearlyProfit);
+    });
+
+    it("values a sector on profit after its freight charge, not before", () => {
+      const base = decomposePhysicalCosts(physicalInput());
+      expect(base.hourlyProfit).toBeGreaterThan(0);
+      const billed = decomposePhysicalCosts(
+        physicalInput({ freightNetHourly: -(base.hourlyProfit + 1) })
+      );
+      expect(billed.hourlyProfit).toBe(base.hourlyProfit);
+      expect(billed.yearlyProfit).toBeLessThan(0);
+      expect(billed.sectorNPV).toBe(0);
+    });
+
+    it("adds haul income to the value of a freight carrier", () => {
+      const base = decomposePhysicalCosts(physicalInput());
+      const earning = decomposePhysicalCosts(physicalInput({ freightNetHourly: 1_000 }));
+      expect(earning.sectorNPV).toBeGreaterThan(base.sectorNPV);
+    });
+
+    it("drops a capital book anchor that freight has made unprofitable", () => {
+      const base = decomposePhysicalCosts(physicalInput({ capitalEnabled: true }));
+      const peak = base.capitalBookAnchor * 4;
+      const billed = decomposePhysicalCosts(
+        physicalInput({
+          capitalEnabled: true,
+          prevCapitalBookAnchor: peak,
+          freightNetHourly: -(base.hourlyProfit + 1),
+        })
+      );
+      expect(billed.capitalBookAnchor).toBe(0);
+    });
+  });
 });

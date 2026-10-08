@@ -76,3 +76,37 @@ describe("PrimeRateCard governance contract", () => {
     expect(screen.queryByText("Adjust rate")).toBeNull();
   });
 });
+
+describe("PrimeRateCard hike range", () => {
+  it("shows the ordinary range and no catch-up note near target", () => {
+    render(
+      <PrimeRateCard
+        {...baseProps()}
+        governance={allowedGovernance()}
+        inflationRate={3}
+        targetInflation={2}
+      />
+    );
+    expect(screen.getByText(/Hike max \+0\.75%/)).toBeTruthy();
+    expect(screen.queryByText(/instead of 0\.75/)).toBeNull();
+    expect(screen.queryByText("Hike by")).toBeNull();
+  });
+
+  it("explains the widened cap and offers steps up to it when inflation is far over target", () => {
+    render(
+      <PrimeRateCard
+        {...baseProps()}
+        governance={allowedGovernance()}
+        inflationRate={16}
+        targetInflation={2}
+      />
+    );
+    expect(screen.getByText(/Hike max \+3\.00%/)).toBeTruthy();
+    expect(screen.getByText(/Inflation is 16\.0% against a 2\.0% target/)).toBeTruthy();
+    expect(screen.getByText(/Allowed range this change: 2\.25% to 7\.00%/)).toBeTruthy();
+
+    fireEvent.click(screen.getByText("+3.00"));
+    expect(screen.getAllByText("7.00%").length).toBeGreaterThan(0);
+    expect((screen.getByText("Confirm rate change") as HTMLButtonElement).disabled).toBe(false);
+  });
+});

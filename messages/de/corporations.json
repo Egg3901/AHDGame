@@ -20,6 +20,9 @@
         "maximumContract": "Maximale zulässige Verpflichtung",
         "penaltyWarning": "Dies ist eine Verpflichtung pro Runde. Eine Produktion unterhalb der Obergrenze für Schadenersatz führt zu Schadenersatz in Höhe von {penaltyPercent}% des Marktwerts jeder fehlenden Einheit."
       }
+    },
+    "supplyBoard": {
+      "npp": "NPP"
     }
   }
 }

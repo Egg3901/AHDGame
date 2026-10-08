@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import type { CommodityType } from "@/lib/constants/commodities";
-import { apportionFreightBilling, type FreightBillingSectorUnits } from "./freightBilling";
+import {
+  apportionFreightBilling,
+  FREIGHT_BILL_MAX_SHARE_OF_GOODS_VALUE,
+  type FreightBillingSectorUnits,
+} from "./freightBilling";
 
 const demand = (entries: Partial<Record<CommodityType, number>>): Map<CommodityType, number> => {
   const m = new Map<CommodityType, number>();
@@ -34,6 +38,49 @@ describe("apportionFreightBilling — charges", () => {
     });
     expect(r.chargeBySectorId.get("s1")).toBeCloseTo(139.6);
     expect(r.unapportionedCharges).toBeCloseTo(697_860.4);
+  });
+
+  it("bounds a sector's bill at a share of the value of the goods it demands", () => {
+    const r = apportionFreightBilling({
+      freightChargesByDestState: charges({ WA: { oil: 100_000 } }),
+      haulRevenueByOriginState: new Map(),
+      freightSupplyUnitsByOriginState: new Map(),
+      demandUnitsByDestState: charges({ WA: { oil: 1_000 } }),
+      unitPriceByDestState: charges({ WA: { oil: 100 } }),
+      sectors: [sector({ stateId: "WA", demandUnitsByCommodity: demand({ oil: 1_000 }) })],
+    });
+    // Goods worth 100 * 1000 = 100k; the 100k raw bill is capped at 15% of it.
+    expect(r.chargeBySectorId.get("s1")).toBeCloseTo(
+      100_000 * FREIGHT_BILL_MAX_SHARE_OF_GOODS_VALUE
+    );
+    expect(r.unapportionedCharges).toBeCloseTo(
+      100_000 * (1 - FREIGHT_BILL_MAX_SHARE_OF_GOODS_VALUE)
+    );
+  });
+
+  it("leaves a bill under the goods-value bound untouched", () => {
+    const r = apportionFreightBilling({
+      freightChargesByDestState: charges({ WA: { oil: 5_000 } }),
+      haulRevenueByOriginState: new Map(),
+      freightSupplyUnitsByOriginState: new Map(),
+      demandUnitsByDestState: charges({ WA: { oil: 1_000 } }),
+      unitPriceByDestState: charges({ WA: { oil: 100 } }),
+      sectors: [sector({ stateId: "WA", demandUnitsByCommodity: demand({ oil: 1_000 }) })],
+    });
+    expect(r.chargeBySectorId.get("s1")).toBeCloseTo(5_000);
+    expect(r.unapportionedCharges).toBeCloseTo(0);
+  });
+
+  it("applies no bound when the destination has no price for the commodity", () => {
+    const r = apportionFreightBilling({
+      freightChargesByDestState: charges({ WA: { oil: 100_000 } }),
+      haulRevenueByOriginState: new Map(),
+      freightSupplyUnitsByOriginState: new Map(),
+      demandUnitsByDestState: charges({ WA: { oil: 1_000 } }),
+      unitPriceByDestState: charges({ WA: { iron: 100 } }),
+      sectors: [sector({ stateId: "WA", demandUnitsByCommodity: demand({ oil: 1_000 }) })],
+    });
+    expect(r.chargeBySectorId.get("s1")).toBeCloseTo(100_000);
   });
 
   it("puts sector inputs on the sourcing book's calibrated demand basis", () => {

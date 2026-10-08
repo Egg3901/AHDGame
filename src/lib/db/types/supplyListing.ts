@@ -32,8 +32,13 @@ export interface SupplyListingView {
   creditRating?: string;
   slot: number;
   own: boolean;
-  /** Posted by an AI-run corporation rather than a player. */
+  /** Posted by an NPP-run corporation rather than a player. */
   ai?: boolean;
+  /** Publisher's corporation logo, when one was uploaded. */
+  corporationLogoUrl?: string;
+  /** Player CEO of the publisher, absent for NPP corporations. */
+  ceoName?: string;
+  ceoAvatarUrl?: string;
   side: "buy" | "sell";
   commodity: CommodityType;
   stateId?: string;

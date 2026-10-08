@@ -153,9 +153,9 @@ export function buildWorldNavItems({
     },
     {
       id: "stockMarket",
-      label: "Stock Market",
+      label: "The Market",
       labelKey: "menus.world.stockMarket",
-      href: "/stockmarket/global",
+      href: "/market",
       section: "main",
       show: true,
     },

@@ -171,6 +171,9 @@ export interface BankData {
   currentSavingsPressure: number;
   currentInflation: number;
   targetInflation: number;
+  /** Stored home-country inflation and target behind the widened hike cap. */
+  rateInflation?: number | null;
+  rateTargetInflation?: number | null;
   neutralPrimeRate?: number;
   isSharedPolicyArea?: boolean;
   inflationBreakdownTotal?: number;

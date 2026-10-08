@@ -45,7 +45,12 @@ export function seatDesiredStep(alignment: ChairAlignment, ctx: FomcMacroContext
     gdpGrowth: ctx.gdpGrowth,
     alignment,
   });
-  return computeNppChairRateStep({ currentRate: ctx.currentRate, targetRate: target, alignment });
+  return computeNppChairRateStep({
+    currentRate: ctx.currentRate,
+    targetRate: target,
+    alignment,
+    inflationGap: ctx.inflationRate - ctx.targetInflation,
+  });
 }
 
 /** Direction implied by a signed step, applying the hold deadband. */
