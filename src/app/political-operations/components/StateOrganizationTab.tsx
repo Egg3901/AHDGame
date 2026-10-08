@@ -2,6 +2,7 @@
 
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useGameClock } from "@/contexts/useGameClock";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
@@ -38,6 +39,7 @@ interface RacePresenceEntry {
 }
 
 interface ListResponse {
+  canBuild?: boolean;
   states?: StateOrgRow[];
   /** Anchor to the viewer's currency; rows already carry a converted nextCost. */
   fxRate?: number;
@@ -104,6 +106,7 @@ export function StateOrganizationTab({
    */
   showHeading?: boolean;
 } = {}) {
+  const t = useTranslations("elections.campaignPresence");
   const { currentTurn } = useGameClock();
   const [rows, setRows] = useState<StateOrgRow[]>([]);
   const [homeState, setHomeState] = useState<string | null>(null);
@@ -112,7 +115,7 @@ export function StateOrganizationTab({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedState, setSelectedState] = useState<string | null>(null);
-  const [unauthorized, setUnauthorized] = useState(false);
+  const [canBuild, setCanBuild] = useState(false);
   const [racePresence, setRacePresence] = useState<RacePresenceEntry[]>([]);
   /** Whose presence the map is showing. null = the viewer's own. */
   const [viewingCharacterId, setViewingCharacterId] = useState<string | null>(null);
@@ -121,20 +124,28 @@ export function StateOrganizationTab({
 
   useEffect(() => {
     const controller = new AbortController();
+    function failLoad(message: string) {
+      setCanBuild(false);
+      setRows([]);
+      setRacePresence([]);
+      setError(message);
+      setLoading(false);
+    }
     fetch("/api/political-operations/state-org/list", { signal: controller.signal })
       .then(async (r) => {
+        if (controller.signal.aborted) return;
         if (r.status === 401 || r.status === 403) {
-          setUnauthorized(true);
-          setLoading(false);
+          failLoad(t("unavailable"));
           return;
         }
         if (!r.ok) {
-          setError("Failed to load campaign presence");
-          setLoading(false);
+          failLoad(t("loadFailed"));
           return;
         }
         const d: ListResponse = await r.json();
         if (controller.signal.aborted) return;
+        setError(null);
+        setCanBuild(d.canBuild === true);
         setRows(d.states ?? []);
         setFxRate(d.fxRate ?? 1);
         setRacePresence(d.racePresence ?? []);
@@ -144,17 +155,18 @@ export function StateOrganizationTab({
       })
       .catch(() => {
         if (controller.signal.aborted) return;
-        setLoading(false);
-        setError("Failed to load campaign presence");
+        failLoad(t("loadFailed"));
       });
     return () => controller.abort();
-  }, [currentTurn]);
+  }, [currentTurn, t]);
 
   const rowByState = useMemo(() => new Map(rows.map((r) => [r.stateId, r])), [rows]);
 
   const viewedCandidate = useMemo(
-    () => racePresence.find((c) => c.characterId === viewingCharacterId) ?? null,
-    [racePresence, viewingCharacterId]
+    () =>
+      racePresence.find((c) => c.characterId === viewingCharacterId) ??
+      (canBuild ? null : (racePresence[0] ?? null)),
+    [racePresence, viewingCharacterId, canBuild]
   );
 
   /**
@@ -163,13 +175,13 @@ export function StateOrganizationTab({
    * onto the same state list so the map geometry stays identical.
    */
   const displayRows = useMemo<StateOrgRow[]>(() => {
-    if (!viewedCandidate || viewedCandidate.isSelf) return rows;
+    if (!viewedCandidate || (canBuild && viewedCandidate.isSelf)) return rows;
     return rows.map((r) => ({
       ...r,
       level: viewedCandidate.levelsByState[r.stateId] ?? 0,
       totalInvested: 0,
     }));
-  }, [rows, viewedCandidate]);
+  }, [rows, viewedCandidate, canBuild]);
 
   // Map data: gray at level 0, blending toward party hex as level rises.
   const stateData = useMemo<Record<string, PrimaryStateData>>(() => {
@@ -194,6 +206,7 @@ export function StateOrganizationTab({
   }, [displayRows, partyHex, homeState]);
 
   async function build(stateId: string) {
+    if (!canBuild || (viewedCandidate && !viewedCandidate.isSelf)) return;
     setBusy(stateId);
     setError(null);
     try {
@@ -222,12 +235,12 @@ export function StateOrganizationTab({
           )
         );
       }
+    } catch {
+      setError(t("buildFailed"));
     } finally {
       setBusy(null);
     }
   }
-
-  if (unauthorized) return null;
 
   if (loading) {
     return <div className="p-4 text-muted">Loading campaign presence...</div>;
@@ -235,7 +248,7 @@ export function StateOrganizationTab({
 
   const ownRow = selectedState ? rowByState.get(selectedState) : null;
   const selectedRow =
-    selectedState && viewedCandidate && !viewedCandidate.isSelf
+    selectedState && viewedCandidate && (!canBuild || !viewedCandidate.isSelf)
       ? {
           stateId: selectedState,
           level: viewedCandidate.levelsByState[selectedState] ?? 0,
@@ -259,7 +272,7 @@ export function StateOrganizationTab({
       <div className="mb-4 rounded-lg border border-card-border bg-card p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           {showHeading ? <h3 className="font-medium">Campaign presence</h3> : <span />}
-          {showHubLink && (
+          {showHubLink && canBuild && (
             <Link
               href="/political-operations"
               className="text-xs font-medium text-primary hover:underline"
@@ -268,38 +281,45 @@ export function StateOrganizationTab({
             </Link>
           )}
         </div>
-        <p className="mt-1 text-sm text-muted">
-          Build per-state infrastructure for the presidential race. It counts in the primary{" "}
-          <strong>and</strong> in the general election. Each level costs {STATE_ORG_COST_ACTIONS}{" "}
-          campaign actions plus an escalating price from your campaign treasury, starting near $
-          {STATE_ORG_COST_FUNDS.toLocaleString("en-US")}. There is <strong>no level cap</strong> —
-          but the bonus flattens as the price compounds, so level {STATE_ORG_MAX_LEVEL} already
-          delivers about {Math.round(STATE_ORG_REFERENCE_FRACTION * 100)}% of the maximum. Fully
-          invested, a state approaches +{Math.round(MAX_STATE_ORG_BONUS_PRIMARY * 100)}% in-state
-          vote bonus in the primary and +{Math.round(MAX_STATE_ORG_BONUS_GENERAL * 100)}% in the
-          general.
-        </p>
+        {!canBuild && <p className="mt-1 text-sm text-muted">{t("readOnly")}</p>}
+        {canBuild && (
+          <p className="mt-1 text-sm text-muted">
+            Build per-state infrastructure for the presidential race. It counts in the primary{" "}
+            <strong>and</strong> in the general election. Each level costs {STATE_ORG_COST_ACTIONS}{" "}
+            campaign actions plus an escalating price from your campaign treasury, starting near $
+            {STATE_ORG_COST_FUNDS.toLocaleString("en-US")}. There is <strong>no level cap</strong>,
+            but the bonus flattens as the price compounds, so level {STATE_ORG_MAX_LEVEL} already
+            delivers about {Math.round(STATE_ORG_REFERENCE_FRACTION * 100)}% of the maximum. Fully
+            invested, a state approaches +{Math.round(MAX_STATE_ORG_BONUS_PRIMARY * 100)}% in-state
+            vote bonus in the primary and +{Math.round(MAX_STATE_ORG_BONUS_GENERAL * 100)}% in the
+            general.
+          </p>
+        )}
         {racePresence.length > 0 && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="text-body-sm font-medium text-muted">Showing</span>
-            <button
-              type="button"
-              onClick={() => setViewingCharacterId(null)}
-              className={`rounded border px-2 py-1 text-xs transition-colors ${
-                viewingCharacterId === null
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-card-border text-muted hover:text-primary"
-              }`}
-            >
-              You
-            </button>
+            {canBuild && (
+              <button
+                type="button"
+                onClick={() => setViewingCharacterId(null)}
+                aria-pressed={viewedCandidate === null}
+                className={`rounded border px-2 py-1 text-xs transition-colors ${
+                  viewedCandidate === null
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-card-border text-muted hover:text-primary"
+                }`}
+              >
+                You
+              </button>
+            )}
             {racePresence.map((c) => (
               <button
                 key={c.characterId}
                 type="button"
                 onClick={() => setViewingCharacterId(c.characterId)}
+                aria-pressed={viewedCandidate?.characterId === c.characterId}
                 className={`rounded border px-2 py-1 text-xs transition-colors ${
-                  viewingCharacterId === c.characterId
+                  viewedCandidate?.characterId === c.characterId
                     ? "border-primary bg-primary/10 text-primary"
                     : "border-card-border text-muted hover:text-primary"
                 }`}
@@ -310,16 +330,19 @@ export function StateOrganizationTab({
             ))}
           </div>
         )}
-        <p className="mt-2 text-sm text-muted">
-          Build early and keep building. Levels do not reset when the primary ends, so what you put
-          in before the primary keeps working through the general. You can also keep building during
-          the general. Levels drop to 25% only after the presidential general resolves. Organization
-          is per player and per state, so a rival&apos;s investment never covers yours.
-        </p>
-        <p className="mt-2 text-xs text-muted">
-          Hover any state for current investment and projected bonus. Click a state to build. Color
-          saturates from gray toward your party color as you invest.
-        </p>
+        {canBuild && (
+          <p className="mt-2 text-sm text-muted">
+            Build early and keep building. Levels do not reset when the primary ends, so what you
+            put in before the primary keeps working through the general. You can also keep building
+            during the general. Levels drop to 25% only after the presidential general resolves.
+            Organization is per player and per state, so a rival&apos;s investment never covers
+            yours.
+          </p>
+        )}
+        <p className="mt-2 text-xs text-muted">{t("inspect")}</p>
+        {!canBuild && !racePresence.length && !error && (
+          <p className="mt-2 text-sm text-muted">{t("empty")}</p>
+        )}
       </div>
 
       {rows.some((row) => row.builtThisTurn) && (
@@ -341,12 +364,7 @@ export function StateOrganizationTab({
         <PrimaryElectoralMap stateData={stateData} onStateClick={setSelectedState} />
 
         <aside className="rounded-xl border border-card-border bg-card p-4 self-start">
-          {!selectedState && (
-            <p className="text-sm text-muted">
-              Click a state on the map to view its investment level, projected bonus, and the Build
-              action.
-            </p>
-          )}
+          {!selectedState && <p className="text-sm text-muted">{t("selectState")}</p>}
           {selectedState && selectedRow && (
             <div>
               <div className="flex items-baseline justify-between gap-2">
@@ -374,10 +392,12 @@ export function StateOrganizationTab({
                   <dt className="text-muted">Projected general bonus</dt>
                   <dd className="font-mono">+{generalBonusPct(selectedRow.level)}%</dd>
                 </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-muted">Next level costs</dt>
-                  <dd className="font-mono">{formatStatePresenceCost(selectedRow.nextCost)}</dd>
-                </div>
+                {canBuild && !viewingOther && (
+                  <div className="flex items-center justify-between">
+                    <dt className="text-muted">Next level costs</dt>
+                    <dd className="font-mono">{formatStatePresenceCost(selectedRow.nextCost)}</dd>
+                  </div>
+                )}
                 {!viewingOther &&
                   selectedRow.builtThisTurn &&
                   selectedRow.spentThisTurn != null && (
@@ -388,29 +408,33 @@ export function StateOrganizationTab({
                       </dd>
                     </div>
                   )}
-                <div className="flex items-center justify-between">
-                  <dt className="text-muted">Career investment</dt>
-                  <dd className="font-mono">{selectedRow.totalInvested} actions</dd>
-                </div>
+                {canBuild && !viewingOther && (
+                  <div className="flex items-center justify-between">
+                    <dt className="text-muted">Career investment</dt>
+                    <dd className="font-mono">{selectedRow.totalInvested} actions</dd>
+                  </div>
+                )}
               </dl>
 
-              <button
-                type="button"
-                disabled={busy === selectedState || viewingOther || selectedRow.builtThisTurn}
-                onClick={() => build(selectedState)}
-                className="mt-4 w-full rounded border border-primary/60 px-3 py-2 text-sm text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
-                title={
-                  viewingOther
-                    ? "You are viewing another candidate's presence"
-                    : `Build +1 (${STATE_ORG_COST_ACTIONS} campaign actions + ${formatStatePresenceCost(selectedRow.nextCost)})`
-                }
-              >
-                {busy === selectedState
-                  ? "Building..."
-                  : viewingOther
-                    ? `Viewing ${viewedCandidate?.name ?? "another candidate"}`
-                    : `Build (+1) — ${STATE_ORG_COST_ACTIONS} campaign actions + ${formatStatePresenceCost(selectedRow.nextCost)}`}
-              </button>
+              {canBuild && (
+                <button
+                  type="button"
+                  disabled={busy === selectedState || viewingOther || selectedRow.builtThisTurn}
+                  onClick={() => build(selectedState)}
+                  className="mt-4 w-full rounded border border-primary/60 px-3 py-2 text-sm text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  title={
+                    viewingOther
+                      ? "You are viewing another candidate's presence"
+                      : `Build +1 (${STATE_ORG_COST_ACTIONS} campaign actions + ${formatStatePresenceCost(selectedRow.nextCost)})`
+                  }
+                >
+                  {busy === selectedState
+                    ? "Building..."
+                    : viewingOther
+                      ? `Viewing ${viewedCandidate?.name ?? "another candidate"}`
+                      : `Build (+1): ${STATE_ORG_COST_ACTIONS} campaign actions + ${formatStatePresenceCost(selectedRow.nextCost)}`}
+                </button>
+              )}
             </div>
           )}
         </aside>
