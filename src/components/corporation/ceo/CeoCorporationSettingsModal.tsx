@@ -1,8 +1,9 @@
 "use client";
 
 import { apiErrorText } from "@/lib/errors/catalog";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 import { Modal } from "@/components/ui/Modal";
 import { CORPORATION_TYPES, CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import {
@@ -56,6 +57,8 @@ export function CeoCorporationSettingsModal({
   controlled,
   onFeedback,
 }: CeoCorporationSettingsModalProps) {
+  const t = useTranslations("corporations.settingsPanel");
+  const formId = useId();
   const standalone = useStandaloneIdentitySettings({
     corporation,
     corpId,
@@ -86,211 +89,248 @@ export function CeoCorporationSettingsModal({
       open={open}
       onClose={onClose}
       title="Corporation settings"
-      maxWidthClass="max-w-lg"
+      maxWidthClass="max-w-4xl"
+      variant="panel"
       scrollable
-      bodyClassName="px-5 pb-5 space-y-6"
+      bodyClassName="p-5 md:p-6"
     >
       {uploadError && (
-        <p className="rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
+        <p className="rounded-sm border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
           {uploadError}
         </p>
       )}
 
-      <section className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Description</label>
-          <textarea
-            value={editDescription}
-            onChange={(e) => setEditDescription(e.target.value)}
-            placeholder="Describe your corporation..."
-            className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none resize-none"
-            rows={3}
-            maxLength={500}
-          />
-        </div>
+      <p className="mb-6 text-sm text-muted">{t("intro")}</p>
+      <div className="grid gap-6 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-6">
+          <section className="space-y-4">
+            <h3 className="text-sm font-semibold">{t("profile")}</h3>
+            <div>
+              <label
+                htmlFor={`${formId}-description`}
+                className="block text-sm font-medium text-foreground mb-1"
+              >
+                Description
+              </label>
+              <textarea
+                id={`${formId}-description`}
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Describe your corporation..."
+                className="w-full rounded-sm border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none resize-none"
+                rows={3}
+                maxLength={500}
+              />
+            </div>
 
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
-            Primary sector type
-          </label>
-          <select
-            value={editPrimaryType}
-            onChange={(e) => {
-              const val = e.target.value as CorporationType;
-              setEditPrimaryType(val);
-              if (editSecondaryType === val) setEditSecondaryType("");
-            }}
-            className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none"
-          >
-            {CORPORATION_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {CORPORATION_TYPE_LABELS[t]}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-muted mt-1">
-            Matching sectors get +5% margin. Mismatched sectors get -15%.
-          </p>
-        </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor={`${formId}-primary`}
+                  className="block text-sm font-medium text-foreground mb-1"
+                >
+                  Primary sector type
+                </label>
+                <select
+                  id={`${formId}-primary`}
+                  value={editPrimaryType}
+                  onChange={(e) => {
+                    const val = e.target.value as CorporationType;
+                    setEditPrimaryType(val);
+                    if (editSecondaryType === val) setEditSecondaryType("");
+                  }}
+                  className="w-full rounded-sm border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none"
+                >
+                  {CORPORATION_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {CORPORATION_TYPE_LABELS[t]}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted mt-1">
+                  Matching sectors get +5% margin. Mismatched sectors get -15%.
+                </p>
+              </div>
 
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
-            Secondary sector focus
-          </label>
-          <select
-            value={editSecondaryType}
-            onChange={(e) => setEditSecondaryType(e.target.value as CorporationType | "")}
-            className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none"
-          >
-            <option value="">None</option>
-            {CORPORATION_TYPES.filter((t) => t !== editPrimaryType).map((t) => (
-              <option key={t} value={t}>
-                {CORPORATION_TYPE_LABELS[t]}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-muted mt-1">
-            Matching sectors get +2.5% margin (half of primary). Doubles sprawl penalty for &gt;15
-            sectors, but reducible via logistics spending.
-          </p>
-        </div>
+              <div>
+                <label
+                  htmlFor={`${formId}-secondary`}
+                  className="block text-sm font-medium text-foreground mb-1"
+                >
+                  Secondary sector focus
+                </label>
+                <select
+                  id={`${formId}-secondary`}
+                  value={editSecondaryType}
+                  onChange={(e) => setEditSecondaryType(e.target.value as CorporationType | "")}
+                  className="w-full rounded-sm border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none"
+                >
+                  <option value="">None</option>
+                  {CORPORATION_TYPES.filter((t) => t !== editPrimaryType).map((t) => (
+                    <option key={t} value={t}>
+                      {CORPORATION_TYPE_LABELS[t]}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted mt-1">
+                  Matching sectors get +2.5% margin (half of primary). Doubles sprawl penalty for
+                  &gt;15 sectors, but reducible via logistics spending.
+                </p>
+              </div>
+            </div>
 
-        {(editPrimaryType !== corporation.type ||
-          (editSecondaryType || null) !== (corporation.secondaryType ?? null)) && (
-          <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-warning">
-            Changing sector type incurs a <strong>-10% margin penalty</strong> on all sectors for 24
-            hours, followed by a 72-hour cooldown before you can switch again.
+            {(editPrimaryType !== corporation.type ||
+              (editSecondaryType || null) !== (corporation.secondaryType ?? null)) && (
+              <div className="rounded-sm border border-warning/30 bg-warning/5 p-3 text-xs text-warning">
+                Changing sector type incurs a <strong>-10% margin penalty</strong> on all sectors
+                for 24 hours, followed by a 72-hour cooldown before you can switch again.
+              </div>
+            )}
+
+            {corporation.typeSwitchCooldownUntilTurn != null &&
+              corporation.typeSwitchCooldownUntilTurn > corporation.currentTurn && (
+                <p className="text-xs text-warning">
+                  Type switch on cooldown (
+                  {corporation.typeSwitchCooldownUntilTurn - corporation.currentTurn} turn
+                  {corporation.typeSwitchCooldownUntilTurn - corporation.currentTurn === 1
+                    ? ""
+                    : "s"}{" "}
+                  remaining). Save will fail if cooldown has not expired.
+                </p>
+              )}
+          </section>
+
+          <div className="border-t border-card-border pt-5">
+            <RenameCorporationSection
+              corporation={corporation}
+              corpId={corpId}
+              onRefresh={onRefresh}
+            />
           </div>
-        )}
-
-        {corporation.typeSwitchCooldownUntilTurn != null &&
-          corporation.typeSwitchCooldownUntilTurn > corporation.currentTurn && (
-            <p className="text-xs text-warning">
-              Type switch on cooldown (
-              {corporation.typeSwitchCooldownUntilTurn - corporation.currentTurn} turn
-              {corporation.typeSwitchCooldownUntilTurn - corporation.currentTurn === 1
-                ? ""
-                : "s"}{" "}
-              remaining). Save will fail if cooldown has not expired.
+        </div>
+        <aside className="min-w-0 space-y-6 md:border-l md:border-card-border md:pl-6">
+          <h3 className="text-sm font-semibold">{t("brand")}</h3>
+          <div>
+            <label
+              htmlFor={`${formId}-color`}
+              className="block text-sm font-medium text-foreground mb-1"
+            >
+              Brand color
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                id={`${formId}-color`}
+                type="color"
+                value={editBrandColor}
+                onChange={(e) => setEditBrandColor(e.target.value)}
+                className="h-10 w-14 cursor-pointer rounded-sm border border-card-border bg-background p-1"
+              />
+              <span className="text-sm text-muted font-mono">{editBrandColor}</span>
+              <span
+                className="inline-block h-6 w-6 rounded-sm border border-card-border"
+                style={{ backgroundColor: editBrandColor }}
+              />
+            </div>
+            <p className="text-xs text-muted mt-1">
+              Displayed on market share charts and sector cards
             </p>
-          )}
-
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Brand color</label>
-          <div className="flex items-center gap-3">
-            <input
-              type="color"
-              value={editBrandColor}
-              onChange={(e) => setEditBrandColor(e.target.value)}
-              className="h-10 w-14 cursor-pointer rounded-lg border border-card-border bg-background p-1"
-            />
-            <span className="text-sm text-muted font-mono">{editBrandColor}</span>
-            <span
-              className="inline-block h-6 w-6 rounded-full border border-card-border"
-              style={{ backgroundColor: editBrandColor }}
-            />
           </div>
-          <p className="text-xs text-muted mt-1">
-            Displayed on market share charts and sector cards
-          </p>
-        </div>
 
+          <section>
+            <p className="text-body-sm font-medium text-muted mb-3">Logo</p>
+            <div className="flex items-center gap-3">
+              {corporation.logoUrl ? (
+                <Image
+                  src={corporation.logoUrl}
+                  alt=""
+                  width={56}
+                  height={56}
+                  className="rounded-sm object-cover border border-card-border shrink-0"
+                  unoptimized={bypassNextImageOptimization(corporation.logoUrl)}
+                />
+              ) : (
+                <div className="h-14 w-14 shrink-0 rounded-sm border border-dashed border-card-border bg-card-elevated flex items-center justify-center">
+                  <span className="text-xs text-muted">None</span>
+                </div>
+              )}
+              <div className="flex flex-col gap-1.5 min-w-0">
+                <label className="cursor-pointer rounded-sm border border-card-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-card-elevated transition-colors text-center">
+                  {uploadingLogo
+                    ? "Uploading..."
+                    : corporation.logoUrl
+                      ? "Replace logo"
+                      : "Upload logo"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="hidden"
+                    disabled={uploadingLogo || uploadingHeader}
+                    onChange={onLogoUpload}
+                  />
+                </label>
+                <p className="text-[10px] text-muted">
+                  {UPLOAD_IMAGE_HINTS.corporationLogo.short}. Max 2 MB.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <p className="text-body-sm font-medium text-muted mb-3">Page banner</p>
+            {corporation.headerImageUrl && (
+              <div className="relative mb-3 h-14 w-full overflow-hidden rounded-sm border border-card-border">
+                <Image
+                  src={corporation.headerImageUrl}
+                  alt=""
+                  fill
+                  className="object-cover"
+                  unoptimized={bypassNextImageOptimization(corporation.headerImageUrl)}
+                />
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="cursor-pointer rounded-sm border border-card-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-card-elevated transition-colors">
+                {uploadingHeader
+                  ? "Uploading..."
+                  : corporation.headerImageUrl
+                    ? "Replace banner"
+                    : "Upload banner"}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  disabled={uploadingHeader || uploadingLogo}
+                  onChange={onHeaderUpload}
+                />
+              </label>
+              {corporation.headerImageUrl && onClearBanner && (
+                <button
+                  type="button"
+                  onClick={onClearBanner}
+                  disabled={uploadingHeader || uploadingLogo}
+                  className="rounded-sm border border-error/30 px-3 py-1.5 text-xs font-medium text-error hover:bg-error/10 transition-colors disabled:opacity-50"
+                >
+                  Remove banner
+                </button>
+              )}
+            </div>
+            <p className="mt-1.5 text-[10px] text-muted">
+              {UPLOAD_IMAGE_HINTS.corporationBanner.short}. Max 4 MB.
+            </p>
+          </section>
+        </aside>
+      </div>
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-card-border pt-4">
+        <p className="text-xs text-muted">{t("saveHint")}</p>
         <button
           type="button"
           onClick={onSaveSettings}
           disabled={saving}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
+          className="rounded-sm bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           {saving ? "Saving..." : "Save settings"}
         </button>
-      </section>
-
-      <div className="border-t border-card-border" />
-
-      <RenameCorporationSection corporation={corporation} corpId={corpId} onRefresh={onRefresh} />
-
-      <div className="border-t border-card-border" />
-
-      <section>
-        <p className="text-body-sm font-medium text-muted mb-3">Logo</p>
-        <div className="flex items-center gap-3">
-          {corporation.logoUrl ? (
-            <Image
-              src={corporation.logoUrl}
-              alt=""
-              width={56}
-              height={56}
-              className="rounded-lg object-cover border border-card-border shrink-0"
-              unoptimized={bypassNextImageOptimization(corporation.logoUrl)}
-            />
-          ) : (
-            <div className="h-14 w-14 shrink-0 rounded-lg border border-dashed border-card-border bg-card-elevated flex items-center justify-center">
-              <span className="text-xs text-muted">None</span>
-            </div>
-          )}
-          <div className="flex flex-col gap-1.5 min-w-0">
-            <label className="cursor-pointer rounded-lg border border-card-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-card-elevated transition-colors text-center">
-              {uploadingLogo ? "Uploading…" : corporation.logoUrl ? "Replace logo" : "Upload logo"}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                className="hidden"
-                disabled={uploadingLogo || uploadingHeader}
-                onChange={onLogoUpload}
-              />
-            </label>
-            <p className="text-[10px] text-muted">
-              {UPLOAD_IMAGE_HINTS.corporationLogo.short}. Max 2 MB.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <div className="border-t border-card-border" />
-
-      <section>
-        <p className="text-body-sm font-medium text-muted mb-3">Page banner</p>
-        {corporation.headerImageUrl && (
-          <div className="relative mb-3 h-14 w-full overflow-hidden rounded-lg border border-card-border">
-            <Image
-              src={corporation.headerImageUrl}
-              alt=""
-              fill
-              className="object-cover"
-              unoptimized={bypassNextImageOptimization(corporation.headerImageUrl)}
-            />
-          </div>
-        )}
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="cursor-pointer rounded-lg border border-card-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-card-elevated transition-colors">
-            {uploadingHeader
-              ? "Uploading…"
-              : corporation.headerImageUrl
-                ? "Replace banner"
-                : "Upload banner"}
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              className="hidden"
-              disabled={uploadingHeader || uploadingLogo}
-              onChange={onHeaderUpload}
-            />
-          </label>
-          {corporation.headerImageUrl && onClearBanner && (
-            <button
-              type="button"
-              onClick={onClearBanner}
-              disabled={uploadingHeader || uploadingLogo}
-              className="rounded-lg border border-error/30 px-3 py-1.5 text-xs font-medium text-error hover:bg-error/10 transition-colors disabled:opacity-50"
-            >
-              Remove banner
-            </button>
-          )}
-        </div>
-        <p className="mt-1.5 text-[10px] text-muted">
-          {UPLOAD_IMAGE_HINTS.corporationBanner.short}. Max 4 MB.
-        </p>
-      </section>
+      </div>
     </Modal>
   );
 }
@@ -552,12 +592,12 @@ function RenameCorporationSection({
       </p>
 
       {renameError && (
-        <div className="mb-3 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+        <div className="mb-3 rounded-sm border border-error/30 bg-error/10 p-3 text-sm text-error">
           {renameError}
         </div>
       )}
       {renameSuccess && (
-        <div className="mb-3 rounded-lg border border-success/30 bg-success/10 p-3 text-sm text-success">
+        <div className="mb-3 rounded-sm border border-success/30 bg-success/10 p-3 text-sm text-success">
           {renameSuccess}
         </div>
       )}
@@ -571,21 +611,23 @@ function RenameCorporationSection({
 
       <div className="space-y-3">
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">New name</label>
-          <input
-            type="text"
-            value={newName}
-            onChange={(e) => {
-              setNewName(e.target.value);
-              setShowConfirm(false);
-              setRenameError("");
-              setRenameSuccess("");
-            }}
-            placeholder={corporation.name}
-            maxLength={60}
-            disabled={onCooldown || renaming}
-            className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none disabled:opacity-50"
-          />
+          <label className="block text-sm font-medium text-foreground mb-1">
+            New name
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => {
+                setNewName(e.target.value);
+                setShowConfirm(false);
+                setRenameError("");
+                setRenameSuccess("");
+              }}
+              placeholder={corporation.name}
+              maxLength={60}
+              disabled={onCooldown || renaming}
+              className="w-full rounded-sm border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none disabled:opacity-50"
+            />
+          </label>
           <p className="mt-1 text-[10px] text-muted">2 to 60 characters</p>
         </div>
 
@@ -594,12 +636,12 @@ function RenameCorporationSection({
             type="button"
             onClick={handlePreview}
             disabled={!nameValid || isSameName || onCooldown || renaming}
-            className="rounded-lg border border-card-border px-4 py-2 text-sm font-medium text-foreground hover:bg-card-elevated transition-colors disabled:opacity-50"
+            className="rounded-sm border border-card-border px-4 py-2 text-sm font-medium text-foreground hover:bg-card-elevated transition-colors disabled:opacity-50"
           >
             Preview rename cost
           </button>
         ) : (
-          <div className="rounded-lg border border-warning/30 bg-warning/5 p-4 space-y-2">
+          <div className="rounded-sm border border-warning/30 bg-warning/5 p-4 space-y-2">
             <p className="text-sm font-medium text-foreground">Confirm rename</p>
             <p className="text-xs text-muted">
               <strong className="text-foreground">&quot;{corporation.name}&quot;</strong>
@@ -625,7 +667,7 @@ function RenameCorporationSection({
                 type="button"
                 onClick={handleConfirmRename}
                 disabled={renaming}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
+                className="rounded-sm bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
                 {renaming ? "Renaming..." : "Confirm rename"}
               </button>
@@ -633,7 +675,7 @@ function RenameCorporationSection({
                 type="button"
                 onClick={() => setShowConfirm(false)}
                 disabled={renaming}
-                className="rounded-lg border border-card-border px-4 py-2 text-sm font-medium text-foreground hover:bg-card-elevated transition-colors disabled:opacity-50"
+                className="rounded-sm border border-card-border px-4 py-2 text-sm font-medium text-foreground hover:bg-card-elevated transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
