@@ -65,7 +65,13 @@ import type { Corporation } from "@/lib/db/types/corporation";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
-import { foundingSectorWeights, pickWeightedIndex } from "@/lib/turn/npp/foundingSectorChoice";
+import {
+  foundingChanceMultiplier,
+  foundingSectorWeights,
+  foundingShortagePressure,
+  foundingSweepCap,
+  pickWeightedIndex,
+} from "@/lib/turn/npp/foundingSectorChoice";
 import {
   challengerBoost,
   computeSectorConcentration,
@@ -186,10 +192,14 @@ export function nppStockCandidateWeight(
 // than cautious/costCutter) rather than the political careerArchetype,
 // since "should I become a CEO" is thematically a corporate-behavior
 // decision. Funds threshold is FOUNDING_FEE × a buffer so an NPP doesn't
-// spend down to exactly zero on a single roll. Flat local-currency-
-// equivalent constant, not anchor-converted — same simplification the
-// bond/stock reserve floors above already use.
-const NPP_FOUNDING_FEE = 100_000;
+// spend down to exactly zero on a single roll. The fee is denominated in ₳
+// and converted to local at the founder's home rate, so it costs the same real
+// value everywhere. Sized from the live NPP cash distribution: cash clusters
+// tightly per country (median ~₳10.7k, p90 ~₳11.2k in the typical country), so
+// a ₳7,500 fee with the 1.5x buffer puts the bar at ₳11,250, about the richest
+// 5 to 10% of NPPs. The old flat 100k local fee was ~₳20 in Turkey and ~₳89k in
+// the US.
+export const NPP_FOUNDING_FEE_ANCHOR = 7_500;
 const NPP_FOUNDING_FUNDS_BUFFER = 1.5;
 const NPP_FOUNDING_BASE_PROBABILITY_BY_ARCHETYPE: Record<
   ReturnType<typeof deriveCeoArchetype>,
@@ -1245,9 +1255,16 @@ export async function foundNppCorporationsSurplus(
   preset?: string
 ): Promise<void> {
   // Founding draws from the personal forex account (₳). Pre-filter the pool by
-  // ₳ investment capital; the core enforces exact per-NPP affordability (fee is
-  // FX-converted there). minFunds doubles as a rough ₳ threshold.
-  const minFunds = NPP_FOUNDING_FEE * NPP_FOUNDING_FUNDS_BUFFER;
+  // ₳ investment capital; the core enforces exact per-NPP affordability (the
+  // local fee is converted back at the home rate there).
+  const minFunds = NPP_FOUNDING_FEE_ANCHOR * NPP_FOUNDING_FUNDS_BUFFER;
+  const fxByCcy = await loadFxRatesByCurrency(db);
+  const homeRateOf = (countryId: CountryId): number => {
+    const currency = preset
+      ? getSeedCurrencyCode(countryId, preset)
+      : (COUNTRY_CURRENCY_MAP[countryId] ?? "USD");
+    return fxByCcy.get(currency) ?? 1;
+  };
   // v4 autonomy sets `econScopeCountries` to null (global), which removed the
   // only barrier that had been keeping the NPP economic brain out of planned
   // economies: the v3 scope was a player-enablement rail, never a
@@ -1305,10 +1322,17 @@ export async function foundNppCorporationsSurplus(
   }
 
   const rng = makeSeededRng(`npp-found-corp:${currentTurn}${NPP_ACTION_RNG_SALT}`);
-  const fxByCcy = await loadFxRatesByCurrency(db);
 
   // Sector choice follows the market: one price read and one count per sweep.
   const priceDocs = await db.collection<CommodityPrice>("commodityPrices").find({}).toArray();
+  // Entry answers shortage: the more markets run short, the more NPPs try to
+  // found and the more foundings one sweep may complete.
+  const shortagePressure = foundingShortagePressure(
+    priceDocs.map((p) => (p.basePrice && p.globalPrice ? p.globalPrice / p.basePrice : null))
+  );
+  const maxFoundings = foundingSweepCap(shortagePressure);
+  const chanceMultiplier = foundingChanceMultiplier(shortagePressure);
+  let founded = 0;
   const { priceRatioOf } = buildNppPriceSignals(new Map(priceDocs.map((p) => [p.commodity, p])));
   const cellCounts = await db
     .collection<Corporation>("corporations")
@@ -1344,7 +1368,8 @@ export async function foundNppCorporationsSurplus(
 
   for (const npp of candidates) {
     const archetype = deriveCeoArchetype(npp.personality);
-    if (rng() >= NPP_FOUNDING_BASE_PROBABILITY_BY_ARCHETYPE[archetype]) continue;
+    if (founded >= maxFoundings) break;
+    if (rng() >= NPP_FOUNDING_BASE_PROBABILITY_BY_ARCHETYPE[archetype] * chanceMultiplier) continue;
 
     if (alreadyCeoIds.has(npp._id.toString())) continue;
 
@@ -1361,19 +1386,17 @@ export async function foundNppCorporationsSurplus(
     existingByCell.set(cell, (existingByCell.get(cell) ?? 0) + 1);
 
     const homeCountry = (npp.countryId ?? "US") as CountryId;
-    const homeCurrency = preset
-      ? getSeedCurrencyCode(homeCountry, preset)
-      : (COUNTRY_CURRENCY_MAP[homeCountry] ?? "USD");
-    const homeRate = fxByCcy.get(homeCurrency) ?? 1;
-    await nppFoundCorporation(
+    const homeRate = homeRateOf(homeCountry);
+    const outcome = await nppFoundCorporation(
       db,
       npp,
       sectorType,
-      NPP_FOUNDING_FEE,
+      NPP_FOUNDING_FEE_ANCHOR * homeRate,
       currentTurn,
       homeRate,
       blockedSet,
       preset
     );
+    if (outcome.ok) founded++;
   }
 }
