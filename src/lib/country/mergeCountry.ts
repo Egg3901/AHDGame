@@ -20,6 +20,7 @@
  * reverse order would retire a country that still owned regions, stranding them
  * in a state nothing enumerates.
  */
+import { recordCorporationExit } from "@/lib/corporations/exits/recordCorporationExit";
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation, CorporateSector, State } from "@/lib/db/types";
 import type { BillStatus } from "@/lib/db/types/legislation";
@@ -575,6 +576,11 @@ async function mergeNationalCorporations(
     const hasOwnHolders = Array.isArray(shell.shareholders) && shell.shareholders.length > 0;
     if ((cash === 0 || sameCurrency) && !hasOwnHolders) {
       await corps.deleteOne({ _id: shell._id });
+      await recordCorporationExit(db, shell, {
+        reason: "national_corporation_merged",
+        successorId: survivor._id,
+        now,
+      });
     } else {
       // Demote but keep: the invariant that matters is one PRIMARY, and a
       // stranded balance is easier to find on a named corporation than in a

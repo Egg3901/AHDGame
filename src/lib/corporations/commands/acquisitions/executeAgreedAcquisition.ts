@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { recordCorporationExit } from "@/lib/corporations/exits/recordCorporationExit";
 import { ObjectId } from "mongodb";
 import type {
   Bond,
@@ -488,6 +489,11 @@ async function runAgreedAcquisition(
       deletedAt: now,
     });
     await corps.deleteOne({ _id: target._id });
+    await recordCorporationExit(db, target, {
+      reason: "acquired",
+      successorId: acquirer._id,
+      now,
+    });
     await markAcquisitionProgress(db, offer._id, { shellDeleted: true });
     settlement.shellDeleted = true;
 

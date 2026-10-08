@@ -412,6 +412,11 @@ describe("nationalizeWholeCorp", () => {
     expect(bondUpdate[1].$set.corporationId).toEqual(primaryId);
 
     expect(db.collectionMocks.corporations.deleteOne).toHaveBeenCalledWith({ _id: targetId });
+    expect(db.collectionMocks.corporationExits.updateOne).toHaveBeenCalledWith(
+      { _id: targetId },
+      { $setOnInsert: expect.objectContaining({ reason: "nationalized", successorId: primaryId }) },
+      { upsert: true }
+    );
     expect(result.nationalCorporationId).toEqual(primaryId);
     expect(result.sectorsAbsorbed).toBe(1);
     expect(result.bondsAssumed).toBe(1);

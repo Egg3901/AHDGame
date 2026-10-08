@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordCorporationExit } from "@/lib/corporations/exits/recordCorporationExit";
 import type { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
@@ -815,6 +816,11 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
         });
 
         await db.collection<Corporation>("corporations").deleteOne({ _id: target._id });
+        await recordCorporationExit(db, target, {
+          reason: "hostile_takeover",
+          successorId: parent._id,
+          now,
+        });
 
         // Takeover fully committed — route the cross-currency acquisition spread
         // best-effort (the outer catch reverses liquidCapital, so this must never throw).

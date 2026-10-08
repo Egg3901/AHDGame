@@ -202,5 +202,16 @@ export async function seedSettlementIndexes(db: Db, log: (msg: string) => void) 
     log
   );
 
+  // Corporation exit records: `_id` is the corporation id (idempotency), these
+  // serve the exits-per-window and per-country reads.
+  await ensureIndex(db, "corporationExits", { turn: -1 }, { name: "corporationExits_turn" }, log);
+  await ensureIndex(
+    db,
+    "corporationExits",
+    { countryId: 1, turn: -1 },
+    { name: "corporationExits_country_turn" },
+    log
+  );
+
   log("Settlement crisis indexes ensured");
 }
