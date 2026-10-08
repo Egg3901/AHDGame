@@ -1,10 +1,15 @@
 /**
  * @vitest-environment happy-dom
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import InputsOutputsPanel from "./InputsOutputsPanel";
 import type { CommoditiesData, CommodityFlow, PlantsData } from "../types";
+
+beforeEach(() => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
+});
+afterEach(() => vi.unstubAllGlobals());
 
 function flow(
   partial: Pick<CommodityFlow, "commodity" | "label" | "icon"> & Partial<CommodityFlow>

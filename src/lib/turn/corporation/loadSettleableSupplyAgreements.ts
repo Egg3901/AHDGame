@@ -8,6 +8,8 @@
 
 import type { Db, ObjectId } from "mongodb";
 import type { CommodityType } from "@/lib/constants/commodities";
+import type { Corporation } from "@/lib/db/types/corporation";
+import { notifySupplyAgreementEvent } from "@/lib/corporations/supplyExchange/notifications";
 import { clampAgreementPremium, type SupplyAgreement } from "@/lib/db/types/supplyAgreement";
 import {
   isStateScopedCommodity,
@@ -51,6 +53,39 @@ type LiveAgreementDoc = {
   lastDamagesNoticeTurn?: number;
 };
 
+async function notifyExpiredAgreements(
+  db: Db,
+  expired: Pick<SupplyAgreement, "_id" | "supplierCorpId" | "buyerCorpId" | "commodity">[]
+): Promise<void> {
+  try {
+    const corpIds = [...new Set(expired.flatMap((a) => [a.supplierCorpId, a.buyerCorpId]))];
+    const corps = await db
+      .collection<Pick<Corporation, "_id" | "userId">>("corporations")
+      .find({ _id: { $in: corpIds } }, { projection: { userId: 1 } })
+      .toArray();
+    const byId = new Map(corps.map((c) => [c._id.toString(), c]));
+    await Promise.all(
+      expired.flatMap((a) =>
+        [a.supplierCorpId, a.buyerCorpId].flatMap((id) => {
+          const recipient = byId.get(id.toString());
+          return recipient
+            ? [
+                notifySupplyAgreementEvent({
+                  recipient,
+                  agreementId: a._id!,
+                  commodity: a.commodity,
+                  event: "expired",
+                }),
+              ]
+            : [];
+        })
+      )
+    );
+  } catch (err) {
+    console.error("[loadSettleableSupplyAgreements] expiry notifications failed:", err);
+  }
+}
+
 export async function loadSettleableSupplyAgreements(args: {
   db: Db;
   turn: number;
@@ -70,12 +105,21 @@ export async function loadSettleableSupplyAgreements(args: {
   // Fixed-term contracts stop before settlement on their expiration turn.
   // Cancellation notices use the same retirement pass below, so both kinds of
   // contract are removed from the live settlement book before it is read.
-  await db
+  const expiringFilter = {
+    status: { $in: ["active", "cancelling"] as SupplyAgreement["status"][] },
+    expiresAtTurn: { $lte: turn },
+  };
+  const expiring = await db
     .collection<SupplyAgreement>("supplyAgreements")
-    .updateMany(
-      { status: { $in: ["active", "cancelling"] }, expiresAtTurn: { $lte: turn } },
-      { $set: { status: "cancelled", updatedAt: now }, $unset: { cancelEffectiveTurn: "" } }
-    );
+    .find(expiringFilter, {
+      projection: { supplierCorpId: 1, buyerCorpId: 1, commodity: 1, status: 1 },
+    })
+    .toArray();
+  await db.collection<SupplyAgreement>("supplyAgreements").updateMany(expiringFilter, {
+    $set: { status: "cancelled", updatedAt: now },
+    $unset: { cancelEffectiveTurn: "" },
+  });
+  if (expiring.length > 0) await notifyExpiredAgreements(db, expiring);
 
   // C6: a contract under NOTICE keeps delivering and settling until its
   // effective turn. Retire the ones whose notice has run out first, then load
