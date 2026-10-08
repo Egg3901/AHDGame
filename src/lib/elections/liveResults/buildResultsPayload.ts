@@ -24,11 +24,17 @@ import {
   computeUnitResult,
 } from "@/lib/elections/liveResults/computeResults";
 import {
+  computePresidentialNight,
+  finalTurnVoteRatioForElection,
+} from "@/lib/elections/liveResults/presidentialNight";
+import { electoralMajorityFor } from "@/lib/elections/presidentialResolutionDisplay";
+import {
   buildNationalElectionNight,
   type ElectionNightPartyInfo,
 } from "@/lib/elections/liveResults/electionNight";
 import type {
   ElectionResultsResponse,
+  PresidentialNight,
   ResultsCandidate,
   ResultsUnit,
 } from "@/lib/elections/liveResults/types";
@@ -167,6 +173,7 @@ export async function buildResultsPayload(
   let totalEv: number | undefined;
   let calledEv: Record<string, number> = {};
   let leadingEv: Record<string, number> = {};
+  let night: PresidentialNight | null = null;
 
   if (isPresident && tally?.totalVotesByUnit) {
     const unitVotes = tally.totalVotesByUnit;
@@ -189,7 +196,7 @@ export async function buildResultsPayload(
         ]),
       ];
       totalEv = apportionment.electoralVoteUnits.reduce((s, u) => s + u.ev, 0);
-      evNeeded = Math.floor(totalEv / 2) + 1;
+      evNeeded = electoralMajorityFor(totalEv);
     } else {
       // Non-US presidents: popular vote per region. The tally may carry
       // vestigial all-zero US unit keys from init — scope to the country's
@@ -207,18 +214,42 @@ export async function buildResultsPayload(
     const stateNames = await loadRegionNames(db, [
       ...new Set(unitIds.map((u) => u.replace(/_CD\d$/, ""))),
     ]);
-    units = unitIds.map((unitId) =>
-      computeUnitResult({
+    const unitInputs = unitIds.map((unitId) => ({
+      unitId,
+      name: unitDisplayName(unitId, stateNames),
+      weight: evByUnit.get(unitId) ?? 0,
+      votes: unitVotes[unitId] ?? {},
+    }));
+    if (election.countryId === "US" && finalHour && totalEv && evNeeded && !tally.finalized) {
+      // US presidential final hour: the election-night broadcast replaces the
+      // generic drip. The tally here is the penultimate-turn tally; the final
+      // turn is not counted until the race resolves.
+      const result = computePresidentialNight({
         electionId,
-        unitId,
-        name: unitDisplayName(unitId, stateNames),
-        weight: evByUnit.get(unitId) ?? 0,
-        votes: unitVotes[unitId] ?? {},
-        isEnded,
-        baselineReportingPct,
-        finalHourProgress: finalHour?.progress ?? null,
-      })
-    );
+        units: unitInputs,
+        totalEv,
+        evNeeded,
+        windowStartMs: finalHour.endsAt.getTime() - windowMs,
+        windowMs,
+        nowMs: now.getTime(),
+        finalTurnRatio: finalTurnVoteRatioForElection(election),
+      });
+      units = result.units;
+      night = result.night;
+    } else {
+      units = unitInputs.map((u) =>
+        computeUnitResult({
+          electionId,
+          unitId: u.unitId,
+          name: u.name,
+          weight: u.weight,
+          votes: u.votes,
+          isEnded,
+          baselineReportingPct,
+          finalHourProgress: finalHour?.progress ?? null,
+        })
+      );
+    }
     units.sort((a, b) => a.name.localeCompare(b.name));
 
     if (tally.finalized && tally.electoralVotesByCandidate) {
@@ -281,14 +312,22 @@ export async function buildResultsPayload(
       : null;
 
   // ── Candidate totals ──────────────────────────────────────────────────
-  const totalCastVotes = Object.values(totalVotesMap).reduce((s, v) => s + v, 0);
+  // During the presidential night the real tally stays hidden: displayed
+  // totals are the sum of what each state has revealed so far.
+  const displayVotes: Record<string, number> = night ? {} : totalVotesMap;
+  if (night) {
+    for (const u of units)
+      for (const c of u.candidates)
+        displayVotes[c.candidateId] = (displayVotes[c.candidateId] ?? 0) + c.votes;
+  }
+  const totalCastVotes = Object.values(displayVotes).reduce((s, v) => s + v, 0);
   const buildCandidate = (
     cid: string,
     name: string,
     party: string,
     isNPP: boolean
   ): ResultsCandidate => {
-    const votes = totalVotesMap[cid] ?? 0;
+    const votes = displayVotes[cid] ?? 0;
     const info = partyInfo(partyMap, party);
     const candidate: ResultsCandidate = {
       id: cid,
@@ -382,6 +421,7 @@ export async function buildResultsPayload(
             endsAt: finalHour.endsAt.toISOString(),
           }
         : null,
+      ...(night ? { night } : {}),
     },
     candidates: resultsCandidates,
     units,

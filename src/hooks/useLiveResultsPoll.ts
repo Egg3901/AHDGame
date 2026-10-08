@@ -4,11 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
 
 const POLL_INTERVAL_MS = 30_000;
+/** Presidential election night: calls and poll closings land every few seconds. */
+const NIGHT_POLL_INTERVAL_MS = 10_000;
 
 /**
  * Keeps a live election results payload fresh: polls the results endpoint
- * every 30s while the election is active and the tab is visible, following
- * the auto-refresh convention from the election detail page. Stops entirely
+ * every 30s (10s during a presidential election night) while the election is
+ * active and the tab is visible, following the auto-refresh convention from
+ * the election detail page. Stops entirely
  * for completed elections (static data) and while `paused` (simulation mode).
  *
  * `dataVersion` bumps only when the payload actually changed, so views can
@@ -26,6 +29,7 @@ export function useLiveResultsPoll(
   const [dataVersion, setDataVersion] = useState(0);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
   const dataRef = useRef(initialData);
+  const nightActive = data.election.night != null;
 
   useEffect(() => {
     if (!isActive || paused) return;
@@ -44,7 +48,9 @@ export function useLiveResultsPoll(
           next.lastUpdated !== prev.lastUpdated ||
           next.election.finalHour?.progress !== prev.election.finalHour?.progress ||
           next.summary.totalVotes !== prev.summary.totalVotes ||
-          next.summary.unitsCalled !== prev.summary.unitsCalled;
+          next.summary.unitsCalled !== prev.summary.unitsCalled ||
+          next.election.night?.feed.length !== prev.election.night?.feed.length ||
+          (next.election.night == null) !== (prev.election.night == null);
         if (changed) {
           dataRef.current = next;
           setData(next);
@@ -55,7 +61,10 @@ export function useLiveResultsPoll(
       }
     };
 
-    const interval = setInterval(() => void poll(), POLL_INTERVAL_MS);
+    const interval = setInterval(
+      () => void poll(),
+      nightActive ? NIGHT_POLL_INTERVAL_MS : POLL_INTERVAL_MS
+    );
     // Refresh promptly when the tab regains focus rather than waiting a cycle.
     let visibilityTimer: ReturnType<typeof setTimeout> | null = null;
     const onVisible = () => {
@@ -71,7 +80,7 @@ export function useLiveResultsPoll(
       if (visibilityTimer) clearTimeout(visibilityTimer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [electionId, isActive, paused]);
+  }, [electionId, isActive, paused, nightActive]);
 
   return { data, dataVersion, lastFetchedAt };
 }
