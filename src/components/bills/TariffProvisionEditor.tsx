@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  CORPORATION_TYPES,
+  FOUNDABLE_CORPORATION_TYPES,
   CORPORATION_TYPE_LABELS,
   type CorporationType,
 } from "@/lib/constants/corporations";
@@ -112,7 +112,7 @@ export function TariffProvisionEditor({ value, onChange, countryId, enabledCount
                 className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm"
               >
                 <option value="">Select…</option>
-                {CORPORATION_TYPES.map((s) => (
+                {FOUNDABLE_CORPORATION_TYPES.map((s) => (
                   <option key={s} value={s}>
                     {CORPORATION_TYPE_LABELS[s]}
                   </option>

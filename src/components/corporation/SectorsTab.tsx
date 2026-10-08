@@ -42,10 +42,12 @@ import { SectorTypeDossier } from "./SectorTypeDossier";
 import { SectorStrategyPanel } from "./SectorStrategyPanel";
 import type { SectorTypeMetricContext } from "./sectorTypeMetrics";
 import { DenseSection, InlineStatus, Segmented, SmallButton, signTone } from "./dense/DenseKit";
-import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
+import { getOperatingSectorLabel, getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
-function sectorIdentity(sector: Pick<SectorDetail, "sectorType" | "industryModel">): string {
-  return `${sector.sectorType}:${sector.industryModel ?? ""}`;
+export function sectorIdentity(
+  sector: Pick<SectorDetail, "sectorType" | "industryModel" | "mediaDiscriminator">
+): string {
+  return `${sector.sectorType}:${sector.industryModel ?? ""}:${sector.mediaDiscriminator ?? ""}`;
 }
 
 interface SectorsTabProps {
@@ -212,13 +214,19 @@ export default function SectorsTab({
   const sectorTypes = useMemo(() => {
     const groups = new Map<
       string,
-      { sectorType: string; industryModel: string | null; count: number }
+      {
+        sectorType: string;
+        industryModel: string | null;
+        mediaDiscriminator: string | null;
+        count: number;
+      }
     >();
     for (const sector of sectors) {
       const value = sectorIdentity(sector);
       const group = groups.get(value) ?? {
         sectorType: sector.sectorType,
         industryModel: sector.industryModel ?? null,
+        mediaDiscriminator: sector.mediaDiscriminator ?? null,
         count: 0,
       };
       group.count += 1;
@@ -230,9 +238,13 @@ export default function SectorsTab({
         value,
         ...group,
         label:
-          group.sectorType === "manufacturing" && group.industryModel === "vehicles"
-            ? "Vehicle manufacturing"
-            : (CORPORATION_TYPE_LABELS[group.sectorType as CorporationType] ?? group.sectorType),
+          getOperatingSectorLabel(
+            group.sectorType,
+            group.industryModel,
+            group.mediaDiscriminator
+          ) ??
+          CORPORATION_TYPE_LABELS[group.sectorType as CorporationType] ??
+          group.sectorType,
       }));
   }, [sectors]);
 
@@ -263,7 +275,11 @@ export default function SectorsTab({
   // dossier, while the table above still filters.
   const selectedSectorGroup = sectorTypes.find((group) => group.value === activeTypeFilter) ?? null;
   const operatingDossierType = selectedSectorGroup
-    ? getOperatingSectorType(selectedSectorGroup.sectorType, selectedSectorGroup.industryModel)
+    ? getOperatingSectorType(
+        selectedSectorGroup.sectorType,
+        selectedSectorGroup.industryModel,
+        selectedSectorGroup.mediaDiscriminator
+      )
     : null;
   const dossierType = operatingDossierType
     ? (CORPORATION_TYPES.find((t) => t === operatingDossierType) ?? null)

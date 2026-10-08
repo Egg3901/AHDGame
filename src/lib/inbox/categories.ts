@@ -159,6 +159,8 @@ export const CATEGORY_OF: Record<NotificationType, InboxCategory> = {
   corp_supply_agreement_damages: "treasury",
   corp_supply_agreement_offer: "treasury",
   corp_supply_agreement_update: "treasury",
+  corp_product_event: "treasury",
+  corp_product_result: "treasury",
   world_event_offered: "system",
   world_event_resolved: "system",
 };

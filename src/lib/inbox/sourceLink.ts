@@ -188,6 +188,17 @@ export function resolveSourceLink(
     }
   }
 
+  // ── Product ventures ─────────────────────────────────────────────────────
+  if (type === "corp_product_event" || type === "corp_product_result") {
+    const corporationId = asString(m.corporationId);
+    if (corporationId) {
+      return {
+        label: type === "corp_product_event" ? "Answer decision" : "View product",
+        href: `/corporation/${corporationId}?tab=sectors#product-studio`,
+      };
+    }
+  }
+
   // ── Ask service ───────────────────────────────────────────────────────────
   // Ask notifications carry a prebuilt href (the Ask site) in metadata.
   if (type.startsWith("ask_")) {

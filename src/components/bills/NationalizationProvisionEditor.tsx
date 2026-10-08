@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useGameTurnStatus } from "@/hooks/useGameEvents";
 import { privateEnterpriseBlockedByYear } from "@/lib/economy/queries/privateEnterpriseRegime";
-import { CORPORATION_TYPES, CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { FOUNDABLE_CORPORATION_TYPES, CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { getBillPassRule } from "@/lib/congress/billPassRule";
@@ -274,7 +274,7 @@ export function NationalizationProvisionEditor({
               className="w-full rounded-lg border border-card-border bg-background px-2 py-1.5 text-sm"
             >
               <option value="">— Select sector type —</option>
-              {CORPORATION_TYPES.map((t) => (
+              {FOUNDABLE_CORPORATION_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>
@@ -559,7 +559,7 @@ function SectorTakeoverRow({
         className="w-full rounded-lg border border-card-border bg-background px-2 py-1.5 text-sm"
       >
         <option value="">— Select sector type —</option>
-        {CORPORATION_TYPES.map((t) => (
+        {FOUNDABLE_CORPORATION_TYPES.map((t) => (
           <option key={t} value={t}>
             {CORPORATION_TYPE_LABELS[t]}
           </option>

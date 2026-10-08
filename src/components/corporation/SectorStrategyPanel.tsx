@@ -22,6 +22,7 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import { COMMODITY_LABELS, type CommodityType } from "@/lib/constants/commodities";
 import {
+  getOperatingSectorLabel,
   getSectorStrategies,
   getStrategy,
   type SectorStrategy,
@@ -110,13 +111,10 @@ export function SectorStrategyPanel({
   mediaOperatingModelsEnabled,
 }: SectorStrategyPanelProps) {
   const { preset } = useWorldFlags();
-  const vehicleModel = sectors.some(
-    (sector) => sector.sectorType === "manufacturing" && sector.industryModel === "vehicles"
-  );
-  const strategyType = vehicleModel ? "automobiles" : sectorType;
-  const label = vehicleModel
-    ? "Vehicle manufacturing"
-    : (CORPORATION_TYPE_LABELS[sectorType] ?? sectorType);
+  // sectorType is already the operating type resolved by SectorsTab.
+  const strategyType = sectorType;
+  const label =
+    getOperatingSectorLabel(sectorType) ?? CORPORATION_TYPE_LABELS[sectorType] ?? sectorType;
   const strategies: SectorStrategy[] = getSectorStrategies(
     strategyType,
     mediaOperatingModelsEnabled,

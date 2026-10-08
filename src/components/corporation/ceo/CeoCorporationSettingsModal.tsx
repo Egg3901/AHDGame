@@ -5,7 +5,7 @@ import { useEffect, useId, useState } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { Modal } from "@/components/ui/Modal";
-import { CORPORATION_TYPES, CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { CORPORATION_TYPE_LABELS, sectorFocusOptions } from "@/lib/constants/corporations";
 import {
   CORPORATION_RENAME_COST,
   CORPORATION_RENAME_MS_PENALTY,
@@ -141,7 +141,7 @@ export function CeoCorporationSettingsModal({
                   }}
                   className="w-full rounded-sm border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none"
                 >
-                  {CORPORATION_TYPES.map((t) => (
+                  {sectorFocusOptions(corporation.type).map((t) => (
                     <option key={t} value={t}>
                       {CORPORATION_TYPE_LABELS[t]}
                     </option>
@@ -166,11 +166,13 @@ export function CeoCorporationSettingsModal({
                   className="w-full rounded-sm border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none"
                 >
                   <option value="">None</option>
-                  {CORPORATION_TYPES.filter((t) => t !== editPrimaryType).map((t) => (
-                    <option key={t} value={t}>
-                      {CORPORATION_TYPE_LABELS[t]}
-                    </option>
-                  ))}
+                  {sectorFocusOptions(corporation.secondaryType)
+                    .filter((t) => t !== editPrimaryType)
+                    .map((t) => (
+                      <option key={t} value={t}>
+                        {CORPORATION_TYPE_LABELS[t]}
+                      </option>
+                    ))}
                 </select>
                 <p className="text-xs text-muted mt-1">
                   Matching sectors get +2.5% margin (half of primary). Doubles sprawl penalty for

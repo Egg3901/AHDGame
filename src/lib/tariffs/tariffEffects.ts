@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import type { Bill, Tariff, TariffProvision } from "@/lib/db/types";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { FederalBudget, FederalTaxRates } from "@/lib/db/types/budget";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { sectorPolicyTargetMatches, type CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { fireTariffPulse } from "@/lib/corporations/sentimentEvents";
@@ -54,7 +54,10 @@ export function getEffectiveTariffRate(
 
     if (t.scopeType === "economy_wide") {
       total += rate;
-    } else if (t.scopeType === "sector" && t.targetSectorType === sectorType) {
+    } else if (
+      t.scopeType === "sector" &&
+      sectorPolicyTargetMatches(t.targetSectorType, sectorType)
+    ) {
       total += rate;
     } else if (t.scopeType === "origin_country" && t.targetOriginCountryId === corpHqCountryId) {
       total += rate;
@@ -211,7 +214,10 @@ export function getTariffBlendWeights(
 
     if (t.scopeType === "economy_wide") {
       blendRate += rate * (1 - economyWideShare);
-    } else if (t.scopeType === "sector" && t.targetSectorType === sectorType) {
+    } else if (
+      t.scopeType === "sector" &&
+      sectorPolicyTargetMatches(t.targetSectorType, sectorType)
+    ) {
       blendRate += rate * (1 - sectorShare);
     } else if (t.scopeType === "origin_country") {
       if (
@@ -342,7 +348,10 @@ export function getDomesticTariffMalus(
     if (rate === 0) continue;
     if (t.scopeType === "economy_wide") {
       total += rate * (1 - economyWideShare);
-    } else if (t.scopeType === "sector" && t.targetSectorType === sectorType) {
+    } else if (
+      t.scopeType === "sector" &&
+      sectorPolicyTargetMatches(t.targetSectorType, sectorType)
+    ) {
       total += rate * (1 - sectorShare);
     }
   }

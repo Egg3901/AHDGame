@@ -68,6 +68,53 @@ export const FOUNDABLE_CORPORATION_TYPES = CORPORATION_TYPES.filter(
   (t): t is Exclude<CorporationType, RetiredCorporationType> => !isRetiredCorporationType(t)
 ) as readonly Exclude<CorporationType, RetiredCorporationType>[];
 
+/**
+ * Sector focus options for a picker: foundable types only, plus the saved
+ * value when it is a retired legacy type, so an old automobiles or
+ * entertainment corporation still renders its own focus without the retired
+ * type being offered to anyone else.
+ */
+export function sectorFocusOptions(saved?: string | null): CorporationType[] {
+  const options: CorporationType[] = [...FOUNDABLE_CORPORATION_TYPES];
+  if (
+    saved &&
+    !options.includes(saved as CorporationType) &&
+    (CORPORATION_TYPES as readonly string[]).includes(saved)
+  ) {
+    options.push(saved as CorporationType);
+  }
+  return options;
+}
+
+/** Canonical sector a retired type was folded into by the 1.12 taxonomy. */
+const FOLDED_INTO: Record<RetiredCorporationType, CorporationType> = {
+  automobiles: "manufacturing",
+  entertainment: "media",
+};
+
+/**
+ * Whether a sector-scoped policy target (subsidy, tariff) covers a sector,
+ * given the sector's OPERATING type (vehicle plants operate as "automobiles",
+ * entertainment media lanes as "entertainment"; see getOperatingSectorType).
+ *
+ * - A legacy "automobiles"/"entertainment" target still reaches the converted
+ *   vehicle and entertainment lanes, so laws enacted before the merger keep
+ *   working.
+ * - A "manufacturing"/"media" target covers the whole canonical sector,
+ *   folded lanes included, since that is the only choice pickers now offer.
+ * - Ordinary manufacturing/media is never reached by a retired target.
+ */
+export function sectorPolicyTargetMatches(
+  target: string | null | undefined,
+  operatingSectorType: string
+): boolean {
+  if (!target) return false;
+  if (target === operatingSectorType) return true;
+  return (
+    isRetiredCorporationType(operatingSectorType) && FOLDED_INTO[operatingSectorType] === target
+  );
+}
+
 /** Specialized production models that belong to the manufacturing taxonomy. */
 export type ManufacturingIndustryModel = "vehicles";
 

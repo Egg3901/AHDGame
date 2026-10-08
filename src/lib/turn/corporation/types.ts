@@ -37,6 +37,8 @@ export interface CorporationLookups {
   mediaProductDevelopmentByCorpId?: Map<string, MediaProductProject>;
   mediaProductQualityBySectorId?: Map<string, number>;
   mediaProductLoyaltyBonusBySectorId?: Map<string, number>;
+  /** Revenue multiplier per sector from released product ventures whose lift is running. */
+  productVentureBoostBySectorId?: Map<string, number>;
   corpById: Map<string, Corporation>;
   /** Two-axis electorate lean, projected only while mediaEditorialEnabled is true. */
   editorialAudienceLeanByState?: Map<string, { economic: number; social: number }>;

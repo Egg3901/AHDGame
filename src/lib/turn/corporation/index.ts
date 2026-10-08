@@ -114,6 +114,7 @@ import {
 import { applyMediaEditorialEffects } from "@/lib/mediaEditorial/applyEffects";
 import { addSettledPoliticalAttention } from "@/lib/mediaOperatingModels/reach";
 import { applyOperatingCashThenDevelopmentCash } from "./manufacturingDevelopmentCashSettlement";
+import { loadVentureBoostBySectorId, processProductVentures } from "@/lib/products/venture/turn";
 import { resumeFoundingUnderwritingPlans } from "@/lib/banking/underwritingSettlement";
 import {
   processMediaProductProjectsV1,
@@ -301,6 +302,22 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       bySector.set(project.sectorId, sectorProjects);
       lookups.mediaProductProjectsBySectorId = bySector;
     }
+  }
+  // Product ventures reuse the existing product flags: media titles follow the
+  // slates flag, manufactured lines follow product lines v2.
+  const productVentureDomainsEnabled = {
+    media: marketGovernorConfig?.mediaProductSlatesEnabled === true,
+    manufacturing:
+      plantsEnabledForMarketShare &&
+      (marketGovernorConfig as { productLinesV2Enabled?: boolean } | null)
+        ?.productLinesV2Enabled === true,
+  };
+  if (productVentureDomainsEnabled.media || productVentureDomainsEnabled.manufacturing) {
+    lookups.productVentureBoostBySectorId = await loadVentureBoostBySectorId(db, {
+      turn: turn ?? 1,
+      sectorsByCorp: lookups.sectorsByCorp,
+      enabled: productVentureDomainsEnabled,
+    });
   }
   const politicalMediaMarketEnabled = marketGovernorConfig?.politicalMediaMarketEnabled === true;
   const politicalMediaOrders: PoliticalMediaOrderForClearing[] = politicalMediaMarketEnabled
@@ -904,6 +921,22 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         }
       },
     });
+  }
+  if (productVentureDomainsEnabled.media || productVentureDomainsEnabled.manufacturing) {
+    try {
+      await processProductVentures({
+        db,
+        turn: typeof turn === "number" ? turn : 1,
+        corporations: lookups.corporations,
+        sectorsByCorp: lookups.sectorsByCorp,
+        exchangeRatesByCurrency: lookups.exchangeRatesByCurrency,
+        enabled: productVentureDomainsEnabled,
+      });
+    } catch (error) {
+      // A venture fault must never stop the corporation turn.
+      console.error("[corporationTurn] product venture processing failed", error);
+    }
+    mark("productVentures");
   }
   let constructionFinanceFundedCount = 0;
   let constructionFinancePendingCount = 0;
