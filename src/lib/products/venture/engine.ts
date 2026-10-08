@@ -18,7 +18,7 @@ export const VENTURE_BOOST_TURNS = 3 * TURNS_PER_DAY;
 /** Time a CEO has to answer an event before the default choice applies. */
 export const VENTURE_EVENT_RESPONSE_TURNS = TURNS_PER_DAY;
 /** Investment target as turns of the matching sectors' revenue. */
-export const VENTURE_TARGET_TURNS_OF_REVENUE = 0.75;
+export const VENTURE_TARGET_TURNS_OF_REVENUE = 1.5;
 export const VENTURE_MIN_TARGET_ANCHOR = 1_000;
 /** Per-turn funding tiers as multiples of target / development turns. */
 export const VENTURE_FUNDING_TIERS = [

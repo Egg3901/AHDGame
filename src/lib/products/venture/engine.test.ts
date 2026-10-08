@@ -284,7 +284,7 @@ describe("funding target against real revenue scale", () => {
       const standard = referenceFundingPerTurn(target);
       const spendShare = standard / perTurn;
       const lift = perTurn * boostFractionForQuality(qualityFromInvestment(target, target));
-      expect(spendShare, label).toBeLessThan(0.02);
+      expect(spendShare, label).toBeLessThan(0.025);
       expect(lift / perTurn, label).toBeGreaterThanOrEqual(0.1);
       expect(lift / perTurn, label).toBeLessThanOrEqual(0.2);
     }
