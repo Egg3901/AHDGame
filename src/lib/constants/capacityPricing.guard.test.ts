@@ -97,9 +97,9 @@ const REGISTRY: Record<string, { count: number; expect: Expectation; why: string
     why: "Units come from computeSectorImpliedUnits at a null strategy; both legs must use the same mix.",
   },
   "src/lib/nationalization/soeOperations.ts": {
-    count: 1,
+    count: 2,
     expect: "sector",
-    why: "SOE directed-capex buys capacity in existing sectors.",
+    why: "SOE directed-capex and the shortage-led growth planner both price capacity in existing sectors at their own strategy.",
   },
   "src/lib/turn/commandEconomyTurn.ts": {
     count: 1,
