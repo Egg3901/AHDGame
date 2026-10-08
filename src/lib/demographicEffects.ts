@@ -56,6 +56,14 @@ import type { GameState } from "@/lib/db/types/gameState";
 import type { State } from "@/lib/db/types/state";
 import { getFederalMultiplier } from "@shared/constants/formulas";
 import { calculateStateLeanForCache } from "@/lib/demographics/cachedStateLean";
+import { calculateStateLean } from "@/lib/utils/demographics";
+import {
+  loadAllStateSlants,
+  mediaPullForState,
+  type MediaPull,
+} from "@/lib/mediaEditorial/opinionPull";
+import type { StateSlant } from "@/lib/mediaEditorial/slant";
+import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { isBucketTarget } from "@/lib/demographics/turnoutTarget";
 import {
   applyDurableBucketShift,
@@ -453,7 +461,8 @@ export function buildDemographicUpdates(
   demographics: StateDemographics,
   shifts: DemographicShiftSet,
   baselines: Map<string, DemographicGroupBaselines> | null,
-  v2Enabled: boolean
+  v2Enabled: boolean,
+  mediaPull: MediaPull | null = null
 ): Record<string, number> {
   const updates: Record<string, number> = {};
 
@@ -539,8 +548,37 @@ export function buildDemographicUpdates(
   }
 
   addBucketDriftUpdates(demographics, shifts, updates);
+  if (mediaPull) addMediaPullUpdates(demographics, baselines, mediaPull, updates);
 
   return updates;
+}
+
+/**
+ * Newsroom slant channel. The same step is added to every group's lean on an
+ * axis, which moves the population-weighted state lean by that step. It rides
+ * on top of whatever the legislation channel or baseline decay already wrote
+ * this turn, so those forces are untouched. See `mediaEditorial/opinionPull.ts`
+ * for the size and bounds of the step.
+ */
+function addMediaPullUpdates(
+  demographics: StateDemographics,
+  baselines: Map<string, DemographicGroupBaselines> | null,
+  pull: MediaPull,
+  updates: Record<string, number>
+): void {
+  const axes = [
+    { field: "economicLean" as const, step: pull.economic },
+    { field: "socialLean" as const, step: pull.social },
+  ];
+  for (const [groupId, group] of Object.entries(demographics.groups)) {
+    for (const { field, step } of axes) {
+      if (step === 0) continue;
+      const key = `groups.${groupId}.${field}`;
+      const current = updates[key] ?? group[field] ?? baselines?.get(groupId)?.[field];
+      if (typeof current !== "number") continue;
+      updates[key] = Math.max(LEAN_ABS_MIN, Math.min(LEAN_ABS_MAX, current + step));
+    }
+  }
 }
 
 /**
@@ -824,7 +862,9 @@ export async function processStateDemographics(
  */
 export async function processAllStateDemographics(
   db: Db,
-  knownLegislationTypes?: readonly LegislationType[]
+  knownLegislationTypes?: readonly LegislationType[],
+  /** Current turn; makes the newsroom slant pull apply at most once per turn. */
+  turn?: number
 ): Promise<number> {
   // Bulk-fetch ALL data upfront in parallel (eliminates per-state queries)
   const [states, allStatePolicies, allLegTypes, allDemographics, gameState] = await Promise.all([
@@ -861,6 +901,7 @@ export async function processAllStateDemographics(
   // flag is on, so flag-off turns issue no extra queries.
   let categories: DemographicCategory[] = [];
   let defaultsByState = new Map<string, StateDemographics>();
+  let slantByState = new Map<string, StateSlant>();
   if (v2Enabled) {
     const [cats, allDefaults] = await Promise.all([
       loadDemographicCategories(db),
@@ -868,6 +909,12 @@ export async function processAllStateDemographics(
     ]);
     categories = cats;
     defaultsByState = new Map(allDefaults.map((d) => [String(d._id), d]));
+    // Newsroom slant: two batched reads for every state, only with the media
+    // editorial flag on. Flag-off turns issue nothing extra.
+    const config = await db
+      .collection<GameConfig>("gameConfig")
+      .findOne({ _id: "default" }, { projection: { mediaEditorialEnabled: 1 } });
+    if (config?.mediaEditorialEnabled === true) slantByState = await loadAllStateSlants(db);
   }
 
   // Build legislation type map for O(1) lookups
@@ -963,12 +1010,50 @@ export async function processAllStateDemographics(
     const stateDefaults = defaultsByState.get(state._id);
     const baselines = v2Enabled ? buildGroupBaselineMap(categories, stateDefaults) : null;
 
+    // Newsroom slant pull: once per state per turn (watermarked), measured
+    // from the state's current cached lean.
+    const slant = slantByState.get(state._id) ?? null;
+    const alreadyPulled =
+      typeof turn === "number" && (demographics.mediaOpinionPull?.turn ?? -1) >= turn;
+    let mediaPull: MediaPull | null = null;
+    if (slant && !alreadyPulled) {
+      const lean =
+        typeof demographics.cachedEconomicLean === "number" &&
+        typeof demographics.cachedSocialLean === "number"
+          ? { economic: demographics.cachedEconomicLean, social: demographics.cachedSocialLean }
+          : (() => {
+              const calc = calculateStateLean(demographics, categories);
+              return { economic: calc.economicLean, social: calc.socialLean };
+            })();
+      mediaPull = mediaPullForState(lean, slant);
+    }
+
     const temporaryUpdates = buildDemographicUpdates(
       demographics,
       temporaryShifts,
       baselines,
-      v2Enabled
+      v2Enabled,
+      mediaPull
     );
+    // Record what the newsrooms are doing so the state page can say so. Only
+    // written when it changes or a pull is applied, and only for slanted states
+    // (or to zero out a stale record).
+    if (typeof turn === "number" && !alreadyPulled) {
+      const stored = demographics.mediaOpinionPull;
+      if (slant) {
+        temporaryUpdates["mediaOpinionPull.turn"] = turn;
+        temporaryUpdates["mediaOpinionPull.economic"] = mediaPull?.economic ?? 0;
+        temporaryUpdates["mediaOpinionPull.social"] = mediaPull?.social ?? 0;
+        temporaryUpdates["mediaOpinionPull.slantEconomic"] = slant.economic;
+        temporaryUpdates["mediaOpinionPull.slantSocial"] = slant.social;
+        temporaryUpdates["mediaOpinionPull.strength"] = slant.strength;
+      } else if (stored && stored.strength > 0) {
+        temporaryUpdates["mediaOpinionPull.turn"] = turn;
+        temporaryUpdates["mediaOpinionPull.economic"] = 0;
+        temporaryUpdates["mediaOpinionPull.social"] = 0;
+        temporaryUpdates["mediaOpinionPull.strength"] = 0;
+      }
+    }
 
     // Durable channel: seed its live-update accumulator with whatever the
     // temporary channel already computed this turn (banded shift OR decay)
