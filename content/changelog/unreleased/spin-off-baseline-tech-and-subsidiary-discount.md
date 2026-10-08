@@ -4,8 +4,8 @@ title: Spin-offs keep baseline tech; large groups trade at a discount
 summary: >-
   A spin-off now starts with the same past-decade tech a new corporation gets,
   and a parent with more than three subsidiaries is valued lower.
-tags: [corporations, stock-market]
-badges: [balance]
+tags: [corporations, stock-market, balance]
+badges: [minor]
 areas: [backend]
 ---
 
