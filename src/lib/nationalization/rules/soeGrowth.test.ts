@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   SOE_GROWTH_MAX_CASH_SHARE,
   SOE_GROWTH_MIN_SHORTAGE,
-  SOE_GROWTH_ORDER_SHARE,
+  SOE_GROWTH_MAX_ORDER_SHARE,
+  SOE_GROWTH_MIN_ORDER_SHARE,
   planSoeCapexGrowth,
+  soeGrowthOrderShare,
   soeGrowthBudgetAnchor,
   type SoeGrowthSectorInput,
 } from "./soeGrowth";
@@ -39,11 +41,30 @@ describe("soeGrowthBudgetAnchor", () => {
   });
 });
 
+describe("soeGrowthOrderShare", () => {
+  it("starts at the floor at the shortage threshold", () => {
+    expect(soeGrowthOrderShare(SOE_GROWTH_MIN_SHORTAGE)).toBeCloseTo(SOE_GROWTH_MIN_ORDER_SHARE, 9);
+  });
+
+  it("rises with the price-over-base ratio and is capped", () => {
+    const at2 = soeGrowthOrderShare(2);
+    const at26 = soeGrowthOrderShare(2.6);
+    expect(at2).toBeGreaterThan(SOE_GROWTH_MIN_ORDER_SHARE);
+    expect(at26).toBeGreaterThan(at2);
+    expect(soeGrowthOrderShare(3.5)).toBe(SOE_GROWTH_MAX_ORDER_SHARE);
+    expect(soeGrowthOrderShare(50)).toBe(SOE_GROWTH_MAX_ORDER_SHARE);
+  });
+
+  it("falls back to the floor for an unreadable ratio", () => {
+    expect(soeGrowthOrderShare(Number.NaN)).toBe(SOE_GROWTH_MIN_ORDER_SHARE);
+  });
+});
+
 describe("planSoeCapexGrowth", () => {
-  it("orders a fixed share of capacity for a short sector at list price", () => {
+  it("orders a shortage-sized share of capacity for a short sector at list price", () => {
     const { growthAnchor, orders } = planSoeCapexGrowth([sector()], 1e9);
     expect(orders).toHaveLength(1);
-    expect(orders[0].units).toBeCloseTo(10_000 * SOE_GROWTH_ORDER_SHARE, 9);
+    expect(orders[0].units).toBeCloseTo(10_000 * soeGrowthOrderShare(2), 9);
     expect(orders[0].costAnchor).toBeCloseTo(orders[0].units * 100, 9);
     expect(growthAnchor).toBeCloseTo(orders[0].costAnchor, 9);
   });
@@ -67,10 +88,11 @@ describe("planSoeCapexGrowth", () => {
       sector({ id: "b", shortage: 3 }),
       sector({ id: "c", shortage: 2 }),
     ];
-    const one = 10_000 * SOE_GROWTH_ORDER_SHARE * 100;
-    const { growthAnchor, orders } = planSoeCapexGrowth(sectors, one * 2.5);
+    const cost = (shortage: number) => 10_000 * soeGrowthOrderShare(shortage) * 100;
+    const budget = cost(3) + cost(2) + 1;
+    const { growthAnchor, orders } = planSoeCapexGrowth(sectors, budget);
     expect(orders.map((o) => o.sectorId)).toEqual(["b", "c"]);
-    expect(growthAnchor).toBeLessThanOrEqual(one * 2.5);
+    expect(growthAnchor).toBeLessThanOrEqual(budget);
     expect(planSoeCapexGrowth(sectors, 0).orders).toHaveLength(0);
   });
 });
