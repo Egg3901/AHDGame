@@ -6,7 +6,7 @@ summary: >-
   Negotiate button on the offers page now opens a counter-offer with the
   offer's terms already filled in.
 tags: [corporations, commodities, contracts]
-badges: [fix]
+badges: [patch]
 areas: [fullstack]
 ---
 
