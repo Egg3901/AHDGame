@@ -37,6 +37,24 @@ export interface ValueLeg {
 /** Below this, a net is zero. Matches the settlement primitive exactly. */
 export const NET_TOLERANCE = 1e-6;
 
+/**
+ * Doubles carry ~16 significant digits, so a transfer of 1e10 anchor units
+ * splits into legs whose rounding noise alone exceeds the absolute floor
+ * (a large sovereign maturity netted 1.9e-6 and was refused forever). The
+ * tolerance therefore scales with the gross moved, at 1e-12 relative, which
+ * is still far below one cent for any realistic transfer.
+ */
+export function netTolerance(
+  legs: readonly Pick<ValueLeg, "kind" | "amount" | "valuation">[]
+): number {
+  const gross = legs.reduce((sum, leg) => {
+    if (leg.kind === "asset") return sum;
+    const value = leg.valuation ? leg.amount / leg.valuation.localPerAnchor : leg.amount;
+    return sum + Math.max(0, value);
+  }, 0);
+  return Math.max(NET_TOLERANCE, gross * 1e-12);
+}
+
 export function legSign(kind: ValueLegKind): number {
   if (kind === "asset") return 0;
   return kind === "debit" || kind === "mint" ? -1 : 1;
@@ -182,7 +200,7 @@ export function checkBalancedTransfer(
     return out;
   }
   const net = legsNet(legs);
-  if (Math.abs(net) > NET_TOLERANCE) {
+  if (Math.abs(net) > netTolerance(legs)) {
     out.push({
       invariant: "balanced_transfer",
       detail: `legs net to ${net}, not zero`,
