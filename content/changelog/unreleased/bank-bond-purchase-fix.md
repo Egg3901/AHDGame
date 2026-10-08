@@ -5,7 +5,7 @@ summary: >-
   A bank that bought government bonds with spare cash could not take delivery
   of them, which stopped every bank's turn from finishing.
 tags: [banking, bonds, fix]
-badges: [fix]
+badges: [hotfix]
 areas: [backend]
 ---
 
