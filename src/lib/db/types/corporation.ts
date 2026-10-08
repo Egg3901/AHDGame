@@ -728,6 +728,8 @@ export interface Corporation {
       amountAnchor: number;
       investmentAnchor: number;
       chargeAnchor: number;
+      /** Exact liquidCapital debited, so a refund never depends on a later FX rate. */
+      localAmount?: number;
     }
   >;
   mediaProductAdvertisingReceiptV1?: MediaProductAdvertisingReceipt;

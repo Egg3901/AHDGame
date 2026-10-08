@@ -24,6 +24,7 @@ import {
 } from "./engine";
 import { liftedSectorIds, getVentureLine, type VentureSector } from "./lines";
 import { sectorTurnRevenueAnchor } from "./revenue";
+import { refundVentureReceipt } from "./refund";
 import { PRODUCT_VENTURES, ventureDocument } from "./store";
 import type { ProductVenture, VentureDomain } from "./types";
 
@@ -192,6 +193,7 @@ export async function processProductVentures(
                 amountAnchor: total,
                 investmentAnchor: investmentWanted,
                 chargeAnchor: chargeWanted,
+                localAmount: local,
               },
             },
           } as never
@@ -232,13 +234,8 @@ export async function processProductVentures(
       const closed = current === null || current.stage !== "development";
       const paid = investmentAnchor + chargeAnchor;
       if (closed && paid > 0) {
-        await args.db
-          .collection<Corporation>("corporations")
-          .updateOne({ _id: row._id, [`${receiptKey}.turn`]: args.turn }, {
-            $inc: { liquidCapital: anchorToCorpLiquidCapital(paid, row, fx) },
-            $unset: { [receiptKey]: "" },
-          } as never);
-        result.paidAnchor -= paid;
+        const refunded = await refundVentureReceipt(args.db, row._id, venture._id, args.turn);
+        if (refunded) result.paidAnchor -= paid;
       }
       continue;
     }

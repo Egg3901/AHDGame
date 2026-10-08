@@ -2,6 +2,7 @@ import { ObjectId } from "mongodb";
 import { describe, expect, it, vi } from "vitest";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import { newVenture, referenceFundingPerTurn } from "./engine";
+import { settleCancelledVentureReceipt } from "./refund";
 import { loadVentureBoostBySectorId, processProductVentures } from "./turn";
 import type { ProductVenture } from "./types";
 
@@ -52,6 +53,7 @@ function setup(cash = 1_000_000, ventures: ProductVenture[] = []) {
       }
       return {
         find: () => ({ toArray: async () => [{ ...corpRow }] }),
+        findOne: async () => ({ ...corpRow }),
         updateOne: async (filter: Record<string, unknown>, update: Record<string, any>) => {
           corpUpdates.push(update);
           const receipts = (corpRow.productVentureDebitsV1 ?? {}) as Record<string, any>;
@@ -183,6 +185,42 @@ describe("processProductVentures", () => {
     await processProductVentures(ctx.args(101));
     expect(ctx.corpRow.liquidCapital).toBeCloseTo(500_000);
     expect(ctx.store.get("v1")!.stage).toBe("cancelled");
+  });
+
+  it("cancel refunds an unapplied debit once, racing the turn refund", async () => {
+    const ctx = setup(400_000, [venture()]);
+    ctx.corpRow.productVentureDebitsV1 = {
+      v1: {
+        turn: 101,
+        amountAnchor: 100_000,
+        investmentAnchor: 100_000,
+        chargeAnchor: 0,
+        localAmount: 100_000,
+      },
+    };
+    const db = ctx.args(101).db;
+    const first = await settleCancelledVentureReceipt(db, corpId, "v1", 100);
+    const second = await settleCancelledVentureReceipt(db, corpId, "v1", 100);
+    expect(first).toBe(true);
+    expect(second).toBe(false);
+    expect(ctx.corpRow.liquidCapital).toBe(500_000);
+  });
+
+  it("cancel never refunds a debit whose turn was already applied", async () => {
+    const ctx = setup(400_000, [venture()]);
+    ctx.corpRow.productVentureDebitsV1 = {
+      v1: {
+        turn: 101,
+        amountAnchor: 100_000,
+        investmentAnchor: 100_000,
+        chargeAnchor: 0,
+        localAmount: 100_000,
+      },
+    };
+    const refunded = await settleCancelledVentureReceipt(ctx.args(101).db, corpId, "v1", 101);
+    expect(refunded).toBe(false);
+    expect(ctx.corpRow.liquidCapital).toBe(400_000);
+    expect(ctx.corpRow.productVentureDebitsV1).toEqual({});
   });
 
   it("sends the CEO a notification when a decision opens", async () => {

@@ -9,6 +9,7 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { applyEventChoice, clampFundingPerTurn } from "@/lib/products/venture/engine";
+import { settleCancelledVentureReceipt } from "@/lib/products/venture/refund";
 import { PRODUCT_VENTURES, ventureDocument } from "@/lib/products/venture/store";
 import type { ProductVenture } from "@/lib/products/venture/types";
 
@@ -84,7 +85,15 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       if (result.matchedCount !== 1) {
         return errorResponse(409, "The turn just processed. Try again.");
       }
-      return NextResponse.json({ ok: true }, { headers: noStore });
+      // A turn that debited just before this cancel but never applied its step
+      // would otherwise keep the money. The receipt gates a single refund.
+      const refunded = await settleCancelledVentureReceipt(
+        db,
+        corporation._id,
+        venture._id,
+        venture.lastProcessedTurn
+      );
+      return NextResponse.json({ ok: true, refunded }, { headers: noStore });
     }
 
     const turn = await getCurrentTurn(db);
