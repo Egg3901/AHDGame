@@ -152,6 +152,8 @@ export default function BuildCapacityDialog({
     0,
     Math.min(plants.headroomUnits, plants.measuredDemandGapUnits ?? 0)
   );
+  // A profitable observed extraction pace cannot be scaled beyond finite deposits.
+  const resourceSizingUnavailable = sectorType === "extraction";
   const sizing = recommendSectorExpansion({
     unitsPerFacility,
     measuredDemandUnits: plants.measuredDemandGapUnits ?? null,
@@ -161,6 +163,7 @@ export default function BuildCapacityDialog({
     cashAnchor: q.corpCapitalAnchor,
     operatingReserveAnchor: plants.investment?.operatingReserveAnchor ?? null,
     constrained:
+      resourceSizingUnavailable ||
       plants.mothballed ||
       (plants.activeCapacityPercent ?? 100) < 100 ||
       plants.roomHeldByOwnIdle === true ||
@@ -289,21 +292,27 @@ export default function BuildCapacityDialog({
               <button
                 type="button"
                 onClick={() => commitCount(sizing.demandFacilities)}
-                disabled={automaticSizingBlocked || sizing.demandFacilities < 1}
+                disabled={
+                  resourceSizingUnavailable || automaticSizingBlocked || sizing.demandFacilities < 1
+                }
                 className="rounded-lg border border-card-border px-3 py-2 text-body-xs font-semibold text-foreground hover:bg-card-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"
               >
                 {t("matchDemand", {
-                  count: Math.min(MAX_FACILITIES, sizing.demandFacilities),
+                  count: resourceSizingUnavailable
+                    ? 0
+                    : Math.min(MAX_FACILITIES, sizing.demandFacilities),
                 })}
               </button>
             )}
           </div>
           <p className="mt-2 text-body-xs text-muted">
-            {automaticSizingBlocked
-              ? t("sizingFinance")
-              : sizing.reason
-                ? t(`sizingReasons.${sizing.reason}`)
-                : t("sizingReserve", { amount: money(sizing.reserveAnchor ?? 0) })}
+            {resourceSizingUnavailable
+              ? t("sizingResources")
+              : automaticSizingBlocked
+                ? t("sizingFinance")
+                : sizing.reason
+                  ? t(`sizingReasons.${sizing.reason}`)
+                  : t("sizingReserve", { amount: money(sizing.reserveAnchor ?? 0) })}
           </p>
           <p id="build-count-help" className="mt-2 text-body-xs text-muted">
             {t("quantityHelp")}

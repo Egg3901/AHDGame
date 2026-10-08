@@ -161,6 +161,7 @@
       "loanStartsAfterApproval": "The build starts after the lender approves and delivers funding.",
       "sizingReserve": "Keeps at least {amount} for company running costs, plus one turn of costs for the new capacity. Checks lower sale prices and higher input costs; uses current measured demand after queued builds.",
       "sizingFinance": "Automatic sizing uses a cash budget. Review loan repayments and choose the financed quantity manually.",
+      "sizingResources": "Automatic sizing for extraction needs deposit headroom, which this forecast does not model. Check resource availability and choose the quantity manually.",
       "measuredDemandTitle": "Buyer demand unavailable",
       "measuredDemandUnavailable": "Measured demand for every output is unavailable. Choose a quantity manually after checking the market.",
       "sizingReasons": {

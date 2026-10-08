@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import BuildCapacityDialog from "./BuildCapacityDialog";
 import type { PlantsData } from "../types";
 import { plantSizeUnits } from "@/lib/constants/facilityQuantum";
+import type { CorporationType } from "@/lib/constants/corporations";
 
 vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({
@@ -58,13 +59,17 @@ const plants = {
   },
 } as unknown as PlantsData;
 
-function renderDialog(onSubmit = vi.fn(), plantData = plants) {
+function renderDialog(
+  onSubmit = vi.fn(),
+  plantData = plants,
+  sectorType: CorporationType = "manufacturing"
+) {
   render(
     <BuildCapacityDialog
       open
       onClose={vi.fn()}
       plants={plantData}
-      sectorType="manufacturing"
+      sectorType={sectorType}
       sectorLabel="Manufacturing"
       submitting={false}
       errorMessage=""
@@ -139,6 +144,14 @@ describe("BuildCapacityDialog count control", () => {
     expect(
       screen.getByText(/Expansion does not produce positive cash when sale prices fall/)
     ).toBeTruthy();
+  });
+
+  it("does not scale an extraction plant without deposit headroom", () => {
+    renderDialog(vi.fn(), plants, "extraction");
+    expect(
+      (screen.getByRole("button", { name: "Match demand" }) as HTMLButtonElement).disabled
+    ).toBe(true);
+    expect(screen.getByText(/Automatic sizing for extraction needs deposit headroom/)).toBeTruthy();
   });
 
   it("keeps a funded build disabled until the loan pledge is reviewed", async () => {
