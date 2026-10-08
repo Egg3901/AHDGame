@@ -450,7 +450,13 @@ async function runFundCron(db: Db, options?: IndexFundCronOptions): Promise<Fund
   for (const fund of funds) {
     // Bond funds hold no equities: nothing to select or rebalance here.
     if (fund.kind === "bond") continue;
-    if (!shouldRebalanceIndexFundConstituents(currentTurn, fund.targetConstituents.length)) {
+    if (
+      !shouldRebalanceIndexFundConstituents(
+        currentTurn,
+        fund.targetConstituents.length,
+        fund._id.toString()
+      )
+    ) {
       continue;
     }
 
