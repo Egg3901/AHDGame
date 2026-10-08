@@ -28,6 +28,25 @@ function stubFetch(agreements: Agreement[]) {
         method,
         body: init?.body ? JSON.parse(init.body as string) : undefined,
       });
+      if (method === "GET" && url.endsWith("/suppliers")) {
+        return {
+          ok: true,
+          json: async () => ({
+            buyerMarketingPerTurnAnchor: 1000,
+            liquidCurrencyCode: null,
+            suppliers: [
+              {
+                id: "supplier-id",
+                name: "Media Co",
+                ticker: "MED",
+                mediaSectorCount: 3,
+                stateCount: 2,
+                models: ["Newspaper"],
+              },
+            ],
+          }),
+        };
+      }
       if (method === "GET") {
         return { ok: true, json: async () => ({ agreements }) };
       }
@@ -60,20 +79,21 @@ describe("AdvertisingAgreementsPanel", () => {
     expect(screen.getByText(/effective value 130/i)).toBeTruthy();
   });
 
-  it("proposes an agreement through the corporation route", async () => {
+  it("lets a buyer pick a media corporation from a list and see a preview", async () => {
     const calls = stubFetch([]);
     render(<AdvertisingAgreementsPanel corpId="corp1" />);
-    await screen.findByText(/coverage advertising/i);
-
-    fireEvent.change(screen.getByLabelText("Advertising supplier corporation ID"), {
-      target: { value: "supplier-id" },
-    });
-    fireEvent.change(screen.getByLabelText("Marketing budget share percent"), {
+    const picker = (await screen.findByLabelText("Media corporation")) as HTMLSelectElement;
+    await waitFor(() => expect(picker.value).toBe("supplier-id"));
+    expect(screen.queryByPlaceholderText(/corporation id/i)).toBeNull();
+    fireEvent.change(screen.getByLabelText("Share of your marketing budget (%)"), {
       target: { value: "25" },
     });
-    fireEvent.change(screen.getByLabelText("Agreement duration turns"), {
+    fireEvent.change(screen.getByLabelText("Length of agreement (turns)"), {
       target: { value: "12" },
     });
+    expect(screen.getByLabelText("Agreement preview").textContent).toMatch(
+      /25% of your marketing budget/
+    );
     fireEvent.click(screen.getByRole("button", { name: "Propose agreement" }));
 
     await waitFor(() => expect(calls.some((call) => call.method === "POST")).toBe(true));
@@ -87,6 +107,22 @@ describe("AdvertisingAgreementsPanel", () => {
     expect(await screen.findByText("Advertising proposal sent")).toBeTruthy();
   });
 
+  it("shows a media corporation its incoming deals instead of the buyer form", async () => {
+    stubFetch([
+      {
+        id: "ad1",
+        role: "supplier",
+        status: "pending",
+        allocationShareBps: 2500,
+        counterparty: { id: "buyer", name: "Buyer Co" },
+      },
+    ]);
+    render(<AdvertisingAgreementsPanel corpId="corp1" ownsMediaSector />);
+    expect(await screen.findByText("Buyer Co")).toBeTruthy();
+    expect(screen.queryByLabelText("Media corporation")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Propose agreement" })).toBeNull();
+  });
+
   it("accepts a pending agreement as the supplier", async () => {
     const calls = stubFetch([
       {
@@ -97,7 +133,7 @@ describe("AdvertisingAgreementsPanel", () => {
         counterparty: { id: "buyer", name: "Buyer Co" },
       },
     ]);
-    render(<AdvertisingAgreementsPanel corpId="corp1" />);
+    render(<AdvertisingAgreementsPanel corpId="corp1" ownsMediaSector />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Accept" }));
 
@@ -168,7 +204,7 @@ describe("AdvertisingAgreementsPanel", () => {
         return { ok: false, json: async () => ({ error: "allocation_exceeds_budget" }) };
       })
     );
-    render(<AdvertisingAgreementsPanel corpId="corp1" />);
+    render(<AdvertisingAgreementsPanel corpId="corp1" ownsMediaSector />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Accept" }));
     expect(await screen.findByText("allocation_exceeds_budget")).toBeTruthy();
