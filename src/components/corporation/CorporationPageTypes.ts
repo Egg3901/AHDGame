@@ -489,6 +489,8 @@ export interface CEO {
 }
 
 export interface Financials {
+  /** CEO-only cash balances, not daily income figures. */
+  arrears?: { turn: number; paidLastTurn: number; remaining: number };
   totalRevenue: number;
   /** Sector maintenance, shown NET of labour when the labour system is on. */
   maintenanceCosts: number;
