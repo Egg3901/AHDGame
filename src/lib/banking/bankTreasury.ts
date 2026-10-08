@@ -489,11 +489,22 @@ function settledInventoryProjections(
       {
         collection: "bonds",
         filter: { _id: oid(receipt.bondId.toHexString()) },
+        // Two writes: MongoDB refuses one update that both pulls from and
+        // pushes to `holders`, so the reservation leaves first and the
+        // settled lot follows under its own receipt.
         update: {
           $pull: { holders: { bankTreasuryTradeId: receipt._id } },
           ...(receipt.primary
             ? { $inc: { totalIssued: receipt.units * BOND_UNIT_FACE_VALUE } }
             : {}),
+          $set: { updatedAt: receipt.updatedAt },
+        },
+        note: "Activate the reserved bank bond units after cash settles",
+      },
+      {
+        collection: "bonds",
+        filter: { _id: oid(receipt.bondId.toHexString()) },
+        update: {
           $push: {
             holders: {
               bankId: receipt.bankId,
@@ -503,9 +514,8 @@ function settledInventoryProjections(
               avgCostPerUnit: receipt.pricePerUnitLocal,
             },
           },
-          $set: { updatedAt: receipt.updatedAt },
         },
-        note: "Activate the reserved bank bond units after cash settles",
+        note: "Add the settled bank bond lot",
       },
     ];
   }
