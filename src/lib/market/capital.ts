@@ -34,6 +34,15 @@ export const CAPITAL_DEPRECIATION_PER_TURN = 0.0005;
 export const CAPITAL_BOOK_ANCHOR_MAX_NPV_MULTIPLE = 5;
 
 /**
+ * Share of the gap between the anchor and current NPV closed each turn while NPV
+ * sits below the anchor. A stale peak fades geometrically (~86% gone after one
+ * 48-turn year) instead of waiting on the 5x cap or the slow depreciation, so
+ * market cap converges onto what current profit supports. See
+ * {@link advanceCapitalBookAnchor}.
+ */
+export const CAPITAL_BOOK_ANCHOR_CONVERGENCE_PER_TURN = 0.04;
+
+/**
  * Launch-safety governor for the clearing/capital revenue leg.
  *
  * Big corps run on thin net margins (~0.5% of revenue), so even a few-percent
@@ -71,18 +80,33 @@ export const MARKET_REALIZATION_RAMP_TURNS = 240;
  * legitimate, carrying a book many times current earnings for ever is a ghost.
  * Above the cap the anchor snaps down to reality; a genuine recovery re-ratchets
  * it up with NPV.
+ *
+ * The 5x cap still left anchors up to 5x current NPV standing indefinitely (~25%
+ * of prod market cap was not backed by current profit). So below NPV the anchor
+ * also converges: each turn it closes a fixed share of its gap to current NPV
+ * (`convergencePerTurn`), taking whichever of that and depreciation is lower. A
+ * transient dip is still smoothed over several turns; a stale peak fades over a
+ * year. Rising NPV re-ratchets instantly, and the lower anchor feeds the share
+ * price through the existing per-turn price cap, so no price jump results.
  */
 export function advanceCapitalBookAnchor(args: {
   prevAnchor: number | null | undefined;
   sectorNPV: number;
   depreciationPerTurn?: number;
+  convergencePerTurn?: number;
 }): number {
-  const { prevAnchor, sectorNPV, depreciationPerTurn = CAPITAL_DEPRECIATION_PER_TURN } = args;
+  const {
+    prevAnchor,
+    sectorNPV,
+    depreciationPerTurn = CAPITAL_DEPRECIATION_PER_TURN,
+    convergencePerTurn = CAPITAL_BOOK_ANCHOR_CONVERGENCE_PER_TURN,
+  } = args;
   const npv = Number.isFinite(sectorNPV) && sectorNPV > 0 ? sectorNPV : 0;
   // First exposure: seed at the current NPV → floor is a no-op on the flip turn.
   if (!(typeof prevAnchor === "number" && prevAnchor > 0)) return npv;
   const decayed = prevAnchor * (1 - Math.max(0, depreciationPerTurn));
-  const smoothed = Math.max(npv, decayed);
+  const converged = npv + (prevAnchor - npv) * (1 - Math.min(1, Math.max(0, convergencePerTurn)));
+  const smoothed = Math.max(npv, Math.min(decayed, converged));
   // Bound the going-concern floor to a multiple of current NPV. A dip to a fifth
   // of peak earnings is already severe; below that the sector is impaired, not
   // dipping, and must not keep a book that reads as many times its own earnings.
