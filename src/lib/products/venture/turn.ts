@@ -206,6 +206,22 @@ export async function processProductVentures(
       }
     }
 
+    const corpSectors = args.sectorsByCorp.get(venture.corporationId) ?? [];
+    const liftedNow = new Set(
+      liftedSectorIds({
+        domain: venture.domain,
+        lineId: venture.lineId,
+        corporationId: venture.corporationId,
+        sectors: corpSectors.map(ventureSector),
+      })
+    );
+    const liftedRevenueAnchor = corpSectors
+      .filter((sector) => liftedNow.has(sector._id.toString()))
+      .reduce(
+        (sum, sector) => sum + sectorTurnRevenueAnchor(sector, corp, args.exchangeRatesByCurrency),
+        0
+      );
+
     let step: ReturnType<typeof advanceDevelopment> = null;
     let current: ProductVenture | null = venture;
     for (let attempt = 0; attempt < 3 && current; attempt++) {
@@ -214,6 +230,7 @@ export async function processProductVentures(
         investmentPaidAnchor: investmentAnchor,
         chargePaidAnchor: chargeAnchor,
         averageQuality: corp.averageQuality,
+        liftedRevenueAnchor,
       });
       if (!candidate) break;
       const write = await collection.replaceOne(

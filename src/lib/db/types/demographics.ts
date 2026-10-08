@@ -130,4 +130,18 @@ export interface StateDemographics {
   layer1PositionOverrides?: Layer1PositionOverlay;
   /** See {@link Layer1TurnoutOverlay} and `layer1PositionOverrides` above — same two-doc split. */
   layer1TurnoutOverrides?: Layer1TurnoutOverlay;
+  /**
+   * Last newsroom slant pull applied to this state's electorate (see
+   * `mediaEditorial/opinionPull.ts`). `turn` is the idempotency watermark;
+   * `economic` and `social` are the per-turn steps just applied; `slant*` and
+   * `strength` describe the local newsrooms. Live doc only.
+   */
+  mediaOpinionPull?: {
+    turn: number;
+    economic: number;
+    social: number;
+    slantEconomic?: number;
+    slantSocial?: number;
+    strength: number;
+  };
 }

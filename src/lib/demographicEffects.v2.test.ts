@@ -923,6 +923,8 @@ function createPersistingFakeDb(fixtures: {
           bulkWrite: async () => ({}),
         };
       }
+      // Media editorial flag lives here; absent means off.
+      if (name === "gameConfig") return { findOne: async () => null };
       return makeCollection(name as keyof typeof stores);
     },
   } as unknown as Db;

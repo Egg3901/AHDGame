@@ -115,6 +115,7 @@ import { applyMediaEditorialEffects } from "@/lib/mediaEditorial/applyEffects";
 import { addSettledPoliticalAttention } from "@/lib/mediaOperatingModels/reach";
 import { applyOperatingCashThenDevelopmentCash } from "./manufacturingDevelopmentCashSettlement";
 import { loadVentureBoostBySectorId, processProductVentures } from "@/lib/products/venture/turn";
+import { ventureDomainsEnabled } from "@/lib/products/venture/access";
 import { resumeFoundingUnderwritingPlans } from "@/lib/banking/underwritingSettlement";
 import {
   processMediaProductProjectsV1,
@@ -304,14 +305,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     }
   }
   // Product ventures reuse the existing product flags: media titles follow the
-  // slates flag, manufactured lines follow product lines v2.
-  const productVentureDomainsEnabled = {
-    media: marketGovernorConfig?.mediaProductSlatesEnabled === true,
-    manufacturing:
-      plantsEnabledForMarketShare &&
-      (marketGovernorConfig as { productLinesV2Enabled?: boolean } | null)
-        ?.productLinesV2Enabled === true,
-  };
+  // slates flag, manufactured lines follow product lines v2. Read through the same helper the venture routes use. The governor
+  // projection above does not carry mediaProductSlatesEnabled, so reading it
+  // from there left every media venture unprocessed while players could start
+  // them.
+  const productVentureDomainsEnabled = await ventureDomainsEnabled(db);
   if (productVentureDomainsEnabled.media || productVentureDomainsEnabled.manufacturing) {
     lookups.productVentureBoostBySectorId = await loadVentureBoostBySectorId(db, {
       turn: turn ?? 1,
