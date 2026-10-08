@@ -81,9 +81,10 @@ export function CountySection({ electionId, stateId, turn, candidate }: CountySe
     return () => controller.abort();
   }, [cacheKey, electionId, stateId]);
 
+  const readyData = load.status === "ready" ? load.data : null;
   const rows = useMemo(
-    () => (load.status === "ready" ? buildCountyRows(load.data, candidate) : []),
-    [load, candidate]
+    () => (readyData ? buildCountyRows(readyData, candidate) : []),
+    [readyData, candidate]
   );
   const sorted = useMemo(() => sortCountyRows(rows, sort.key, sort.dir), [rows, sort]);
 

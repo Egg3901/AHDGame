@@ -235,7 +235,10 @@ export function PresidentialMap({ model, electionId, countryId, turn }: Presiden
           canZoomIn={pz.view.k < MAX_ZOOM}
           canZoomOut={pz.view.k > MIN_ZOOM}
           atRest={atRest}
-          onToggle={() => setUnlocked((u) => !u)}
+          onToggle={() => {
+            if (unlocked) pz.reset();
+            setUnlocked(!unlocked);
+          }}
           onZoom={pz.zoomBy}
           onReset={pz.reset}
         />

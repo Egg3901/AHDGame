@@ -28,11 +28,6 @@ export function usePanZoom({ svgRef, enabled, scale, width, height }: Options) {
   const gesture = useRef({ startX: 0, startY: 0, moved: false, pinch: 0 });
   const dragged = useRef(false);
 
-  // A locked map always shows the whole country.
-  useEffect(() => {
-    if (!enabled) setView(IDENTITY_VIEW);
-  }, [enabled]);
-
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg || !enabled) return;
@@ -125,7 +120,8 @@ export function usePanZoom({ svgRef, enabled, scale, width, height }: Options) {
   const reset = useCallback(() => setView(IDENTITY_VIEW), []);
 
   return {
-    view,
+    // A locked map always shows the whole country.
+    view: enabled ? view : IDENTITY_VIEW,
     dragging,
     zoomBy,
     reset,
