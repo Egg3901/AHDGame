@@ -51,6 +51,178 @@ describe("validateBillProvisions: reset version isolation", () => {
     expect(result).toMatchObject({ ok: false, status: 409 });
     if (!result.ok) expect(result.error).toMatch(/only reviewed legislation v2/i);
   });
+
+  it("rejects a null reviewed provision without throwing", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      resetWorldId: "world-1",
+      metricsSystemVersion: "v2",
+      legislationSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "world-1",
+          revision: 3,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "metrics",
+        },
+        legislation: {
+          worldId: "world-1",
+          revision: 6,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "legislation",
+        },
+      },
+    });
+
+    const result = await validateBillProvisions(db as unknown as Db, [null], "custom", "JP");
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      error: "Each provision must have a legislation type.",
+    });
+  });
+
+  it("accepts an exact-rate JP tax from the reviewed v2 tax catalog", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      resetWorldId: "world-1",
+      metricsSystemVersion: "v2",
+      legislationSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "world-1",
+          revision: 3,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "metrics",
+        },
+        legislation: {
+          worldId: "world-1",
+          revision: 6,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "legislation",
+        },
+      },
+    });
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "jp_foreign_corporation_tax",
+          name: "Foreign Corporation Tax Act",
+          countryScope: "jp",
+          policyDomain: "tax",
+          taxRateChange: { scope: "federal", taxType: "foreignCorporateTax" },
+          policyOptions: [
+            { id: "zero", name: "0%", rate: 0 },
+            { id: "maximum", name: "65%", rate: 65 },
+          ],
+        },
+      ],
+    });
+    db.collection("federalBudget");
+    db.collectionMocks.federalBudget.findOne.mockResolvedValue({
+      _id: "JP",
+      taxRates: { foreignCorporateTax: 23 },
+    });
+
+    const result = await validateBillProvisions(
+      db as unknown as Db,
+      [
+        {
+          legislationTypeId: "jp_foreign_corporation_tax",
+          proposedRate: 27.25,
+          effectDirection: 0,
+        },
+      ],
+      "tax",
+      "JP"
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.policyProvisions).toEqual([
+        expect.objectContaining({
+          legislationTypeId: "jp_foreign_corporation_tax",
+          proposedRate: 27.25,
+          policyOptionId: "rate:27.25",
+          currentPolicyOptionNameSnapshot: "Rate: 23%",
+          policyOptionNameSnapshot: "Rate: 27.25%",
+        }),
+      ]);
+    }
+  });
+
+  it("rejects the same reviewed tax instrument twice in one bill", async () => {
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      resetWorldId: "world-1",
+      metricsSystemVersion: "v2",
+      legislationSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "world-1",
+          revision: 3,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "metrics",
+        },
+        legislation: {
+          worldId: "world-1",
+          revision: 6,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "legislation",
+        },
+      },
+    });
+    db.collectionMocks.legislationTypes.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: "jp_foreign_corporation_tax",
+          name: "Foreign Corporation Tax Act",
+          countryScope: "jp",
+          policyDomain: "tax",
+          taxRateChange: { scope: "federal", taxType: "foreignCorporateTax" },
+          policyOptions: [
+            { id: "zero", name: "0%", rate: 0 },
+            { id: "maximum", name: "65%", rate: 65 },
+          ],
+        },
+      ],
+    });
+    db.collection("federalBudget").findOne.mockResolvedValue({
+      _id: "JP",
+      taxRates: { foreignCorporateTax: 23 },
+    });
+
+    const result = await validateBillProvisions(
+      db as unknown as Db,
+      [
+        {
+          legislationTypeId: "jp_foreign_corporation_tax",
+          proposedRate: 27.25,
+          effectDirection: 0,
+        },
+        {
+          legislationTypeId: "jp_foreign_corporation_tax",
+          proposedRate: 28,
+          effectDirection: 0,
+        },
+      ],
+      "tax",
+      "JP"
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      error: "A v2 bill cannot repeat a tax instrument.",
+    });
+  });
 });
 
 describe("validateBillProvisions — embargo", () => {

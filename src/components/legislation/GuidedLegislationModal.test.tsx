@@ -111,7 +111,7 @@ const metricBoard = {
   ],
 };
 
-function stubCatalog(response: unknown = catalog) {
+function stubCatalog(response: unknown = catalog, legislationTypes: unknown[] = []) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
@@ -123,27 +123,27 @@ function stubCatalog(response: unknown = catalog) {
             ? response
             : url.includes("reset-metrics")
               ? metricBoard
-              : [],
+              : legislationTypes,
       };
     })
   );
 }
 
-function renderModal(onSuccess = vi.fn()) {
+function renderModal(onSuccess = vi.fn(), countryId: "US" | "JP" = "US", onClose = vi.fn()) {
   render(
     <GuidedLegislationModal
-      countryId="US"
+      countryId={countryId}
       endpoint="/api/congress/bills"
       chambers={[
         { value: "house", label: "House" },
         { value: "senate", label: "Senate" },
       ]}
       initialChamber="house"
-      onClose={vi.fn()}
+      onClose={onClose}
       onSuccess={onSuccess}
     />
   );
-  return { onSuccess };
+  return { onClose, onSuccess };
 }
 
 async function addProvision(domain: string, family: string, option: string) {
@@ -272,5 +272,148 @@ describe("GuidedLegislationModal", () => {
     });
     expect(mocks.showToast).toHaveBeenCalledWith("Bill proposed.", "success");
     expect(onSuccess).toHaveBeenCalledOnce();
+  });
+
+  it("returns to the existing bill from every provision step without losing the draft", async () => {
+    stubCatalog();
+    const { onClose } = renderModal();
+
+    await addProvision("Health and care", "Primary care access", "Community clinic expansion");
+    fireEvent.change(screen.getByLabelText("Bill title"), {
+      target: { value: "Community Care Act" },
+    });
+    fireEvent.change(screen.getByLabelText("Summary"), {
+      target: { value: "Expands access to community clinics." },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add another provision" }));
+    expect(screen.getByRole("button", { name: "Back to bill" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Policy domain"), {
+      target: { value: "Education and skills" },
+    });
+    expect(screen.getByRole("button", { name: "Back to bill" })).toBeTruthy();
+    fireEvent.click(screen.getByText("School access").closest("button")!);
+    expect(screen.getByRole("button", { name: "Back to bill" })).toBeTruthy();
+    fireEvent.click(screen.getByText("Portable school support").closest("button")!);
+    expect(screen.getByRole("button", { name: "Back to bill" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Bill overview" }));
+    expect(screen.getByRole("heading", { name: "Bill overview" })).toBeTruthy();
+    expect((screen.getByLabelText("Bill title") as HTMLInputElement).value).toBe(
+      "Community Care Act"
+    );
+    expect((screen.getByLabelText("Summary") as HTMLTextAreaElement).value).toBe(
+      "Expands access to community clinics."
+    );
+    expect(screen.getByText("Community clinic expansion")).toBeTruthy();
+    expect(screen.queryByText("Portable school support")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add another provision" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to bill" }));
+    expect(screen.getByRole("heading", { name: "Bill overview" })).toBeTruthy();
+    expect(screen.getByText("Community clinic expansion")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add another provision" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByRole("heading", { name: "Bill overview" })).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("closes on Escape when no bill draft exists", async () => {
+    stubCatalog();
+    const { onClose } = renderModal();
+    await screen.findByLabelText("Policy domain");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("renders and submits a JP foreign-corporate exact-rate provision", async () => {
+    stubCatalog(
+      {
+        ...catalog,
+        families: [],
+        metrics: [],
+        taxes: [
+          {
+            id: "T03",
+            title: "Foreign corporate tax",
+            existingLegislationTypeId: "jp_foreign_corporation_tax",
+          },
+        ],
+      },
+      [
+        {
+          _id: "jp_foreign_corporation_tax",
+          name: "Foreign Corporation Tax Act",
+          taxSliderEstimate: {
+            minRate: 0,
+            maxRate: 65,
+            step: 0.01,
+            currentRate: 23,
+          },
+        },
+      ]
+    );
+    mocks.postBill.mockResolvedValue({ response: { ok: true }, data: {}, cancelled: false });
+    renderModal(vi.fn(), "JP");
+
+    fireEvent.change(await screen.findByLabelText("Policy domain"), {
+      target: { value: "Taxes" },
+    });
+    fireEvent.click(screen.getByText("Foreign corporate tax").closest("button")!);
+    fireEvent.change(screen.getByLabelText(/Proposed/), { target: { value: "" } });
+    expect(screen.getByRole("button", { name: "Review" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.change(screen.getByLabelText(/Proposed/), { target: { value: "27.25" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+
+    expect(screen.getByText(/Current rate 23%/).textContent).toContain("27.25%");
+    fireEvent.click(screen.getByRole("button", { name: "Add to draft bill" }));
+    fireEvent.change(screen.getByLabelText("Bill title"), {
+      target: { value: "Foreign Enterprise Revenue Act" },
+    });
+    fireEvent.change(screen.getByLabelText("Summary"), {
+      target: { value: "Adjusts the statutory rate on foreign corporate profits." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Propose bill" }));
+
+    await waitFor(() => expect(mocks.postBill).toHaveBeenCalledOnce());
+    expect(mocks.postBill).toHaveBeenCalledWith({
+      url: "/api/congress/bills",
+      body: {
+        title: "Foreign Enterprise Revenue Act",
+        summary: "Adjusts the statutory rate on foreign corporate profits.",
+        chamber: "house",
+        category: "tax",
+        provisions: [
+          {
+            legislationTypeId: "jp_foreign_corporation_tax",
+            proposedRate: 27.25,
+            effectDirection: 0,
+          },
+        ],
+      },
+    });
+  });
+
+  it("does not offer tax instruments that lack exact-rate metadata", async () => {
+    stubCatalog({
+      ...catalog,
+      families: [],
+      metrics: [],
+      taxes: [
+        {
+          id: "T03",
+          title: "Foreign corporate tax",
+          existingLegislationTypeId: "jp_foreign_corporation_tax",
+        },
+      ],
+    });
+    renderModal(vi.fn(), "JP");
+
+    const domain = await screen.findByLabelText("Policy domain");
+    expect(screen.queryByRole("option", { name: "Taxes" })).toBeNull();
+    expect(domain).toBeTruthy();
   });
 });

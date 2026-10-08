@@ -189,12 +189,14 @@ export function GuidedLegislationModal({
   const [selectedFamilyId, setSelectedFamilyId] = useState("");
   const [selectedChoice, setSelectedChoice] = useState<LawChoice | "">("");
   const [selectedTaxId, setSelectedTaxId] = useState("");
-  const [taxRate, setTaxRate] = useState(0);
+  const [taxRate, setTaxRate] = useState<number | "">("");
   const [draft, setDraft] = useState<DraftProvision[]>([]);
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [chamber, setChamber] = useState(initialChamber);
   const [submitting, setSubmitting] = useState(false);
+  const hasStartedBill = draft.length > 0 || Boolean(title.trim()) || Boolean(summary.trim());
+  const canReturnToBill = hasStartedBill && step !== "overview";
 
   useEffect(() => {
     let cancelled = false;
@@ -210,7 +212,7 @@ export function GuidedLegislationModal({
         return body;
       }),
       fetch(
-        `/api/game/legislation-types?scope=${scope === "regional" ? "state" : "national"}&country=${countryId.toLowerCase()}${regionId ? `&regionId=${encodeURIComponent(regionId)}` : ""}&nocache=1`,
+        `/api/game/legislation-types?scope=${scope === "regional" ? "state" : "national"}&country=${countryId.toLowerCase()}${regionId ? `&regionId=${encodeURIComponent(regionId)}` : ""}&nocache=1&exactTax=1`,
         { cache: "no-store" }
       ).then(async (response) => {
         if (!response.ok) throw new Error("The tax catalog is unavailable");
@@ -245,16 +247,31 @@ export function GuidedLegislationModal({
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      if (canReturnToBill) {
+        setStep("overview");
+        return;
+      }
+      onClose();
     };
     document.addEventListener("keydown", key);
     return () => document.removeEventListener("keydown", key);
-  }, [onClose]);
+  }, [canReturnToBill, onClose]);
 
-  const domains = useMemo(
-    () => [...new Set(catalog?.families.map((family) => family.domain) ?? [])].sort(),
-    [catalog]
+  const availableTaxes = useMemo(
+    () =>
+      (catalog?.taxes ?? []).filter((candidate) =>
+        legacyTaxes.some(
+          (type) =>
+            type._id === candidate.existingLegislationTypeId && Boolean(type.taxSliderEstimate)
+        )
+      ),
+    [catalog, legacyTaxes]
   );
+  const domains = useMemo(() => {
+    const values = [...new Set(catalog?.families.map((family) => family.domain) ?? [])].sort();
+    return availableTaxes.length > 0 ? [...values, "Taxes"] : values;
+  }, [availableTaxes.length, catalog]);
   const metrics = useMemo(() => {
     const usedIds = new Set(catalog?.families.flatMap((family) => family.primaryMetricIds) ?? []);
     const returned = new Map(
@@ -334,6 +351,20 @@ export function GuidedLegislationModal({
   const option = family?.options.find((candidate) => candidate.option.choice === selectedChoice);
   const tax = catalog?.taxes.find((candidate) => candidate.id === selectedTaxId);
   const taxType = legacyTaxes.find((candidate) => candidate._id === tax?.existingLegislationTypeId);
+  const taxEstimate = taxType?.taxSliderEstimate;
+  const taxRateValid =
+    taxEstimate != null &&
+    typeof taxRate === "number" &&
+    Number.isFinite(taxRate) &&
+    taxRate >= taxEstimate.minRate &&
+    taxRate <= taxEstimate.maxRate &&
+    Math.abs(
+      (taxRate - taxEstimate.minRate) / taxEstimate.step -
+        Math.round((taxRate - taxEstimate.minRate) / taxEstimate.step)
+    ) < 1e-7;
+  function returnToBill() {
+    if (hasStartedBill) setStep("overview");
+  }
 
   function beginAnother() {
     setStep("starting");
@@ -363,8 +394,15 @@ export function GuidedLegislationModal({
   }
 
   function addTaxToDraft() {
-    const estimate = taxType?.taxSliderEstimate;
-    if (!tax || !estimate || taxRate === estimate.currentRate) return;
+    const estimate = taxEstimate;
+    if (
+      !tax ||
+      !estimate ||
+      !taxRateValid ||
+      typeof taxRate !== "number" ||
+      taxRate === estimate.currentRate
+    )
+      return;
     const replacesExisting = draft.some(
       (provision) =>
         provision.kind === "tax" &&
@@ -452,21 +490,46 @@ export function GuidedLegislationModal({
               current draft size.
             </p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-xl text-muted">
-            ×
-          </button>
+          <div className="flex items-center gap-3">
+            {canReturnToBill ? (
+              <button
+                type="button"
+                onClick={returnToBill}
+                className="rounded-lg border border-card-border px-3 py-2 text-sm font-medium hover:border-primary hover:text-primary"
+              >
+                Back to bill
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="text-xl text-muted"
+            >
+              ×
+            </button>
+          </div>
         </header>
 
         <div className="border-b border-card-border px-5 py-3">
           <div className="flex flex-wrap gap-2">
-            {steps.map((candidate) => (
-              <span
-                key={candidate.id}
-                className={`rounded px-2 py-1 text-[11px] ${step === candidate.id ? "bg-primary text-white" : "bg-background text-muted"}`}
-              >
-                {candidate.label}
-              </span>
-            ))}
+            {steps.map((candidate) => {
+              const className = `rounded px-2 py-1 text-[11px] ${step === candidate.id ? "bg-primary text-white" : "bg-background text-muted"}`;
+              return candidate.id === "overview" && canReturnToBill ? (
+                <button
+                  key={candidate.id}
+                  type="button"
+                  onClick={returnToBill}
+                  className={`${className} hover:text-primary`}
+                >
+                  {candidate.label}
+                </button>
+              ) : (
+                <span key={candidate.id} className={className}>
+                  {candidate.label}
+                </span>
+              );
+            })}
           </div>
         </div>
 
@@ -525,7 +588,7 @@ export function GuidedLegislationModal({
                         className="mt-2 w-full rounded-lg border border-card-border bg-background px-3 py-2.5 text-sm text-foreground"
                       >
                         <option value="">Select a policy domain</option>
-                        {[...domains, "Taxes"].map((value) => (
+                        {domains.map((value) => (
                           <option key={value} value={value}>
                             {value}
                           </option>
@@ -569,7 +632,7 @@ export function GuidedLegislationModal({
                   <h3 className="font-semibold">Choose a law family</h3>
                   {path === "domain" && domain === "Taxes" ? (
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {catalog.taxes.map((candidate) => (
+                      {availableTaxes.map((candidate) => (
                         <button
                           key={candidate.existingLegislationTypeId}
                           type="button"
@@ -580,7 +643,7 @@ export function GuidedLegislationModal({
                             const type = legacyTaxes.find(
                               (row) => row._id === candidate.existingLegislationTypeId
                             );
-                            setTaxRate(type?.taxSliderEstimate?.currentRate ?? 0);
+                            setTaxRate(type?.taxSliderEstimate?.currentRate ?? "");
                             setStep("level");
                           }}
                           className="rounded-xl border border-card-border bg-background/40 p-4 text-left hover:border-primary"
@@ -707,7 +770,7 @@ export function GuidedLegislationModal({
                 </section>
               ) : null}
 
-              {step === "level" && tax && taxType?.taxSliderEstimate ? (
+              {step === "level" && tax && taxEstimate ? (
                 <section className="space-y-5">
                   <div>
                     <h3 className="font-semibold">{tax.title}</h3>
@@ -720,24 +783,26 @@ export function GuidedLegislationModal({
                     <input
                       type="range"
                       className="w-full"
-                      min={taxType.taxSliderEstimate.minRate}
-                      max={taxType.taxSliderEstimate.maxRate}
-                      step={taxType.taxSliderEstimate.step}
+                      min={taxEstimate.minRate}
+                      max={taxEstimate.maxRate}
+                      step={taxEstimate.step}
                       value={taxRate}
                       onChange={(event) => setTaxRate(Number(event.target.value))}
                     />
                     <div className="mt-3 flex items-center justify-between text-sm">
-                      <span>Current {taxType.taxSliderEstimate.currentRate}%</span>
+                      <span>Current {taxEstimate.currentRate}%</span>
                       <label>
                         Proposed{" "}
                         <input
                           type="number"
                           className="ml-2 w-24 rounded border border-card-border bg-background px-2 py-1"
-                          min={taxType.taxSliderEstimate.minRate}
-                          max={taxType.taxSliderEstimate.maxRate}
-                          step={taxType.taxSliderEstimate.step}
+                          min={taxEstimate.minRate}
+                          max={taxEstimate.maxRate}
+                          step={taxEstimate.step}
                           value={taxRate}
-                          onChange={(event) => setTaxRate(Number(event.target.value))}
+                          onChange={(event) =>
+                            setTaxRate(event.target.value === "" ? "" : Number(event.target.value))
+                          }
                         />
                         %
                       </label>
@@ -753,13 +818,32 @@ export function GuidedLegislationModal({
                     </button>
                     <button
                       type="button"
-                      disabled={taxRate === taxType.taxSliderEstimate.currentRate}
+                      disabled={!taxRateValid || taxRate === taxEstimate.currentRate}
                       onClick={() => setStep("review")}
                       className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                     >
                       Review
                     </button>
                   </div>
+                </section>
+              ) : null}
+
+              {step === "level" && !family && (!tax || !taxEstimate) ? (
+                <section className="space-y-4">
+                  <div
+                    role="alert"
+                    className="rounded-lg border border-error/40 bg-error/10 p-4 text-sm text-error"
+                  >
+                    This policy level is unavailable. Return to the law list and choose another
+                    provision.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setStep("family")}
+                    className="rounded-lg border border-card-border px-4 py-2 text-sm"
+                  >
+                    Back
+                  </button>
                 </section>
               ) : null}
 
@@ -817,12 +901,11 @@ export function GuidedLegislationModal({
                         })}
                       </div>
                     </div>
-                  ) : tax && taxType?.taxSliderEstimate ? (
+                  ) : tax && taxEstimate && taxRateValid ? (
                     <div className="rounded-xl border border-card-border bg-background/40 p-5">
                       <h4 className="font-semibold">{tax.title}</h4>
                       <p className="mt-2 text-sm">
-                        Current rate {taxType.taxSliderEstimate.currentRate}% → proposed rate{" "}
-                        {taxRate}%
+                        Current rate {taxEstimate.currentRate}% → proposed rate {taxRate}%
                       </p>
                     </div>
                   ) : null}
