@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
+import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
+import { priceRealizationFactor } from "@/lib/market/priceRealization";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   computeDemandCappedContractReservations,
@@ -24,7 +26,8 @@ vi.mock("@/lib/notifications", () => ({
 
 const now = new Date("2026-01-01T00:00:00Z");
 const commodity = Object.keys(COMMODITY_BASE_PRICES)[0] as CommodityType;
-const base = COMMODITY_BASE_PRICES[commodity];
+// Settlement prices one turn of a daily-basis volume: base price / TURNS_PER_DAY.
+const base = COMMODITY_BASE_PRICES[commodity] / TURNS_PER_DAY;
 const ratio: ReadonlyMap<CommodityType, number> = new Map([[commodity, 1]]);
 
 const supId = new ObjectId();
@@ -545,7 +548,7 @@ describe("settleSupplyAgreements delivery persistence", () => {
     };
     db.collectionMocks.corporations.find.mockReturnValue(
       createAsyncIterableCursor([
-        { _id: supId, liquidCapital: 10_000 },
+        { _id: supId, liquidCapital: 500 },
         { _id: buyId, liquidCapital: 1_000_000 },
       ])
     );
@@ -583,7 +586,7 @@ describe("settleSupplyAgreements delivery persistence", () => {
         expect.objectContaining({
           updateOne: expect.objectContaining({
             filter: { _id: supId },
-            update: expect.objectContaining({ $inc: { liquidCapital: -10_000 } }),
+            update: expect.objectContaining({ $inc: { liquidCapital: -500 } }),
           }),
         }),
       ])
@@ -909,8 +912,11 @@ describe("computeSupplyAgreementSettlements — shortfall damages (P3b)", () => 
     });
 
     const expected = Math.round(20 * base * CONTRACT_SHORTFALL_PENALTY);
-    expect(r.deltaByCorp.get(S)).toBe(-expected);
-    expect((r.deltaByCorp.get(B) ?? 0) + (r.deltaByCorp.get(buyer2) ?? 0)).toBe(expected);
+    expect(Math.abs((r.deltaByCorp.get(S) ?? 0) + expected)).toBeLessThanOrEqual(1);
+    // Each buyer leg rounds on its own, so legs may differ from the exact figure by 1.
+    expect(
+      Math.abs((r.deltaByCorp.get(B) ?? 0) + (r.deltaByCorp.get(buyer2) ?? 0) - expected)
+    ).toBeLessThanOrEqual(1);
   });
 
   it("treats an explicit zero ceiling as known rather than unclamped", () => {
@@ -1330,7 +1336,7 @@ describe("computeSupplyAgreementSettlements — state-scoped agreements", () => 
       turn: 5,
       now,
     });
-    const expected = Math.round(100 * COMMODITY_BASE_PRICES.freight * 0.2);
+    const expected = Math.round(100 * (COMMODITY_BASE_PRICES.freight / TURNS_PER_DAY) * 0.2);
     expect(inState.settledCount).toBe(1);
     expect(inState.deltaByCorp.get(S)).toBe(expected);
     expect(inState.deliveries[0]?.deliveredUnits).toBeCloseTo(100, 6);
@@ -1369,5 +1375,51 @@ describe("computeSupplyAgreementSettlements — state-scoped agreements", () => 
     });
     expect(r.damages).toHaveLength(1);
     expect(r.damages[0]?.shortfallUnits).toBeCloseTo(60, 6);
+  });
+});
+
+describe("computeSupplyAgreementSettlements: premium sizing", () => {
+  const info = (id: string): SettleCorpInfo | undefined =>
+    id === S
+      ? { _id: supId, name: "Sup", ccy: "USD" as CurrencyCode, fxRate: 1 }
+      : id === B
+        ? { _id: buyId, name: "Buy", ccy: "USD" as CurrencyCode, fxRate: 1 }
+        : undefined;
+  const settle = (priceRatio: number, consumedDaily: number) =>
+    computeSupplyAgreementSettlements({
+      agreements: [
+        { supplierCorpId: S, buyerCorpId: B, commodity, volumeCap: 1000, pricePremium: 0.1 },
+      ],
+      contractSettlementByCorp: new Map([[S, new Map([[commodity, 1000]])]]),
+      buyerDemandByCorpCommodity: new Map([[B, new Map([[commodity, consumedDaily]])]]),
+      eraUnitScale: 1,
+      priceRatioByCommodity: new Map([[commodity, priceRatio]]),
+      corpInfo: info,
+      turn: 5,
+      now,
+    });
+
+  it("settles one turn of the daily-basis volume, not the whole day", () => {
+    const r = settle(1, 200);
+    // 200 units/day consumed => 200 / 24 units' worth this turn at a 10% premium.
+    expect(r.deltaByCorp.get(S)).toBe(Math.round(200 * base * 0.1));
+    expect(r.deltaByCorp.get(S)).toBeLessThan(COMMODITY_BASE_PRICES[commodity] * 200 * 0.1);
+  });
+
+  it("prices off the damped realization factor, not the raw price ratio", () => {
+    const damped = settle(4, 200).deltaByCorp.get(S) ?? 0;
+    const raw = settle(1, 200).deltaByCorp.get(S) ?? 0;
+    // ratio 4 realizes at most PRICE_REALIZATION_MAX (1.5x), never 4x.
+    expect(damped / raw).toBeLessThanOrEqual(1.5 + 1e-6);
+    expect(damped).toBeGreaterThan(raw);
+  });
+
+  it("never lets a premium notional exceed the buyer's real turn spend on the input", () => {
+    const r = settle(3, 200);
+    const buyerSpendAtMarket =
+      (200 * COMMODITY_BASE_PRICES[commodity] * priceRealizationFactor(3)) / TURNS_PER_DAY;
+    expect(Math.abs(r.deltaByCorp.get(S) ?? 0)).toBeLessThanOrEqual(
+      Math.ceil(buyerSpendAtMarket * 0.1)
+    );
   });
 });
