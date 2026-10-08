@@ -8,6 +8,7 @@ import {
   applyGovernmentDemand,
   GOVERNMENT_DEMAND_SUPPLY_CAP,
   governmentSupplyCapFactors,
+  sumHouseholdDemand,
   applyLatentFinancialDemand,
   bondIssuanceAnchor,
   applyRateSensitiveDemand,
@@ -332,7 +333,8 @@ describe("government demand supply cap", () => {
   >;
   const run = (
     prior: Map<CommodityType, number> | undefined,
-    truncated = new Map<CommodityType, number>()
+    truncated = new Map<CommodityType, number>(),
+    householdDemand?: Map<CommodityType, number>
   ) => {
     const { global, byState } = blankLedgers();
     const byCountry = aggregateByCountry(byState, new Map());
@@ -355,6 +357,7 @@ describe("government demand supply cap", () => {
           ["u1", "UK"],
         ]),
         priorGlobalSupply: prior,
+        householdDemand,
       },
       global,
       byCountry,
@@ -375,6 +378,48 @@ describe("government demand supply cap", () => {
     const uk = byCountry.get("UK")!.get("healthcare_services")!.demand;
     expect(us / uk).toBeCloseTo(3, 9);
     expect(truncated.get("healthcare_services")).toBeCloseTo(uncapped - capped, 6);
+  });
+
+  it("shares the ceiling with household demand instead of stacking a second one", () => {
+    const uncapped = run(undefined).global.get("healthcare_services")!.demand;
+    const supply = uncapped / 10;
+    const ceiling = supply * GOVERNMENT_DEMAND_SUPPLY_CAP;
+    // Households already sit at the ceiling: nothing is left for government.
+    const full = run(
+      new Map([["healthcare_services", supply]]),
+      new Map(),
+      new Map([["healthcare_services", ceiling]])
+    );
+    expect(full.global.get("healthcare_services")!.demand).toBe(0);
+    expect(full.truncated.get("healthcare_services")).toBeCloseTo(uncapped, 6);
+
+    // Households take a third of it: government gets the remaining two thirds.
+    const shared = run(
+      new Map([["healthcare_services", supply]]),
+      new Map(),
+      new Map([["healthcare_services", ceiling / 3]])
+    );
+    expect(shared.global.get("healthcare_services")!.demand).toBeCloseTo((ceiling * 2) / 3, 9);
+    const us = shared.byCountry.get("US")!.get("healthcare_services")!.demand;
+    const uk = shared.byCountry.get("UK")!.get("healthcare_services")!.demand;
+    expect(us / uk).toBeCloseTo(3, 9);
+  });
+
+  it("sums household demand across states", () => {
+    const totals = sumHouseholdDemand(
+      new Map([
+        ["a", new Map<CommodityType, number>([["food", 2]])],
+        [
+          "b",
+          new Map<CommodityType, number>([
+            ["food", 3],
+            ["energy", 1],
+          ]),
+        ],
+      ])
+    );
+    expect(totals.get("food")).toBe(5);
+    expect(totals.get("energy")).toBe(1);
   });
 
   it("leaves a commodity with no recorded supply uncapped", () => {

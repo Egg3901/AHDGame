@@ -106,6 +106,7 @@ import {
   demandCalibrationFor,
   buildStatesByCountry,
   collectHouseholdSignals,
+  sumHouseholdDemand,
 } from "./commodity/demandLegs";
 import {
   buildNudgeMap,
@@ -704,6 +705,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
               .map((p) => [p.commodity as CommodityType, p.globalSupply as number])
           )
         : undefined,
+      householdDemand: sumHouseholdDemand(householdFinalDemandByState),
       demandCalibration,
     },
     global,
