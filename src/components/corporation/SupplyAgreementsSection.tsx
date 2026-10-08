@@ -19,6 +19,10 @@ import {
 import { useToast } from "@/contexts/ToastContext";
 import { supplyAgreementRequiresState } from "@/lib/market/commodityMarketScope";
 import { apiErrorText } from "@/lib/errors/catalog";
+import {
+  negotiateDraftFromSearch,
+  type NegotiateDraft,
+} from "@/lib/corporations/supplyExchange/negotiateLink";
 
 interface SupplyAgreement {
   _id: string;
@@ -178,6 +182,40 @@ export default function SupplyAgreementsSection({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Opens the proposal form as the counterparty of a listing, from the board
+  // here or from the Negotiate link on the public offers page.
+  const openResponse = useCallback(
+    (listing: NegotiateDraft) => {
+      setProposalRole(listing.side === "sell" ? "buyer" : "supplier");
+      setSelectedBuyer({
+        id: listing.corporationId,
+        name: listing.corporationName,
+        ticker: null,
+        countryId: null,
+      });
+      setCommodity(listing.commodity);
+      setStateId(listing.stateId ?? "");
+      setVolumeCap(String(listing.volumeCap));
+      setPremiumPct(listing.pricePremium * 100);
+      setDurationTurns(listing.durationTurns != null ? String(listing.durationTurns) : "");
+      setExclusive(false);
+      setShowForm(true);
+      window.setTimeout(
+        () =>
+          document
+            .getElementById(`supply-proposal-${corpId}`)
+            ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+        0
+      );
+    },
+    [corpId]
+  );
+
+  useEffect(() => {
+    const draft = negotiateDraftFromSearch(window.location.search);
+    if (draft) openResponse(draft);
+  }, [openResponse]);
 
   // Debounced buyer search for player-run private corps across all countries, so
   // the supplier can contract with a foreign player-owned corp (#106).
@@ -749,33 +787,7 @@ export default function SupplyAgreementsSection({
         </button>
       </div>
 
-      <SupplyOfferBoard
-        key={corpId}
-        corpId={corpId}
-        onRespond={(listing) => {
-          setProposalRole(listing.side === "sell" ? "buyer" : "supplier");
-          setSelectedBuyer({
-            id: listing.corporationId,
-            name: listing.corporationName,
-            ticker: null,
-            countryId: null,
-          });
-          setCommodity(listing.commodity);
-          setStateId(listing.stateId ?? "");
-          setVolumeCap(String(listing.volumeCap));
-          setPremiumPct(listing.pricePremium * 100);
-          setDurationTurns(listing.durationTurns != null ? String(listing.durationTurns) : "");
-          setExclusive(false);
-          setShowForm(true);
-          window.setTimeout(
-            () =>
-              document
-                .getElementById(`supply-proposal-${corpId}`)
-                ?.scrollIntoView({ behavior: "smooth", block: "start" }),
-            0
-          );
-        }}
-      />
+      <SupplyOfferBoard key={corpId} corpId={corpId} onRespond={openResponse} />
 
       {showForm && (
         <form
