@@ -5,7 +5,7 @@ summary: >-
   The CEO of a controlling parent company now sees revenue, profit and margin
   on its subsidiaries' sector pages, matching the subsidiary's corporation page.
 tags: [corporations, subsidiaries]
-badges: [fix]
+badges: [patch]
 areas: [fullstack]
 ---
 
