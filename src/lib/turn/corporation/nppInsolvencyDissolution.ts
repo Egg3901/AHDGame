@@ -15,6 +15,7 @@ import { corporateCashArrearsAnchor } from "@/lib/bonds/corporateCredit";
 import { isMateriallyInsolvent } from "./nppInsolvencyRules";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
+import { SETTLEMENT_HISTORY_EXCLUDED } from "@/lib/banking/settlementHistory";
 
 /**
  * NPP-run corporation auto-insolvency dissolution.
@@ -113,7 +114,10 @@ export async function processNppInsolventCorpDissolution(
 
   let corps = await db
     .collection<Corporation>("corporations")
-    .find({ ceoType: "npp", countryOwnerId: { $exists: false }, suspended: { $ne: true } })
+    .find(
+      { ceoType: "npp", countryOwnerId: { $exists: false }, suspended: { $ne: true } },
+      { projection: SETTLEMENT_HISTORY_EXCLUDED }
+    )
     .toArray();
   if (commandEconomyEnabled) {
     // Per-country budget softness (default fairly soft when not yet written).
