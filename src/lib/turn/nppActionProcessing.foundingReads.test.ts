@@ -32,6 +32,8 @@ describe("foundNppCorporationsSurplus read budget", () => {
 
     const corpAggregate = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
 
+    const sectorAggregate = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
+
     const corpFind = vi.fn().mockReturnValue({ toArray: async () => [] });
     const corpFindOne = vi.fn().mockResolvedValue(null);
     const corpUpdateOne = vi.fn().mockResolvedValue({ matchedCount: 1 });
@@ -88,6 +90,7 @@ describe("foundNppCorporationsSurplus read budget", () => {
             aggregate: corpAggregate,
           };
         }
+        if (name === "corporateSectors") return { aggregate: sectorAggregate };
         if (name === "gameState") return { findOne: gameStateFindOne };
         if (name === "federalBudget") return { find: fedBudgetFind };
         if (name === "exchangeRates")
@@ -137,6 +140,8 @@ describe("foundNppCorporationsSurplus read budget", () => {
     expect(corpFind).toHaveBeenCalledTimes(1);
     // Sector choice reads the per-country sector counts once per sweep.
     expect(corpAggregate).toHaveBeenCalledTimes(1);
+    // Sector concentration is one grouped capacity read per sweep, never per NPP.
+    expect(sectorAggregate).toHaveBeenCalledTimes(1);
     const preloadFilter = corpFind.mock.calls[0][0] as Record<string, unknown>;
     expect((preloadFilter.ceoId as { $in: unknown[] }).$in).toHaveLength(300);
 
