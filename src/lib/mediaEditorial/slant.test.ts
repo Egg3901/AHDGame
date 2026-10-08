@@ -3,6 +3,7 @@ import {
   SLANT_MAX_FAVORABILITY_BONUS,
   SLANT_MAX_PRICE_DISCOUNT,
   advertisingFavorabilityFactor,
+  applySlantToAdvertise,
   advertisingPriceFactor,
   reachWeightedSlant,
   slantDistance,
@@ -56,5 +57,31 @@ describe("advertising effects", () => {
   it("measures distance on the same axes as the editorial audience fit", () => {
     expect(slantDistance({ economic: 5, social: 5 }, { economic: -5, social: -5 })).toBe(1);
     expect(slantDistance({ economic: 1, social: 1 }, { economic: 1, social: 1 })).toBe(0);
+  });
+});
+
+describe("applySlantToAdvertise", () => {
+  const right = { economic: 5, social: 5, strength: 1 };
+
+  it("cuts price and lifts the gain by at most 15% at full closeness", () => {
+    const out = applySlantToAdvertise(-1000, 10, { economic: 5, social: 5 }, right)!;
+    expect(out.cost).toBeCloseTo(850);
+    expect(out.favorabilityGain).toBe(11.5);
+    expect(out.cutPct).toBe(15);
+  });
+
+  it("gives nothing without a stance match or local slant", () => {
+    expect(applySlantToAdvertise(-1000, 10, { economic: 0, social: 0 }, null)).toBeNull();
+    expect(applySlantToAdvertise(-1000, 10, { economic: -5, social: -5 }, right)).toBeNull();
+  });
+
+  it("scales the gain bonus with newsroom saturation", () => {
+    const out = applySlantToAdvertise(
+      -1000,
+      10,
+      { economic: 5, social: 5 },
+      { ...right, strength: 0.4 }
+    )!;
+    expect(out.favorabilityGain).toBe(10.6);
   });
 });

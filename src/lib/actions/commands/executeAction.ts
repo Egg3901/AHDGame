@@ -49,7 +49,7 @@ import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import { fundPoliticalMediaOrder } from "@/lib/politicalMedia/journal";
 import {
-  advertisingFavorabilityFactor,
+  applySlantToAdvertise,
   advertisingPriceFactor,
   loadStateSlant,
 } from "@/lib/mediaEditorial/slant";
@@ -297,17 +297,18 @@ export async function executeCharacterAction(
       (effect.fundsChange ?? 0) < 0
     ) {
       const slant = await loadStateSlant(db, state._id);
-      const factor = advertisingPriceFactor(current.policies, slant);
-      const favFactor = advertisingFavorabilityFactor(current.policies, slant);
-      if (factor < 1) {
-        const cost = Math.abs(effect.fundsChange ?? 0) * factor;
-        const gain = Math.round((effect.favorabilityChange ?? 0) * favFactor * 100) / 100;
-        const cutPct = Math.round((1 - factor) * 100);
+      const slanted = applySlantToAdvertise(
+        effect.fundsChange ?? 0,
+        effect.favorabilityChange ?? 0,
+        current.policies,
+        slant
+      );
+      if (slanted) {
         effect = {
           ...effect,
-          fundsChange: -cost,
-          favorabilityChange: gain,
-          message: `Spent ${fundsFormatter(cost)} on ads, ${cutPct}% less, and gained ${gain} favorability points, because newsrooms in ${state.name} lean close to your positions.`,
+          fundsChange: -slanted.cost,
+          favorabilityChange: slanted.favorabilityGain,
+          message: `Spent ${fundsFormatter(slanted.cost)} on ads, ${slanted.cutPct}% less, and gained ${slanted.favorabilityGain} favorability points, because newsrooms in ${state.name} lean close to your positions.`,
         };
       }
     }

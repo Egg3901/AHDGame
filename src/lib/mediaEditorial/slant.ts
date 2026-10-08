@@ -105,6 +105,33 @@ export function advertisingFavorabilityFactor(
   return 1 + SLANT_MAX_FAVORABILITY_BONUS * slantCloseness(advertiser, slant);
 }
 
+export interface SlantedAdvertise {
+  cost: number;
+  favorabilityGain: number;
+  /** Whole percent cut on the price; 0 when the slant gives nothing. */
+  cutPct: number;
+}
+
+/**
+ * Applies the newsroom slant to one ad buy: cheaper by the price factor and
+ * worth up to 15% more favorability. Returns null when there is no discount.
+ */
+export function applySlantToAdvertise(
+  baseCost: number,
+  baseGain: number,
+  advertiser: Partial<EditorialPosition> | null | undefined,
+  slant: StateSlant | null
+): SlantedAdvertise | null {
+  const factor = advertisingPriceFactor(advertiser, slant);
+  if (factor >= 1) return null;
+  return {
+    cost: Math.abs(baseCost) * factor,
+    favorabilityGain:
+      Math.round(baseGain * advertisingFavorabilityFactor(advertiser, slant) * 100) / 100,
+    cutPct: Math.round((1 - factor) * 100),
+  };
+}
+
 /** Slant of a state's newsrooms, weighted by what each sector actually earns. */
 export async function loadStateSlant(db: Db, stateId: string): Promise<StateSlant | null> {
   const sectors = await db
