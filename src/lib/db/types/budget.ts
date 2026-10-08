@@ -704,6 +704,8 @@ export interface FederalBudget {
    * law changes. Other countries leave this field absent.
    */
   nonLawSpendingGdpShareBaseline?: number;
+  /** Calibration version that wrote nonLawSpendingGdpShareBaseline (countries outside the law book). */
+  nonLawSpendingCalibration?: string;
   /** Founding-world program expense scale shared by catalog quotes and seeded v2 options. */
   programCostScaleBaseline?: number;
   /**
