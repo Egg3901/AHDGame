@@ -1714,14 +1714,19 @@ async function recordPresidentialStatePollingSnapshots(
 export async function accumulateGeneralElectionVotes(
   now: Date,
   turn: number,
-  scope?: ElectionSweepScope
+  scope?: ElectionSweepScope,
+  options?: { slice?: "early" }
 ): Promise<void> {
   const db = await getDb();
+  // Half-hour results tick (electionHalfTick.ts): early halves of races
+  // already on the board only; waves, presidential engines and new tallies
+  // stay on the turn.
+  const early = options?.slice === "early";
 
   // Run presidential primary stagger waves first (before general accumulation).
   // Affects only presidential elections in primary phase within 6h of ending.
   try {
-    await processPrimaryStaggerWaves(db, now, turn, scope?.electionIds);
+    if (!early) await processPrimaryStaggerWaves(db, now, turn, scope?.electionIds);
   } catch (err) {
     logger.error("Turn", "Primary stagger failed", err);
   }
@@ -1941,6 +1946,7 @@ export async function accumulateGeneralElectionVotes(
       const existing = tallyByElection.get(election._id.toString());
       const activeCandidates = candidatesByElection.get(election._id.toString()) ?? [];
 
+      if (early && (!existing || usesLegacyPresidentialCampaign(election))) return;
       if (usesLegacyPresidentialCampaign(election)) {
         if (!existing && activeCandidates.length > 0) {
           await initPresidentVoteTally(election._id, activeCandidates);
@@ -1966,6 +1972,7 @@ export async function accumulateGeneralElectionVotes(
           election,
           tally: existing ?? undefined,
           candidates: activeCandidates,
+          ...(early ? { slice: "early" as const } : {}),
         });
       }
     } catch (err) {

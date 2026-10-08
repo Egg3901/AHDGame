@@ -761,6 +761,69 @@ describe("accumulateVoteTurn — vote accumulation", () => {
     vi.mocked(getStateApprovalForElection).mockResolvedValue(opts.approvalPct ?? 50);
   }
 
+  describe("half-hour split turns", () => {
+    async function splitFixture(snapshots: { turn: number; slicePart?: "early" | "rest" }[]) {
+      const { distributeVotesBySwingFlow } = await import("./voteDistributionSwingFlow");
+      const electionId = new ObjectId();
+      const candidate = makeCandidate({ electionId });
+      const start = new Date("2024-01-01T00:00:00Z");
+      const election = makeElection({
+        _id: electionId,
+        startTurn: 100,
+        endTurn: 148,
+        startTime: start,
+        endTime: new Date(start.getTime() + 48 * 3_600_000),
+      });
+      await setupHappyPath({ electionId, candidates: [candidate], election, totalPool: 100_000 });
+      const tally = await db.collectionMocks.electionVoteTallies.findOne();
+      db.collectionMocks.electionVoteTallies.findOne.mockResolvedValue({
+        ...tally,
+        turnSnapshots: snapshots,
+      });
+      const now = new Date(start.getTime() + 10 * 3_600_000);
+      const pool = () => vi.mocked(distributeVotesBySwingFlow).mock.calls.at(-1)?.[1] as number;
+      const pushed = () =>
+        db.collectionMocks.electionVoteTallies.updateOne.mock.calls.at(-1)?.[1].$push.turnSnapshots;
+      return { electionId, now, pool, pushed };
+    }
+
+    it("banks half the turn's slice early and the other half on the turn", async () => {
+      const whole = await splitFixture([]);
+      await accumulateVoteTurn(whole.electionId, 110, whole.now);
+      const wholePool = whole.pool();
+      expect(whole.pushed().slicePart).toBeUndefined();
+
+      const early = await splitFixture([]);
+      await accumulateVoteTurn(early.electionId, 110, early.now, { slice: "early" });
+      expect(early.pool()).toBeCloseTo(wholePool / 2, 6);
+      expect(early.pushed()).toMatchObject({ turn: 110, slicePart: "early" });
+
+      const rest = await splitFixture([{ turn: 110, slicePart: "early" }]);
+      await accumulateVoteTurn(rest.electionId, 110, rest.now);
+      expect(rest.pool()).toBeCloseTo(wholePool / 2, 6);
+      expect(rest.pushed()).toMatchObject({ turn: 110, slicePart: "rest" });
+    });
+
+    it.each([
+      ["a second early tick", [{ turn: 110, slicePart: "early" as const }], "early" as const],
+      ["an early tick after the whole turn", [{ turn: 110 }], "early" as const],
+      ["the turn after it was counted whole", [{ turn: 110 }], undefined],
+      [
+        "the turn after both halves",
+        [
+          { turn: 110, slicePart: "early" as const },
+          { turn: 110, slicePart: "rest" as const },
+        ],
+        undefined,
+      ],
+    ])("counts nothing on %s", async (_label, snapshots, slice) => {
+      const f = await splitFixture(snapshots);
+      db.collectionMocks.electionVoteTallies.updateOne.mockClear();
+      await accumulateVoteTurn(f.electionId, 110, f.now, slice ? { slice } : undefined);
+      expect(db.collectionMocks.electionVoteTallies.updateOne).not.toHaveBeenCalled();
+    });
+  });
+
   it("appends a VoteTurnSnapshot to turnSnapshots", async () => {
     const electionId = new ObjectId();
     const candidate = makeCandidate({ electionId });
