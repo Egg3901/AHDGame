@@ -163,6 +163,39 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       supply: { electronics: 0.3, steel: 0.2 },
       demand: { rare_earth: 0.15, iron: 0.1, energy: 0.2, chemicals: 0.1, plastics: 0.1 },
     },
+    // Vehicle lines folded in from the retired automobiles sector. Recipes
+    // match the vehicle-model "standard" and "heavy_machinery" strategies.
+    {
+      id: "vehicle_assembly",
+      name: "Vehicle Assembly",
+      description:
+        "Retool the plant to build cars. Produces vehicles from steel, iron and electronics.",
+      supply: { vehicles: 0.5 },
+      demand: {
+        steel: 0.21,
+        iron: 0.08,
+        electronics: 0.13,
+        energy: 0.1,
+        freight: 0.08,
+        real_estate_services: 0.02,
+        plastics: 0.08,
+      },
+    },
+    {
+      id: "vehicle_heavy_machinery",
+      name: "Trucks and Heavy Machinery",
+      description:
+        "Retool the plant to build trucks and construction equipment. Steel-intensive vehicle output.",
+      supply: { vehicles: 0.55 },
+      demand: {
+        steel: 0.29,
+        iron: 0.12,
+        energy: 0.13,
+        freight: 0.1,
+        plastics: 0.05,
+        advertising: 0.05,
+      },
+    },
   ],
 
   // ── Technology ────────────────────────────────────────────────────────

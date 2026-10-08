@@ -105,3 +105,29 @@ describe("manufacturing product eligibility", () => {
     ).toBe(false);
   });
 });
+
+describe("vehicle lines on ordinary manufacturing", () => {
+  const plant = (strategyId: string) => ({
+    sectorId: "p1",
+    corporationId: "c1",
+    sectorType: "manufacturing",
+    industryModel: null,
+    strategyId,
+    capitalStock: 100,
+    plantCount: 4,
+  });
+
+  it("offers vehicle products once a plant retools to vehicle assembly", () => {
+    expect(isLegalManufacturingProductForPlant("passenger_car", plant("vehicle_assembly"))).toBe(
+      true
+    );
+    expect(
+      isLegalManufacturingProductForPlant("truck", plant("vehicle_heavy_machinery"))
+    ).toBe(true);
+  });
+
+  it("does not offer vehicle products to a steel plant", () => {
+    expect(isLegalManufacturingProductForPlant("passenger_car", plant("standard"))).toBe(false);
+    expect(isLegalManufacturingProductForPlant("truck", plant("heavy_metals"))).toBe(false);
+  });
+});
