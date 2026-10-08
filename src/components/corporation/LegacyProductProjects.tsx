@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Button, Card } from "@/components/ui";
+import { DenseSection, InlineStatus, SmallButton, TableScroll, Td, Th } from "./dense/DenseKit";
 import { apiErrorText } from "@/lib/errors/catalog";
 
 interface LegacyProject {
@@ -87,28 +87,45 @@ export function LegacyProductProjects({ corporationId }: { corporationId: string
 
   if (projects.length === 0) return null;
   return (
-    <Card title="Earlier product projects">
-      <p className="text-sm text-muted">
-        These started before the product studio and keep running until they retire. New products are
-        started in the studio above.
+    <DenseSection title="Earlier product projects" meta="started before the product studio">
+      <p className="py-1 text-sm text-muted">
+        These keep running until they retire and cannot be restarted. Start new products in the
+        studio above.
       </p>
-      {message && (
-        <p className="mt-2 text-sm text-red-500" role="alert">
-          {message}
-        </p>
-      )}
-      <ul className="mt-3 space-y-2">
-        {projects.map((project) => (
-          <li key={project.key} className="flex items-center justify-between gap-3 text-sm">
-            <span>
-              {project.label} <span className="text-muted">({project.stage})</span>
-            </span>
-            <Button size="sm" variant="secondary" onClick={() => void retire(project)}>
-              Retire
-            </Button>
-          </li>
-        ))}
-      </ul>
-    </Card>
+      <InlineStatus message={message} tone="error" className="py-1" />
+      <TableScroll>
+        <table className="w-full text-sm" aria-label="Earlier product projects">
+          <thead>
+            <tr>
+              <Th>Project</Th>
+              <Th>Stage</Th>
+              <Th>
+                <span className="sr-only">Actions</span>
+              </Th>
+            </tr>
+          </thead>
+          <tbody>
+            {projects.map((project) => (
+              <tr key={project.key}>
+                <Td numeric={false} wrap>
+                  {project.label}
+                </Td>
+                <Td numeric={false} className="capitalize text-muted">
+                  {project.stage.replace(/_/g, " ")}
+                </Td>
+                <Td align="right" numeric={false}>
+                  <SmallButton
+                    onClick={() => void retire(project)}
+                    title="Stops the project. It cannot be restarted."
+                  >
+                    Retire
+                  </SmallButton>
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </TableScroll>
+    </DenseSection>
   );
 }
