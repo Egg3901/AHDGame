@@ -20,8 +20,7 @@ import {
 import { getStateBillStatusDisplayLabel } from "@/lib/legislature/stateBillUiLabels";
 import { regionApiSubUrl, regionLegislatureUrl } from "@/lib/urls";
 import { BillEffectsSection } from "../../components/BillEffectsSection";
-import { BillProvisionCard } from "@/components/legislature/BillProvisionCard";
-import { provisionToView } from "@/lib/legislature/dto/provisionView";
+import { BillProvisionsSection } from "@/components/legislature/BillProvisionsSection";
 import type { StateBillDetail } from "@/lib/legislature/dto/stateBillDetail";
 import { mapStateStatusToBillStatus } from "@/lib/legislature/mapStateBillToBillDisplay";
 import { useGameClock } from "@/contexts/useGameClock";
@@ -252,20 +251,9 @@ function StateBillDetailContent() {
             </span>
           </div>
 
-          {bill.provisions?.length > 0 && (
-            <div className="flex flex-col gap-3 pt-2 border-t border-card-border/40">
-              <h3 className="text-lg font-semibold">Provisions</h3>
-              {bill.provisions.map((p, i) => (
-                <BillProvisionCard
-                  key={i}
-                  view={provisionToView(p)}
-                  billCountry={bill.countryId}
-                  index={i}
-                />
-              ))}
-              <BillEffectsSection provisions={bill.provisions} />
-            </div>
-          )}
+          <BillProvisionsSection provisions={bill.provisions} billCountry={bill.countryId}>
+            <BillEffectsSection provisions={bill.provisions} />
+          </BillProvisionsSection>
 
           {bill.canGovernorAction && (
             <div className="flex flex-wrap gap-2 pt-2 border-t border-card-border/40">
@@ -323,105 +311,109 @@ function StateBillDetailContent() {
           </div>
         )}
 
-        <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-muted">Progress</h3>
-          <BillTimeline
-            status={timelineStatus}
-            originChamber="state"
-            proposedAt={bill.proposedAt}
-            votingEndsAt={
-              isOriginStage
-                ? (bill.votingEndsAt ?? null)
-                : isOverrideStage
-                  ? (bill.overrideVotingEndsAt ?? null)
-                  : null
-            }
-            variant="state"
-            stateStatus={bill.status}
-            stateExecutiveLabel={getRegionalBillAssentTitleForState(
-              bill.countryId as CountryId,
-              bill.stateId
-            )}
-          />
-        </div>
-
-        {hasChamberTally && bill.eligibleSeats > 0 && (
-          <div className="rounded-xl border border-card-border bg-card p-5">
-            <h3 className="mb-3 text-sm font-semibold text-muted">Chamber · floor vote</h3>
-            <VoteSeatingChart
-              style="hemicycle"
-              votes={{
-                for: bill.votesFor,
-                abstain: bill.votesAbstain,
-                against: bill.votesAgainst,
-              }}
-              eligible={bill.eligibleSeats}
-              width={460}
-            />
-          </div>
-        )}
-
-        {hasChamberTally && (
-          <VoteBar
-            label={isOverrideStage ? "Chamber vote (closed)" : "Chamber vote"}
-            votesFor={bill.votesFor}
-            votesAgainst={bill.votesAgainst}
-            votesAbstain={bill.votesAbstain}
-            deadline={isOriginStage && !isOverrideStage ? (bill.votingEndsAt ?? null) : null}
-            myVote={bill.myVote}
-            canVote={bill.canVote && !voting && canCastOriginVote}
-            onVote={canCastOriginVote ? (v) => void handleChamberVote(v) : undefined}
-            shiftPreview={bill.voteShiftPreview}
-          />
-        )}
-
-        {isOverrideStage && (
-          <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
-            <h3 className="text-sm font-semibold">Veto override</h3>
-            <VoteBar
-              label="Override vote (2/3 required)"
-              votesFor={bill.overrideVotesFor}
-              votesAgainst={bill.overrideVotesAgainst}
-              votesAbstain={0}
-              requiredLabel={
-                bill.eligibleSeats > 0
-                  ? `${bill.overrideVotesFor} / ${Math.ceil((bill.eligibleSeats * 2) / 3)} needed (2/3)`
-                  : undefined
-              }
-              deadline={bill.overrideVotingEndsAt ?? null}
-              myVote={
-                bill.myOverrideVote === "for"
-                  ? "for"
-                  : bill.myOverrideVote === "against"
-                    ? "against"
+        <div className="grid min-w-0 gap-6 lg:grid-cols-[1fr_340px]">
+          <aside className="min-w-0 self-start rounded-xl border border-card-border bg-card p-5 space-y-4 lg:order-2">
+            <h3 className="text-sm font-semibold text-muted">Progress</h3>
+            <BillTimeline
+              status={timelineStatus}
+              originChamber="state"
+              proposedAt={bill.proposedAt}
+              votingEndsAt={
+                isOriginStage
+                  ? (bill.votingEndsAt ?? null)
+                  : isOverrideStage
+                    ? (bill.overrideVotingEndsAt ?? null)
                     : null
               }
-              canVote={bill.canVote && !voting && canCastOverrideVote}
-              omitAbstain
-              onVote={
-                canCastOverrideVote
-                  ? (v) => {
-                      if (v === "for" || v === "against") void handleOverrideVote(v);
-                    }
-                  : undefined
-              }
+              variant="state"
+              stateStatus={bill.status}
+              stateExecutiveLabel={getRegionalBillAssentTitleForState(
+                bill.countryId as CountryId,
+                bill.stateId
+              )}
             />
-          </div>
-        )}
+          </aside>
 
-        {bill.voteByParty.length > 0 && (
-          <div className="rounded-xl border border-card-border bg-card p-5">
-            <h3 className="text-sm font-semibold mb-3">Vote tally by party</h3>
-            <VoteTallyTable voteByParty={bill.voteByParty} chamberLabel="Chamber" />
-          </div>
-        )}
+          <div className="min-w-0 space-y-6 lg:order-1">
+            {hasChamberTally && bill.eligibleSeats > 0 && (
+              <div className="rounded-xl border border-card-border bg-card p-5">
+                <h3 className="mb-3 text-sm font-semibold text-muted">Chamber · floor vote</h3>
+                <VoteSeatingChart
+                  style="hemicycle"
+                  votes={{
+                    for: bill.votesFor,
+                    abstain: bill.votesAbstain,
+                    against: bill.votesAgainst,
+                  }}
+                  eligible={bill.eligibleSeats}
+                  width={460}
+                />
+              </div>
+            )}
 
-        {bill.voteByPartyOverride.length > 0 && (
-          <div className="rounded-xl border border-card-border bg-card p-5">
-            <h3 className="text-sm font-semibold mb-3">Override vote tally by party</h3>
-            <VoteTallyTable voteByParty={bill.voteByPartyOverride} chamberLabel="Override" />
+            {hasChamberTally && (
+              <VoteBar
+                label={isOverrideStage ? "Chamber vote (closed)" : "Chamber vote"}
+                votesFor={bill.votesFor}
+                votesAgainst={bill.votesAgainst}
+                votesAbstain={bill.votesAbstain}
+                deadline={isOriginStage && !isOverrideStage ? (bill.votingEndsAt ?? null) : null}
+                myVote={bill.myVote}
+                canVote={bill.canVote && !voting && canCastOriginVote}
+                onVote={canCastOriginVote ? (v) => void handleChamberVote(v) : undefined}
+                shiftPreview={bill.voteShiftPreview}
+              />
+            )}
+
+            {isOverrideStage && (
+              <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
+                <h3 className="text-sm font-semibold">Veto override</h3>
+                <VoteBar
+                  label="Override vote (2/3 required)"
+                  votesFor={bill.overrideVotesFor}
+                  votesAgainst={bill.overrideVotesAgainst}
+                  votesAbstain={0}
+                  requiredLabel={
+                    bill.eligibleSeats > 0
+                      ? `${bill.overrideVotesFor} / ${Math.ceil((bill.eligibleSeats * 2) / 3)} needed (2/3)`
+                      : undefined
+                  }
+                  deadline={bill.overrideVotingEndsAt ?? null}
+                  myVote={
+                    bill.myOverrideVote === "for"
+                      ? "for"
+                      : bill.myOverrideVote === "against"
+                        ? "against"
+                        : null
+                  }
+                  canVote={bill.canVote && !voting && canCastOverrideVote}
+                  omitAbstain
+                  onVote={
+                    canCastOverrideVote
+                      ? (v) => {
+                          if (v === "for" || v === "against") void handleOverrideVote(v);
+                        }
+                      : undefined
+                  }
+                />
+              </div>
+            )}
+
+            {bill.voteByParty.length > 0 && (
+              <div className="rounded-xl border border-card-border bg-card p-5">
+                <h3 className="text-sm font-semibold mb-3">Vote tally by party</h3>
+                <VoteTallyTable voteByParty={bill.voteByParty} chamberLabel="Chamber" />
+              </div>
+            )}
+
+            {bill.voteByPartyOverride.length > 0 && (
+              <div className="rounded-xl border border-card-border bg-card p-5">
+                <h3 className="text-sm font-semibold mb-3">Override vote tally by party</h3>
+                <VoteTallyTable voteByParty={bill.voteByPartyOverride} chamberLabel="Override" />
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Discussions */}
         <BillDiscussionPanel
