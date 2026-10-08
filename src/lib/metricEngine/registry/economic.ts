@@ -110,7 +110,11 @@ export const sectorGrowthNode: RegistryNode = {
   // The lagged tradeGrowth edge feeds the net-exports impulse (T5); lagged so the
   // trade↔output loop is cross-turn-damped (and registry-node prev is populated
   // by the phase, so no extra projection is needed).
-  inputs: [{ provider: "sectorRevenueTax" }, { lagged: "economic.tradeGrowth" }],
+  inputs: [
+    { provider: "sectorRevenueTax" },
+    { provider: "fiscalTradeInputs" },
+    { lagged: "economic.tradeGrowth" },
+  ],
   bounds: [SECTOR_SIGNAL_MIN, SECTOR_SIGNAL_MAX],
   inertia: INERTIA,
   maxPolicyDelta: MAX_POLICY_DELTA,
@@ -133,8 +137,17 @@ export const sectorGrowthNode: RegistryNode = {
         : sumRealizedRevenue(p.owned, true);
     // Trailing trend first (noise-proof), one-turn delta as the cold-start
     // fallback while the snapshot log matures, legacy weighted average last.
+    // The money trend is nominal: strip the lagged inflation so the real output
+    // gap does not integrate the price level (and the Phillips term it feeds).
+    const trade = ctx.providers["fiscalTradeInputs"] as FiscalTradeInputs | undefined;
+    const inflation = trade?.inflationRate;
     const trailingSignal = p.plantsEnabled
-      ? computeTrailingRevenueGrowthRate(p.revenueEmaNow, p.revenueTrendBaseline, TURNS_PER_YEAR)
+      ? computeTrailingRevenueGrowthRate(
+          p.revenueEmaNow,
+          p.revenueTrendBaseline,
+          TURNS_PER_YEAR,
+          inflation
+        )
       : null;
     const outputSignal = p.plantsEnabled
       ? computeTrailingRevenueGrowthRate(p.outputEmaNow, p.outputTrendBaseline, TURNS_PER_YEAR)
@@ -146,7 +159,8 @@ export const sectorGrowthNode: RegistryNode = {
             realizedNow,
             p.realizedRevenuePrev,
             p.turnsSincePrev,
-            TURNS_PER_YEAR
+            TURNS_PER_YEAR,
+            inflation
           )
         : null);
     const sector = blendOutputGrowthSignal(
