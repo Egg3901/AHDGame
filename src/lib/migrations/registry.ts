@@ -108,6 +108,7 @@ import { migration as reconcileSeedIndexes } from "./entries/2026-10-01-reconcil
 import { migration as bankLoanCharterEpoch } from "./entries/2026-10-04-bank-loan-charter-epoch";
 import { migration as manufacturingProductProjectsV2Index } from "./entries/2026-10-04-manufacturing-product-projects-v2-index";
 import { migration as productVentureIndexes } from "./entries/2026-10-08-product-venture-indexes";
+import { migration as backfillSpinOffTechBaselines } from "./entries/2026-10-08-backfill-spinoff-tech-baselines";
 import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-media-product-projects-v1-index";
 import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank-treasury-trade-indexes";
 import { migration as underwritingRecoveryIndexes } from "./entries/2026-10-04-underwriting-recovery-indexes";
@@ -349,6 +350,8 @@ export const MIGRATIONS: Migration[] = [
   bankFailurePoliticsIndex,
   advertisingAgreementIndexes,
   productVentureIndexes,
+  // Suggestion #363: spin-offs were created with no tech. Additive heal.
+  backfillSpinOffTechBaselines,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

@@ -1260,17 +1260,25 @@ export function makeNppCorpDecision(
             }).totalAnchor
           )
         : 0;
+      // A firm behind a dominant sector leader deploys more of its surplus and
+      // steps faster. The leader and healthy sectors read 1, so nothing slows.
+      const challengerPull = Math.max(
+        1,
+        ctx.challengerBoostOf?.(sector.sectorType, corp._id.toString()) ?? 1
+      );
       const growthBudgetLocal =
-        Math.max(0, cashLocal - effectiveCashFloor) * NPP_GROWTH_DEPLOY_FRACTION;
+        Math.max(0, cashLocal - effectiveCashFloor) *
+        Math.min(1, NPP_GROWTH_DEPLOY_FRACTION * challengerPull);
       // Demand anchor: grow by at most this share of proven throughput a turn
       // (at least one facility for demand-side sectors), not the whole treasury
       // at once. Extraction growth is additionally scaled by finite deposit
       // headroom and never floors up to a facility when the deposit cannot
       // support one.
+      const growthStepOfRun = Math.min(1, NPP_GROWTH_MAX_STEP_OF_RUN * challengerPull);
       const growthStepUnits =
         sector.sectorType === "extraction"
-          ? Math.floor(runUnits * NPP_GROWTH_MAX_STEP_OF_RUN * extractionHeadroom)
-          : Math.max(facilityUnits, Math.floor(runUnits * NPP_GROWTH_MAX_STEP_OF_RUN));
+          ? Math.floor(runUnits * growthStepOfRun * extractionHeadroom)
+          : Math.max(facilityUnits, Math.floor(runUnits * growthStepOfRun));
       const growthCapUnits = Math.min(
         growthStepUnits,
         Math.floor(growthStepUnits * NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH - pendingUnits)
