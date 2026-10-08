@@ -1,5 +1,6 @@
 "use client";
 
+import { describeMediaPull } from "@/lib/mediaEditorial/opinionPullCopy";
 import { useState, type ReactNode } from "react";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { REGION_CENSUS_LABELS } from "@/lib/constants/regionCensusLabels";
@@ -187,41 +188,48 @@ function KpiStrip({
   socialLean,
   avgTurnout,
   categoryCount,
+  mediaPullLine,
 }: {
   population: number | null;
   economicLean: number | null;
   socialLean: number | null;
   avgTurnout: number | null;
   categoryCount: number;
+  mediaPullLine?: string | null;
 }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      <KpiCell label="Population">{population !== null ? fmtPopulation(population) : "—"}</KpiCell>
-      <KpiCell label="Political lean">
-        {economicLean !== null || socialLean !== null ? (
-          <div className="flex flex-wrap items-center gap-1">
-            {economicLean !== null && (
-              <span
-                className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-semibold ${leanTextClass(economicLean)}`}
-              >
-                Econ {fmtLean(economicLean)}
-              </span>
-            )}
-            {socialLean !== null && (
-              <span
-                className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-semibold ${leanTextClass(socialLean)}`}
-              >
-                Soc {fmtLean(socialLean)}
-              </span>
-            )}
-          </div>
-        ) : (
-          "—"
-        )}
-      </KpiCell>
-      <KpiCell label="Turnout">{avgTurnout !== null ? `${avgTurnout.toFixed(1)}%` : "—"}</KpiCell>
-      <KpiCell label="Demographic categories">{categoryCount}</KpiCell>
-    </div>
+    <>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <KpiCell label="Population">
+          {population !== null ? fmtPopulation(population) : "—"}
+        </KpiCell>
+        <KpiCell label="Political lean">
+          {economicLean !== null || socialLean !== null ? (
+            <div className="flex flex-wrap items-center gap-1">
+              {economicLean !== null && (
+                <span
+                  className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-semibold ${leanTextClass(economicLean)}`}
+                >
+                  Econ {fmtLean(economicLean)}
+                </span>
+              )}
+              {socialLean !== null && (
+                <span
+                  className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-semibold ${leanTextClass(socialLean)}`}
+                >
+                  Soc {fmtLean(socialLean)}
+                </span>
+              )}
+            </div>
+          ) : (
+            "—"
+          )}
+        </KpiCell>
+        <KpiCell label="Turnout">{avgTurnout !== null ? `${avgTurnout.toFixed(1)}%` : "—"}</KpiCell>
+        <KpiCell label="Demographic categories">{categoryCount}</KpiCell>
+      </div>
+      {mediaPullLine && <p className="text-xs text-muted">{mediaPullLine}</p>}
+    </>
   );
 }
 
@@ -247,7 +255,8 @@ function computeKpiProps({
       : null;
   const avgTurnout = computeAvgTurnout(turnoutData);
   const categoryCount = categories.length;
-  return { population, economicLean, socialLean, avgTurnout, categoryCount };
+  const mediaPullLine = describeMediaPull(demographics?.mediaOpinionPull);
+  return { population, economicLean, socialLean, avgTurnout, categoryCount, mediaPullLine };
 }
 
 // ─── census card with integrated turnout ─────────────────────────────────────
