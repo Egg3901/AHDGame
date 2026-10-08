@@ -128,6 +128,8 @@ export interface PhysicalCostsInput {
   priceRatioByCommodity: CorporationLookups["priceRatioByCommodity"];
   reachableInputPriceRatiosByCountry: CorporationLookups["reachableInputPriceRatiosByCountry"];
   plantsCapacity: number;
+  /** Share of capacity not mothballed; the fixed overhead half bills active capacity. */
+  activeFraction?: number;
   producedUnits: number;
   retoolCapacityRatio: number;
   newPolicyLevel: number;
@@ -195,6 +197,7 @@ export function decomposePhysicalCosts(input: PhysicalCostsInput): PhysicalCosts
     priceRatioByCommodity,
     reachableInputPriceRatiosByCountry,
     plantsCapacity,
+    activeFraction,
     producedUnits,
     retoolCapacityRatio,
     newPolicyLevel,
@@ -343,6 +346,7 @@ export function decomposePhysicalCosts(input: PhysicalCostsInput): PhysicalCosts
           producedUnits,
           turnsPerDay: TURNS_PER_DAY,
           mothballed,
+          activeFraction,
         })
       : otherOpexCalibrated
         ? // Exact by construction, whether or not the per-unit anchor could be

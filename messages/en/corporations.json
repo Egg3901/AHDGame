@@ -300,7 +300,7 @@
     },
     "editorialStance": {
       "title": "Editorial stance",
-      "description": "The position your newsrooms publish, on the same two scales politicians use. Politicians close to it gain a little favorability from your coverage, and in states where your newsrooms dominate, advertisers close to it pay up to 15% less to run ads. A stance far from your audience costs you up to 25% of the ad space you can sell. 0 and 0 is neutral and changes nothing.",
+      "description": "The position your newsrooms publish, on the same two scales politicians use. Politicians close to it gain a little favorability from your coverage, and in states where your newsrooms dominate, advertisers close to it pay up to 15% less to run ads. Your stance also moves opinion. Local newsrooms slowly pull voters in their state toward their position, more so the larger the share of local coverage that takes a stance. A stance far from your audience costs you up to 25% of the ad space you can sell. 0 and 0 is neutral and changes nothing.",
       "economic": "Economic",
       "economicLow": "-5 command economy",
       "economicHigh": "+5 free market",

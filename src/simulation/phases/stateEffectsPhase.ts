@@ -234,7 +234,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       // destructured (mirrors the append-only results below); only
       // demoEffectResult is.
       runtime.runPhase("demographicEffects", async () => {
-        const result = await processAllStateDemographics(db, await getLegislationTypes());
+        const result = await processAllStateDemographics(db, await getLegislationTypes(), newTurn);
         // Isolated so a checkpoint bug can't mark the whole demographics phase
         // failed (and discard its result) after the demographics writes above
         // have already persisted — the sequencing constraint is the only
