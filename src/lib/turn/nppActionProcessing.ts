@@ -56,6 +56,9 @@ import {
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { CorporationType } from "@/lib/constants/corporations";
+import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
+import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
+import { foundingSectorWeights, pickWeightedIndex } from "@/lib/turn/npp/foundingSectorChoice";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 import { resolveShareExecutionPrice } from "@/lib/corporations/marketExecution";
 import { deriveCeoArchetype } from "@/lib/turn/ceoArchetype";
@@ -1219,8 +1222,10 @@ async function sellNppStockSurplus(
  * NPPs accumulate capital. Bounds the candidate pool to the N wealthiest
  * NPPs (query, not a full scan) rather than checking all NPPs for "funds
  * above threshold". Sector type is picked deterministically (seeded roll
- * over CORPORATION_TYPES) — no diversification logic needed here, that's
- * organic across many independent founding events over a long run.
+ * over CORPORATION_TYPES), weighted toward sectors whose outputs are short in
+ * the founder's market and away from country-sectors already crowded with
+ * companies (see foundingSectorChoice.ts). A uniform pick spread companies
+ * evenly over sectors whatever the market needed.
  */
 export async function foundNppCorporationsSurplus(
   db: Db,
@@ -1291,15 +1296,37 @@ export async function foundNppCorporationsSurplus(
   const rng = makeSeededRng(`npp-found-corp:${currentTurn}${NPP_ACTION_RNG_SALT}`);
   const fxByCcy = await loadFxRatesByCurrency(db);
 
+  // Sector choice follows the market: one price read and one count per sweep.
+  const priceDocs = await db.collection<CommodityPrice>("commodityPrices").find({}).toArray();
+  const { priceRatioOf } = buildNppPriceSignals(new Map(priceDocs.map((p) => [p.commodity, p])));
+  const cellCounts = await db
+    .collection<Corporation>("corporations")
+    .aggregate<{ _id: { c: string; t: string }; n: number }>([
+      { $group: { _id: { c: "$countryId", t: "$type" }, n: { $sum: 1 } } },
+    ])
+    .toArray();
+  const existingByCell = new Map<string, number>(
+    cellCounts.map((row) => [`${row._id.c}:${row._id.t}`, row.n])
+  );
+  const existingCount = (countryId: string, type: CorporationType) =>
+    existingByCell.get(`${countryId}:${type}`) ?? 0;
+
   for (const npp of candidates) {
     const archetype = deriveCeoArchetype(npp.personality);
     if (rng() >= NPP_FOUNDING_BASE_PROBABILITY_BY_ARCHETYPE[archetype]) continue;
 
     if (alreadyCeoIds.has(npp._id.toString())) continue;
 
-    const sectorType = CORPORATION_TYPES[
-      Math.floor(rng() * CORPORATION_TYPES.length)
-    ] as CorporationType;
+    const homeCountryForSector = (npp.countryId ?? "US") as CountryId;
+    const weights = foundingSectorWeights({
+      types: CORPORATION_TYPES as readonly CorporationType[],
+      countryId: homeCountryForSector,
+      priceRatioOf,
+      existingCount,
+    });
+    const sectorType = CORPORATION_TYPES[pickWeightedIndex(weights, rng())] as CorporationType;
+    const cell = `${homeCountryForSector}:${sectorType}`;
+    existingByCell.set(cell, (existingByCell.get(cell) ?? 0) + 1);
 
     const homeCountry = (npp.countryId ?? "US") as CountryId;
     const homeCurrency = preset
