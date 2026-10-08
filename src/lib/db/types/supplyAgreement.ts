@@ -52,6 +52,8 @@ export interface SupplyAgreement {
   durationTurns?: number;
   /** Turn on which an accepted fixed-term agreement starts settling. */
   startsAtTurn?: number;
+  /** Set when the agreement was formed by taking a standing board listing. */
+  listingId?: string;
   /** Turn on which an accepted fixed-term agreement stops settling. */
   expiresAtTurn?: number;
   /**

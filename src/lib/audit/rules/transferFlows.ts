@@ -79,7 +79,29 @@ function flowOf(row: AnomalyAuditRow): TransferFlow | null {
   return flow.from === flow.to ? null : flow;
 }
 
-function isActorDriven(row: AnomalyAuditRow): boolean {
+/**
+ * Supply-agreement settlement is routine EXCEPT between related parties, where
+ * the premium and shortfall-damages legs are a way to move cash between pockets.
+ * The caller names the agreements it has established as related; every other
+ * agreement keeps the routine exemption.
+ */
+export const SUPPLY_AGREEMENT_SETTLEMENT_ACTION = "corp.supply_agreement";
+
+export interface TransferFlowOptions {
+  /** Agreement ids whose parties share an owner, a CEO or a material shareholding. */
+  relatedAgreementIds?: ReadonlySet<string>;
+}
+
+function isRelatedSupplySettlement(row: AnomalyAuditRow, options: TransferFlowOptions): boolean {
+  return (
+    row.action === SUPPLY_AGREEMENT_SETTLEMENT_ACTION &&
+    row.agreementId !== undefined &&
+    options.relatedAgreementIds?.has(row.agreementId) === true
+  );
+}
+
+function isActorDriven(row: AnomalyAuditRow, options: TransferFlowOptions = {}): boolean {
+  if (isRelatedSupplySettlement(row, options)) return true;
   if (SYSTEM_SETTLEMENT_ACTIONS.has(row.action)) return false;
   if (row.actorKind === "system") return false;
   if (row.actorKind)
@@ -117,7 +139,10 @@ function pairCandidate(event: TransferEvent, row: AnomalyAuditRow, flow: Transfe
   );
 }
 
-function buildTransferEvents(rows: readonly AnomalyAuditRow[]): TransferEvent[] {
+function buildTransferEvents(
+  rows: readonly AnomalyAuditRow[],
+  options: TransferFlowOptions = {}
+): TransferEvent[] {
   const events: TransferEvent[] = [];
   const candidatesByKey = new Map<string, TransferEvent[]>();
   const sorted = [...rows].sort(
@@ -128,7 +153,7 @@ function buildTransferEvents(rows: readonly AnomalyAuditRow[]): TransferEvent[] 
   );
   for (const row of sorted) {
     const flow = flowOf(row);
-    if (!flow || !isActorDriven(row)) continue;
+    if (!flow || !isActorDriven(row, options)) continue;
     const rowTime = row.ts.getTime();
     const key = transferKey(row, flow);
     const candidates = candidatesByKey.get(key) ?? [];
@@ -168,9 +193,12 @@ function findingOrNull(
   return flaggedIds.size > 0 ? { type, detail, flaggedRows: flaggedIds.size } : null;
 }
 
-export function detectCircularWire(rows: readonly AnomalyAuditRow[]): TransferDetectorResult {
+export function detectCircularWire(
+  rows: readonly AnomalyAuditRow[],
+  options: TransferFlowOptions = {}
+): TransferDetectorResult {
   const flaggedIds = new Set<string>();
-  const events = buildTransferEvents(rows);
+  const events = buildTransferEvents(rows, options);
   const eventsByFlow = new Map<string, TransferEvent[]>();
   for (const event of events) {
     const key = flowKey(event.flow);
