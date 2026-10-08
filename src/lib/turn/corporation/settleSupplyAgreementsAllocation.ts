@@ -66,7 +66,17 @@ export interface SettleCorpInfo {
    * pre-C6 behaviour (no floor) rather than silently settling everything to 0.
    */
   liquidCapitalAnchor?: number;
+  /**
+   * Cash in ₳ an autonomous NPP buyer keeps for growth. A premium is paid only
+   * out of `NPP_PREMIUM_PAYABLE_SHARE` of the balance above this reserve, so a
+   * contract premium cannot hold the buyer under the cash floor that gates its
+   * expansion. Absent for players and any corp without a reserve.
+   */
+  premiumReserveAnchor?: number;
 }
+
+/** Share of an NPP buyer's cash above its reserve that premiums may consume per turn. */
+export const NPP_PREMIUM_PAYABLE_SHARE = 0.5;
 
 /**
  * Add one equal-and-opposite corporation cash transfer to an accumulator.
