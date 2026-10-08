@@ -209,6 +209,30 @@ describe("stampTaxSliderProvisions", () => {
     );
     expect(stamped.ok).toBe(false);
   });
+
+  it("strips an unvalidated exact rate from a non-slider policy", async () => {
+    db.collectionMocks.legislationTypes.findOne = vi.fn().mockResolvedValue({
+      taxRateChange: { scope: "state", taxType: "incomeTax" },
+    });
+
+    const stamped = await stampTaxSliderProvisions(
+      db as unknown as Db,
+      [
+        {
+          legislationTypeId: "legacy_state_income_tax",
+          policyOptionId: "standard",
+          proposedRate: 99,
+        },
+      ],
+      "US",
+      "NC"
+    );
+
+    expect(stamped).toEqual({
+      ok: true,
+      provisions: [{ legislationTypeId: "legacy_state_income_tax", policyOptionId: "standard" }],
+    });
+  });
 });
 
 describe("taxSliderNotchRate (NPC one-notch move)", () => {

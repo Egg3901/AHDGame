@@ -246,7 +246,11 @@ export async function processNppInsolventCorpDissolution(
         corp._id,
         "bondSettlementInProgressAt",
         now,
-        () => executeCorporationBondDefaultDissolution(db, corp, { requireDefaultedBonds: false })
+        () =>
+          executeCorporationBondDefaultDissolution(db, corp, {
+            requireDefaultedBonds: false,
+            exitReason: "npp_insolvency",
+          })
       );
       // null → settlement already in progress elsewhere; skip, it'll be retried
       // next turn if still insolvent.

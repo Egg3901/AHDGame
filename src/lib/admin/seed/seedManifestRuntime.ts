@@ -1056,6 +1056,11 @@ export const RUNTIME: CollectionEntry[] = [
     notes: "Merger decisions reference world-specific corporations.",
   },
   {
+    name: "corporationExits",
+    category: "runtime",
+    notes: "Exit records reference world-specific corporations that were deleted.",
+  },
+  {
     name: "indexListingPetitions",
     category: "runtime",
     notes: "Listing decisions reference world-specific corporations and characters.",

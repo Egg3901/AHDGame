@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { recordCorporationExit } from "@/lib/corporations/exits/recordCorporationExit";
 import { ObjectId } from "mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
@@ -276,6 +277,11 @@ export async function mergeBackSectorType(
 
   // Dissolve the emptied split-off shell (no payout, no restore).
   await corps.deleteOne({ _id: splitOff._id });
+  await recordCorporationExit(db, splitOff, {
+    reason: "national_corporation_merged",
+    successorId: target._id,
+    now,
+  });
   await Promise.all(
     splitOffSectors.map((sector, index) =>
       releaseConstructionPropertyTransition(db, sector._id, transitionKeys[index])

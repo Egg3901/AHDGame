@@ -38,6 +38,7 @@
  * needs the old ids keeps them in `nationalizationLedger` provenance and bond
  * `originalIssuerName`, same as the existing merge modules.
  */
+import { recordCorporationExit } from "@/lib/corporations/exits/recordCorporationExit";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
@@ -211,6 +212,11 @@ export async function mergeNationalCorporations(
       deletedAt: now,
     });
     await corps.deleteOne({ _id: corp._id });
+    await recordCorporationExit(db, corp, {
+      reason: "national_corporation_merged",
+      successorId: survivorPrimary._id,
+      now,
+    });
   }
 
   // Hold the property lock through bond/share/title settlement and shell

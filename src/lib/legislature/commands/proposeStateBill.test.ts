@@ -224,6 +224,98 @@ describe("proposeStateBill — US state tax sliders (ticket #1106)", () => {
     expect(res.body).toMatchObject({ error: expect.stringMatching(/at least/) });
     expect(db.collection("stateBills").insertOne).not.toHaveBeenCalled();
   });
+
+  it("rejects the same reviewed regional tax instrument twice", async () => {
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({
+      _id: "current",
+      currentTurn: 100,
+      resetWorldId: "world-1",
+      metricsSystemVersion: "v2",
+      legislationSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "world-1",
+          revision: 3,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "metrics",
+        },
+        legislation: {
+          worldId: "world-1",
+          revision: 6,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "legislation",
+        },
+      },
+    } as never);
+    const { proposeStateBill } = await import("./proposeStateBill");
+
+    const res = await proposeStateBill(db as unknown as Db, "US", "NC", authUser(), {
+      title: "Duplicated Income Tax Act",
+      summary: "Attempts to set the same tax twice.",
+      category: "tax",
+      provisions: [
+        { legislationTypeId: "us.tax.stateIncomeTax", proposedRate: 7 },
+        { legislationTypeId: "us.tax.stateIncomeTax", proposedRate: 8 },
+      ],
+    });
+
+    expect(res).toMatchObject({
+      status: 400,
+      body: { error: "A v2 bill cannot repeat a tax instrument." },
+    });
+    expect(db.collection("stateBills").insertOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed reviewed regional law selection without throwing", async () => {
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({
+      _id: "current",
+      currentTurn: 100,
+      resetWorldId: "world-1",
+      metricsSystemVersion: "v2",
+      legislationSystemVersion: "v2",
+      resetVersionSeeds: {
+        metrics: {
+          worldId: "world-1",
+          revision: 3,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "metrics",
+        },
+        legislation: {
+          worldId: "world-1",
+          revision: 6,
+          sourceTurn: 1,
+          completedAt: "2026-10-04T00:00:00.000Z",
+          verificationHash: "legislation",
+        },
+      },
+    } as never);
+    const { proposeStateBill } = await import("./proposeStateBill");
+
+    const res = await proposeStateBill(db as unknown as Db, "US", "NC", authUser(), {
+      title: "Malformed Regional Law Act",
+      summary: "Omits the region from a reviewed regional law selection.",
+      category: "education",
+      provisions: [
+        {
+          type: "reset_law",
+          familyId: "education.core",
+          scope: "regional",
+          choice: "center",
+        },
+      ],
+    });
+
+    expect(res).toMatchObject({
+      status: 400,
+      body: { error: expect.stringMatching(/identify its family and region/i) },
+    });
+    expect(db.collection("stateBills").insertOne).not.toHaveBeenCalled();
+  });
 });
 
 describe("proposeStateBill — provision snapshots", () => {
