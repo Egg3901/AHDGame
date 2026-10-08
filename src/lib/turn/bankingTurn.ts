@@ -23,7 +23,11 @@ import { processBankTreasuryTurn } from "@/lib/banking/bankTreasury";
 import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import { recoverBankingSettlements } from "@/lib/banking/recovery";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
-import { recordBankingStage, timedBankingStage } from "@/lib/banking/telemetry";
+import {
+  recordBankingStage,
+  timedBankingStage,
+  withBankingTelemetryBatch,
+} from "@/lib/banking/telemetry";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import { computeNpcDepositShare, equityCappedDepositCeiling } from "@/lib/banking/deposits";
 import { domesticDepositRetention } from "@/lib/centralBank/marketEffects";
@@ -99,6 +103,13 @@ type DepositTaker = {
  * the turn explicitly for idempotency keys.
  */
 export async function processBankingTurn(db: Db, turn: number): Promise<BankingTurnSummary> {
+  // Every settlement in the pass bumps the turn's banking telemetry document.
+  // Unbatched, that was about 150 concurrent increments on one document per
+  // turn; batched, one write when the pass ends. Counts are unchanged.
+  return withBankingTelemetryBatch(db, turn, () => runBankingTurn(db, turn));
+}
+
+async function runBankingTurn(db: Db, turn: number): Promise<BankingTurnSummary> {
   // Persisted per-stage timings and round trips for this phase (#2689).
   const steps = substepMarker();
   await resumeReservePoolTransfers(db);

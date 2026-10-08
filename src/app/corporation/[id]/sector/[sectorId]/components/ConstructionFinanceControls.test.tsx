@@ -1,7 +1,17 @@
 /** @vitest-environment happy-dom */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ConstructionFinanceControls from "./ConstructionFinanceControls";
+import type { ReactElement } from "react";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../../../../../messages/en/corporations.json";
+function render(ui: ReactElement) {
+  return renderView(
+    <NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}>
+      {ui}
+    </NextIntlClientProvider>
+  );
+}
 vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({
     formatAmount: (amount: number, currency: string) => `${currency} ${amount}`,
@@ -43,6 +53,38 @@ describe("construction finance consent", () => {
       expect(onChange).toHaveBeenCalledWith(null);
     }
   );
+  it("shows native loan amounts exactly without converting a face value twice", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            enabled: true,
+            currency: "GBP",
+            lenders: [{ id: "bank", name: "Lender", ratePercent: 5, approvalRequired: false }],
+          }),
+          { status: 200 }
+        )
+      )
+    );
+    render(
+      <ConstructionFinanceControls
+        view={{ corporationId: "corp", currency: "GBP", localPerAnchor: 2 }}
+        totalAnchor={50000}
+        constructionAnchor={50000}
+        cashAnchor={15000}
+        onChange={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByLabelText(/Finance this build/));
+    await screen.findByRole("option", { name: /Lender/ });
+    expect(screen.getByText("Bank funds for this build").parentElement?.textContent).toContain(
+      "£74,250.00"
+    );
+    expect(screen.getByText("Your cash contribution").parentElement?.textContent).toContain(
+      "£25,750.00"
+    );
+  });
   it("requires reviewed whole-site consent and sufficient native contribution, preserving one request on retry", async () => {
     vi.stubGlobal(
       "fetch",
@@ -70,7 +112,18 @@ describe("construction finance consent", () => {
     fireEvent.click(screen.getByLabelText(/Finance this build/));
     await screen.findByRole("option", { name: /Lender/ });
     expect(onChange.mock.lastCall?.[0].request).toBeNull();
-    expect(screen.getByText(/Your cash contribution/).textContent).toContain("USD 25750");
+    expect(screen.getByText(/Your cash contribution/).parentElement?.textContent).toContain(
+      "$25,750.00"
+    );
+    expect(screen.getByText("Bank funds for this build").parentElement?.textContent).toContain(
+      "$74,250.00"
+    );
+    expect(screen.getByText("Origination fee (withheld)").parentElement?.textContent).toContain(
+      "$750.00"
+    );
+    expect(screen.getByText("Cash left after build").parentElement?.textContent).toContain(
+      "$4,250.00"
+    );
     fireEvent.click(screen.getByLabelText(/I pledge this sector/));
     await waitFor(() =>
       expect(onChange.mock.lastCall?.[0].request).toMatchObject({

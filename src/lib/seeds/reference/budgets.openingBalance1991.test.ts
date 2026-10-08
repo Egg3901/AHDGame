@@ -131,6 +131,18 @@ describe("1991 player fiscal openings", () => {
     }
   });
 
+  it("IE opens within receipts after debt service (it enacts no spending laws)", () => {
+    const budget = getInitialNationalBudgetsForPreset("1991-default").find(
+      (row) => row.countryId === "IE"
+    )!;
+    // The seeded book is Ireland's runtime spending; unfitted it ran a 13% deficit.
+    expect(budget.surplus / budget.gdp).toBeGreaterThanOrEqual(-0.0051);
+    expect(budget.surplus / budget.gdp).toBeLessThan(0);
+    const programs = budget.spending.total - budget.spending.debtInterest;
+    expect(programs / budget.gdp).toBeGreaterThan(0.3);
+    expect(programs / budget.gdp).toBeLessThan(0.36);
+  });
+
   it("leaves later presets and non-player spending at their existing calibration", () => {
     expect(
       getNationalBudgetSeedConfigsForPreset("1999-default").every(
