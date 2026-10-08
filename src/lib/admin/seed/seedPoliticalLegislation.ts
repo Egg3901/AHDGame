@@ -34,6 +34,7 @@ import {
 import { LAW_COUNTRY_IDS, type LawCountryId } from "@/lib/politicalLegislation/types";
 import { DD_LAND_STATE_IDS } from "@/lib/politicalLegislation/laws/ddLandLaws";
 import { refreshNationalBudgetRevenue } from "@/lib/budget/revenue";
+import { openingNonLawResidual } from "@/lib/budget/rules/nonLawSpending";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { NATIONAL_POLICY_STATE_IDS } from "@/lib/policy/nationalStateId";
 import type { CountryId } from "@/lib/constants/countries";
@@ -271,7 +272,14 @@ export async function seedPoliticalLegislationBaseline(
     const targetSpending = Math.round(
       (budget.gdp * SUCCESSOR_1991_GENERAL_GOVERNMENT_GDP_PERCENT.RU.expenditure) / 100
     );
-    const residual = targetSpending - budget.spending.total;
+    // The union grant pool is booked as spending once the regional budgets
+    // exist; keep it inside the envelope instead of on top of it.
+    const residual = openingNonLawResidual({
+      targetSpending,
+      measuredTotal: budget.spending.total,
+      bookedStateGrants: budget.spending.stateGrants,
+      baselineStateGrants: budget.baselineStateGrants,
+    });
     if (residual < 0) {
       throw new Error(`1991 Russian law spending exceeds the fiscal envelope by ${-residual}`);
     }

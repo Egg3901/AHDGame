@@ -70,6 +70,32 @@ export function calibrateNonLawSpendingShare(args: {
   return share >= NON_LAW_CALIBRATION_MIN_SHARE ? share : 0;
 }
 
+/**
+ * Non-law spending (SUR, or the budget's own currency) that tops a country's
+ * law-priced spending up to its authored total envelope at seed.
+ *
+ * A planned-economy union grant pool is booked back as `spending.stateGrants`
+ * once the regional budgets exist, but they do not exist yet while the seed
+ * measures the book. Counting only the booked grants left the pool out of the
+ * measurement, so the residual absorbed it and the pool was then booked a
+ * second time on the first turns (live Russia: the 106B pool, 4.6% of GDP).
+ * The unbooked part of the pool is therefore taken off the residual.
+ *
+ * A negative result means the law book and debt service alone already exceed
+ * the envelope; the caller decides how to fail.
+ */
+export function openingNonLawResidual(args: {
+  targetSpending: number;
+  measuredTotal: number;
+  bookedStateGrants: number;
+  baselineStateGrants: number | undefined;
+}): number {
+  const { targetSpending, measuredTotal, bookedStateGrants } = args;
+  const baselineGrants = Math.max(0, args.baselineStateGrants ?? 0);
+  const unbookedGrants = Math.max(0, baselineGrants - Math.max(0, bookedStateGrants));
+  return targetSpending - measuredTotal - unbookedGrants;
+}
+
 /** Seeded general-government spending envelope (categories plus grants). */
 export function seededSpendingEnvelope(
   budget: Pick<FederalBudget, "baselineSpendingByCategory" | "baselineStateGrants">

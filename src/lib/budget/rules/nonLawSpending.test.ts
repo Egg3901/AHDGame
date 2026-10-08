@@ -5,6 +5,7 @@ import {
   calibrateNonLawSpendingShare,
   needsNonLawCalibration,
   nonLawSpendingAmount,
+  openingNonLawResidual,
   seededSpendingEnvelope,
 } from "./nonLawSpending";
 
@@ -102,5 +103,58 @@ describe("seededSpendingEnvelope", () => {
       } as never)
     ).toBe(15);
     expect(seededSpendingEnvelope({} as never)).toBe(0);
+  });
+});
+
+describe("openingNonLawResidual", () => {
+  it("takes the unbooked union grant pool off the residual", () => {
+    // Seed time: laws plus debt service measure 900, no regional budget books the pool yet.
+    expect(
+      openingNonLawResidual({
+        targetSpending: 1000,
+        measuredTotal: 900,
+        bookedStateGrants: 0,
+        baselineStateGrants: 60,
+      })
+    ).toBe(40);
+  });
+
+  it("does not take the pool off twice when it is already booked", () => {
+    expect(
+      openingNonLawResidual({
+        targetSpending: 1000,
+        measuredTotal: 900,
+        bookedStateGrants: 60,
+        baselineStateGrants: 60,
+      })
+    ).toBe(100);
+  });
+
+  it("only removes the part of the pool that is still unbooked", () => {
+    expect(
+      openingNonLawResidual({
+        targetSpending: 1000,
+        measuredTotal: 900,
+        bookedStateGrants: 25,
+        baselineStateGrants: 60,
+      })
+    ).toBe(65);
+  });
+
+  it("treats a missing or negative pool as none", () => {
+    const base = { targetSpending: 1000, measuredTotal: 900, bookedStateGrants: 0 };
+    expect(openingNonLawResidual({ ...base, baselineStateGrants: undefined })).toBe(100);
+    expect(openingNonLawResidual({ ...base, baselineStateGrants: -5 })).toBe(100);
+  });
+
+  it("goes negative when the book and the pool already exceed the envelope", () => {
+    expect(
+      openingNonLawResidual({
+        targetSpending: 1000,
+        measuredTotal: 980,
+        bookedStateGrants: 0,
+        baselineStateGrants: 60,
+      })
+    ).toBe(-40);
   });
 });
