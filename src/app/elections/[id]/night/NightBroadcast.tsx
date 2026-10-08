@@ -115,7 +115,10 @@ export function NightBroadcast({
           <SettledPanel
             view={view}
             candidateName={candidateName}
-            contingent={{ result: contingent?.result ?? data.summary.contingentResult }}
+            contingent={{
+              result: contingent?.result ?? data.summary.contingentResult,
+              houseVote: data.summary.contingentHouseVote,
+            }}
             href={concludedHref}
             onContinue={onContinue}
           />

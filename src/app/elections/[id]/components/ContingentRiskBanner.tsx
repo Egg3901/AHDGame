@@ -40,8 +40,14 @@ function HouseOutcome({
   return (
     <>
       Projected House ballot: no candidate reaches {projection.houseThreshold} state delegations
-      {delegations > 0 ? `; ${winnerName} leads with ${delegations}` : ""}. The deadlock breaker
-      would seat <span className="text-foreground font-medium">{winnerName}</span>.
+      {delegations > 0 ? `; ${winnerName} leads with ${delegations}` : ""}. Nobody would be elected
+      president:{" "}
+      {projection.vicePresidentWinnerName ? (
+        <span className="text-foreground font-medium">{projection.vicePresidentWinnerName}</span>
+      ) : (
+        "the vice president the Senate elects"
+      )}{" "}
+      would serve as acting president while the House keeps voting.
     </>
   );
 }

@@ -35,6 +35,11 @@ export interface SeatPresidentialExecutiveParams {
   vpNppId?: ObjectId;
   now: Date;
   turn?: number;
+  /**
+   * Seat as acting president (House contingent deadlock): no term counts
+   * toward term limits and the career entry reads as an appointment.
+   */
+  acting?: boolean;
 }
 
 export async function seatPresidentialExecutive(
@@ -42,6 +47,7 @@ export async function seatPresidentialExecutive(
   params: SeatPresidentialExecutiveParams
 ): Promise<void> {
   const { election, winnerCandidate, vpCharId, vpNppId, now } = params;
+  const acting = params.acting === true;
   const electionCountry = (election.countryId ??
     COUNTRY_CONFIGS.US.id) as typeof COUNTRY_CONFIGS.US.id;
   const resolutionCountryId = election.countryId ?? "US";
@@ -185,6 +191,7 @@ export async function seatPresidentialExecutive(
         party: winnerCandidate.party,
         isNPP: winnerCandidate.isNPP ?? false,
         nppId: winnerCandidate.nppId ?? undefined,
+        isActing: acting,
         electedAt: now,
         updatedAt: now,
       },
@@ -212,9 +219,11 @@ export async function seatPresidentialExecutive(
       );
     const presidentOffice: OfficeType = { type: "president" };
     const presidentCareer: CareerEvent = {
-      type: "elected",
+      type: acting ? "appointed" : "elected",
       office: presidentOffice,
-      officeLabel: getOfficeLabel(presidentOffice, election.countryId),
+      officeLabel: acting
+        ? `Acting ${getOfficeLabel(presidentOffice, election.countryId)}`
+        : getOfficeLabel(presidentOffice, election.countryId),
       party: winnerCandidate.party,
       partyCountryId: election.countryId,
       electionId: election._id.toString(),
@@ -226,7 +235,7 @@ export async function seatPresidentialExecutive(
         careerHistory: {
           $not: {
             $elemMatch: {
-              type: "elected",
+              type: presidentCareer.type,
               electionId: election._id.toString(),
               "office.type": "president",
             },
@@ -237,10 +246,13 @@ export async function seatPresidentialExecutive(
         $set: {
           currentOffice: presidentOffice,
           updatedAt: now,
-          ...incrementExecutiveTermsServedUpdate(
-            winnerCharacter ?? { executiveTermsServed: undefined },
-            electionCountry
-          ),
+          // An acting presidency is not an elected term (term limits).
+          ...(acting
+            ? {}
+            : incrementExecutiveTermsServedUpdate(
+                winnerCharacter ?? { executiveTermsServed: undefined },
+                electionCountry
+              )),
         },
         $push: { careerHistory: presidentCareer },
       }

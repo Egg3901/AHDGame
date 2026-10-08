@@ -2,6 +2,7 @@ import { ObjectId } from "mongodb";
 import type { Db } from "@/lib/mongodb";
 import type {
   Character,
+  Coalition,
   ElectionCandidate,
   ElectionVoteTally,
   ElectedOfficial,
@@ -57,6 +58,28 @@ function buildVoterProfile(
 }
 
 export type ContingentChamberSnapshot = NonNullable<ElectionVoteTally["contingentChamberSnapshot"]>;
+
+/** Party sequential id to the other parties in its coalition, for one country. */
+async function loadCoalitionPartners(db: Db, countryId: string): Promise<Map<string, string[]>> {
+  let coalitions: Pick<Coalition, "members">[] = [];
+  try {
+    coalitions = await db
+      .collection<Coalition>("coalitions")
+      .find({ countryId: countryId as CountryId })
+      .project<Pick<Coalition, "members">>({ members: 1 })
+      .toArray();
+  } catch {
+    // No coalition data: the ballot falls back to party and ideology alone.
+  }
+  const partners = new Map<string, string[]>();
+  for (const coalition of coalitions) {
+    const ids = (coalition.members ?? []).map((m) => String(m.partySequentialId));
+    for (const id of ids) {
+      partners.set(id, [...(partners.get(id) ?? []), ...ids.filter((other) => other !== id)]);
+    }
+  }
+  return partners;
+}
 
 export type LoadContingentElectionDataResult = Omit<
   ResolveContingentElectionInput,
@@ -320,6 +343,22 @@ export async function loadContingentElectionData(
       const voter = policiesForOfficial(official);
       if (voter) senators.push({ ...voter, weight: 1 });
     }
+  }
+
+  // A coalition votes as a bloc: each legislator treats partner parties'
+  // candidates as allies (see COALITION_MATCH_BONUS). Read live membership at
+  // ballot time, including for a frozen chamber snapshot.
+  const coalitionPartners = await loadCoalitionPartners(db, countryId);
+  if (coalitionPartners.size > 0) {
+    const withPartners = (v: ContingentVoterProfile): ContingentVoterProfile => {
+      const partners = coalitionPartners.get(v.party);
+      return partners ? { ...v, coalitionParties: partners } : v;
+    };
+    houseDelegations = houseDelegations.map((d) => ({
+      ...d,
+      voters: d.voters.map(withPartners),
+    }));
+    senators = senators.map(withPartners);
   }
 
   const presidentCandidates: ContingentCandidateProfile[] = [];

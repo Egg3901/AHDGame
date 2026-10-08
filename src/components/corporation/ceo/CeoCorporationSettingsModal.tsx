@@ -116,7 +116,7 @@ export function CeoCorporationSettingsModal({
                 id={`${formId}-description`}
                 value={editDescription}
                 onChange={(e) => setEditDescription(e.target.value)}
-                placeholder="Describe your corporation..."
+                placeholder="Describe your corporation"
                 className="w-full rounded-sm border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none resize-none"
                 rows={3}
                 maxLength={500}
@@ -148,7 +148,7 @@ export function CeoCorporationSettingsModal({
                   ))}
                 </select>
                 <p className="text-xs text-muted mt-1">
-                  Matching sectors get +5% margin. Mismatched sectors get -15%.
+                  Sectors of this type earn 5% more margin. Sectors of any other type earn 15% less.
                 </p>
               </div>
 
@@ -175,8 +175,8 @@ export function CeoCorporationSettingsModal({
                     ))}
                 </select>
                 <p className="text-xs text-muted mt-1">
-                  Matching sectors get +2.5% margin (half of primary). Doubles sprawl penalty for
-                  &gt;15 sectors, but reducible via logistics spending.
+                  Sectors of this type earn 2.5% more margin. It doubles the sprawl penalty once you
+                  run more than 15 sectors; logistics spending reduces it.
                 </p>
               </div>
             </div>
@@ -184,8 +184,8 @@ export function CeoCorporationSettingsModal({
             {(editPrimaryType !== corporation.type ||
               (editSecondaryType || null) !== (corporation.secondaryType ?? null)) && (
               <div className="rounded-sm border border-warning/30 bg-warning/5 p-3 text-xs text-warning">
-                Changing sector type incurs a <strong>-10% margin penalty</strong> on all sectors
-                for 24 hours, followed by a 72-hour cooldown before you can switch again.
+                Changing sector focus cuts margin by <strong>10%</strong> on every sector for 24
+                turns, then blocks another change for 72 turns.
               </div>
             )}
 

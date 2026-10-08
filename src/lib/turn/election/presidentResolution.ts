@@ -16,6 +16,11 @@ import {
 } from "@/lib/turn/electionCalculations";
 import type { ContingentElectionResult } from "@/lib/turn/election/contingentElection";
 import {
+  announceActingPresidency,
+  needsActingPresidency,
+  seatActingPresidencyForHouseVote,
+} from "@/lib/turn/election/contingentActingPresidency";
+import {
   markContingentResolutionPending,
   runPresidentialContingentBallot,
 } from "@/lib/turn/election/presidentContingentBallot";
@@ -233,6 +238,7 @@ async function finalizePresidentTally(
             senateThreshold: contingentResult.senateThreshold,
             deadlockBreakerUsed: contingentResult.deadlockBreakerUsed,
             deadlockBreakerReason: contingentResult.deadlockBreakerReason,
+            houseDeadlocked: contingentResult.houseDeadlocked ?? false,
             topElectoralVoteTotal: contingentResult.topElectoralVoteTotal,
           },
         }),
@@ -495,6 +501,45 @@ export async function resolvePresidentElection(
     }
     if (finalized) {
       await runPostFinalizeCleanup(db, election, electoralVotesByCandidate, now);
+    }
+  }
+
+  // House deadlock: nobody is elected president. The Senate's vice-presidential
+  // pick acts while the House keeps voting; covers seating retries as well.
+  if (needsActingPresidency(contingentResult) && tally.contingentHouseVote?.status !== "closed") {
+    try {
+      const vote = await seatActingPresidencyForHouseVote(db, {
+        election,
+        contingentResult: contingentResult!,
+        existingVote: tally.contingentHouseVote,
+        now,
+        turn: currentTurn,
+      });
+      console.log(
+        `[Turn] President election ${election._id}: House deadlocked, ${vote.actingPresidentName} is acting president; the House votes until turn ${vote.closesTurn}`
+      );
+      // Announce once: a seating retry reuses the existing vote record.
+      if (!tally.contingentHouseVote) {
+        await announceActingPresidency(db, {
+          election,
+          vote,
+          houseThreshold: contingentResult!.houseThreshold,
+          candidates,
+        });
+      }
+      return true;
+    } catch (err) {
+      console.error(
+        `[Turn] President election ${election._id}: acting presidency seating failed — will retry next turn`,
+        err
+      );
+      await db
+        .collection<ElectionVoteTally>("electionVoteTallies")
+        .updateOne(
+          { electionId: election._id },
+          { $set: { executiveSeatingPending: true, updatedAt: now } }
+        );
+      return false;
     }
   }
 

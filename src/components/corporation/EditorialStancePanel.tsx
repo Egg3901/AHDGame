@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { DenseSection, InlineStatus, SmallButton } from "./dense/DenseKit";
 
 export interface EditorialStanceView {
   economic: number;
@@ -48,65 +49,68 @@ export function EditorialStancePanel({
     }
   }
 
+  const changed = economic !== (stance?.economic ?? 0) || social !== (stance?.social ?? 0);
+  const axes = [
+    {
+      key: "economic",
+      value: economic,
+      set: setEconomic,
+      low: t("economicLow"),
+      high: t("economicHigh"),
+    },
+    { key: "social", value: social, set: setSocial, low: t("socialLow"), high: t("socialHigh") },
+  ] as const;
+
   return (
-    <section
-      className="rounded-xl border border-card-border bg-card p-5"
-      aria-labelledby="editorial-stance-title"
+    <DenseSection
+      id="editorial-stance"
+      title={t("title")}
+      meta={t("published", {
+        economic: stanceValue(stance?.economic ?? 0),
+        social: stanceValue(stance?.social ?? 0),
+      })}
     >
-      <h2 id="editorial-stance-title" className="text-lg font-semibold">
-        {t("title")}
-      </h2>
-      <p className="mt-1 text-sm text-muted">{t("description")}</p>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <label className="grid gap-2 text-sm">
-          <span>
-            {t("economic")}: {stanceValue(economic)}
-          </span>
-          <input
-            type="range"
-            min={-5}
-            max={5}
-            step={1}
-            value={economic}
-            disabled={!isCeo || saving}
-            onChange={(event) => setEconomic(Number(event.target.value))}
-            aria-label={t("economic")}
-          />
-        </label>
-        <label className="grid gap-2 text-sm">
-          <span>
-            {t("social")}: {stanceValue(social)}
-          </span>
-          <input
-            type="range"
-            min={-5}
-            max={5}
-            step={1}
-            value={social}
-            disabled={!isCeo || saving}
-            onChange={(event) => setSocial(Number(event.target.value))}
-            aria-label={t("social")}
-          />
-        </label>
+      <p className="py-1 text-sm text-muted">{t("description")}</p>
+      <div className="grid gap-4 py-2 sm:grid-cols-2">
+        {axes.map((axis) => (
+          <label key={axis.key} className="grid gap-1 text-sm">
+            <span>
+              {t(axis.key)}: <span className="font-mono">{stanceValue(axis.value)}</span>
+            </span>
+            <input
+              type="range"
+              min={-5}
+              max={5}
+              step={1}
+              value={axis.value}
+              disabled={!isCeo || saving}
+              onChange={(event) => axis.set(Number(event.target.value))}
+              aria-label={t(axis.key)}
+            />
+            <span className="flex justify-between text-xs text-muted">
+              <span>{axis.low}</span>
+              <span>{axis.high}</span>
+            </span>
+          </label>
+        ))}
       </div>
-      {isCeo && (
-        <button
-          type="button"
-          className="mt-4 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-          disabled={
-            saving || (economic === (stance?.economic ?? 0) && social === (stance?.social ?? 0))
-          }
-          onClick={() => void save()}
-        >
-          {saving ? t("saving") : t("save")}
-        </button>
+      {isCeo ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <SmallButton
+            tone="primary"
+            disabled={saving || !changed}
+            title={!changed ? t("unchanged") : undefined}
+            onClick={() => void save()}
+          >
+            {saving ? t("saving") : t("save")}
+          </SmallButton>
+          {!changed && <span className="text-xs text-muted">{t("unchanged")}</span>}
+        </div>
+      ) : (
+        <p className="text-xs text-muted">{t("ceoOnly")}</p>
       )}
-      {error && (
-        <p role="alert" className="mt-3 text-sm text-error">
-          {error}
-        </p>
-      )}
-    </section>
+      <InlineStatus message={error} tone="error" className="pt-2" />
+    </DenseSection>
   );
 }
 

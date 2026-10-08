@@ -165,6 +165,26 @@ describe("takeSupplyListing", () => {
     );
   });
 
+  it("lets a player take an AI-posted offer, which has no publishing user (ticket 1418)", async () => {
+    // Prod shape: NPP corporations hold the placeholder user id and the turn
+    // engine writes AI listings without publishedByUserId.
+    db.collection("corporations").findOne.mockResolvedValue(
+      publisher({ userId: "000000000000000000000000" })
+    );
+    db.collection("supplyListings").findOne.mockResolvedValue(
+      listing({ _id: `${publisherId}:ai:sell:steel`, publishedByUserId: undefined, aiListed: true })
+    );
+    const response = await takeRequest({ listingId: `${publisherId}:ai:sell:steel`, volume: 30 });
+    expect(response.status).toBe(200);
+    expect(db.collectionMocks.supplyAgreements.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        supplierCorpId: publisherId,
+        buyerCorpId: takerId,
+        status: "active",
+      })
+    );
+  });
+
   it("rejects over-taking, expired, own and stale-publisher offers", async () => {
     expect((await takeRequest({ listingId: `${publisherId}:0`, volume: 101 })).status).toBe(409);
     db.collection("supplyListings").findOne.mockResolvedValue(listing({ expiresAtTurn: 100 }));

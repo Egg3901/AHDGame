@@ -36,6 +36,8 @@ export interface ElectedOfficial {
   termEnds?: Date;
   /** True if appointed (Senate only), false if elected */
   isAppointment?: boolean;
+  /** President only: serving as acting president while the House has not chosen. */
+  isActing?: boolean;
   /** Character ID of appointing governor (if isAppointment is true) */
   appointedBy?: ObjectId;
   /**

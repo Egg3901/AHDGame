@@ -435,7 +435,12 @@ export default async function RootLayout({
                           {!isWikiSubdomain && !isNativeApp && <AdSlot />}
                           {!isWikiSubdomain && !isNativeApp && <AdSenseSlot />}
                           {!isWikiSubdomain && <SiteFooter displayMode={displayMode} />}
-                          {!isWikiSubdomain && <StatusBar showOnlineStatus={!isClientShell} />}
+                          {!isWikiSubdomain && (
+                            <StatusBar
+                              showOnlineStatus={!isClientShell}
+                              turnStatusLink={!singleplayer}
+                            />
+                          )}
                           {!isWikiSubdomain && singleplayer && <TurnProgressToast />}
                           {!isWikiSubdomain && <TutorialCoachMount />}
                           {!isWikiSubdomain && <LiveRefreshBanner />}

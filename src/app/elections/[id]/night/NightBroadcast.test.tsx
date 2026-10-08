@@ -144,6 +144,32 @@ describe("NightBroadcast", () => {
   });
 });
 
+describe("House deadlock on the settled board", () => {
+  it("names the acting president and the House vote window, not the delegation leader", () => {
+    const data = settledFixture(CAND_A);
+    data.summary.projectedWinner = null;
+    data.summary.resolutionMode = "contingent_deadlock";
+    data.summary.contingentResult = {
+      presidentWinnerId: CAND_B,
+      houseVoteTotals: { [CAND_B]: 10 },
+      houseThreshold: 26,
+      deadlockBreakerUsed: true,
+      houseDeadlocked: true,
+    } as never;
+    data.summary.contingentHouseVote = {
+      status: "open",
+      actingPresidentName: "Casey Acting",
+      closesTurn: 73,
+    };
+    render(<NightBroadcast data={data} {...props} />);
+    const text = screen.getByTestId("night-settled").textContent;
+    expect(text).toContain("The House has not chosen a president");
+    expect(text).toContain("Casey Acting serves as acting president");
+    expect(text).toContain("until turn 73");
+    expect(text).not.toContain("The House elects");
+  });
+});
+
 describe("settling keeps the night's record", () => {
   it("keeps the night feed on the settled board", () => {
     const live = nightFixture();

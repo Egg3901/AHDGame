@@ -181,6 +181,26 @@ export interface ElectionVoteTally {
     deadlockBreakerUsed?: boolean;
     deadlockBreakerReason?: string;
     topElectoralVoteTotal: number;
+    /** No House majority: an acting president serves while the House keeps voting. */
+    houseDeadlocked?: boolean;
+  };
+  /**
+   * President only: the House vote that stays open after a contingent deadlock.
+   * The Senate's vice-presidential pick serves as acting president meanwhile.
+   */
+  contingentHouseVote?: {
+    status: "open" | "closed";
+    openedTurn: number;
+    closesTurn: number;
+    /** Contingent person id (character id, or `npp_<id>`). */
+    actingPresidentId: string;
+    actingPresidentName: string;
+    eligibleCandidateIds: string[];
+    /** House member id to the candidacy they back. */
+    votes: Record<string, string>;
+    /** Set when the House reaches a majority and the president is seated. */
+    presidentWinnerId?: string;
+    closedTurn?: number;
   };
   /** President only: per-unit turn snapshots for EV projection */
   unitTurnSnapshots?: Record<string, VoteTurnSnapshot[]>;
