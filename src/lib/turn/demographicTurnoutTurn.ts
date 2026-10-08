@@ -1,3 +1,8 @@
+/**
+ * Party turnout and registration budgets spend treasury each turn.
+ * processPartyGOTV applies funded turnout campaigns and registration drives;
+ * registration drives reach only regions with live party presence.
+ */
 import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import {
   getStateDemographicTurnoutCollection,
@@ -14,6 +19,7 @@ import type {
   OrgRegLedger,
   NPP,
   GameConfig,
+  ElectedOfficial,
 } from "@/lib/db/types";
 import { POOL_SENTINEL_PARTY_ID } from "@/lib/db/types";
 import { decayTurnout, canvassingBoost } from "@/lib/campaignTargeting/rules";
@@ -55,6 +61,10 @@ import {
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { isPartyTreasuryNegative, resetPartyBudgetSpending } from "@/lib/partyBudgetGuards";
 import { logger } from "../observability/logger";
+import {
+  buildRegistrationPresence,
+  registrationPresenceKey,
+} from "@/lib/parties/rules/registrationPresence";
 
 type StoredPartyBudget = PartyBudget & { countryId?: CountryId };
 
@@ -354,6 +364,7 @@ export async function processPartyGOTV(
   const registrationPoolUnregDrawn = new Map<string, number>(); // pool._id -> pp drawn from unregistered
   const registrationPoolIndepDrawn = new Map<string, number>(); // pool._id -> pp drawn from independent
   const registrationLedgerRows: Omit<OrgRegLedger, "_id">[] = [];
+  let registrationPresence = new Set<string>();
   const budgetsToReset: PartyBudget[] = [];
   const budgetCountryBackfills = new Map<string, CountryId>();
 
@@ -516,6 +527,18 @@ export async function processPartyGOTV(
     // feature is opt-in (default 0%), so unused worlds keep the prior query set.
     const anyRegistrationBudget = partyBudgets.some((b) => (b.registrationBudgetPercent ?? 0) > 0);
     if (anyRegistrationBudget) {
+      // Reuse the already loaded rosters. One projected officeholder read per
+      // phase, not one presence query per party/region. Cached flags can be stale.
+      const officials = await db
+        .collection<ElectedOfficial>("electedOfficials")
+        .find({}, { projection: { countryId: 1, party: 1, state: 1 } })
+        .toArray();
+      registrationPresence = buildRegistrationPresence(
+        statePartyOrgs,
+        allCharacters,
+        allNPPs,
+        officials
+      );
       const pools = await db
         .collection<StateRegistrationPool>("stateRegistrationPool")
         .find({})
@@ -787,13 +810,27 @@ export async function processPartyGOTV(
           const rows =
             statePartyRowsByCountryParty.get(`${budgetCountryId}:${budget.partyId}`) ?? [];
           for (const spo of rows) {
+            if (
+              !registrationPresence.has(
+                registrationPresenceKey(spo.countryId, spo.partyId, spo.stateId)
+              )
+            )
+              continue;
             const pool = registrationPoolMap.get(`${spo.countryId}:${spo.stateId}`);
             if (pool) targets.push({ spo, pool });
           }
         } else {
           const spo = statePartyOrgMap.get(`${budget.stateId}_${budget.partyId}`);
           const pool = spo ? registrationPoolMap.get(`${spo.countryId}:${spo.stateId}`) : undefined;
-          if (spo && pool) targets.push({ spo, pool });
+          if (
+            spo &&
+            pool &&
+            spo.countryId === budgetCountryId &&
+            registrationPresence.has(
+              registrationPresenceKey(spo.countryId, spo.partyId, spo.stateId)
+            )
+          )
+            targets.push({ spo, pool });
         }
 
         if (targets.length > 0) {

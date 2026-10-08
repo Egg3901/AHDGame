@@ -73,7 +73,10 @@ describe("processPartyGOTV — registration drive with an exhausted pool", () =>
         socialPosition: 0,
       },
     ],
-    characters: [],
+    characters: [
+      { countryId: "US", party: "1", homeState: "PA" },
+      { countryId: "US", party: "6", homeState: "PA" },
+    ],
     npps: [],
     states: [{ _id: "PA", population: 1000, gdp: 100, votingEligiblePopulation: 800 }],
     stateRegistrationPool: [
