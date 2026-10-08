@@ -145,10 +145,12 @@ describe("ProductStudio", () => {
     render(<ProductStudio corporationId="c1" />);
     expect(await screen.findByLabelText("Product line")).toBeTruthy();
     expect(screen.getByLabelText("Product name")).toBeTruthy();
-    expect(screen.getByText(/adds 10 to 20 percent to revenue/i)).toBeTruthy();
-    expect(screen.getByText(/About 43% chance of a hit/)).toBeTruthy();
+    expect(screen.getByText(/10 to 20 percent of revenue/i)).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Chance of a hit" })).toBeTruthy();
+    expect(screen.getByText("43%")).toBeTruthy();
     expect(screen.queryByPlaceholderText(/corporation id/i)).toBeNull();
     expect(document.body.textContent).toMatch(/earn \S*7(\.2K|,200)\S* per turn now/);
+    expect(screen.getByText(/Name your product to start/)).toBeTruthy();
   });
 
   it("lists lines the plants cannot make with the reason, never in the picker", async () => {
@@ -184,7 +186,7 @@ describe("ProductStudio", () => {
     render(<ProductStudio corporationId="c1" />);
     expect(await screen.findByText("Falcon")).toBeTruthy();
     expect(screen.getByText("31% to 52%")).toBeTruthy();
-    expect(screen.getByText("13% to 18%")).toBeTruthy();
+    expect(screen.getByText(/13% to 18%/)).toBeTruthy();
     expect(screen.getByRole("progressbar", { name: "Development progress" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Reject and reorder/ }));
     await waitFor(() => expect(calls.some((c) => c.method === "PATCH")).toBe(true));
@@ -218,11 +220,9 @@ describe("ProductStudio", () => {
     );
     render(<ProductStudio corporationId="c1" />);
     const item = await screen.findByText("Falcon");
-    const text = item.closest("li")!.textContent!;
-    expect(text).toMatch(/Lifts revenue 16%/);
-    expect(text).toMatch(/about \S*1\S* per turn, 2 days left/);
-    expect(text).toMatch(/2 days left/);
-    expect(text).toMatch(/ahead of spend by \S*26\S*\./);
+    const text = item.closest("tr")!.textContent!;
+    expect(text).toMatch(/16%, about \S*1\S* per turn, 2 days left/);
+    expect(text).toMatch(/\+\S*26\S*/);
   });
 
   it("tells a flop there is no ongoing penalty", async () => {
@@ -232,7 +232,7 @@ describe("ProductStudio", () => {
       })
     );
     render(<ProductStudio corporationId="c1" />);
-    expect(await screen.findByText(/No ongoing penalty/)).toBeTruthy();
+    expect(await screen.findByText(/Money spent is not recovered/)).toBeTruthy();
   });
 
   it("hides start and answer controls from non-CEOs", async () => {
@@ -240,7 +240,7 @@ describe("ProductStudio", () => {
     render(<ProductStudio corporationId="c1" />);
     await screen.findByText("Falcon");
     expect(screen.queryByRole("button", { name: "Cancel development" })).toBeNull();
-    const choice = screen.getByRole("button", { name: /Reject and reorder/ }) as HTMLButtonElement;
-    expect(choice.disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: /Reject and reorder/ })).toBeNull();
+    expect(screen.getByText(/The CEO answers by turn/)).toBeTruthy();
   });
 });

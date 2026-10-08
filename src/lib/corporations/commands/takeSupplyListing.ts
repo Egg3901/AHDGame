@@ -78,10 +78,12 @@ export async function takeSupplyListing(request: Request, takerCorpId: string) {
       .findOne({ _id: listing.corporationId });
     // The same staleness rule the board applies when listing: the offer binds
     // only while the CEO who posted it still runs the corporation.
+    // AI listings carry no publishing user (the turn engine reposts them each
+    // refresh), so the board shows them unconditionally and the take must too.
     if (
       !publisher ||
-      publisher.ceoVacant ||
-      publisher.userId?.toString() !== listing.publishedByUserId
+      (listing.aiListed !== true &&
+        (publisher.ceoVacant || publisher.userId?.toString() !== listing.publishedByUserId))
     ) {
       return errorResponse(409, "This offer is no longer available");
     }

@@ -16,6 +16,8 @@ export interface ExecutiveHolder {
   avatarUrl?: string;
   isNPP: boolean;
   administrationStartDate: string | null;
+  /** President only: acting while the House has not chosen (contingent deadlock). */
+  isActing?: boolean;
 }
 
 /**
@@ -58,6 +60,7 @@ export async function resolveExecutiveHolder(
       avatarUrl: char.avatarUrl,
       isNPP: false,
       administrationStartDate,
+      ...(official.isActing ? { isActing: true } : {}),
     };
   }
 
@@ -77,6 +80,7 @@ export async function resolveExecutiveHolder(
       avatarUrl: npp.avatarUrl,
       isNPP: true,
       administrationStartDate,
+      ...(official.isActing ? { isActing: true } : {}),
     };
   }
 

@@ -300,11 +300,18 @@
     },
     "editorialStance": {
       "title": "Editorial stance",
-      "description": "Your newsroom's published position shapes its audience and the politicians it supports. In each state where you run newsrooms, advertisers whose own positions are close to the local newsroom lean pay up to 15% less to run ads.",
+      "description": "The position your newsrooms publish, on the same two scales politicians use. Politicians close to it gain a little favorability from your coverage, and in states where your newsrooms dominate, advertisers close to it pay up to 15% less to run ads. A stance far from your audience costs you up to 25% of the ad space you can sell. 0 and 0 is neutral and changes nothing.",
       "economic": "Economic",
+      "economicLow": "-5 command economy",
+      "economicHigh": "+5 free market",
       "social": "Social",
+      "socialLow": "-5 libertarian",
+      "socialHigh": "+5 authoritarian",
+      "published": "Published now: economic {economic}, social {social}",
+      "ceoOnly": "Only the CEO can change the stance.",
+      "unchanged": "Move a slider to change the stance.",
       "save": "Publish stance",
-      "saving": "Publishing...",
+      "saving": "Publishing",
       "saveFailed": "Could not publish the editorial stance."
     },
     "propForexFees": {

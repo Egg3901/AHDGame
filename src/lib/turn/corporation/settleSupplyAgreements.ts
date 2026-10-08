@@ -39,6 +39,10 @@
  * learn a new ledger row.
  */
 
+import {
+  energyProductivityMultiplier,
+  plantUtilizationForInputs,
+} from "@/lib/corporations/rules/energyProductivityRamp";
 import { substepMarker } from "@/lib/observability/phaseSubsteps";
 import { ObjectId, type Db, type AnyBulkWriteOperation } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
@@ -142,7 +146,11 @@ export function computeSupplyAgreementBuyerDemand(args: {
       typeof sector.producedUnits === "number" &&
       typeof sector.capacityUnits === "number" &&
       sector.capacityUnits > 0
-        ? Math.max(0, Math.min(1, sector.producedUnits / sector.capacityUnits))
+        ? plantUtilizationForInputs(
+            sector.producedUnits,
+            sector.capacityUnits,
+            energyProductivityMultiplier(sector.sectorType, args.currentTurn, args.preset)
+          )
         : 1;
     const inputMultiplier = getInputMultiplier(sector.productionPolicyLevel ?? 0);
     const natcorpMultiplier = sector.isNatcorp ? NATCORP_COMMODITY_MULTIPLIER : 1;

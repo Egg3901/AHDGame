@@ -13,6 +13,7 @@ interface Agreement {
   allocationShareBps: number;
   durationTurns?: number;
   lastEffectiveAnchor?: number;
+  lastCoveredSpendAnchor?: number;
   lastOverlap?: number;
   counterparty?: { id: string; name: string; ticker?: string };
 }
@@ -64,7 +65,7 @@ describe("AdvertisingAgreementsPanel", () => {
         role: "buyer",
         status: "active",
         allocationShareBps: 2500,
-        lastEffectiveAnchor: 130,
+        lastCoveredSpendAnchor: 130,
         lastOverlap: 0.8,
         counterparty: { id: "supplier", name: "Media Co", ticker: "MED" },
       },
@@ -72,11 +73,12 @@ describe("AdvertisingAgreementsPanel", () => {
     render(<AdvertisingAgreementsPanel corpId="corp1" />);
 
     expect(await screen.findByText("Media Co")).toBeTruthy();
-    expect(screen.getByText("buyer")).toBeTruthy();
-    expect(screen.getByText("active")).toBeTruthy();
-    expect(screen.getByText("25% of budget")).toBeTruthy();
-    expect(screen.getByText(/last coverage overlap 80%/i)).toBeTruthy();
-    expect(screen.getByText(/effective value 130/i)).toBeTruthy();
+    expect(screen.getByText("You buy from them")).toBeTruthy();
+    expect(screen.getByText("Active")).toBeTruthy();
+    expect(screen.getByText("25%")).toBeTruthy();
+    expect(screen.getByText("80%")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Budget covered per turn" })).toBeTruthy();
+    expect(document.body.textContent).toMatch(/130/);
   });
 
   it("lets a buyer pick a media corporation from a list and see a preview", async () => {
@@ -207,7 +209,8 @@ describe("AdvertisingAgreementsPanel", () => {
     render(<AdvertisingAgreementsPanel corpId="corp1" ownsMediaSector />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Accept" }));
-    expect(await screen.findByText("allocation_exceeds_budget")).toBeTruthy();
+    expect(await screen.findByText(/more than 100% of the buyer/)).toBeTruthy();
+    expect(screen.queryByText(/allocation_exceeds_budget/)).toBeNull();
     expect(screen.getByText("Buyer Co")).toBeTruthy();
   });
 
@@ -217,6 +220,26 @@ describe("AdvertisingAgreementsPanel", () => {
     await waitFor(() => expect(calls.length).toBeGreaterThan(0));
     expect(screen.getByText("Buy coverage advertising from a media corporation")).toBeTruthy();
     expect(screen.queryByText("Coverage advertising")).toBeNull();
+  });
+
+  it("says why the propose button is disabled and never shows an empty picker", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => ({
+        ok: true,
+        json: async () =>
+          url.endsWith("/suppliers")
+            ? { buyerMarketingPerTurnAnchor: 0, liquidCurrencyCode: null, suppliers: [] }
+            : { agreements: [] },
+      }))
+    );
+    render(<AdvertisingAgreementsPanel corpId="corp1" />);
+    fireEvent.click(await screen.findByText("Buy coverage advertising from a media corporation"));
+    await screen.findByText("No media corporation to buy from");
+    expect(screen.getByText("Pick a media corporation first.")).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Propose agreement" }) as HTMLButtonElement).disabled
+    ).toBe(true);
   });
 
   it("shows live agreements in full on a corporation without media sectors", async () => {

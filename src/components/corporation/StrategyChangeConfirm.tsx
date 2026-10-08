@@ -7,7 +7,10 @@ import {
   getOperatingSectorType,
   getSectorStrategies,
   getStrategyForOperatingModel,
+  STRATEGY_COOLDOWN_TURNS,
   STRATEGY_RETOOL_COST_FRACTION,
+  STRATEGY_TRANSITION_MARGIN_PENALTY,
+  STRATEGY_TRANSITION_TURNS,
   type SectorStrategy,
 } from "@/lib/constants/sectorStrategies";
 import {
@@ -41,6 +44,11 @@ interface StrategyChangeConfirmProps {
 
 type MarketStatus = "oversupplied" | "balanced" | "undersupplied";
 type CommodityMarket = { globalSupply: number; globalDemand: number };
+
+/** Rates are shares of output; show them as units per 100 units of output. */
+function per100(rate: number): string {
+  return String(Math.round(rate * 100));
+}
 
 function getMarketStatus(supply: number, demand: number): MarketStatus {
   if (supply <= 0 && demand <= 0) return "balanced";
@@ -206,21 +214,38 @@ export default function StrategyChangeConfirm({
     <div className="rounded-lg border border-primary/30 bg-card p-3 shadow-lg space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-bold text-foreground">Switch to {target.name}?</span>
-        <span className="text-[11px] text-error font-medium">Cost: {fmtMoney(retoolCost)}</span>
+        <span className="text-sm font-semibold text-foreground">Switch to {target.name}?</span>
+        <span className="text-xs text-error font-medium">
+          Retooling cost {fmtMoney(retoolCost)}
+        </span>
       </div>
 
       {/* Description */}
-      <p className="text-[11px] text-muted leading-tight">{target.description}</p>
+      <p className="text-xs text-muted">{target.description}</p>
 
       {/* Commodity changes table */}
       <table className="w-full border-collapse">
         <thead>
-          <tr className="text-sm font-semibold text-foreground border-b border-card-border">
+          <tr className="text-xs font-semibold text-foreground border-b border-card-border">
             <th className="text-left py-1 font-semibold">Commodity</th>
-            <th className="text-right py-1 pr-1.5 font-semibold">Output</th>
-            <th className="text-right py-1 pr-1.5 font-semibold">Input</th>
-            <th className="text-right py-1 font-semibold">Market</th>
+            <th
+              className="text-right py-1 pr-1.5 font-semibold"
+              title="Units produced per 100 units of output, old then new"
+            >
+              Makes
+            </th>
+            <th
+              className="text-right py-1 pr-1.5 font-semibold"
+              title="Units used per 100 units of output, old then new"
+            >
+              Needs
+            </th>
+            <th
+              className="text-right py-1 font-semibold"
+              title="World supply against world demand right now"
+            >
+              World market
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -232,14 +257,14 @@ export default function StrategyChangeConfirm({
               const status = m ? getMarketStatus(m.globalSupply, m.globalDemand) : undefined;
 
               return (
-                <tr key={commodity} className="text-[11px] border-b border-card-border/30">
+                <tr key={commodity} className="text-xs border-b border-card-border/30">
                   <td className="py-0.5 pr-1">
                     <span className="flex items-center gap-1">
                       <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-card-elevated text-[8px] font-bold text-muted">
                         {COMMODITY_ICONS[commodity]}
                       </span>
                       <span
-                        className="text-muted truncate max-w-[90px]"
+                        className="text-muted truncate max-w-[120px]"
                         title={COMMODITY_LABELS[commodity]}
                       >
                         {COMMODITY_LABELS[commodity]}
@@ -249,9 +274,7 @@ export default function StrategyChangeConfirm({
                   <td className="py-0.5 tabular-nums text-right pr-1.5">
                     {supplyChanged ? (
                       <span>
-                        <span className="text-muted">
-                          {oldSupply > 0 ? oldSupply.toFixed(2) : "0"}
-                        </span>
+                        <span className="text-muted">{per100(oldSupply)}</span>
                         <span className="text-muted/50 mx-0.5">→</span>
                         <span
                           className={
@@ -262,11 +285,11 @@ export default function StrategyChangeConfirm({
                                 : "text-blue-400/60"
                           }
                         >
-                          {newSupply > 0 ? newSupply.toFixed(2) : "0"}
+                          {per100(newSupply)}
                         </span>
                       </span>
                     ) : oldSupply > 0 ? (
-                      <span className="text-muted/50">{oldSupply.toFixed(2)}</span>
+                      <span className="text-muted/50">{per100(oldSupply)}</span>
                     ) : (
                       <span className="text-muted/30">0</span>
                     )}
@@ -274,9 +297,7 @@ export default function StrategyChangeConfirm({
                   <td className="py-0.5 tabular-nums text-right pr-1.5">
                     {demandChanged ? (
                       <span>
-                        <span className="text-muted">
-                          {oldDemand > 0 ? oldDemand.toFixed(2) : "0"}
-                        </span>
+                        <span className="text-muted">{per100(oldDemand)}</span>
                         <span className="text-muted/50 mx-0.5">→</span>
                         <span
                           className={
@@ -287,18 +308,18 @@ export default function StrategyChangeConfirm({
                                 : "text-amber-400/60"
                           }
                         >
-                          {newDemand > 0 ? newDemand.toFixed(2) : "0"}
+                          {per100(newDemand)}
                         </span>
                       </span>
                     ) : oldDemand > 0 ? (
-                      <span className="text-muted/50">{oldDemand.toFixed(2)}</span>
+                      <span className="text-muted/50">{per100(oldDemand)}</span>
                     ) : (
                       <span className="text-muted/30">0</span>
                     )}
                   </td>
                   <td className="py-0.5 text-right">
                     {status && (
-                      <span className={`text-[10px] ${STATUS_STYLE[status]}`}>
+                      <span className={`text-xs ${STATUS_STYLE[status]}`}>
                         {STATUS_LABEL[status]}
                       </span>
                     )}
@@ -312,8 +333,13 @@ export default function StrategyChangeConfirm({
 
       {/* Margin estimate */}
       {marginDelta != null && (
-        <div className="flex items-center justify-between text-[11px] bg-background rounded px-2 py-1">
-          <span className="text-muted">Est. commodity margin</span>
+        <div className="flex items-center justify-between text-xs bg-background rounded px-2 py-1">
+          <span
+            className="text-muted"
+            title="Rough estimate from current world prices. Percentage points of margin."
+          >
+            Estimated margin from commodity prices
+          </span>
           <span className="tabular-nums">
             <span className="text-muted">
               {currentMargin! >= 0 ? "+" : ""}
@@ -344,15 +370,17 @@ export default function StrategyChangeConfirm({
 
       {/* Footer */}
       <div className="flex items-center justify-between pt-0.5">
-        <span className="text-[10px] text-muted">
-          12-turn transition · -5% margin · 24-turn cooldown (from start)
+        <span className="text-xs text-muted">
+          Phases in over {STRATEGY_TRANSITION_TURNS} turns, costs{" "}
+          {Math.abs(STRATEGY_TRANSITION_MARGIN_PENALTY)} points of margin meanwhile, and locks
+          further changes for {STRATEGY_COOLDOWN_TURNS} turns.
         </span>
         <span className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="rounded border border-card-border px-2.5 py-1 text-[11px] text-muted hover:bg-card-elevated disabled:opacity-50"
+            className="rounded border border-card-border px-2.5 py-1 text-xs text-muted hover:bg-card-elevated disabled:opacity-50"
           >
             Cancel
           </button>
@@ -360,9 +388,9 @@ export default function StrategyChangeConfirm({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className="rounded bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="rounded bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
-            {loading ? "Switching…" : "Confirm"}
+            {loading ? "Switching" : "Switch strategy"}
           </button>
         </span>
       </div>

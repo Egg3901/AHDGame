@@ -36,7 +36,14 @@ export interface VentureEventView {
   title: string;
   body: string;
   deadlineTurn: number;
-  choices: Array<{ id: string; label: string; detail: string; isDefault: boolean }>;
+  choices: Array<{
+    id: string;
+    label: string;
+    detail: string;
+    isDefault: boolean;
+    /** One-time cost of this choice in anchor currency (0 when free). */
+    chargeAnchor?: number;
+  }>;
 }
 
 export interface VentureView {
@@ -142,6 +149,7 @@ export function ventureView(input: {
               label: choice.label,
               detail: choice.detail,
               isDefault: choice.id === def.defaultChoiceId,
+              chargeAnchor: choice.chargeFraction * venture.targetAnchor,
             })),
           },
         ];
