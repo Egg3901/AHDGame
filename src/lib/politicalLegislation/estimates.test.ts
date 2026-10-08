@@ -5,6 +5,7 @@ import { UK_LAWS } from "./laws/ukLaws";
 import { US_STATE_TAX_LAWS } from "./laws/usStateTaxLaws";
 import { attachPoliticalLegislationEstimates } from "./estimates";
 import { projectLawToLegislationType } from "./project";
+import { jpLegislationTypes } from "@/lib/countries/jp/data/jpLegislationTypes";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -99,5 +100,32 @@ describe("attachPoliticalLegislationEstimates", () => {
       null
     );
     expect(ukLegacy[0].estimates).toBeUndefined();
+  });
+
+  it("attaches exact-rate metadata to reviewed legacy JP tax instruments", async () => {
+    db.collectionMocks.federalBudget.findOne = vi.fn().mockResolvedValue({
+      taxRates: { foreignCorporateTax: 23 },
+      taxBases: { foreignCorporateProfits: 900_000_000 },
+    });
+    const foreignCorporateTax = jpLegislationTypes.find(
+      (type) => type._id === "jp_foreign_corporation_tax"
+    )!;
+
+    const [doc] = await attachPoliticalLegislationEstimates(
+      db as unknown as Db,
+      [foreignCorporateTax as unknown as Record<string, unknown>],
+      "jp",
+      null,
+      null,
+      true
+    );
+
+    expect(doc.taxSliderEstimate).toMatchObject({
+      minRate: 0,
+      maxRate: 65,
+      step: 0.01,
+      currentRate: 23,
+      revenueDeltaPerPoint: 9_000_000,
+    });
   });
 });

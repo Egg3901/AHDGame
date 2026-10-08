@@ -328,6 +328,109 @@ describe("onBillEnacted", () => {
     expect(updateCall[1].$set["taxRatePhaseIn.salesTax"]).toBe(5);
   });
 
+  it("applies an exact-rate provision on a reviewed legacy JP tax type", async () => {
+    const bill = createBill({
+      stateId: "jp_national",
+      provisions: [
+        {
+          legislationTypeId: "jp_foreign_corporation_tax",
+          policyOptionId: "rate:27.25",
+          policyOptionNameSnapshot: "Rate: 27.25%",
+          currentPolicyOptionNameSnapshot: "Rate: 23%",
+          effectDirection: 1,
+          proposedRate: 27.25,
+        } as any,
+      ],
+    });
+    const legType = {
+      _id: "jp_foreign_corporation_tax",
+      policyDomain: "tax",
+      countryScope: "jp",
+      taxRateChange: { scope: "federal", taxType: "foreignCorporateTax" },
+      policyOptions: [
+        { id: "zero", name: "0%", rate: 0 },
+        { id: "maximum", name: "65%", rate: 65 },
+      ],
+    };
+
+    setupCollection("legislationTypes", [legType]);
+    setupCollection("gameState", [{ _id: "current", currentYear: 1991 } as any]);
+    setupCollection("statePolicies", []);
+    db.collection("federalBudget");
+    db.collectionMocks.federalBudget.findOne = vi.fn().mockResolvedValue({
+      _id: "JP",
+      countryId: "JP",
+      taxRates: {
+        incomeTax: 20,
+        domesticCorporateTax: 23,
+        foreignCorporateTax: 23,
+        payrollTax: 15,
+        tariffs: 0,
+        salesTax: 3,
+      },
+      spending: { total: 100 },
+    });
+
+    await onBillEnacted(db as unknown as Db, bill as any, 10);
+
+    expect(db.collectionMocks.statePolicies.updateOne.mock.calls[0][1].$set).toMatchObject({
+      policyOptionId: "rate:27.25",
+      policyOptionIndex: 0,
+    });
+    const updateCall = db.collectionMocks.federalBudget.updateOne.mock.calls[0];
+    expect(updateCall[0]).toEqual({ _id: "JP" });
+    expect(updateCall[1].$set.taxRates.foreignCorporateTax).toBe(24);
+    expect(updateCall[1].$set["taxRatePhaseIn.foreignCorporateTax"]).toBe(27.25);
+  });
+
+  it("does not enact an unvalidated exact rate on a legacy tax type", async () => {
+    const bill = createBill({
+      stateId: "jp_national",
+      provisions: [
+        {
+          legislationTypeId: "jp_foreign_corporation_tax",
+          policyOptionId: "zero",
+          effectDirection: -1,
+          proposedRate: 99,
+        } as any,
+      ],
+    });
+    const legType = {
+      _id: "jp_foreign_corporation_tax",
+      policyDomain: "tax",
+      countryScope: "jp",
+      taxRateChange: { scope: "federal", taxType: "foreignCorporateTax" },
+      policyOptions: [
+        { id: "zero", name: "0%", rate: 0 },
+        { id: "maximum", name: "65%", rate: 65 },
+      ],
+    };
+
+    setupCollection("legislationTypes", [legType]);
+    setupCollection("gameState", [{ _id: "current", currentYear: 1991 } as any]);
+    setupCollection("statePolicies", []);
+    db.collection("federalBudget");
+    db.collectionMocks.federalBudget.findOne = vi.fn().mockResolvedValue({
+      _id: "JP",
+      countryId: "JP",
+      taxRates: {
+        incomeTax: 20,
+        domesticCorporateTax: 23,
+        foreignCorporateTax: 23,
+        payrollTax: 15,
+        tariffs: 0,
+        salesTax: 3,
+      },
+      spending: { total: 100 },
+    });
+
+    await onBillEnacted(db as unknown as Db, bill as any, 10);
+
+    const updateCall = db.collectionMocks.federalBudget.updateOne.mock.calls[0];
+    expect(updateCall[1].$set.taxRates.foreignCorporateTax).toBe(22);
+    expect(updateCall[1].$set["taxRatePhaseIn.foreignCorporateTax"]).toBe(0);
+  });
+
   it("uses policyOptionId for matching when provided", async () => {
     const bill = createBill({
       provisions: [

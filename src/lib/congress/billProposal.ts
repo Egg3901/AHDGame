@@ -57,6 +57,8 @@ import { isResetV2Country, resetSystemVersionsForCountry } from "@/lib/resetVers
 import { loadReviewedLawCatalog } from "@/lib/resetLegislation/loadReviewedCatalog";
 import type { ResetCountry } from "@/lib/resetLegislation/fundingOwner";
 import type { LawChoice } from "@/lib/resetLegislation/rules/eligibility";
+import { resetTaxesFor } from "@/lib/resetLegislation/taxCatalog";
+import { resolveResetTaxProvisionFields } from "@/lib/resetLegislation/resolveTaxProvision";
 import { marketAtLeast } from "@/lib/market/featureFlag";
 import { isMediaOwnershipBillAvailable } from "@/lib/mediaRegulation/rules";
 import { loadUSMediaOutletDelivery } from "@/lib/mediaRegulation/turnData";
@@ -159,6 +161,7 @@ export async function validateBillProvisions(
   const validatedEuropeanTreatyProvisions: EuropeanTreatyProvision[] = [];
   const validatedResetLawProvisions: ResetLawProvision[] = [];
   const resetFamilyIds = new Set<string>();
+  const resetTaxTypeIds = new Set<string>();
   let reviewedNationalCatalog: Awaited<ReturnType<typeof loadReviewedLawCatalog>> | null = null;
   const isTradeCategory = TARIFF_BILL_CATEGORIES.has(category as BillCategory);
   const requestedLegislationTypeIds = Array.from(
@@ -186,8 +189,11 @@ export async function validateBillProvisions(
     // no such gate — it only checks that the proposer holds a legislative seat — so
     // accepting one here would let any backbencher take the country to war by
     // hand-rolling a provision. Refused outright rather than validated.
-    const rawType = "type" in (rawP as object) ? (rawP as { type: unknown }).type : undefined;
-    if (resetLegislationV2 && rawType !== "reset_law") {
+    const rawType =
+      typeof rawP === "object" && rawP !== null && "type" in rawP
+        ? (rawP as { type: unknown }).type
+        : undefined;
+    if (resetLegislationV2 && rawType !== undefined && rawType !== "reset_law") {
       return {
         ok: false,
         status: 409,
@@ -322,11 +328,7 @@ export async function validateBillProvisions(
     }
 
     // Handle subsidy / end_subsidy provisions
-    if (
-      "type" in (rawP as object) &&
-      ((rawP as { type: unknown }).type === "subsidy" ||
-        (rawP as { type: unknown }).type === "end_subsidy")
-    ) {
+    if (rawType === "subsidy" || rawType === "end_subsidy") {
       if (
         !SUBSIDY_BILL_CATEGORIES.has(category as Parameters<typeof SUBSIDY_BILL_CATEGORIES.has>[0])
       ) {
@@ -370,11 +372,7 @@ export async function validateBillProvisions(
     }
 
     // Handle durable embargo / end_embargo provisions (trade bills only)
-    if (
-      "type" in (rawP as object) &&
-      ((rawP as { type: unknown }).type === "embargo" ||
-        (rawP as { type: unknown }).type === "end_embargo")
-    ) {
+    if (rawType === "embargo" || rawType === "end_embargo") {
       if (!isTradeCategory) {
         return {
           ok: false,
@@ -422,7 +420,7 @@ export async function validateBillProvisions(
     }
 
     // Handle electoral-law provisions (franchise + registration access)
-    if ("type" in (rawP as object) && (rawP as { type: unknown }).type === "electoral_law") {
+    if (rawType === "electoral_law") {
       const rawElectoralLaw = rawP as { japanShugiinReform?: unknown };
       const reformContext =
         rawElectoralLaw.japanShugiinReform === true
@@ -440,7 +438,7 @@ export async function validateBillProvisions(
       continue;
     }
 
-    if ("type" in (rawP as object) && (rawP as { type: unknown }).type === "euro_adoption") {
+    if (rawType === "euro_adoption") {
       if (category !== "economy") {
         return { ok: false, status: 400, error: "Euro adoption belongs in an economy bill." };
       }
@@ -464,10 +462,7 @@ export async function validateBillProvisions(
     // returns it to the government. Economy bills only, and only for countries
     // whose bank is their own — a shared bank (ECB) is a treaty institution one
     // member's legislature cannot rewrite.
-    if (
-      "type" in (rawP as object) &&
-      (rawP as { type: unknown }).type === "central_bank_independence"
-    ) {
+    if (rawType === "central_bank_independence") {
       if (
         !CENTRAL_BANK_INDEPENDENCE_BILL_CATEGORIES.has(
           category as Parameters<typeof CENTRAL_BANK_INDEPENDENCE_BILL_CATEGORIES.has>[0]
@@ -508,10 +503,7 @@ export async function validateBillProvisions(
 
     // Economic system reform: a legislated target for the marketization dial.
     // Economy bills only, one per bill, and only where the era began planned.
-    if (
-      "type" in (rawP as object) &&
-      (rawP as { type: unknown }).type === "economic_system_reform"
-    ) {
+    if (rawType === "economic_system_reform") {
       if (
         !CENTRAL_BANK_INDEPENDENCE_BILL_CATEGORIES.has(
           category as Parameters<typeof CENTRAL_BANK_INDEPENDENCE_BILL_CATEGORIES.has>[0]
@@ -553,7 +545,7 @@ export async function validateBillProvisions(
     }
 
     // Handle union-law provisions (v3 Phase 7b)
-    if ("type" in (rawP as object) && (rawP as { type: unknown }).type === "union_law") {
+    if (rawType === "union_law") {
       if (
         !UNION_LAW_BILL_CATEGORIES.has(
           category as Parameters<typeof UNION_LAW_BILL_CATEGORIES.has>[0]
@@ -599,7 +591,7 @@ export async function validateBillProvisions(
     }
 
     // Handle tariff provisions
-    if ("type" in (rawP as object) && (rawP as { type: unknown }).type === "tariff") {
+    if (rawType === "tariff") {
       const p = rawP as {
         type: "tariff";
         scopeType: "economy_wide" | "sector" | "origin_country" | "corporation";
@@ -682,6 +674,45 @@ export async function validateBillProvisions(
         status: 400,
         error: "This legislation is not available in this era.",
       };
+    }
+    if (resetLegislationV2) {
+      const resetTax = resetTaxesFor(sourceCountry as ResetCountry, "national").find(
+        (candidate) => candidate.existingLegislationTypeId === lt._id
+      );
+      if (!resetTax) {
+        return {
+          ok: false,
+          status: 409,
+          error: "This world accepts only reviewed legislation v2 provisions.",
+        };
+      }
+      if (resetTaxTypeIds.has(lt._id)) {
+        return { ok: false, status: 400, error: "A v2 bill cannot repeat a tax instrument." };
+      }
+      if (category !== "tax" && category !== "custom") {
+        return {
+          ok: false,
+          status: 400,
+          error: "Reviewed tax provisions require a tax or multi-domain bill.",
+        };
+      }
+      const resolved = await resolveResetTaxProvisionFields(
+        db,
+        lt,
+        p?.proposedRate,
+        typeof p?.policyOptionId === "string" ? p.policyOptionId : undefined,
+        sourceCountry as ResetCountry,
+        "national"
+      );
+      if (!resolved.ok) {
+        return { ok: false, status: 400, error: resolved.error };
+      }
+      resetTaxTypeIds.add(lt._id);
+      validatedPolicyProvisions.push({
+        legislationTypeId: lt._id,
+        ...resolved.fields,
+      });
+      continue;
     }
     if (sourceCountry === "US" && lt._id === "us_media_communications") {
       const mediaRegulationEnabled =

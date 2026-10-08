@@ -70,6 +70,7 @@ import { generateDiscordEventCard } from "@/lib/discord/eventCard";
 import { billChamberVoteSplits } from "@/lib/charts/voteSplitChart";
 import { calculateShiftImpacts } from "@/lib/archetypeAffinities";
 import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefaults";
+import { taxSliderRateLabel } from "@/lib/politicalLegislation/taxSlider";
 import {
   calculateFederalRevenue,
   calculateStateRevenue,
@@ -150,6 +151,8 @@ interface ProvisionData {
   social?: number;
   /** Tax-slider laws (ruling #16): the slider-chosen rate. */
   proposedRate?: number;
+  policyOptionNameSnapshot?: string;
+  currentPolicyOptionNameSnapshot?: string;
 }
 
 /**
@@ -587,6 +590,8 @@ export async function onBillEnacted(
         // federalBudget.taxRates never moved and the duties/VAT the bill
         // levied were never collected (ticket #1102).
         proposedRate: p.proposedRate,
+        policyOptionNameSnapshot: p.policyOptionNameSnapshot,
+        currentPolicyOptionNameSnapshot: p.currentPolicyOptionNameSnapshot,
       });
     }
   } else if (bill.legislationTypeId && bill.effectDirection != null) {
@@ -836,8 +841,29 @@ async function processProvisionEnactment(
   // Find the matching policy option and its index
   let policyOption: LegislationPolicyOption | undefined;
   let newPolicyIndex = 3; // Default to center (index 3 in 0-6 range)
+  const exactRateValidated =
+    provision.proposedRate !== undefined &&
+    (Boolean(lt?.taxSlider) ||
+      (Boolean(lt?.taxRateChange) &&
+        provision.policyOptionNameSnapshot === taxSliderRateLabel(provision.proposedRate) &&
+        typeof provision.currentPolicyOptionNameSnapshot === "string"));
 
-  if (lt?.policyOptions?.length) {
+  if (exactRateValidated && provision.proposedRate !== undefined && lt?.policyOptions?.length) {
+    const ratedOptions = lt.policyOptions
+      .map((option, index) => ({ option, index }))
+      .filter(
+        (entry): entry is { option: LegislationPolicyOption & { rate: number }; index: number } =>
+          typeof entry.option.rate === "number" && Number.isFinite(entry.option.rate)
+      );
+    if (ratedOptions.length > 0) {
+      newPolicyIndex = ratedOptions.reduce((nearest, candidate) =>
+        Math.abs(candidate.option.rate - provision.proposedRate!) <
+        Math.abs(nearest.option.rate - provision.proposedRate!)
+          ? candidate
+          : nearest
+      ).index;
+    }
+  } else if (lt?.policyOptions?.length) {
     // Prefer policyOptionId lookup (reliable), fall back to effectDirection matching
     let matchIndex = -1;
     if (provision.policyOptionId) {
@@ -947,14 +973,18 @@ async function processProvisionEnactment(
   }
 
   // Apply tax rate changes if this is tax legislation
-  if (lt?.taxRateChange && policyOption?.rate !== undefined) {
+  if (!exactRateValidated && lt?.taxRateChange && policyOption?.rate !== undefined) {
     await applyTaxRateChange(db, lt, policyOption.rate, stateId);
   }
 
-  // Tax-slider laws (ruling #16): no options ladder — the provision carries the
-  // slider-chosen rate; federalBudget.taxRates stays the source of truth (the
-  // statePolicies record above stores the rate-encoded option id for readback).
-  if (lt?.taxSlider && provision.proposedRate !== undefined) {
+  // Exact-rate laws carry the chosen rate on the provision. New-generation
+  // types expose `taxSlider`; reviewed JP/IE v2 taxes retain their established
+  // `taxRateChange` types and use the same rate-encoded provision shape.
+  if (
+    exactRateValidated &&
+    (lt?.taxSlider || lt?.taxRateChange) &&
+    provision.proposedRate !== undefined
+  ) {
     await applyTaxRateChange(db, lt, provision.proposedRate, stateId);
   }
 
