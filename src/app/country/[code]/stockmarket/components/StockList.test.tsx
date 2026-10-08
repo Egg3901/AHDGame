@@ -132,3 +132,23 @@ describe("StockList quote", () => {
     expect(screen.getByText("Px7")).toBeTruthy();
   });
 });
+
+describe("StockList trade shortcut", () => {
+  it("links tradable rows with float to the share ticket", () => {
+    render(<StockList listings={[{ ...tradable, tickerSymbol: "PUB" }]} />);
+    const link = screen.getByRole("link", { name: "Trade PUB" });
+    expect(link.getAttribute("href")).toBe("/corporation/1?tab=shares&trade=1");
+  });
+
+  it("omits the shortcut for non-tradable rows and empty floats", () => {
+    render(
+      <StockList
+        listings={[
+          { ...tradable, _id: "dry", name: "Dry Co", sequentialId: 2, publicFloat: 0 },
+          soe("s1", "SoE One"),
+        ]}
+      />
+    );
+    expect(screen.queryByRole("link", { name: /^Trade / })).toBeNull();
+  });
+});
