@@ -375,7 +375,6 @@ describe("names link out and states open", () => {
     vi.restoreAllMocks();
   });
 
-
   it("pairs the turns with the local close time when the race has one", () => {
     const e = election();
     (e as unknown as Record<string, unknown>).endTime = "2026-11-10T15:24:00.000Z";

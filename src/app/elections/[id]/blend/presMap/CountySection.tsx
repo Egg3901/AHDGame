@@ -132,10 +132,17 @@ export function CountySection({ electionId, stateId, turn, candidate }: CountySe
           style={{
             width: "100%",
             borderCollapse: "collapse",
+            tableLayout: "fixed",
             fontFamily: FONT.sans,
             fontSize: 12.5,
           }}
         >
+          <colgroup>
+            <col style={{ width: "27%" }} />
+            <col style={{ width: "31%" }} />
+            <col style={{ width: "15%" }} />
+            <col style={{ width: "27%" }} />
+          </colgroup>
           <thead>
             <tr>
               {COLUMNS.map((col) => {
@@ -164,11 +171,11 @@ export function CountySection({ electionId, stateId, turn, candidate }: CountySe
                       }
                       style={{
                         width: "100%",
-                        padding: "6px 8px",
+                        padding: "6px 6px",
                         font: "inherit",
                         fontFamily: FONT.mono,
                         fontSize: 10,
-                        letterSpacing: ".08em",
+                        letterSpacing: ".04em",
                         textTransform: "uppercase",
                         textAlign: col.align,
                         cursor: "pointer",
@@ -196,8 +203,8 @@ export function CountySection({ electionId, stateId, turn, candidate }: CountySe
                   borderBottom: `1px solid ${BLEND.hairline}`,
                 }}
               >
-                <td style={{ padding: "5px 8px", color: BLEND.ink }}>{row.name}</td>
-                <td style={{ padding: "5px 8px", color: BLEND.muted }}>
+                <td style={{ padding: "5px 6px", color: BLEND.ink }}>{row.name}</td>
+                <td style={{ padding: "5px 6px", color: BLEND.muted }}>
                   {row.winnerName ? (
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                       <i
@@ -217,7 +224,7 @@ export function CountySection({ electionId, stateId, turn, candidate }: CountySe
                 </td>
                 <td
                   style={{
-                    padding: "5px 8px",
+                    padding: "5px 6px",
                     textAlign: "right",
                     fontFamily: FONT.mono,
                     fontSize: 11.5,
@@ -228,7 +235,7 @@ export function CountySection({ electionId, stateId, turn, candidate }: CountySe
                 </td>
                 <td
                   style={{
-                    padding: "5px 8px",
+                    padding: "5px 6px",
                     textAlign: "right",
                     fontFamily: FONT.mono,
                     fontSize: 11.5,

@@ -159,6 +159,8 @@ export function PresidentialMap({ model, electionId, countryId, turn }: Presiden
           position: "relative",
           background: BLEND.inset,
           border: `1px solid ${BLEND.hairline}`,
+          // Room for the overview beside the map without it scrolling at once.
+          minHeight: selectedState && wide ? 640 : undefined,
         }}
       >
         <svg
