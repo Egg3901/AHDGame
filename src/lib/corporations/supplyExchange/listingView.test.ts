@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
-import { loadOpenOffers } from "./listingView";
+import { loadOpenOffers, offerSort, openOffersFilter } from "./listingView";
 
 function makeDb(rows: unknown[], publishers: unknown[]) {
   const find = vi.fn();
@@ -59,5 +59,58 @@ describe("loadOpenOffers", () => {
     });
     expect(find.mock.calls[0][0]).toEqual({ commodity: "oil", expiresAtTurn: { $gt: 5 } });
     expect(out).toEqual({ offers: [], hasMore: false });
+  });
+});
+
+describe("offer filters and ordering", () => {
+  it("builds the kind, side and commodity filter", () => {
+    expect(
+      openOffersFilter({ turn: 5, kind: "player", side: "sell", commodities: ["oil"] })
+    ).toEqual({
+      commodity: "oil",
+      side: "sell",
+      aiListed: { $ne: true },
+      expiresAtTurn: { $gt: 5 },
+    });
+    expect(openOffersFilter({ turn: 5, kind: "npp", commodities: ["oil", "coal"] })).toEqual({
+      commodity: { $in: ["oil", "coal"] },
+      aiListed: true,
+      expiresAtTurn: { $gt: 5 },
+    });
+  });
+
+  it("lists players first for kind=all and sorts by the chosen key", () => {
+    expect(offerSort("volume", "all")).toEqual({ aiListed: 1, volumeCap: -1, _id: 1 });
+    expect(offerSort("premium", "player")).toEqual({ pricePremium: 1, _id: 1 });
+  });
+
+  it("passes the sort to the read and adds logo and CEO display", async () => {
+    const corpId = new ObjectId();
+    const ceoId = new ObjectId();
+    const { db, chain } = makeDb(
+      [
+        {
+          _id: "l1",
+          corporationId: corpId,
+          slot: 1,
+          side: "buy",
+          commodity: "oil",
+          volumeCap: 9,
+          pricePremium: 0,
+          expiresAtTurn: 99,
+          publishedByUserId: "u",
+        },
+      ],
+      [{ _id: corpId, name: "Acme", userId: "u", logoUrl: "/l.png", ceoId }]
+    );
+    const out = await loadOpenOffers(db, {
+      turn: 5,
+      viewerCorpIds: new Set(),
+      limit: 10,
+      kind: "player",
+      sort: "volume",
+    });
+    expect(chain.sort).toHaveBeenCalledWith({ volumeCap: -1, _id: 1 });
+    expect(out.offers[0].corporationLogoUrl).toBe("/l.png");
   });
 });

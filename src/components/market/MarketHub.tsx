@@ -1,10 +1,11 @@
 "use client";
 
-import Link from "next/link";
+import { useEffect, useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { CommodityData, MarketCapPoint } from "@/app/country/[code]/stockmarket/types";
+import type { CommodityData } from "@/app/country/[code]/stockmarket/types";
 import { MARKET_TABS, parseMarketTab, type MarketTab } from "@/lib/market/hubTabs";
-import { CommoditiesPanel, vsBasePct } from "./CommoditiesPanel";
+import { CommoditiesPanel } from "./CommoditiesPanel";
 import { MarketOverview } from "./MarketOverview";
 import {
   BondsPanel,
@@ -15,12 +16,34 @@ import {
   sectorsUrl,
   type SectorsForSaleResponse,
 } from "./MarketPanels";
-import { SupplyDealsPanel, type SupplyOffersResponse } from "./SupplyDealsPanel";
-import { StatTile, pctText, toneClass } from "./marketUi";
+import { SUPPLY_PAGE_SIZE, SupplyDealsPanel, type SupplyOffersResponse } from "./SupplyDealsPanel";
+import { DEFAULT_OFFER_FILTERS, offersQuery } from "./supplyOfferUi";
+import { StockMarketChart } from "@/app/country/[code]/stockmarket/components/MarketOverview";
 import { useMarketJson } from "./useMarketJson";
 
-interface HistoryResponse {
-  points?: MarketCapPoint[];
+const CHART_KEY = "market.chartOpen";
+
+/** Chart visibility, remembered per browser; expanded until the player hides it. */
+function useChartOpen(): [boolean, (open: boolean) => void] {
+  const [open, setOpen] = useState(true);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(CHART_KEY) === "0") setOpen(false);
+    } catch {
+      // storage unavailable: keep the default
+    }
+  }, []);
+  return [
+    open,
+    (next) => {
+      setOpen(next);
+      try {
+        window.localStorage.setItem(CHART_KEY, next ? "1" : "0");
+      } catch {
+        // storage unavailable: the choice lasts for this visit
+      }
+    },
+  ];
 }
 
 export function MarketHub() {
@@ -29,24 +52,16 @@ export function MarketHub() {
   const searchParams = useSearchParams();
   const tab = parseMarketTab(searchParams.get("tab"));
 
-  // Headline data: four small reads, in parallel, shared with the overview and
-  // the commodities, sectors and supply tabs through the response cache.
-  const history = useMarketJson<HistoryResponse>(
-    "/api/stock-exchange/market-cap-history?exchange=global&limit=2"
-  );
+  // Shared with the overview and the commodities, sectors and supply tabs
+  // through the response cache.
   const commodities = useMarketJson<{ commodities?: CommodityData[] }>("/api/commodities");
   const sectors = useMarketJson<SectorsForSaleResponse>(sectorsUrl(1));
-  const offers = useMarketJson<SupplyOffersResponse>("/api/supply-offers?page=1&pageSize=20");
-
-  const points = history.data?.points ?? [];
-  const last = points[points.length - 1];
-  const prev = points.length > 1 ? points[points.length - 2] : undefined;
-  const indexChange =
-    last && prev && prev.marketCap > 0 ? (last.marketCap / prev.marketCap - 1) * 100 : null;
+  const offers = useMarketJson<SupplyOffersResponse>(
+    `/api/supply-offers?${offersQuery(DEFAULT_OFFER_FILTERS, 1, SUPPLY_PAGE_SIZE)}`
+  );
   const list = commodities.data?.commodities ?? null;
-  const above = (list ?? []).filter((c) => (vsBasePct(c) ?? 0) > 0.5).length;
-  const below = (list ?? []).filter((c) => (vsBasePct(c) ?? 0) < -0.5).length;
   const supplyEnabled = offers.data?.enabled === true;
+  const [chartOpen, setChartOpen] = useChartOpen();
 
   const setTab = (next: MarketTab) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -64,39 +79,27 @@ export function MarketHub() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatTile
-            label="Market index"
-            value={last ? Math.round(last.marketCap).toLocaleString() : "n/a"}
-            sub={indexChange == null ? undefined : `${pctText(indexChange, 2)} last turn`}
-            href="/market?tab=stocks"
-          />
-          <StatTile
-            label="Sectors for sale"
-            value={String(sectors.data?.counts.forSale ?? sectors.data?.totalItems ?? 0)}
-            sub="Open one to buy"
-            href="/market?tab=sectors"
-          />
-          <StatTile
-            label="Open supply offers"
-            value={supplyEnabled ? (offers.data?.total ?? 0).toLocaleString() : "Off"}
-            sub={supplyEnabled ? "Across all commodities" : "Not enabled in this world"}
-            href="/market?tab=supply"
-          />
-          <div className="rounded-xl border border-card-border bg-card px-4 py-3 shadow-card">
-            <span className="text-body-sm font-medium text-muted">Commodities vs base</span>
-            <span className="mt-1 flex items-baseline gap-3 text-xl font-bold tabular-nums">
-              <span className={toneClass(1)}>{above} above</span>
-              <span className={toneClass(-1)}>{below} below</span>
-            </span>
-            <Link
-              href="/market?tab=commodities"
-              className="mt-0.5 block text-[11px] text-primary hover:underline"
+        <section aria-label="Stock market chart">
+          <div className="flex items-center justify-between">
+            <h2 className="text-heading-sm font-bold text-foreground">Stock market</h2>
+            <button
+              type="button"
+              aria-expanded={chartOpen}
+              onClick={() => setChartOpen(!chartOpen)}
+              className="inline-flex h-8 items-center gap-1 rounded-md border border-card-border px-2.5 text-xs font-medium text-foreground hover:bg-card-elevated"
             >
-              See prices
-            </Link>
+              {chartOpen ? (
+                <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+              {chartOpen ? "Hide chart" : "Show chart"}
+            </button>
           </div>
-        </div>
+          {chartOpen && (
+            <StockMarketChart exchangeFilter="global" refreshKey={null} currentTurn={0} />
+          )}
+        </section>
 
         <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
           <div

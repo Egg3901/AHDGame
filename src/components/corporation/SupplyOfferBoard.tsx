@@ -321,7 +321,7 @@ export function SupplyOfferBoard({
                   </h4>
                   <p className="text-sm">
                     {row.corporationName}
-                    {row.ai ? " (AI)" : ""}
+                    {row.ai ? ` (${t("npp")})` : ""}
                     {row.stateId ? ` (${row.stateId})` : ""}
                   </p>
                   {row.corporationCountryId && (
