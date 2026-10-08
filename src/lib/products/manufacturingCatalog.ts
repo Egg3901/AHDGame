@@ -64,6 +64,13 @@ export const MANUFACTURING_PRODUCT_KINDS: readonly ManufacturingProductKind[] = 
     strategyIds: ["electronics_manufacturing"],
   },
   {
+    id: "home_appliance",
+    label: "Home appliances",
+    outputCommodity: "electronics",
+    sectorTypes: ["manufacturing"],
+    strategyIds: ["electronics_manufacturing", "additive_manufacturing"],
+  },
+  {
     id: "structural_steel",
     label: "Structural steel",
     outputCommodity: "steel",
@@ -83,6 +90,13 @@ export const MANUFACTURING_PRODUCT_KINDS: readonly ManufacturingProductKind[] = 
     outputCommodity: "steel",
     sectorTypes: ["manufacturing"],
     strategyIds: ["heavy_metals", "additive_manufacturing", "autonomous_factory"],
+  },
+  {
+    id: "cookware_hardware",
+    label: "Cookware and hardware",
+    outputCommodity: "steel",
+    sectorTypes: ["manufacturing"],
+    strategyIds: ["standard", "heavy_metals", "autonomous_factory"],
   },
   {
     id: "cement",

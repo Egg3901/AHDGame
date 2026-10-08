@@ -48,6 +48,11 @@ import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import { fundPoliticalMediaOrder } from "@/lib/politicalMedia/journal";
+import {
+  advertisingFavorabilityFactor,
+  advertisingPriceFactor,
+  loadStateSlant,
+} from "@/lib/mediaEditorial/slant";
 
 function clampAddExpression(fieldPath: string, delta: number, min: number, max: number) {
   return {
@@ -112,12 +117,16 @@ export async function executeCharacterAction(
 
   const forexEnabled = await isForexEnabled();
   const gameState = await getGameState();
-  const gameConfig = await db
-    .collection<GameConfig>("gameConfig")
-    .findOne(
-      { _id: "default" },
-      { projection: { campaignEraPriceLevelEnabled: 1, politicalMediaMarketEnabled: 1 } }
-    );
+  const gameConfig = await db.collection<GameConfig>("gameConfig").findOne(
+    { _id: "default" },
+    {
+      projection: {
+        campaignEraPriceLevelEnabled: 1,
+        politicalMediaMarketEnabled: 1,
+        mediaEditorialEnabled: 1,
+      },
+    }
+  );
   const priceLevel = resolveCampaignPriceLevel(
     gameConfig?.campaignEraPriceLevelEnabled,
     gameState?.preset
@@ -277,6 +286,30 @@ export async function executeCharacterAction(
         preset: gameState?.preset,
         priceLevel,
       });
+    }
+
+    // ROTDM: media ownership prices political advertising. Local newsrooms
+    // that lean close to the advertiser's own positions make ads cheaper.
+    if (
+      actionType === "advertise" &&
+      state &&
+      gameConfig?.mediaEditorialEnabled === true &&
+      (effect.fundsChange ?? 0) < 0
+    ) {
+      const slant = await loadStateSlant(db, state._id);
+      const factor = advertisingPriceFactor(current.policies, slant);
+      const favFactor = advertisingFavorabilityFactor(current.policies, slant);
+      if (factor < 1) {
+        const cost = Math.abs(effect.fundsChange ?? 0) * factor;
+        const gain = Math.round((effect.favorabilityChange ?? 0) * favFactor * 100) / 100;
+        const cutPct = Math.round((1 - factor) * 100);
+        effect = {
+          ...effect,
+          fundsChange: -cost,
+          favorabilityChange: gain,
+          message: `Spent ${fundsFormatter(cost)} on ads, ${cutPct}% less, and gained ${gain} favorability points, because newsrooms in ${state.name} lean close to your positions.`,
+        };
+      }
     }
 
     const actionFundsChange = effect.fundsChange ?? 0;

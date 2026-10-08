@@ -143,6 +143,10 @@ export const NOTIFICATION_TYPES = [
   "corp_supply_agreement_offer",
   /** A supply agreement was accepted, taken from the board, cancelled, or expired. */
   "corp_supply_agreement_update",
+  /** A product in development needs the CEO to answer a decision. */
+  "corp_product_event",
+  /** A product finished development as a hit or a flop. */
+  "corp_product_result",
   "bank_supervision_breach",
   "bank_supervision_cleared",
   // Defence procurement: a government offering one of this corp's plants an order.

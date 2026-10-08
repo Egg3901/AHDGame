@@ -293,7 +293,7 @@
     },
     "editorialStance": {
       "title": "Editorial stance",
-      "description": "Your newsroom's published position shapes its audience and the politicians it supports.",
+      "description": "Your newsroom's published position shapes its audience and the politicians it supports. In each state where you run newsrooms, advertisers whose own positions are close to the local newsroom lean pay up to 15% less to run ads.",
       "economic": "Economic",
       "social": "Social",
       "save": "Publish stance",

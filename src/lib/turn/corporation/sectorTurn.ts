@@ -522,8 +522,11 @@ export function processSector(
   // price/realization lift, not extra workers. Maintenance, growth realization
   // and regulatory legs below all scale with the boosted figure, so margins
   // are preserved and the lift lands in profit, then NPV, then share price.
+  // A released product venture lifts revenue the same way, for a few days.
   const hourlyRevenue =
-    realizedHourlyRevenue * sectorRevenueBoostMultiplier(currentTurn, operatingSectorType);
+    realizedHourlyRevenue *
+    sectorRevenueBoostMultiplier(currentTurn, operatingSectorType) *
+    (lookups.productVentureBoostBySectorId?.get(sector._id.toString()) ?? 1);
   // (moved to resolvePlantsRevenue: trade-exposure embargo legs)
   // (moved to resolvePlantsRevenue: P3b extraction hard min)
   // (moved to resolvePlantsRevenue: pre-plants counterfactual baseline)
