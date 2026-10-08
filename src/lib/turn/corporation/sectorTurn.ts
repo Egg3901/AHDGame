@@ -694,6 +694,20 @@ export function processSector(
       labourOutputFactor,
     });
 
+  // Canonical freight billing (issue #897, gameConfig gate, default off):
+  // last turn's state-scoped shipping money as this sector's own named legs,
+  // ₳/turn. Charge rides `costs` and credit rides the returned revenue below;
+  // both legs and the flag-off stale-clear behavior live in
+  // `resolveSectorFreightBillingLegs`. Off ⇒ both 0 and no fields written.
+  const freightBilling = resolveSectorFreightBillingLegs({
+    market,
+    sector,
+    embargoLegacyMothball,
+    currentTurn,
+    sectorCurrencyCode,
+    sectorFxRate,
+  });
+
   // ─── P3.5: physical cost decomposition (plants only) ──────────────────────
   // Pure computation in `sectorTurn/sectorCosts.ts`; names are unchanged.
   const {
@@ -738,6 +752,7 @@ export function processSector(
     capitalEnabled: market.capitalEnabled,
     prevCapitalBookAnchor: sector.capitalBookAnchor,
     npvBoostMultiplier: sectorNpvBoostMultiplier(currentTurn),
+    freightNetHourly: freightBilling.credit - freightBilling.charge,
   });
 
   const productProject = lookups.productLinesV2Enabled
@@ -815,20 +830,6 @@ export function processSector(
     ? inventoryTurn.drainedRevenueAnchor / TURNS_PER_DAY
     : 0;
   const hourlyInventoryCarry = inventoryTurn ? inventoryTurn.carryCostAnchor / TURNS_PER_DAY : 0;
-
-  // Canonical freight billing (issue #897, gameConfig gate, default off):
-  // last turn's state-scoped shipping money as this sector's own named legs,
-  // ₳/turn. Charge rides `costs` and credit rides the returned revenue below;
-  // both legs and the flag-off stale-clear behavior live in
-  // `resolveSectorFreightBillingLegs`. Off ⇒ both 0 and no fields written.
-  const freightBilling = resolveSectorFreightBillingLegs({
-    market,
-    sector,
-    embargoLegacyMothball,
-    currentTurn,
-    sectorCurrencyCode,
-    sectorFxRate,
-  });
 
   // Persist countryId so API endpoints don't need to re-derive it from the state.
   // newRevenue / newGrowthCost are ₳ (computed from anchor inputs); convert
