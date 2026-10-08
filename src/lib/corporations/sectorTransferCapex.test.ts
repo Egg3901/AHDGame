@@ -315,3 +315,52 @@ describe("partial capacity ownership transfers", () => {
     expect(identitySectorPlantFields(partial).activeCapacityPercent).toBe(25);
   });
 });
+
+describe("stockpiled inventory across transfers", () => {
+  const pile = (units: Record<string, number>, value: number): Partial<SectorPlantFields> => ({
+    inventoryUnits: units,
+    inventoryValueAnchor: value,
+  });
+
+  it("sums inventory per commodity and value anchor on merge", () => {
+    const merged = mergeSectorPlantFields(
+      midBuild(pile({ iron: 100, coal: 5 }, 1_000)),
+      midBuild(pile({ iron: 40, steel: 7 }, 400))
+    );
+    expect(merged.inventoryUnits).toEqual({ iron: 140, coal: 5, steel: 7 });
+    expect(merged.inventoryValueAnchor).toBe(1_400);
+  });
+
+  it("keeps the incoming pile when the survivor holds none", () => {
+    const merged = mergeSectorPlantFields(midBuild(), midBuild(pile({ iron: 40 }, 400)));
+    expect(merged.inventoryUnits).toEqual({ iron: 40 });
+    expect(merged.inventoryValueAnchor).toBe(400);
+  });
+
+  it("writes no inventory fields when neither side holds a pile", () => {
+    const merged = mergeSectorPlantFields(midBuild(), midBuild());
+    expect(merged).not.toHaveProperty("inventoryUnits");
+    expect(merged).not.toHaveProperty("inventoryValueAnchor");
+  });
+
+  it("restores the survivor's own pile on the identity fold", () => {
+    const identity = identitySectorPlantFields(midBuild(pile({ iron: 100 }, 1_000)));
+    expect(identity.inventoryUnits).toEqual({ iron: 100 });
+    expect(identity.inventoryValueAnchor).toBe(1_000);
+  });
+
+  it("slices the pile with the capacity on a carve", () => {
+    const sector = midBuild({
+      sectorType: undefined,
+      plantCount: 4,
+      ...pile({ iron: 100 }, 1_000),
+    });
+    const carved = carveSectorPlantFields(sector, 0.25);
+    const kept = carveSectorPlantFields(sector, 0.75);
+    expect(carved.inventoryUnits?.iron).toBeCloseTo(25);
+    expect((carved.inventoryUnits?.iron ?? 0) + (kept.inventoryUnits?.iron ?? 0)).toBeCloseTo(100);
+    expect((carved.inventoryValueAnchor ?? 0) + (kept.inventoryValueAnchor ?? 0)).toBeCloseTo(
+      1_000
+    );
+  });
+});

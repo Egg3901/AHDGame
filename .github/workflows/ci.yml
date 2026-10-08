@@ -241,6 +241,9 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=6144
           CI: "true"
+          # Two static-generation workers instead of three: three exhausted the
+          # 16 GB runner and got its agent killed in about one build in five.
+          NEXT_BUILD_CPUS: "2"
 
   federation-transactions:
     needs: changes
