@@ -121,6 +121,11 @@ export interface SharePriceInput {
    * Absent / 0 ⇒ no tech asset contribution.
    */
   techAssetValueAnchor?: number;
+  /**
+   * Formalized subsidiaries this corp controls. Above
+   * SUBSIDIARY_SPRAWL_FREE_COUNT the fundamental takes a conglomerate discount.
+   */
+  subsidiaryCount?: number;
 }
 
 /**
@@ -199,8 +204,12 @@ export function computeSharePrices(
         FUNDAMENTAL_GROWTH_PREMIUM_WEIGHT * growthPremiumPerShare) *
       reliancePenalty;
 
+    // Conglomerate discount (suggestion #363) applies to the fundamental, before
+    // the rate limiter, so the price converges to the discounted value instead
+    // of compounding the discount through the previous-price anchor.
     const fundamentalValue =
-      FUNDAMENTAL_TANGIBLE_BOOK_WEIGHT * tangibleBookPerShare + earningsComponent;
+      (FUNDAMENTAL_TANGIBLE_BOOK_WEIGHT * tangibleBookPerShare + earningsComponent) *
+      subsidiarySprawlMultiplier(i.subsidiaryCount ?? 0);
 
     // Post-split smoothing: bias toward the pre-computed split price for
     // STOCK_SPLIT_PRICE_SMOOTHING_TURNS turns so the new equilibrium is
@@ -322,6 +331,23 @@ export function insiderConcentrationMultiplier(
   const over = Math.min(ceoOwnershipFraction, 1) - INSIDER_CONCENTRATION_THRESHOLD;
   const t = span > 0 ? over / span : 1;
   return 1 - INSIDER_CONCENTRATION_MAX_PENALTY * t * t;
+}
+
+/**
+ * Conglomerate discount on a parent's valuation for subsidiary sprawl. Free up
+ * to SUBSIDIARY_SPRAWL_FREE_COUNT subsidiaries, then linear to
+ * -SUBSIDIARY_SPRAWL_MAX_PENALTY at SUBSIDIARY_SPRAWL_CAP_COUNT, flat beyond.
+ */
+export const SUBSIDIARY_SPRAWL_FREE_COUNT = 3;
+export const SUBSIDIARY_SPRAWL_CAP_COUNT = 9;
+export const SUBSIDIARY_SPRAWL_MAX_PENALTY = 0.5;
+
+export function subsidiarySprawlMultiplier(subsidiaryCount: number): number {
+  if (!(subsidiaryCount > SUBSIDIARY_SPRAWL_FREE_COUNT)) return 1;
+  const over =
+    Math.min(subsidiaryCount, SUBSIDIARY_SPRAWL_CAP_COUNT) - SUBSIDIARY_SPRAWL_FREE_COUNT;
+  const span = SUBSIDIARY_SPRAWL_CAP_COUNT - SUBSIDIARY_SPRAWL_FREE_COUNT;
+  return 1 - SUBSIDIARY_SPRAWL_MAX_PENALTY * (over / span);
 }
 
 /**
