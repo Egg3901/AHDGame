@@ -12,6 +12,7 @@
  */
 import { activeCapacityConstraintFactor } from "@/lib/corporations/investment/rules";
 import { techOutputUnitsMultiplier } from "@/lib/constants/capacityEconomy";
+import { energyProductivityMultiplier } from "@/lib/corporations/rules/energyProductivityRamp";
 import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 import { getOutputMultiplier } from "@/lib/utils/productionPolicy";
 import { CAPACITY_BINDING_THRESHOLD } from "@/lib/extraction/capacityHaircut";
@@ -87,6 +88,8 @@ export interface PlantsRevenueInput {
   plantsMixPrice: number;
   plantsStartTurn: number | undefined | null;
   currentTurn: number;
+  /** Originating reset preset; keys the energy productivity ramp. */
+  preset?: string;
   governorCap: number;
   governorRampTurns: number;
   privateBankingEnabled?: boolean;
@@ -164,6 +167,7 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
     clearingFactor,
     clearingStartTurn,
     currentTurn,
+    preset,
     priceRealization,
     priceRatioByCommodity,
     embargoLegacyMothball,
@@ -298,8 +302,14 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
   // FLIP IDENTITY: the multiplier is exactly 1 for an empty `outputRateMult` —
   // every corp without the tech, and every world with the tech tree off — so the
   // flip turn is unchanged. Plants-gated so non-plants behaviour is byte-identical.
+  //
+  // The 1991 energy productivity ramp rides the same factor: a smooth,
+  // turn-keyed gain on output per unit of energy capacity (exactly 1 on any
+  // other sector, preset, or before the ramp starts). It is folded into this
+  // multiplier, not a new leg, so produced == offered == ledger stays intact.
   const plantsTechOutputMultiplier = plantsEnabled
-    ? techOutputUnitsMultiplier(strategySupply, techEffects.outputRateMult)
+    ? techOutputUnitsMultiplier(strategySupply, techEffects.outputRateMult) *
+      energyProductivityMultiplier(sector.sectorType, currentTurn, preset)
     : 1;
   // Ticket #1072: which production-policy curve throttles TONNAGE.
   //

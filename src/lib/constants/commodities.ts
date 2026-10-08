@@ -38,6 +38,10 @@ import {
   getOperatingSectorType,
   applyPlannedEconomyOutputMix,
 } from "./sectorStrategies";
+import {
+  energyProductivityMultiplier,
+  plantUtilizationForInputs,
+} from "@/lib/corporations/rules/energyProductivityRamp";
 import { getOutputMultiplier, getInputMultiplier } from "@/lib/utils/productionPolicy";
 import { TRADE_EMBARGO_EXPORT_LOSS_SHARE } from "@/lib/trade/constants";
 
@@ -2320,12 +2324,18 @@ export function computeRawSupplyDemand(
         : null;
     // Utilization scales INPUT demand: producedUnits / capacity. A plant running
     // at 60% of nameplate consumes ~60% of its inputs rather than 100%.
+    // The energy productivity ramp lifts the cap with the output gain, so a plant
+    // that makes more from the same capacity buys proportionally more inputs.
     const plantsUtilization =
       plantsEnabled &&
       typeof sector.producedUnits === "number" &&
       typeof sector.capacityUnits === "number" &&
       sector.capacityUnits > 0
-        ? Math.max(0, Math.min(1, sector.producedUnits / sector.capacityUnits))
+        ? plantUtilizationForInputs(
+            sector.producedUnits,
+            sector.capacityUnits,
+            energyProductivityMultiplier(sector.sectorType, currentTurn, preset)
+          )
         : 1;
     const plantsSupplyRates: Partial<Record<CommodityType, number>> | null =
       plantsSupplyUnits != null ? Object.fromEntries(supplyEntries) : null;
