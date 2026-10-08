@@ -32,6 +32,7 @@ import { sweepExpiredCountryModifiers } from "@/lib/events/substrate/countryModi
 import { processWorldEventsTurn } from "@/lib/events/worldEvents/driver";
 import { processCampaignSpendReset } from "@/lib/turn/elections/campaignSpendReset";
 import { resolveGeneralElections } from "@/lib/turn/electionResolution";
+import { closeDueContingentHouseVotes } from "@/lib/turn/election/contingentHouseVoteClose";
 import { processPostConversionElections } from "@/lib/turn/postConversionElections";
 import {
   resolvePrimariesIfNeeded,
@@ -1255,9 +1256,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         );
         phaseResults.primarySnapshots = { snapshotsTaken: snapshotResult ?? 0 };
 
-        const generalResolved = await runtime.runPhase("electionResolution", () =>
-          resolveGeneralElections(gameNow)
-        );
+        const generalResolved = await runtime.runPhase("electionResolution", async () => {
+          const resolved = await resolveGeneralElections(gameNow);
+          // A deadlocked House vote that has run its full window closes here.
+          await closeDueContingentHouseVotes(db, gameNow, newTurn);
+          return resolved;
+        });
         phaseResults.electionResolution = {
           electionsResolved: generalResolved ?? 0,
           winners: [],
