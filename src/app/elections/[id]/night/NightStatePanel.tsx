@@ -87,7 +87,13 @@ export function NightStatePanel({
       >
         <i
           aria-hidden
-          style={{ width: 12, height: 34, flex: "none", display: "block", background: state.fill }}
+          style={{
+            width: 12,
+            height: 34,
+            flex: "none",
+            display: "block",
+            background: swatch(state),
+          }}
         />
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 14.5, fontWeight: 600 }}>
@@ -101,7 +107,10 @@ export function NightStatePanel({
 
       <dl style={{ margin: "14px 0 0", display: "flex", gap: 24 }}>
         <Fact label="Reporting" value={`${b.reportingPct.toFixed(1)}%`} />
-        <Fact label="Status" value={b.statusLabel} />
+        <Fact
+          label="Votes counted"
+          value={b.showNumbers ? Math.round(state.totalVotes).toLocaleString("en-US") : "None"}
+        />
       </dl>
 
       <Section title="Vote counted so far">
@@ -208,6 +217,21 @@ export function NightStatePanel({
       ) : null}
     </div>
   );
+}
+
+/** Flat fill, or the same hatch or stripes the map draws. */
+function swatch(state: PresMapState): string {
+  const o = state.overlay;
+  if (!o) return state.fill;
+  const cols = o.kind === "hatch" ? [o.base, o.colors[0]] : o.colors;
+  const step = o.kind === "hatch" ? [3, 2] : cols.map(() => 4);
+  let at = 0;
+  const stops = cols.map((c, i) => {
+    const from = at;
+    at += step[i];
+    return `${c} ${from}px ${at}px`;
+  });
+  return `repeating-linear-gradient(135deg, ${stops.join(", ")})`;
 }
 
 function Fact({ label, value }: { label: string; value: string }) {

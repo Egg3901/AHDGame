@@ -136,7 +136,9 @@ function Stat({ label, value }: { label: string; value: string }) {
 // ---- race to N ----
 
 export function RaceBar({ view }: { view: NightView }) {
-  const [a, b, ...rest] = view.candidates;
+  // The two leading tickets keep fixed sides (by id) so a changing lead does not swap them.
+  const [first, second, ...rest] = view.candidates;
+  const [a, b] = [first, second].filter(Boolean).sort((x, y) => x.id.localeCompare(y.id));
   const total = Math.max(1, view.totalEv);
   const pct = (ev: number) => `${Math.min(100, (ev / total) * 100)}%`;
   const marker = (view.evNeeded / total) * 100;

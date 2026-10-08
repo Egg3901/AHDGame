@@ -137,7 +137,7 @@ export function msUntil(
 ): number {
   return Math.max(
     0,
-    (fractionOf(at, night.windowStart, night.windowEnd) - progress) * windowRealMs
+    Math.round((fractionOf(at, night.windowStart, night.windowEnd) - progress) * windowRealMs)
   );
 }
 
@@ -260,16 +260,19 @@ export function buildNightView(data: ElectionResultsResponse): NightView {
   const totalEv = night?.totalEv ?? election.totalEv ?? units.reduce((s, u) => s + u.weight, 0);
   const evNeeded = night?.evNeeded ?? election.evNeeded ?? Math.floor(totalEv / 2) + 1;
 
+  // Ties (everyone at zero when the night opens) keep the payload's own order.
   const views: NightCandidateView[] = candidates
-    .map((c) => ({
+    .map((c, order) => ({
       id: c.id,
       name: c.name,
       color: candidateColor(c),
       ev: night ? (night.calledEv[c.id] ?? 0) : (c.electoralVotes ?? 0),
       votes: c.totalVotes,
       sharePct: c.voteSharePct,
+      order,
     }))
-    .sort((a, b) => b.ev - a.ev || b.votes - a.votes || a.name.localeCompare(b.name));
+    .sort((a, b) => b.ev - a.ev || b.votes - a.votes || a.order - b.order)
+    .map(({ order: _order, ...rest }) => rest);
 
   const weightSum = units.reduce((s, u) => s + u.weight, 0);
   const reportingPct =
