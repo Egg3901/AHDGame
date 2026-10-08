@@ -462,7 +462,14 @@ export function CorporationMasthead({
               {est(money.fmt(corporation.liquidCapital))}
             </Figure>
           )}
-          {creditRating && <Figure label="Credit">{creditRating}</Figure>}
+          {creditRating && (
+            <Figure
+              label="Leverage"
+              title="Measures debt load and the ability to service it, not profitability: a company with no debt rates AAA."
+            >
+              {creditRating}
+            </Figure>
+          )}
           {Number.isFinite(corporation.marketingStrength) && (
             <Figure label="Marketing" title="Marketing strength and its change per turn.">
               {formatMarketingStrength(corporation.marketingStrength)}

@@ -587,7 +587,8 @@ export default function OverviewTab({
                       }
                     />
                     <KVRow
-                      label="Credit rating"
+                      label="Leverage rating"
+                      title="Measures debt load and the ability to service it, not profitability: a company with no debt rates AAA."
                       value={corporation.creditRatingSnapshot ?? bondInfo.creditRating.rating}
                       hint={`${corporation.creditCompositeSnapshot ?? bondInfo.creditRating.compositeScore}/100`}
                       action={<RowLink onClick={() => onTabChange("credit")}>Details</RowLink>}
@@ -599,7 +600,7 @@ export default function OverviewTab({
                   </>
                 ) : (
                   <KVRow
-                    label="Credit"
+                    label="Leverage"
                     value={<span className="text-muted">Loading</span>}
                     mono={false}
                   />

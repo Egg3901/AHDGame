@@ -375,8 +375,8 @@ export default function CreditRatingTab({
         )}
 
         <DenseSection
-          title="Credit rating"
-          meta="recalculated each turn"
+          title="Leverage rating"
+          meta="debt load and coverage, recalculated each turn"
           actions={
             <a
               href="#corp-bonds"

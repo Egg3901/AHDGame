@@ -567,7 +567,8 @@ export default function FinancialsTab({
                 />
                 {creditRating && (
                   <KVRow
-                    label="Credit rating"
+                    label="Leverage rating"
+                    title="Measures debt load and the ability to service it, not profitability: a company with no debt rates AAA."
                     value={creditRating}
                     hint={creditScore != null ? `${creditScore}/100` : undefined}
                   />
@@ -732,7 +733,8 @@ export default function FinancialsTab({
                 })()}
                 {creditRating && bondInfo && bondInfo.totalDebt > 0 && (
                   <KVRow
-                    label="Credit rating"
+                    label="Leverage rating"
+                    title="Measures debt load and the ability to service it, not profitability: a company with no debt rates AAA."
                     value={creditRating}
                     hint={creditScore != null ? `${creditScore}/100` : undefined}
                   />
