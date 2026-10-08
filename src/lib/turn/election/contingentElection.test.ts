@@ -84,6 +84,23 @@ describe("scoreContingentPreference", () => {
       scoreContingentPreference(voter, gopPresident)
     );
   });
+
+  it("backs a coalition partner's candidate over an ideologically closer rival", () => {
+    // Party 3 sits at the centre, closer to a party-1 voter than party 2's
+    // candidate; once parties 1 and 2 are in coalition the voter backs the ally.
+    const loner = demRep("v1");
+    const ally: ContingentVoterProfile = { ...demRep("v2"), coalitionParties: ["2"] };
+    expect(scoreContingentPreference(loner, indPresident)).toBeGreaterThan(
+      scoreContingentPreference(loner, gopPresident)
+    );
+    expect(scoreContingentPreference(ally, gopPresident)).toBeGreaterThan(
+      scoreContingentPreference(ally, indPresident)
+    );
+    // Own party still comes first.
+    expect(scoreContingentPreference(ally, demPresident)).toBeGreaterThan(
+      scoreContingentPreference(ally, gopPresident)
+    );
+  });
 });
 
 describe("calculateHouseDelegationVote", () => {
@@ -169,6 +186,7 @@ describe("resolveContingentElection", () => {
     expect(result.houseVoteTotals.dem).toBe(28);
     expect(result.resolutionMode).toBe("contingent");
     expect(result.deadlockBreakerUsed).toBe(false);
+    expect(result.houseDeadlocked).toBe(false);
   });
 
   it("limits House ballot to top three EV candidates", () => {
@@ -202,6 +220,7 @@ describe("resolveContingentElection", () => {
 
     expect(result.deadlockBreakerUsed).toBe(true);
     expect(result.resolutionMode).toBe("contingent_deadlock");
+    expect(result.houseDeadlocked).toBe(true);
     expect(["dem", "gop"]).toContain(result.presidentWinnerId);
   });
 

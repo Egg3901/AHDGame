@@ -203,11 +203,15 @@ export function buildResultsBlendViewModel(inp: ResultsBlendInput): ResultsBlend
   // far fewer electoral votes than the college leader.
   const house = summary.contingentResult;
   const houseVotes = winner && house ? (house.houseVoteTotals[winner.id] ?? 0) : null;
-  const winnerLine = winner
-    ? house && houseVotes != null
-      ? `Elected by the House with ${houseVotes} state delegations${house.deadlockBreakerUsed ? ` (short of ${house.houseThreshold}; seated under the deadlock rule)` : ""}. ${winner.ev} electoral votes, ${winner.pct} per cent of the vote`
-      : `${winner.ev} electoral votes, ${winner.pct} per cent of the vote`
-    : "No ticket has been projected yet";
+  const actingVote = summary.contingentHouseVote;
+  const winnerLine =
+    !winner && actingVote?.status === "open"
+      ? `No president elected yet: the House is still voting, until turn ${actingVote.closesTurn}. ${actingVote.actingPresidentName} serves as acting president.`
+      : winner
+        ? house && houseVotes != null
+          ? `Elected by the House with ${houseVotes} state delegations${house.deadlockBreakerUsed ? ` (short of ${house.houseThreshold}; seated under the deadlock rule)` : ""}. ${winner.ev} electoral votes, ${winner.pct} per cent of the vote`
+          : `${winner.ev} electoral votes, ${winner.pct} per cent of the vote`
+        : "No ticket has been projected yet";
 
   const arrow = (col: StateSortKey) => (sortBy === col ? (sortDesc ? " ↓" : " ↑") : "");
 

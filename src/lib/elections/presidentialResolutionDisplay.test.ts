@@ -48,3 +48,23 @@ describe("presidentialResolutionDisplay", () => {
     ).toBe("b");
   });
 });
+
+describe("House deadlock", () => {
+  it("names no president while the House has not chosen", () => {
+    expect(
+      resolvePresidentialWinnerCandidateId({ a: 220, b: 189, c: 75 }, "contingent_deadlock", {
+        presidentWinnerId: "c",
+        houseDeadlocked: true,
+      } as never)
+    ).toBeNull();
+  });
+
+  it("names the House winner once there is a majority", () => {
+    expect(
+      resolvePresidentialWinnerCandidateId({ a: 220, b: 189, c: 75 }, "contingent", {
+        presidentWinnerId: "c",
+        houseDeadlocked: false,
+      } as never)
+    ).toBe("c");
+  });
+});
