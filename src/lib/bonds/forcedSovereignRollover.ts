@@ -177,3 +177,11 @@ export async function rollOverUnfundedSovereignPoolFloat(
   }
   return true;
 }
+
+/** Face (local currency) a forced rollover moved off this bond instead of paying it from Treasury cash. */
+export async function readForcedRolloverFaceLocal(db: Db, bond: Bond): Promise<number> {
+  const stored = await db
+    .collection<Bond>("bonds")
+    .findOne({ _id: bond._id }, { projection: { sovereignMaturityClaim: 1 } });
+  return stored?.sovereignMaturityClaim?.forcedRollover?.faceLocal ?? 0;
+}

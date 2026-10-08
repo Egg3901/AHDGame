@@ -7,6 +7,7 @@ import { euroSettlementRates } from "@/lib/currency/euro/rules";
 import { purchaseSpreadRate } from "@/lib/currency/rules/purchaseConversion";
 import { loadConversionQuoteContext } from "@/lib/currency/euro/quotes";
 import { roundedAggregateCredit } from "@/lib/bonds/rules/roundedAggregateCredit";
+import { readForcedRolloverFaceLocal } from "@/lib/bonds/forcedSovereignRollover";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
 import type {
@@ -1455,13 +1456,7 @@ export async function processBondTurn(
 
       // A forced rollover moved the pool's face to a replacement bond, so that
       // face was never paid out of Treasury cash.
-      const rolledFace =
-        (
-          await db
-            .collection<Bond>("bonds")
-            .findOne({ _id: bond._id }, { projection: { sovereignMaturityClaim: 1 } })
-        )?.sovereignMaturityClaim?.forcedRollover?.faceLocal ?? 0;
-      const paidLocal = nonBankRepaymentLocal - rolledFace;
+      const paidLocal = nonBankRepaymentLocal - (await readForcedRolloverFaceLocal(db, bond));
 
       return [
         ...maturityEntries,
