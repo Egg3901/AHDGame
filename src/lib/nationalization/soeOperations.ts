@@ -75,6 +75,7 @@ import {
   NATCORP_RD_DECAY_PER_TURN,
   NATCORP_RD_RAMP_UP_PER_TURN,
 } from "./constants";
+import { SETTLEMENT_HISTORY_EXCLUDED } from "@/lib/banking/settlementHistory";
 
 interface MetricOpInput {
   countryId: CountryId;
@@ -425,9 +426,10 @@ export async function processSoeOperations(
   // them entirely. The post-filter keeps the canonical reader as the final word.
   const corps = await db
     .collection<Corporation>("corporations")
-    .find({
-      $or: [{ countryOwnerId: { $exists: true } }, { ownershipState: "stateOwned" }],
-    })
+    .find(
+      { $or: [{ countryOwnerId: { $exists: true } }, { ownershipState: "stateOwned" }] },
+      { projection: SETTLEMENT_HISTORY_EXCLUDED }
+    )
     .toArray();
   const soeCorps = corps.filter((c) => isStateOwned(c));
   if (soeCorps.length === 0) return { soeCorps: 0, backing: [] };

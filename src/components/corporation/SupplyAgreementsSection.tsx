@@ -781,13 +781,13 @@ export default function SupplyAgreementsSection({
         <button
           type="button"
           onClick={() => setShowForm((v) => !v)}
+          aria-expanded={showForm}
+          aria-controls={`supply-proposal-${corpId}`}
           className="inline-flex h-7 items-center rounded-md border border-primary bg-primary px-2.5 text-xs font-medium text-white transition-colors hover:bg-primary/90"
         >
           {showForm ? t("negotiation.close") : t("negotiation.proposeButton")}
         </button>
       </div>
-
-      <SupplyOfferBoard key={corpId} corpId={corpId} onRespond={openResponse} />
 
       {showForm && (
         <form
@@ -1044,6 +1044,8 @@ export default function SupplyAgreementsSection({
           </div>
         </form>
       )}
+
+      <SupplyOfferBoard key={corpId} corpId={corpId} onRespond={openResponse} />
 
       {loading ? (
         <p className="text-xs text-muted">Loading agreements…</p>

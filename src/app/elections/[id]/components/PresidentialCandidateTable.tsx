@@ -7,6 +7,7 @@ import { formatVotes } from "./ElectionDetailHelpers";
 import type { CandidateDetail } from "./ElectionDetailTypes";
 import { CsInfoIcon } from "./CsInfoIcon";
 import { NppAbbr } from "@/components/elections/NppAbbr";
+import { countedTurns } from "@/lib/elections/snapshotTurns";
 
 /**
  * A candidate's campaign strength as it stands right now: the value the
@@ -93,8 +94,8 @@ export function PresidentialCandidateTable({
         </span>
         {hasTurns && (
           <span className="text-muted font-normal">
-            {formatVotes(totalVotesCast)} votes · {tally.turnSnapshots.length} turn
-            {tally.turnSnapshots.length !== 1 ? "s" : ""}
+            {formatVotes(totalVotesCast)} votes · {countedTurns(tally.turnSnapshots)} turn
+            {countedTurns(tally.turnSnapshots) !== 1 ? "s" : ""}
           </span>
         )}
       </div>

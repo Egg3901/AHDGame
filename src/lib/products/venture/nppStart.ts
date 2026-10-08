@@ -6,16 +6,16 @@
  * The rule is deliberately small and bounded:
  *  - at most one development per corporation and domain (the unique activeKey
  *    index backs this, so a replay or a race cannot add a second);
- *  - eligible only if cash left after the whole standard commitment stays above
- *    the NPP cash reserve (`getNppCashFloorAnchor`, the reserve behind #3561),
+ *  - eligible only if cash above the NPP cash reserve (`getNppCashFloorAnchor`,
+ *    the reserve behind #3561) covers a 12-turn runway of standard funding,
  *    and the company is not insolvent, in arrears or in financial distress;
  *  - one seeded roll per eligible company per turn. Per-turn start hazard
  *    p = 1 / (2 x 72) = 1/144, so that about one in three eligible companies
  *    has a product in development at steady state (derivation below);
  *  - the line is drawn with weights favouring outputs that are short in the
  *    market (the same price-ratio signal NPP founding uses, #3485);
- *  - tier: standard funding, lean when the cash left after the commitment is
- *    thin. Never all-in.
+ *  - tier: standard funding, lean when headroom above the reserve is under two
+ *    runways. Never all-in.
  *
  * Steady state. A company alternates idle and developing. Idle time before a
  * start is geometric with mean 1/p turns, development lasts D = 72 turns, so
@@ -59,8 +59,14 @@ export const NPP_VENTURE_START_HAZARD =
 /** Same shape as NPP founding: a short output weighs as the square of its price ratio. */
 export const NPP_VENTURE_SHORTAGE_EXPONENT = 2;
 export const NPP_VENTURE_MIN_SHORTAGE_SCORE = 0.5;
-/** Cash above reserve + commitment below this multiple of the reserve is "tight": go lean. */
-export const NPP_VENTURE_TIGHT_HEADROOM_RESERVES = 1;
+/**
+ * Turns of standard funding the company must hold above its reserve to start.
+ * Funding is debited each turn from operating income, so the company needs a
+ * runway, not the whole 72-turn commitment in cash on day one.
+ */
+export const NPP_VENTURE_CASH_RUNWAY_TURNS = 12;
+/** Below this many runways of headroom the company funds at the lean tier. */
+export const NPP_VENTURE_TIGHT_HEADROOM_RUNWAYS = 2;
 
 export type NppVentureTierId = "lean" | "standard";
 
@@ -109,10 +115,10 @@ export function isNppDistressed(corp: Corporation): boolean {
     (corp.liquidCapital ?? 0) < 0 ||
     corp.financialDistressSinceTurn !== undefined ||
     corp.nppInsolventSinceTurn !== undefined ||
+    // The *LastTurn* maps hold turn stamps, not amounts, so only the amount
+    // maps say whether anything is owed.
     hasPositive(corp.operatingCashArrearsByCurrency) ||
-    hasPositive(corp.operatingCashArrearsLastTurnByCurrency) ||
-    hasPositive(corp.federalTaxArrearsAnchorByCountry) ||
-    hasPositive(corp.federalTaxArrearsLastTurnByCountry)
+    hasPositive(corp.federalTaxArrearsAnchorByCountry)
   );
 }
 
@@ -215,9 +221,10 @@ export function selectNppVentureStarts(
               sum + sectorTurnRevenueAnchor(sector, corp, args.exchangeRatesByCurrency),
             0
           );
-        const target = ventureTargetAnchor(baseline);
-        // The full standard commitment must leave the reserve intact.
-        if (liquidAnchor - target < args.reserveAnchor) continue;
+        const runway =
+          referenceFundingPerTurn(ventureTargetAnchor(baseline)) * NPP_VENTURE_CASH_RUNWAY_TURNS;
+        // A funding runway must sit above the reserve.
+        if (liquidAnchor - args.reserveAnchor < runway) continue;
         candidates.push({
           domain,
           lineId: status.line.id,
@@ -237,9 +244,10 @@ export function selectNppVentureStarts(
         )
       ];
     const target = ventureTargetAnchor(pick.baseline);
-    const headroom = liquidAnchor - target - args.reserveAnchor;
+    const runway = referenceFundingPerTurn(target) * NPP_VENTURE_CASH_RUNWAY_TURNS;
+    const headroom = liquidAnchor - args.reserveAnchor;
     const tier: NppVentureTierId =
-      headroom < args.reserveAnchor * NPP_VENTURE_TIGHT_HEADROOM_RESERVES ? "lean" : "standard";
+      headroom < runway * NPP_VENTURE_TIGHT_HEADROOM_RUNWAYS ? "lean" : "standard";
     starts.push({
       corporationId,
       domain: pick.domain,

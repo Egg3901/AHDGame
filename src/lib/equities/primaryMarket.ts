@@ -18,6 +18,7 @@ import {
   readEquityPool,
   refundEquityPoolDebit,
 } from "./marketPool";
+import { SETTLEMENT_HISTORY_EXCLUDED } from "@/lib/banking/settlementHistory";
 
 /** Maximum share of the pool's equity-liquidity allocation committed to one issue. */
 export const EQUITY_PRIMARY_COMMIT_SHARE = 0.2;
@@ -201,7 +202,10 @@ export async function placePendingShareIssuances(
 ): Promise<{ corporationsTouched: number; sharesPlaced: number; paidLocal: number }> {
   const corporations = await db
     .collection<Corporation>("corporations")
-    .find({ "pendingShareIssuance.remainingShares": { $gt: 0 }, isPrivate: { $ne: true } })
+    .find(
+      { "pendingShareIssuance.remainingShares": { $gt: 0 }, isPrivate: { $ne: true } },
+      { projection: SETTLEMENT_HISTORY_EXCLUDED }
+    )
     .sort({ "pendingShareIssuance.createdAtTurn": 1 })
     .toArray();
   const result = { corporationsTouched: 0, sharesPlaced: 0, paidLocal: 0 };

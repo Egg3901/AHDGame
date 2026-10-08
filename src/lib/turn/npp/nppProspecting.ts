@@ -24,6 +24,7 @@ import {
   anchorToCorpCapital,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
+import { SETTLEMENT_HISTORY_EXCLUDED } from "@/lib/banking/settlementHistory";
 
 /** Price ratio at or above this: the resource is short enough to survey. */
 export const NPP_PROSPECT_SHORTAGE_RATIO = 1.15;
@@ -100,7 +101,10 @@ export async function processNppProspecting(db: Db, turn: number, now: Date): Pr
 
   const nppCorps = await db
     .collection<Corporation>("corporations")
-    .find({ ceoType: "npp", type: "extraction", suspended: { $ne: true } })
+    .find(
+      { ceoType: "npp", type: "extraction", suspended: { $ne: true } },
+      { projection: SETTLEMENT_HISTORY_EXCLUDED }
+    )
     .toArray();
   if (nppCorps.length === 0) return 0;
 

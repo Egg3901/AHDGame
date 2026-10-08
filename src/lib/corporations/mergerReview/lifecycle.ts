@@ -34,6 +34,7 @@ import {
   MERGER_REMEDY_TURNS,
   type MergerReviewDecision,
 } from "./constants";
+import { SETTLEMENT_HISTORY_EXCLUDED } from "@/lib/banking/settlementHistory";
 
 export type LifecycleResult<T = object> =
   { ok: false; error: string; status: number } | ({ ok: true } & T);
@@ -207,7 +208,10 @@ export async function fineOverdueDivestitures(
 ): Promise<{ fined: number; totalAnchor: number }> {
   const corps = await db
     .collection<Corporation>("corporations")
-    .find({ "pendingDivestiture.dueTurn": { $lt: currentTurn } })
+    .find(
+      { "pendingDivestiture.dueTurn": { $lt: currentTurn } },
+      { projection: SETTLEMENT_HISTORY_EXCLUDED }
+    )
     .toArray();
   if (corps.length === 0) return { fined: 0, totalAnchor: 0 };
 

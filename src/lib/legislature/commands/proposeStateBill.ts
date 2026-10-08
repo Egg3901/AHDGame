@@ -153,6 +153,21 @@ export async function proposeStateBill(
   const votingEndsOnTurn = (gameStateForTurn?.currentTurn ?? 0) + VOTING_DURATION_HOURS;
   const resetLegislationV2 =
     resetSystemVersionsForCountry(gameStateForTurn, RESET_V2_READY, countryId).legislation === "v2";
+  if (
+    !resetLegislationV2 &&
+    provisions?.some(
+      (provision) =>
+        typeof provision === "object" &&
+        provision !== null &&
+        "type" in provision &&
+        provision.type === "reset_law"
+    )
+  ) {
+    return {
+      status: 409,
+      body: { error: "Reviewed legislation is unavailable. Refresh the page before proposing." },
+    };
+  }
   // Reviewed v2 bills deliberately use `custom` for multi-domain drafts. Legacy
   // custom bills remain flavor-only and cannot smuggle mechanical provisions.
   const effectiveProvisions = category === "custom" && !resetLegislationV2 ? [] : provisions;

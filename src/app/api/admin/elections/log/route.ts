@@ -50,6 +50,7 @@ export type {
   GeneralCandidateResult,
   ElectionLogEntry,
 } from "@/lib/elections/electionResponseTypes";
+import { countedTurns } from "@/lib/elections/snapshotTurns";
 
 // ─── Route handler ────────────────────────────────────────────────────────────
 
@@ -290,13 +291,13 @@ export async function GET(request: Request) {
         } else if (generalCandidates.length > 0) {
           const leader = generalCandidates[0];
           events.push(
-            `${leader.name} leading — ${leader.pct.toFixed(1)}% (${leader.votes.toLocaleString()} votes, ${tally.turnSnapshots.length} turn${tally.turnSnapshots.length !== 1 ? "s" : ""} counted)`
+            `${leader.name} leading — ${leader.pct.toFixed(1)}% (${leader.votes.toLocaleString()} votes, ${countedTurns(tally.turnSnapshots)} turn${countedTurns(tally.turnSnapshots) !== 1 ? "s" : ""} counted)`
           );
         }
 
         generalResult = {
           totalVotes,
-          turnsCounted: tally.turnSnapshots.length,
+          turnsCounted: countedTurns(tally.turnSnapshots),
           finalized: tally.finalized,
           candidates: generalCandidates,
           events,

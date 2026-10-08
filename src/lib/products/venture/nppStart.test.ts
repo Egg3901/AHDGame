@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import { VENTURE_DEVELOPMENT_TURNS, referenceFundingPerTurn, ventureTargetAnchor } from "./engine";
 import {
+  NPP_VENTURE_CASH_RUNWAY_TURNS,
   NPP_VENTURE_START_HAZARD,
   isNppDistressed,
   nppLineWeight,
@@ -89,23 +90,42 @@ describe("selectNppVentureStarts eligibility", () => {
     expect(selectNppVentureStarts(args([player, state], sectors))).toEqual([]);
   });
 
-  it("keeps the reserve: cash after the full commitment must stay above it", () => {
+  function runwayFor(corps: Corporation[], sectors: Map<string, CorporateSector[]>): number {
+    const [probe] = selectNppVentureStarts(args(corps, sectors));
+    return (
+      referenceFundingPerTurn(ventureTargetAnchor(probe.baselineRevenueAnchor)) *
+      NPP_VENTURE_CASH_RUNWAY_TURNS
+    );
+  }
+
+  it("needs a funding runway above the reserve, not the whole commitment in cash", () => {
     const { corps, sectors } = world(1);
-    const baseline = 1_000;
-    const target = ventureTargetAnchor(baseline);
-    corps[0].liquidCapital = RESERVE + target - 1;
+    const runway = runwayFor(corps, sectors);
+    corps[0].liquidCapital = RESERVE + runway - 1;
     expect(selectNppVentureStarts(args(corps, sectors))).toEqual([]);
-    corps[0].liquidCapital = RESERVE + target;
+    corps[0].liquidCapital = RESERVE + runway;
     expect(selectNppVentureStarts(args(corps, sectors))).toHaveLength(1);
   });
 
-  it("goes lean when the cash left after the commitment is thin", () => {
+  it("goes lean when headroom above the reserve is under two runways", () => {
     const { corps, sectors } = world(1);
-    const target = ventureTargetAnchor(1_000);
-    corps[0].liquidCapital = RESERVE + target + RESERVE / 2;
+    const runway = runwayFor(corps, sectors);
+    corps[0].liquidCapital = RESERVE + runway * 1.5;
     const [start] = selectNppVentureStarts(args(corps, sectors));
     expect(start.tier).toBe("lean");
-    expect(start.fundingPerTurnAnchor).toBeCloseTo(referenceFundingPerTurn(target) * 0.5, 6);
+    corps[0].liquidCapital = RESERVE + runway * 2;
+    expect(selectNppVentureStarts(args(corps, sectors))[0].tier).toBe("standard");
+  });
+
+  it("reads arrears turn stamps as stamps, not as money owed", () => {
+    const { corps, sectors } = world(1, 10_000_000, {
+      operatingCashArrearsByCurrency: { USD: 0 },
+      operatingCashArrearsLastTurnByCurrency: { USD: 52 },
+      federalTaxArrearsAnchorByCountry: { us: 0 },
+      federalTaxArrearsLastTurnByCountry: { us: 52 },
+    } as Partial<Corporation>);
+    expect(isNppDistressed(corps[0])).toBe(false);
+    expect(selectNppVentureStarts(args(corps, sectors))).toHaveLength(1);
   });
 
   it.each([

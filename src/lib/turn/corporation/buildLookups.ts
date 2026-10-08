@@ -110,6 +110,7 @@ import {
   scarcityReliefCappedUtilization,
 } from "@/lib/extraction/capacityHaircut";
 import type { SourcingNetworkDoc } from "@/lib/logistics/sourcingLedger";
+import { SETTLEMENT_HISTORY_EXCLUDED } from "@/lib/banking/settlementHistory";
 
 export async function buildCorporationLookups(
   db: Db,
@@ -222,6 +223,9 @@ export async function buildCorporationLookups(
         {},
         {
           projection: {
+            // Money-move settlement history: most of each document's bytes,
+            // read only by the settlement protocol under its own projection.
+            ...SETTLEMENT_HISTORY_EXCLUDED,
             ...(options?.mediaEditorialEnabled === true ? {} : { editorialStance: 0 }),
             ...(options?.productLinesV2Enabled === true
               ? {}
