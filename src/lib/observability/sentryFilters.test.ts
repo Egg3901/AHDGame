@@ -1,6 +1,27 @@
 import { describe, expect, it } from "vitest";
 
-import { isValuelessNonErrorRejection } from "./sentryFilters";
+import { isValuelessNonErrorRejection, isMarketPollingTeardown } from "./sentryFilters";
+
+describe("market polling teardown", () => {
+  const event = (type: string, value: string) => ({ exception: { values: [{ type, value }] } });
+  it("recognizes the explicitly tagged cancellation without relying on source maps", () => {
+    expect(
+      isMarketPollingTeardown(event("AbortError", "Market polling stopped after view cleanup"))
+    ).toBe(true);
+  });
+  it("preserves timeouts, untagged aborts and application failures", () => {
+    expect(isMarketPollingTeardown(event("AbortError", "signal is aborted without reason"))).toBe(
+      false
+    );
+    expect(
+      isMarketPollingTeardown(event("TimeoutError", "Market polling stopped after view cleanup"))
+    ).toBe(false);
+    expect(
+      isMarketPollingTeardown(event("Error", "Market polling stopped after view cleanup"))
+    ).toBe(false);
+    expect(isMarketPollingTeardown({})).toBe(false);
+  });
+});
 
 describe("isValuelessNonErrorRejection", () => {
   it("drops the classic value: undefined rejection with no originalException", () => {

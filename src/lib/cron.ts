@@ -675,7 +675,9 @@ export async function initializeCronJobs() {
   if (
     process.env.NODE_ENV === "production" &&
     isCronWorkerProcess(process.env) &&
-    shouldStartHostedBackgroundServices(process.env)
+    shouldStartHostedBackgroundServices(process.env) &&
+    // Sandboxes do not inherit the creator token or reconcile live supporters.
+    (process.env.SENTRY_ENVIRONMENT !== "sandbox" || !!process.env.PATREON_CREATOR_TOKEN?.trim())
   ) {
     patreonReconcileCron = cron.schedule(
       PATREON_RECONCILIATION_SCHEDULE,
