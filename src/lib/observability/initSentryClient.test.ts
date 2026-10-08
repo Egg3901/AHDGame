@@ -10,6 +10,7 @@ describe("market cleanup error reporting", () => {
     initSentryClient();
     const beforeSend = vi.mocked(Sentry.init).mock.calls[0][0].beforeSend!;
     const event = (type: string, value: string): Sentry.ErrorEvent => ({
+      type: undefined,
       exception: { values: [{ type, value }] },
     });
     expect(
