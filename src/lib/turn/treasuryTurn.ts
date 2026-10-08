@@ -32,8 +32,11 @@ import { settleBankSovereignClaims } from "@/lib/banking/bankSovereignClaims";
 import { bankCouponClaim, bankCouponPlanForCountry } from "@/lib/banking/rules/sovereignClaims";
 import {
   budgetIdsWithOpenSovereignCouponClaims,
+  openSovereignCouponHolderKeys,
   settleFundedSovereignCoupons,
+  sovereignCouponHolderKeys,
 } from "@/lib/banking/fundedSovereignCoupons";
+import { KeyedQueue, interleaveByKey, runInLanes } from "@/lib/turn/settlementLanes";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import {
   fxRateForCorpFromMap,
@@ -42,6 +45,11 @@ import {
 import type { SovereignCouponCorporationQuote } from "@/lib/banking/rules/sovereignCoupons";
 import { RESET_V2_READY } from "@/lib/resetVersions/availability";
 import { resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
+
+/** Concurrent country settlements; a shared payee or pool still orders them. */
+const TREASURY_LANES = 8;
+/** Bank claims settle against shared bank escrows and insurance funds. */
+const BANK_CLAIMS_KEY = "bankSovereignClaims";
 
 /**
  * Per-turn fiscal accrual (spec §4). For each country's federalBudget, move a
@@ -211,7 +219,45 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
 
   steps.mark("load");
   let countriesProcessed = 0;
-  for (const initial of budgets) {
+  // Countries settle in bounded lanes. Each holds its budget, its bond pool,
+  // every coupon payee it may credit (frozen open claims and current bond
+  // holders) and, when banks are involved, the shared bank-claim key, so any
+  // document two countries share is still written one country at a time.
+  const openClaimHolderKeys = treasuryCashLedgerEnabled
+    ? await openSovereignCouponHolderKeys(db)
+    : new Map<string, Set<string>>();
+  const bondHolderKeysByCountry = new Map<string, Set<string>>();
+  for (const bond of sovereignBonds) {
+    const country = String(bond.countryId);
+    const set = bondHolderKeysByCountry.get(country) ?? new Set<string>();
+    for (const holder of bond.holders ?? []) {
+      if (holder.characterId) set.add(`characters:${holder.characterId.toHexString()}`);
+      if (holder.imperialCharacterId)
+        set.add(`imperialCharacters:${holder.imperialCharacterId.toHexString()}`);
+      if (holder.corporationId) set.add(`corporations:${holder.corporationId.toHexString()}`);
+      if (holder.fundId) set.add(`indexFunds:${holder.fundId.toHexString()}`);
+      if (holder.nppId) set.add(`npps:${holder.nppId.toHexString()}`);
+      if (holder.bankId) set.add(BANK_CLAIMS_KEY);
+    }
+    bondHolderKeysByCountry.set(country, set);
+  }
+  const budgetLockKeys = (b: FederalBudget): string[] => {
+    const country = String(b.countryId ?? b._id);
+    const keys = [
+      `federalBudget:${String(b._id)}`,
+      `bondMarketPools:${resolveCountryCurrencyCode(b) ?? "USD"}`,
+      ...(openClaimHolderKeys.get(String(b._id)) ?? []),
+      ...(bondHolderKeysByCountry.get(country) ?? []),
+      ...(b.sovereignCouponClaims ?? []).flatMap(sovereignCouponHolderKeys),
+    ];
+    if (b.sovereignCouponClaims?.length)
+      for (const claim of b.sovereignCouponClaims)
+        keys.push(`bondMarketPools:${claim.currencyCode}`);
+    if (b.bankSovereignClaims?.length) keys.push(BANK_CLAIMS_KEY);
+    return keys;
+  };
+  const lock = new KeyedQueue();
+  const settleBudget = async (initial: FederalBudget): Promise<void> => {
     let b = initial;
     if (!liveCountries.has(String(b.countryId ?? b._id))) {
       if (treasuryCashLedgerEnabled && owesCoupons(b)) {
@@ -224,7 +270,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
           corporateQuotes: corporationQuotes,
         });
       }
-      continue;
+      return;
     }
     for (let attempt = 0; attempt < 4; attempt++) {
       if (b.treasuryAccrual) {
@@ -249,7 +295,7 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
               corporateQuotes: corporationQuotes,
             });
           }
-          break;
+          return;
         }
       }
       // Invariant: every federalBudget carries a signed treasuryBalance (set at
@@ -433,14 +479,19 @@ export async function processTreasuryTurn(_turn: number): Promise<{ countriesPro
           );
         }
         countriesProcessed += 1;
-        break;
+        return;
       }
       const refreshed = await db.collection<FederalBudget>("federalBudget").findOne({ _id: b._id });
       if (!refreshed) throw new Error(`Treasury budget ${b._id} disappeared during accrual`);
       b = refreshed;
       if (attempt === 3) throw new Error(`Treasury accrual ${b._id}:${_turn} could not claim cash`);
     }
-  }
+  };
+  await runInLanes(
+    interleaveByKey(budgets, (b) => resolveCountryCurrencyCode(b) ?? "USD"),
+    TREASURY_LANES,
+    (b) => lock.run(budgetLockKeys(b), () => settleBudget(b))
+  );
   steps.mark("budgets");
   return { countriesProcessed };
 }

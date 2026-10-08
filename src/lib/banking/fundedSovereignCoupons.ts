@@ -63,6 +63,44 @@ export async function budgetIdsWithOpenSovereignCouponClaims(db: Db): Promise<Se
   return new Set(ids.map(String));
 }
 
+/**
+ * Lock keys for every document a coupon payout can credit, as
+ * `<collection>:<id>`. Matches the credit legs built in payoutTransition.
+ */
+export function sovereignCouponHolderKeys(claim: FundedSovereignCouponClaim): string[] {
+  return claim.holders.flatMap((holder) => {
+    if (holder.kind === "publicFloat") return [`bondMarketPools:${claim.currencyCode}`];
+    if (!holder.id) return [];
+    if (holder.kind === "character") return [`characters:${holder.id}`];
+    if (holder.kind === "imperial") return [`imperialCharacters:${holder.id}`];
+    if (holder.kind === "corporation") return [`corporations:${holder.id}`];
+    if (holder.kind === "fund") return [`indexFunds:${holder.id}`];
+    if (holder.kind === "npp") return [`npps:${holder.id}`];
+    return [];
+  });
+}
+
+/** Holder lock keys of every stored unpaid coupon claim, by budget id. */
+export async function openSovereignCouponHolderKeys(db: Db): Promise<Map<string, Set<string>>> {
+  const rows = await claimStore(db)
+    .find(OPEN_CLAIM, {
+      projection: {
+        budgetId: 1,
+        "claim.currencyCode": 1,
+        "claim.holders.kind": 1,
+        "claim.holders.id": 1,
+      },
+    })
+    .toArray();
+  const keys = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const set = keys.get(row.budgetId) ?? new Set<string>();
+    for (const key of sovereignCouponHolderKeys(row.claim)) set.add(key);
+    keys.set(row.budgetId, set);
+  }
+  return keys;
+}
+
 /** Unpaid claims for one budget, in book order. Legacy array claims are not included. */
 export async function loadOpenSovereignCouponClaims(
   db: Db,
