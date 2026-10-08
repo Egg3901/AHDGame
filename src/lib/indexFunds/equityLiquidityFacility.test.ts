@@ -6,6 +6,10 @@ const orderMocks = vi.hoisted(() => ({
   cancelFundShareOrder: vi.fn(),
   placeFundShareBuyOrder: vi.fn(),
   placeFundShareSellOrder: vi.fn(),
+  // These cases pin the one-order-at-a-time path, which the batched helpers
+  // fall back to when they decline. fundShareOrders tests cover the batches.
+  cancelFundShareOrdersBatch: vi.fn().mockResolvedValue(false),
+  placeFundQuotesBatch: vi.fn().mockResolvedValue(null),
 }));
 const ledgerMocks = vi.hoisted(() => ({
   emitTx: vi.fn().mockResolvedValue(undefined),

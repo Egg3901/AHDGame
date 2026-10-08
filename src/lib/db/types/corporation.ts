@@ -83,6 +83,8 @@ export interface ShareOrder {
   /** Turn and reference price used to construct the standing quote. */
   liquidityQuotedTurn?: number;
   liquidityReferencePrice?: number;
+  /** Claim token of the batched cancel that closed this order (index-fund requote). */
+  cancelClaimId?: ObjectId;
   type: "buy" | "sell";
   shares: number;
   sharesRemaining: number;
