@@ -24,7 +24,7 @@ import { resumeTreasuryReserveTransfer } from "@/lib/budget/treasuryReserveTrans
  *    Publishing is the caller's job because the caller knows the actor.
  */
 
-import { type Db, type Document } from "mongodb";
+import { type Collection, type Db, type Document, type Filter } from "mongodb";
 import {
   MONEY_MOVE_COLLECTION,
   applyMoneyMove,
@@ -426,6 +426,59 @@ interface FinishOptions {
   force?: boolean;
 }
 
+/**
+ * MongoDB refuses an update that pulls from and pushes to the same array in
+ * one write ("would create a conflict"), so a record frozen with such a
+ * projection can never finish. Before any part of it applies, split it in the
+ * journal: the update without its conflicting $push, then the $push alone
+ * under its own receipt. The CAS on the whole list means a racing settler
+ * sees either the old list or the split one, never half of each.
+ */
+async function splitConflictingProjections(
+  journal: Collection<{ _id: string } & JournalExtension>,
+  key: string,
+  records: JournalProjectionRecord[]
+): Promise<JournalProjectionRecord[]> {
+  const conflicting = (record: JournalProjectionRecord) => {
+    if (record.applied || record.appliedAt || !isUpdateProjection(record.projection)) return [];
+    const raw: unknown = (record.projection as { update?: unknown }).update;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+    const update = raw as Record<string, Record<string, unknown> | undefined>;
+    const pulled = Object.keys(update.$pull ?? {});
+    return Object.keys(update.$push ?? {}).filter((path) => pulled.includes(path));
+  };
+  if (!records.some((record) => conflicting(record).length > 0)) return records;
+  const split = records.flatMap((record) => {
+    const paths = conflicting(record);
+    if (!paths.length || !isUpdateProjection(record.projection)) return [record];
+    const update = { ...(record.projection.update as Record<string, Record<string, unknown>>) };
+    const push = { ...update.$push };
+    const moved = Object.fromEntries(paths.map((path) => [path, push[path]]));
+    for (const path of paths) delete push[path];
+    if (Object.keys(push).length) update.$push = push;
+    else delete update.$push;
+    return [
+      { ...record, projection: { ...record.projection, update } },
+      {
+        receiptProtocol: "protected_v1" as const,
+        collection: record.collection,
+        note: `${record.note} (array add)`,
+        claimedAt: null,
+        appliedAt: null,
+        applied: false,
+        projection: { ...record.projection, update: { $push: moved } },
+      },
+    ];
+  });
+  const replaced = await journal.updateOne(
+    { _id: key, projections: records } as Filter<{ _id: string } & JournalExtension>,
+    { $set: { projections: split } }
+  );
+  if (replaced.matchedCount === 1) return split;
+  const fresh = await journal.findOne({ _id: key });
+  return fresh?.projections ?? records;
+}
+
 async function finishProjections(
   db: Db,
   transition: BankingTransition,
@@ -446,6 +499,8 @@ async function finishProjections(
   const existing =
     ownedRecords === undefined ? await journal.findOne({ _id: transition.key }) : null;
   let records = ownedRecords ?? existing?.projections;
+  if (existing && records)
+    records = await splitConflictingProjections(journal, transition.key, records);
   if (records === undefined) {
     records = transition.projections.map((projection) => ({
       receiptProtocol: "protected_v1",
