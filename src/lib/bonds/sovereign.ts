@@ -81,6 +81,10 @@ import {
 import { loadDemocraticHealth } from "@/lib/governanceStyle/loadDemocraticHealth";
 import { democraticHealthSovereignSpread } from "@/lib/governanceStyle/rules/democraticConsequences";
 import { settleSovereignPublicFloatDisposition } from "./publicFloatSovereignNovation";
+import {
+  FORCED_ROLLOVER_MATURITY,
+  rollOverUnfundedSovereignPoolFloat,
+} from "./forcedSovereignRollover";
 import { publicFloatNovationShare } from "./rules/publicFloatNovation";
 
 export const SOVEREIGN_ISSUANCE_INTERVAL_TURNS = 12;
@@ -1017,6 +1021,28 @@ export async function settleSovereignBondMaturity(
   return landed.matchedCount === 1 ? { amountLocal: repaymentLocal, currencyCode } : null;
 }
 
+/** Coupon a fresh sovereign bond would carry now: prime, term, rating, credibility, democracy. */
+async function marketSovereignRolloverCoupon(db: Db, countryId: CountryId): Promise<number> {
+  const [budget, centralBank, democraticSpreadPp] = await Promise.all([
+    db
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { creditRating: 1 } }),
+    db
+      .collection<CentralBank>("centralBanks")
+      .findOne({ _id: getBankId(countryId) }, { projection: { primeRate: 1, chairInfamy: 1 } }),
+    loadDemocraticSovereignSpread(db, countryId),
+  ]);
+  const primeRate =
+    centralBank?.primeRate ?? getCountryConfig(countryId).centralBank.defaultPrimeRate;
+  return getSovereignCouponRate(
+    primeRate,
+    FORCED_ROLLOVER_MATURITY,
+    (centralBank ? sovereignCredibilitySpread(centralBank.chairInfamy ?? 0) : 0) +
+      democraticSpreadPp,
+    sovereignCreditSpreadPp(budget?.creditRating)
+  );
+}
+
 export interface SovereignMaturityCashLeg {
   collection: string;
   filter: Record<string, unknown>;
@@ -1285,7 +1311,24 @@ export async function settleFundedSovereignBondMaturity(
         { _id: budgetId, ...frozenBudgetIdentity },
         { projection: { treasuryCashLocal: 1 } }
       );
-    if ((currentBudget?.treasuryCashLocal ?? 0) < cashAmountLocal) return null;
+    if ((currentBudget?.treasuryCashLocal ?? 0) < cashAmountLocal) {
+      // An unfundable maturity rolls its pool holding into a par replacement
+      // bond rather than sitting unpaid forever. Retry once on the rebased claim.
+      if (quote.forcedRollover || !bond.countryId) return null;
+      const rolled = await rollOverUnfundedSovereignPoolFloat(db, {
+        bond: (await db.collection<Bond>("bonds").findOne({ _id: bond._id })) ?? bond,
+        claim: quote,
+        turn,
+        now,
+        couponRate: await marketSovereignRolloverCoupon(db, bond.countryId),
+        budgetId,
+        client: transactionClient,
+      });
+      if (!rolled) return null;
+      const rebased = await db.collection<Bond>("bonds").findOne({ _id: bond._id });
+      if (!rebased?.sovereignMaturityClaim?.forcedRollover) return null;
+      return settleFundedSovereignBondMaturity(db, { ...input, bond: rebased });
+    }
     if (quote.fundingAttemptTurn !== turn) {
       const priorAttemptTurn = quote.fundingAttemptTurn;
       const reservation = await db.collection<Bond>("bonds").updateOne(
