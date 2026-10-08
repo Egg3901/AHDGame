@@ -16,6 +16,24 @@ const quote = (exchange = "NYSE", asOf = "2026-10-01T12:00:00Z") => ({
 const response = (data: ReturnType<typeof quote>) => ({ ok: true, json: async () => data });
 
 describe("live stock quote polling", () => {
+  it("tags unmount cancellation and consumes the pending request rejection", async () => {
+    let signal!: AbortSignal;
+    const fetch = vi.fn((_url: string, init: RequestInit) => {
+      signal = init.signal!;
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const { unmount } = renderHook(() => useExchangeQuotes("nyse", 100));
+    await act(async () => unmount());
+    expect(signal.aborted).toBe(true);
+    expect(signal.reason).toMatchObject({
+      name: "AbortError",
+      message: "Market polling stopped after view cleanup",
+    });
+  });
+
   it("refreshes quotes every minute without waiting for the other market boards", async () => {
     const fetch = vi.fn().mockResolvedValue(response(quote()));
     vi.stubGlobal("fetch", fetch);

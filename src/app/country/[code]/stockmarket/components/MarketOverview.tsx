@@ -1,5 +1,6 @@
 "use client";
 
+import { MARKET_POLLING_TEARDOWN } from "@/lib/observability/sentryFilters";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { marketTurnLabel } from "@/lib/stockExchange/rules/calendar";
 import type { GameDateAnchor } from "@/lib/utils/gameDate";
@@ -359,7 +360,7 @@ export function MarketOverview({
     const timer = window.setInterval(refresh, 60_000);
     document.addEventListener("visibilitychange", refresh);
     return () => {
-      controller.abort();
+      controller.abort(new DOMException(MARKET_POLLING_TEARDOWN, "AbortError"));
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", refresh);
     };

@@ -1,15 +1,17 @@
+/**
+ * Bank charters require a financial sector, legal charter type and posted capital.
+ * loadCharterCapitalRequirements quotes capital for the world's era and currency;
+ * issueCharter rechecks eligibility before debiting the corporation's treasury.
+ */
 import { ObjectId, type Db } from "mongodb";
 import type { BankCharter, BankCharterType, BankLoan } from "@/lib/db/types/bank";
 import type { Corporation, CorporateSector, GameConfig } from "@/lib/db/types";
 import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
+import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import { CORPORATION_FOUNDING_COST } from "@/lib/constants/corporations";
-import {
-  getGdpAnchorRate,
-  loadWorldEraUnitScale,
-  loadWorldPreset,
-} from "@/lib/currency/gdpAnchorRate";
+import { getGdpAnchorRate, loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { settleAtomicDocumentTransition } from "./atomicDocumentSettlement";
@@ -93,29 +95,43 @@ export type RevokeCharterResult =
     }
   | { ok: false; error: string };
 
+/** Minimum posted capital by charter type, in the requested currency. */
+export type CharterCapitalRequirements = Record<BankCharterType, number>;
+
 /**
- * Minimum capital to post for a bank charter, in `currency` face value.
- *
- * Base is 10× {@link CORPORATION_FOUNDING_COST} in USD-1953 reference terms,
- * deflated by the world's era unit scale, then converted to the bank's
- * currency via {@link getGdpAnchorRate} (local = anchor / rate).
+ * Quote all charter choices from one request-local world preset read.
+ * The console reuses these quotes for display and eligibility. Mutation callers
+ * still load fresh requirements through getCharterCapitalRequirement.
  */
-export async function getCharterCapitalRequirement(
+export async function loadCharterCapitalRequirements(
   db: Db,
-  currency: CurrencyCode,
-  charterType?: BankCharterType
-): Promise<number> {
-  const [eraUnitScale, preset] = await Promise.all([
-    loadWorldEraUnitScale(db),
-    loadWorldPreset(db),
-  ]);
+  currency: CurrencyCode
+): Promise<CharterCapitalRequirements> {
+  const preset = await loadWorldPreset(db);
+  const eraUnitScale = getEraUnitScale(preset);
   const scale = eraUnitScale > 0 && Number.isFinite(eraUnitScale) ? eraUnitScale : 1;
   const countryId = getCountryIdForCurrency(currency);
   const rate = getGdpAnchorRate(countryId, preset);
   const safeRate = rate > 0 && Number.isFinite(rate) ? rate : 1;
-  const typeFraction = charterType === "investment" ? INVESTMENT_CHARTER_CAPITAL_FRACTION : 1;
-  const anchor = (CHARTER_CAPITAL_REFERENCE_USD * typeFraction) / scale;
-  return Math.max(1, Math.round(anchor / safeRate));
+  const requirement = (typeFraction: number) => {
+    const anchor = (CHARTER_CAPITAL_REFERENCE_USD * typeFraction) / scale;
+    return Math.max(1, Math.round(anchor / safeRate));
+  };
+  const retail = requirement(1);
+  return {
+    retail,
+    universal: retail,
+    investment: requirement(INVESTMENT_CHARTER_CAPITAL_FRACTION),
+  };
+}
+
+/** Minimum posted capital, freshly priced for the active world and currency. */
+export async function getCharterCapitalRequirement(
+  db: Db,
+  currency: CurrencyCode,
+  charterType: BankCharterType = "retail"
+): Promise<number> {
+  return (await loadCharterCapitalRequirements(db, currency))[charterType];
 }
 
 async function corpOwnsFinancialSector(db: Db, corporationId: ObjectId): Promise<boolean> {
@@ -134,7 +150,7 @@ export async function checkCharterEligibility(
   corporation: Corporation,
   requestedType: BankCharterType,
   currency: CurrencyCode,
-  options?: { skipFlagCheck?: boolean }
+  options?: { skipFlagCheck?: boolean; capitalRequirements?: CharterCapitalRequirements }
 ): Promise<CharterEligibilityResult> {
   const reasons: string[] = [];
 
@@ -207,7 +223,9 @@ export async function checkCharterEligibility(
     reasons.push(`Corporation treasury is denominated in ${corpCurrency}, not ${currency}`);
   }
 
-  const requirement = await getCharterCapitalRequirement(db, currency, requestedType);
+  const requirement =
+    options?.capitalRequirements?.[requestedType] ??
+    (await getCharterCapitalRequirement(db, currency, requestedType));
   if ((corporation.liquidCapital ?? 0) < requirement) {
     reasons.push(
       `Insufficient treasury: need ${requirement.toLocaleString()} ${currency} posted capital`
