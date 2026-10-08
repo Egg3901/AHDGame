@@ -2,6 +2,8 @@
 
 import { useTranslations } from "next-intl";
 import InvestmentForecast from "./InvestmentForecast";
+import { investmentForecastInput } from "../lib/investment";
+import { recommendSectorExpansion } from "@/lib/corporations/investment/expansion/rules";
 import ConstructionFinanceControls from "./ConstructionFinanceControls";
 import type {
   ConstructionFinanceChoice,
@@ -10,7 +12,7 @@ import type {
 import { useMemo, useState } from "react";
 import { Modal, Button } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
-import { AlertTriangle, Info, TrendingUp } from "lucide-react";
+import { AlertTriangle, ChevronDown, Info, TrendingUp } from "lucide-react";
 import type { PlantsData } from "../types";
 import { fmtUnits, fmtMult, fmtPct } from "../lib/plants";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -61,13 +63,9 @@ function clampCount(n: number): number {
 /**
  * The build dialog: the one place a player turns money into productive capacity.
  *
- * Design intent — this is the hero of the plants feature, so it answers four
- * questions in order, top to bottom, with no scrolling back:
- *
- *   1. how much am I buying   (stepper, in whole facilities; one facility = plantSizeUnits(type) units/day)
- *   2. what does it cost      (itemized, every price leg named)
- *   3. when does it pay back  (live, at today's fill rate and margin)
- *   4. should I               (demand check against untapped market headroom)
+ * Quantity, capacity and demand come first. The build total and payment choice
+ * stay visible without opening the price calculation. The action footer stays
+ * outside the scrolling content, including on small screens.
  *
  * Cost is exactly linear in units, so the whole preview is computed on the
  * client from the per-unit quote the page payload already carries. No round
@@ -133,7 +131,8 @@ export default function BuildCapacityDialog({
     const transferFee = construction * (q.fxSpreadRate ?? 0);
     const total = construction + transferFee;
     const workersNeeded = plants.laborIntensity * safeUnits;
-    const overHeadroom = safeUnits > Math.min(plants.headroomUnits, plants.demandGapUnits ?? 0);
+    const overHeadroom =
+      safeUnits > Math.max(0, Math.min(plants.headroomUnits, plants.measuredDemandGapUnits ?? 0));
     return {
       safeCount,
       safeUnits,
@@ -149,41 +148,56 @@ export default function BuildCapacityDialog({
   const maxAffordableFacilities = Math.floor(q.maxAffordableUnits / unitsPerFacility);
   const ownedFacilities =
     plants.plantCount ?? facilitiesFromUnits(sectorType, plants.capacityUnits ?? 0);
-  const buyersRoomUnits = Math.min(plants.headroomUnits, plants.demandGapUnits ?? 0);
+  const buyersRoomUnits = Math.max(
+    0,
+    Math.min(plants.headroomUnits, plants.measuredDemandGapUnits ?? 0)
+  );
+  const sizing = recommendSectorExpansion({
+    unitsPerFacility,
+    measuredDemandUnits: plants.measuredDemandGapUnits ?? null,
+    shareHeadroomUnits: plants.headroomUnits,
+    // The measured quote already reserves every known build in this market.
+    queuedUnits: 0,
+    cashAnchor: q.corpCapitalAnchor,
+    operatingReserveAnchor: plants.investment?.operatingReserveAnchor ?? null,
+    constrained:
+      plants.mothballed ||
+      (plants.activeCapacityPercent ?? 100) < 100 ||
+      plants.roomHeldByOwnIdle === true ||
+      (workersDesired > 0 && plants.workers < workersDesired) ||
+      (plants.truth?.deliveryLimitedFraction ?? 0) > 0 ||
+      (plants.idleCauses ?? []).some((cause) => cause.units > 0 && cause.cause !== "other"),
+    forecast: investmentForecastInput(plants, unitsPerFacility),
+  });
+  const automaticSizingBlocked = financingChoice !== null || !!q.financing?.pendingRequest;
   const headroomFacilities = Math.floor(buyersRoomUnits / unitsPerFacility);
   // Which constraint actually bound, when there is no room at all. A market
   // whose SHARE is fully claimed is a different situation from one where
   // buyers have no unmet demand, and the player can act on the difference.
   const noShareLeft = plants.headroomUnits < 1;
   const blockedByMothball = plants.mothballed;
-  const affordable = financingChoice
-    ? financingChoice.affordable && !!financingChoice.request
-    : preview.affordable;
+  const affordable = financingChoice ? financingChoice.affordable : preview.affordable;
   const canSubmit =
     !q.financing?.pendingRequest &&
     !submitting &&
     !blockedByMothball &&
     preview.safeCount > 0 &&
-    affordable;
+    affordable &&
+    (!financingChoice || !!financingChoice.request);
 
   return (
     <Modal
       open={open}
       onClose={onClose}
       scrollable
-      maxWidthClass="max-w-lg"
-      title={
-        <div>
-          <p className="text-heading-sm font-bold text-foreground">
-            {vocab.buildVerb === "open" ? "Open more capacity" : "Build capacity"}
-          </p>
-          <p className="mt-0.5 text-body-sm font-normal text-muted">
-            {t("rampSubtitle", { sector: sectorLabel, turns: plants.buildTurns })}
-          </p>
-        </div>
-      }
+      maxWidthClass="max-w-2xl max-h-[calc(100dvh-4rem)] flex flex-col"
+      bodyClassName="flex min-h-0 flex-1 flex-col"
+      title={t("expansionTitle")}
     >
-      <div className="space-y-5">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-5">
+        <p className="text-body-sm text-muted">
+          {t("rampSubtitle", { sector: sectorLabel, turns: plants.buildTurns })}
+        </p>
         {blockedByMothball && (
           <div className="flex gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
@@ -194,7 +208,7 @@ export default function BuildCapacityDialog({
           </div>
         )}
 
-        {/* 1. HOW MUCH ─────────────────────────────────────────────────────── */}
+        {/* Quantity shortcuts use whole facilities; submission uses units. */}
         <div>
           <label htmlFor="build-count" className="text-body-sm font-medium text-muted">
             {capitalizeFacility(sites)} to {vocab.buildVerb}
@@ -270,97 +284,236 @@ export default function BuildCapacityDialog({
               +10
             </StepButton>
           </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {sectorType !== "logistics" && (
+              <button
+                type="button"
+                onClick={() => commitCount(sizing.demandFacilities)}
+                disabled={automaticSizingBlocked || sizing.demandFacilities < 1}
+                className="rounded-lg border border-card-border px-3 py-2 text-body-xs font-semibold text-foreground hover:bg-card-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"
+              >
+                {t("matchDemand", {
+                  count: Math.min(MAX_FACILITIES, sizing.demandFacilities),
+                })}
+              </button>
+            )}
+          </div>
+          <p className="mt-2 text-body-xs text-muted">
+            {automaticSizingBlocked
+              ? t("sizingFinance")
+              : sizing.reason
+                ? t(`sizingReasons.${sizing.reason}`)
+                : t("sizingReserve", { amount: money(sizing.reserveAnchor ?? 0) })}
+          </p>
           <p id="build-count-help" className="mt-2 text-body-xs text-muted">
-            Type a number, or hold <kbd className="font-semibold">Shift</kbd> for ten times the step
-            and <kbd className="font-semibold">Ctrl</kbd> for a hundred times.
+            {t("quantityHelp")}
           </p>
           <p className="mt-1 text-body-xs text-muted">
-            You hold {fmtUnits(ownedFacilities)} {ownedFacilities === 1 ? site : sites} today (
-            {fmtUnits(plants.capacityUnits)} units/day). Most you can afford right now:{" "}
-            <button
-              type="button"
-              onClick={() => commitCount(Math.max(1, maxAffordableFacilities))}
-              className="font-semibold text-primary underline decoration-dotted underline-offset-2"
-            >
-              {fmtUnits(maxAffordableFacilities)}
-            </button>
-            .
+            {t("currentFacilities", {
+              count: ownedFacilities,
+              facilities: ownedFacilities === 1 ? site : sites,
+              units: plants.capacityUnits,
+            })}
           </p>
         </div>
 
-        {/* 2. WHAT IT COSTS ────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-3 gap-2">
+          <Tile
+            label={t("addedCapacity")}
+            value={`+${fmtUnits(preview.safeUnits)}`}
+            unit={t("unitsPerDay")}
+            help={t("addedCapacityHelp")}
+          />
+          <Tile
+            label={t("rampTitle")}
+            value={`${plants.buildTurns}`}
+            unit={t("turnsUnit")}
+            help={t("rampHelp")}
+          />
+          <Tile
+            label={t("staffNeeded")}
+            value={fmtUnits(preview.workersNeeded)}
+            unit={t("workersUnit")}
+            help={t("staffNeededHelp")}
+          />
+        </div>
+
+        {/* Demand warnings remain visible, including markets with no room. */}
+        <div
+          className={`flex gap-2 rounded-lg border p-3 ${
+            preview.overHeadroom ? "border-warning/30 bg-warning/10" : "border-info/30 bg-info/10"
+          }`}
+        >
+          {preview.overHeadroom ? (
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+          ) : (
+            <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden />
+          )}
+          <div className="min-w-0">
+            <h3 className="mb-1 text-body-sm font-semibold text-foreground">
+              {t(
+                sectorType === "logistics"
+                  ? "freightDemand"
+                  : plants.measuredDemandGapUnits == null
+                    ? "measuredDemandTitle"
+                    : preview.overHeadroom
+                      ? "beyondDemand"
+                      : "withinDemand"
+              )}
+            </h3>
+            <p className="text-body-sm text-foreground">
+              {sectorType === "logistics" ? (
+                <>
+                  Freight demand is the state&apos;s combined bulk and special cargo load. Both draw
+                  from one shared fleet, and special cargo uses three times as much TEU per unit.
+                  Check this state&apos;s combined load in the Logistics map before expanding.
+                </>
+              ) : plants.measuredDemandGapUnits == null ? (
+                <>{t("measuredDemandUnavailable")}</>
+              ) : preview.overHeadroom ? (
+                buyersRoomUnits >= 1 ? (
+                  <>
+                    Buyers here have room for about{" "}
+                    {headroomFacilities >= 1
+                      ? `${fmtUnits(headroomFacilities)} more ${headroomFacilities === 1 ? site : sites}`
+                      : `less than one ${site}`}{" "}
+                    ({fmtUnits(buyersRoomUnits)} units a day). You are ordering{" "}
+                    {fmtUnits(preview.safeCount)}. Expect the extra output to go unsold, or to be
+                    taken from a rival.
+                  </>
+                ) : (plants.demandGapUnits ?? 0) > 0 && !plants.roomHeldByOwnIdle ? (
+                  <>{t("mixedOrQueuedDemand")}</>
+                ) : plants.roomHeldByOwnIdle ? (
+                  // The plant is held below capacity by its own sales, so the
+                  // market gap is not room for new capacity yet (ticket 1370).
+                  <>
+                    Your {sites} here already run below capacity because sales set the pace. Output
+                    climbs about 15% a turn while buyers keep taking it, so new capacity would sit
+                    idle until that catches up. Fill what you have before building more.
+                  </>
+                ) : noShareLeft ? (
+                  // Two very different reasons the room is zero, and saying
+                  // "oversupplied" for both is what made a fully-claimed market
+                  // read as a broken one (ticket #1162).
+                  <>
+                    Every unit of this market is already owned, here and by rivals. There is nothing
+                    left to claim, so growth has to come from taking share on price rather than from
+                    building.
+                  </>
+                ) : (
+                  <>
+                    The market for what this sector makes is oversupplied: buyers are already taking
+                    all they need. Unclaimed share can still read above zero, because that counts
+                    market nobody has built into rather than buyers waiting. Expect extra output to
+                    go unsold unless you win share from a rival on price.
+                  </>
+                )
+              ) : (
+                <>
+                  Buyers here have room for about {fmtUnits(headroomFacilities)} more{" "}
+                  {headroomFacilities === 1 ? site : sites} ({fmtUnits(buyersRoomUnits)} units a
+                  day). This order fits inside that.
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+
+        {/* The charge remains visible; price modifiers are available on demand. */}
         <div className="rounded-lg border border-card-border bg-card-muted/60 p-4">
-          <p className="mb-3 text-body-sm font-medium text-muted">What it costs</p>
-          <dl className="space-y-1.5 text-body-sm">
-            <CostLeg
-              label={`Base price per ${site}`}
-              value={money(q.unitPriceAnchor * unitsPerFacility)}
-              help={`The standing price of one ${site} (${fmtUnits(unitsPerFacility)} units/day of capacity) in this industry, at this point in history.`}
-            />
-            <CostLeg
-              label="Your market share"
-              value={fmtMult(q.dominanceMultiplier)}
-              help="Growing a sector you already dominate costs more. Sites, staff and permits get harder to come by."
-              muted={q.dominanceMultiplier === 1}
-            />
-            <CostLeg
-              label="Borrowing rates"
-              value={fmtMult(q.rateMultiplier)}
-              help="Building is financed. When the country's prime rate is high, building costs more."
-              muted={q.rateMultiplier === 1}
-            />
-            <CostLeg
-              label="CEO business sense"
-              value={fmtMult(q.acumenMultiplier)}
-              help="A sharper CEO negotiates a better build price and is less exposed to rates."
-              muted={q.acumenMultiplier === 1}
-            />
-            <CostLeg
-              label="Local prices"
-              value={fmtMult(q.hostPriceMultiplier)}
-              help={`Where you build changes what it costs. An expensive region charges more for the same ${site}.`}
-              muted={q.hostPriceMultiplier === 1}
-            />
-            <CostLeg
-              label="Your technology"
-              value={fmtMult(q.techMultiplier)}
-              help="Unlocked technology lowers what you pay to build."
-              muted={q.techMultiplier === 1}
-            />
-            {(q.expansionMultiplier ?? 1) !== 1 && (
-              <CostLeg
-                label={t("expansionDiscount")}
-                value={fmtMult(q.expansionMultiplier ?? 1)}
-                help={t("expansionDiscountHelp")}
-              />
-            )}
-            <div className="flex items-center justify-between border-t border-card-border pt-2">
-              <dt className="text-body-sm text-muted">Price per {site}</dt>
-              <dd className="text-body-sm font-semibold tabular-nums text-foreground">
-                {money(q.perUnitAnchor * unitsPerFacility)}
-              </dd>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <p className="text-body-sm font-semibold text-foreground">{t("buildTotal")}</p>
+              <p className="mt-1 text-body-xs text-muted">
+                {t("priceEach", {
+                  amount: money(q.perUnitAnchor * unitsPerFacility),
+                  facility: site,
+                })}
+              </p>
             </div>
-            {preview.transferFee > 0 && (
-              <CostLeg
-                label="Foreign transfer fee"
-                value={money(preview.transferFee)}
-                help="This sector is in a country that uses a different currency. Moving the money there costs a small fee on top of the build."
+            <p
+              className={`text-heading font-bold tabular-nums ${affordable ? "text-foreground" : "text-error"}`}
+            >
+              {money(preview.total)}
+            </p>
+          </div>
+          {preview.transferFee > 0 && (
+            <p className="mt-2 text-body-xs text-muted">
+              {t("includedTransferFee", { amount: money(preview.transferFee) })}
+            </p>
+          )}
+          <details className="group mt-3 border-t border-card-border pt-3">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded text-body-sm text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              {t("priceBreakdown")}
+              <ChevronDown
+                className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180"
+                aria-hidden
               />
-            )}
-            <div className="flex items-baseline justify-between pt-1">
-              <dt className="text-body font-semibold text-foreground">
-                Total for {fmtUnits(preview.safeCount)} {preview.safeCount === 1 ? site : sites}
-              </dt>
-              <dd
-                className={`text-heading-sm font-bold tabular-nums ${
-                  affordable ? "text-foreground" : "text-error"
-                }`}
-              >
-                {money(preview.total)}
-              </dd>
-            </div>
-          </dl>
-          {!affordable && (
+            </summary>
+            <dl className="mt-3 space-y-2 text-body-sm">
+              <CostLeg
+                label={`Base price per ${site}`}
+                value={money(q.unitPriceAnchor * unitsPerFacility)}
+                help={`The standing price of one ${site} (${fmtUnits(unitsPerFacility)} units/day of capacity) in this industry, at this point in history.`}
+              />
+              <CostLeg
+                label="Your market share"
+                value={fmtMult(q.dominanceMultiplier)}
+                help="Growing a sector you already dominate costs more. Sites, staff and permits get harder to come by."
+                muted={q.dominanceMultiplier === 1}
+              />
+              <CostLeg
+                label="Borrowing rates"
+                value={fmtMult(q.rateMultiplier)}
+                help="Building is financed. When the country's prime rate is high, building costs more."
+                muted={q.rateMultiplier === 1}
+              />
+              <CostLeg
+                label="CEO business sense"
+                value={fmtMult(q.acumenMultiplier)}
+                help="A sharper CEO negotiates a better build price and is less exposed to rates."
+                muted={q.acumenMultiplier === 1}
+              />
+              <CostLeg
+                label="Local prices"
+                value={fmtMult(q.hostPriceMultiplier)}
+                help={`Where you build changes what it costs. An expensive region charges more for the same ${site}.`}
+                muted={q.hostPriceMultiplier === 1}
+              />
+              <CostLeg
+                label="Your technology"
+                value={fmtMult(q.techMultiplier)}
+                help="Unlocked technology lowers what you pay to build."
+                muted={q.techMultiplier === 1}
+              />
+              {(q.expansionMultiplier ?? 1) !== 1 && (
+                <CostLeg
+                  label={t("expansionDiscount")}
+                  value={fmtMult(q.expansionMultiplier ?? 1)}
+                  help={t("expansionDiscountHelp")}
+                />
+              )}
+              <div className="flex items-center justify-between border-t border-card-border pt-2">
+                <dt className="text-body-sm text-muted">Price per {site}</dt>
+                <dd className="text-body-sm font-semibold tabular-nums text-foreground">
+                  {money(q.perUnitAnchor * unitsPerFacility)}
+                </dd>
+              </div>
+              {preview.transferFee > 0 && (
+                <CostLeg
+                  label="Foreign transfer fee"
+                  value={money(preview.transferFee)}
+                  help="This sector is in a country that uses a different currency. Moving the money there costs a small fee on top of the build."
+                />
+              )}
+            </dl>
+          </details>
+          {!q.financing && (
+            <p className="mt-3 text-body-sm text-muted">
+              {t("cashBalance", { amount: money(q.corpCapitalAnchor) })}
+            </p>
+          )}
+          {!affordable && !financingChoice && (
             <p className="mt-2 flex gap-2 rounded-md border border-error/30 bg-error/10 p-2 text-body-sm text-error">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               <span>
@@ -375,24 +528,6 @@ export default function BuildCapacityDialog({
           )}
         </div>
 
-        {/* 3. WHAT IT GIVES YOU ────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 gap-2">
-          <Tile
-            label={t("rampTitle")}
-            value={`${plants.buildTurns}`}
-            unit="turns"
-            help={t("rampHelp")}
-          />
-          <Tile
-            label="Staff needed"
-            value={fmtUnits(preview.workersNeeded)}
-            unit="workers"
-            help="Extra workers this capacity needs once it is running. Their wages become part of your daily cost."
-          />
-        </div>
-
-        <InvestmentForecast plants={plants} units={preview.safeUnits} />
-
         {workersDesired > 0 && plants.workers < workersDesired && (
           <p className="flex gap-2 rounded-md border border-warning/30 bg-warning/10 p-2 text-body-sm text-foreground">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
@@ -403,70 +538,6 @@ export default function BuildCapacityDialog({
             </span>
           </p>
         )}
-
-        {/* 4. SHOULD YOU ───────────────────────────────────────────────────── */}
-        <div
-          className={`flex gap-2 rounded-lg border p-3 ${
-            preview.overHeadroom ? "border-warning/30 bg-warning/10" : "border-info/30 bg-info/10"
-          }`}
-        >
-          {preview.overHeadroom ? (
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
-          ) : (
-            <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden />
-          )}
-          <p className="text-body-sm text-foreground">
-            {sectorType === "logistics" ? (
-              <>
-                Freight demand is the state&apos;s combined bulk and special cargo load. Both draw
-                from one shared fleet, and special cargo uses three times as much TEU per unit.
-                Check this state&apos;s combined load in the Logistics map before expanding.
-              </>
-            ) : preview.overHeadroom ? (
-              buyersRoomUnits >= 1 ? (
-                <>
-                  Buyers here have room for about{" "}
-                  {headroomFacilities >= 1
-                    ? `${fmtUnits(headroomFacilities)} more ${headroomFacilities === 1 ? site : sites}`
-                    : `less than one ${site}`}{" "}
-                  ({fmtUnits(buyersRoomUnits)} units a day). You are ordering{" "}
-                  {fmtUnits(preview.safeCount)}. Expect the extra output to go unsold, or to be
-                  taken from a rival.
-                </>
-              ) : plants.roomHeldByOwnIdle ? (
-                // The plant is held below capacity by its own sales, so the
-                // market gap is not room for new capacity yet (ticket 1370).
-                <>
-                  Your {sites} here already run below capacity because sales set the pace. Output
-                  climbs about 15% a turn while buyers keep taking it, so new capacity would sit
-                  idle until that catches up. Fill what you have before building more.
-                </>
-              ) : noShareLeft ? (
-                // Two very different reasons the room is zero, and saying
-                // "oversupplied" for both is what made a fully-claimed market
-                // read as a broken one (ticket #1162).
-                <>
-                  Every unit of this market is already owned, here and by rivals. There is nothing
-                  left to claim, so growth has to come from taking share on price rather than from
-                  building.
-                </>
-              ) : (
-                <>
-                  The market for what this sector makes is oversupplied: buyers are already taking
-                  all they need. Unclaimed share can still read above zero, because that counts
-                  market nobody has built into rather than buyers waiting. Expect extra output to go
-                  unsold unless you win share from a rival on price.
-                </>
-              )
-            ) : (
-              <>
-                Buyers here have room for about {fmtUnits(headroomFacilities)} more{" "}
-                {headroomFacilities === 1 ? site : sites} ({fmtUnits(buyersRoomUnits)} units a day).
-                This order fits inside that.
-              </>
-            )}
-          </p>
-        </div>
 
         {open && q.financing && (
           <ConstructionFinanceControls
@@ -480,15 +551,38 @@ export default function BuildCapacityDialog({
           />
         )}
 
+        {plants.investment ? (
+          <InvestmentForecast plants={plants} units={preview.safeUnits} />
+        ) : (
+          <details className="group rounded-lg border border-card-border p-3">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded text-body-sm text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              {t("noForecastShort")}
+              <ChevronDown
+                className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180"
+                aria-hidden
+              />
+            </summary>
+            <p className="mt-2 text-body-sm text-muted">{t("noForecast")}</p>
+          </details>
+        )}
+
         {errorMessage && (
           <p className="rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-body-sm text-error">
             {errorMessage}
           </p>
         )}
-
-        <div className="flex justify-end gap-2">
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-b-xl border-t border-card-border bg-card px-5 py-4">
+        <div>
+          <p className="text-body-xs text-muted">{t("buildTotal")}</p>
+          <p className="text-body font-bold tabular-nums text-foreground">{money(preview.total)}</p>
+        </div>
+        {financingChoice && !financingChoice.request && (
+          <p className="w-full text-body-xs text-muted">{t("reviewLoan")}</p>
+        )}
+        <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
-            Cancel
+            {t("cancelBuild")}
           </Button>
           <Button
             variant="primary"
@@ -595,7 +689,7 @@ function Tile({
   // sat at three different heights across the row.
   return (
     <div
-      className="flex h-full flex-col rounded-lg border border-card-border bg-background/40 p-3"
+      className="flex h-full min-w-0 flex-col rounded-lg border border-card-border bg-background/40 p-3"
       title={help}
     >
       <p className="text-body-sm font-medium leading-tight text-muted">{label}</p>

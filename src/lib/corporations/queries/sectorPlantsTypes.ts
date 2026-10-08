@@ -118,6 +118,8 @@ export interface SectorPlantsSection {
    * market before any new build would.
    */
   demandGapUnits: number;
+  /** Measured room for every output; no weighted or latent-demand top-up. */
+  measuredDemandGapUnits?: number | null;
   /**
    * True when this sector's own demand throttle bound last turn. Its idle
    * capacity is what buyers' room fills first (output can climb by the probe
@@ -150,6 +152,8 @@ export interface SectorPlantsSection {
   capacityRecovery?: { coldUpkeepFraction: number; coldUpkeepDailyAnchor: number };
   investment?: {
     overheadDailyAnchor: number;
+    /** One turn of company running costs; null when liabilities or current costs are unknown. */
+    operatingReserveAnchor?: number | null;
     taxRatePercent: number;
     freightNetCostDailyAnchor?: number;
     inventoryRevenueDailyAnchor?: number;

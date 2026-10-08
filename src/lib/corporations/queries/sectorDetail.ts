@@ -1,3 +1,8 @@
+import {
+  expansionOperatingReserve,
+  sellableExpansionUnits,
+} from "@/lib/corporations/investment/expansion/rules";
+import { deliveredFraction } from "@/lib/corporations/buildDelivery";
 import { loadInvestmentBondReference } from "@/lib/corporations/investment/bondReference";
 import { NextResponse } from "next/server";
 import { findMergedRegionMetrics } from "@/lib/macroMetrics/merge";
@@ -35,14 +40,23 @@ import {
   tariffRulesNeedSectorPresenceKeys,
 } from "@/lib/tariffs/tariffEffects";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
-import { CORPORATION_TYPE_LABELS, calculateWorkers } from "@/lib/constants/corporations";
+import {
+  CORPORATION_TYPE_LABELS,
+  calculateWorkers,
+  TURNS_PER_DAY,
+} from "@/lib/constants/corporations";
 import type {
   CorporationType,
   StateMetricValues,
   MacroEconomicValues,
 } from "@/lib/constants/corporations";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
-import { eraScaledBasePrices, type CommodityType } from "@/lib/constants/commodities";
+import {
+  eraScaledBasePrices,
+  commodityMixWeight,
+  COMMODITY_BASE_PRICES,
+  type CommodityType,
+} from "@/lib/constants/commodities";
 import { sectorDemandGapUnits } from "@/lib/market/sectorDemandGap";
 import { commodityDemandGap, isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
 import { latentTopUpForCountry, latentTopUpForState } from "@/lib/market/latentShortageSignal";
@@ -60,6 +74,7 @@ import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
   getCorpFxRate,
+  fxRateForSectorHostFromMap,
   getSectorHostFxRate,
   loadFxRatesByCurrency,
   resolveSectorHostCurrencyCode,
@@ -313,6 +328,12 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
                 realizedRevenue: 1,
                 profitMargin: 1,
                 currentGrowthCost: 1,
+                "plantsPnl.totalCost": 1,
+                "plantsPnl.turn": 1,
+                operatingCapacityUnits: 1,
+                capitalStock: 1,
+                buildQueue: 1,
+                freightBillingCharge: 1,
               },
             }
           )
@@ -863,6 +884,97 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         });
       });
 
+      // The sizing shortcut uses actual buyers for every output, not the
+      // weighted expansion appetite or latent price-cap demand above.
+      const queuedMarketUnits = siblingsSectors.reduce(
+        (sum, candidate) =>
+          sum +
+          (candidate.buildQueue ?? []).reduce(
+            (queued, order) =>
+              queued + order.unitsOrdered * (1 - deliveredFraction(order, currentTurn)),
+            0
+          ),
+        0
+      );
+      const measuredDemandGapUnits = Math.max(
+        0,
+        sellableExpansionUnits(
+          Object.entries(effectiveSupply)
+            .filter(([, rate]) => (rate ?? 0) > 0)
+            .map(([commodity]) => {
+              const key = commodity as CommodityType;
+              return {
+                weight: commodityMixWeight(effectiveSupply, COMMODITY_BASE_PRICES, key),
+                gap: (
+                  isStateScopedCommodity(key)
+                    ? stateBalances.has(key)
+                    : !!bookFor(reachableBooks, sectorCountryId, key)
+                )
+                  ? commodityDemandGap({
+                      commodity: key,
+                      stateBalance: stateBalances.get(key),
+                      reachableBook: bookFor(reachableBooks, sectorCountryId, key),
+                      globalBalance: globalBalances.get(key),
+                      latentDemandTopUp: 0,
+                    })
+                  : 0,
+              };
+            })
+        ) - queuedMarketUnits
+      );
+      // Existing debt needs a repayment budget, which this operating scenario
+      // does not model. Do not offer automatic sizing for an indebted company.
+      const [activeLoan, activeBond] = await Promise.all([
+        db.collection("bankLoans").findOne(
+          {
+            borrowerType: "corporation",
+            borrowerId: corporation._id,
+            status: { $in: ["current", "arrears"] },
+            outstanding: { $gt: 0 },
+          },
+          { projection: { _id: 1 } }
+        ),
+        db
+          .collection("bonds")
+          .findOne({ corporationId: corporation._id, matured: false }, { projection: { _id: 1 } }),
+      ]);
+      const unsettled =
+        !!activeLoan ||
+        !!activeBond ||
+        corporation.imfBailoutActive === true ||
+        (corporation.shareEscrowBalance ?? 0) < 0 ||
+        Object.values(corporation.operatingCashArrearsByCurrency ?? {}).some(
+          (value) => value > 0
+        ) ||
+        Object.values(corporation.federalTaxArrearsAnchorByCountry ?? {}).some(
+          (value) => value > 0
+        );
+      const operatingReserveAnchor = unsettled
+        ? null
+        : expansionOperatingReserve({
+            overheadPerTurnAnchor:
+              corpLiquidCapitalToAnchor(
+                corpLevelCosts + (corporation.rdBudget ?? 0),
+                corporation,
+                corporationFxRate
+              ) / TURNS_PER_DAY,
+            sectors: allCorpSectors.map((s) => ({
+              current: s.plantsPnl?.turn === currentTurn,
+              capacityUnits: s.operatingCapacityUnits ?? s.capitalStock ?? 0,
+              queuedUnits: (s.buildQueue ?? []).reduce(
+                (sum, order) =>
+                  sum + order.unitsOrdered * (1 - deliveredFraction(order, currentTurn)),
+                0
+              ),
+              costPerTurnAnchor:
+                readCorpEconomicAnchor(
+                  (s.plantsPnl?.totalCost ?? NaN) + Math.max(0, s.freightBillingCharge ?? 0),
+                  resolveSectorHostCurrencyCode(s, corporation),
+                  fxRateForSectorHostFromMap(s, corporation, siblingFxByCurrency)
+                ) / TURNS_PER_DAY,
+            })),
+          });
+
       // Ticket 1370 follow-up: when the plant is held back because the
       // valuable part of its output is oversupplied, name the strategy whose
       // output this market is short of. Advisory only. Prices and books are the
@@ -965,6 +1077,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           sectorDetailUnitScale
         ),
         demandGapUnits,
+        measuredDemandGapUnits,
         // Every producer's capacity in this cell (the focal sector included),
         // so "Unclaimed share" reads the same pool `headroomUnits` measures.
         retoolHint,
@@ -976,6 +1089,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         }, 0),
         workers: sector.workers ?? calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
         investment: {
+          operatingReserveAnchor,
           overheadDailyAnchor:
             corpLiquidCapitalToAnchor(
               corpLevelCosts + (corporation.rdBudget ?? 0),

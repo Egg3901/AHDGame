@@ -606,6 +606,8 @@ export interface PlantsData {
    * share, NOT demand, optional because payloads predating the split omit it.
    */
   demandGapUnits?: number;
+  /** Measured room for every output; no weighted or latent-demand top-up. */
+  measuredDemandGapUnits?: number | null;
   /** This sector's own demand throttle bound last turn, so its room to build reads 0. */
   roomHeldByOwnIdle?: boolean;
   /** Unowned pool over owned capacity plus that pool, percent. */
@@ -617,6 +619,8 @@ export interface PlantsData {
   capacityRecovery?: { coldUpkeepFraction: number; coldUpkeepDailyAnchor: number };
   investment?: {
     overheadDailyAnchor: number;
+    /** One turn of company running costs; null when liabilities or current costs are unknown. */
+    operatingReserveAnchor?: number | null;
     taxRatePercent: number;
     freightNetCostDailyAnchor?: number;
     inventoryRevenueDailyAnchor?: number;

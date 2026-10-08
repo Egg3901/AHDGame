@@ -4,10 +4,11 @@
 import type { ReactElement } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../../../../messages/en/corporations.json";
-import { cleanup, fireEvent, render as renderView, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render as renderView, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import BuildCapacityDialog from "./BuildCapacityDialog";
 import type { PlantsData } from "../types";
+import { plantSizeUnits } from "@/lib/constants/facilityQuantum";
 
 vi.mock("@/contexts/CurrencyContext", () => ({
   useCurrency: () => ({
@@ -24,7 +25,24 @@ const plants = {
   laborIntensity: 2,
   headroomUnits: 10_000_000,
   demandGapUnits: 10_000_000,
-  pnl: { profitPerUnitAnchor: 5 },
+  measuredDemandGapUnits: 10_000_000,
+  workers: 10,
+  workersDesired: 10,
+  producedUnits: 1_000,
+  soldUnits: 1_000,
+  activeCapacityPercent: 100,
+  depreciationPerTurn: 0,
+  investment: { overheadDailyAnchor: 0, taxRatePercent: 0, operatingReserveAnchor: 10 },
+  pnl: {
+    profitPerUnitAnchor: 5,
+    revenueAnchor: 10_000,
+    inputsAnchor: 0,
+    labourAnchor: 0,
+    complianceAnchor: 0,
+    otherOperatingAnchor: 0,
+    growthAndBuildAnchor: 0,
+    upkeepAnchor: 0,
+  },
   buildQuote: {
     unitPriceAnchor: 1,
     dominanceMultiplier: 1,
@@ -71,6 +89,79 @@ describe("BuildCapacityDialog count control", () => {
     expect(screen.queryByLabelText(/Finance this build/)).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
   });
+  it("matches measured buyer demand even when share headroom is larger", () => {
+    const units = plantSizeUnits("manufacturing");
+    const { input } = renderDialog(vi.fn(), {
+      ...plants,
+      headroomUnits: units * 20,
+      demandGapUnits: units * 3.9,
+      measuredDemandGapUnits: units * 3.9,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Match demand: 3" }));
+    expect(input.value).toBe("3");
+    expect(screen.getByText("This expansion fits current demand")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText(/build one more/i));
+    expect(screen.getByText("This expansion exceeds current demand")).toBeTruthy();
+  });
+
+  it("disables shortcuts when cash or buyer room cannot fund one whole facility", () => {
+    const units = plantSizeUnits("manufacturing");
+    const { input } = renderDialog(vi.fn(), {
+      ...plants,
+      headroomUnits: units,
+      demandGapUnits: units / 2,
+      measuredDemandGapUnits: units / 2,
+      buildQuote: { ...plants.buildQuote, corpCapitalAnchor: 0, maxAffordableUnits: 0 },
+    });
+    const demand = screen.getByRole("button", { name: "Match demand" }) as HTMLButtonElement;
+    expect(demand.disabled).toBe(true);
+    fireEvent.click(demand);
+    expect(input.value).toBe("1");
+  });
+
+  it("withholds automatic sizing without reliable operating history", () => {
+    renderDialog(vi.fn(), { ...plants, investment: undefined });
+    const demand = screen.getByRole("button", { name: "Match demand" }) as HTMLButtonElement;
+    expect(demand.disabled).toBe(true);
+    expect(
+      screen.getByText(/Automatic sizing is unavailable without current operating figures/)
+    ).toBeTruthy();
+  });
+
+  it("keeps a funded build disabled until the loan pledge is reviewed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            enabled: true,
+            currency: "USD",
+            lenders: [{ id: "bank", name: "Lender", ratePercent: 5, approvalRequired: false }],
+          }),
+          { status: 200 }
+        )
+      )
+    );
+    const { onSubmit } = renderDialog(vi.fn(), {
+      ...plants,
+      buildQuote: {
+        ...plants.buildQuote,
+        financing: { corporationId: "corp", currency: "USD", localPerAnchor: 1 },
+      },
+    });
+    const submit = screen.getByRole("button", { name: /^Build 1 / }) as HTMLButtonElement;
+    fireEvent.click(screen.getByLabelText(/Finance this build/));
+    await screen.findByRole("option", { name: /Lender/ });
+    expect(submit.disabled).toBe(true);
+    expect(
+      screen.getByText("Complete the loan details and pledge consent to continue.")
+    ).toBeTruthy();
+    fireEvent.click(screen.getByLabelText(/I pledge this sector/));
+    await waitFor(() => expect(submit.disabled).toBe(false));
+    fireEvent.click(submit);
+    expect(onSubmit.mock.lastCall?.[1]).toMatchObject({ bankId: "bank", pledgeConsent: true });
+  });
+
   it("lets a player clear the field and type a whole number", () => {
     const { input } = renderDialog();
     expect(input.value).toBe("1");
