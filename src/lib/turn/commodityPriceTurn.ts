@@ -59,7 +59,7 @@ import {
   getDemographicsDemandEnabled,
   getHouseholdConsumptionEnabled,
 } from "@/lib/market/featureFlag";
-import { PLANTS_HOUSEHOLD_UNIT_SCALE } from "@/lib/turn/householdConsumption";
+import { plantsHouseholdUnitScale } from "@/lib/turn/householdConsumption";
 import { computeExtractionCapacityMultipliers } from "@/lib/turn/extraction/extractionCapacity";
 import { getStateResourceCapacityCollection } from "@/lib/db/collections/stateResourceCapacity";
 import {
@@ -82,7 +82,8 @@ import type { TradeEmbargo } from "@/lib/db/types/tradeEmbargo";
 import type { OrganizationMembership } from "@/lib/db/types/internationalOrganization";
 import { applySphereRoutedMacroContributions } from "@/lib/world/spheres";
 import { depletedCapacityDoc } from "@/lib/extraction/depletion";
-import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
+import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import { resolveCommodityNominalIndices } from "@/lib/market/commodityNominalIndex";
 import { persistCommodityNominalIndex } from "@/lib/turn/commodityNominalIndexPersistence";
 export { realizedOutputFraction } from "@/lib/extraction/realizedOutputFraction";
@@ -440,7 +441,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
 
   // Plants tier: the world ledger reads real production instead of the revenue
   // nameplate. Resolved once and reused by the flow-ledger block below.
-  const ledgerEraUnitScale = await loadWorldEraUnitScale(db);
+  const worldPreset = await loadWorldPreset(db);
+  const ledgerEraUnitScale = getEraUnitScale(worldPreset);
   // The WHOLE ledger runs on the era base-price table: unit conversions scale,
   // mix-weight ratios cancel, and computed price LEVELS land on the same era
   // magnitudes seedCommodityPrices writes. One substitution, one basis — the
@@ -623,7 +625,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         // Plants worlds: re-anchor household demand onto the physical unit basis
         // plants supply uses, clamped per commodity against prior supply. Legacy
         // worlds pass 1/undefined and are byte-identical (ticket #1027).
-        plantsUnitScale: plantsLedgerEnabled ? PLANTS_HOUSEHOLD_UNIT_SCALE : 1,
+        plantsUnitScale: plantsLedgerEnabled ? plantsHouseholdUnitScale(worldPreset) : 1,
         priorGlobalSupply: plantsLedgerEnabled ? priorGlobalSupply : undefined,
         states: allStates.map((s) => ({
           stateId: s._id,

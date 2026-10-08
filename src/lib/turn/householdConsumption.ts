@@ -4,6 +4,7 @@ import {
   demographicWealthMultiplier,
   type CommodityType,
 } from "@/lib/constants/commodities";
+import { eraForPreset, type EraId } from "@/lib/seeds/presetSelector";
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -85,6 +86,32 @@ export const HOUSEHOLD_CONSUMPTION_PER_CAPITA = 0.002;
  * (override replaces the per-capita base, scale still applies).
  */
 export const PLANTS_HOUSEHOLD_UNIT_SCALE = 3000;
+
+/**
+ * Per-era override of {@link PLANTS_HOUSEHOLD_UNIT_SCALE}, for eras whose
+ * seeded supply per capita is far below the world the 3000 was calibrated on.
+ *
+ * 1991: the seed produces ~0.1 food units/person against the ~15 the 3000
+ * assumed, so scaled household demand sat 3.5x (plastics) to 92x
+ * (pharmaceuticals) above seeded supply, geometric mean 17.8x, measured per
+ * commodity on the live 1991 world as `population x perCapita x 3000 x
+ * basketShare / basePrice / globalSupply`. Every household commodity then hit
+ * the 1.5x supply cap, so the cap, not the economy, set demand and latent
+ * shortages read 19x to 90x. Scale 200 (3000 x 1.25 / 17.8, rounded) puts the
+ * average opening ratio near 1.25x, inside the 1.0 to 1.5x band where the cap
+ * stops binding on average. Spread between commodities is real (services seed
+ * thin, manufacturing thick) and is left to the build signals to close.
+ * Eras without an entry keep the default.
+ */
+export const PLANTS_HOUSEHOLD_UNIT_SCALE_BY_ERA: Partial<Record<EraId, number>> = {
+  "1991": 200,
+};
+
+/** The plants household unit scale for a world preset (default when the era has no override). */
+export function plantsHouseholdUnitScale(preset?: string): number {
+  if (!preset) return PLANTS_HOUSEHOLD_UNIT_SCALE;
+  return PLANTS_HOUSEHOLD_UNIT_SCALE_BY_ERA[eraForPreset(preset)] ?? PLANTS_HOUSEHOLD_UNIT_SCALE;
+}
 
 /**
  * Per-commodity ceiling on scaled household demand, as a multiple of the
