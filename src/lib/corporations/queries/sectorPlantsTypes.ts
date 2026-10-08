@@ -108,16 +108,17 @@ export interface SectorPlantsSection {
   /** Untapped demand in this (state, sectorType) market, units/day. */
   headroomUnits: number;
   /**
-   * True buyers' room in sector output units: unmet world demand across this
-   * sector's output mix (min over legs - the market stops absorbing when the
-   * first leg saturates). 0 in a glut. `headroomUnits` above is the unowned
-   * pool = claimable market SHARE, a different thing; the UI must not present
-   * it as demand (ticket #1027 follow-up).
+   * Weighted expansion appetite across the output mix, including latent demand.
+   * It can remain positive while one output has no unmet demand. It is not an
+   * all-output sell-through limit. Use measuredDemandGapUnits for automatic
+   * sizing; headroomUnits measures claimable market share.
    *
    * 0 while `roomHeldByOwnIdle`: this sector's own idle capacity reaches the
    * market before any new build would.
    */
   demandGapUnits: number;
+  /** Measured room for every output after known queues; excludes latent demand. */
+  measuredDemandGapUnits?: number | null;
   /**
    * True when this sector's own demand throttle bound last turn. Its idle
    * capacity is what buyers' room fills first (output can climb by the probe
@@ -150,6 +151,8 @@ export interface SectorPlantsSection {
   capacityRecovery?: { coldUpkeepFraction: number; coldUpkeepDailyAnchor: number };
   investment?: {
     overheadDailyAnchor: number;
+    /** One turn of company running costs; null when liabilities or current costs are unknown. */
+    operatingReserveAnchor?: number | null;
     taxRatePercent: number;
     freightNetCostDailyAnchor?: number;
     inventoryRevenueDailyAnchor?: number;

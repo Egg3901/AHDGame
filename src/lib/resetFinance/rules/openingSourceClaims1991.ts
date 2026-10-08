@@ -40,7 +40,7 @@ export const SOURCE_SIGNATURE: Record<
   },
   IE: {
     revenue: 12_799_224_185.566666,
-    spending: 17_000_796_534,
+    spending: 12_953_891_355,
     gdp: 30_933_434_751.04,
     debt: 28_355_454_256,
     ceiling: 33_672_101_928.999992,
