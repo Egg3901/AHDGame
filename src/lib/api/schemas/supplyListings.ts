@@ -36,3 +36,10 @@ export const supplyListingActionSchema = z
       body.action === "withdraw" || !supplyAgreementRequiresState(body.commodity) || !!body.stateId,
     { message: "This commodity requires a fulfillment state", path: ["stateId"] }
   );
+
+/** POST /api/corporations/[id]/supply-listings/take. */
+export const supplyListingTakeSchema = z.object({
+  listingId: z.string().trim().min(1).max(80),
+  /** Units per turn to contract; may be less than the listing's remaining volume. */
+  volume: z.number().finite().positive(),
+});

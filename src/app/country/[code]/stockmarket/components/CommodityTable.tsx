@@ -232,6 +232,12 @@ export function CommodityTable({ commodities, exchangeFilter = "global" }: Commo
                             )}
                           </div>
                         </Link>
+                        <Link
+                          href={`/commodity/${commodity.commodity}/offers`}
+                          className="ml-[52px] mt-0.5 inline-block text-[11px] text-muted underline decoration-card-border underline-offset-2 hover:text-foreground hover:decoration-foreground"
+                        >
+                          Supply offers
+                        </Link>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="font-mono font-bold tabular-nums text-foreground">

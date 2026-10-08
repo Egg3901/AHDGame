@@ -14,6 +14,11 @@ import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { supplyAgreementRequiresState } from "@/lib/market/commodityMarketScope";
 import type { Corporation, GameConfig, State } from "@/lib/db/types";
 import type { SupplyListing, SupplyListingView } from "@/lib/db/types/supplyListing";
+import {
+  PUBLISHER_PROJECTION,
+  toListingView,
+  type PublisherFields,
+} from "@/lib/corporations/supplyExchange/listingView";
 
 type Context = { params: Promise<{ id: string }> };
 const privateHeaders = { "Cache-Control": "private, no-store" };
@@ -67,34 +72,12 @@ export async function GET(request: Request, context: Context) {
     const corps = await a.db
       .collection<Corporation>("corporations")
       .find({ _id: { $in: [...rows, ...own].map((row) => row.corporationId) } })
-      .project({ _id: 1, name: 1, userId: 1, ceoVacant: 1 })
+      .project<PublisherFields>(PUBLISHER_PROJECTION)
       .toArray();
     const byId = new Map(corps.map((c) => [c._id.toString(), c]));
-    const serialize = (row: SupplyListing): SupplyListingView | null => {
-      const corp = byId.get(row.corporationId.toString());
-      const own = row.corporationId.equals(a.corp._id);
-      const ai = row.aiListed === true;
-      if (
-        !corp ||
-        (!own && !ai && (corp.ceoVacant || corp.userId?.toString() !== row.publishedByUserId))
-      )
-        return null;
-      return {
-        id: row._id,
-        corporationId: row.corporationId.toString(),
-        corporationName: corp.name,
-        slot: row.slot,
-        own,
-        ...(ai ? { ai: true } : {}),
-        side: row.side,
-        commodity: row.commodity,
-        ...(row.stateId ? { stateId: row.stateId } : {}),
-        volumeCap: row.volumeCap,
-        pricePremium: row.pricePremium,
-        ...(row.durationTurns != null ? { durationTurns: row.durationTurns } : {}),
-        expiresAtTurn: row.expiresAtTurn,
-      };
-    };
+    const viewer = new Set([a.corp._id.toString()]);
+    const serialize = (row: SupplyListing): SupplyListingView | null =>
+      toListingView(row, byId.get(row.corporationId.toString()), viewer);
     return NextResponse.json(
       {
         listings: rows.slice(0, 30).map(serialize).filter(Boolean),
