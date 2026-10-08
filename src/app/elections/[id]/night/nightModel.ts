@@ -204,7 +204,7 @@ export interface NightView {
   reportingPct: number;
   /** Candidate with a majority of called electoral votes, once there is one. */
   winnerId: string | null;
-  /** Settled with nobody at the majority. */
+  /** Settled with nobody at the EV majority (the House decides, or decided). */
   noMajority: boolean;
   nextClose: NightNextClose | null;
   keyRaces: NightKeyRace[];
@@ -282,6 +282,12 @@ export function buildNightView(data: ElectionResultsResponse): NightView {
         ? units.reduce((s, u) => s + u.reportingPct * u.weight, 0) / weightSum
         : 0;
 
+  // Maine and Nebraska district units carry EVs but are not extra states.
+  const stateUnits = units.filter((u) => !/_CD\d$/.test(u.id));
+  const decidedByHouse =
+    data.summary.resolutionMode === "contingent" ||
+    data.summary.resolutionMode === "contingent_deadlock";
+
   const top = views[0];
   const winnerId =
     top && top.ev >= evNeeded && evNeeded > 0 ? top.id : (data.summary.projectedWinner ?? null);
@@ -330,12 +336,12 @@ export function buildNightView(data: ElectionResultsResponse): NightView {
     totalEv,
     evNeeded,
     candidates: views,
-    statesCalled: night?.statesCalled ?? units.filter((u) => u.called).length,
-    totalStates: night?.totalStates ?? units.length,
-    statesPollsClosed: night?.statesPollsClosed ?? units.length,
+    statesCalled: night?.statesCalled ?? stateUnits.filter((u) => u.called).length,
+    totalStates: night?.totalStates ?? stateUnits.length,
+    statesPollsClosed: night?.statesPollsClosed ?? stateUnits.length,
     reportingPct: Math.round(reportingPct * 10) / 10,
     winnerId,
-    noMajority: settled && winnerId == null && units.length > 0,
+    noMajority: settled && units.length > 0 && (decidedByHouse || winnerId == null),
     nextClose,
     keyRaces,
   };

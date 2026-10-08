@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { BlendShell } from "@/components/blend/BlendShell";
 import { BlendTicker } from "@/components/blend/BlendTicker";
 import { BLEND, FONT } from "@/components/blend/tokens";
@@ -60,7 +60,12 @@ export function NightBroadcast({
   banner,
 }: NightBroadcastProps) {
   const view = useMemo(() => buildNightView(data), [data]);
-  const feed = useMemo(() => buildNightFeed(data), [data]);
+  const liveFeed = useMemo(() => buildNightFeed(data), [data]);
+  // The resolved payload carries no night, so keep the last night's feed on
+  // the settled board instead of blanking the record of how it was called.
+  const [heldFeed, setHeldFeed] = useState(liveFeed);
+  if (liveFeed.length > 0 && liveFeed !== heldFeed) setHeldFeed(liveFeed);
+  const feed = liveFeed.length > 0 ? liveFeed : heldFeed;
   const progress = useNightProgress(data);
   const { active, dismiss } = useCallAlerts(data);
   const night = data.election.night ?? null;
@@ -87,7 +92,7 @@ export function NightBroadcast({
     <aside aria-label="Election night details">
       <NextClosing view={view} night={night} progress={progress} windowRealMs={windowRealMs} />
       <CandidateTotals view={view} />
-      <NightFeed items={feed} />
+      <NightFeed items={feed} settled={settled} />
     </aside>
   );
 
@@ -110,7 +115,7 @@ export function NightBroadcast({
           <SettledPanel
             view={view}
             candidateName={candidateName}
-            contingent={contingent}
+            contingent={{ result: contingent?.result ?? data.summary.contingentResult }}
             href={concludedHref}
             onContinue={onContinue}
           />
@@ -146,7 +151,7 @@ export function NightBroadcast({
         <div className="night-mobile-only">
           <NextClosing view={view} night={night} progress={progress} windowRealMs={windowRealMs} />
           <CandidateTotals view={view} />
-          <NightFeed items={feed} collapsible />
+          <NightFeed items={feed} settled={settled} collapsible />
         </div>
       </BlendShell>
     </div>

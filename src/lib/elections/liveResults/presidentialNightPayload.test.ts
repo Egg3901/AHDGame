@@ -135,6 +135,44 @@ describe("presidential night payload", () => {
   });
 });
 
+describe("resolved US president winner", () => {
+  it("names the House contingent winner, not the popular-vote leader", async () => {
+    const { db, race, gs } = setup("US", "resolved");
+    const [a, b] = CANDS.map(String);
+    const tallies = (db as unknown as ReturnType<typeof createMockDb>).collection(
+      "electionVoteTallies"
+    );
+    const base = await tallies.findOne();
+    const contingentResult = {
+      presidentWinnerId: b,
+      houseVoteTotals: { [b]: 11, [a]: 7 },
+      houseThreshold: 26,
+      deadlockBreakerUsed: true,
+    };
+    tallies.findOne.mockResolvedValue({
+      ...base,
+      resolutionMode: "contingent_deadlock",
+      contingentResult,
+    });
+    const p = await buildResultsPayload(db, race, gs, { isAdmin: false, apportionmentYear: null });
+    expect(p.summary.projectedWinner).toBe(b);
+    expect(p.summary.resolutionMode).toBe("contingent_deadlock");
+    expect(p.summary.contingentResult?.presidentWinnerId).toBe(b);
+  });
+
+  it("names the EV majority winner on a majority resolution", async () => {
+    const { db, race, gs } = setup("US", "resolved");
+    const tallies = (db as unknown as ReturnType<typeof createMockDb>).collection(
+      "electionVoteTallies"
+    );
+    const base = await tallies.findOne();
+    tallies.findOne.mockResolvedValue({ ...base, resolutionMode: "majority" });
+    const p = await buildResultsPayload(db, race, gs, { isAdmin: false, apportionmentYear: null });
+    expect(p.summary.projectedWinner).toBe(String(CANDS[0]));
+    expect(p.summary.contingentResult).toBeUndefined();
+  });
+});
+
 describe("admin simulation replays the presidential night", () => {
   it("uses the broadcast model for US presidents and stays monotonic", async () => {
     const { buildSimulationScript, simulationFrame } = await import("./simulateResults");

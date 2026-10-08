@@ -7,6 +7,11 @@
  * what the results dashboard renders.
  */
 
+import type {
+  ContingentElectionDisplay,
+  PresidentialResolutionMode,
+} from "@/lib/elections/presidentialResolutionDisplay";
+
 export interface ResultsElectionMeta {
   id: string;
   countryId: string;
@@ -133,6 +138,10 @@ export interface ResultsSummary {
   unitsCalled: number;
   /** Candidate id — set only once decisive (EV majority / final). */
   projectedWinner?: string | null;
+  /** Resolved US president: how the engine decided it. */
+  resolutionMode?: PresidentialResolutionMode;
+  /** Resolved US president decided by the House: the contingent ballot. */
+  contingentResult?: ContingentElectionDisplay;
 }
 
 /** One sibling region election in a national parliamentary aggregation. */

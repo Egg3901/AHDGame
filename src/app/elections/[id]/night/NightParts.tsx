@@ -506,15 +506,19 @@ export function CandidateTotals({ view }: { view: NightView }) {
 export function NightFeed({
   items,
   collapsible = false,
+  settled = false,
 }: {
   items: NightFeedItem[];
   collapsible?: boolean;
+  settled?: boolean;
 }) {
   const [open, setOpen] = useState(!collapsible);
   const list = (
     <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
       {items.length === 0 ? (
-        <li style={{ fontSize: 13, color: BLEND.mutedDim }}>Polls have not closed yet.</li>
+        <li style={{ fontSize: 13, color: BLEND.mutedDim }}>
+          {settled ? "Every state has been called." : "Polls have not closed yet."}
+        </li>
       ) : null}
       {items.map((i) => (
         <li
@@ -644,8 +648,14 @@ export function SettledPanel({
   href: string;
   onContinue?: () => void;
 }) {
-  const winner = view.winnerId ? view.candidates.find((c) => c.id === view.winnerId) : undefined;
   const result = contingent?.result;
+  const winner =
+    !view.noMajority && view.winnerId
+      ? view.candidates.find((c) => c.id === view.winnerId)
+      : undefined;
+  const houseWinnerId = result?.presidentWinnerId ?? (view.noMajority ? view.winnerId : null);
+  const houseVotes = houseWinnerId ? (result?.houseVoteTotals[houseWinnerId] ?? null) : null;
+  const houseColor = view.candidates.find((c) => c.id === houseWinnerId)?.color;
   const linkStyle: CSSProperties = {
     display: "inline-block",
     padding: "8px 14px",
@@ -665,12 +675,12 @@ export function SettledPanel({
         padding: "16px 18px",
         borderBottom: `1px solid ${BLEND.hairlineStrong}`,
         background: BLEND.inset,
-        borderLeft: `4px solid ${winner ? winner.color : BLEND.caution}`,
+        borderLeft: `4px solid ${winner?.color ?? houseColor ?? BLEND.caution}`,
       }}
     >
       {winner ? (
         <>
-          <div style={{ ...MONO_LABEL, color: BLEND.gold }}>Projected winner</div>
+          <div style={{ ...MONO_LABEL, color: BLEND.gold }}>Winner</div>
           <div style={{ fontSize: 24, fontWeight: 600, marginTop: 2 }}>{winner.name}</div>
           <p style={{ margin: "4px 0 0", fontSize: 14, color: BLEND.muted }}>
             {winner.ev} electoral votes, {view.evNeeded} needed. All {view.totalStates} states
@@ -681,12 +691,20 @@ export function SettledPanel({
         <>
           <div style={{ ...MONO_LABEL, color: BLEND.caution }}>Contingent election</div>
           <div style={{ fontSize: 22, fontWeight: 600, marginTop: 2 }}>
-            No candidate reached {view.evNeeded} electoral votes
+            {houseWinnerId
+              ? `The House elects ${candidateName(houseWinnerId)}`
+              : `No candidate reached ${view.evNeeded} electoral votes`}
           </div>
           <p style={{ margin: "4px 0 0", fontSize: 14, color: BLEND.muted }}>
-            {result
-              ? `The House elected ${candidateName(result.presidentWinnerId)} with ${result.houseVoteTotals[result.presidentWinnerId] ?? 0} state delegation votes.`
-              : "The presidency goes to a contingent election in the House of Representatives."}{" "}
+            No candidate reached {view.evNeeded} electoral votes, so the House chose from the top
+            three, one vote per state delegation.{" "}
+            {houseWinnerId && result && houseVotes != null
+              ? result.deadlockBreakerUsed
+                ? `No one reached ${result.houseThreshold} delegations; ${candidateName(houseWinnerId)} led with ${houseVotes} and was seated under the deadlock rule.`
+                : `${candidateName(houseWinnerId)} won ${houseVotes} of the ${result.houseThreshold} delegations needed.`
+              : houseWinnerId
+                ? ""
+                : "The presidency goes to a contingent election in the House of Representatives."}{" "}
             All {view.totalStates} states called, 100% reporting.
           </p>
         </>

@@ -27,7 +27,11 @@ import {
   computePresidentialNight,
   finalTurnVoteRatioForElection,
 } from "@/lib/elections/liveResults/presidentialNight";
-import { electoralMajorityFor } from "@/lib/elections/presidentialResolutionDisplay";
+import {
+  electoralMajorityFor,
+  isContingentResolutionMode,
+  resolvePresidentialWinnerCandidateId,
+} from "@/lib/elections/presidentialResolutionDisplay";
 import {
   buildNationalElectionNight,
   type ElectionNightPartyInfo,
@@ -393,7 +397,31 @@ export async function buildResultsPayload(
       tally?.brazilPresidentialResult?.outcome === "won"
         ? tally.brazilPresidentialResult.winnerId
         : null;
-  if (!projectedWinner && isEnded && singleWinnerRace && totalCastVotes > 0) {
+  // A resolved US Electoral College race names whoever the engine seated. With
+  // no EV majority that is the House contingent winner, never the popular-vote
+  // leader the fallback below would pick.
+  const usCollegeResolution =
+    isPresident && isEnded && election.countryId === "US" && tally?.resolutionMode
+      ? tally.resolutionMode
+      : undefined;
+  if (usCollegeResolution) {
+    const evByCandidate = Object.fromEntries(
+      resultsCandidates.map((c) => [c.id, c.electoralVotes ?? 0])
+    );
+    projectedWinner = resolvePresidentialWinnerCandidateId(
+      evByCandidate,
+      usCollegeResolution,
+      tally?.contingentResult,
+      evNeeded
+    );
+  }
+  if (
+    !projectedWinner &&
+    !usCollegeResolution &&
+    isEnded &&
+    singleWinnerRace &&
+    totalCastVotes > 0
+  ) {
     projectedWinner = resultsCandidates[0]?.id ?? null;
   }
 
@@ -432,6 +460,12 @@ export async function buildResultsPayload(
       totalUnits: units.length,
       unitsCalled,
       projectedWinner,
+      ...(usCollegeResolution ? { resolutionMode: usCollegeResolution } : {}),
+      ...(usCollegeResolution &&
+      isContingentResolutionMode(usCollegeResolution) &&
+      tally?.contingentResult
+        ? { contingentResult: tally.contingentResult }
+        : {}),
     },
     isAdmin,
     // During the final-hour drip the payload legitimately changes every poll;

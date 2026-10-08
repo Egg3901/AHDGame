@@ -81,7 +81,7 @@ describe("NightBroadcast", () => {
     render(<NightBroadcast data={settledFixture()} {...props} />);
     expect(screen.getAllByText("FINAL").length).toBeGreaterThan(0);
     const settled = screen.getByTestId("night-settled");
-    expect(settled.textContent).toContain("Projected winner");
+    expect(settled.textContent).toContain("Winner");
     expect(settled.textContent).toContain("Alex Morrow");
     expect(settled.textContent).toContain("100% reporting");
     expect(screen.getByRole("link", { name: "View concluded results" }).getAttribute("href")).toBe(
@@ -114,13 +114,49 @@ describe("NightBroadcast", () => {
           result: {
             presidentWinnerId: CAND_B,
             houseVoteTotals: { [CAND_B]: 27 },
+            houseThreshold: 26,
+            deadlockBreakerUsed: false,
           } as never,
         }}
       />
     );
-    expect(screen.getByTestId("night-settled").textContent).toContain(
-      "The House elected Jordan Blake with 27 state delegation votes."
+    const text = screen.getByTestId("night-settled").textContent;
+    expect(text).toContain("The House elects Jordan Blake");
+    expect(text).toContain("Jordan Blake won 27 of the 26 delegations needed.");
+  });
+
+  it("takes the House winner from the payload, never the popular-vote or EV leader", () => {
+    const data = settledFixture(CAND_A);
+    data.summary.projectedWinner = CAND_B;
+    data.summary.resolutionMode = "contingent_deadlock";
+    data.summary.contingentResult = {
+      presidentWinnerId: CAND_B,
+      houseVoteTotals: { [CAND_B]: 11 },
+      houseThreshold: 26,
+      deadlockBreakerUsed: true,
+    } as never;
+    render(<NightBroadcast data={data} {...props} />);
+    const text = screen.getByTestId("night-settled").textContent;
+    expect(text).toContain("Contingent election");
+    expect(text).toContain("The House elects Jordan Blake");
+    expect(text).toContain("seated under the deadlock rule");
+    expect(text).not.toContain("Winner");
+  });
+});
+
+describe("settling keeps the night's record", () => {
+  it("keeps the night feed on the settled board", () => {
+    const live = nightFixture();
+    live.election.night!.feed = [
+      ...live.election.night!.feed,
+      { at: "2026-10-08T05:25:00.000Z", stateId: "PA", kind: "call", candidateId: CAND_B },
+    ];
+    const { rerender } = render(<NightBroadcast data={live} {...props} />);
+    rerender(<NightBroadcast data={settledFixture()} {...props} />);
+    expect(screen.getAllByText(/Projected: Jordan Blake wins Pennsylvania/).length).toBeGreaterThan(
+      0
     );
+    expect(screen.queryByText("Polls have not closed yet.")).toBeNull();
   });
 });
 
