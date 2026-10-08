@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { recordCorporationExit } from "@/lib/corporations/exits/recordCorporationExit";
 import { ObjectId } from "mongodb";
 import type {
   Bond,
@@ -486,6 +487,15 @@ async function runAgreedAcquisition(
     await stampSubjectDeleted(db, target._id, {
       sequentialId: target.sequentialId,
       deletedAt: now,
+    });
+    // Record the exit BEFORE the delete, strictly: the upsert is idempotent per
+    // corporation, and a crash after the delete would leave a resume with no
+    // target document to snapshot.
+    await recordCorporationExit(db, target, {
+      reason: "acquired",
+      successorId: acquirer._id,
+      now,
+      strict: true,
     });
     await corps.deleteOne({ _id: target._id });
     await markAcquisitionProgress(db, offer._id, { shellDeleted: true });

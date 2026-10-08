@@ -1258,7 +1258,10 @@ export async function nationalizeWholeCorp(
     sequentialId: target.sequentialId,
     deletedAt: now,
   });
-  await deleteDissolvedCorporation(db, target._id, ledger, now, "ownershipTransition:dissolve");
+  await deleteDissolvedCorporation(db, target._id, ledger, now, "ownershipTransition:dissolve", {
+    reason: "nationalized",
+    successorId: nationalCorp._id,
+  });
   // Keep every reservation through compensation, asset transfer, share/bond
   // settlement, and shell deletion. Only release after ownership is final.
   await Promise.all(

@@ -146,6 +146,20 @@ describe("executeAgreedAcquisition", () => {
     expect(settlement?.legs.every((leg) => leg.applied)).toBe(true);
   });
 
+  it("records one exit row for the absorbed target, naming the acquirer as successor", async () => {
+    const w = buildAcquisitionWorld({ sectorCount: 1 });
+    await executeAgreedAcquisition({ db: w.db, offer: w.offer as never, currentTurn: 200 });
+
+    const exits = await w.memory.collection("corporationExits").find({}).toArray();
+    expect(exits).toHaveLength(1);
+    expect(exits[0]).toMatchObject({
+      reason: "acquired",
+      ownerKind: "player",
+      successorId: w.offer.acquirerCorporationId,
+    });
+    expect(String(exits[0]._id)).toBe(String(w.offer.targetCorporationId));
+  });
+
   it("ledgers the acquirer outflow and both shell-cash legs", async () => {
     const w = buildAcquisitionWorld();
     const r = await executeAgreedAcquisition({

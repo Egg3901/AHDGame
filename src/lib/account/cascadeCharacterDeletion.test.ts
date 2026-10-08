@@ -150,7 +150,7 @@ describe("cascadeCharacterDeletion", () => {
     expect(executeCorporationBondDefaultDissolution).toHaveBeenCalledWith(
       db,
       { _id: bondedCorpId },
-      { requireDefaultedBonds: false }
+      { requireDefaultedBonds: false, exitReason: "owner_deleted" }
     );
     // ...and is NOT dumped to public float; only the clean corp releases shares.
     expect(releaseCorporationHeldSharesToFloat).toHaveBeenCalledTimes(1);

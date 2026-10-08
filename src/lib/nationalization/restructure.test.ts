@@ -192,6 +192,17 @@ describe("mergeBackSectorType", () => {
     // Primary keeps empty assignedSectorTypes (remainder) — no $addToSet on it.
     expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
     expect(db.collectionMocks.corporations.deleteOne).toHaveBeenCalledWith({ _id: splitId });
+    expect(db.collectionMocks.corporationExits.updateOne).toHaveBeenCalledWith(
+      { _id: splitId },
+      {
+        $setOnInsert: expect.objectContaining({
+          reason: "national_corporation_merged",
+          ownerKind: "state",
+          successorId: primaryId,
+        }),
+      },
+      { upsert: true }
+    );
   });
 
   it("rejects when no split-off owns the type", async () => {

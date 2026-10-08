@@ -222,6 +222,10 @@ describe("processNppInsolventCorpDissolution", () => {
     expect(vi.mocked(executeCorporationBondDefaultDissolution).mock.calls[0][1]).toMatchObject({
       _id: zombie._id,
     });
+    // The exit record is tagged so the corporation's disappearance has a cause.
+    expect(vi.mocked(executeCorporationBondDefaultDissolution).mock.calls[0][2]).toMatchObject({
+      exitReason: "npp_insolvency",
+    });
   });
 
   it("clears the clock (and does not dissolve) when a stamped corp recovers", async () => {
