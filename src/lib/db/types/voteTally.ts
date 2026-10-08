@@ -6,6 +6,11 @@ import type { ParticipationSummary } from "@/lib/demographics/v2/rules";
 
 export interface VoteTurnSnapshot {
   turn: number;
+  /**
+   * Half of a split turn: "early" is banked by the half-hour results tick
+   * ahead of the turn, "rest" by the turn itself. Absent: the whole turn.
+   */
+  slicePart?: "early" | "rest";
   recordedAt: Date;
   cumulativeVotes: Record<string, number>;
   sharesPct: Record<string, number>;

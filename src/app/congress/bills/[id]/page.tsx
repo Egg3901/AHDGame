@@ -11,9 +11,8 @@ import { BillPageErrorBoundary } from "@/components/BillPageErrorBoundary";
 import { BillDetailSkeleton } from "./components/BillDetailSkeleton";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { useActivePreset } from "@/contexts/RegisteredCountriesContext";
-import { BillProvisionCard } from "@/components/legislature/BillProvisionCard";
+import { BillProvisionsSection } from "@/components/legislature/BillProvisionsSection";
 import { BillProposalChip } from "@/components/bills/BillProposalChip";
-import { provisionToView } from "@/lib/legislature/dto/provisionView";
 import type { BillDetail } from "./types";
 import { chamberLabel } from "./billHelpers";
 import { otherChamber } from "@/lib/billLifecycleHelpers";
@@ -314,19 +313,7 @@ function BillDetailContent() {
           )}
 
           {/* Provisions — Proposed vs Current */}
-          {bill.provisions?.length ? (
-            <div className="flex flex-col gap-3 pt-2 border-t border-card-border/40">
-              <h3 className="text-lg font-semibold">Provisions</h3>
-              {bill.provisions.map((p, i) => (
-                <BillProvisionCard
-                  key={i}
-                  view={provisionToView(p)}
-                  billCountry={resolvedCountryId}
-                  index={i}
-                />
-              ))}
-            </div>
-          ) : null}
+          <BillProvisionsSection provisions={bill.provisions} billCountry={resolvedCountryId} />
 
           {/* Co-sponsors */}
           {(bill.coSponsors?.length ?? 0) > 0 && (

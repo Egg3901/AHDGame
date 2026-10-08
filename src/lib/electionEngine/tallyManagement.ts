@@ -166,6 +166,12 @@ export async function accumulateVoteTurn(
     tally?: ElectionVoteTally;
     /** The election's active candidates, when the caller already loaded them this turn. */
     candidates?: ElectionCandidate[];
+    /**
+     * "early": the half-hour results tick. Release half of this turn's slice
+     * ahead of the turn; the turn itself then releases the other half. Totals,
+     * the closing surge and every deadline are unchanged.
+     */
+    slice?: "early";
   }
 ): Promise<void> {
   const db = options?.preload?.db ?? (await getDb());
@@ -189,12 +195,25 @@ export async function accumulateVoteTurn(
   // SAME turn number. Live turn 460 ran three times on 2026-08-28 and every
   // open general banked three slices of that turn. A tally that already holds
   // this turn's snapshot has already been counted.
-  if (tally.turnSnapshots?.some((s) => s.turn === turnNumber)) return;
+  //
+  // A turn may be split in two: the half-hour results tick banks an "early"
+  // half ahead of the turn, and the turn then banks the "rest". Each half is
+  // counted once; a whole or "rest" snapshot means the turn is fully counted.
+  const sameTurn = tally.turnSnapshots?.filter((s) => s.turn === turnNumber) ?? [];
+  if (
+    options?.slice === "early" ? sameTurn.length > 0 : sameTurn.some((s) => s.slicePart !== "early")
+  )
+    return;
+  const slicePart: VoteTurnSnapshot["slicePart"] =
+    options?.slice === "early" ? "early" : sameTurn.length > 0 ? "rest" : undefined;
+  const sliceFraction = slicePart ? 0.5 : 1;
 
   const election =
     options?.election ?? (await db.collection<Election>("elections").findOne({ _id: electionId }));
   if (!election || !election.endTime) return;
   const isPrStv = tally.countingMethod === "pr_stv";
+  // Ranked ballots are drawn whole per turn; they keep the hourly path.
+  if (isPrStv && slicePart === "early") return;
   if (isPrStv) {
     if (election.countryId !== "IE" || !["dail", "localCouncil"].includes(election.electionType))
       throw new Error("Ranked PR-STV is supported only for Irish Dail and local council races");
@@ -488,6 +507,9 @@ export async function accumulateVoteTurn(
   // `totalPool` before multiplying by the slice, so shrinking both cancels to
   // the ballot — the same algebra that made the registered-voter gate below a
   // live-verified no-op on its first placement.
+  // Half-hour split: each half carries half of the turn's slice, before the
+  // electorate caps, so the caps still bound the whole turn.
+  effEffectiveTurnPool *= sliceFraction;
   effEffectiveTurnPool = capTurnSliceToElectorate(effEffectiveTurnPool, effTotalPool, electorate);
   // ── Registered-voter gate ──────────────────────────────────────────────────
   // The unregistered slice of the registration pool cannot cast a ballot, so
@@ -547,6 +569,12 @@ export async function accumulateVoteTurn(
     election.countryId === "RU" &&
     election.electionType === "federationCouncilMember" &&
     election.russianCouncilRound != null;
+  // Bespoke national ballot systems keep the hourly path.
+  if (
+    slicePart === "early" &&
+    (isBgOrdinary || isHuBound || isJapanMixed || isBgFounding || isBoundDuma || isBoundCouncil)
+  )
+    return;
   const alreadyCast = isPrStv
     ? Object.values(tally.totalVotes).reduce((sum, votes) => sum + votes, 0)
     : isBoundCouncil
@@ -1099,6 +1127,7 @@ export async function accumulateVoteTurn(
       : null;
   const snapshot: VoteTurnSnapshot = {
     turn: turnNumber,
+    ...(slicePart ? { slicePart } : {}),
     recordedAt: now,
     cumulativeVotes: { ...newTotals },
     sharesPct:
