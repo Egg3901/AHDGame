@@ -470,6 +470,7 @@ export function processSector(
     clearingFactor,
     clearingStartTurn,
     currentTurn,
+    preset: lookups.preset,
     priceRealization,
     priceRatioByCommodity: lookups.priceRatioByCommodity,
     embargoLegacyMothball,
