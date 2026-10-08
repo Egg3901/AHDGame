@@ -12,14 +12,12 @@ import { PRODUCT_VENTURES } from "./store";
 import type { ProductVenture, VentureDomain } from "./types";
 
 export async function ventureDomainsEnabled(db: Db): Promise<Record<VentureDomain, boolean>> {
-  const config = await db
-    .collection<GameConfig>("gameConfig")
-    .findOne(
-      { _id: "default" },
-      {
-        projection: { marketSystemMode: 1, productLinesV2Enabled: 1, mediaProductSlatesEnabled: 1 },
-      }
-    );
+  const config = await db.collection<GameConfig>("gameConfig").findOne(
+    { _id: "default" },
+    {
+      projection: { marketSystemMode: 1, productLinesV2Enabled: 1, mediaProductSlatesEnabled: 1 },
+    }
+  );
   const mode = await getMarketSystemMode(config);
   return {
     media: config?.mediaProductSlatesEnabled === true,

@@ -58,14 +58,19 @@ export async function listAdvertisingSuppliers(
   const ids = groups.map((group) => group._id);
   const corps = ids.length
     ? await db
-        .collection<Corporation>("corporations")
+        .collection("corporations")
         .find({
           _id: { $in: ids as never[] },
           ceoVacant: { $ne: true },
           ceoType: { $ne: "npp" },
           userId: { $exists: true },
         })
-        .project<Pick<Corporation, "_id" | "name" | "ticker" | "editorialStance">>({
+        .project<{
+          _id: { toString(): string };
+          name: string;
+          ticker?: string | null;
+          editorialStance?: { economic: number; social: number };
+        }>({
           name: 1,
           ticker: 1,
           editorialStance: 1,

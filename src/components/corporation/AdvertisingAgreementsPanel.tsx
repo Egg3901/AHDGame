@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Card, Input } from "@/components/ui";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { apiErrorText } from "@/lib/errors/catalog";
 
@@ -94,7 +95,7 @@ export default function AdvertisingAgreementsPanel({
   }, [corpId, ownsMediaSector]);
 
   const money = (anchor: number) =>
-    formatAmount(anchor, suppliers?.liquidCurrencyCode ?? undefined);
+    formatAmount(anchor, (suppliers?.liquidCurrencyCode ?? undefined) as CurrencyCode | undefined);
   const share = Number(sharePct);
   const turns = Number(durationTurns);
   const shareValid = Number.isFinite(share) && share >= 1 && share <= 100;

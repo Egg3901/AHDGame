@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Card, Input, LoadingSpinner } from "@/components/ui";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { apiErrorText } from "@/lib/errors/catalog";
 import { VENTURE_FUNDING_TIERS } from "@/lib/products/venture/engine";
@@ -99,7 +100,8 @@ export function ProductStudio({
     );
   }
 
-  const money: Money = (anchor) => formatAmount(anchor, studio.liquidCurrencyCode ?? undefined);
+  const money: Money = (anchor) =>
+    formatAmount(anchor, (studio.liquidCurrencyCode ?? undefined) as CurrencyCode | undefined);
   const visible = studio.domains.filter((domain) => domain.enabled && domain.hasSectors);
   if (visible.length === 0) return null;
 
