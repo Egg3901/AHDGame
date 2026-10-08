@@ -6,7 +6,7 @@ summary: >-
   you sell it is now half as wide.
 tags: [stockmarket, economy]
 badges: [patch]
-areas: [economy]
+areas: [backend]
 ---
 
 ## What changed
