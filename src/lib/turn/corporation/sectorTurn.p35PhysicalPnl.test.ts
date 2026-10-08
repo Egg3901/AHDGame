@@ -331,7 +331,7 @@ describe("P3.5 — legacy anchors solved with the policy stack inside them", () 
    */
   const withStack = (env: SectorTurnEnv) => {
     env.market = { ...env.market, governorRampTurns: 0 };
-    (env.lookups.regionalConditionMarginByState as Map<string, number>).set(STATE_ID, 12);
+    (env.lookups.regionalConditionMarginByState as Map<string, number>).set(STATE_ID, 20);
   };
 
   it("reproduces the margin formula on its calibration state", () => {
@@ -381,10 +381,10 @@ describe("P3.5 — legacy anchors solved with the policy stack inside them", () 
       withStack(env);
       (env.lookups.regionalConditionMarginByState as Map<string, number>).set(STATE_ID, 0);
     });
-    // Dropping the 12-point regional modifier costs exactly its revenue
+    // Dropping the 20-point regional modifier costs exactly its revenue
     // share; the charge-back is the same amount in both runs.
     const delta = profitOf(same) - profitOf(removed);
-    expect(delta).toBeCloseTo(same.result.hourlyRevenue * 0.12, 6);
+    expect(delta).toBeCloseTo(same.result.hourlyRevenue * 0.2, 6);
   });
 });
 

@@ -153,8 +153,8 @@ export default function CorporationGuidePage() {
             </p>
             <SubHeader>Secondary type trade-off</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
-              A secondary type gives you +5% on a second sector class instead of −15%. The cost: it{" "}
-              <strong className="text-foreground">doubles the sprawl penalty</strong> once you
+              A secondary type gives you +2.5% on a second sector class instead of −15%. The cost:
+              it <strong className="text-foreground">doubles the sprawl penalty</strong> once you
               exceed the 15-sector threshold (see Sprawl section). Worth it if you genuinely want
               two sector classes and invest in Logistics & Operations Strength.
             </p>
@@ -250,15 +250,15 @@ Escalation drops by 1 each turn. Costs halve if you wait`}</FormulaBlock>
                   <tr>
                     <td className="px-4 py-2.5 text-foreground font-medium">Sector type match</td>
                     <td className="px-4 py-2.5">
-                      <Tag variant="positive">+10%</Tag> / <Tag variant="negative">−15%</Tag>
+                      <Tag variant="positive">+5%</Tag> / <Tag variant="negative">−15%</Tag>
                     </td>
                     <td className="px-4 py-2.5">All</td>
-                    <td className="px-4 py-2.5">Primary +10%, secondary +5%, other −15%</td>
+                    <td className="px-4 py-2.5">Primary +5%, secondary +2.5%, other −15%</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-2.5 text-foreground font-medium">Home location</td>
                     <td className="px-4 py-2.5">
-                      <Tag variant="positive">+10%</Tag> / <Tag variant="positive">+5%</Tag>
+                      <Tag variant="positive">+5%</Tag> / <Tag variant="positive">+2.5%</Tag>
                     </td>
                     <td className="px-4 py-2.5">All</td>
                     <td className="px-4 py-2.5">HQ state +10%, same country +5%, abroad +0%</td>
@@ -394,17 +394,17 @@ Escalation drops by 1 each turn. Costs halve if you wait`}</FormulaBlock>
 
             <SubHeader>Home location bonus</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
-              Sectors in your <strong className="text-foreground">HQ state</strong> get +10%;
-              sectors in the same country (different state) get +5%. This makes early expansion in
-              your home state very strong. You effectively start with 45% base margin before any
+              Sectors in your <strong className="text-foreground">HQ state</strong> get +5%; sectors
+              in the same country (different state) get +2.5%. This makes early expansion in your
+              home state somewhat stronger. You effectively start with 40% base margin before any
               other modifier.
             </p>
 
             <SubHeader>Subsidies are large</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
               Each active subsidy adds{" "}
-              <strong className="text-foreground">+15 percentage points</strong> to qualifying
-              sectors. Federal and state subsidies stack. A sector with both starts at 65% margin.
+              <strong className="text-foreground">+7.5 percentage points</strong> to qualifying
+              sectors. Federal and state subsidies stack. A sector with both starts at 55% margin.
               Use your political influence to champion subsidy bills for your sector type.
             </p>
           </section>

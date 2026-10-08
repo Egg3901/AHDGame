@@ -294,13 +294,13 @@ export function calcMarketingGrowth(dailyBudget: number, currentStrength: number
 }
 
 /** Profit margin bonus (%) for sectors in corporation's home state */
-export const HOME_STATE_MARGIN_BONUS = 10;
+export const HOME_STATE_MARGIN_BONUS = 5;
 /** Profit margin bonus (%) for sectors in corporation's home nation (same country, different state) */
-export const HOME_NATION_MARGIN_BONUS = 5;
+export const HOME_NATION_MARGIN_BONUS = 2.5;
 /** Profit margin bonus (%) for a state/region's primary sector specialization */
-export const STATE_PRIMARY_SECTOR_MARGIN_BONUS = 10;
+export const STATE_PRIMARY_SECTOR_MARGIN_BONUS = 5;
 /** Profit margin bonus (%) for a state/region's secondary sector specialization */
-export const STATE_SECONDARY_SECTOR_MARGIN_BONUS = 5;
+export const STATE_SECONDARY_SECTOR_MARGIN_BONUS = 2.5;
 
 /** Default profit margin for new sectors (%) */
 export const DEFAULT_PROFIT_MARGIN = 35;
@@ -1385,8 +1385,8 @@ export function getExpropriationRiskMarginModifier(
 
 /**
  * Profit margin bonus for home state/nation. International sectors get 0.
- * - Home state (sector in HQ state): +10%
- * - Home nation (same country, different state): +5%
+ * - Home state (sector in HQ state): +5%
+ * - Home nation (same country, different state): +2.5%
  * - International (different country): 0%
  */
 export function getHomeLocationMarginBonus(
@@ -1407,8 +1407,8 @@ export interface StateSectorSpecialization {
 
 /**
  * Profit margin bonus for state/region sector specializations.
- * - Primary sector: +10 percentage points
- * - Secondary sector: +5 percentage points
+ * - Primary sector: +5 percentage points
+ * - Secondary sector: +2.5 percentage points
  */
 export function getStateSectorSpecializationMarginBonus(
   specialization: StateSectorSpecialization | null | undefined,

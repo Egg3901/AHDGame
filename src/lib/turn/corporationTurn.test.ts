@@ -12,7 +12,8 @@ import { MANUFACTURING_PRODUCT_PROJECTS_V2 } from "@/lib/products/manufacturingP
 import { processCorporationTurn } from "./corporationTurn";
 // profitMargin:100 (a "zero maintenance" shortcut in these fixtures) now realizes
 // at the soft-capped ~95.2%, so income/tax expectations scale by this factor.
-const EFF_MARGIN_100 = softCapEffectiveMargin(100) / 100;
+// An off-type corp's -15 mismatch is only partly offset by the home-state bonus.
+const EFF_MARGIN_MISMATCH = softCapEffectiveMargin(90) / 100;
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({
@@ -522,10 +523,10 @@ describe("processCorporationTurn", () => {
     const gdpFloor = 100_000_000_000 * 0.08 * 0.75;
     // Contribution is ~180k JPY at full margin. The high side is soft-capped and
     // the realized value depends on the sector's live modifier stack, so bound it:
-    // at least the zero-modifier soft-capped level, at most the full-margin level.
+    // at least the off-type soft-capped level, at most the full-margin level.
     // (The >1200×100 guard is what actually proves FX conversion ran, not raw ₳.)
     const contribution = blended - gdpFloor;
-    expect(contribution).toBeGreaterThan(180_000 * EFF_MARGIN_100 * 0.99);
+    expect(contribution).toBeGreaterThan(180_000 * EFF_MARGIN_MISMATCH * 0.99);
     expect(contribution).toBeLessThan(180_000 * 1.01);
     expect(contribution).toBeGreaterThan(1200 * 100);
   });
@@ -621,10 +622,10 @@ describe("processCorporationTurn", () => {
     const gdpFloor = 10_000_000_000 * 0.08 * 0.75;
     // Contribution is ~180k JPY at full margin. The high side is soft-capped and
     // the realized value depends on the sector's live modifier stack, so bound it:
-    // at least the zero-modifier soft-capped level, at most the full-margin level.
+    // at least the off-type soft-capped level, at most the full-margin level.
     // (The >1200×100 guard is what actually proves FX conversion ran, not raw ₳.)
     const contribution = blended - gdpFloor;
-    expect(contribution).toBeGreaterThan(180_000 * EFF_MARGIN_100 * 0.99);
+    expect(contribution).toBeGreaterThan(180_000 * EFF_MARGIN_MISMATCH * 0.99);
     expect(contribution).toBeLessThan(180_000 * 1.01);
     expect(contribution).toBeGreaterThan(1200 * 100);
   });
@@ -872,18 +873,18 @@ describe("processCorporationTurn", () => {
     // realizes just under 100% instead of a hard-clamped exactly-100; (2) captured
     // revenue is scaled by market share, which is now measured over real market
     // revenue rather than an unowned pool (PR #1145). Together these land pre-tax
-    // income at ~180 with the specialized operating saving, and each jurisdiction
+    // income at ~172 with the specialized operating saving, and each jurisdiction
     // taxes its own share. Values are the
     // deterministic engine output; rates (20/6, 23/1.5) are unchanged. Aggregate
     // totals and the jurisdiction breakdowns are rounded independently, so they
-    // can differ by a unit (39 vs 18+20 for federal tax).
-    expect(doc.corporateTaxPaid).toBe(45);
-    expect(doc.federalTaxPaid).toBe(39);
+    // can differ by a unit (37 vs 18+19 for federal tax).
+    expect(doc.corporateTaxPaid).toBe(43);
+    expect(doc.federalTaxPaid).toBe(37);
     expect(doc.stateTaxPaid).toBe(7);
-    expect(doc.incomePreDividends).toBeCloseTo(180, 0);
+    expect(doc.incomePreDividends).toBeCloseTo(172, 0);
     expect((doc.taxPaidByCountry as Record<string, number>).US).toBe(18);
-    expect((doc.taxPaidByCountry as Record<string, number>).JP).toBe(20);
-    expect((doc.taxPaidByState as Record<string, number>).US_CA).toBe(6);
+    expect((doc.taxPaidByCountry as Record<string, number>).JP).toBe(19);
+    expect((doc.taxPaidByState as Record<string, number>).US_CA).toBe(5);
     expect((doc.taxPaidByState as Record<string, number>).KNS).toBe(1);
   });
 
