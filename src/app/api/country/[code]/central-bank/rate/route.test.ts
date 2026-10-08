@@ -112,6 +112,52 @@ describe("POST /api/country/[code]/central-bank/rate", () => {
     expect(embed.fields?.find((f) => f.name === "Reason")?.value).toBe("Combat inflation.");
   });
 
+  describe("hike cap when inflation runs far over target", () => {
+    const withInflation = (inflationRate: number | null) =>
+      db
+        .collection("federalBudget")
+        .findOne.mockResolvedValue(
+          inflationRate === null ? null : { economicFactors: { inflationRate } }
+        );
+
+    it("lets the chair hike by up to 3 points when inflation is 5+ points over target", async () => {
+      await setup();
+      withInflation(12);
+      const { POST } = await import("./route");
+
+      const res = await POST(makeRequest({ rate: 5 }), ctx());
+
+      expect(res.status).toBe(200);
+      const set = db.collectionMocks.centralBanks.updateOne.mock.calls[0][1].$set;
+      expect(set.primeRate).toBe(5);
+      // Hikes carry no scrutiny.
+      expect(set.chairInfamy).toBeUndefined();
+    });
+
+    it("still refuses a hike beyond the widened cap", async () => {
+      await setup();
+      withInflation(12);
+      const { POST } = await import("./route");
+
+      const res = await POST(makeRequest({ rate: 5.25 }), ctx());
+
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toMatch(/limited to \+3\.00%/);
+      expect(db.collectionMocks.centralBanks.updateOne).not.toHaveBeenCalled();
+    });
+
+    it.each([3, null])("keeps the 0.75 cap when inflation is %s", async (inflation) => {
+      await setup();
+      withInflation(inflation);
+      const { POST } = await import("./route");
+
+      const res = await POST(makeRequest({ rate: 3 }), ctx());
+
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toMatch(/limited to \+0\.75%/);
+    });
+  });
+
   it("labels admin overrides in the Chair field via existing changedByName", async () => {
     const adminUser = makeMockUser({
       isAdmin: true,

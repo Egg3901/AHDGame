@@ -662,6 +662,7 @@ describe("GET /api/country/[code]/fomc and POST /vote", () => {
       "nextDeadline",
       "normalizedRateChoices",
       "primeRateOnGrid",
+      "rateLimits",
       "viewerRole",
     ]);
     for (const action of body.governance.allowedActions) {
