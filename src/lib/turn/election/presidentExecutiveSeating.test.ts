@@ -192,6 +192,42 @@ describe("seatPresidentialExecutive", () => {
     expect(set["executiveTermsServed.US"]).toBeUndefined();
   });
 
+  it("seats an acting president without counting a term or recording an election win", async () => {
+    const presId = new ObjectId();
+    const election = makeElection({});
+    const winnerCandidate = {
+      _id: new ObjectId(),
+      isNPP: false,
+      characterId: presId,
+      characterName: "Acting Person",
+      party: "1",
+    } as unknown as ElectionCandidate;
+
+    await seatPresidentialExecutive(db as unknown as Db, {
+      election,
+      winnerCandidate,
+      now: NOW,
+      acting: true,
+    });
+
+    const winnerUpdate = db.collectionMocks["characters"]!.updateOne.mock.calls.find(
+      (c) =>
+        (c[0] as Record<string, unknown>)?._id === presId && (c[1] as { $push?: unknown })?.$push
+    );
+    expect(winnerUpdate).toBeDefined();
+    const update = winnerUpdate![1] as {
+      $set: Record<string, unknown>;
+      $push: { careerHistory: { type: string; officeLabel: string } };
+    };
+    expect(Object.keys(update.$set).some((k) => k.startsWith("executiveTermsServed"))).toBe(false);
+    expect(update.$push.careerHistory.type).toBe("appointed");
+    expect(update.$push.careerHistory.officeLabel).toMatch(/^Acting /);
+    const officialSet = db.collectionMocks["electedOfficials"]!.updateOne.mock.calls.find(
+      (c) => (c[1] as { $set?: Record<string, unknown> })?.$set?.characterName === "Acting Person"
+    );
+    expect((officialSet![1] as { $set: Record<string, unknown> }).$set.isActing).toBe(true);
+  });
+
   it("keeps the local head of state seated when an election resolves", async () => {
     const pinnedId = new ObjectId();
     const winnerId = new ObjectId();
