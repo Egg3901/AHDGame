@@ -174,4 +174,27 @@ describe("AdvertisingAgreementsPanel", () => {
     expect(await screen.findByText("allocation_exceeds_budget")).toBeTruthy();
     expect(screen.getByText("Buyer Co")).toBeTruthy();
   });
+
+  it("collapses the buyer entry point on a corporation without media sectors", async () => {
+    const calls = stubFetch([]);
+    render(<AdvertisingAgreementsPanel corpId="corp1" ownsMediaSector={false} />);
+    await waitFor(() => expect(calls.length).toBeGreaterThan(0));
+    expect(screen.getByText("Buy coverage advertising from a media corporation")).toBeTruthy();
+    expect(screen.queryByText("Coverage advertising")).toBeNull();
+  });
+
+  it("shows live agreements in full on a corporation without media sectors", async () => {
+    stubFetch([
+      {
+        id: "ad1",
+        role: "buyer",
+        status: "active",
+        allocationShareBps: 1000,
+        counterparty: { id: "supplier", name: "Media Co" },
+      },
+    ]);
+    render(<AdvertisingAgreementsPanel corpId="corp1" ownsMediaSector={false} />);
+    expect(await screen.findByText("Media Co")).toBeTruthy();
+    expect(screen.getByText("Coverage advertising")).toBeTruthy();
+  });
 });

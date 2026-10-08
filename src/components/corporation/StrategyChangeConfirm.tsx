@@ -4,8 +4,9 @@ import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useEffect, useState } from "react";
 import type { CorporationType } from "@/lib/constants/corporations";
 import {
+  getOperatingSectorType,
   getSectorStrategies,
-  getStrategy,
+  getStrategyForOperatingModel,
   STRATEGY_RETOOL_COST_FRACTION,
   type SectorStrategy,
 } from "@/lib/constants/sectorStrategies";
@@ -22,6 +23,10 @@ import { fetchJson } from "@/lib/observability/fetchJson";
 
 interface StrategyChangeConfirmProps {
   sectorType: CorporationType;
+  /** Manufacturing production model (vehicles) of the persisted sector. */
+  industryModel?: string | null;
+  /** Media lane discriminator (entertainment) of the persisted sector. */
+  mediaDiscriminator?: string | null;
   mediaOperatingModelsEnabled?: boolean;
   currentStrategyId: string;
   targetStrategyId: string;
@@ -92,6 +97,8 @@ function estimateCommodityMargin(
 
 export default function StrategyChangeConfirm({
   sectorType,
+  industryModel,
+  mediaDiscriminator,
   mediaOperatingModelsEnabled,
   currentStrategyId,
   targetStrategyId,
@@ -138,15 +145,25 @@ export default function StrategyChangeConfirm({
   }, []);
 
   const { preset } = useWorldFlags();
+  // A vehicle plant is stored as manufacturing and an entertainment lane as
+  // media; both run the folded type's recipes, so resolve the operating type
+  // before looking strategies up or the target is never found.
+  const operatingType = getOperatingSectorType(sectorType, industryModel, mediaDiscriminator);
   const strategies = getSectorStrategies(
-    sectorType,
+    operatingType,
     mediaOperatingModelsEnabled === true,
     null,
     preset
   );
   if (!strategies) return null;
 
-  const current = getStrategy(sectorType, currentStrategyId, preset);
+  const current = getStrategyForOperatingModel(
+    sectorType,
+    currentStrategyId,
+    industryModel,
+    mediaDiscriminator,
+    preset
+  );
   const target = strategies.find((s) => s.id === targetStrategyId) as SectorStrategy | undefined;
   if (!current || !target) return null;
 

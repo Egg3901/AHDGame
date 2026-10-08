@@ -15,7 +15,19 @@ interface AgreementRow {
   counterparty?: { id: string; name: string; ticker?: string };
 }
 
-export default function AdvertisingAgreementsPanel({ corpId }: { corpId: string }) {
+/**
+ * Coverage advertising is a media product. Media corporations supply it, so
+ * they always see the full panel. Any other corporation is only ever a buyer:
+ * it sees its live agreements, and otherwise a collapsed entry point instead
+ * of a media workflow sitting open on its sectors tab.
+ */
+export default function AdvertisingAgreementsPanel({
+  corpId,
+  ownsMediaSector = true,
+}: {
+  corpId: string;
+  ownsMediaSector?: boolean;
+}) {
   const [agreements, setAgreements] = useState<AgreementRow[]>([]);
   const [supplierCorpId, setSupplierCorpId] = useState("");
   const [sharePct, setSharePct] = useState("10");
@@ -84,8 +96,8 @@ export default function AdvertisingAgreementsPanel({ corpId }: { corpId: string 
     setBusy(false);
   }
 
-  return (
-    <Card title="Coverage advertising">
+  const content = (
+    <>
       <p className="text-sm text-muted">
         Allocate part of the existing marketing budget to a Media & Entertainment supplier. This
         does not add a second expense; delivered coverage changes advertising efficacy.
@@ -166,6 +178,21 @@ export default function AdvertisingAgreementsPanel({ corpId }: { corpId: string 
           </li>
         ))}
       </ul>
-    </Card>
+    </>
   );
+
+  if (!ownsMediaSector && agreements.length === 0) {
+    return (
+      <Card>
+        <details>
+          <summary className="cursor-pointer text-sm font-medium text-foreground">
+            Buy coverage advertising from a media corporation
+          </summary>
+          <div className="mt-3">{content}</div>
+        </details>
+      </Card>
+    );
+  }
+
+  return <Card title="Coverage advertising">{content}</Card>;
 }

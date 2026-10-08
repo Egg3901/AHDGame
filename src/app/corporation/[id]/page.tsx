@@ -1143,7 +1143,10 @@ export default function CorporationDetailPage() {
                         <MediaProductStudio corporationId={id} onUpdate={fetchCorporation} />
                       )}
                     {isCeo && corporation.mediaOperatingModelsEnabled === true && (
-                      <AdvertisingAgreementsPanel corpId={id} />
+                      <AdvertisingAgreementsPanel
+                        corpId={id}
+                        ownsMediaSector={sectors.some((sector) => sector.sectorType === "media")}
+                      />
                     )}
                     {corporation.productLinesV2Enabled &&
                       sectors.some((sector) =>

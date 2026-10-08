@@ -68,6 +68,24 @@ export const FOUNDABLE_CORPORATION_TYPES = CORPORATION_TYPES.filter(
   (t): t is Exclude<CorporationType, RetiredCorporationType> => !isRetiredCorporationType(t)
 ) as readonly Exclude<CorporationType, RetiredCorporationType>[];
 
+/**
+ * Sector focus options for a picker: foundable types only, plus the saved
+ * value when it is a retired legacy type, so an old automobiles or
+ * entertainment corporation still renders its own focus without the retired
+ * type being offered to anyone else.
+ */
+export function sectorFocusOptions(saved?: string | null): CorporationType[] {
+  const options: CorporationType[] = [...FOUNDABLE_CORPORATION_TYPES];
+  if (
+    saved &&
+    !options.includes(saved as CorporationType) &&
+    (CORPORATION_TYPES as readonly string[]).includes(saved)
+  ) {
+    options.push(saved as CorporationType);
+  }
+  return options;
+}
+
 /** Specialized production models that belong to the manufacturing taxonomy. */
 export type ManufacturingIndustryModel = "vehicles";
 

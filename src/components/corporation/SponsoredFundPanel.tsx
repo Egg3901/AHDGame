@@ -5,7 +5,7 @@ import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, type FormEvent } from "react";
 import Link from "next/link";
 import {
-  CORPORATION_TYPES,
+  FOUNDABLE_CORPORATION_TYPES,
   CORPORATION_TYPE_LABELS,
   type CorporationType,
 } from "@/lib/constants/corporations";
@@ -270,7 +270,7 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
                   required
                 >
                   <option value="">Pick an industry…</option>
-                  {CORPORATION_TYPES.map((t) => (
+                  {FOUNDABLE_CORPORATION_TYPES.map((t) => (
                     <option key={t} value={t}>
                       {CORPORATION_TYPE_LABELS[t as CorporationType]}
                     </option>
