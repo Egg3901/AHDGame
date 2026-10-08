@@ -108,7 +108,7 @@ export interface SectorPlantsSection {
   /** Untapped demand in this (state, sectorType) market, units/day. */
   headroomUnits: number;
   /**
-   * True buyers' room in sector output units: unmet world demand across this
+   * Weighted expansion appetite in sector output units: unmet world demand across this
    * sector's output mix (min over legs - the market stops absorbing when the
    * first leg saturates). 0 in a glut. `headroomUnits` above is the unowned
    * pool = claimable market SHARE, a different thing; the UI must not present
@@ -118,7 +118,7 @@ export interface SectorPlantsSection {
    * market before any new build would.
    */
   demandGapUnits: number;
-  /** Measured room for every output; no weighted or latent-demand top-up. */
+  /** Measured room for every output after known queues; excludes latent demand. */
   measuredDemandGapUnits?: number | null;
   /**
    * True when this sector's own demand throttle bound last turn. Its idle

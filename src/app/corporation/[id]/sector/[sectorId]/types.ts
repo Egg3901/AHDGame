@@ -601,12 +601,12 @@ export interface PlantsData {
   };
   headroomUnits: number;
   /**
-   * True buyers' room in sector output units (unmet demand across the output
-   * mix, min over legs; 0 in a glut). `headroomUnits` is claimable market
-   * share, NOT demand, optional because payloads predating the split omit it.
+   * Weighted expansion appetite across the output mix, including latent demand.
+   * This is not a limit at which every output sells. Use measuredDemandGapUnits
+   * for automatic sizing. headroomUnits measures claimable market share.
    */
   demandGapUnits?: number;
-  /** Measured room for every output; no weighted or latent-demand top-up. */
+  /** Measured room for every output after known queues; excludes latent demand. */
   measuredDemandGapUnits?: number | null;
   /** This sector's own demand throttle bound last turn, so its room to build reads 0. */
   roomHeldByOwnIdle?: boolean;
