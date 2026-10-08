@@ -22,6 +22,8 @@ import {
   FOMC_VOTE_WINDOW_TURNS,
   MAX_RATE_CHANGE_DELTA,
   MAX_RATE_CUT_DELTA,
+  NPP_CHAIR_HIGH_INFLATION_HIKE_DELTA,
+  PRIME_RATE_CEILING,
   PRIME_RATE_STEP,
   RATE_CHANGES_PER_TERM,
   RATE_CHANGE_COOLDOWN_TURNS,
@@ -259,10 +261,12 @@ export function committeeRateExecutionRefusal(
   if (state.commandEconomy) return "command-economy";
   if (rateChangeRefusalFor(state.fxCommitment)) return "fx-committed";
   if (!Number.isFinite(delta) || !Number.isFinite(state.primeRate)) return "invalid-rate";
-  if (delta > MAX_RATE_CHANGE_DELTA + EPSILON) return "delta-hike";
+  // Committee motions are always the Taylor step, which widens its hike clamp
+  // when inflation is far over target (see computeNppChairRateStep).
+  if (delta > NPP_CHAIR_HIGH_INFLATION_HIKE_DELTA + EPSILON) return "delta-hike";
   if (delta < -(MAX_RATE_CUT_DELTA + EPSILON)) return "delta-cut";
   const requested = snapToPrimeRateGrid(state.primeRate) + delta;
-  if (requested < 0 || requested > 25) return "out-of-range";
+  if (requested < 0 || requested > PRIME_RATE_CEILING) return "out-of-range";
   if (state.rateChangesThisTerm >= RATE_CHANGES_PER_TERM) return "term-cap";
   if (
     typeof state.lastRateChangeTurn === "number" &&

@@ -58,6 +58,57 @@ describe("computeNppChairRateStep", () => {
   it("returns ~0 when already at target", () => {
     expect(computeNppChairRateStep({ currentRate: 4.0, targetRate: 4.0 })).toBeCloseTo(0, 6);
   });
+
+  it("keeps the ordinary hike cap while inflation is near target", () => {
+    expect(
+      computeNppChairRateStep({ currentRate: 2.0, targetRate: 10.0, inflationGap: 4.5 })
+    ).toBeCloseTo(0.75, 6);
+  });
+
+  it("widens the hike clamp once inflation is far over target", () => {
+    // 0.5 * 8 = 4 -> clamp to +3.0
+    expect(
+      computeNppChairRateStep({ currentRate: 2.0, targetRate: 10.0, inflationGap: 8 })
+    ).toBeCloseTo(3.0, 6);
+    // still proportional below the wide clamp: 0.5 * 4 = 2
+    expect(
+      computeNppChairRateStep({ currentRate: 2.0, targetRate: 6.0, inflationGap: 8 })
+    ).toBeCloseTo(2.0, 6);
+  });
+
+  it("leaves cuts alone when inflation is far over target", () => {
+    expect(
+      computeNppChairRateStep({ currentRate: 10.0, targetRate: 2.0, inflationGap: 8 })
+    ).toBeCloseTo(-1.75, 6);
+  });
+
+  it("never hikes past the policy-rate ceiling", () => {
+    expect(
+      computeNppChairRateStep({ currentRate: 24, targetRate: 80, inflationGap: 70 })
+    ).toBeCloseTo(1, 6);
+    expect(computeNppChairRateStep({ currentRate: 25, targetRate: 80, inflationGap: 70 })).toBe(0);
+  });
+
+  it("closes a 16% and a 64% inflation gap in a handful of moves, not years", () => {
+    const movesToTarget = (inflation: number, neutral: number) => {
+      const target = Math.min(neutral + (inflation - 2), 25);
+      let rate = 9.5;
+      let moves = 0;
+      while (Math.abs(target - rate) > 0.5 && moves < 200) {
+        const step = computeNppChairRateStep({
+          currentRate: rate,
+          targetRate: target,
+          inflationGap: inflation - 2,
+        });
+        rate = Math.round((rate + step) / 0.25) * 0.25;
+        moves++;
+      }
+      return moves;
+    };
+    // Each move waits RATE_CHANGE_COOLDOWN_TURNS (6) turns.
+    expect(movesToTarget(16, 4)).toBeLessThanOrEqual(4);
+    expect(movesToTarget(64, 4)).toBeLessThanOrEqual(8);
+  });
 });
 
 function mockRateDb(budget: any, nationalMetrics: any, npp: any = null) {
@@ -107,6 +158,22 @@ describe("processNppChairAutoRate", () => {
     const op = callArgs[1];
     expect(op.$set.primeRate).toBeGreaterThan(4.0);
     expect(op.$set.lastRateChangeTurn).toBe(50);
+  });
+
+  it("hikes by more than the ordinary cap when inflation is far over target", async () => {
+    const { db, updateOne } = mockRateDb(
+      { economicFactors: { inflationRate: 64 } },
+      { economic: { gdpGrowth: { value: 2.0 } } }
+    );
+    const bank = {
+      _id: "b" as any,
+      primeRate: 9.5,
+      lastRateChangeTurn: null,
+      chairMode: "npp",
+    } as any;
+    await processNppChairAutoRate(db, bank, "US" as any, 50, null, false, 2019);
+    const op = updateOne.mock.calls[0] as unknown as [unknown, { $set: { primeRate: number } }];
+    expect(op[1].$set.primeRate).toBe(12.5);
   });
 
   it("is a no-op within the cooldown window", async () => {
@@ -309,7 +376,7 @@ describe("processNppChairAutoRate", () => {
     const op = (
       updateOne.mock.calls[0] as unknown as [unknown, { $set: Record<string, unknown> }]
     )[1];
-    expect(op.$set.primeRate).toBe(5.25);
+    expect(op.$set.primeRate).toBe(7.5);
     expect(op.$set.lastStandingAdviceTurn).toBe(28);
     expect(op.$set).not.toHaveProperty("lastRateChangeTurn");
     const pushed = pushedRecord(updateOne)!;

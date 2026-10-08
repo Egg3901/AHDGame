@@ -864,7 +864,7 @@ it("allows a carried hold under an exchange-rate commitment", () => {
 
 it.each([
   ["out-of-range", 25, 0.5],
-  ["delta-hike", 5, 1],
+  ["delta-hike", 5, 3.5],
   ["delta-cut", 5, -3],
 ] as const)("blocks a carried proposal violating %s", (reason, primeRate, proposedDelta) => {
   const meeting = nppMajorityMeeting(100);

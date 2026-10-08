@@ -16,6 +16,9 @@ import {
   NPP_CHAIR_TARGET_GROWTH,
   MAX_RATE_CHANGE_DELTA,
   MAX_RATE_CUT_DELTA,
+  NPP_CHAIR_HIGH_INFLATION_GAP,
+  NPP_CHAIR_HIGH_INFLATION_HIKE_DELTA,
+  PRIME_RATE_CEILING,
   GOVERNMENT_RATE_IDLE_TURNS,
   RATE_CHANGE_COOLDOWN_TURNS,
   RATE_HISTORY_MAX,
@@ -30,17 +33,30 @@ import { isBankGovernmentControlled } from "@/lib/centralBank/governance";
  * Bounded step toward the target: 0.5x the gap, clamped to [-1.75, +0.75].
  * `alignment` scales hike vs. cut speed before the clamp (hawk hikes faster /
  * cuts slower; dove the inverse).
+ *
+ * When `inflationGap` (inflation minus target) is at least
+ * NPP_CHAIR_HIGH_INFLATION_GAP the hike clamp widens to
+ * NPP_CHAIR_HIGH_INFLATION_HIKE_DELTA so the rate can catch up with runaway
+ * inflation in a few meetings instead of years. The step is still 0.5x the gap,
+ * so it shrinks as the rate closes in, and cuts are untouched. Hikes never
+ * carry the rate past PRIME_RATE_CEILING.
  */
 export function computeNppChairRateStep(params: {
   currentRate: number;
   targetRate: number;
   alignment?: ChairAlignment | null;
+  inflationGap?: number;
 }): number {
   const policy = chairAlignmentPolicy(params.alignment);
   const desired = params.targetRate - params.currentRate;
   let step = NPP_CHAIR_STEP_FRACTION * desired;
   step *= step >= 0 ? policy.hikeStepMult : policy.cutStepMult;
-  return Math.max(-MAX_RATE_CUT_DELTA, Math.min(MAX_RATE_CHANGE_DELTA, step));
+  const hikeCap =
+    (params.inflationGap ?? 0) >= NPP_CHAIR_HIGH_INFLATION_GAP
+      ? NPP_CHAIR_HIGH_INFLATION_HIKE_DELTA
+      : MAX_RATE_CHANGE_DELTA;
+  const headroom = Math.max(0, PRIME_RATE_CEILING - params.currentRate);
+  return Math.max(-MAX_RATE_CUT_DELTA, Math.min(hikeCap, headroom, step));
 }
 
 function finiteOr(value: unknown, fallback: number): number {
@@ -166,6 +182,7 @@ export async function processNppChairAutoRate(
     currentRate: bank.primeRate,
     targetRate,
     alignment: bank.chairAlignment,
+    inflationGap: inflationRate - targetInflation,
   });
   if (Math.abs(step) <= 1e-9) return;
 
