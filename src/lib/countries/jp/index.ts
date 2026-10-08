@@ -24,7 +24,7 @@ import { JP_ERAS } from "./eras";
  * `CountryFolder` with nothing quietly absent, which is the check that tells the
  * next country whether the contract is actually expressible.
  */
-export const JP: CountryFolder = {
+export const JP: CountryFolder<"JP"> = {
   id: "JP",
   identity: JP_IDENTITY,
   institutions: JP_INSTITUTIONS,

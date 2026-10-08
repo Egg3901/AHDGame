@@ -41,10 +41,27 @@ describe("getCountryAccess()", () => {
       enabledForPlayers: false,
       status: "beta",
       economyPreview: false,
+      requirementLevel: "background",
       registered: true,
       econOnly: true,
       nppGoverned: false,
     });
+  });
+
+  it("identifies an economy-preview country's completeness contract", async () => {
+    await setupDb();
+    db.collectionMocks["countryGameStates"]!.findOne.mockResolvedValue({
+      _id: "JP",
+      enabledForPlayers: false,
+      status: "beta",
+      economyPreview: true,
+    });
+
+    const { getCountryAccess } = await import("./countryAccess");
+    const result = await getCountryAccess("JP");
+
+    expect(result.economyPreview).toBe(true);
+    expect(result.requirementLevel).toBe("economy-preview");
   });
 
   it("treats a dissolved country as unregistered, whatever its status says", async () => {
@@ -83,6 +100,7 @@ describe("getCountryAccess()", () => {
       enabledForPlayers: true,
       status: "active",
       economyPreview: false,
+      requirementLevel: "player-enabled",
       registered: true,
       econOnly: false,
       nppGoverned: false,
@@ -101,6 +119,7 @@ describe("getCountryAccess()", () => {
       enabledForPlayers: true,
       status: "active",
       economyPreview: false,
+      requirementLevel: "player-enabled",
       registered: true,
       econOnly: false,
       nppGoverned: false,
@@ -122,6 +141,7 @@ describe("getCountryAccess()", () => {
       enabledForPlayers: false,
       status: "coming-soon",
       economyPreview: false,
+      requirementLevel: "background",
       registered: true,
       econOnly: true,
       nppGoverned: false,
@@ -144,6 +164,7 @@ describe("getCountryAccess()", () => {
       enabledForPlayers: true,
       status: "active",
       economyPreview: false,
+      requirementLevel: "player-enabled",
       registered: true,
       econOnly: false,
       nppGoverned: false,

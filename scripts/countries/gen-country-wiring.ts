@@ -659,7 +659,7 @@ import { ${COUNTRY}_ERAS } from "./eras";
  * MongoDB driver into the browser. Client surfaces take \`./identity\` or
  * \`./geographyFacts\`, never this file and never \`./geography\`.
  */
-export const ${COUNTRY}: CountryFolder = {
+export const ${COUNTRY}: CountryFolder<"${COUNTRY}"> = {
   id: ${JSON.stringify(COUNTRY)},
   identity: ${COUNTRY}_IDENTITY,
   institutions: ${COUNTRY}_INSTITUTIONS,

@@ -2,8 +2,6 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { CONVERTED } from "../../src/lib/countries/singleCountryData";
 
-void CONVERTED;
-
 /* ---------------------------------------------------------------------------
  * THE CLASSIFIER
  *
@@ -105,12 +103,9 @@ const NOT_A_COUNTRY_PREFIX = /^(JPY|JPEG|JPG|USD|USE|USSR)([_A-Z]|$)/;
  * so the id SET is what keeps this honest: a match only counts if it is a
  * country this game actually has.
  */
-const COUNTRY_IDS = new Set(
-  (
-    "US UK JP DE FR IT RU CN BR PL CS YU DD AT BG FI GR HU IE NG RO SE ES TR CA IN " +
-    "SCO WAL BLR UKR BAL"
-  ).split(" ")
-);
+// CA and IN are not configured countries. They remain in the classifier only
+// so US state-key collisions are still detected and rejected as ambiguous.
+const COUNTRY_IDS = new Set<string>([...CONVERTED, "CA", "IN"]);
 
 /**
  * US state and territory codes.
