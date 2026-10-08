@@ -201,6 +201,8 @@ export interface ElectionVoteTally {
     /** Set when the House reaches a majority and the president is seated. */
     presidentWinnerId?: string;
     closedTurn?: number;
+    /** Set at close when the House elected a president whose seating has not completed. */
+    seatingPending?: boolean;
   };
   /** President only: per-unit turn snapshots for EV projection */
   unitTurnSnapshots?: Record<string, VoteTurnSnapshot[]>;
