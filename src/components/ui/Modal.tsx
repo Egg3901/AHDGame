@@ -37,6 +37,8 @@ interface ModalProps {
    * want edge-to-edge bordered sections inside the body.
    */
   bodyClassName?: string;
+  /** A restrained, internally scrolling panel for desktop settings forms. */
+  variant?: "default" | "panel";
 }
 
 /**
@@ -53,6 +55,7 @@ export function Modal({
   scrollable = false,
   headerActions,
   bodyClassName,
+  variant = "default",
 }: ModalProps) {
   const titleId = useId();
 
@@ -69,9 +72,10 @@ export function Modal({
 
   // Vertical padding clears the notch and home indicator when the page runs
   // edge to edge (viewport-fit=cover); env() resolves to 0 everywhere else.
-  const layoutClass = scrollable
-    ? "items-start overflow-y-auto pt-[max(2rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]"
-    : "items-center pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]";
+  const layoutClass =
+    scrollable && variant !== "panel"
+      ? "items-start overflow-y-auto pt-[max(2rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]"
+      : "items-center pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]";
 
   const renderedBodyClass = bodyClassName ?? "px-5 pb-5";
 
@@ -93,9 +97,11 @@ export function Modal({
         aria-label="Close dialog"
       />
       <div
-        className={`relative z-10 w-full ${maxWidthClass} rounded-xl border border-card-border bg-card shadow-2xl`}
+        className={`relative z-10 w-full ${maxWidthClass} border border-card-border shadow-2xl ${variant === "panel" ? "flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden rounded-sm bg-background" : "rounded-xl bg-card"}`}
       >
-        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4">
+        <div
+          className={`flex shrink-0 items-start justify-between gap-3 px-5 pt-5 pb-4 ${variant === "panel" ? "border-b border-card-border" : ""}`}
+        >
           {typeof title === "string" ? (
             <h2 id={titleId} className="flex-1 min-w-0 text-lg font-semibold text-foreground">
               {title}
@@ -120,7 +126,13 @@ export function Modal({
             </svg>
           </button>
         </div>
-        <div className={renderedBodyClass}>{children}</div>
+        <div
+          className={
+            variant === "panel" ? `${renderedBodyClass} min-h-0 overflow-y-auto` : renderedBodyClass
+          }
+        >
+          {children}
+        </div>
       </div>
     </div>
   );

@@ -76,6 +76,12 @@ export interface MoneyMoveLeg {
   path?: string;
   /** Additional `$set` applied with the same write (timestamps, status flips). */
   set?: Record<string, unknown>;
+  /**
+   * Additional non-money counters `$inc`ed in the same write, under the same
+   * exactly-once receipt as the balance itself (e.g. a fiscal-position total
+   * that mirrors the cash this leg delivers). Never balanced, never a balance.
+   */
+  inc?: Record<string, number>;
   /** What this leg is, for the audit record. */
   note: string;
 }
@@ -138,6 +144,7 @@ export interface MoneyMoveRecordLeg {
   filter?: Record<string, unknown>;
   path?: string;
   set?: Record<string, unknown>;
+  inc?: Record<string, number>;
 }
 
 interface MoneyMoveRecord {
@@ -196,7 +203,8 @@ function valuedQuoteConflict(
         leg.collection === proposed.collection &&
         leg.path === proposed.path &&
         isDeepStrictEqual(leg.filter ?? null, proposed.filter ?? null) &&
-        isDeepStrictEqual(leg.set ?? null, proposed.set ?? null)
+        isDeepStrictEqual(leg.set ?? null, proposed.set ?? null) &&
+        isDeepStrictEqual(leg.inc ?? null, proposed.inc ?? null)
       );
     });
   return !sameLegs || !isDeepStrictEqual(existing.quoteIdentity ?? null, quoteIdentity ?? null);
@@ -267,6 +275,7 @@ export async function claimMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
       ...(leg.filter ? { filter: leg.filter } : {}),
       ...(leg.path ? { path: leg.path } : {}),
       ...(leg.set ? { set: leg.set } : {}),
+      ...(leg.inc ? { inc: leg.inc } : {}),
     })),
     createdAt: new Date(),
   };
@@ -339,7 +348,8 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
       !leg.collection ||
       !leg.path ||
       !leg.filter ||
-      [leg.path, ...Object.keys(leg.set ?? {})].some(reservedLegPath)
+      [leg.path, ...Object.keys(leg.set ?? {})].some(reservedLegPath) ||
+      invalidLegInc(leg)
     );
   });
   if (valuationError) return { status: "rejected", applied: [], error: valuationError };
@@ -455,6 +465,28 @@ function reservedLegPath(path: string): boolean {
     (reserved) => path === reserved || path.startsWith(`${reserved}.`)
   );
 }
+/**
+ * A leg's extra counters must be finite numbers on unreserved paths that
+ * neither repeat nor nest inside the balance itself, and only cash legs carry
+ * them: the balance and its counters land in one write or not at all.
+ */
+function invalidLegInc(leg: Pick<MoneyMoveLeg, "kind" | "path" | "set" | "inc">): boolean {
+  if (leg.inc === undefined) return false;
+  if (leg.kind !== "credit" && leg.kind !== "debit") return true;
+  const paths = Object.keys(leg.inc);
+  return (
+    paths.length === 0 ||
+    paths.some(
+      (path) =>
+        !Number.isFinite(leg.inc![path]) ||
+        reservedLegPath(path) ||
+        path === leg.path ||
+        (leg.path !== undefined &&
+          (path.startsWith(`${leg.path}.`) || leg.path.startsWith(`${path}.`))) ||
+        Object.keys(leg.set ?? {}).includes(path)
+    )
+  );
+}
 interface LegReceipt {
   key: string;
   index: number;
@@ -535,6 +567,7 @@ async function applyLeg(
     return `Leg ${i} of ${key} is not a valid equity custody update.`;
   if ([...(leg.path ? [leg.path] : []), ...Object.keys(leg.set ?? {})].some(reservedLegPath))
     return `Leg ${i} of ${key} attempts to change reserved settlement metadata.`;
+  if (invalidLegInc(leg)) return `Leg ${i} of ${key} carries invalid extra counters.`;
 
   const target = db.collection<LegTarget>(leg.collection);
   const id = { _id: leg.filter._id } as Filter<LegTarget>;
@@ -617,6 +650,7 @@ async function applyLeg(
       {
         $inc: {
           ...(leg.kind === "asset" ? {} : { [leg.path!]: leg.kind === "debit" ? -amount : amount }),
+          ...leg.inc,
           [LEG_REVISION]: 1,
         },
         $set: { updatedAt: new Date(), ...leg.set, [PENDING_LEG]: delivered },
@@ -676,7 +710,8 @@ async function deliverCreditLegsInBatch(
     const leg = legs[i];
     if (leg.kind !== "credit" || !leg.collection || !leg.path || leg.filter?._id === undefined)
       continue;
-    if ([leg.path, ...Object.keys(leg.set ?? {})].some(reservedLegPath)) continue;
+    if ([leg.path, ...Object.keys(leg.set ?? {})].some(reservedLegPath) || invalidLegInc(leg))
+      continue;
     const targetKey = `${leg.collection}\u0000${String(leg.filter._id)}`;
     if (seen.has(targetKey)) continue;
     seen.add(targetKey);
@@ -732,7 +767,7 @@ async function deliverCreditLegsInBatch(
           ],
         } as Filter<LegTarget>,
         update: {
-          $inc: { [leg.path!]: Math.max(0, leg.amount), [LEG_REVISION]: 1 },
+          $inc: { [leg.path!]: Math.max(0, leg.amount), ...leg.inc, [LEG_REVISION]: 1 },
           $set: { updatedAt: new Date(), ...leg.set, [PENDING_LEG]: receipt },
           $push: { settledKeys: { $each: [legStamp(key, i)], $slice: -SETTLED_KEYS_CAP } },
         },

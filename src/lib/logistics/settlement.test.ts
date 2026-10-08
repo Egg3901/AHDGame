@@ -59,7 +59,7 @@ function inputs(freightSupply: number) {
     statePricesFor: () => ({ A: 100, B: 100 }),
     nationalPricesFor: () => ({}),
     basePriceFor: () => 100,
-    freightPrice: 10,
+    freightPrice: 40,
     hops: () => 1,
     tariffRatePct: () => 0,
     isBlocked: () => false,
@@ -138,10 +138,10 @@ describe("settleFreightNetwork", () => {
   it("threads the freight billing aggregates through on the sourcing result", () => {
     const result = settleFreightNetwork(inputs(100));
 
-    // 80 units hauled A→B, one hop: charge = 80 × freightPrice(10) × bulk
-    // price weight (0.004) × 1 hop, booked identically on both sides.
+    // 80 units hauled A→B, one hop: charge = 80 × freightPrice(40) × bulk
+    // price weight (0.001) × 1 hop, booked identically on both sides.
     const charge = result.sourcing.freightChargesByDestState.get("B")?.get("coal");
-    expect(charge).toBeCloseTo(80 * 10 * 0.004);
+    expect(charge).toBeCloseTo(80 * 40 * 0.001);
     expect(result.sourcing.haulRevenueByOriginState.get("A")).toBeCloseTo(charge!);
   });
 });

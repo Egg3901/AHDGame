@@ -15,6 +15,8 @@ import type { FederalBudget } from "@/lib/db/types/budget";
 import { getGameState } from "@/lib/gameState";
 import { resolveJurisdiction } from "@/lib/monetaryGovernance/jurisdiction";
 import { bankToJurisdictionState } from "@/lib/monetaryGovernance/governanceShell";
+import { computeRateLimits } from "@/lib/centralBank/rateLimits";
+import { loadInflationVsTarget } from "@/lib/monetaryGovernance/inflationGap";
 import { allowedActionsFor } from "@/lib/monetaryGovernance/rules/allowedActions";
 import { isBankGovernmentControlledLive } from "@/lib/centralBank/governance";
 import type { CentralBank, FomcNomination } from "@/lib/db/types/centralBank";
@@ -155,6 +157,11 @@ export async function GET(_request: Request, context: RouteContext) {
       typeof persistedLevel === "number" && Number.isFinite(persistedLevel)
         ? persistedLevel
         : scheduledMarketizationLevel(countryId, gameState?.currentYear);
+    const inflationVsTarget = await loadInflationVsTarget(
+      db,
+      jurisdiction.anchorCountryId,
+      gameState?.currentYear
+    );
     const governanceState = bankToJurisdictionState(bank, {
       jurisdiction,
       governmentControlled: await isBankGovernmentControlledLive(
@@ -168,6 +175,7 @@ export async function GET(_request: Request, context: RouteContext) {
           }
         : null,
       commandEconomy: commandEconomyEnabled && resolvedLevel < COMMAND_CEILING,
+      inflationGap: inflationVsTarget?.gap ?? null,
     });
     const isAdmin = (auth as { isAdmin?: boolean }).isAdmin === true;
     const viewerRole = isAdmin
@@ -198,6 +206,11 @@ export async function GET(_request: Request, context: RouteContext) {
       nextDeadline: governanceView.nextDeadline,
       normalizedRateChoices: governanceView.normalizedRateChoices,
       primeRateOnGrid: governanceView.primeRateOnGrid,
+      rateLimits: computeRateLimits({
+        primeRate: bank.primeRate,
+        inflation: inflationVsTarget?.inflation,
+        target: inflationVsTarget?.target,
+      }),
     };
 
     const history = (bank.fomcMeetingHistory ?? []).slice(-MEETING_HISTORY_LIMIT).map((m) => {

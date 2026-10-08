@@ -42,7 +42,7 @@
     "4f62d7d16cbec7e421bad3cc3c6725b5193a1a77a13e58596a02ceb4dafb0bbb": 1,
     "0fcac4908f576ce0e7403fac4ff209a6ac3df8f01ea768430566990645c69dcd": 1,
     "cdc2b00a67c0d4d80b01972e0f0c40d95296b9df671d65c11f08bb0dfa56429d": 1,
-    "531c00ea9751bf0bd99d72507c3f74d10c023b472c144d37e7ebabd4899d945a": 1,
+    "f14cef7ff5bc98f00b2e00a87fb40c2490cf5ac9cb84545c6504ef2d28352141": 1,
     "d1666ebbdd70c4cbe4e4ee035b64549383c61e3eaa2f1c77bc03ba229b216312": 1,
     "e1039f82f3d8d0c0c135a6662589503167d9869ae992580450369106113d9fb3": 1,
     "db4fd11e51fae1576dd1c2a5ff9d7717b0158d0b3520eb2c6dfe5328c291aa1e": 1,
@@ -409,8 +409,6 @@
     "d8c7cba0c12a46e81456bb863a6c3e5b2282986bd6b02f71d798fcf7ddab3481": 1,
     "d0cb2d9bddb59b9245335f991fdc89667786c233b289cea481e3dd94dff2e5e9": 1,
     "e731a00b14031b065410c82ccbc2917ce9589167389dceba4b3af1dfa78bb467": 1,
-    "2e5013692897d4fe95500eb74a190eebf6c893bbb02ca766337344b31dbb2479": 1,
-    "4837b694e32ae6ae677ef2c8340a524cee2672872807ca3a5c518208f22e337d": 1,
     "92112cc0258c52e1439882cf3442aac9fa7b8066a7f8805bfbe643abf3df1a57": 1,
     "e0b5634d248fd2fc54b15f50994d014b8fc4e20c29693ad15ae11f6abcad3508": 1,
     "a4bdbc9e0c834192ba9055a407643991b0865f65e09f5cae3dbb72061215ca2b": 1,
@@ -679,7 +677,9 @@
     "94f1b2d981615fc3db41dc40a58a04631465db2eae47dc1b1db3655cb0fa9577": 1,
     "4b032f506d43563de28532b93be7d9978727393b7a4f0f201f0989e1955d688b": 1,
     "e54ef0dc8a1525b6ea8904bb3e860c6282b9e49f23a9f687633ba83328afd1ad": 1,
-    "a9ede6674d692d5180505a301712299bb9a0fadd03e15dd1923e2a5d29194472": 1
+    "a9ede6674d692d5180505a301712299bb9a0fadd03e15dd1923e2a5d29194472": 1,
+    "7879fff949225c0c8a92dc6f2d926e9d25779281386bf392cb351432446c3e47": 1,
+    "5a5eb0a74ba31d29109f1b85850290e6aebdb28aad86e67eb3c43f65b66e683d": 1
   },
   "locations": [
     {
@@ -973,8 +973,8 @@
       "file": "src/lib/banking/moneyMove.ts",
       "operation": "updateOne",
       "owner": "applyLeg",
-      "expression": "target.updateOne({ $and: [ leg.filter, guard, ...(leg.kind === \"debit\" ? [{ [leg.path!]: { $gte: amount } }] : []), ], } as Filter<LegTarget>, { $inc: { ...(leg.kind === \"asset\" ? {} : { [leg.path!]: leg.kind === \"debit\" ? -amount : amount }), [LEG_REVISION]: 1, }, $set: { updatedAt: new Date(), ...leg.set, [PENDING_LEG]: delivered }, $push: { settledKeys: { $each: [stamp], $slice: -SETTLED_KEYS_CAP } }, })",
-      "fingerprint": "531c00ea9751bf0bd99d72507c3f74d10c023b472c144d37e7ebabd4899d945a"
+      "expression": "target.updateOne({ $and: [ leg.filter, guard, ...(leg.kind === \"debit\" ? [{ [leg.path!]: { $gte: amount } }] : []), ], } as Filter<LegTarget>, { $inc: { ...(leg.kind === \"asset\" ? {} : { [leg.path!]: leg.kind === \"debit\" ? -amount : amount }), ...leg.inc, [LEG_REVISION]: 1, }, $set: { updatedAt: new Date(), ...leg.set, [PENDING_LEG]: delivered }, $push: { settledKeys: { $each: [stamp], $slice: -SETTLED_KEYS_CAP } }, })",
+      "fingerprint": "f14cef7ff5bc98f00b2e00a87fb40c2490cf5ac9cb84545c6504ef2d28352141"
     },
     {
       "file": "src/lib/banking/moneyMove.ts",
@@ -3609,20 +3609,6 @@
       "fingerprint": "e731a00b14031b065410c82ccbc2917ce9589167389dceba4b3af1dfa78bb467"
     },
     {
-      "file": "src/lib/turn/treasuryTurn.ts",
-      "operation": "updateOne",
-      "owner": "processTreasuryTurn",
-      "expression": "db.collection<FederalBudget>(\"federalBudget\").updateOne({ _id: b._id, treasuryBalance: b.treasuryBalance ?? null, $or: [ { \"treasuryAccrual.turn\": { $exists: false } }, { \"treasuryAccrual.turn\": { $lt: _turn } }, ], }, { $set: { treasuryBalance: next, treasuryAccrual: receipt, ...(bankSovereignClaims.length > 0 ? { bankSovereignClaims } : {}), ...rampSet, }, ...(Object.keys(rampUnset).length > 0 ? { $unset: rampUnset } : {}), })",
-      "fingerprint": "2e5013692897d4fe95500eb74a190eebf6c893bbb02ca766337344b31dbb2479"
-    },
-    {
-      "file": "src/lib/turn/treasuryTurn.ts",
-      "operation": "findOne",
-      "owner": "processTreasuryTurn",
-      "expression": "db.collection<FederalBudget>(\"federalBudget\").findOne({ _id: b._id })",
-      "fingerprint": "4837b694e32ae6ae677ef2c8340a524cee2672872807ca3a5c518208f22e337d"
-    },
-    {
       "file": "src/lib/banking/fundedSovereignCoupons.ts",
       "operation": "updateOne",
       "owner": "settleFundedSovereignCoupons",
@@ -5595,6 +5581,20 @@
       "owner": "processLoanBookOnlyBank",
       "expression": "corporations.updateOne(bankingTurnPublicationFilter({ bankId: corp._id, countryId: corp.countryId, charteredTurn: charter.charteredTurn, currency, turn, observedIncomeTurn: publicationCharter.lastBankingIncomeTurn, observedSovereignCouponIncome: publicationCharter.lastBankingSovereignCouponIncome, observedTreasuryRealizedGain: publicationCharter.lastBankingTreasuryRealizedGain, observedSovereignCouponPaidLifetime: publicationCharter.sovereignCouponIncomePaidLifetime, observedSovereignCouponBookedLifetime: publicationCharter.sovereignCouponIncomeBookedLifetime, observedTreasuryGainPaidLifetime: publicationCharter.treasuryRealizedGainPaidLifetime, observedTreasuryGainBookedLifetime: publicationCharter.treasuryRealizedGainBookedLifetime, observedUnderwritingFeesTurn: publicationCharter.lastBankingUnderwritingFeesTurn, observedUnderwritingFees: publicationCharter.lastBankingUnderwritingFees, }), { $set: { \"bankCharter.lastBankingTurn\": turn, \"bankCharter.lastBankingIncome\": serviced.interestCollected - serviced.writtenOff + unbooked.couponIncome + unbooked.realizedGain + underwritingFeesForTurn, \"bankCharter.lastBankingIncomeTurn\": turn, \"bankCharter.lastBankingDepositInterest\": 0, \"bankCharter.lastBankingLoanInterest\": serviced.interestCollected, \"bankCharter.lastBankingSovereignCouponIncome\": unbooked.couponIncome, \"bankCharter.lastBankingTreasuryRealizedGain\": unbooked.realizedGain, \"bankCharter.sovereignCouponIncomeBookedLifetime\": publicationCharter.sovereignCouponIncomePaidLifetime ?? 0, \"bankCharter.treasuryRealizedGainBookedLifetime\": publicationCharter.treasuryRealizedGainPaidLifetime ?? 0, \"bankCharter.lastBankingLoanOriginationFees\": 0, \"bankCharter.lastBankingUnderwritingFees\": underwritingFeesForTurn, \"bankCharter.lastBankingUnderwritingFeesTurn\": turn, \"bankCharter.lastBankingInterbankInterestPaid\": 0, \"bankCharter.lastBankingInterbankInterestReceived\": 0, \"bankCharter.lastBankingFacilityInterest\": 0, \"bankCharter.lastBankingInsurancePremium\": 0, \"bankCharter.lastBankingWriteoffs\": serviced.writtenOff, updatedAt: new Date(), }, })",
       "fingerprint": "a9ede6674d692d5180505a301712299bb9a0fadd03e15dd1923e2a5d29194472"
+    },
+    {
+      "file": "src/lib/turn/treasuryTurn.ts",
+      "operation": "updateOne",
+      "owner": "settleBudget",
+      "expression": "db.collection<FederalBudget>(\"federalBudget\").updateOne({ _id: b._id, treasuryBalance: b.treasuryBalance ?? null, $or: [ { \"treasuryAccrual.turn\": { $exists: false } }, { \"treasuryAccrual.turn\": { $lt: _turn } }, ], }, { $set: { treasuryBalance: next, treasuryAccrual: receipt, ...(bankSovereignClaims.length > 0 ? { bankSovereignClaims } : {}), ...rampSet, }, ...(Object.keys(rampUnset).length > 0 ? { $unset: rampUnset } : {}), })",
+      "fingerprint": "7879fff949225c0c8a92dc6f2d926e9d25779281386bf392cb351432446c3e47"
+    },
+    {
+      "file": "src/lib/turn/treasuryTurn.ts",
+      "operation": "findOne",
+      "owner": "settleBudget",
+      "expression": "db.collection<FederalBudget>(\"federalBudget\").findOne({ _id: b._id })",
+      "fingerprint": "5a5eb0a74ba31d29109f1b85850290e6aebdb28aad86e67eb3c43f65b66e683d"
     }
   ],
   "adoptedReleaseCommit": "81812055b6",

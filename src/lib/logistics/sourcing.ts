@@ -78,10 +78,26 @@ export const FREIGHT_TEU_PER_UNIT_HOP: Record<FreightClass, number> = {
  * bound (production market audit, turn 322).
  */
 export const FREIGHT_PRICE_TEU_PER_UNIT_HOP: Record<FreightClass, number> = {
-  bulk: 0.004,
-  special: 0.012,
+  bulk: 0.001,
+  special: 0.003,
   grid: 0,
 };
+
+/**
+ * Ceiling on a haulage leg's shipping charge per unit, as a share of the
+ * seller's ask. The per-hop rate above is retuned so a typical 2 to 4 hop bulk
+ * haul costs about 5 to 12 percent of the cargo at the base freight price, but
+ * the freight price floats with the market (2.8x base while haulage is short),
+ * so the rate alone cannot promise that. This bound is the backstop: a haul
+ * never costs more than a fraction of the goods it carries, however tight
+ * freight gets. Grid legs are wheeled at a fraction of the ask and need no cap.
+ */
+export const FREIGHT_SHIPPING_MAX_ASK_SHARE = 0.4;
+
+/** Bound a haulage leg's per-unit shipping charge at a share of the ask. */
+export function boundedShippingPerUnit(shippingPerUnit: number, ask: number): number {
+  return Math.min(shippingPerUnit, Math.max(0, ask) * FREIGHT_SHIPPING_MAX_ASK_SHARE);
+}
 
 /**
  * Fraction of dispatched units lost per hop on the grid/pipeline network:
@@ -740,7 +756,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
       const ask = nationalPrices[cid] ?? basePrice;
       const shippingPerUnit = isGrid
         ? gridWheelingPerHop(ask) * SEA_FREIGHT_HOP_EQUIV
-        : shippingPerUnitPerHop * SEA_FREIGHT_HOP_EQUIV;
+        : boundedShippingPerUnit(shippingPerUnitPerHop * SEA_FREIGHT_HOP_EQUIV, ask);
       const ratePct = tariffRatePct(commodity, cid, buyer.countryId);
       const tariffPerUnit = ask * (ratePct / 100);
       return {
@@ -825,7 +841,7 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
           : 1;
         const shippingPerUnit = isGrid
           ? gridWheelingPerHop(ask) * hopCount * routeMultiplier
-          : shippingPerUnitPerHop * hopCount * routeMultiplier;
+          : boundedShippingPerUnit(shippingPerUnitPerHop * hopCount * routeMultiplier, ask);
         candidates.push({
           originType: "state",
           originId: seller.stateId,
