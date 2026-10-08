@@ -85,6 +85,7 @@ import {
   FORCED_ROLLOVER_MATURITY,
   rollOverUnfundedSovereignPoolFloat,
 } from "./forcedSovereignRollover";
+import { publicFloatNovationShare } from "./rules/publicFloatNovation";
 
 export const SOVEREIGN_ISSUANCE_INTERVAL_TURNS = 12;
 export const SOVEREIGN_BOND_MATURITY_TURNS: BondMaturityTurns = 48;
@@ -521,27 +522,49 @@ export async function calculateSovereignRolloverAmount(
     })
     .toArray();
   const budget = await db
-    .collection<Pick<FederalBudget, "_id" | "debt">>("federalBudget")
-    .findOne({ _id: getNationalBudgetId(countryId) }, { projection: { debt: 1 } });
-  return sovereignRolloverFromBonds(activeBonds, budget?.debt?.principal, turn);
+    .collection<Pick<FederalBudget, "_id" | "debt" | "countryId" | "currencyCode">>("federalBudget")
+    .findOne(
+      { _id: getNationalBudgetId(countryId) },
+      { projection: { debt: 1, countryId: 1, currencyCode: 1 } }
+    );
+  // The pool exchanges its maturing float at par for fresh 48-turn paper
+  // (publicFloatSovereignNovation.ts), so that share never needs cash. Only
+  // the share that maturity will actually pay out is worth prefunding.
+  const currency =
+    (budget ? resolveCountryCurrencyCode(budget) : null) ?? COUNTRY_CURRENCY_MAP[countryId];
+  const pool = currency ? await readPoolForPrimary(db, currency) : null;
+  const novationShare = publicFloatNovationShare(pool?.appetiteByCountry?.[countryId]);
+  return sovereignRolloverFromBonds(activeBonds, budget?.debt?.principal, turn, novationShare);
 }
 
 /**
  * Rollover for a country from its live (unmatured, undefaulted) sovereign
  * bonds and its budget principal. Pure, so a caller holding both for many
  * countries at once gets the same figure without a read per country.
+ *
+ * `novationShare` (0..1) is the share of each maturing public float the pool
+ * will take in kind at par. A novated unit is already refinanced by the
+ * exchange: it leaves principal unchanged, so issuing cash for it as well
+ * counts the same debt twice and parks the proceeds in the Treasury. Default 0
+ * keeps the gross maturing face, which is what default-risk callers want.
  */
 export function sovereignRolloverFromBonds(
-  activeBonds: ReadonlyArray<Pick<Bond, "maturityTurn" | "totalIssued">>,
+  activeBonds: ReadonlyArray<Pick<Bond, "maturityTurn" | "totalIssued"> & { publicFloat?: number }>,
   principal: unknown,
-  turn: number
+  turn: number,
+  novationShare = 0
 ): number {
   const maturingSoon = activeBonds.filter(
     (bond) =>
       bond.maturityTurn >= turn && bond.maturityTurn < turn + SOVEREIGN_ISSUANCE_INTERVAL_TURNS
   );
 
-  const maturingFace = maturingSoon.reduce((sum, bond) => sum + (bond.totalIssued ?? 0), 0);
+  const share = Math.min(1, Math.max(0, novationShare));
+  const maturingFace = maturingSoon.reduce((sum, bond) => {
+    const face = bond.totalIssued ?? 0;
+    const novated = Math.min(face, (bond.publicFloat ?? 0) * BOND_UNIT_FACE_VALUE) * share;
+    return sum + (face - novated);
+  }, 0);
   const activeFace = activeBonds.reduce((sum, bond) => sum + (bond.totalIssued ?? 0), 0);
 
   // Rollover refinances debt that still exists. A country that has paid its

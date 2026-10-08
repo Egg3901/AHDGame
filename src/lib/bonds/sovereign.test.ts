@@ -288,6 +288,64 @@ describe("calculateSovereignRolloverAmount", () => {
     expect(total).toBe(0);
   });
 
+  it("does not prefund the share of a maturing float the pool will take in kind", async () => {
+    const db = setBondsForQuery([
+      makeBond({
+        maturityTurn: ISSUANCE_TURN,
+        totalIssued: 10_000_000_000,
+        publicFloat: 9_000_000,
+      }),
+    ]);
+    // Appetite 1.2 (BASE_DEMAND) accepts the whole float: only the 1B held
+    // outside the float needs cash at maturity.
+    db.collection("bondMarketPools").findOne.mockResolvedValue({
+      _id: "USD",
+      appetiteByCountry: { [COUNTRY_CONFIGS.US.id]: 1.2 },
+    });
+    const total = await calculateSovereignRolloverAmount(
+      db as unknown as Db,
+      COUNTRY_CONFIGS.US.id,
+      ISSUANCE_TURN
+    );
+    expect(total).toBe(1_000_000_000);
+  });
+
+  it("scales the novated share with the pool appetite", async () => {
+    const db = setBondsForQuery([
+      makeBond({
+        maturityTurn: ISSUANCE_TURN,
+        totalIssued: 10_000_000_000,
+        publicFloat: 10_000_000,
+      }),
+    ]);
+    db.collection("bondMarketPools").findOne.mockResolvedValue({
+      _id: "USD",
+      appetiteByCountry: { [COUNTRY_CONFIGS.US.id]: 0.6 },
+    });
+    const total = await calculateSovereignRolloverAmount(
+      db as unknown as Db,
+      COUNTRY_CONFIGS.US.id,
+      ISSUANCE_TURN
+    );
+    expect(total).toBe(5_000_000_000);
+  });
+
+  it("rolls the full maturing face when the pool has no appetite for the issuer", async () => {
+    const db = setBondsForQuery([
+      makeBond({
+        maturityTurn: ISSUANCE_TURN,
+        totalIssued: 10_000_000_000,
+        publicFloat: 10_000_000,
+      }),
+    ]);
+    const total = await calculateSovereignRolloverAmount(
+      db as unknown as Db,
+      COUNTRY_CONFIGS.US.id,
+      ISSUANCE_TURN
+    );
+    expect(total).toBe(10_000_000_000);
+  });
+
   it("rounds the rollover total down to whole bond units ($1,000 each)", async () => {
     const db = setBondsForQuery([
       makeBond({ maturityTurn: ISSUANCE_TURN, totalIssued: 1_234_567 }),

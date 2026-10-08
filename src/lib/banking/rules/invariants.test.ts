@@ -10,6 +10,7 @@ import {
   evaluateBankingInvariants,
   legsNet,
   moneyMoveValuationError,
+  netTolerance,
 } from "./invariants";
 
 describe("banking invariant catalog", () => {
@@ -434,5 +435,44 @@ describe("evaluateBankingInvariants", () => {
       "jurisdiction_ownership",
       "one_authoritative_balance",
     ]);
+  });
+});
+
+describe("balanced_transfer float tolerance on large transfers", () => {
+  const rate = 1.02062906595127;
+  const valued = (kind: "debit" | "credit", amount: number, localPerAnchor: number) => ({
+    kind,
+    amount,
+    valuation: { currencyCode: "USD", localPerAnchor },
+  });
+  // A real novated sovereign maturity payout: one escrow debit fanned out to
+  // funds (anchor-valued), a character and the bond pool. It nets to ~1.9e-6
+  // from rounding alone, which the old absolute 1e-6 floor refused forever.
+  const payout = [
+    valued("debit", 8309421000, rate),
+    valued("credit", 1590195.747058501, 1),
+    valued("credit", 331168.3071508154, 1),
+    valued("credit", 306673.6098763468, 1),
+    valued("credit", 80000, rate),
+    valued("credit", 8307067000, rate),
+  ] as const;
+
+  it("accepts rounding noise on a multi-billion payout", () => {
+    expect(Math.abs(legsNet(payout))).toBeGreaterThan(1e-6);
+    expect(checkBalancedTransfer(payout)).toEqual([]);
+  });
+
+  it("still refuses a real imbalance at the same scale", () => {
+    const short = payout.map((leg, i) => (i === 5 ? { ...leg, amount: leg.amount - 1 } : leg));
+    expect(checkBalancedTransfer(short)).toHaveLength(1);
+  });
+
+  it("keeps the absolute floor for small transfers", () => {
+    expect(
+      netTolerance([
+        { kind: "debit", amount: 10 },
+        { kind: "credit", amount: 10 },
+      ])
+    ).toBe(1e-6);
   });
 });

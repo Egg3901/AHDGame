@@ -24,7 +24,7 @@
     "1de1085a9996b41a311a6d7bcfb389873ce33138effe7dcf4ddafc80b2569042": 1,
     "fcbd2db358ca4fd941111785023466ec6b27971d5c1972cc1e0e869db3706bde": 1,
     "497756d6867c39cc4e0133294a6c34d7f436c22adb9b39d54c6b341c33511fd0": 1,
-    "623e2a25937ef3a45b2f85f0e220acc20ffdb1d18532d1d25e533576eff21a9a": 1,
+    "d6847bfbc3daa02086b98eed1f7b744be95be2e9f7172aa202240c8c8e8e800a": 1,
     "2c557d7ee3cab6dc991e04aa043d468e5ded494bd5b32dfac7e6ab65dc6f1fe7": 1,
     "979fc5c1df78753fa650c4df798928f45ecf0d0a257ccd607bc38888c739829e": 1,
     "144df353cfa37f086b05f98dbde02486a5de88c02e564dcf88ee3679f42d78bc": 1,
@@ -852,8 +852,8 @@
       "file": "src/lib/budget/fiscalYear.ts",
       "operation": "updateOne",
       "owner": "processFiscalYear",
-      "expression": "db.collection<FederalBudget>(\"federalBudget\").updateOne({ _id: federalBudget._id }, { $set: { fiscalYear: newFiscalYear, taxRates: normalizedTaxRates, revenue: federalRevenue, spending: finalSpending, ...((federalBudget.financialCrisisAusterityUntilTurn ?? -1) >= currentTurn ? { financialCrisisAusterityBaseSpending: federalSpending } : {}), \"debt.interestRate\": debtResult.interestRate, debtToGdpRatio: debtResult.debtToGdpRatio, creditRating: debtResult.creditRating, surplus: finalSurplus, updatedAt: new Date(), }, })",
-      "fingerprint": "623e2a25937ef3a45b2f85f0e220acc20ffdb1d18532d1d25e533576eff21a9a"
+      "expression": "db.collection<FederalBudget>(\"federalBudget\").updateOne({ _id: federalBudget._id }, { $set: { fiscalYear: newFiscalYear, taxRates: normalizedTaxRates, revenue: federalRevenue, spending: finalSpending, ...((federalBudget.financialCrisisAusterityUntilTurn ?? -1) >= currentTurn ? { financialCrisisAusterityBaseSpending: federalSpending } : {}), \"debt.interestRate\": debtResult.interestRate, ...(raisedCeiling !== null ? { \"debt.ceiling\": raisedCeiling, \"debt.ceilingLastRaisedYear\": newFiscalYear } : {}), debtToGdpRatio: debtResult.debtToGdpRatio, creditRating: debtResult.creditRating, surplus: finalSurplus, updatedAt: new Date(), }, })",
+      "fingerprint": "d6847bfbc3daa02086b98eed1f7b744be95be2e9f7172aa202240c8c8e8e800a"
     },
     {
       "file": "src/lib/bonds/sovereign.ts",

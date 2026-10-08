@@ -35,7 +35,7 @@ vi.mock("./spending", () => ({
 
 vi.mock("./debt", () => ({
   processAnnualDebt: vi.fn(),
-  triggerDebtCeilingCrisis: vi.fn(),
+  resolveDebtCeilingCrisis: vi.fn(),
   getDebtThreshold: vi.fn(),
 }));
 
@@ -62,7 +62,7 @@ import {
   calculateStateSpending,
   calculateStateSpendingDetail,
 } from "./spending";
-import { processAnnualDebt, triggerDebtCeilingCrisis, getDebtThreshold } from "./debt";
+import { processAnnualDebt, resolveDebtCeilingCrisis, getDebtThreshold } from "./debt";
 import { processFormulaGrants, updateStateGrantRevenue } from "./grants";
 import { calculateCountryInflation } from "./inflation";
 
@@ -500,7 +500,7 @@ describe("processFiscalYear", () => {
     expect(surplus).toBeCloseTo(-1_850_000_000_000, -6);
   });
 
-  it("triggers debt ceiling crisis when ceiling is exceeded", async () => {
+  it("raises the US ceiling and clears the crisis flag when the stock breaches it", async () => {
     vi.mocked(processAnnualDebt).mockResolvedValue({
       interestPayment: 880_000_000_000,
       newPrincipal: 32_000_000_000_000, // exceeds $31.4T ceiling
@@ -513,10 +513,16 @@ describe("processFiscalYear", () => {
     const db = makeDb({});
     await processFiscalYear(db as unknown as Db, 2026, 600);
 
-    expect(triggerDebtCeilingCrisis).toHaveBeenCalledWith(db, 2026);
+    expect(resolveDebtCeilingCrisis).toHaveBeenCalledWith(db);
+    const ceilingWrite = db._federalBudgetUpdateOne.mock.calls.find(
+      (c: unknown[]) => "debt.ceiling" in ((c[1] as { $set: object }).$set ?? {})
+    );
+    const set = (ceilingWrite![1] as { $set: Record<string, number> }).$set;
+    expect(set["debt.ceiling"]).toBe(Math.round(32_000_000_000_000 * 1.1));
+    expect(set["debt.ceilingLastRaisedYear"]).toBe(2026);
   });
 
-  it("does not trigger debt ceiling crisis when ceiling is not exceeded", async () => {
+  it("leaves the ceiling alone while the stock is well below it", async () => {
     vi.mocked(processAnnualDebt).mockResolvedValue({
       interestPayment: 880_000_000_000,
       newPrincipal: 23_000_000_000_000,
@@ -529,7 +535,11 @@ describe("processFiscalYear", () => {
     const db = makeDb({});
     await processFiscalYear(db as unknown as Db, 2026, 600);
 
-    expect(triggerDebtCeilingCrisis).not.toHaveBeenCalled();
+    expect(resolveDebtCeilingCrisis).not.toHaveBeenCalled();
+    const raised = db._federalBudgetUpdateOne.mock.calls.some(
+      (c: unknown[]) => "debt.ceiling" in ((c[1] as { $set: object }).$set ?? {})
+    );
+    expect(raised).toBe(false);
   });
 
   it("uses dynamic inflation from calculateCountryInflation", async () => {
@@ -971,7 +981,7 @@ describe("processFiscalYear", () => {
     expect(processFormulaGrants).not.toHaveBeenCalledWith(db, expect.any(Number), "JP");
   });
 
-  it("keeps debt ceiling crisis US-only while processing non-US budgets", async () => {
+  it("keeps the crisis flag reset US-only while processing non-US budgets", async () => {
     vi.mocked(processAnnualDebt).mockResolvedValue({
       interestPayment: 880_000_000_000,
       newPrincipal: 40_000_000_000_000,
@@ -987,7 +997,7 @@ describe("processFiscalYear", () => {
 
     await processFiscalYear(db as unknown as Db, 2026, 600);
 
-    expect(triggerDebtCeilingCrisis).not.toHaveBeenCalled();
+    expect(resolveDebtCeilingCrisis).not.toHaveBeenCalled();
   });
 
   it("writes snapshots only for budgets that actually processed", async () => {
