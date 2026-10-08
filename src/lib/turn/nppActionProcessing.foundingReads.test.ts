@@ -30,6 +30,8 @@ describe("foundNppCorporationsSurplus read budget", () => {
       nppInvestmentCashAnchor: 200_000,
     }));
 
+    const corpAggregate = vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) });
+
     const corpFind = vi.fn().mockReturnValue({ toArray: async () => [] });
     const corpFindOne = vi.fn().mockResolvedValue(null);
     const corpUpdateOne = vi.fn().mockResolvedValue({ matchedCount: 1 });
@@ -72,7 +74,12 @@ describe("foundNppCorporationsSurplus read budget", () => {
           return { find: () => candidateCursor(), findOneAndUpdate: nppDebit };
         }
         if (name === "corporations") {
-          return { find: corpFind, findOne: corpFindOne, updateOne: corpUpdateOne };
+          return {
+            find: corpFind,
+            findOne: corpFindOne,
+            updateOne: corpUpdateOne,
+            aggregate: corpAggregate,
+          };
         }
         if (name === "gameState") return { findOne: gameStateFindOne };
         if (name === "federalBudget") return { find: fedBudgetFind };
@@ -115,6 +122,8 @@ describe("foundNppCorporationsSurplus read budget", () => {
     // One batched already-CEO exclusion over the whole pool, not one findOne
     // per RNG-passing candidate.
     expect(corpFind).toHaveBeenCalledTimes(1);
+    // Sector choice reads the per-country sector counts once per sweep.
+    expect(corpAggregate).toHaveBeenCalledTimes(1);
     const preloadFilter = corpFind.mock.calls[0][0] as Record<string, unknown>;
     expect((preloadFilter.ceoId as { $in: unknown[] }).$in).toHaveLength(300);
 

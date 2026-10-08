@@ -6,6 +6,8 @@ import {
   applyDemandCalibration,
   applyDemographicsUplift,
   applyGovernmentDemand,
+  GOVERNMENT_DEMAND_SUPPLY_CAP,
+  governmentSupplyCapFactors,
   applyLatentFinancialDemand,
   bondIssuanceAnchor,
   applyRateSensitiveDemand,
@@ -320,6 +322,76 @@ describe("latent financial demand currency", () => {
     expect(
       bondIssuanceAnchor({ totalIssued: 500, currencyCode: "JPY" } as never, () => 136)
     ).toBeCloseTo(500 / 136, 9);
+  });
+});
+
+describe("government demand supply cap", () => {
+  const BASE_100 = Object.fromEntries(COMMODITY_TYPES.map((c) => [c, 100])) as Record<
+    CommodityType,
+    number
+  >;
+  const run = (
+    prior: Map<CommodityType, number> | undefined,
+    truncated = new Map<CommodityType, number>()
+  ) => {
+    const { global, byState } = blankLedgers();
+    const byCountry = aggregateByCountry(byState, new Map());
+    applyGovernmentDemand(
+      {
+        federalBudgets: [
+          { countryId: "US", spending: { byCategory: { healthcare: 480_000 } } },
+          { countryId: "UK", spending: { byCategory: { healthcare: 160_000 } } },
+        ] as never,
+        ledgerBasePrices: BASE_100,
+        fxRateForCountry: () => 1,
+        ledgerCurrentYear: null,
+        ledgerCommandEconomyEnabled: false,
+        statesByCountry: new Map([
+          ["US", new Map([["s1", 100]])],
+          ["UK", new Map([["u1", 100]])],
+        ]),
+        stateToCountry: new Map([
+          ["s1", "US"],
+          ["u1", "UK"],
+        ]),
+        priorGlobalSupply: prior,
+      },
+      global,
+      byCountry,
+      byState,
+      truncated
+    );
+    return { global, byCountry, truncated };
+  };
+
+  it("holds government purchases to the cap times last turn's supply, keeping shares", () => {
+    const uncapped = run(undefined).global.get("healthcare_services")!.demand;
+    // Last turn's supply is a tenth of what governments ask for.
+    const supply = uncapped / 10;
+    const { global, byCountry, truncated } = run(new Map([["healthcare_services", supply]]));
+    const capped = global.get("healthcare_services")!.demand;
+    expect(capped).toBeCloseTo(supply * GOVERNMENT_DEMAND_SUPPLY_CAP, 9);
+    const us = byCountry.get("US")!.get("healthcare_services")!.demand;
+    const uk = byCountry.get("UK")!.get("healthcare_services")!.demand;
+    expect(us / uk).toBeCloseTo(3, 9);
+    expect(truncated.get("healthcare_services")).toBeCloseTo(uncapped - capped, 6);
+  });
+
+  it("leaves a commodity with no recorded supply uncapped", () => {
+    const uncapped = run(undefined).global.get("healthcare_services")!.demand;
+    expect(
+      run(new Map([["healthcare_services", 0]])).global.get("healthcare_services")!.demand
+    ).toBeCloseTo(uncapped, 9);
+  });
+
+  it("bounds calibrated demand", () => {
+    const f = governmentSupplyCapFactors(
+      [{ commodity: "ordnance", units: 100 }],
+      new Map([["ordnance", 10]]),
+      () => 2
+    );
+    // cap = 10 x 1.5 / 2 = 7.5 of the 100 requested
+    expect(f.get("ordnance")).toBeCloseTo(0.075, 9);
   });
 });
 
