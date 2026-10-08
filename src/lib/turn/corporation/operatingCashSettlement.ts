@@ -590,7 +590,6 @@ async function settleCorporateOperatingCashBatched(
         note: "Withhold corporate tax from available realized operating cash",
       },
     ];
-    const taxProjections: BankingTransition["projections"] = [];
     for (const destination of taxDestinations) {
       const {
         country,
@@ -607,13 +606,11 @@ async function settleCorporateOperatingCashBatched(
         collection: "federalBudget",
         filter: treasuryFilter(country),
         path: "treasuryCashLocal",
-        note: "Deliver the payer-funded tax into spendable Treasury cash",
-      });
-      taxProjections.push({
-        collection: "federalBudget",
-        filter: treasuryFilter(country),
-        update: { $inc: { treasuryBalance: treasuryLocal }, $set: { updatedAt: now } },
-        note: "Record the Treasury tax receipt in signed fiscal-position analytics",
+        // The signed fiscal-position total moves in the same write as the cash,
+        // under the leg's own receipt, instead of a second guarded projection
+        // (seven more round trips per tax payment) to the same document.
+        inc: { treasuryBalance: treasuryLocal },
+        note: "Deliver the payer-funded tax into spendable Treasury cash and fiscal position",
       });
     }
     const taxTransition: BankingTransition = {
@@ -622,7 +619,7 @@ async function settleCorporateOperatingCashBatched(
       turn,
       currency: sourceCurrency as CurrencyCode,
       legs: taxLegs,
-      projections: taxProjections,
+      projections: [],
       event: {
         kind: "monetary.executed",
         command: "turn.corporation.taxWithholding",
