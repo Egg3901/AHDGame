@@ -118,8 +118,20 @@ describe("ResultsBlendView", () => {
             threshold: 26,
             delegationsVoting: 48,
             winnerId: null,
-            candidates: [{ id: "c1", name: "First Ticket", delegations: 20, members: 190 }],
-            viewer: { isHouseMember: false, canVote: false, choiceId: null },
+            candidates: [
+              { id: "c1", name: "First Ticket", delegations: 20, members: 190, dropped: false },
+            ],
+            delegations: [{ stateId: "OH", backing: "c1", tied: false }],
+            whips: [],
+            ballots: [{ turn: 10, opening: true, totals: { c1: 20 }, winnerId: null }],
+            defiances: [],
+            viewer: {
+              isHouseMember: false,
+              canVote: false,
+              choiceId: null,
+              whip: null,
+              canWhip: [],
+            },
           },
         }),
       }));
