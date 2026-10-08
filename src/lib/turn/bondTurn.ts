@@ -1453,6 +1453,16 @@ export async function processBondTurn(
       )
         return null;
 
+      // A forced rollover moved the pool's face to a replacement bond, so that
+      // face was never paid out of Treasury cash.
+      const rolledFace =
+        (
+          await db
+            .collection<Bond>("bonds")
+            .findOne({ _id: bond._id }, { projection: { sovereignMaturityClaim: 1 } })
+        )?.sovereignMaturityClaim?.forcedRollover?.faceLocal ?? 0;
+      const paidLocal = nonBankRepaymentLocal - rolledFace;
+
       return [
         ...maturityEntries,
         {
@@ -1461,12 +1471,12 @@ export async function processBondTurn(
           createdAt: now,
           subjectType: "government",
           countryId: countryId,
-          amount: -nonBankRepaymentLocal,
+          amount: -paidLocal,
           currencyCode: bondCcy,
-          anchorAmount: -nonBankRepaymentLocal / treasuryValuation.anchorRate,
+          anchorAmount: -paidLocal / treasuryValuation.anchorRate,
           meta: {
             bondId: bond._id.toHexString(),
-            units: nonBankRepaymentLocal / BOND_UNIT_FACE_VALUE,
+            units: paidLocal / BOND_UNIT_FACE_VALUE,
             couponRate: bond.couponRate,
             treasuryCashMovement: true,
             ...treasuryValuation,
