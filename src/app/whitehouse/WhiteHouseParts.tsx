@@ -15,6 +15,8 @@ interface ExecutiveData {
   countryId?: CountryId;
   avatarUrl?: string;
   administrationStartDate?: string | null;
+  /** Serving as acting president while the House has not chosen. */
+  isActing?: boolean;
   /** In-game week + year the official was seated (e.g. "Week 23, 1991"). */
   administrationStartGameDate?: string | null;
   /** True when the seat is held by an NPP (non-player politician) rather than a Character. */

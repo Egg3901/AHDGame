@@ -16,6 +16,7 @@ import {
 } from "@/lib/turn/electionCalculations";
 import type { ContingentElectionResult } from "@/lib/turn/election/contingentElection";
 import {
+  announceActingPresidency,
   needsActingPresidency,
   seatActingPresidencyForHouseVote,
 } from "@/lib/turn/election/contingentActingPresidency";
@@ -517,6 +518,15 @@ export async function resolvePresidentElection(
       console.log(
         `[Turn] President election ${election._id}: House deadlocked, ${vote.actingPresidentName} is acting president; the House votes until turn ${vote.closesTurn}`
       );
+      // Announce once: a seating retry reuses the existing vote record.
+      if (!tally.contingentHouseVote) {
+        await announceActingPresidency(db, {
+          election,
+          vote,
+          houseThreshold: contingentResult!.houseThreshold,
+          candidates,
+        });
+      }
       return true;
     } catch (err) {
       console.error(
