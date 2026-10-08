@@ -859,6 +859,14 @@ export default function CorporationDetailPage() {
           // figure is already net of the payout, so netting the projection-derived
           // `dividendDistribution` off it read as a loss on a profitable corp (#1098).
           retainedDaily={financials != null ? corpIncomeBasis(financials).retained : null}
+          revenueGrowth={
+            financials != null
+              ? {
+                  pct: financials.currentGrowthRate,
+                  realized: financials.growthRateIsRealized === true,
+                }
+              : null
+          }
           effectiveDividendRate={financials?.effectiveDividendRate ?? null}
           periodView={periodView}
           financialFogOfWar={financialFogOfWar}
