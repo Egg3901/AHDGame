@@ -348,6 +348,12 @@ export const RUNTIME: CollectionEntry[] = [
       "Media product slates and their paid development state belong to the current world. Reset with their corporations and sectors.",
   },
   {
+    name: "productVentures",
+    category: "runtime",
+    notes:
+      "Funded product ventures (development, released boost windows). Reset with their corporations; per-turn debit receipts are embedded on corporations and wiped with those rows.",
+  },
+  {
     name: "pendingNationalizations",
     category: "runtime",
     notes: "Legislative takings in their notice window; resolved/cleared in the corp turn.",
