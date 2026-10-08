@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
-import { handleRouteError, forbidden } from "@/lib/api/errors";
+import { handleRouteError } from "@/lib/api/errors";
 import { loadUsPoliticalStateIds } from "@/lib/elections/usPoliticalHome";
 import { getPartyHex } from "@/lib/utils/politics";
 import { loadRacePresence } from "@/lib/politicalOperations/racePresence";
@@ -22,7 +22,8 @@ import type { CharacterStateOrg, PoliticalParty } from "@/lib/db/types";
  * political US state or territory (level 0 included). Consumed by the State
  * Organization tab.
  *
- * Auth: requireAuthWithCharacter (US-only)
+ * Non-US characters receive public candidate levels only, in read-only mode.
+ * Auth: requireAuthWithCharacter
  * Errors: 401, 403
  */
 async function handleGET() {
@@ -30,11 +31,25 @@ async function handleGET() {
     const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
     const character = auth.user.character;
+    const db = await getDb();
     if (character.countryId !== "US") {
-      return NextResponse.json(forbidden("US-only").toJson(), { status: 403 });
+      const [{ residentPoliticalIds }, racePresence] = await Promise.all([
+        loadUsPoliticalStateIds(db),
+        loadRacePresence(db, character._id),
+      ]);
+      return NextResponse.json({
+        canBuild: false,
+        states: [...residentPoliticalIds].sort().map((stateId) => ({
+          stateId,
+          level: 0,
+          totalInvested: 0,
+          nextCost: 0,
+          updatedAt: null,
+        })),
+        racePresence,
+      });
     }
 
-    const db = await getDb();
     const [rows, party, { residentPoliticalIds }, racePresence, fxRate] = await Promise.all([
       db
         .collection<CharacterStateOrg>("characterStateOrg")
@@ -88,6 +103,7 @@ async function handleGET() {
     );
 
     return NextResponse.json({
+      canBuild: true,
       states: result,
       /**
        * Anchor to the viewer's own currency. Rows already carry a converted
