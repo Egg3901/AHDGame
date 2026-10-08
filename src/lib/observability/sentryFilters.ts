@@ -4,11 +4,39 @@
 interface StreamErrorEvent {
   exception?: {
     values?: Array<{
+      type?: string;
       value?: string;
       mechanism?: { type?: string };
-      stacktrace?: { frames?: Array<{ filename?: string; in_app?: boolean }> };
+      stacktrace?: { frames?: Array<{ filename?: string; function?: string; in_app?: boolean }> };
     }>;
   };
+}
+
+/** The two market pollers deliberately cancel their fetches during React unmount. */
+export function isMarketPollingTeardown(event: StreamErrorEvent): boolean {
+  const values = event.exception?.values;
+  if (values?.length !== 1) return false;
+  const value = values[0];
+  if (
+    value.type !== "AbortError" ||
+    value.value !== "signal is aborted without reason" ||
+    value.mechanism?.type !== "auto.browser.global_handlers.onunhandledrejection"
+  )
+    return false;
+  const frames = value.stacktrace?.frames;
+  const last = frames?.at(-1);
+  return !!(
+    last?.in_app === true &&
+    last.function === "destroy" &&
+    /^src\/app\/country\/\[code\]\/stockmarket\/(?:useExchangeQuotes\.ts|components\/MarketOverview\.tsx)$/.test(
+      last.filename ?? ""
+    ) &&
+    frames?.some(
+      (frame) =>
+        frame.function === "commitHookEffectListUnmount" &&
+        /(?:^|\/)react-dom(?:\/cjs)?\/react-dom-client\.production\.js$/.test(frame.filename ?? "")
+    )
+  );
 }
 
 /** Next.js reports a render-stream close when its HTTP client disconnects. */

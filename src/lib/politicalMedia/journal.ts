@@ -328,7 +328,7 @@ function validatedIdentity(args: {
     (payer.actionCost !== undefined &&
       (!Number.isSafeInteger(payer.actionCost) || payer.actionCost < 0)) ||
     (payer.currentActions !== undefined &&
-      (!Number.isSafeInteger(payer.currentActions) || payer.currentActions < 0)) ||
+      (!Number.isFinite(payer.currentActions) || payer.currentActions < 0)) ||
     ((payer.actionCost ?? 0) > 0 && payer.currentActions === undefined)
   )
     throw new Error("Political media order has an invalid source, target or payer quote.");
@@ -374,6 +374,9 @@ export async function fundPoliticalMediaOrder(
   const identity = validatedIdentity({ ...args, details: args.details ?? {} });
   const key = politicalMediaOrderKey(identity.orderId);
   const actions = identity.payer.actionCost;
+  if (actions > 0 && (identity.payer.currentActions ?? 0) < actions) {
+    return { status: "rejected", applied: [], error: "Insufficient actions for the media order" };
+  }
   const payerFilter: Record<string, unknown> = { _id: args.payer.documentId };
   payerFilter[identity.payer.path] = { $gte: identity.payer.amountLocal };
   if (actions > 0) payerFilter.actions = identity.payer.currentActions;
