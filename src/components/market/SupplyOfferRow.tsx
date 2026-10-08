@@ -6,6 +6,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { COMMODITY_LABELS, COMMODITY_UNITS } from "@/lib/constants/commodities";
 import type { SupplyListingView } from "@/lib/db/types/supplyListing";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { negotiateHref } from "@/lib/corporations/supplyExchange/negotiateLink";
 import {
   OfferIdentity,
   PremiumChip,
@@ -173,7 +174,7 @@ export function SupplyOfferRow({
             {busy ? "Taking..." : "Take offer"}
           </button>
           <Link
-            href={`/corporation/${corpId}?tab=commodities#supply-agreements`}
+            href={negotiateHref(corpId, offer)}
             className="inline-flex h-8 items-center rounded-md border border-card-border px-3 text-xs font-medium text-foreground hover:bg-card-elevated"
           >
             Negotiate
