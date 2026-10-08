@@ -14,7 +14,6 @@ import type {
   Election,
   ElectionCandidate,
   ElectionVoteTally,
-  ElectedOfficial,
   NPP,
 } from "@/lib/db/types";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
@@ -131,9 +130,10 @@ export async function seatActingPresidencyForHouseVote(
 }
 
 /**
- * Tell the people the deadlock involves: the acting president, the three
- * tickets still on the House ballot, and every player sitting in the House, plus
- * the country's game-event feed. Never throws: messaging must not undo seating.
+ * Tell the acting president, and post the deadlock to the country's game-event
+ * feed. House members, the candidates and whips get the House vote opening
+ * notice from `notifyHouseVoteOpened`. Never throws: messaging must not undo
+ * seating.
  */
 export async function announceActingPresidency(
   db: Db,
@@ -172,38 +172,6 @@ export async function announceActingPresidency(
           message: `No candidate won a majority of state delegations, so nobody has been elected president yet. As the vice president chosen by the Senate, you serve as acting president. ${window}`,
           metadata,
         });
-    }
-    for (const c of onBallot) {
-      if (c.isNPP) continue;
-      const userId = await userOf(c.characterId);
-      if (userId)
-        inputs.push({
-          userId,
-          type: "system",
-          title: "The House has not chosen a president",
-          message: `No candidate reached ${houseThreshold} state delegations. ${vote.actingPresidentName} serves as acting president. You remain on the House ballot with ${names}. ${window}`,
-          metadata,
-        });
-    }
-    const houseMembers = await db
-      .collection<ElectedOfficial>("electedOfficials")
-      .find(
-        { countryId: election.countryId ?? "US", officeType: "house", characterId: { $ne: null } },
-        { projection: { characterId: 1 } }
-      )
-      .toArray();
-    const notified = new Set(inputs.map((i) => String(i.userId)));
-    for (const member of houseMembers) {
-      const userId = await userOf(member.characterId);
-      if (!userId || notified.has(String(userId))) continue;
-      notified.add(String(userId));
-      inputs.push({
-        userId,
-        type: "system",
-        title: "The House chooses the president",
-        message: `No candidate won ${houseThreshold} state delegations. The House keeps voting for one of ${names}, one vote per state delegation. ${vote.actingPresidentName} serves as acting president meanwhile. ${window}`,
-        metadata,
-      });
     }
     if (inputs.length > 0) await createNotifications(inputs);
   } catch (err) {
