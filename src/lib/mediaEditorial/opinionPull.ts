@@ -9,6 +9,7 @@
 import type { Db } from "mongodb";
 import { reachWeightedSlant, type Newsroom, type StateSlant } from "./slant";
 import { normalizeEditorialPosition, type EditorialPosition } from "./rules";
+import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 
 /**
  * Most an axis can move from media in a window of {@link MEDIA_PULL_WINDOW_TURNS}
@@ -16,7 +17,7 @@ import { normalizeEditorialPosition, type EditorialPosition } from "./rules";
  */
 export const MEDIA_PULL_MAX_POINTS_PER_WINDOW = 0.5;
 /** Length of the window above: 72 turns, three game days. */
-export const MEDIA_PULL_WINDOW_TURNS = 72;
+export const MEDIA_PULL_WINDOW_TURNS = 3 * TURNS_PER_DAY;
 /** Hard per-turn ceiling on the step, in axis points. About 0.0069. */
 export const MEDIA_PULL_MAX_STEP_PER_TURN =
   MEDIA_PULL_MAX_POINTS_PER_WINDOW / MEDIA_PULL_WINDOW_TURNS;
@@ -29,7 +30,7 @@ export const MEDIA_PULL_AXIS_SPAN = 10;
  */
 export const MEDIA_PULL_RATE = MEDIA_PULL_MAX_STEP_PER_TURN / MEDIA_PULL_AXIS_SPAN;
 /** Game turns in one game day, for player-facing rates. */
-export const MEDIA_PULL_TURNS_PER_DAY = 24;
+export const MEDIA_PULL_TURNS_PER_DAY = TURNS_PER_DAY;
 
 export interface MediaPull {
   economic: number;
