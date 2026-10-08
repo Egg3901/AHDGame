@@ -44,6 +44,7 @@ import { loadSovereignCouponBooks } from "@/lib/bonds/sovereignCouponBook";
 import { sovereignStockAnnualService } from "@/lib/budget/rules/sovereignDebtService";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import {
+  NON_LAW_CALIBRATION_VERSION,
   calibrateNonLawSpendingShare,
   needsNonLawCalibration,
   seededSpendingEnvelope,
@@ -610,9 +611,13 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
         marginalRate: budget.debt.interestRate,
         imfBailoutActive: budget.imfSovereignBailoutActive,
       });
+      // A recalibration measures the law book alone, without any earlier residual.
+      const recalibrate = needsNonLawCalibration(budget, countryId);
       let spending = await calculateFederalSpending(
         db,
-        { ...budget, revenue },
+        recalibrate
+          ? { ...budget, revenue, nonLawSpendingGdpShareBaseline: undefined }
+          : { ...budget, revenue },
         debtService,
         eraContext ?? undefined,
         refugeeServiceCosts,
@@ -620,7 +625,7 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
       );
       // First exposure for a country whose seed law book prices only part of
       // its government: fix the missing envelope as a share of GDP, once.
-      const calibratedShare = needsNonLawCalibration(budget, countryId)
+      const calibratedShare = recalibrate
         ? calibrateNonLawSpendingShare({
             gdp: budget.gdp,
             baselineTotal: seededSpendingEnvelope(budget),
@@ -629,9 +634,11 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
                 (a, v) => a + (Number.isFinite(v) ? v : 0),
                 0
               ) + (spending.stateGrants ?? 0),
+            annualRevenue: revenue.total,
+            annualDebtService: spending.debtInterest ?? 0,
           })
         : undefined;
-      if (calibratedShare !== undefined) {
+      if (calibratedShare !== undefined && calibratedShare > 0) {
         spending = await calculateFederalSpending(
           db,
           { ...budget, revenue, nonLawSpendingGdpShareBaseline: calibratedShare },
@@ -652,7 +659,10 @@ export async function refreshNationalBudgetRevenue(db: Db, budgetIds?: string[])
               surplus,
               updatedAt: now,
               ...(calibratedShare !== undefined
-                ? { nonLawSpendingGdpShareBaseline: calibratedShare }
+                ? {
+                    nonLawSpendingGdpShareBaseline: calibratedShare,
+                    nonLawSpendingCalibration: NON_LAW_CALIBRATION_VERSION,
+                  }
                 : {}),
             },
           },

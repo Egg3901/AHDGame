@@ -743,16 +743,18 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
               </table>
             </div>
 
-            <SubHeader>Credit rating</SubHeader>
+            <SubHeader>Leverage rating</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
-              Your credit rating (0-100) is computed from four factors:{" "}
-              <strong className="text-foreground">debt-to-equity ratio</strong> (is the company
-              overleveraged), <strong className="text-foreground">interest coverage ratio</strong>{" "}
-              (can it pay interest from earnings),{" "}
-              <strong className="text-foreground">profitability</strong> (is it actually making
-              money), and <strong className="text-foreground">liquidity</strong> (does it have cash
-              on hand). A higher rating means a lower credit spread and cheaper borrowing. Keep your
-              corp profitable and debt-light to maintain it.
+              Your leverage rating (0-100, shown as AAA to CCC) is a credit score built from four
+              factors: <strong className="text-foreground">debt-to-equity ratio</strong> (is the
+              company overleveraged),{" "}
+              <strong className="text-foreground">interest coverage ratio</strong> (can it pay
+              interest from earnings), <strong className="text-foreground">profitability</strong>{" "}
+              (is it actually making money), and{" "}
+              <strong className="text-foreground">liquidity</strong> (does it have cash on hand).
+              Debt carries most of the weight, so a company with no debt rates AAA even when it is
+              losing money: read it as how safely the company can borrow, not how well it is doing.
+              A higher rating means a lower credit spread and cheaper borrowing.
             </p>
             <Callout kind="warning" label="Debt ceiling:">
               Total debt cannot exceed 2× equity. If equity shrinks through losses or heavy

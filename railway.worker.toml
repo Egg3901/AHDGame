@@ -1,0 +1,20 @@
+# Railway config for the turn-worker services (one per world), which own the
+# cron schedule so web deploys never restart a running turn. See
+# scripts/turn-worker.ts for the design and src/lib/startupMode.ts for the
+# CRON_OWNER switch. The web services keep using railway.toml.
+#
+# Each worker service points its config file at this path and deploys from a
+# release branch that only moves between turns, so a worker deploy cannot land
+# mid-turn either.
+
+[build]
+builder = "NIXPACKS"
+# The worker runs the engine through tsx. It serves no pages, so the Next build
+# (and its memory) is skipped; dependencies still install as for web.
+buildCommand = "echo 'turn worker: no web build'"
+
+[deploy]
+# Same heap settings as web (see railway.toml for the reasoning).
+startCommand = "CRON_OWNER=worker npm run start:turn-worker"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

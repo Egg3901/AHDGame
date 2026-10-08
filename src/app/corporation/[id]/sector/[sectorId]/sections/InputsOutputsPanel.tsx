@@ -111,7 +111,6 @@ export default function InputsOutputsPanel({
                 <FlowRow
                   key={f.commodity}
                   flow={f}
-                  countryId={countryId}
                   priceText={price(f.billedUnitPrice ?? f.marketPrice)}
                   right={
                     f.inputAvailability != null && f.inputAvailability < 0.999 ? (
@@ -183,7 +182,6 @@ export default function InputsOutputsPanel({
                 <FlowRow
                   key={f.commodity}
                   flow={f}
-                  countryId={countryId}
                   priceText={price(f.marketPrice)}
                   right={(() => {
                     const share = soldShareFor(f);
@@ -300,13 +298,11 @@ export default function InputsOutputsPanel({
 
 function FlowRow({
   flow,
-  countryId,
   priceText,
   right,
   badge,
 }: {
   flow: CommodityFlow;
-  countryId: CountryId;
   priceText: string;
   right: React.ReactNode;
   badge: React.ReactNode;
@@ -314,7 +310,7 @@ function FlowRow({
   return (
     <li className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-card-border bg-background/40 px-3 py-2">
       <Link
-        href={`/commodities/${flow.commodity}?country=${countryId}`}
+        href={`/commodity/${flow.commodity}`}
         className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border text-body-xs font-bold transition-opacity hover:opacity-80 ${flow.colors}`}
         aria-label={`Open the ${flow.label} market`}
       >
