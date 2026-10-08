@@ -194,6 +194,18 @@ describe("nothing on this screen is won", () => {
   // GeneralBlendView renders only while a race is RUNNING; a concluded one gets
   // ResultsBlendView. So every figure here is a forecast from the votes banked
   // so far, and the screen has to say so rather than reading as a called result.
+  it("raises the contingent election beside the college bar on both layouts", () => {
+    const e = election();
+    e.generalVotes!.electoralVotesByCandidate = { c1: 54, c2: 40, c3: 19 };
+    render(<GeneralBlendView election={e} electionId="e1" wire={[]} onRefresh={() => {}} />);
+    expect(screen.getAllByText("Contingent election risk")).toHaveLength(2);
+  });
+
+  it("raises no contingent election when a ticket holds the majority", () => {
+    renderView();
+    expect(screen.queryByText("Contingent election risk")).toBeNull();
+  });
+
   it("says the figures are projected, on both layouts", () => {
     renderView();
     expect(screen.getAllByText(/No state is won until the race resolves/)).toHaveLength(2);

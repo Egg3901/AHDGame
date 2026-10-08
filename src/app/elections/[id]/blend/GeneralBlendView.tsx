@@ -9,6 +9,13 @@ import { BlendShell, BlendHeader, BlendSection } from "@/components/blend/BlendS
 import { BlendRail, BlendChipRail } from "@/components/blend/BlendRail";
 import { BlendTicker } from "@/components/blend/BlendTicker";
 import { useElectionCampaigns } from "../components/useElectionCampaigns";
+import { ContingentRiskBanner } from "../components/ContingentRiskBanner";
+import {
+  PRESIDENTIAL_EV_NEEDED,
+  assessContingentEvRisk,
+  collegeSizeFromEvByState,
+  electoralMajorityFor,
+} from "@/lib/elections/presidentialResolutionDisplay";
 import { TicketCards, TicketsTable } from "./GeneralTicketsTable";
 import { DemocraticHealthBlock } from "./DemocraticHealthBlock";
 import { PresidentialMap } from "./presMap/PresidentialMap";
@@ -58,6 +65,25 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
   );
 
   const mapModel = useMemo(() => buildPresMapModel(election), [election]);
+
+  // No projected EV majority: say so beside the college bar, with the House
+  // and Senate ballot the engine would run, instead of below the fold.
+  const contingentBanner = useMemo(() => {
+    const gv = election.generalVotes;
+    const college = collegeSizeFromEvByState(gv?.evByState);
+    const risk = assessContingentEvRisk(
+      gv?.electoralVotesByCandidate,
+      college > 0 ? electoralMajorityFor(college) : PRESIDENTIAL_EV_NEEDED
+    );
+    if (!risk?.atRisk || election.countryId !== "US") return null;
+    return (
+      <ContingentRiskBanner
+        risk={risk}
+        candidateNames={gv?.candidateNames ?? {}}
+        projection={gv?.contingentProjection}
+      />
+    );
+  }, [election]);
   const presidentialMap = (
     <PresidentialMap
       model={mapModel}
@@ -595,6 +621,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               <div style={{ marginTop: 14 }}>
                 <EvBar vm={vm} height={28} error={endorseError} />
               </div>
+              {contingentBanner ? <div style={{ marginTop: 14 }}>{contingentBanner}</div> : null}
             </div>
           ) : null}
 
@@ -803,6 +830,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
                 heroPairTickets
               )}
               <EvBar vm={vm} height={34} error={endorseError} />
+              {contingentBanner ? <div style={{ marginTop: 16 }}>{contingentBanner}</div> : null}
             </section>
           ) : null}
 

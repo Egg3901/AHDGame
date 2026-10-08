@@ -569,7 +569,9 @@ export function GeneralElectionPanel({
             />
           )}
 
-        {contingentRisk?.atRisk && (
+        {/* The Blend hero carries this banner beside its college bar, and that
+            screen mounts this panel with the college summary turned off. */}
+        {showCollegeSummary && contingentRisk?.atRisk && (
           <ContingentRiskBanner
             risk={contingentRisk}
             candidateNames={tally.candidateNames}
