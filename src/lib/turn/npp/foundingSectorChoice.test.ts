@@ -47,6 +47,24 @@ describe("foundingSectorWeights", () => {
     expect(crowded[0]).toBeCloseTo(flat[0], 9);
   });
 
+  it("pulls founders toward a dominated sector", () => {
+    const flat = foundingSectorWeights({
+      types: TYPES,
+      countryId: "US",
+      priceRatioOf: () => 1,
+      existingCount: () => 0,
+    });
+    const pulled = foundingSectorWeights({
+      types: TYPES,
+      countryId: "US",
+      priceRatioOf: () => 1,
+      existingCount: () => 0,
+      challengerBoostOf: (t) => (t === "retail" ? 2.5 : 1),
+    });
+    expect(pulled[2]).toBeCloseTo(flat[2] * 2.5, 9);
+    expect(pulled[0]).toBeCloseTo(flat[0], 9);
+  });
+
   it("never gives a sector zero weight", () => {
     const w = foundingSectorWeights({
       types: TYPES,
