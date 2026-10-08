@@ -258,6 +258,9 @@ function formatCampaignForViewer(
   const base = {
     id: campaign._id.toString(),
     candidateId: candidateSeqId,
+    // Character (or NPP) ObjectId: the stable join key against election
+    // candidacies; `candidateId` above is the URL-facing sequential id.
+    candidateRefId: campaign.candidateId.toString(),
     candidateName: candidate?.name || "Unknown",
     candidateIsNPP: campaign.candidateIsNPP,
     party: campaign.party,

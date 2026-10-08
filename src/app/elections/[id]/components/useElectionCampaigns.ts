@@ -6,6 +6,8 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 export interface CampaignSummary {
   id: string;
   candidateId: string;
+  /** Character or NPP ObjectId of the candidate; join key against candidacies. */
+  candidateRefId?: string;
   candidateName: string;
   candidateIsNPP?: boolean;
   party: string;
