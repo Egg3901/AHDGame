@@ -11,6 +11,7 @@ import type { Character, PoliticalParty } from "@/lib/db/types";
 
 vi.mock("@/lib/utils/electionCandidacy", () => ({
   withdrawFromMismatchedPrimaries: vi.fn().mockResolvedValue({ withdrawnCount: 0 }),
+  transferIndependentCandidaciesToParty: vi.fn().mockResolvedValue({ transferredCount: 0 }),
   cleanupPartyPositionsOnSwitch: vi.fn().mockResolvedValue({
     clearedNationalLeadership: [],
     clearedStateLeadership: [],
@@ -213,5 +214,35 @@ describe("applyCharacterPartyJoin — first-joiner auto-chair", () => {
     await applyCharacterPartyJoin(makeArgs(db));
 
     expect(cleanupCaucusParticipationForCharacters).not.toHaveBeenCalled();
+  });
+
+  it("transfers active candidacies when joining from independent", async () => {
+    const db = makeDb();
+    const args = makeArgs(db);
+    const { transferIndependentCandidaciesToParty, withdrawFromMismatchedPrimaries } =
+      await import("@/lib/utils/electionCandidacy");
+
+    await applyCharacterPartyJoin(args);
+
+    expect(transferIndependentCandidaciesToParty).toHaveBeenCalledWith(
+      db,
+      args.character._id,
+      "3",
+      args.now
+    );
+    expect(withdrawFromMismatchedPrimaries).not.toHaveBeenCalled();
+  });
+
+  it("withdraws active candidacies when switching from another party", async () => {
+    const db = makeDb();
+    const args = makeArgs(db);
+    args.character = { ...args.character, party: "1" } as Character;
+    const { transferIndependentCandidaciesToParty, withdrawFromMismatchedPrimaries } =
+      await import("@/lib/utils/electionCandidacy");
+
+    await applyCharacterPartyJoin(args);
+
+    expect(withdrawFromMismatchedPrimaries).toHaveBeenCalledWith(args.character._id, "3");
+    expect(transferIndependentCandidaciesToParty).not.toHaveBeenCalled();
   });
 });

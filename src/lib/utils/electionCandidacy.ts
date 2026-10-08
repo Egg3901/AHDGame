@@ -1,4 +1,4 @@
-import { ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type {
   Character,
@@ -20,6 +20,101 @@ import { withdrawFromPartyLeadershipElections } from "@/lib/elections/withdrawFr
 import { withdrawPlayerEndorsementsOnPartyChange } from "@/lib/elections/playerEndorsements";
 import type { CongressLeader } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
+
+/**
+ * Move an Independent player's live governmental candidacies onto the party
+ * they just joined. Unlike a party-to-party switch, joining from Independent
+ * does not invalidate the candidacy: the same candidate stays in the race with
+ * their new party label, campaign access, and tally metadata.
+ */
+export async function transferIndependentCandidaciesToParty(
+  db: Db,
+  characterId: ObjectId,
+  newParty: string,
+  now = new Date()
+): Promise<{ transferredCount: number; elections: string[] }> {
+  const candidacies = await db
+    .collection<ElectionCandidate>("electionCandidates")
+    .find({
+      characterId,
+      isNPP: { $ne: true },
+      status: "active",
+      party: "independent",
+    })
+    .toArray();
+
+  if (candidacies.length === 0) {
+    return { transferredCount: 0, elections: [] };
+  }
+
+  const electionIds = [
+    ...new Map(candidacies.map((c) => [c.electionId.toString(), c.electionId])).values(),
+  ];
+  const elections = await db
+    .collection<Election>("elections")
+    .find(
+      {
+        _id: { $in: electionIds },
+        status: { $in: ["upcoming", "active", "completed"] },
+      },
+      { projection: { _id: 1, electionType: 1, state: 1 } }
+    )
+    .toArray();
+  const activeElectionIds = new Set(elections.map((e) => e._id.toString()));
+  const toTransfer = candidacies.filter((c) => activeElectionIds.has(c.electionId.toString()));
+
+  if (toTransfer.length === 0) {
+    return { transferredCount: 0, elections: [] };
+  }
+
+  const candidateIds = toTransfer.map((c) => c._id);
+  const transferredElectionIds = [
+    ...new Map(toTransfer.map((c) => [c.electionId.toString(), c.electionId])).values(),
+  ];
+  const result = await db.collection<ElectionCandidate>("electionCandidates").updateMany(
+    {
+      _id: { $in: candidateIds },
+      status: "active",
+      party: "independent",
+    },
+    { $set: { party: newParty } }
+  );
+
+  // Campaign access and party funding key off Campaign.party, so keep the
+  // retained campaign in lockstep with its candidate row.
+  await db.collection("campaigns").updateMany(
+    {
+      electionId: { $in: transferredElectionIds },
+      candidateId: characterId,
+      party: "independent",
+    },
+    { $set: { party: newParty, updatedAt: now } }
+  );
+
+  // Existing tallies denormalize each candidate's party for maps, seat
+  // estimates, and result displays. Each race needs its own dynamic field so
+  // unrelated tallies do not gain candidate entries from another election.
+  await db.collection("electionVoteTallies").bulkWrite(
+    toTransfer.map((candidate) => ({
+      updateMany: {
+        filter: { electionId: candidate.electionId },
+        update: {
+          $set: { [`candidateParties.${candidate._id.toString()}`]: newParty },
+        },
+      },
+    }))
+  );
+
+  const electionDetails = toTransfer.map((candidate) => {
+    const election = elections.find((e) => e._id.equals(candidate.electionId));
+    return `${election?.electionType || "unknown"} (${election?.state || "??"})`;
+  });
+
+  return {
+    transferredCount: result.modifiedCount,
+    elections: electionDetails,
+  };
+}
 
 /**
  * When a character switches parties, withdraw them from any active primaries

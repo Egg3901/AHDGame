@@ -185,6 +185,12 @@ export const INDEX_TARGETS = [
       "settlementPlays drain + per-turn indexes, the UNIQUE partial index that holds each character to one use of a personal play per turn, and the UNIQUE partial index on settlementCrises that stops two live German Questions. Required before the crisis is opened on a world that was never reset.",
   },
   {
+    id: "indexesProductVentures",
+    label: "Indexes — Product Ventures",
+    description:
+      "productVentures: the UNIQUE partial index that holds one venture in development per corporation and domain, the studio's per-corporation read, and the turn processor's stage scan. Required before the product studio is used on a world that was never reset.",
+  },
+  {
     id: "indexesIdentityHistory",
     label: "Indexes — Identity History",
     description:

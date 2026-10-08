@@ -720,6 +720,18 @@ export interface Corporation {
   manufacturingProductAdvertisingObligationsV2?: ManufacturingProductAdvertisingObligationV2[];
   manufacturingProductAdvertisingReceiptV2?: ManufacturingProductAdvertisingReceiptV2;
   mediaProductDevelopmentReceiptV1?: MediaProductDevelopmentReceipt;
+  /** Per-venture funding receipts, keyed by venture id; written beside each cash debit. */
+  productVentureDebitsV1?: Record<
+    string,
+    {
+      turn: number;
+      amountAnchor: number;
+      investmentAnchor: number;
+      chargeAnchor: number;
+      /** Exact liquidCapital debited, so a refund never depends on a later FX rate. */
+      localAmount?: number;
+    }
+  >;
   mediaProductAdvertisingReceiptV1?: MediaProductAdvertisingReceipt;
   /** Frozen original buyer quote, including seller allocations, until durable settlement completes. */
   mediaProductAdvertisingObligationsV1?: MediaProductAdvertisingObligationV1[];

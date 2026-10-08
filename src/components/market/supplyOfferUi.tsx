@@ -54,6 +54,19 @@ export function offerPremiumLabel(premium: number): string {
   return `${value > 0 ? "+" : ""}${value}%`;
 }
 
+/** Plain-words reading of a premium, so "+20%" is not mistaken for "20% of the price". */
+export function offerPremiumDescription(premium: number): string {
+  const value = Math.abs(Math.round(premium * 1000) / 10);
+  if (value === 0) return "At the market price";
+  return `${value}% ${premium > 0 ? "above" : "below"} the market price`;
+}
+
+/** Per-unit price the offer settles at, or null without a market price. */
+export function offerUnitPrice(premium: number, marketPrice: number | undefined): number | null {
+  if (marketPrice == null || !Number.isFinite(marketPrice)) return null;
+  return marketPrice * (1 + premium);
+}
+
 /** Estimated value of one turn of the offer at the current market price, or null without a price. */
 export function offerValuePerTurn(
   offer: Pick<SupplyListingView, "volumeCap" | "pricePremium">,
@@ -79,6 +92,7 @@ export function PremiumChip({ premium, side }: { premium: number; side: "buy" | 
   return (
     <span
       className={`inline-flex rounded px-1.5 py-0.5 text-xs font-semibold tabular-nums ${tone}`}
+      title={offerPremiumDescription(premium)}
     >
       {offerPremiumLabel(premium)}
     </span>

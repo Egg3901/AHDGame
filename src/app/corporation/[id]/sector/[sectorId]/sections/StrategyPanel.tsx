@@ -416,7 +416,8 @@ export default function StrategyPanel({
 
           {pendingStrategyId && sector && (
             <StrategyChangeConfirm
-              sectorType={sector.sectorType}
+              sectorType={strategy.operatingSectorType ?? sector.sectorType}
+              mediaOperatingModelsEnabled={strategy.mediaOperatingModelsEnabled === true}
               currentStrategyId={strategy.currentStrategyId}
               targetStrategyId={pendingStrategyId}
               dailyRevenue={sector.revenue ?? 0}

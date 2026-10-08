@@ -63,6 +63,22 @@ describe("corpQualifiesForSubsidy", () => {
     expect(corpQualifiesForSubsidy(s, "CA", "technology", "CA", undefined, "US", "US")).toBe(false);
   });
 
+  it("maps folded sector targets across the 1.12 taxonomy", () => {
+    // Callers pass the operating type: vehicle plants are "automobiles",
+    // entertainment media lanes are "entertainment".
+    const legacyAuto = makeSubsidy({ scopeType: "sector", targetSectorType: "automobiles" });
+    expect(
+      corpQualifiesForSubsidy(legacyAuto, "CA", "automobiles", "CA", undefined, "US", "US")
+    ).toBe(true);
+    expect(
+      corpQualifiesForSubsidy(legacyAuto, "CA", "manufacturing", "CA", undefined, "US", "US")
+    ).toBe(false);
+    const media = makeSubsidy({ scopeType: "sector", targetSectorType: "media" });
+    expect(corpQualifiesForSubsidy(media, "CA", "entertainment", "CA", undefined, "US", "US")).toBe(
+      true
+    );
+  });
+
   it("strategy filter matches sector.strategyId", () => {
     const s = makeSubsidy({ scopeType: "economy_wide", targetStrategyId: "renewables" });
     expect(corpQualifiesForSubsidy(s, "CA", "energy", "CA", "renewables", "US", "US")).toBe(true);

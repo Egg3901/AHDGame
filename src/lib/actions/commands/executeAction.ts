@@ -48,6 +48,7 @@ import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { resolveCampaignPriceLevel } from "@/lib/campaigns/rules/priceLevel";
 import { fundPoliticalMediaOrder } from "@/lib/politicalMedia/journal";
+import { applySlantToAdvertise, loadStateSlant } from "@/lib/mediaEditorial/slant";
 
 function clampAddExpression(fieldPath: string, delta: number, min: number, max: number) {
   return {
@@ -112,12 +113,16 @@ export async function executeCharacterAction(
 
   const forexEnabled = await isForexEnabled();
   const gameState = await getGameState();
-  const gameConfig = await db
-    .collection<GameConfig>("gameConfig")
-    .findOne(
-      { _id: "default" },
-      { projection: { campaignEraPriceLevelEnabled: 1, politicalMediaMarketEnabled: 1 } }
-    );
+  const gameConfig = await db.collection<GameConfig>("gameConfig").findOne(
+    { _id: "default" },
+    {
+      projection: {
+        campaignEraPriceLevelEnabled: 1,
+        politicalMediaMarketEnabled: 1,
+        mediaEditorialEnabled: 1,
+      },
+    }
+  );
   const priceLevel = resolveCampaignPriceLevel(
     gameConfig?.campaignEraPriceLevelEnabled,
     gameState?.preset
@@ -277,6 +282,31 @@ export async function executeCharacterAction(
         preset: gameState?.preset,
         priceLevel,
       });
+    }
+
+    // ROTDM: media ownership prices political advertising. Local newsrooms
+    // that lean close to the advertiser's own positions make ads cheaper.
+    if (
+      actionType === "advertise" &&
+      state &&
+      gameConfig?.mediaEditorialEnabled === true &&
+      (effect.fundsChange ?? 0) < 0
+    ) {
+      const slant = await loadStateSlant(db, state._id);
+      const slanted = applySlantToAdvertise(
+        effect.fundsChange ?? 0,
+        effect.favorabilityChange ?? 0,
+        current.policies,
+        slant
+      );
+      if (slanted) {
+        effect = {
+          ...effect,
+          fundsChange: -slanted.cost,
+          favorabilityChange: slanted.favorabilityGain,
+          message: `Spent ${fundsFormatter(slanted.cost)} on ads, ${slanted.cutPct}% less, and gained ${slanted.favorabilityGain} favorability points, because newsrooms in ${state.name} lean close to your positions.`,
+        };
+      }
     }
 
     const actionFundsChange = effect.fundsChange ?? 0;

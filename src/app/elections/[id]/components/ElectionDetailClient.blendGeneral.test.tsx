@@ -53,7 +53,9 @@ vi.mock("./PresidentialMapWithStateDetail", () => ({
 }));
 vi.mock("./ElectionHeader", () => ({ ElectionHeader: () => null }));
 vi.mock("./AdminSection", () => ({ AdminSection: () => null }));
-vi.mock("./CampaignsListPanel", () => ({ CampaignsListPanel: () => null }));
+vi.mock("./CampaignsListPanel", () => ({
+  CampaignsListPanel: () => <div data-testid="campaigns-list" />,
+}));
 vi.mock("./CampaignManagerTab", () => ({
   CampaignManagerTab: () => <div data-testid="campaign-manager" />,
 }));
@@ -119,6 +121,13 @@ describe("the Blend general page does not print the same standing twice", () => 
     // that list, behind a second link to the same page.
     const { queryByTestId } = renderPage();
     expect(queryByTestId("campaign-manager")).toBeNull();
+  });
+
+  it("leaves campaign operations to the hero's tickets table", () => {
+    // They were a separate list at the foot of this block, restating the
+    // tickets above it. They are columns of that table now.
+    const { queryByTestId } = renderPage();
+    expect(queryByTestId("campaigns-list")).toBeNull();
   });
 
   it("tells the general phase view to leave out the national mood gauge", () => {

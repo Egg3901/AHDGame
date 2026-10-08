@@ -53,7 +53,12 @@ export default async function NewCharterPage() {
       </div>
 
       <div className="rounded-lg border border-card-border bg-card p-6">
-        <DraftCharterForm countryCode={countryCode} proposer={proposer} stateNames={stateNames} />
+        <DraftCharterForm
+          countryCode={countryCode}
+          proposer={proposer}
+          stateNames={stateNames}
+          showPartySwitchWarning={user.character.party !== "independent"}
+        />
       </div>
 
       <div className="mt-4 rounded-md border border-card-border bg-card/40 p-4 text-xs text-muted">

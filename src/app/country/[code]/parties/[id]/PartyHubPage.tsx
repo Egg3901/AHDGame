@@ -16,6 +16,7 @@ import { COUNTRY_CONFIGS, CountryId } from "@/lib/constants/countries";
 import { parseCountryParam } from "@/lib/db/partyLookup";
 import { partyApiUrl, partyUrl, regionPartyApiUrl, regionPartyUrl, regionUrl } from "@/lib/urls";
 import { PlainPositionLabel } from "@/components/party/PlainPositionLabel";
+import { PartySwitchElectionWarning } from "@/components/party/PartySwitchElectionWarning";
 import {
   PARTY_PAGE_TITLE_CLASS,
   PARTY_SECTION_HEADING_CLASS,
@@ -911,17 +912,22 @@ function NationalPartyHub({ scope }: { scope: Extract<PartyHubScope, { kind: "na
               {leaving ? tParties("leave.pending") : tParties("leave.button")}
             </button>
           ) : (
-            <Button
-              onClick={handleJoin}
-              disabled={joining || !canJoinFromHomeRegion}
-              title={
-                canJoinFromHomeRegion
-                  ? undefined
-                  : `${party.name} is not established in or next to your home region.`
-              }
-            >
-              {joining ? "Joining…" : "Join party"}
-            </Button>
+            <div className="flex max-w-72 flex-col items-stretch gap-2">
+              <Button
+                onClick={handleJoin}
+                disabled={joining || !canJoinFromHomeRegion}
+                title={
+                  canJoinFromHomeRegion
+                    ? undefined
+                    : `${party.name} is not established in or next to your home region.`
+                }
+              >
+                {joining ? "Joining…" : "Join party"}
+              </Button>
+              {user.character?.party && user.character.party !== "independent" ? (
+                <PartySwitchElectionWarning />
+              ) : null}
+            </div>
           )
         ) : null
       }

@@ -1,7 +1,7 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Subsidy, SubsidyProvision, EndSubsidyProvision } from "@/lib/db/types";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { sectorPolicyTargetMatches, type CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import { fireSubsidyCreatedPulse, fireSubsidyEndedPulse } from "@/lib/corporations/sentimentEvents";
 
@@ -37,7 +37,11 @@ export function corpQualifiesForSubsidy(
   }
 
   // Sector type filter
-  if (subsidy.scopeType === "sector" && subsidy.targetSectorType !== sectorType) return false;
+  if (
+    subsidy.scopeType === "sector" &&
+    !sectorPolicyTargetMatches(subsidy.targetSectorType, sectorType)
+  )
+    return false;
 
   // Strategy filter — default to "standard" when no strategyId set
   if (subsidy.targetStrategyId != null) {

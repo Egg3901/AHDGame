@@ -15,6 +15,7 @@
 import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
 import { facilityPlural, facilitySingular } from "@/lib/constants/facilityVocabulary";
 import { SECTOR_TYPE_BRIEFING } from "@/lib/constants/sectorTypeDossier";
+import { getOperatingSectorLabel } from "@/lib/constants/sectorStrategies";
 import type { MoneyPeriod } from "@/lib/constants/moneyTimescale";
 import { MONEY_PERIOD_SUFFIX } from "@/lib/constants/moneyTimescale";
 import type { SectorDetail } from "./CorporationPageTypes";
@@ -47,12 +48,10 @@ export function SectorTypeDossier({
   fmtMoney,
   metricContext,
 }: SectorTypeDossierProps) {
-  const vehicleModel = sectors.some(
-    (sector) => sector.sectorType === "manufacturing" && sector.industryModel === "vehicles"
-  );
-  const label = vehicleModel
-    ? "Vehicle manufacturing"
-    : (CORPORATION_TYPE_LABELS[sectorType] ?? sectorType);
+  // sectorType is the operating type (automobiles / entertainment for the
+  // folded lanes), resolved by SectorsTab from the group's model fields.
+  const label =
+    getOperatingSectorLabel(sectorType) ?? CORPORATION_TYPE_LABELS[sectorType] ?? sectorType;
   const suffix = MONEY_PERIOD_SUFFIX[timeScale];
 
   const sites = facilityPlural(sectorType);
