@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
 import { ResultsBlendView } from "./ResultsBlendView";
 
@@ -97,5 +97,50 @@ describe("ResultsBlendView", () => {
   it("lists the closest states on both layouts", () => {
     render(<ResultsBlendView data={data()} route="concluded" />);
     expect(screen.getAllByText("Pennsylvania").length).toBeGreaterThanOrEqual(2);
+  });
+
+  describe("House vote panel", () => {
+    afterEach(() => {
+      cleanup();
+      vi.unstubAllGlobals();
+    });
+
+    it("mounts once for a deadlocked House, above both layouts", async () => {
+      const fetchFn = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          vote: {
+            status: "open",
+            openedTurn: 10,
+            closesTurn: 34,
+            turnsLeft: 14,
+            actingPresidentName: "Alex Acting",
+            threshold: 26,
+            delegationsVoting: 48,
+            winnerId: null,
+            candidates: [{ id: "c1", name: "First Ticket", delegations: 20, members: 190 }],
+            viewer: { isHouseMember: false, canVote: false, choiceId: null },
+          },
+        }),
+      }));
+      vi.stubGlobal("fetch", fetchFn);
+      const withVote = data();
+      withVote.summary.contingentHouseVote = {
+        status: "open",
+        actingPresidentName: "Alex Acting",
+        closesTurn: 34,
+      };
+      render(<ResultsBlendView data={withVote} route="concluded" />);
+      await waitFor(() => expect(screen.getAllByLabelText("House vote")).toHaveLength(1));
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+    });
+
+    it("stays out of the way when there is no House vote", () => {
+      const fetchFn = vi.fn();
+      vi.stubGlobal("fetch", fetchFn);
+      render(<ResultsBlendView data={data()} route="concluded" />);
+      expect(screen.queryByLabelText("House vote")).toBeNull();
+      expect(fetchFn).not.toHaveBeenCalled();
+    });
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
+import { BLEND, BLEND_CONTAINER, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import { BlendShell, BlendSection } from "@/components/blend/BlendShell";
 import { BlendRail, BlendChipRail } from "@/components/blend/BlendRail";
 import { BlendVitals } from "@/components/blend/BlendVitals";
@@ -13,6 +13,7 @@ import {
   type ResultsRoute,
   type StateSortKey,
 } from "./resultsBlendViewModel";
+import { ContingentHouseVotePanel } from "../components/ContingentHouseVotePanel";
 
 export interface ResultsBlendViewProps {
   data: ElectionResultsResponse;
@@ -368,6 +369,17 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
 
   return (
     <>
+      {/* One instance above both layouts; the panel renders only for a deadlocked House. */}
+      {data.summary.contingentHouseVote ? (
+        <div style={{ background: BLEND.page }}>
+          <div className={BLEND_CONTAINER}>
+            <ContingentHouseVotePanel
+              electionId={data.election.id}
+              colorMap={new Map(data.candidates.map((c) => [c.id, c.partyColor]))}
+            />
+          </div>
+        </div>
+      ) : null}
       {/* Mobile */}
       <div className="lg:hidden" style={{ background: BLEND.page, color: BLEND.ink }}>
         <div
