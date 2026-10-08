@@ -10,8 +10,9 @@ import { CAPITAL_DEPRECIATION_PER_TURN } from "@/lib/market/capital";
  * THE STATE CAPEX CHANNEL.
  *
  * A state enterprise funds capacity from state channels, not by draining its
- * own operating cash. Two channels exist, and each is bounded at exactly one
- * turn of depreciation replacement so neither can grow the enterprise:
+ * own operating cash. Two replacement channels exist, each bounded at exactly
+ * one turn of depreciation so neither grows the enterprise (growth is a
+ * separate, shortage-gated leg: see soeCapexGrowth.test.ts):
  *
  *   • command economies — the Gosbank directed-credit tranche, floored at
  *     replacement in `commandEconomyTurn`;

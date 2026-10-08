@@ -42,7 +42,7 @@
     "4f62d7d16cbec7e421bad3cc3c6725b5193a1a77a13e58596a02ceb4dafb0bbb": 1,
     "0fcac4908f576ce0e7403fac4ff209a6ac3df8f01ea768430566990645c69dcd": 1,
     "cdc2b00a67c0d4d80b01972e0f0c40d95296b9df671d65c11f08bb0dfa56429d": 1,
-    "531c00ea9751bf0bd99d72507c3f74d10c023b472c144d37e7ebabd4899d945a": 1,
+    "f14cef7ff5bc98f00b2e00a87fb40c2490cf5ac9cb84545c6504ef2d28352141": 1,
     "d1666ebbdd70c4cbe4e4ee035b64549383c61e3eaa2f1c77bc03ba229b216312": 1,
     "e1039f82f3d8d0c0c135a6662589503167d9869ae992580450369106113d9fb3": 1,
     "db4fd11e51fae1576dd1c2a5ff9d7717b0158d0b3520eb2c6dfe5328c291aa1e": 1,
@@ -973,8 +973,8 @@
       "file": "src/lib/banking/moneyMove.ts",
       "operation": "updateOne",
       "owner": "applyLeg",
-      "expression": "target.updateOne({ $and: [ leg.filter, guard, ...(leg.kind === \"debit\" ? [{ [leg.path!]: { $gte: amount } }] : []), ], } as Filter<LegTarget>, { $inc: { ...(leg.kind === \"asset\" ? {} : { [leg.path!]: leg.kind === \"debit\" ? -amount : amount }), [LEG_REVISION]: 1, }, $set: { updatedAt: new Date(), ...leg.set, [PENDING_LEG]: delivered }, $push: { settledKeys: { $each: [stamp], $slice: -SETTLED_KEYS_CAP } }, })",
-      "fingerprint": "531c00ea9751bf0bd99d72507c3f74d10c023b472c144d37e7ebabd4899d945a"
+      "expression": "target.updateOne({ $and: [ leg.filter, guard, ...(leg.kind === \"debit\" ? [{ [leg.path!]: { $gte: amount } }] : []), ], } as Filter<LegTarget>, { $inc: { ...(leg.kind === \"asset\" ? {} : { [leg.path!]: leg.kind === \"debit\" ? -amount : amount }), ...leg.inc, [LEG_REVISION]: 1, }, $set: { updatedAt: new Date(), ...leg.set, [PENDING_LEG]: delivered }, $push: { settledKeys: { $each: [stamp], $slice: -SETTLED_KEYS_CAP } }, })",
+      "fingerprint": "f14cef7ff5bc98f00b2e00a87fb40c2490cf5ac9cb84545c6504ef2d28352141"
     },
     {
       "file": "src/lib/banking/moneyMove.ts",

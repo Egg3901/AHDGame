@@ -236,7 +236,8 @@ export async function settleAtomicDocumentTransition(
         leg.collection !== projection.collection ||
         !leg.path ||
         !same(reviveObjectIds(leg.filter), identity) ||
-        leg.set
+        leg.set ||
+        leg.inc
     )
   )
     return bad("Atomic cash legs must share the document identity");
