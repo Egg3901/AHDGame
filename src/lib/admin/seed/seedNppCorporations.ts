@@ -18,6 +18,11 @@ import {
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
+import { computeUnownedSeedRevenue } from "@/lib/admin/seed/seedUnownedSectors";
+import { nppSeedRevenueCap } from "@/lib/admin/seed/rules/nppSeedCapacity";
+import { foundingStarterUnits } from "@/lib/corporations/foundingPlant";
+import { revenuePerCapacityUnit } from "@/lib/constants/capacityEconomy";
+import type { State } from "@/lib/db/types/state";
 import {
   getPresetEnablementCountries,
   getPresetEnablementTier,
@@ -181,6 +186,16 @@ export async function seedNppCorporations(
         mediaDiscriminator: 1,
       })
       .toArray();
+    // Fresh 1991 only: size the competitor book from the country's whole
+    // economy rather than its capital region (see rules/nppSeedCapacity.ts).
+    const countryStates =
+      preset === "1991-default"
+        ? await db
+            .collection<State>("states")
+            .find({ countryId, _id: { $not: /^NATIONAL_/ } })
+            .project<Pick<State, "_id" | "gdp">>({ gdp: 1 })
+            .toArray()
+        : [];
     let countrySpawned = 0;
     for (const market of sectorMarkets) {
       const present = existing.filter(
@@ -191,6 +206,45 @@ export async function seedNppCorporations(
       ).length;
       const missing = Math.max(0, perSectorCount - present);
       if (missing === 0) continue;
+      const operatingType = getOperatingSectorType(
+        market.type,
+        market.industryModel,
+        market.mediaDiscriminator
+      ) as CorporationType;
+      const countrySizedCap =
+        countryStates.length > 0
+          ? nppSeedRevenueCap({
+              countryPoolRevenue: countryStates.reduce(
+                (sum, region) =>
+                  sum +
+                  computeUnownedSeedRevenue({
+                    gdp: region.gdp,
+                    countryId,
+                    stateId: String(region._id),
+                    sectorType: operatingType,
+                    preset,
+                  }),
+                0
+              ),
+              perSectorCount,
+              floorRevenue:
+                foundingStarterUnits(market.type, market.industryModel, market.mediaDiscriminator) *
+                revenuePerCapacityUnit(
+                  market.type,
+                  getEraUnitScale(preset),
+                  market.industryModel,
+                  market.mediaDiscriminator
+                ),
+            })
+          : undefined;
+      const extractionCap =
+        market.type === "extraction" && extractionSite
+          ? (extractionSite.supportedDailyRevenue / getEraUnitScale(preset)) * 0.25
+          : undefined;
+      const maximumStartingRevenue =
+        countrySizedCap !== undefined && extractionCap !== undefined
+          ? Math.min(countrySizedCap, extractionCap)
+          : (countrySizedCap ?? extractionCap);
       const spawned = await batchSpawnNppCorporations(db, countryId, {
         perSectorCount: missing,
         sectorMarkets: [market],
@@ -201,10 +255,9 @@ export async function seedNppCorporations(
           ? {
               headquartersState: extractionSite.stateId,
               initialStrategyId: extractionSite.strategyId,
-              maximumStartingRevenue:
-                (extractionSite.supportedDailyRevenue / getEraUnitScale(preset)) * 0.25,
             }
           : {}),
+        ...(maximumStartingRevenue !== undefined ? { maximumStartingRevenue } : {}),
       });
       if (spawned.length !== missing) {
         throw new Error(
