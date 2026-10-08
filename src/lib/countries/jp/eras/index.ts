@@ -23,7 +23,7 @@ import { JP_2027 } from "./2027";
  * 466/248 legislature. A table naming only 1991 loses it silently, which is why
  * eraConfigOverrides.test.ts now pins both.
  */
-export const JP_ERAS: Partial<Record<ShippingPreset, CountryEraOverride>> = {
+export const JP_ERAS: Record<ShippingPreset, CountryEraOverride> = {
   "1953-default": JP_1953,
   "1979-default": JP_1979,
   "1991-default": JP_1991,

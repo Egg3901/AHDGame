@@ -20,7 +20,7 @@ import { UKR_2027 } from "./2027";
  * needs the Soviet-ruble anchor normalizer. Every other preset uses the base
  * config.
  */
-export const UKR_ERAS: Partial<Record<ShippingPreset, CountryEraOverride>> = {
+export const UKR_ERAS: Record<ShippingPreset, CountryEraOverride> = {
   "1953-default": UKR_1953,
   "1979-default": UKR_1979,
   "1991-default": UKR_1991,

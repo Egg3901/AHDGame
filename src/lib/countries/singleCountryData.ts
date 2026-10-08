@@ -40,8 +40,10 @@
  * the test prints their sizes so the backlog stays visible instead of silent.
  */
 
+import type { CountryId } from "@/lib/constants/countries";
+
 /** Countries whose folder is finished. Adding one turns the guard on for it. */
-export const CONVERTED: readonly string[] = [
+export const CONVERTED: readonly CountryId[] = [
   "JP",
   "US",
   "UK",

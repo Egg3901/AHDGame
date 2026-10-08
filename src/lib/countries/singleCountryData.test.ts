@@ -68,7 +68,7 @@ describe("single-country data lives in that country's folder", () => {
   it("reports the backlog for countries not yet converted", () => {
     const byCountry = new Map<string, { files: number; lines: number }>();
     for (const f of singleCountryFiles()) {
-      if (CONVERTED.includes(f.country)) continue;
+      if ((CONVERTED as readonly string[]).includes(f.country)) continue;
       // Already in its own folder: relocated, not outstanding.
       if (f.file.startsWith(`src/lib/countries/${f.country.toLowerCase()}/`)) continue;
       const row = byCountry.get(f.country) ?? { files: 0, lines: 0 };

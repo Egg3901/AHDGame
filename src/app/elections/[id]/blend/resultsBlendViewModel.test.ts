@@ -163,6 +163,31 @@ describe("winner", () => {
   });
 });
 
+describe("House vote after a deadlock", () => {
+  const acting = (status: "open" | "closed") =>
+    data({
+      summary: {
+        ...data().summary,
+        projectedWinner: null,
+        resolutionMode: "contingent_deadlock",
+        contingentHouseVote: { status, actingPresidentName: "Alex Acting", closesTurn: 34 },
+      },
+    });
+
+  it("says the House is still voting while the window is open", () => {
+    const vm = buildResultsBlendViewModel(input({ data: acting("open") }));
+    expect(vm.winnerLine).toContain("until turn 34");
+    expect(vm.winnerLine).toContain("Alex Acting serves as acting president");
+  });
+
+  it("says the acting president continues when the House closes without a majority", () => {
+    const vm = buildResultsBlendViewModel(input({ data: acting("closed") }));
+    expect(vm.winnerLine).toBe(
+      "The House closed without electing a president. Alex Acting continues as acting president."
+    );
+  });
+});
+
 describe("electoral college", () => {
   it("uses the payload's own threshold and total", () => {
     const vm = buildResultsBlendViewModel(input());

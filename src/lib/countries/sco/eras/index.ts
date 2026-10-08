@@ -18,7 +18,7 @@ import { SCO_2027 } from "./2027";
  *
  * ⚠ SCO HAS NO CONFIG OVERRIDE IN ANY ERA. Every preset uses the base config.
  */
-export const SCO_ERAS: Partial<Record<ShippingPreset, CountryEraOverride>> = {
+export const SCO_ERAS: Record<ShippingPreset, CountryEraOverride> = {
   "1953-default": SCO_1953,
   "1979-default": SCO_1979,
   "1991-default": SCO_1991,

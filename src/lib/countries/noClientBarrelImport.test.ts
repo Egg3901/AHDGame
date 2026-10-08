@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { CONVERTED } from "./singleCountryData";
 
 /**
  * No `"use client"` module imports a country barrel.
@@ -73,9 +74,10 @@ function clientModules(): { file: string; source: string }[] {
 
 describe("country barrels are server-side only", () => {
   it("covers every country folder, including the three-letter ones", () => {
-    // Guards the guard a second way: a directory read that came back short would
-    // narrow the pattern silently, which is exactly how the old one went stale.
-    expect(COUNTRY_DIRS.length).toBeGreaterThanOrEqual(29);
+    // Guards the guard a second way: the discovered directory set must be the
+    // converted roster exactly. A new folder or roster entry cannot silently
+    // narrow the pattern or escape this test.
+    expect([...COUNTRY_DIRS].sort()).toEqual(CONVERTED.map((cc) => cc.toLowerCase()).sort());
     for (const cc of ["sco", "wal", "blr", "ukr", "bal"]) {
       expect(COUNTRY_DIRS).toContain(cc);
       expect(BARREL_IMPORT.test(`from "@/lib/countries/${cc}"`)).toBe(true);

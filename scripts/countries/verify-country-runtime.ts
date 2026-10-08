@@ -123,6 +123,7 @@ import { HAZARD_GROUPS } from "../../src/lib/crises/regionHazards";
 import { REGION_DEMOGRAPHIC_CATEGORY_IDS } from "../../src/app/country/[code]/region/[id]/regionData";
 import { readFileSync } from "node:fs";
 import { CONVERTED } from "../../src/lib/countries/singleCountryData";
+import { SHIPPING_PRESETS } from "../../src/lib/world/eraRoster";
 import { escapeRegExp } from "./regexEscape";
 
 type Dict = Record<string, unknown>;
@@ -1329,6 +1330,36 @@ export async function verify(cc: string): Promise<boolean> {
   let forwarders = 0;
   let scalars = 0;
   let failed = 0;
+
+  if (at(folder, "id") !== cc) {
+    console.log(`FAIL  ${cc} folder id is ${String(at(folder, "id"))}.`);
+    failed++;
+  }
+  if (at(folder, "institutions.config.id") !== cc) {
+    console.log(
+      `FAIL  ${cc} institutions.config.id is ${String(at(folder, "institutions.config.id"))}.`
+    );
+    failed++;
+  }
+
+  const eras = at(folder, "eras") as Dict;
+  for (const preset of SHIPPING_PRESETS) {
+    const era = eras?.[preset] as Dict | undefined;
+    if (!era) {
+      console.log(`FAIL  ${cc}.eras has no entry for ${preset}.`);
+      failed++;
+    } else if (era.preset !== preset) {
+      console.log(`FAIL  ${cc}.eras.${preset} is labelled ${String(era.preset)}.`);
+      failed++;
+    }
+  }
+  const unexpectedEras = Object.keys(eras ?? {}).filter(
+    (preset) => !(SHIPPING_PRESETS as readonly string[]).includes(preset)
+  );
+  if (unexpectedEras.length > 0) {
+    console.log(`FAIL  ${cc}.eras has unknown presets: ${unexpectedEras.join(", ")}.`);
+    failed++;
+  }
 
   for (const [name, registry] of Object.entries(REGISTRIES)) {
     const value = registry[cc];

@@ -1,5 +1,14 @@
 {
   "elections": {
+    "campaignPresence": {
+      "loadFailed": "Failed to load campaign presence. Please refresh and try again.",
+      "buildFailed": "Could not confirm the build. Refresh to check its result before trying again.",
+      "unavailable": "Campaign presence is unavailable. Sign in again to view it.",
+      "readOnly": "Read-only campaign presence. Select a candidate to inspect their state-by-state infrastructure. Building is restricted to eligible US characters.",
+      "inspect": "Hover a state for its presence level and projected bonus. Click a state for details.",
+      "empty": "No active presidential candidates are available to display.",
+      "selectState": "Select a state to inspect its campaign presence level and projected bonus."
+    },
     "mergerNppWarning": {
       "adjacency": "Both parties must have a member, elected official, or active NPP in the same region or in neighboring regions. This is checked when proposing and again before the merger takes effect. If they no longer touch, the proposal is rejected.",
       "title": "Merger warning: excess incoming NPPs are permanently deleted",

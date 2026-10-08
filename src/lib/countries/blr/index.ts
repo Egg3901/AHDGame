@@ -14,7 +14,7 @@ import { BLR_ERAS } from "./eras";
  * MongoDB driver into the browser. Client surfaces take `./identity` or
  * `./geographyFacts`, never this file and never `./geography`.
  */
-export const BLR: CountryFolder = {
+export const BLR: CountryFolder<"BLR"> = {
   id: "BLR",
   identity: BLR_IDENTITY,
   institutions: BLR_INSTITUTIONS,
