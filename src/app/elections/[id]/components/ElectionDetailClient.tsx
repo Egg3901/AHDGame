@@ -533,7 +533,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             per-ticket tally and the deadline strip all appear up there, so the
             blocks below are asked to leave them out rather than print the same
             standing twice on one page. */}
-        <BlendScope title="Also on this race" lede="Trends, state drivers, turnout and the factor ledger.">
+        <BlendScope title="Also on this race" lede="The full map and the trends.">
           {canEnter &&
             (election.bulgarianFoundingRound?.round === 1 ||
               Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (

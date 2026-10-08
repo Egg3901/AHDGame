@@ -45,7 +45,7 @@ function campaignFor(
   ticket: GeneralTicketVM,
   campaigns: CampaignSummary[]
 ): CampaignSummary | undefined {
-  return campaigns.find((c) => (c.candidateRefId ?? c.candidateId) === ticket.candidateKey);
+  return campaigns.find((c) => c.candidateId === ticket.candidateKey);
 }
 
 /** What goes in a campaign cell when there is no campaign figure to show. */

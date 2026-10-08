@@ -93,8 +93,7 @@ function election(): ElectionDetail {
 const CAMPAIGNS = [
   {
     id: "camp1",
-    candidateId: "15",
-    candidateRefId: "ch1",
+    candidateId: "ch1",
     candidateName: "First Ticket",
     party: "1",
     partyName: "Democratic Party",
