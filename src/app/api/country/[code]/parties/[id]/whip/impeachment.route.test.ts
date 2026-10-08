@@ -31,8 +31,8 @@ vi.mock("@/lib/congress/applyWhipVotes", () => ({
 vi.mock("@/lib/parties/antiAbuseGuards", () => ({
   getPartyNppControlStatus: vi.fn().mockResolvedValue({ ok: true }),
 }));
-vi.mock("@/lib/mail/systemMail", () => ({ sendSystemMail: vi.fn() }));
-vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn() }));
+vi.mock("@/lib/mail/systemMail", () => ({ sendSystemMails: vi.fn() }));
+vi.mock("@/lib/notifications", () => ({ createNotifications: vi.fn() }));
 vi.mock("@/lib/time/gameTime", () => ({ getGameTime: vi.fn() }));
 
 function makeCursor(docs: unknown[]) {

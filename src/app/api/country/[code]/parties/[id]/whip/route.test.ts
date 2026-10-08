@@ -35,8 +35,8 @@ vi.mock("@/lib/time/gameTime", () => ({
 vi.mock("@/lib/parties/antiAbuseGuards", () => ({
   getPartyNppControlStatus: vi.fn().mockResolvedValue({ ok: true }),
 }));
-vi.mock("@/lib/mail/systemMail", () => ({ sendSystemMail: vi.fn() }));
-vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn() }));
+vi.mock("@/lib/mail/systemMail", () => ({ sendSystemMails: vi.fn() }));
+vi.mock("@/lib/notifications", () => ({ createNotifications: vi.fn() }));
 
 function makeCursor(docs: unknown[]) {
   return {
@@ -243,17 +243,17 @@ describe("POST /api/country/[code]/parties/[id]/whip", () => {
     );
 
     const { applyPlayerWhipToBill } = await import("@/lib/congress/applyPlayerWhip");
-    const { sendSystemMail } = await import("@/lib/mail/systemMail");
-    const { createNotification } = await import("@/lib/notifications");
+    const { sendSystemMails } = await import("@/lib/mail/systemMail");
+    const { createNotifications } = await import("@/lib/notifications");
 
     expect(applyPlayerWhipToBill).not.toHaveBeenCalled();
-    expect(sendSystemMail).not.toHaveBeenCalled();
-    expect(createNotification).toHaveBeenCalledWith(
+    expect(sendSystemMails).not.toHaveBeenCalled();
+    expect(createNotifications).toHaveBeenCalledWith([
       expect.objectContaining({
         title: "Party vote recommendation",
         metadata: expect.objectContaining({ mode: "soft" }),
-      })
-    );
+      }),
+    ]);
   });
 
   it("allows a hard player whip after a soft player whip already exists on the target", async () => {
