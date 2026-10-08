@@ -3,52 +3,23 @@ import { describe, expect, it } from "vitest";
 import { isValuelessNonErrorRejection, isMarketPollingTeardown } from "./sentryFilters";
 
 describe("market polling teardown", () => {
-  const teardown = () => ({
-    exception: {
-      values: [
-        {
-          type: "AbortError",
-          value: "signal is aborted without reason",
-          mechanism: { type: "auto.browser.global_handlers.onunhandledrejection" },
-          stacktrace: {
-            frames: [
-              {
-                filename:
-                  "node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.production.js",
-                function: "commitHookEffectListUnmount",
-              },
-              {
-                filename: "src/app/country/[code]/stockmarket/useExchangeQuotes.ts",
-                function: "destroy",
-                in_app: true,
-              },
-            ],
-          },
-        },
-      ],
-    },
+  const event = (type: string, value: string) => ({ exception: { values: [{ type, value }] } });
+  it("recognizes the explicitly tagged cancellation without relying on source maps", () => {
+    expect(
+      isMarketPollingTeardown(event("AbortError", "Market polling stopped after view cleanup"))
+    ).toBe(true);
   });
-
-  it("recognizes the captured unmount cancellation in each market poller", () => {
-    expect(isMarketPollingTeardown(teardown())).toBe(true);
-    const chart = teardown();
-    chart.exception.values[0].stacktrace.frames[1].filename =
-      "src/app/country/[code]/stockmarket/components/MarketOverview.tsx";
-    expect(isMarketPollingTeardown(chart)).toBe(true);
-  });
-
-  it("preserves timeouts, unexpected aborts and application failures", () => {
-    for (const type of ["TimeoutError", "Error"]) {
-      const event = teardown();
-      event.exception.values[0].type = type;
-      expect(isMarketPollingTeardown(event)).toBe(false);
-    }
-    const active = teardown();
-    active.exception.values[0].stacktrace.frames[1].function = "refresh";
-    expect(isMarketPollingTeardown(active)).toBe(false);
-    const noUnmount = teardown();
-    noUnmount.exception.values[0].stacktrace.frames.shift();
-    expect(isMarketPollingTeardown(noUnmount)).toBe(false);
+  it("preserves timeouts, untagged aborts and application failures", () => {
+    expect(isMarketPollingTeardown(event("AbortError", "signal is aborted without reason"))).toBe(
+      false
+    );
+    expect(
+      isMarketPollingTeardown(event("TimeoutError", "Market polling stopped after view cleanup"))
+    ).toBe(false);
+    expect(
+      isMarketPollingTeardown(event("Error", "Market polling stopped after view cleanup"))
+    ).toBe(false);
+    expect(isMarketPollingTeardown({})).toBe(false);
   });
 });
 
