@@ -62,6 +62,7 @@ import {
 import type { CorporationLookups } from "./types";
 import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 import { emitTxBulk } from "@/lib/financialTxLog/emit";
+import { getNppCashFloorAnchor } from "@/lib/turn/npp/nppCashReserve";
 import { partitionedBulkWrite } from "./partitionedBulkWrite";
 import {
   resolveCorpLiquidCurrencyCode,
@@ -71,6 +72,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import {
   MIN_SETTLE_ANCHOR,
+  NPP_PREMIUM_PAYABLE_SHARE,
   scopeOf,
   allocateDeliveriesToBuyers,
   type SettleableSupplyAgreement,
@@ -499,7 +501,17 @@ export function computeSupplyAgreementSettlements(args: {
       typeof payer.liquidCapitalAnchor === "number" &&
       Number.isFinite(payer.liquidCapitalAnchor)
     ) {
-      const available = Math.max(0, payer.liquidCapitalAnchor - (paidByCorp.get(payerId) ?? 0));
+      // An NPP buyer paying a premium keeps its growth reserve: only a share of
+      // the cash above the reserve is payable, the rest is logged as unpaid.
+      const premiumBound =
+        rawNetAnchor > 0 &&
+        typeof payer.premiumReserveAnchor === "number" &&
+        Number.isFinite(payer.premiumReserveAnchor);
+      const spendable = premiumBound
+        ? Math.max(0, payer.liquidCapitalAnchor - payer.premiumReserveAnchor!) *
+          NPP_PREMIUM_PAYABLE_SHARE
+        : payer.liquidCapitalAnchor;
+      const available = Math.max(0, spendable - (paidByCorp.get(payerId) ?? 0));
       const payable = Math.min(owedAnchor, available);
       unpaidAnchor = owedAnchor - payable;
       if (deliveryRecord && unpaidAnchor > 0) {
@@ -719,6 +731,13 @@ export async function settleSupplyAgreements(args: {
           resolveCorpLiquidCurrencyCode(corp),
           fxRateForCorpFromMap(corp, lookups.exchangeRatesByCurrency)
         ),
+        ...(corp.ceoType === "npp" && corp.ceoId
+          ? {
+              premiumReserveAnchor: getNppCashFloorAnchor(
+                args.plantsEnabled ? lookups.preset : undefined
+              ),
+            }
+          : {}),
       };
     },
     turn,

@@ -1045,6 +1045,59 @@ describe("C6 — damages are bounded and solvency-floored", () => {
     expect(r.deltaByCorp.get(B)).toBe(broke);
   });
 
+  describe("NPP buyer premium reserve", () => {
+    const run = (buyerAnchor: number, reserve: number | undefined) =>
+      computeSupplyAgreementSettlements({
+        agreements: [
+          { supplierCorpId: S, buyerCorpId: B, commodity, volumeCap: 100, pricePremium: 0.1 },
+        ],
+        contractSettlementByCorp: new Map([[S, new Map([[commodity, 100]])]]),
+        eraUnitScale: 1,
+        priceRatioByCommodity: ratio,
+        corpInfo: (id) =>
+          id === S
+            ? { _id: supId, name: "Sup", ccy: "USD" as CurrencyCode, fxRate: 1 }
+            : id === B
+              ? {
+                  _id: buyId,
+                  name: "Buy",
+                  ccy: "USD" as CurrencyCode,
+                  fxRate: 1,
+                  liquidCapitalAnchor: buyerAnchor,
+                  ...(reserve === undefined ? {} : { premiumReserveAnchor: reserve }),
+                }
+              : undefined,
+        turn: 5,
+        now,
+      });
+    const premium = 100 * base * 0.1;
+
+    it("pays nothing while the buyer sits under its reserve", () => {
+      const r = run(premium * 10, premium * 10);
+      expect(r.deltaByCorp.get(B) ?? 0).toBe(0);
+      expect(r.deltaByCorp.get(S) ?? 0).toBe(0);
+    });
+
+    it("pays only half of the cash above the reserve and conserves money", () => {
+      const reserve = 1_000_000;
+      const excess = premium; // half of this is below the premium owed
+      const r = run(reserve + excess, reserve);
+      const paid = -(r.deltaByCorp.get(B) ?? 0);
+      expect(paid).toBe(Math.round(excess * 0.5));
+      expect(r.deltaByCorp.get(S)).toBe(paid);
+    });
+
+    it("pays the full premium once the buyer holds ample cash above the reserve", () => {
+      const r = run(1e12, 1_000_000);
+      expect(-(r.deltaByCorp.get(B) ?? 0)).toBe(Math.round(premium));
+    });
+
+    it("leaves a buyer without a reserve (player) paying from all its cash", () => {
+      const r = run(premium * 2, undefined);
+      expect(-(r.deltaByCorp.get(B) ?? 0)).toBe(Math.round(premium));
+    });
+  });
+
   it("shares one payer's balance across its contracts instead of paying it twice", () => {
     const broke = 5_000;
     const B2 = new ObjectId();
