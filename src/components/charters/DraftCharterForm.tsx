@@ -10,6 +10,7 @@ import { FoundingCohortPicker, defaultCohort } from "./FoundingCohortPicker";
 import { adjacentStates } from "@/lib/constants/stateAdjacency";
 import type { CountryId } from "@/lib/constants/countries";
 import type { FoundingCohortPick } from "@/lib/db/types";
+import { PartySwitchElectionWarning } from "@/components/party/PartySwitchElectionWarning";
 
 const EMPTY_PLATFORM: PlatformValue = {
   economic: 0,
@@ -51,6 +52,7 @@ interface DraftCharterFormProps {
    * human-readable dropdown labels without a client-side fetch.
    */
   stateNames: Readonly<Record<string, string>>;
+  showPartySwitchWarning?: boolean;
 }
 
 interface FounderSlot {
@@ -58,7 +60,12 @@ interface FounderSlot {
   name: string;
 }
 
-export function DraftCharterForm({ countryCode, proposer, stateNames }: DraftCharterFormProps) {
+export function DraftCharterForm({
+  countryCode,
+  proposer,
+  stateNames,
+  showPartySwitchWarning = false,
+}: DraftCharterFormProps) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [abbreviation, setAbbreviation] = useState("");
@@ -243,6 +250,7 @@ export function DraftCharterForm({ countryCode, proposer, stateNames }: DraftCha
       <Button type="submit" disabled={submitting} className="w-full">
         {submitting ? "Submitting…" : "Create charter draft"}
       </Button>
+      {showPartySwitchWarning ? <PartySwitchElectionWarning /> : null}
     </form>
   );
 }
