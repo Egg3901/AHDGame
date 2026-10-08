@@ -38,6 +38,8 @@ beforeEach(() => {
   db.collection("corporateSectors");
   db.collection("exchangeRates");
   db.collection("unownedSectors");
+  db.collection("corporationExits");
+  db.collection("corporationHistory");
 });
 
 describe("POST /api/corporations/[id]/dissolve", () => {
@@ -114,6 +116,19 @@ describe("POST /api/corporations/[id]/dissolve", () => {
     const sectorDeleteFilter = db.collectionMocks.corporateSectors.deleteMany.mock.calls[0][0];
     expect(sectorDeleteFilter._id.$in).toEqual([sectorId]);
     expect(sectorDeleteFilter["constructionPropertyTransition.kind"]).toBe("restore");
+    expect(db.collectionMocks.corporationExits.updateOne).toHaveBeenCalledWith(
+      { _id: corpId },
+      {
+        $setOnInsert: expect.objectContaining({
+          corporationId: corpId,
+          name: "Test Corp",
+          countryId: "UK",
+          ownerKind: "player",
+          reason: "voluntary_closure",
+        }),
+      },
+      { upsert: true }
+    );
   });
 
   it("returns 409 when a dissolve is already in progress", async () => {

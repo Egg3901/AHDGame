@@ -201,7 +201,9 @@ export async function stampTaxSliderProvisions<T extends StampableProvision>(
     }
     const lt = await db.collection<LegislationType>("legislationTypes").findOne({ _id: ltId });
     if (!lt?.taxSlider) {
-      out.push(p);
+      const withoutUnvalidatedRate = { ...p };
+      delete withoutUnvalidatedRate.proposedRate;
+      out.push(withoutUnvalidatedRate);
       continue;
     }
     const resolved = await resolveTaxSliderProvisionFields(

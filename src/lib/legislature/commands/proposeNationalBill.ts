@@ -51,7 +51,8 @@ import {
 import { hasBillLifecycle } from "@/lib/legislature/hasBillLifecycle";
 import { mayRuleByDecree } from "@/lib/singleplayerHeadOfState";
 import { enactSingleplayerDecree } from "./enactSingleplayerDecree";
-import { isResetV2Country } from "@/lib/resetVersions/rules";
+import { RESET_V2_READY } from "@/lib/resetVersions/availability";
+import { isResetV2Country, resetSystemVersionsForCountry } from "@/lib/resetVersions/rules";
 
 const VOTING_DURATION_HOURS = 24;
 const VOTING_DURATION_MS = VOTING_DURATION_HOURS * 60 * 60 * 1000;
@@ -140,7 +141,9 @@ export async function proposeNationalBill(
   // Custom (flavor/roleplay) bills carry no provisions and have no mechanical
   // effect. Force the provision list empty so a client cannot smuggle real
   // effects in under category:"custom".
-  const rawProvisions = category === "custom" ? [] : clientProvisions;
+  const resetLegislationV2 =
+    resetSystemVersionsForCountry(gameState, RESET_V2_READY, countryId).legislation === "v2";
+  const rawProvisions = category === "custom" && !resetLegislationV2 ? [] : clientProvisions;
   if (
     isUsCongress &&
     rawProvisions.some(

@@ -344,6 +344,17 @@ describe("mergeCountry", () => {
       expect.objectContaining({ $inc: { liquidCapital: 40 } })
     );
     expect(corps.deleteOne).toHaveBeenCalledWith({ _id: "shell" });
+    expect(prime(db, "corporationExits").updateOne).toHaveBeenCalledWith(
+      { _id: "shell" },
+      {
+        $setOnInsert: expect.objectContaining({
+          reason: "national_corporation_merged",
+          successorId: "survivor",
+          finalCash: 0 + 40,
+        }),
+      },
+      { upsert: true }
+    );
   });
 
   it("keeps a shell whose cash is in another currency, but demotes it", async () => {

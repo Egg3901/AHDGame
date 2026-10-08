@@ -155,6 +155,7 @@ export async function cascadeCharacterDeletion(
           () =>
             executeCorporationBondDefaultDissolution(db, corp, {
               requireDefaultedBonds: false,
+              exitReason: "owner_deleted",
             })
         );
         if (result) {

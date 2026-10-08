@@ -68,6 +68,8 @@ function mkCursor(docs: unknown[]) {
   const cursor = {
     project: () => cursor,
     sort: () => cursor,
+    limit: () => cursor,
+    next: async () => docs[0] ?? null,
     toArray: async () => docs,
   };
   return cursor;
@@ -113,6 +115,8 @@ function makeDb(opts: { corp: Record<string, unknown>; issuerBonds: Record<strin
       find: () => mkCursor([]),
       updateOne: vi.fn().mockResolvedValue({}),
     },
+    corporationHistory: { find: () => mkCursor([{ revenue: 1_234 }]) },
+    corporationExits: { updateOne: vi.fn().mockResolvedValue({}) },
   };
   return {
     collection: (name: string) => {
@@ -123,12 +127,17 @@ function makeDb(opts: { corp: Record<string, unknown>; issuerBonds: Record<strin
   } as unknown as Db;
 }
 
+function exitWrites(db: Db) {
+  return vi.mocked(db.collection("corporationExits").updateOne).mock.calls;
+}
+
 const CHAR_ID = new ObjectId();
 
 function baseCorp(overrides: Record<string, unknown> = {}) {
   return {
     _id: new ObjectId(),
     name: "Doomed Corp",
+    type: "retail",
     countryId: "US",
     liquidCapital: 500_000,
     totalShares: 100,
@@ -189,6 +198,74 @@ describe("executeCorporationBondDefaultDissolution ledger rows (#3237)", () => {
     const dist = entries.filter((e) => e.type === "corp_dissolution_distribution");
     expect(dist).toHaveLength(1);
     expect(dist[0].amount).toBe(500_000); // whole pool → sole shareholder
+  });
+
+  it("records the exit with the caller's reason, turn, and last revenue", async () => {
+    const corp = baseCorp({ sharePrice: 3, totalShares: 100, ceoType: "npp" });
+    const db = makeDb({ corp: corp as unknown as Record<string, unknown>, issuerBonds: [] });
+
+    await executeCorporationBondDefaultDissolution(db, corp, {
+      requireDefaultedBonds: false,
+      exitReason: "npp_insolvency",
+    });
+
+    expect(exitWrites(db)).toEqual([
+      [
+        { _id: corp._id },
+        {
+          $setOnInsert: expect.objectContaining({
+            corporationId: corp._id,
+            name: "Doomed Corp",
+            corporationType: "retail",
+            countryId: "US",
+            ownerKind: "npp",
+            reason: "npp_insolvency",
+            turn: 251, // from the module-level getCurrentTurn mock
+            finalCash: 500_000,
+            finalMarketCap: 300,
+            finalRevenue: 1_234,
+          }),
+        },
+        { upsert: true },
+      ],
+    ]);
+  });
+
+  it("defaults the exit reason from whether the dissolution needed a defaulted bond", async () => {
+    const forced = baseCorp();
+    const forcedDb = makeDb({
+      corp: forced as unknown as Record<string, unknown>,
+      issuerBonds: [],
+    });
+    await executeCorporationBondDefaultDissolution(forcedDb, forced, {
+      requireDefaultedBonds: false,
+    });
+    expect(exitWrites(forcedDb)[0][1]).toEqual({
+      $setOnInsert: expect.objectContaining({ reason: "forced_liquidation", ownerKind: "player" }),
+    });
+
+    const defaulted = baseCorp();
+    const bond = {
+      _id: new ObjectId(),
+      corporationId: defaulted._id,
+      issuerType: "corporation",
+      matured: false,
+      defaulted: true,
+      totalIssued: 1_000,
+      couponRate: 5,
+      holders: [],
+      publicFloat: 0,
+    };
+    const defaultedDb = makeDb({
+      corp: defaulted as unknown as Record<string, unknown>,
+      issuerBonds: [bond],
+    });
+    await executeCorporationBondDefaultDissolution(defaultedDb, defaulted, {
+      requireDefaultedBonds: true,
+    });
+    expect(exitWrites(defaultedDb)[0][1]).toEqual({
+      $setOnInsert: expect.objectContaining({ reason: "bond_default" }),
+    });
   });
 
   it("real bond default emits exactly one bond_default row and the liquidation legs sum to zero", async () => {
