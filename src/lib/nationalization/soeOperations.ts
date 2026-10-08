@@ -1054,7 +1054,9 @@ async function applyStateCapexGrowth(
   }
 ): Promise<void> {
   const { countryId, sectors, ledger, turn, now } = input;
-  const candidates = sectors.filter((s) => s.sectorType !== "extraction" && s.capitalStock > 0);
+  const candidates = sectors.filter(
+    (s) => s.sectorType !== "extraction" && (s.capitalStock ?? 0) > 0
+  );
   if (candidates.length === 0) return;
   const [budgetDoc, priceDocs, queueDocs] = await Promise.all([
     db
@@ -1113,7 +1115,7 @@ async function applyStateCapexGrowth(
     candidates.map((s) => ({
       id: String(s._id),
       sectorType: s.sectorType,
-      capitalStock: s.capitalStock,
+      capitalStock: s.capitalStock ?? 0,
       pendingOrders: pendingById.get(String(s._id)) ?? 0,
       unitPriceAnchor: capacityPricePerUnit(
         s.sectorType,

@@ -8,7 +8,7 @@
  * asks the treasury to pay, and writes the build orders.
  */
 
-import type { CorporationType } from "@/lib/db/types";
+import type { CorporationType } from "@/lib/db/types/corporation";
 
 /** Weighted price-over-base ratio of a sector's outputs above which it counts as short. */
 export const SOE_GROWTH_MIN_SHORTAGE = 1.25;
