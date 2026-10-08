@@ -1211,11 +1211,22 @@ export function makeNppCorpDecision(
         sector.sectorType === "extraction"
           ? Math.max(0, Math.min(1, placementSignals?.extractionHeadroomOf?.(sector.stateId) ?? 1))
           : 1;
+      // Growth is bounded by capacity IN FLIGHT, not by how many orders are
+      // pending. The old gate counted orders, so two replacement-sized slices
+      // (each ~0.05% of the plant, placed while growth was briefly ineligible)
+      // shut growth out for a whole build cycle: on the live 1991 world 80% of
+      // retail capacity, 87% of real estate and 58% of healthcare sat in plants
+      // with a healthy fill and two trivial orders pending, in markets running
+      // at 30% of demand. Two full-size growth orders are the ceiling the slot
+      // count used to enforce, so that is the in-flight ceiling here.
+      const pendingUnits = (sector.buildQueue ?? []).reduce(
+        (sum, o) => sum + (Number.isFinite(o.unitsOrdered) ? Math.max(0, o.unitsOrdered) : 0),
+        0
+      );
       const canGrow =
         (sp.isProfitable || criticalShortage) &&
         levers.allowGrowthCapex &&
         !(ctx.retailExpansionPaused && sector.sectorType === "retail") &&
-        queueDepth < NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH &&
         stateShortage > NPP_GROWTH_MIN_SHORTAGE &&
         utilization >= NPP_GROWTH_MIN_UTILIZATION &&
         (sector.sectorType !== "extraction" || extractionHeadroom > 0);
@@ -1256,10 +1267,14 @@ export function makeNppCorpDecision(
       // at once. Extraction growth is additionally scaled by finite deposit
       // headroom and never floors up to a facility when the deposit cannot
       // support one.
-      const growthCapUnits =
+      const growthStepUnits =
         sector.sectorType === "extraction"
           ? Math.floor(runUnits * NPP_GROWTH_MAX_STEP_OF_RUN * extractionHeadroom)
           : Math.max(facilityUnits, Math.floor(runUnits * NPP_GROWTH_MAX_STEP_OF_RUN));
+      const growthCapUnits = Math.min(
+        growthStepUnits,
+        Math.floor(growthStepUnits * NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH - pendingUnits)
+      );
       // Units the growth budget affords, bounded by that step. Growth only fires
       // if it clears one whole facility — below that the plant just replaces
       // depreciation, so a cash-poor corp keeps its maintenance rather than

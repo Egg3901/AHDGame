@@ -22,7 +22,12 @@ export const NPP_REINVEST_AGGRESSION = 1.0;
 export const NPP_REINVEST_MIN_FILL = 0.85;
 /** Queue depth is a storage bound; replacement size carries the cadence. */
 export const NPP_REINVEST_MAX_QUEUE_DEPTH = 20;
-/** Stop discretionary growth sooner than necessary replacement. */
+/**
+ * Stop tiny replacement orders sooner than the storage bound. It also sets how
+ * many per-turn growth steps may be in flight at once (this many times
+ * `NPP_GROWTH_MAX_STEP_OF_RUN` of run capacity), counted in pending UNITS so a
+ * replacement-sized slice cannot use up a growth slot.
+ */
 export const NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH = 2;
 /**
  * Growth builds from nothing, like a player's `buildCapacity` — it is NOT gated
