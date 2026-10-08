@@ -17,9 +17,11 @@ vi.mock("@/lib/db/partyLookup", () => ({
 }));
 vi.mock("@/lib/mail/systemMail", () => ({
   sendSystemMail: vi.fn().mockResolvedValue(undefined),
+  sendSystemMails: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/notifications", () => ({
   createNotification: vi.fn().mockResolvedValue(undefined),
+  createNotifications: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/api/rateLimit", () => ({
   checkRateLimit: vi
@@ -101,6 +103,44 @@ describe("POST /api/country/[code]/parties/[id]/whip — character audience", ()
 
     // NPPs (empty so the NPP-audience path can resolve too when we want back-compat check)
     db.collection("npps").find.mockReturnValue({ toArray: async () => [] });
+  });
+
+  it("batches mail and notifications for eleven player recipients", async () => {
+    const recipients = Array.from({ length: 11 }, (_, index) => ({
+      _id: new ObjectId(),
+      userId: new ObjectId(),
+      name: `Player ${index}`,
+      sequentialId: index + 1,
+    }));
+    db.collection("electedOfficials").find.mockReturnValue({
+      toArray: async () => recipients.map((char) => ({ characterId: char._id, isNPP: false })),
+    });
+    db.collection("characters").find.mockReturnValue({
+      project: () => ({ toArray: async () => recipients }),
+    });
+    const { POST } = await import("./route");
+    const req = new Request("http://localhost/api/country/US/parties/1/whip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        audience: "character",
+        targetType: "bill",
+        targetId: billId.toString(),
+        chamber: "house",
+        direction: "for",
+      }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ code: "US", id: partyId }) });
+    expect(res.status).toBe(200);
+    expect((await res.json()).mailedCount).toBe(11);
+    const { sendSystemMail, sendSystemMails } = await import("@/lib/mail/systemMail");
+    const { createNotification, createNotifications } = await import("@/lib/notifications");
+    expect(sendSystemMail).not.toHaveBeenCalled();
+    expect(createNotification).not.toHaveBeenCalled();
+    expect(sendSystemMails).toHaveBeenCalledOnce();
+    expect(vi.mocked(sendSystemMails).mock.calls[0]?.[1]).toHaveLength(11);
+    expect(createNotifications).toHaveBeenCalledOnce();
+    expect(vi.mocked(createNotifications).mock.calls[0]?.[0]).toHaveLength(11);
   });
 
   it("issues a character whip and writes a BillWhip with audience=character", async () => {
