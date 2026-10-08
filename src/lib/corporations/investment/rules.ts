@@ -141,6 +141,8 @@ export interface InvestmentForecastInput {
   demandGapUnits: number;
   revenueDailyAnchor: number;
   operatingCostDailyAnchor: number;
+  /** Price-sensitive physical inputs, within operatingCostDailyAnchor. */
+  inputsCostDailyAnchor?: number;
   /** Revenue-linked policy credits or charges, excluded from operating costs above. */
   policyCreditDailyAnchor?: number;
   overheadDailyAnchor: number;
@@ -170,7 +172,8 @@ export interface InvestmentHorizon {
  * Replacement is a cash reserve, not a second purchase or saleable asset.
  */
 export function forecastSectorInvestment(
-  input: InvestmentForecastInput
+  input: InvestmentForecastInput,
+  horizonTurns: readonly number[] = [48, 96, 192]
 ): InvestmentHorizon[] | null {
   if (
     !Object.values(input).every(Number.isFinite) ||
@@ -223,7 +226,7 @@ export function forecastSectorInvestment(
     const availableCashAnchor =
       operatingCashAnchor - overheadAnchor - taxAnchor - replacementReserveAnchor;
     if (cashPaybackTurn === null && availableCashAnchor >= cost) cashPaybackTurn = turn;
-    if (turn === 48 || turn === 96 || turn === 192) {
+    if (horizonTurns.includes(turn)) {
       horizons.push({
         cashPaybackTurn,
         turns: turn,

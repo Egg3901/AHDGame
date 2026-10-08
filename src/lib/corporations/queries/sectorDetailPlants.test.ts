@@ -448,6 +448,26 @@ describe("buildSectorPlantsSection", () => {
 });
 
 describe("sector investment quote context", () => {
+  it("keeps the measured sizing limit distinct from the weighted expansion signal", () => {
+    const result = buildSectorPlantsSection({
+      ...BASE_ARGS,
+      eraUnitScale: 1,
+      sector: sectorFixture(),
+      demandGapUnits: 10000,
+      measuredDemandGapUnits: 120,
+    });
+    expect(result.demandGapUnits).toBe(10000);
+    expect(result.measuredDemandGapUnits).toBe(120);
+    const idle = buildSectorPlantsSection({
+      ...BASE_ARGS,
+      eraUnitScale: 1,
+      sector: sectorFixture({ demandThrottleFactor: 0.5 }),
+      demandGapUnits: 10000,
+      measuredDemandGapUnits: 120,
+    });
+    expect(idle.measuredDemandGapUnits).toBe(0);
+  });
+
   it("quotes cold upkeep using the same capped maintenance basis as the turn", () => {
     const result = buildSectorPlantsSection({
       ...BASE_ARGS,
