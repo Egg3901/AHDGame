@@ -143,6 +143,7 @@ function toMoneyLeg(leg: TransitionLeg): MoneyMoveLeg {
     ...(leg.filter ? { filter: reviveObjectIds(leg.filter) } : {}),
     ...(leg.path ? { path: leg.path } : {}),
     ...(leg.set ? { set: reviveObjectIds(leg.set) } : {}),
+    ...(leg.inc ? { inc: leg.inc } : {}),
     note: leg.note,
   };
 }

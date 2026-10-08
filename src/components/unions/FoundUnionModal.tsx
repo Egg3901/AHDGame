@@ -4,7 +4,11 @@ import { InlineError } from "@/components/ui/InlineError";
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { Modal } from "@/components/ui";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import {
+  CORPORATION_TYPE_LABELS,
+  FOUNDABLE_CORPORATION_TYPES,
+  type CorporationType,
+} from "@/lib/constants/corporations";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { MAX_UNION_NAME_LENGTH, MIN_UNION_NAME_LENGTH } from "@/lib/unions/unionFounding";
 
@@ -168,9 +172,9 @@ export function FoundUnionModal({
                 <option value="" disabled>
                   Select industry…
                 </option>
-                {Object.entries(CORPORATION_TYPE_LABELS).map(([key, label]) => (
+                {FOUNDABLE_CORPORATION_TYPES.map((key) => (
                   <option key={key} value={key}>
-                    {label}
+                    {CORPORATION_TYPE_LABELS[key]}
                   </option>
                 ))}
               </select>

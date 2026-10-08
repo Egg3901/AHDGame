@@ -1,33 +1,21 @@
 import { NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
-import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
-import { parseJsonBody } from "@/lib/api/validate";
-import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { marketAtLeast, getMarketSystemMode } from "@/lib/market/featureFlag";
-import { sectorCapacityBookAnchor } from "@/lib/corporations/sectorProfitBasis";
 import type { GameConfig, CorporateSector } from "@/lib/db/types";
 import { getMediaProductKind, MEDIA_PRODUCT_KINDS } from "@/lib/products/mediaProductCatalog";
 import { getMediaOperatingModel } from "@/lib/mediaOperatingModels/catalog";
 import { MEDIA_PRODUCT_PROJECTS, type MediaProductProject } from "@/lib/products/mediaProduct";
-import { mediaDevelopmentThresholdAnchor } from "@/lib/products/rules/mediaProductRules";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
 const noStore = { "Cache-Control": "private, no-store" };
-const startSchema = z.object({
-  kindId: z.string().min(1).max(80),
-  sectorId: z.string().refine((value) => ObjectId.isValid(value)),
-  title: z.string().trim().min(1).max(80),
-  allocationShare: z.number().finite().gt(0).lte(1),
-});
 
 async function slatesAvailable(db: Awaited<ReturnType<typeof getDb>>) {
   const config = await db.collection<GameConfig>("gameConfig").findOne(
@@ -159,81 +147,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
   }
 }
 
-export async function POST(request: Request, { params }: RouteParams) {
-  try {
-    const auth = await requireBasicAuth();
-    if (!auth.ok) return auth.response;
-    const limit = checkRateLimit(auth.user.userId, 20, 60_000);
-    if (!limit.ok) return rateLimitResponse(limit.retryAfter);
-    const parsed = await parseJsonBody(request, startSchema);
-    if (!parsed.success) return errorResponse(parsed.status, parsed.error);
-    const { id } = await params;
-    const db = await getDb();
-    const resolved = await resolveCorporation(db, id);
-    if (!resolved.ok) return resolved.response;
-    const corporation = resolved.corporation;
-    const ceoError = requireCeo(corporation, auth.user.userId);
-    if (ceoError) return ceoError;
-    if (!(await slatesAvailable(db))) {
-      return errorResponse(409, "Media product slates are not enabled");
-    }
-    const kind = getMediaProductKind(parsed.data.kindId);
-    if (!kind) return errorResponse(400, "Unknown media product kind");
-    const [sector, gameState, currentTurn] = await Promise.all([
-      db.collection<CorporateSector>("corporateSectors").findOne({
-        _id: new ObjectId(parsed.data.sectorId),
-        corporationId: corporation._id,
-      }),
-      getGameState(),
-      getCurrentTurn(db),
-    ]);
-    if (!sector || sector.sectorType !== "media" || sector.strategyId !== kind.modelId) {
-      return errorResponse(400, "Choose an owned active sector running this media model");
-    }
-    if (
-      (gameState?.currentYear ?? 0) <
-      (getMediaOperatingModel(kind.modelId)?.availableFromYear ?? Number.MAX_SAFE_INTEGER)
-    ) {
-      return errorResponse(400, "This product model is not available yet");
-    }
-    const capacityBasisAnchor = sectorCapacityBookAnchor(sector, gameState?.currentYear, 1);
-    if (capacityBasisAnchor <= 0) {
-      return errorResponse(
-        409,
-        "The selected sector needs owned capacity before developing a title"
-      );
-    }
-    const projectId = new ObjectId().toString();
-    const project: MediaProductProject = {
-      _id: projectId,
-      corporationId: corporation._id.toString(),
-      activeDevelopmentCorporationId: corporation._id.toString(),
-      sectorId: sector._id.toString(),
-      operatingSectorType:
-        sector.mediaDiscriminator === "entertainment" ? "entertainment" : "media",
-      kindId: kind.id,
-      title: parsed.data.title,
-      allocationShare: parsed.data.allocationShare,
-      stage: "development",
-      startedTurn: currentTurn,
-      stageStartedTurn: currentTurn,
-      developmentPaidAnchor: 0,
-      paidThresholdAnchor: mediaDevelopmentThresholdAnchor(capacityBasisAnchor),
-      elapsedDevelopmentTurns: 0,
-      elapsedThresholdTurns: kind.durations.development ?? 1,
-      developmentAdvertisingAnchor: 0,
-      developmentAdvertisingTurns: 0,
-    };
-    try {
-      await db.collection<MediaProductProject>(MEDIA_PRODUCT_PROJECTS).insertOne(project);
-    } catch (error) {
-      if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
-        return errorResponse(409, "This corporation already has a media product in development");
-      }
-      throw error;
-    }
-    return NextResponse.json({ project }, { status: 201, headers: noStore });
-  } catch (error) {
-    return handleRouteError(error);
-  }
+/**
+ * New product projects are started in the product studio (`/ventures`).
+ * Projects already in flight keep running and can still be read and retired.
+ */
+export async function POST() {
+  return errorResponse(
+    410,
+    "Starting products here has moved to the product studio. Use the ventures endpoint."
+  );
 }

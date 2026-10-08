@@ -185,7 +185,6 @@ export function SubdivisionMap({
 
         // Convert TopoJSON to GeoJSON and extract paths
         const topojson = await import("topojson-client");
-        // @ts-expect-error - d3-geo v3 type definitions issue
         const { geoPath, geoAlbersUsa } = await import("d3-geo");
 
         const projection = geoAlbersUsa();

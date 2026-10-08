@@ -129,7 +129,11 @@ export function typeMarketShare(sectors: SectorDetail[]): number | null {
  * file still counted it.
  */
 export function resolveSectorStrategy(sector: SectorDetail) {
-  const type = getOperatingSectorType(sector.sectorType, sector.industryModel) as CorporationType;
+  const type = getOperatingSectorType(
+    sector.sectorType,
+    sector.industryModel,
+    sector.mediaDiscriminator
+  ) as CorporationType;
   if (!SECTOR_STRATEGIES[type]?.length) return null;
   // `corporationDetail` already normalises an absent id to "standard", so this
   // only matters for a row that arrives with one; kept so the function is
@@ -137,7 +141,8 @@ export function resolveSectorStrategy(sector: SectorDetail) {
   return getStrategyForOperatingModel(
     sector.sectorType,
     sector.strategyId ?? "standard",
-    sector.industryModel
+    sector.industryModel,
+    sector.mediaDiscriminator
   );
 }
 

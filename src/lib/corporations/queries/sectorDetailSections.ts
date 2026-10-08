@@ -578,6 +578,8 @@ export function buildSectorStrategySection(args: {
   } = args;
   return {
     currentStrategyId: sector.strategyId ?? "standard",
+    operatingSectorType: sectorType,
+    mediaOperatingModelsEnabled,
     currentStrategyName: getStrategy(sectorType, sector.strategyId ?? "standard").name,
     isTransitioning: effectiveRates.isTransitioning,
     isReversing: sector.isReversing ?? false,

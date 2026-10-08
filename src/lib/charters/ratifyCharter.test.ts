@@ -40,6 +40,11 @@ vi.mock("@/lib/caucus/cleanupCaucusParticipationForCharacters", () => ({
   }),
 }));
 
+vi.mock("@/lib/utils/electionCandidacy", () => ({
+  transferIndependentCandidaciesToParty: vi.fn().mockResolvedValue({ transferredCount: 0 }),
+  withdrawFromMismatchedPrimaries: vi.fn().mockResolvedValue({ withdrawnCount: 0 }),
+}));
+
 // ratifyCharter opens the party's first national leadership elections via the
 // shared create-missing path; stub it so these unit tests stay db-stub only.
 vi.mock("@/lib/nationalPartyElections", async (importOriginal) => ({
@@ -269,6 +274,9 @@ describe("ratifyCharter", () => {
 
     const result = await ratifyCharter(charter._id, db);
 
+    const { transferIndependentCandidaciesToParty, withdrawFromMismatchedPrimaries } =
+      await import("@/lib/utils/electionCandidacy");
+
     expect(result.partyId).toBe("77");
     expect(result.partySequentialId).toBe(77);
 
@@ -301,6 +309,32 @@ describe("ratifyCharter", () => {
       JSON.stringify((u as { update: unknown }).update).includes("memberCount")
     );
     expect(memberCountUpdate).toBeTruthy();
+    expect(transferIndependentCandidaciesToParty).toHaveBeenCalledTimes(3);
+    expect(withdrawFromMismatchedPrimaries).not.toHaveBeenCalled();
+  });
+
+  it("withdraws only founders who defect from another party", async () => {
+    const charter = makeCharter();
+    const founderChars = charter.foundersCharacterIds.map((cid, index) => ({
+      _id: cid,
+      userId: new ObjectId(),
+      party: index === 1 ? "9" : "independent",
+      homeState: "US-CA",
+    }));
+    const { db } = makeDb({
+      charter,
+      states: [{ _id: "US-CA" }],
+      founderCharacters: founderChars,
+    });
+    const { transferIndependentCandidaciesToParty, withdrawFromMismatchedPrimaries } =
+      await import("@/lib/utils/electionCandidacy");
+    vi.mocked(transferIndependentCandidaciesToParty).mockClear();
+    vi.mocked(withdrawFromMismatchedPrimaries).mockClear();
+
+    await ratifyCharter(charter._id, db);
+
+    expect(transferIndependentCandidaciesToParty).toHaveBeenCalledTimes(2);
+    expect(withdrawFromMismatchedPrimaries).toHaveBeenCalledWith(founderChars[1]!._id, "77");
   });
 
   it("marks all three founders as founders of the new party (leadership tenure exemption)", async () => {

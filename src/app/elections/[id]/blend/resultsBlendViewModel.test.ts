@@ -141,6 +141,26 @@ describe("winner", () => {
     expect(vm.winnerName).toBeNull();
     expect(vm.winnerLine).toMatch(/no ticket/i);
   });
+
+  it("explains a president chosen by the House", () => {
+    const house = data({
+      summary: {
+        ...data().summary,
+        projectedWinner: "c1",
+        resolutionMode: "contingent_deadlock",
+        contingentResult: {
+          presidentWinnerId: "c1",
+          houseVoteTotals: { c1: 11, c2: 7 },
+          houseThreshold: 26,
+          deadlockBreakerUsed: true,
+        } as never,
+      },
+    });
+    const vm = buildResultsBlendViewModel(input({ data: house }));
+    expect(vm.winnerName).toBe("First Ticket");
+    expect(vm.winnerLine).toContain("Elected by the House with 11 state delegations");
+    expect(vm.winnerLine).toContain("deadlock rule");
+  });
 });
 
 describe("electoral college", () => {

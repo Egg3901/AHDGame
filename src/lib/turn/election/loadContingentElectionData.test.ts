@@ -138,6 +138,65 @@ describe("loadContingentElectionData", () => {
     expect(result.houseDelegations.find((d) => d.stateId === "CA")?.voters).toHaveLength(1);
   });
 
+  it("ballots supplied chamber officials instead of the seated chamber", async () => {
+    const repCharId = new ObjectId();
+    const presCharId = new ObjectId();
+    const nppId = new ObjectId();
+    db.collectionMocks["politicalParties"]!.find.mockReturnValue(makeCursor([]));
+    db.collectionMocks["characters"]!.find.mockReturnValue(
+      makeCursor([
+        { _id: repCharId, party: "1", policies: { economic: 2, social: -1 } },
+        {
+          _id: presCharId,
+          party: "2",
+          policies: { economic: 0, social: 0 },
+          currentOffice: { type: "president" },
+        },
+      ])
+    );
+    db.collectionMocks["npps"]!.find.mockReturnValue(
+      makeCursor([{ _id: nppId, party: "2", policies: { economic: -3, social: 1 } }])
+    );
+
+    const demId = new ObjectId();
+    const { loadContingentElectionData } = await import("./loadContingentElectionData");
+    const result = await loadContingentElectionData(
+      db as unknown as Db,
+      electionId,
+      "US",
+      [{ _id: demId, party: "1", characterId: new ObjectId(), isNPP: false }] as never,
+      { [demId.toString()]: 300 },
+      {
+        chamberOfficials: {
+          house: [
+            { officeType: "house", state: "OH", characterId: repCharId, seatsHeld: 3 },
+            {
+              officeType: "house",
+              state: "OH",
+              characterId: null,
+              isNPP: true,
+              nppId,
+              seatsHeld: 2,
+            },
+            { officeType: "house", state: "TX", characterId: presCharId, seatsHeld: 1 },
+            { officeType: "house", state: "DC", characterId: repCharId, seatsHeld: 1 },
+          ] as never,
+          senate: [{ officeType: "senate", state: "OH", characterId: repCharId }] as never,
+        },
+      }
+    );
+
+    expect(db.collectionMocks["electedOfficials"]!.find).not.toHaveBeenCalled();
+    const oh = result.houseDelegations.find((d) => d.stateId === "OH");
+    expect(oh?.voters).toEqual([
+      expect.objectContaining({ id: repCharId.toString(), weight: 3, economic: 2 }),
+      expect.objectContaining({ id: `npp_${nppId.toString()}`, weight: 2, economic: -3 }),
+    ]);
+    expect(result.houseDelegations.find((d) => d.stateId === "TX")?.voters).toHaveLength(0);
+    expect(result.houseDelegations.some((d) => d.stateId === "DC")).toBe(false);
+    expect(result.senators).toHaveLength(1);
+  });
+
   it("builds evByEligibleId for president and VP tickets", async () => {
     db.collectionMocks["electedOfficials"]!.find.mockReturnValue(makeCursor([]));
     db.collectionMocks["politicalParties"]!.find.mockReturnValue(makeCursor([]));

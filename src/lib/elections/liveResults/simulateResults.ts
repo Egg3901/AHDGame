@@ -8,6 +8,7 @@
  * endpoint, so what the admin previews is exactly what players will see.
  */
 
+import { electoralMajorityFor } from "@/lib/elections/presidentialResolutionDisplay";
 import {
   computeElectoralTotals,
   computeNationalProjection,
@@ -15,6 +16,7 @@ import {
   hashFraction,
   unitRevealOffset,
 } from "./computeResults";
+import { computePresidentialNight, finalTurnVoteRatioForElection } from "./presidentialNight";
 import type {
   ElectionResultsResponse,
   NationalParty,
@@ -124,30 +126,54 @@ export function simulationFrame(
   const simElectionId = `sim:${seed}`;
   const isPresident = base.election.electionType === "president";
 
-  const frameUnits: ResultsUnit[] = units.map((unit) => {
-    const finals = finalVotesByUnit[unit.id];
-    const reveal = unitRevealOffset(simElectionId, unit.id);
-    // Counting starts immediately, completes at the unit's reveal moment.
-    const counted = countCurve(progress / reveal);
-    const votes: Record<string, number> = {};
-    for (const [cid, finalV] of Object.entries(finals)) {
-      // Per-candidate stagger: late-counting strongholds shift the lead as
-      // returns come in, like real precinct geography.
-      const lag = 0.75 + hashFraction(`${seed}:lag:${unit.id}:${cid}`) * 0.5;
-      votes[cid] = Math.round(finalV * countCurve((progress * lag) / reveal));
-      if (counted >= 1) votes[cid] = finalV;
-    }
-    return computeUnitResult({
-      electionId: simElectionId,
-      unitId: unit.id,
-      name: unit.name,
-      weight: unit.weight,
-      votes,
-      isEnded: false,
-      baselineReportingPct: 5,
-      finalHourProgress: progress,
-    });
-  });
+  // US presidential races replay the real election night: poll-closing order,
+  // fogged returns and worst-case-safe calls, over the compressed hour.
+  const useNight = isPresident && base.election.countryId === "US";
+  const totalEvForNight = base.election.totalEv ?? units.reduce((s, u) => s + u.weight, 0);
+  const nightResult = useNight
+    ? computePresidentialNight({
+        electionId: simElectionId,
+        units: units.map((u) => ({
+          unitId: u.id,
+          name: u.name,
+          weight: u.weight,
+          votes: finalVotesByUnit[u.id],
+        })),
+        totalEv: totalEvForNight,
+        evNeeded: electoralMajorityFor(totalEvForNight),
+        windowStartMs: 0,
+        windowMs: 1_000_000,
+        nowMs: Math.min(1, Math.max(0, progress)) * 1_000_000,
+        finalTurnRatio: finalTurnVoteRatioForElection(base.election),
+      })
+    : null;
+
+  const frameUnits: ResultsUnit[] = nightResult
+    ? nightResult.units
+    : units.map((unit) => {
+        const finals = finalVotesByUnit[unit.id];
+        const reveal = unitRevealOffset(simElectionId, unit.id);
+        // Counting starts immediately, completes at the unit's reveal moment.
+        const counted = countCurve(progress / reveal);
+        const votes: Record<string, number> = {};
+        for (const [cid, finalV] of Object.entries(finals)) {
+          // Per-candidate stagger: late-counting strongholds shift the lead as
+          // returns come in, like real precinct geography.
+          const lag = 0.75 + hashFraction(`${seed}:lag:${unit.id}:${cid}`) * 0.5;
+          votes[cid] = Math.round(finalV * countCurve((progress * lag) / reveal));
+          if (counted >= 1) votes[cid] = finalV;
+        }
+        return computeUnitResult({
+          electionId: simElectionId,
+          unitId: unit.id,
+          name: unit.name,
+          weight: unit.weight,
+          votes,
+          isEnded: false,
+          baselineReportingPct: 5,
+          finalHourProgress: progress,
+        });
+      });
 
   const { calledEv, leadingEv } = computeElectoralTotals(frameUnits);
   const totalEv = isPresident
@@ -279,6 +305,7 @@ export function simulationFrame(
       evNeeded,
       totalEv,
       finalHour: { progress, endsAt: base.election.finalHour?.endsAt ?? "" },
+      night: nightResult?.night ?? null,
     },
     candidates: frameCandidates,
     units: frameUnits,

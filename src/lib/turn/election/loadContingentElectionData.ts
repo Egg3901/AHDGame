@@ -104,6 +104,17 @@ function chamberSnapshotFromChamberData(
 }
 
 /**
+ * House/Senate rows to ballot in place of the seated chamber. The live-race
+ * projection passes the Congress it expects the concurrent races to seat, so
+ * those rows go through the same voter-profile and executive-exclusion rules
+ * the real ballot applies to `electedOfficials`.
+ */
+export interface ContingentChamberOfficials {
+  house: ElectedOfficial[];
+  senate: ElectedOfficial[];
+}
+
+/**
  * Load current House/Senate composition and candidate profiles for a contingent
  * presidential election.
  */
@@ -113,31 +124,43 @@ export async function loadContingentElectionData(
   countryId: string,
   candidates: ElectionCandidate[],
   electoralVotesByCandidate: Record<string, number>,
-  options?: { chamberSnapshot?: ContingentChamberSnapshot }
+  options?: {
+    chamberSnapshot?: ContingentChamberSnapshot;
+    chamberOfficials?: ContingentChamberOfficials;
+  }
 ): Promise<LoadContingentElectionDataResult> {
   const frozenChamber = options?.chamberSnapshot;
+  const suppliedChamber = options?.chamberOfficials;
   const [houseOfficials, senateOfficials, parties] = await Promise.all([
     frozenChamber
       ? Promise.resolve([] as ElectedOfficial[])
-      : db
-          .collection<ElectedOfficial>("electedOfficials")
-          .find({
-            countryId: countryId as CountryId,
-            officeType: "house",
-            state: { $exists: true, $ne: CONTINGENT_EXCLUDED_HOUSE_STATE },
-            $or: [{ characterId: { $ne: null } }, { nppId: { $exists: true }, isNPP: true }],
-          })
-          .toArray(),
+      : suppliedChamber
+        ? Promise.resolve(
+            suppliedChamber.house.filter(
+              (o) => o.state && o.state !== CONTINGENT_EXCLUDED_HOUSE_STATE
+            )
+          )
+        : db
+            .collection<ElectedOfficial>("electedOfficials")
+            .find({
+              countryId: countryId as CountryId,
+              officeType: "house",
+              state: { $exists: true, $ne: CONTINGENT_EXCLUDED_HOUSE_STATE },
+              $or: [{ characterId: { $ne: null } }, { nppId: { $exists: true }, isNPP: true }],
+            })
+            .toArray(),
     frozenChamber
       ? Promise.resolve([] as ElectedOfficial[])
-      : db
-          .collection<ElectedOfficial>("electedOfficials")
-          .find({
-            countryId: countryId as CountryId,
-            officeType: "senate",
-            $or: [{ characterId: { $ne: null } }, { nppId: { $exists: true }, isNPP: true }],
-          })
-          .toArray(),
+      : suppliedChamber
+        ? Promise.resolve(suppliedChamber.senate)
+        : db
+            .collection<ElectedOfficial>("electedOfficials")
+            .find({
+              countryId: countryId as CountryId,
+              officeType: "senate",
+              $or: [{ characterId: { $ne: null } }, { nppId: { $exists: true }, isNPP: true }],
+            })
+            .toArray(),
     db
       .collection<PoliticalParty>("politicalParties")
       .find({ countryId: countryId as CountryId })

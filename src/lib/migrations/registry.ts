@@ -107,6 +107,7 @@ import { migration as appleProviderIdentityIndex } from "./entries/2026-09-30-ap
 import { migration as reconcileSeedIndexes } from "./entries/2026-10-01-reconcile-seed-indexes";
 import { migration as bankLoanCharterEpoch } from "./entries/2026-10-04-bank-loan-charter-epoch";
 import { migration as manufacturingProductProjectsV2Index } from "./entries/2026-10-04-manufacturing-product-projects-v2-index";
+import { migration as productVentureIndexes } from "./entries/2026-10-08-product-venture-indexes";
 import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-media-product-projects-v1-index";
 import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank-treasury-trade-indexes";
 import { migration as underwritingRecoveryIndexes } from "./entries/2026-10-04-underwriting-recovery-indexes";
@@ -347,6 +348,7 @@ export const MIGRATIONS: Migration[] = [
   underwritingRecoveryIndexes,
   bankFailurePoliticsIndex,
   advertisingAgreementIndexes,
+  productVentureIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

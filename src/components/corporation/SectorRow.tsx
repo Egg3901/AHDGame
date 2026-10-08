@@ -855,6 +855,8 @@ export function SectorRow({
         <div className="px-2 pb-3 pt-1">
           <StrategyChangeConfirm
             sectorType={sector.sectorType as CorporationType}
+            industryModel={sector.industryModel}
+            mediaDiscriminator={sector.mediaDiscriminator}
             currentStrategyId={currentId}
             targetStrategyId={pendingChange.targetStrategyId}
             dailyRevenue={sector.revenue}

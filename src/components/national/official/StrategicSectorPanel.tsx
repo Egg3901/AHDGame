@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui";
-import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import { FOUNDABLE_CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
 import { MAX_STRATEGIC_SECTOR_DESIGNATIONS } from "@/lib/nationalization/constants";
 import type { NatOfficialActions } from "../NationalCorporationView";
 import { apiErrorText } from "@/lib/errors/catalog";
@@ -26,7 +26,7 @@ export function StrategicSectorPanel({
     null
   );
 
-  const undesignated = CORPORATION_TYPES.filter((t) => !designated.includes(t));
+  const undesignated = FOUNDABLE_CORPORATION_TYPES.filter((t) => !designated.includes(t));
   const atCap = designated.length >= MAX_STRATEGIC_SECTOR_DESIGNATIONS;
 
   async function mutate(httpMethod: "POST" | "DELETE", sectorType: string, ok: string) {

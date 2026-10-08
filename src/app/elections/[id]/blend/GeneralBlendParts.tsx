@@ -1,5 +1,4 @@
 import { type ReactNode } from "react";
-import Link from "next/link";
 import { BLEND, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import type { ElectionDetail } from "../components/ElectionDetailTypes";
 import { type DriverRowVM, type GeneralBlendVM } from "./generalBlendViewModel";
@@ -167,44 +166,6 @@ function DriverRows({ rows }: { rows: DriverRowVM[] }) {
         </div>
       ))}
     </>
-  );
-}
-
-export function TileBoard({
-  vm,
-  columns,
-  electionId,
-}: {
-  vm: GeneralBlendVM;
-  columns: number;
-  electionId: string;
-}) {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: 4 }}>
-      {vm.tiles.map((t) => (
-        <Link
-          key={t.stateId}
-          href={`/elections/${electionId}/state/${t.stateId}`}
-          title={`${t.title} (open state detail)`}
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 1,
-            aspectRatio: "1",
-            color: t.ink,
-            background: t.background,
-            textDecoration: "none",
-          }}
-        >
-          <span style={{ fontFamily: FONT.mono, fontSize: 10.5, fontWeight: 700 }}>
-            {t.stateId}
-          </span>
-          <span style={{ fontFamily: FONT.mono, fontSize: 9, opacity: 0.75 }}>{t.ev}</span>
-        </Link>
-      ))}
-    </div>
   );
 }
 
@@ -402,31 +363,5 @@ export function WhyItMovedBlock({ vm }: { vm: GeneralBlendVM }) {
         </p>
       ) : null}
     </>
-  );
-}
-
-/** The board's colour key. Without it the tiles are colour with no legend. */
-export function TierLegend({ vm }: { vm: GeneralBlendVM }) {
-  if (vm.tierLegend.length === 0) return null;
-  return (
-    <div
-      style={{
-        marginTop: 14,
-        display: "flex",
-        flexWrap: "wrap",
-        gap: "6px 18px",
-        fontFamily: FONT.mono,
-        fontSize: 10,
-        color: BLEND.mutedDim,
-      }}
-    >
-      <span style={{ letterSpacing: ".1em" }}>MARGIN TIERS:</span>
-      {vm.tierLegend.map((l) => (
-        <span key={l.label} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <i style={{ width: 9, height: 9, display: "block", background: l.swatch }} />
-          {l.label} <span style={{ opacity: 0.6 }}>{l.band}</span>
-        </span>
-      ))}
-    </div>
   );
 }

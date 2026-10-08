@@ -665,6 +665,8 @@
         "corp_supply_agreement_damages": "Corporation supply agreement damages",
         "corp_supply_agreement_offer": "Corporation supply agreement offer",
         "corp_supply_agreement_update": "Corporation supply agreement update",
+        "corp_product_event": "Product decision needed",
+        "corp_product_result": "Product result",
         "bank_supervision_breach": "Bank supervision breach",
         "bank_supervision_cleared": "Bank supervision cleared",
         "defence_contract_offered": "Defence contract offered",

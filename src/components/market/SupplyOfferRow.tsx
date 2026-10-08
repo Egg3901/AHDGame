@@ -11,6 +11,7 @@ import {
   PremiumChip,
   SideBadge,
   formatVolume,
+  offerUnitPrice,
   offerValuePerTurn,
 } from "./supplyOfferUi";
 
@@ -66,6 +67,7 @@ export function SupplyOfferRow({
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
   const value = offerValuePerTurn(offer, marketPrice);
+  const unitPrice = offerUnitPrice(offer.pricePremium, marketPrice);
 
   async function take() {
     setBusy(true);
@@ -109,6 +111,11 @@ export function SupplyOfferRow({
         </span>
         <span>
           <PremiumChip premium={offer.pricePremium} side={offer.side} />
+          {unitPrice != null && (
+            <span className="block text-xs tabular-nums text-muted">
+              ~{formatAmount(Math.round(unitPrice))}/{COMMODITY_UNITS[commodity]}
+            </span>
+          )}
         </span>
         <span className="text-xs text-muted">
           {offer.durationTurns ? `${offer.durationTurns} turns` : "Open-ended"}
