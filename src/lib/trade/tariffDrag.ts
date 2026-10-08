@@ -1,5 +1,5 @@
 import type { CountryId } from "@/lib/constants/countries";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { sectorPolicyTargetMatches, type CorporationType } from "@/lib/constants/corporations";
 import type { Tariff } from "@/lib/db/types/tariff";
 import { isFtaActive, type FtaPairSet } from "@/lib/tariffs/ftaOverrides";
 
@@ -24,7 +24,10 @@ export function importerTariffOnFlow(
     if (t.countryId !== importer) continue;
     if (t.scopeType === "economy_wide") {
       totalPct += t.rate;
-    } else if (t.scopeType === "sector" && t.targetSectorType === sectorType) {
+    } else if (
+      t.scopeType === "sector" &&
+      sectorPolicyTargetMatches(t.targetSectorType, sectorType)
+    ) {
       totalPct += t.rate;
     } else if (t.scopeType === "origin_country" && t.targetOriginCountryId === exporter) {
       totalPct += t.rate;
