@@ -744,6 +744,7 @@ export function processSector(
     priceRatioByCommodity: lookups.priceRatioByCommodity,
     reachableInputPriceRatiosByCountry: lookups.reachableInputPriceRatiosByCountry,
     plantsCapacity,
+    activeFraction,
     producedUnits,
     retoolCapacityRatio,
     newPolicyLevel,
