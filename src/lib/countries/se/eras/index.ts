@@ -20,7 +20,7 @@ import { SE_2027 } from "./2027";
  * so an override supplying `legislature` replaces the base one wholesale -- every
  * field it omits is gone, not inherited.
  */
-export const SE_ERAS: Partial<Record<ShippingPreset, CountryEraOverride>> = {
+export const SE_ERAS: Record<ShippingPreset, CountryEraOverride> = {
   "1953-default": SE_1953,
   "1979-default": SE_1979,
   "1991-default": SE_1991,

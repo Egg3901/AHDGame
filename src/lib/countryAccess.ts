@@ -35,10 +35,16 @@ import {
   type CountryStatus,
 } from "@/lib/constants/countries";
 import type { CountryGameState, GameState } from "@/lib/db/types/gameState";
+import {
+  countryRequirementLevelForAccess,
+  type CountryRequirementLevel,
+} from "@/lib/world/countryRequirementLevel";
 
 export interface CountryAccess {
   enabledForPlayers: boolean;
   status: CountryStatus;
+  /** The feature-completeness contract this runtime access state must satisfy. */
+  requirementLevel: CountryRequirementLevel;
   /**
    * True when this country's economy is wired into the cross-country market
    * lists (stock exchange, commodities, bonds) for non-admin players. This is
@@ -175,6 +181,7 @@ export async function getCountryAccessFromDb(db: Db, countryId: CountryId): Prom
       // load-bearing answer here.
       status: "coming-soon",
       economyPreview: false,
+      requirementLevel: "background",
       registered: false,
       econOnly: false,
       nppGoverned: false,
@@ -184,6 +191,7 @@ export async function getCountryAccessFromDb(db: Db, countryId: CountryId): Prom
   // Resolve status first so the enabledForPlayers fallback uses the DB-driven value.
   const resolvedStatus = doc?.status ?? config.status;
   const enabledForPlayers = doc?.enabledForPlayers ?? resolvedStatus === "active";
+  const economyPreview = !enabledForPlayers && (doc?.economyPreview ?? false);
 
   // A non-player country is "NPP-governed" once the global autonomy level is v1+.
   const nppGoverned = !enabledForPlayers && (await readGlobalNppLevelRank(db)) >= NPP_LEVEL_RANK.v1;
@@ -197,7 +205,8 @@ export async function getCountryAccessFromDb(db: Db, countryId: CountryId): Prom
     status: resolvedStatus,
     // economyPreview is only meaningful when the country isn't fully enabled.
     // If fully enabled, treat as false (no partial-access banner needed).
-    economyPreview: !enabledForPlayers && (doc?.economyPreview ?? false),
+    economyPreview,
+    requirementLevel: countryRequirementLevelForAccess({ enabledForPlayers, economyPreview }),
     registered,
     econOnly: registered && !enabledForPlayers,
     nppGoverned,
@@ -252,10 +261,12 @@ export async function getAllCountryAccess(dbArg?: Db): Promise<Record<CountryId,
     const doc = docMap.get(countryId);
     const resolvedStatus = doc?.status ?? config.status;
     const enabledForPlayers = doc?.enabledForPlayers ?? resolvedStatus === "active";
+    const economyPreview = !enabledForPlayers && (doc?.economyPreview ?? false);
     out[countryId] = {
       enabledForPlayers,
       status: resolvedStatus,
-      economyPreview: !enabledForPlayers && (doc?.economyPreview ?? false),
+      economyPreview,
+      requirementLevel: countryRequirementLevelForAccess({ enabledForPlayers, economyPreview }),
       // Everything `registeredBase()` yields is registered by construction.
       registered: true,
       econOnly: !enabledForPlayers,

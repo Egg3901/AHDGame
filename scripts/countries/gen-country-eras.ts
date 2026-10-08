@@ -163,7 +163,7 @@ ${imports.join("\n")}
  * field it omits is gone, not inherited.`
  }
  */
-export const ${COUNTRY}_ERAS: Partial<Record<ShippingPreset, CountryEraOverride>> = {
+export const ${COUNTRY}_ERAS: Record<ShippingPreset, CountryEraOverride> = {
 ${entries.join("\n")}
 };
 `;

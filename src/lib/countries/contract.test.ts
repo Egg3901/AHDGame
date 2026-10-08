@@ -24,7 +24,7 @@ import { SHIPPING_PRESETS } from "@/lib/world/eraRoster";
  *   - this file -- is the CONTRACT satisfied? Not whether the values are right,
  *     but whether the shape the plan declared is expressible by a real country.
  *
- * That second question is the one that matters for the other 23 countries. If
+ * That second question is the one that matters for every country. If
  * Japan only fits `CountryFolder` because a member is optional and quietly
  * absent, the shape is wrong and the next country inherits the problem.
  */

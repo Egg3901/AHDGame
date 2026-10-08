@@ -274,6 +274,10 @@ export async function enterCountryForPlayers(
 
   const updateFields: Record<string, unknown> = {
     enabledForPlayers: true,
+    // Player access and economy preview are mutually exclusive. Clearing this
+    // prevents a previously masked preview flag from resurfacing if player
+    // access is later disabled without an explicit preview choice.
+    economyPreview: false,
     updatedAt: now,
   };
   if (opts?.status !== undefined) {

@@ -30,6 +30,17 @@ import {
   type WorldEconomicArchetype,
 } from "@/lib/world/worldEntityManifest";
 import { partyRosterLabel, partySeedsForPreset } from "@/lib/seeds/partySeedRegistry";
+import {
+  countryBackgroundModeForEraTier,
+  countryRequirementLevelForAccess,
+  countryRequirementLevelForEraTier,
+  countryRequirementProfile,
+  type CountryBackgroundMode,
+  type CountryContentStatus,
+  type CountryRequirementLevel,
+  type CountryRequirementReadinessTarget,
+} from "@/lib/world/countryRequirementLevel";
+import { isShippingPreset, tierFor } from "@/lib/world/eraRoster";
 
 // ─── Capability catalogue ────────────────────────────────────────────────────
 
@@ -115,6 +126,18 @@ export interface CapabilityDiagnostic {
 export interface CountryReadinessReport {
   countryId: CountryId;
   presetId: string;
+  /** The completeness contract this country must meet in this preset. */
+  requirementLevel: CountryRequirementLevel;
+  /** Which legacy readiness result decides the active completeness contract. */
+  requirementTarget: CountryRequirementReadinessTarget;
+  /** Whether the country satisfies its active completeness contract. */
+  requirementStatus: ReadinessResult;
+  /** Mechanical blockers relevant to the active completeness contract only. */
+  requirementBlockers: FailedCapability[];
+  /** Runtime shape when the preset assigns the Background requirement. */
+  backgroundMode: CountryBackgroundMode | null;
+  /** Content completeness is reported separately from the mechanical gate. */
+  contentStatus: CountryContentStatus;
   archetypes: ReadinessArchetype[];
   autonomous: ReadinessResult;
   player: ReadinessResult;
@@ -132,6 +155,21 @@ export class PlayerOpenBlockedError extends Error {
       `Cannot open ${report.countryId} to players for ${report.presetId}: hard blockers — ${names || "player not ready"}`
     );
     this.name = "PlayerOpenBlockedError";
+    this.report = report;
+  }
+}
+
+export class EconomyPreviewBlockedError extends Error {
+  readonly report: CountryReadinessReport;
+
+  constructor(report: CountryReadinessReport) {
+    const names = readinessBlockersForScope(report, "autonomous")
+      .map((blocker) => blocker.capabilityId)
+      .join(", ");
+    super(
+      `Cannot enable economy preview for ${report.countryId} under ${report.presetId}: hard blockers — ${names || "autonomous economy not ready"}`
+    );
+    this.name = "EconomyPreviewBlockedError";
     this.report = report;
   }
 }
@@ -382,6 +420,9 @@ export function evaluateCountryReadiness(input: {
   presetId: string;
   archetypes: readonly ReadinessArchetype[];
   evidence: CapabilityEvidenceMap;
+  /** Defaults to player-enabled for callers evaluating a promotion candidate. */
+  requirementLevel?: CountryRequirementLevel;
+  backgroundMode?: CountryBackgroundMode | null;
 }): CountryReadinessReport {
   const requirements = mergeRequirements(input.archetypes);
   const hardBlockers: FailedCapability[] = [];
@@ -440,9 +481,32 @@ export function evaluateCountryReadiness(input: {
   const player: ReadinessResult =
     autonomous === "ready" && playerFailures.size === 0 ? "ready" : "blocked";
 
+  const requirementLevel = input.requirementLevel ?? "player-enabled";
+  const requirementTarget = countryRequirementProfile(requirementLevel).readinessTarget;
+  const requirementStatus: ReadinessResult =
+    requirementTarget === null ? "ready" : requirementTarget === "autonomous" ? autonomous : player;
+  const requirementBlockers =
+    requirementTarget === null
+      ? []
+      : hardBlockers.filter((blocker) =>
+          capabilities
+            .find((capability) => capability.capabilityId === blocker.capabilityId)
+            ?.requiredFor.some(
+              (scope) =>
+                scope === requirementTarget ||
+                (requirementTarget === "player" && scope === "autonomous")
+            )
+        );
+
   return {
     countryId: input.countryId,
     presetId: input.presetId,
+    requirementLevel,
+    requirementTarget,
+    requirementStatus,
+    requirementBlockers,
+    backgroundMode: input.backgroundMode ?? null,
+    contentStatus: flavorGaps.length === 0 ? "complete" : "gaps",
     archetypes: [...input.archetypes],
     autonomous,
     player,
@@ -791,6 +855,27 @@ export function collectCapabilityEvidence(
   return probes;
 }
 
+function resolveCountryRequirement(
+  countryId: CountryId,
+  presetId: string
+): { level: CountryRequirementLevel; backgroundMode: CountryBackgroundMode | null } {
+  if (isShippingPreset(presetId)) {
+    const tier = tierFor(presetId, countryId);
+    return {
+      level: countryRequirementLevelForEraTier(tier),
+      backgroundMode: countryBackgroundModeForEraTier(tier),
+    };
+  }
+  const legacyAccess = getWorldEntityOrThrow(presetId, countryId).legacyAccess;
+  return {
+    level: countryRequirementLevelForAccess({
+      enabledForPlayers: legacyAccess === "player",
+      economyPreview: legacyAccess === "economy-preview",
+    }),
+    backgroundMode: null,
+  };
+}
+
 /** Assess readiness for a country+preset using static evidence. */
 export function assessCountryReadiness(
   countryId: CountryId,
@@ -798,7 +883,29 @@ export function assessCountryReadiness(
 ): CountryReadinessReport {
   const archetypes = resolveReadinessArchetypesForCountry(countryId, presetId);
   const evidence = collectCapabilityEvidence(countryId, presetId);
-  return evaluateCountryReadiness({ countryId, presetId, archetypes, evidence });
+  const requirement = resolveCountryRequirement(countryId, presetId);
+  return evaluateCountryReadiness({
+    countryId,
+    presetId,
+    archetypes,
+    evidence,
+    requirementLevel: requirement.level,
+    backgroundMode: requirement.backgroundMode,
+  });
+}
+
+export function readinessBlockersForScope(
+  report: CountryReadinessReport,
+  scope: ReadinessScope
+): FailedCapability[] {
+  return report.hardBlockers.filter((blocker) =>
+    report.capabilities
+      .find((capability) => capability.capabilityId === blocker.capabilityId)
+      ?.requiredFor.some(
+        (requiredScope) =>
+          requiredScope === scope || (scope === "player" && requiredScope === "autonomous")
+      )
+  );
 }
 
 /**
@@ -813,6 +920,16 @@ export function assertCanOpenCountryToPlayers(
   if (report.player !== "ready" || report.hardBlockers.length > 0) {
     throw new PlayerOpenBlockedError(report);
   }
+  return report;
+}
+
+/** Gate for exposing a country's economy to players without opening player control. */
+export function assertCanEnableCountryEconomyPreview(
+  countryId: CountryId,
+  presetId: string
+): CountryReadinessReport {
+  const report = assessCountryReadiness(countryId, presetId);
+  if (report.autonomous !== "ready") throw new EconomyPreviewBlockedError(report);
   return report;
 }
 

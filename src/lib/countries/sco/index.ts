@@ -14,7 +14,7 @@ import { SCO_ERAS } from "./eras";
  * MongoDB driver into the browser. Client surfaces take `./identity` or
  * `./geographyFacts`, never this file and never `./geography`.
  */
-export const SCO: CountryFolder = {
+export const SCO: CountryFolder<"SCO"> = {
   id: "SCO",
   identity: SCO_IDENTITY,
   institutions: SCO_INSTITUTIONS,

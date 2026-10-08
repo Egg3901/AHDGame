@@ -23,6 +23,7 @@ import { PresidentialCandidateTable } from "./PresidentialCandidateTable";
 import { CandidateComparisonCards } from "./CandidateComparisonCards";
 import { NonPresidentialResultsPanel } from "./NonPresidentialResultsPanel";
 import { ContingentElectionPanel } from "./ContingentElectionPanel";
+import { ContingentHouseVotePanel } from "./ContingentHouseVotePanel";
 import {
   assessContingentEvRisk,
   isContingentResolutionMode,
@@ -617,6 +618,10 @@ export function GeneralElectionPanel({
               electoralVotes={electoralVotes}
             />
           )}
+
+        {isEnded && electionId && tally.contingentResult && (
+          <ContingentHouseVotePanel electionId={electionId} colorMap={colorMap} />
+        )}
 
         {/* Detailed stats table */}
         {showCollegeSummary && (
