@@ -296,7 +296,12 @@ export const GDP_GROWTH_SCENARIOS: GoldenScenario[] = [
       setupCollection(db, "corporations", []);
       setupCollection(db, "exchangeRates", []);
       setupCollection(db, "federalBudget", [
-        { _id: "federal", countryId: "US", taxRates: { salesTax: 0 } },
+        {
+          _id: "federal",
+          countryId: "US",
+          taxRates: { salesTax: 0 },
+          economicFactors: { inflationRate: 0 },
+        },
       ]);
       setupCollection(db, "stateBudgets", [{ _id: "s6", taxRates: { salesTax: 6 } }]);
       setupGameConfig(db, "plants");
@@ -325,7 +330,12 @@ export const GDP_GROWTH_SCENARIOS: GoldenScenario[] = [
       setupCollection(db, "corporations", []);
       setupCollection(db, "exchangeRates", []);
       setupCollection(db, "federalBudget", [
-        { _id: "federal", countryId: "US", taxRates: { salesTax: 0 } },
+        {
+          _id: "federal",
+          countryId: "US",
+          taxRates: { salesTax: 0 },
+          economicFactors: { inflationRate: 0 },
+        },
       ]);
       setupCollection(db, "stateBudgets", [{ _id: "s7", taxRates: { salesTax: 6 } }]);
       setupGameConfig(db, "plants");
@@ -333,10 +343,10 @@ export const GDP_GROWTH_SCENARIOS: GoldenScenario[] = [
     expected: [{ _id: "s7", gdpGrowth: 2.167, sectorBaseline: 2.167, integratedGdp: 2.167 }],
   },
   {
-    name: "plants: a revenue explosion is clamped to the node ceiling before the EMA",
+    name: "plants: a fast but plausible revenue surge is clamped to the node ceiling before the EMA",
     turn: 10,
     seed: (db) => {
-      // 1000 → 2000 in one turn annualizes to +4800% — clamped to 15.
+      // 1000 → 1010 in one turn annualizes to +48% — clamped to 15.
       setupCollection(db, "states", [
         { ...state("s8"), sectorRealizedRevenue: 1000, sectorRealizedRevenueTurn: 9 },
       ]);
@@ -344,7 +354,7 @@ export const GDP_GROWTH_SCENARIOS: GoldenScenario[] = [
         {
           _id: "secH",
           stateId: "s8",
-          revenue: 2000,
+          revenue: 1010,
           currentGrowthRate: 1,
           corporationId: undefined,
         },
@@ -355,7 +365,12 @@ export const GDP_GROWTH_SCENARIOS: GoldenScenario[] = [
       setupCollection(db, "corporations", []);
       setupCollection(db, "exchangeRates", []);
       setupCollection(db, "federalBudget", [
-        { _id: "federal", countryId: "US", taxRates: { salesTax: 0 } },
+        {
+          _id: "federal",
+          countryId: "US",
+          taxRates: { salesTax: 0 },
+          economicFactors: { inflationRate: 0 },
+        },
       ]);
       setupCollection(db, "stateBudgets", [{ _id: "s8", taxRates: { salesTax: 6 } }]);
       setupGameConfig(db, "plants");

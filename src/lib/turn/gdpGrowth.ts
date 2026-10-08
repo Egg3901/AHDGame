@@ -26,6 +26,7 @@ import { DE_ECONOMY } from "@/lib/countries/de/economy";
 import { CN_ECONOMY } from "@/lib/countries/cn/economy";
 import { IE_ECONOMY } from "@/lib/countries/ie/economy";
 import { BR_ECONOMY } from "@/lib/countries/br/economy";
+import { realRevenueGrowth } from "@/lib/metricEngine/rules/revenueGrowthSignal";
 
 /** Default daily growth rate for unowned sectors (background economy) */
 export const DEFAULT_UNOWNED_GROWTH_RATE = 0.5;
@@ -205,7 +206,8 @@ export function computeRealizedRevenueGrowthRate(
   realizedNow: number,
   realizedPrev: number | undefined,
   turnsSincePrev: number | undefined,
-  turnsPerYear: number
+  turnsPerYear: number,
+  inflationPct?: number
 ): number | null {
   if (typeof realizedPrev !== "number" || !Number.isFinite(realizedPrev) || realizedPrev <= 0) {
     return null;
@@ -218,9 +220,9 @@ export function computeRealizedRevenueGrowthRate(
   ) {
     return null;
   }
-  const raw = (realizedNow / realizedPrev - 1) * 100 * (turnsPerYear / turnsSincePrev);
-  if (!Number.isFinite(raw)) return null;
-  return clamp(raw, SECTOR_SIGNAL_MIN, SECTOR_SIGNAL_MAX);
+  const nominal = (realizedNow / realizedPrev - 1) * 100 * (turnsPerYear / turnsSincePrev);
+  if (!Number.isFinite(nominal)) return null;
+  return clamp(realRevenueGrowth(nominal, inflationPct), SECTOR_SIGNAL_MIN, SECTOR_SIGNAL_MAX);
 }
 
 // ── Trailing revenue trend (the one-turn amplifier fix) ─────────────
@@ -413,14 +415,15 @@ export function selectRevenueTrendBaseline(
 export function computeTrailingRevenueGrowthRate(
   emaNow: number | undefined,
   baseline: RevenueTrendBaseline | null | undefined,
-  turnsPerYear: number
+  turnsPerYear: number,
+  inflationPct?: number
 ): number | null {
   if (typeof emaNow !== "number" || !Number.isFinite(emaNow) || emaNow < 0) return null;
   if (!baseline || !Number.isFinite(baseline.value) || baseline.value <= 0) return null;
   if (!Number.isFinite(baseline.spanTurns) || baseline.spanTurns <= 0) return null;
-  const raw = (emaNow / baseline.value - 1) * 100 * (turnsPerYear / baseline.spanTurns);
-  if (!Number.isFinite(raw)) return null;
-  return clamp(raw, SECTOR_SIGNAL_MIN, SECTOR_SIGNAL_MAX);
+  const nominal = (emaNow / baseline.value - 1) * 100 * (turnsPerYear / baseline.spanTurns);
+  if (!Number.isFinite(nominal)) return null;
+  return clamp(realRevenueGrowth(nominal, inflationPct), SECTOR_SIGNAL_MIN, SECTOR_SIGNAL_MAX);
 }
 
 /**
