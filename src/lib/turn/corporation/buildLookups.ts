@@ -284,6 +284,7 @@ export async function buildCorporationLookups(
           projection: {
             _id: 1,
             commodity: 1,
+            turn: 1,
             globalSupply: 1,
             globalDemand: 1,
             globalPrice: 1,
