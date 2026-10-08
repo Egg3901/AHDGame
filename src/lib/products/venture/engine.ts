@@ -208,6 +208,13 @@ export interface VentureTurnInput {
   chargePaidAnchor: number;
   /** Corporation quality score for the brand bonus. */
   averageQuality?: number | null;
+  /**
+   * Current per-turn revenue of the sectors this product would lift. At
+   * completion the product is judged against the larger of its original
+   * target and one priced on this revenue, so expanding the lifted sectors
+   * after a cheap start cannot buy a lift on a much larger business.
+   */
+  liftedRevenueAnchor?: number | null;
 }
 
 export interface VentureTurnResult {
@@ -287,6 +294,8 @@ export function advanceDevelopment(
       ),
     };
     resolveDefaults(true);
+    const repriced = ventureTargetAnchor(finite(input.liftedRevenueAnchor ?? 0));
+    if (repriced > next.targetAnchor) next = { ...next, targetAnchor: repriced };
     const quality = finalQuality(next, brandQualityBonus(input.averageQuality));
     const probability = hitProbability(quality);
     const hit = rollOutcome(next._id) < probability;

@@ -290,3 +290,35 @@ describe("funding target against real revenue scale", () => {
     }
   });
 });
+
+describe("repricing at completion", () => {
+  function finish(venture: ProductVenture, liftedRevenueAnchor: number): ProductVenture {
+    let current = venture;
+    const funding = referenceFundingPerTurn(current.targetAnchor);
+    for (let turn = venture.startedTurn + 1; turn < venture.startedTurn + 400; turn++) {
+      const step = advanceDevelopment(current, {
+        turn,
+        investmentPaidAnchor: funding,
+        chargePaidAnchor: Math.min(funding, current.pendingChargeAnchor),
+        liftedRevenueAnchor,
+      });
+      if (!step) continue;
+      current = step.venture;
+      if (step.completed) return current;
+    }
+    throw new Error("never completed");
+  }
+
+  it("judges a product against the business it would lift at release", () => {
+    const steady = finish(make("reprice-a"), 100_000);
+    const expanded = finish(make("reprice-a"), 1_000_000);
+    expect(expanded.targetAnchor).toBe(ventureTargetAnchor(1_000_000));
+    expect(expanded.finalQuality!).toBeLessThan(steady.finalQuality!);
+  });
+
+  it("never lowers the original target when revenue fell", () => {
+    const venture = make("reprice-b");
+    const shrunk = finish(venture, 10);
+    expect(shrunk.targetAnchor).toBe(venture.targetAnchor);
+  });
+});
