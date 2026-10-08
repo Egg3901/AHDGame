@@ -1,5 +1,5 @@
 import type { NextResponse } from "next/server";
-import { requirePublicBotToken } from "@/lib/api/requireBotToken";
+import { requireBotToken } from "@/lib/api/requireBotToken";
 import { validateUserApiKey } from "@/lib/api/userApiAuth";
 import { rateLimitResponse, rateLimitHeaders, BOT_READ_LIMITS } from "@/lib/api/rateLimit";
 import { durableRateLimit } from "@/lib/api/rateLimit.mongo";
@@ -43,7 +43,7 @@ function uncacheable(response: NextResponse): NextResponse {
  *
  * Accepts either:
  * - X-API-Key header with a valid user API key (public or private scope)
- * - X-Bot-Token header with the server's PUBLIC_BOT_API_KEY (existing behavior)
+ * - X-Bot-Token header with the server's PUBLIC_BOT_API_KEY or DISCORD_BOT_API_KEY
  *
  * User keys are charged against a per-owner allowance that scales with the
  * owner's active supporter tier (see {@link publicApiMaxRequests}). The bot
@@ -78,7 +78,7 @@ export async function publicApiGuard(
   }
 
   // Fall back to existing bot token auth (X-Bot-Token header)
-  if (!requirePublicBotToken(request)) {
+  if (!requireBotToken(request)) {
     return {
       ok: false,
       response: uncacheable(
