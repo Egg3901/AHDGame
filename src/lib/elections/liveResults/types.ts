@@ -35,6 +35,51 @@ export interface ResultsElectionMeta {
     progress: number;
     endsAt: string;
   } | null;
+  /**
+   * US presidential races only, and only inside the final-hour window: the
+   * election-night broadcast state (poll-closing schedule, called EV, event
+   * feed). Null/absent everywhere else.
+   */
+  night?: PresidentialNight | null;
+}
+
+/**
+ * Per-state broadcast status.
+ * - polls_open: polls have not closed yet; grey, 0% reporting.
+ * - counting: polls closed, no meaningful returns yet; no leader shown.
+ * - too_early: first returns in but below the leader floor; no leader shown.
+ * - leaning: a leader is shown (lean colour) but the state is not called.
+ * - too_close: counted margin inside the small-margin band; leader shown, no call.
+ * - called: the leader cannot be overtaken by the remaining final turn.
+ */
+export type PresidentialNightStatus =
+  "polls_open" | "counting" | "too_early" | "leaning" | "too_close" | "called";
+
+export interface PresidentialNightEvent {
+  /** ISO instant inside the final-hour window. */
+  at: string;
+  stateId: string;
+  /** Set on "call" events: the candidate the state was called for. */
+  candidateId?: string;
+  kind: "polls_close" | "call";
+}
+
+export interface PresidentialNight {
+  /** Final-hour window bounds (ISO). */
+  windowStart: string;
+  windowEnd: string;
+  /** Era-correct electoral college size and majority threshold. */
+  totalEv: number;
+  evNeeded: number;
+  /** Candidate id -> EV from CALLED states only (news style). */
+  calledEv: Record<string, number>;
+  statesCalled: number;
+  totalStates: number;
+  statesPollsClosed: number;
+  /** Next poll closing batch after `now`, or null once every state has closed. */
+  nextClose: { at: string; stateIds: string[] } | null;
+  /** Poll closings and calls up to `now`, oldest first. Same history for every viewer. */
+  feed: PresidentialNightEvent[];
 }
 
 export interface ResultsCandidate {
@@ -75,6 +120,10 @@ export interface ResultsUnit {
   leaderMargin: number;
   leaderMarginPct: number;
   candidates: ResultsUnitCandidate[];
+  /** Presidential night only: when this state's polls close (ISO, inside the final hour). */
+  pollsCloseAt?: string;
+  /** Presidential night only: broadcast status for this state. */
+  nightStatus?: PresidentialNightStatus;
 }
 
 export interface ResultsSummary {
