@@ -47,7 +47,7 @@ export interface PresMapTrend {
   candidateId: string | null;
   name: string | null;
   color: string | null;
-  /** The named candidate's share gain over the window, percentage points. */
+  /** How far the top-two margin swung toward the named candidate, percentage points. */
   shiftPp: number;
   windowTurns: number;
   /** Top two candidates' shares by turn, oldest first, for the sparkline. */
@@ -154,8 +154,8 @@ export function computePollingChange(
 }
 
 /**
- * Which way a state is moving: the candidate with the largest share gain over
- * the last few turns, or steady when nobody gained meaningfully.
+ * Which way a state is moving: toward whichever of the current top two gained
+ * on the other over the last few turns, or steady when the margin barely moved.
  */
 export function computeTrend(
   snapshots: VoteTurnSnapshot[] | undefined,
@@ -189,14 +189,20 @@ export function computeTrend(
   if (ref.turn >= latest.turn) return { ...empty, series };
   const now = sharesFromSnapshot(latest);
   const before = sharesFromSnapshot(ref);
+  // Direction is read off the race that decides the state: the margin between
+  // the current top two. A minor ticket gaining a point says nothing about
+  // which way the state is heading.
+  const [leadId, nextId] = topIds;
   let bestId: string | null = null;
   let best = 0;
-  for (const id of new Set([...Object.keys(now), ...Object.keys(before)])) {
-    const delta = (now[id] ?? 0) - (before[id] ?? 0);
-    if (bestId === null || delta > best) {
-      bestId = id;
-      best = delta;
-    }
+  if (leadId && nextId) {
+    const swing =
+      (now[leadId] ?? 0) - (now[nextId] ?? 0) - ((before[leadId] ?? 0) - (before[nextId] ?? 0));
+    bestId = swing >= 0 ? leadId : nextId;
+    best = Math.abs(swing);
+  } else if (leadId) {
+    bestId = leadId;
+    best = Math.max(0, (now[leadId] ?? 0) - (before[leadId] ?? 0));
   }
   const span = latest.turn - ref.turn;
   if (bestId === null || best < TREND_MIN_SHIFT_PP) {
@@ -231,12 +237,12 @@ export function pollChangeHint(turnsAgo: number | null, sinceTurn: number | null
   return `Change in projected vote share ${window} (turn ${sinceTurn}), in percentage points.`;
 }
 
-/** One-line reading of a trend, e.g. "Trending toward Name, +0.8 pts over 3 turns". */
+/** One-line reading of a trend, e.g. "Trending toward Name, margin swing 0.8 pts over the last 3 turns". */
 export function describeTrend(trend: PresMapTrend): string {
   if (trend.status === "none") return "Not enough turns yet to show a direction.";
   const turns = `${trend.windowTurns} ${trend.windowTurns === 1 ? "turn" : "turns"}`;
   if (trend.status === "steady") return `Holding steady over the last ${turns}.`;
-  return `Trending toward ${trend.name}, +${trend.shiftPp.toFixed(1)} pts over the last ${turns}.`;
+  return `Trending toward ${trend.name}, margin swing ${trend.shiftPp.toFixed(1)} pts over the last ${turns}.`;
 }
 
 export function buildPresMapModel(election: ElectionDetail): PresMapModel {

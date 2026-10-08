@@ -59,14 +59,26 @@ describe("computePollingChange", () => {
 });
 
 describe("computeTrend", () => {
-  it("names the candidate with the largest share gain over the window", () => {
+  it("names the top-two candidate the margin swung toward over the window", () => {
     const snaps = [snap(1, 500, 500), snap(2, 495, 505), snap(3, 490, 510), snap(4, 480, 520)];
-    const trend = computeTrend(snaps, lookup, ["a", "b"], 3);
+    const trend = computeTrend(snaps, lookup, ["b", "a"], 3);
     expect(trend.status).toBe("toward");
     expect(trend.candidateId).toBe("b");
-    expect(trend.shiftPp).toBeCloseTo(2);
+    expect(trend.shiftPp).toBeCloseTo(4);
     expect(trend.windowTurns).toBe(3);
     expect(trend.series).toHaveLength(4);
+  });
+
+  it("ignores a minor ticket's gain when the top two margin moved the other way", () => {
+    const at = (turn: number, a: number, b: number, c: number): VoteTurnSnapshot => ({
+      turn,
+      recordedAt: "",
+      cumulativeVotes: { a, b, c },
+      sharesPct: {},
+    });
+    const trend = computeTrend([at(1, 480, 480, 40), at(4, 485, 470, 45)], lookup, ["a", "b"], 3);
+    expect(trend.candidateId).toBe("a");
+    expect(trend.shiftPp).toBeCloseTo(1.5);
   });
 
   it("falls back to the oldest snapshot when history is shorter than the window", () => {
