@@ -1,7 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Button, Card, Input, LoadingSpinner } from "@/components/ui";
+import { Badge, Input, LoadingSpinner } from "@/components/ui";
+import {
+  DenseSection,
+  InlineStatus,
+  KVList,
+  KVRow,
+  SmallButton,
+  TableScroll,
+  Td,
+  Th,
+  signTone,
+} from "./dense/DenseKit";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { apiErrorText } from "@/lib/errors/catalog";
@@ -14,20 +25,22 @@ const DOMAIN_COPY = {
   media: {
     title: "Media titles",
     noun: "title",
-    blurb:
-      "Fund a title every turn for about three days. If it lands, revenue rises across all of your media sectors for three days. If it flops, you lose what you spent and nothing more.",
+    intro:
+      "Fund a title each turn for about three days. A hit lifts revenue at all of your media sectors for three days. A flop costs only what you spent.",
     sectors: "media sectors",
     namePlaceholder: "Working title",
     nameLabel: "Title",
+    lifted: "media sectors",
   },
   manufacturing: {
     title: "Manufactured products",
     noun: "product",
-    blurb:
-      "Fund a product line every turn for about three days. If it sells, revenue rises across the plants that make its output for three days. If it flops, you lose what you spent and nothing more. You can only develop lines your plants can actually produce.",
+    intro:
+      "Fund a product line each turn for about three days. A hit lifts revenue at the plants that make its output for three days. A flop costs only what you spent. You can only develop lines your plants can make.",
     sectors: "plants making this output",
     namePlaceholder: "Product name",
     nameLabel: "Product name",
+    lifted: "plants",
   },
 } as const;
 
@@ -87,16 +100,12 @@ export function ProductStudio({
 
   if (!studio) {
     return message ? (
-      <Card className="p-5">
-        <p className="text-sm text-muted">{message}</p>
-      </Card>
+      <p className="text-sm text-muted">{message}</p>
     ) : (
-      <Card className="p-5">
-        <div className="flex items-center gap-2 text-sm text-muted">
-          <LoadingSpinner />
-          <span>Loading product studio</span>
-        </div>
-      </Card>
+      <div className="flex items-center gap-2 text-sm text-muted">
+        <LoadingSpinner />
+        <span>Loading product studio</span>
+      </div>
     );
   }
 
@@ -140,6 +149,84 @@ async function call(
   }
 }
 
+const HOW_IT_WORKS =
+  "Quality runs from 0 to 100. It comes from how much you spend against the line's target, plus the outcome of events. Higher quality raises both the chance of a hit and the size of the lift, which is 10 to 20 percent of revenue. Each product meets one or two events that ask for a decision. If you do not answer by the deadline, the marked default applies.";
+
+interface TierRow {
+  id: string;
+  label: string;
+  perTurn: number;
+  hitChance?: number;
+  boostFraction?: number;
+}
+
+/** One table for both starting and re-funding: level, money per turn, total, odds. */
+function FundingTable({
+  name,
+  rows,
+  selected,
+  onSelect,
+  disabled,
+  turns,
+  baseline,
+  money,
+}: {
+  name: string;
+  rows: TierRow[];
+  selected: string | undefined;
+  onSelect: (id: string) => void;
+  disabled?: boolean;
+  turns: number;
+  baseline?: number;
+  money: Money;
+}) {
+  const withOdds = rows.some((row) => row.hitChance !== undefined);
+  return (
+    <TableScroll>
+      <table className="w-full text-sm" aria-label="Spend per turn">
+        <thead>
+          <tr>
+            <Th>
+              <span className="sr-only">Pick</span>
+            </Th>
+            <Th>Spend level</Th>
+            <Th align="right">Per turn</Th>
+            <Th align="right">Over {turnsToDays(turns)}</Th>
+            {withOdds && <Th align="right">Chance of a hit</Th>}
+            {withOdds && baseline !== undefined && <Th align="right">Revenue lift if it hits</Th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id} className={selected === row.id ? "bg-card-elevated" : ""}>
+              <Td numeric={false} className="w-8">
+                <input
+                  type="radio"
+                  name={name}
+                  aria-label={row.label}
+                  checked={selected === row.id}
+                  disabled={disabled}
+                  onChange={() => onSelect(row.id)}
+                />
+              </Td>
+              <Td numeric={false}>{row.label}</Td>
+              <Td align="right">{money(row.perTurn)}</Td>
+              <Td align="right">{money(row.perTurn * turns)}</Td>
+              {withOdds && <Td align="right">{pct(row.hitChance ?? 0)}</Td>}
+              {withOdds && baseline !== undefined && (
+                <Td align="right">
+                  {pct(row.boostFraction ?? 0)}, {money(baseline * (row.boostFraction ?? 0))} per
+                  turn
+                </Td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </TableScroll>
+  );
+}
+
 function DomainPanel({
   corporationId,
   studio,
@@ -164,6 +251,8 @@ function DomainPanel({
   const selected: LineView | undefined =
     available.find((line) => line.id === lineId) ?? available[0];
   const tierOdds = selected?.oddsByTier.find((entry) => entry.id === tier);
+  const hasPast = domain.recent.length > 0;
+  const showIntro = studio.isCeo || domain.active != null || hasPast;
 
   async function start() {
     if (!selected || !tierOdds) return;
@@ -185,42 +274,42 @@ function DomainPanel({
   }
 
   return (
-    <Card title={copy.title}>
-      <p className="text-sm text-muted">{copy.blurb}</p>
-      <p className="mt-1 text-sm text-muted">
-        A hit adds 10 to 20 percent to revenue, higher with better quality. Quality comes from how
-        much you spend against the line&apos;s target, plus events along the way. Each product meets
-        one or two random events that ask for a decision.
-      </p>
-      {message && (
-        <p className="mt-2 text-sm text-red-500" role="alert">
-          {message}
-        </p>
+    <DenseSection id={`studio-${domain.domain}`} title={copy.title}>
+      {showIntro && (
+        <div className="space-y-1 py-1">
+          <p className="text-sm text-muted">{copy.intro}</p>
+          <details className="text-xs text-muted">
+            <summary className="cursor-pointer">How quality and odds work</summary>
+            <p className="mt-1">{HOW_IT_WORKS}</p>
+          </details>
+        </div>
       )}
+      <InlineStatus message={message} tone="error" className="py-1" />
 
       {domain.active ? (
         <ActiveVenture
           corporationId={corporationId}
           studio={studio}
           venture={domain.active}
+          baseline={domain.lines.find((line) => line.id === domain.active?.lineId)}
           money={money}
           onChanged={onChanged}
         />
       ) : studio.isCeo ? (
-        <div className="mt-4 space-y-4">
+        <div className="space-y-3 py-2">
           {available.length === 0 ? (
             <p className="text-sm text-muted">
               None of your {copy.sectors} can make a product right now.
             </p>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label htmlFor={`line-${domain.domain}`} className="mb-1 block text-sm font-medium">
+                <label htmlFor={`line-${domain.domain}`} className="mb-1 block text-xs text-muted">
                   Product line
                 </label>
                 <select
                   id={`line-${domain.domain}`}
-                  className="block w-full rounded-lg border border-card-border bg-card px-3 py-2 text-base"
+                  className="block h-9 w-full rounded-md border border-card-border bg-card px-2 text-sm"
                   value={selected?.id ?? ""}
                   onChange={(event) => setLineId(event.target.value)}
                 >
@@ -232,7 +321,7 @@ function DomainPanel({
                 </select>
               </div>
               <div>
-                <label htmlFor={`name-${domain.domain}`} className="mb-1 block text-sm font-medium">
+                <label htmlFor={`name-${domain.domain}`} className="mb-1 block text-xs text-muted">
                   {copy.nameLabel}
                 </label>
                 <Input
@@ -248,58 +337,54 @@ function DomainPanel({
 
           {selected && (
             <>
-              <fieldset>
-                <legend className="mb-1 text-sm font-medium">Spend per turn</legend>
-                <div className="grid gap-2 sm:grid-cols-4">
-                  {selected.oddsByTier.map((entry) => (
-                    <label
-                      key={entry.id}
-                      className={`cursor-pointer rounded-lg border p-3 text-sm ${
-                        tier === entry.id ? "border-primary" : "border-card-border"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name={`tier-${domain.domain}`}
-                        className="sr-only"
-                        checked={tier === entry.id}
-                        onChange={() => setTier(entry.id)}
-                      />
-                      <span className="block font-medium">{entry.label}</span>
-                      <span className="block">{money(entry.fundingPerTurnAnchor)} per turn</span>
-                      <span className="block text-muted">
-                        {money(entry.fundingPerTurnAnchor * studio.developmentTurns)} over{" "}
-                        {turnsToDays(studio.developmentTurns)}
-                      </span>
-                      <span className="block text-muted">
-                        About {pct(entry.hitChance)} chance of a hit
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-              <p className="text-sm text-muted">
-                Your {selected.liftedSectorCount}{" "}
-                {selected.liftedSectorCount === 1 ? "sector" : "sectors"} that would be lifted earn{" "}
-                {money(selected.baselineRevenueAnchor)} per turn now. A hit at the {tier} level adds
-                about {tierOdds ? pct(tierOdds.boostFraction) : "10%"}, roughly{" "}
-                {money(selected.baselineRevenueAnchor * (tierOdds?.boostFraction ?? 0.1))} per turn
-                for {turnsToDays(studio.boostTurns)}. Chances are before any events and rise or fall
-                with the decisions you make.
+              <FundingTable
+                name={`tier-${domain.domain}`}
+                rows={selected.oddsByTier.map((entry) => ({
+                  id: entry.id,
+                  label: entry.label,
+                  perTurn: entry.fundingPerTurnAnchor,
+                  hitChance: entry.hitChance,
+                  boostFraction: entry.boostFraction,
+                }))}
+                selected={tier}
+                onSelect={setTier}
+                turns={studio.developmentTurns}
+                baseline={selected.baselineRevenueAnchor}
+                money={money}
+              />
+              <p className="text-xs text-muted">
+                {selected.liftedSectorCount === 0
+                  ? `No ${copy.lifted} would be lifted by this line yet.`
+                  : `A hit lifts your ${selected.liftedSectorCount} ${copy.lifted}, which earn ${money(
+                      selected.baselineRevenueAnchor
+                    )} per turn now, for ${turnsToDays(studio.boostTurns)}.`}{" "}
+                Chances are before events and move with your decisions. The spend comes out of
+                corporation cash each turn.
               </p>
-              <Button
-                onClick={() => void start()}
-                isLoading={busy}
-                disabled={busy || name.trim().length === 0}
-              >
-                Start development
-              </Button>
+              <div className="flex flex-wrap items-center gap-3">
+                <SmallButton
+                  tone="primary"
+                  onClick={() => void start()}
+                  disabled={busy || name.trim().length === 0}
+                  title={name.trim().length === 0 ? `Name your ${copy.noun} to start` : undefined}
+                >
+                  {busy ? "Starting" : "Start development"}
+                </SmallButton>
+                {name.trim().length === 0 && (
+                  <span className="text-xs text-muted">
+                    Name your {copy.noun} to start. It costs{" "}
+                    {tierOdds ? money(tierOdds.fundingPerTurnAnchor) : "n/a"} per turn.
+                  </span>
+                )}
+              </div>
             </>
           )}
           {locked.length > 0 && (
-            <details className="text-sm text-muted">
-              <summary className="cursor-pointer">Lines you cannot make yet</summary>
-              <ul className="mt-2 space-y-1">
+            <details className="text-xs text-muted">
+              <summary className="cursor-pointer">
+                {locked.length} {locked.length === 1 ? "line" : "lines"} you cannot make yet
+              </summary>
+              <ul className="mt-1 space-y-0.5">
                 {locked.map((line) => (
                   <li key={line.id}>
                     <span className="font-medium text-foreground">{line.label}</span>: {line.reason}
@@ -310,20 +395,18 @@ function DomainPanel({
           )}
         </div>
       ) : (
-        <p className="mt-3 text-sm text-muted">Only the CEO can start a product.</p>
+        <p className="py-2 text-sm text-muted">
+          Only the CEO can start a {copy.noun}.{!hasPast && ` None has been released yet.`}
+        </p>
       )}
 
-      {domain.recent.length > 0 && (
-        <div className="mt-6">
-          <h3 className="text-sm font-semibold">Past products</h3>
-          <ul className="mt-2 space-y-2" aria-label={`Past ${copy.noun}s`}>
-            {domain.recent.map((venture) => (
-              <PastVenture key={venture.id} venture={venture} money={money} />
-            ))}
-          </ul>
+      {hasPast && (
+        <div className="pt-2">
+          <h3 className="pb-1 text-xs font-medium text-muted">Past {copy.noun}s</h3>
+          <PastTable ventures={domain.recent} money={money} noun={copy.noun} />
         </div>
       )}
-    </Card>
+    </DenseSection>
   );
 }
 
@@ -331,12 +414,14 @@ function ActiveVenture({
   corporationId,
   studio,
   venture,
+  baseline,
   money,
   onChanged,
 }: {
   corporationId: string;
   studio: StudioView;
   venture: VentureView;
+  baseline?: LineView;
   money: Money;
   onChanged: () => Promise<void>;
 }) {
@@ -360,15 +445,19 @@ function ActiveVenture({
   const current = tiers.find(
     (tier) => Math.abs(tier.multiple * reference - venture.fundingPerTurnAnchor) < reference * 0.01
   )?.id;
+  const base = baseline?.baselineRevenueAnchor;
 
   return (
-    <div className="mt-4 space-y-4" aria-label="Product in development">
+    <div className="space-y-3 py-2" aria-label="Product in development">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-base font-semibold">{venture.name}</span>
+        <span className="text-sm font-semibold">{venture.name}</span>
         <Badge color="info">{venture.lineLabel}</Badge>
+        <span className="text-xs text-muted">
+          {done} of {total} turns done
+        </span>
       </div>
       <div
-        className="h-2 w-full overflow-hidden rounded bg-card-border"
+        className="h-1.5 w-full overflow-hidden rounded bg-card-border"
         role="progressbar"
         aria-label="Development progress"
         aria-valuemin={0}
@@ -377,118 +466,116 @@ function ActiveVenture({
       >
         <div className="h-full bg-primary" style={{ width: `${(done / total) * 100}%` }} />
       </div>
-      <dl className="grid gap-2 text-sm sm:grid-cols-2">
-        <div>
-          <dt className="text-muted">Spent so far</dt>
-          <dd>{money(venture.spentAnchor)}</dd>
-        </div>
-        <div>
-          <dt className="text-muted">Release</dt>
-          <dd>
-            Turn {venture.endTurn}, in {turnsToDays(venture.turnsRemaining)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-muted">Quality now</dt>
-          <dd>{venture.currentQuality} of 100</dd>
-        </div>
+      <KVList className="grid gap-x-8 sm:grid-cols-2">
+        <KVRow label="Spent so far" value={money(venture.spentAnchor)} />
+        <KVRow
+          label="Release"
+          value={`Turn ${venture.endTurn}, in ${turnsToDays(venture.turnsRemaining)}`}
+        />
+        <KVRow label="Quality now" value={`${venture.currentQuality} of 100`} />
         {venture.odds && (
-          <div>
-            <dt className="text-muted">Projected quality at release</dt>
-            <dd>{venture.odds.projectedQuality} of 100 at this spending</dd>
-          </div>
+          <KVRow
+            label="Quality at release"
+            value={`${venture.odds.projectedQuality} of 100`}
+            title="Projected at the current spending"
+          />
         )}
         {venture.odds && (
-          <div>
-            <dt className="text-muted">Chance of a hit</dt>
-            <dd>{range(venture.odds.hitLow, venture.odds.hitHigh)}</dd>
-          </div>
+          <KVRow label="Chance of a hit" value={range(venture.odds.hitLow, venture.odds.hitHigh)} />
         )}
         {venture.odds && (
-          <div>
-            <dt className="text-muted">Revenue lift if it hits</dt>
-            <dd>{range(venture.odds.boostLow, venture.odds.boostHigh)}</dd>
-          </div>
+          <KVRow
+            label="Revenue lift if it hits"
+            value={
+              base !== undefined
+                ? `${range(venture.odds.boostLow, venture.odds.boostHigh)}, ${money(
+                    base * venture.odds.boostLow
+                  )} to ${money(base * venture.odds.boostHigh)} per turn`
+                : range(venture.odds.boostLow, venture.odds.boostHigh)
+            }
+          />
         )}
         {venture.pendingChargeAnchor > 0 && (
-          <div>
-            <dt className="text-muted">Decision costs still to pay</dt>
-            <dd>{money(venture.pendingChargeAnchor)}</dd>
-          </div>
+          <KVRow label="Decision costs still to pay" value={money(venture.pendingChargeAnchor)} />
         )}
-      </dl>
+      </KVList>
 
       {studio.isCeo && (
-        <fieldset disabled={busy}>
-          <legend className="mb-1 text-sm font-medium">Spend per turn</legend>
-          <div className="grid gap-2 sm:grid-cols-4">
-            {tiers.map((tier) => (
-              <label
-                key={tier.id}
-                className={`cursor-pointer rounded-lg border p-3 text-sm ${
-                  current === tier.id ? "border-primary" : "border-card-border"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="active-tier"
-                  className="sr-only"
-                  checked={current === tier.id}
-                  onChange={() =>
-                    void patch({
-                      action: "set_funding",
-                      fundingPerTurnAnchor: tier.multiple * reference,
-                    })
-                  }
-                />
-                <span className="block font-medium">{tier.label}</span>
-                <span className="block">{money(tier.multiple * reference)} per turn</span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
+        <FundingTable
+          name="active-tier"
+          rows={tiers.map((tier) => ({
+            id: tier.id,
+            label: tier.label,
+            perTurn: tier.multiple * reference,
+          }))}
+          selected={current}
+          onSelect={(id) => {
+            const tier = tiers.find((entry) => entry.id === id);
+            if (tier)
+              void patch({
+                action: "set_funding",
+                fundingPerTurnAnchor: tier.multiple * reference,
+              });
+          }}
+          disabled={busy}
+          turns={Math.max(1, venture.turnsRemaining)}
+          money={money}
+        />
       )}
 
       {venture.pendingEvents.map((event) => (
         <div
           key={event.eventId}
-          className="rounded-lg border border-primary p-4"
+          className="rounded-md border border-primary p-3"
           role="group"
           aria-label={event.title}
         >
-          <h4 className="font-semibold">{event.title}</h4>
+          <h4 className="text-sm font-semibold">{event.title}</h4>
           <p className="mt-1 text-sm">{event.body}</p>
           <p className="mt-1 text-xs text-muted">
-            Answer by turn {event.deadlineTurn}. If you do not, the marked default applies.
+            {studio.isCeo
+              ? `Answer by turn ${event.deadlineTurn}. If you do not, the marked default applies.`
+              : `The CEO answers by turn ${event.deadlineTurn}, or the marked default applies.`}
           </p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <ul className="mt-2 divide-y divide-card-border/60">
             {event.choices.map((choice) => (
-              <button
+              <li
                 key={choice.id}
-                type="button"
-                disabled={busy || !studio.isCeo}
-                onClick={() =>
-                  void patch({
-                    action: "answer_event",
-                    eventId: event.eventId,
-                    choiceId: choice.id,
-                  })
-                }
-                className="rounded-lg border border-card-border p-3 text-left text-sm hover:border-primary disabled:opacity-60"
+                className="flex flex-wrap items-center justify-between gap-2 py-1.5"
               >
-                <span className="block font-medium">
-                  {choice.label}
-                  {choice.isDefault ? " (default)" : ""}
-                </span>
-                <span className="block text-muted">{choice.detail}</span>
-              </button>
+                <div className="min-w-0 text-sm">
+                  <span className="font-medium">
+                    {choice.label}
+                    {choice.isDefault ? " (default)" : ""}
+                  </span>
+                  <span className="block text-xs text-muted">
+                    {choice.detail}
+                    {choice.chargeAnchor ? ` About ${money(choice.chargeAnchor)}.` : ""}
+                  </span>
+                </div>
+                {studio.isCeo && (
+                  <SmallButton
+                    disabled={busy}
+                    ariaLabel={choice.label}
+                    onClick={() =>
+                      void patch({
+                        action: "answer_event",
+                        eventId: event.eventId,
+                        choiceId: choice.id,
+                      })
+                    }
+                  >
+                    Choose
+                  </SmallButton>
+                )}
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       ))}
 
       {venture.resolvedEvents.length > 0 && (
-        <ul className="text-sm text-muted">
+        <ul className="text-xs text-muted">
           {venture.resolvedEvents.map((event) => (
             <li key={event.title}>
               {event.title}: {event.choiceLabel}
@@ -497,61 +584,93 @@ function ActiveVenture({
           ))}
         </ul>
       )}
-      {message && (
-        <p className="text-sm text-red-500" role="alert">
-          {message}
-        </p>
-      )}
+      <InlineStatus message={message} tone="error" />
       {studio.isCeo && (
-        <Button
-          variant="destructive"
-          size="sm"
+        <SmallButton
+          tone="danger"
           disabled={busy}
+          title="Stops the spending. Money already spent is not recovered."
           onClick={() => void patch({ action: "cancel" })}
         >
           Cancel development
-        </Button>
+        </SmallButton>
       )}
     </div>
   );
 }
 
-function PastVenture({ venture, money }: { venture: VentureView; money: Money }) {
-  const hit = venture.outcome === "hit";
-  const running = venture.stage === "released";
+function PastTable({
+  ventures,
+  money,
+  noun,
+}: {
+  ventures: VentureView[];
+  money: Money;
+  noun: string;
+}) {
   return (
-    <li className="rounded-lg border border-card-border p-3 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium">{venture.name}</span>
-        <Badge color={hit ? "success" : "default"}>
-          {venture.stage === "cancelled" ? "Cancelled" : hit ? "Hit" : "Flop"}
-        </Badge>
-        <span className="text-muted">{venture.lineLabel}</span>
-        {venture.finalQuality !== undefined && (
-          <span className="text-muted">quality {venture.finalQuality}</span>
-        )}
-      </div>
-      <p className="mt-1 text-muted">Spent {money(venture.spentAnchor)}.</p>
-      {hit && (
-        <p className="mt-1">
-          Lifts revenue {pct(venture.boostFraction ?? 0)}
-          {running
-            ? `, about ${money(venture.upliftPerTurnAnchor ?? 0)} per turn, ${turnsToDays(
-                venture.boostTurnsRemaining ?? 0
-              )} left.`
-            : ", finished."}{" "}
-          Extra revenue so far {money(venture.upliftToDateAnchor ?? 0)}
-          {venture.netReturnAnchor !== undefined
-            ? `, ${venture.netReturnAnchor >= 0 ? "ahead of" : "behind"} spend by ${money(
-                Math.abs(venture.netReturnAnchor)
-              )}`
-            : ""}
-          .
-        </p>
-      )}
-      {venture.stage === "flopped" && (
-        <p className="mt-1 text-muted">No ongoing penalty. The money spent is not recovered.</p>
-      )}
-    </li>
+    <TableScroll>
+      <table className="w-full text-sm" aria-label={`Past ${noun}s`}>
+        <thead>
+          <tr>
+            <Th>Product</Th>
+            <Th>Result</Th>
+            <Th align="right">Quality</Th>
+            <Th align="right">Spent</Th>
+            <Th align="right">Extra revenue</Th>
+            <Th align="right">Net of spend</Th>
+            <Th>Lift</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {ventures.map((venture) => {
+            const hit = venture.outcome === "hit";
+            const running = venture.stage === "released";
+            return (
+              <tr key={venture.id}>
+                <Td numeric={false} wrap>
+                  <span className="font-medium">{venture.name}</span>
+                  <span className="block text-xs text-muted">{venture.lineLabel}</span>
+                </Td>
+                <Td numeric={false}>
+                  <Badge color={hit ? "success" : "default"}>
+                    {venture.stage === "cancelled" ? "Cancelled" : hit ? "Hit" : "Flop"}
+                  </Badge>
+                </Td>
+                <Td align="right">
+                  {venture.finalQuality !== undefined ? `${venture.finalQuality} of 100` : "n/a"}
+                </Td>
+                <Td align="right">{money(venture.spentAnchor)}</Td>
+                <Td align="right">{hit ? money(venture.upliftToDateAnchor ?? 0) : "n/a"}</Td>
+                <Td
+                  align="right"
+                  className={hit ? signTone(venture.netReturnAnchor ?? 0) : ""}
+                  title={hit ? "Extra revenue so far minus everything spent" : undefined}
+                >
+                  {hit && venture.netReturnAnchor !== undefined
+                    ? `${venture.netReturnAnchor >= 0 ? "+" : "-"}${money(
+                        Math.abs(venture.netReturnAnchor)
+                      )}`
+                    : "n/a"}
+                </Td>
+                <Td numeric={false} wrap className="text-xs text-muted">
+                  {hit
+                    ? `${pct(venture.boostFraction ?? 0)}${
+                        running
+                          ? `, about ${money(venture.upliftPerTurnAnchor ?? 0)} per turn, ${turnsToDays(
+                              venture.boostTurnsRemaining ?? 0
+                            )} left`
+                          : ", finished"
+                      }`
+                    : venture.stage === "flopped"
+                      ? "None. Money spent is not recovered."
+                      : "None"}
+                </Td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </TableScroll>
   );
 }
