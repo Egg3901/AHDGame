@@ -5,6 +5,8 @@ import {
   type HouseholdConsumptionState,
   type HouseholdStateSignals,
   type HouseholdConsumptionResult,
+  PLANTS_HOUSEHOLD_UNIT_SCALE,
+  plantsHouseholdUnitScale,
 } from "./householdConsumption";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
 
@@ -271,5 +273,24 @@ describe("computeHouseholdConsumption — plants unit re-anchor (ticket #1027)",
       ] as [CommodityType, number][]),
     });
     expect(clampedAmple.global.get("food")).toBeCloseTo(foodDemand, 6);
+  });
+});
+
+describe("plantsHouseholdUnitScale", () => {
+  it("keeps the default scale for every era without an override", () => {
+    for (const preset of ["2019-default", "1953-default", "1979-default", "2023-default"]) {
+      expect(plantsHouseholdUnitScale(preset)).toBe(PLANTS_HOUSEHOLD_UNIT_SCALE);
+    }
+    expect(plantsHouseholdUnitScale(undefined)).toBe(PLANTS_HOUSEHOLD_UNIT_SCALE);
+  });
+
+  it("sizes 1991 household demand near seeded supply instead of 17x above it", () => {
+    const scale = plantsHouseholdUnitScale("1991-default");
+    expect(scale).toBeLessThan(PLANTS_HOUSEHOLD_UNIT_SCALE / 10);
+    // Live 1991 opening: geometric-mean household demand / seeded supply was
+    // 17.8x at the default scale; demand is linear in the scale.
+    const ratio = (17.8 * scale) / PLANTS_HOUSEHOLD_UNIT_SCALE;
+    expect(ratio).toBeGreaterThanOrEqual(1);
+    expect(ratio).toBeLessThanOrEqual(1.5);
   });
 });

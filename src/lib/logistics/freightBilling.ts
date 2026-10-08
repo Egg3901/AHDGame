@@ -4,6 +4,7 @@
  */
 export {
   apportionFreightBilling,
+  FREIGHT_BILL_MAX_SHARE_OF_GOODS_VALUE,
   type FreightBillingApportionment,
   type FreightBillingSectorUnits,
 } from "./rules/freightBilling";

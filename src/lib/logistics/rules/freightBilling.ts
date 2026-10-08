@@ -26,6 +26,17 @@
 
 import type { CommodityType } from "@/lib/constants/commodities";
 
+/**
+ * Ceiling on a sector's freight bill for one commodity, as a share of the
+ * value of the units it demands there (demand units x destination unit price).
+ * Real freight runs a few percent to roughly 10-15% of goods value. The
+ * sourcing pass prices a hop off the freight market in absolute terms, so a
+ * deficit freight market on top of cheap bulk cargo can bill a buyer more than
+ * the cargo is worth (observed: a sector billed 5x its own revenue). The excess
+ * stays in `unapportionedCharges`, so conservation still holds.
+ */
+export const FREIGHT_BILL_MAX_SHARE_OF_GOODS_VALUE = 0.15;
+
 /** One sector's billing-relevant physical units, keyed into its host state. */
 export interface FreightBillingSectorUnits {
   sectorId: string;
@@ -71,6 +82,12 @@ export function apportionFreightBilling(inputs: {
   /** The sourcing pass's era calibration, applied to sector input demand too. */
   demandCalibrationByCommodity?: ReadonlyMap<CommodityType, number>;
   freightSupplyUnitsByOriginState: ReadonlyMap<string, number>;
+  /**
+   * Destination unit price per commodity (₳). Bounds each sector's bill at
+   * {@link FREIGHT_BILL_MAX_SHARE_OF_GOODS_VALUE} of the goods it demands.
+   * A commodity or state with no price is left unbounded.
+   */
+  unitPriceByDestState?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
 }): FreightBillingApportionment {
   const {
     freightChargesByDestState,
@@ -79,6 +96,7 @@ export function apportionFreightBilling(inputs: {
     demandUnitsByDestState,
     demandCalibrationByCommodity,
     freightSupplyUnitsByOriginState,
+    unitPriceByDestState,
   } = inputs;
   const positiveFinite = (value: number | undefined): number =>
     typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
@@ -118,11 +136,16 @@ export function apportionFreightBilling(inputs: {
       // Sector production may grow since the lagged sourcing snapshot. Bound
       // aggregate shares at 100% without shifting noncorporate demand to corps.
       const totalDemand = Math.max(stateDemand, corporateDemand);
+      const unitPrice = positiveFinite(unitPriceByDestState?.get(stateId)?.get(commodity));
       let apportioned = 0;
       for (const sector of stateSectors) {
         const demand = positiveFinite(sector.demandUnitsByCommodity.get(commodity)) * calibration;
         if (!(demand > 0)) continue;
-        const share = (charge * demand) / totalDemand;
+        const raw = (charge * demand) / totalDemand;
+        const share =
+          unitPrice > 0
+            ? Math.min(raw, demand * unitPrice * FREIGHT_BILL_MAX_SHARE_OF_GOODS_VALUE)
+            : raw;
         chargeBySectorId.set(sector.sectorId, (chargeBySectorId.get(sector.sectorId) ?? 0) + share);
         apportioned += share;
       }
