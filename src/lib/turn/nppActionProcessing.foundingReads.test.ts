@@ -42,6 +42,7 @@ describe("foundNppCorporationsSurplus read budget", () => {
     const gameStateFindOne = vi.fn().mockResolvedValue({ currentYear: 1970 });
     const fedBudgetFind = vi.fn().mockReturnValue({ toArray: async () => [] });
 
+    const nppFilters: Record<string, unknown>[] = [];
     const candidateCursor = () => {
       let ordered = [...candidates];
       const cursor = {
@@ -71,7 +72,13 @@ describe("foundNppCorporationsSurplus read budget", () => {
     const db = {
       collection: vi.fn().mockImplementation((name: string) => {
         if (name === "npps") {
-          return { find: () => candidateCursor(), findOneAndUpdate: nppDebit };
+          return {
+            find: (filter: unknown) => {
+              nppFilters.push(filter as Record<string, unknown>);
+              return candidateCursor();
+            },
+            findOneAndUpdate: nppDebit,
+          };
         }
         if (name === "corporations") {
           return {
@@ -112,6 +119,16 @@ describe("foundNppCorporationsSurplus read budget", () => {
     const attempts = nppDebit.mock.calls.length;
     // Non-vacuous: the seeded stream must actually attempt foundings.
     expect(attempts).toBeGreaterThan(0);
+    // No price docs means no shortage pressure: the calm per-sweep cap holds.
+    expect(attempts).toBeLessThanOrEqual(3);
+
+    // The cash prefilter is per country in FX terms, not one flat bar: a 1.5x
+    // buffer on the 100k fee at the live EUR rate for a French NPP.
+    const poolFilter = nppFilters[0] as {
+      $or: { countryId: unknown; nppInvestmentCashAnchor: { $gte: number } }[];
+    };
+    const fr = poolFilter.$or.find((c) => c.countryId === "FR");
+    expect(fr?.nppInvestmentCashAnchor.$gte).toBeCloseTo((150_000 / 0.92) * 1, 0);
     // A 2027 French founder's fee uses the live EUR rate, not the obsolete
     // FRF rate (or the missing-rate fallback of 1).
     const firstDebitFilter = nppDebit.mock.calls[0][0] as {

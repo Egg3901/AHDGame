@@ -48,6 +48,7 @@ import { careerArchetypeModifiersContinuous } from "@/lib/nppAutonomy/v3/careerA
 import { nppBuyBond } from "@/lib/nppAutonomy/v3/finance/nppBonds";
 import { nppBuyShares, nppSellShares } from "@/lib/nppAutonomy/v3/finance/nppShares";
 import { nppFoundCorporation } from "@/lib/nppAutonomy/v3/finance/nppFoundCorporation";
+import { localToAnchor } from "@/lib/nppAutonomy/v3/finance/nppEconomicAccount";
 import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
 import {
   nppBuildPartyOrg,
@@ -58,7 +59,13 @@ import type { Corporation } from "@/lib/db/types/corporation";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
-import { foundingSectorWeights, pickWeightedIndex } from "@/lib/turn/npp/foundingSectorChoice";
+import {
+  foundingChanceMultiplier,
+  foundingSectorWeights,
+  foundingShortagePressure,
+  foundingSweepCap,
+  pickWeightedIndex,
+} from "@/lib/turn/npp/foundingSectorChoice";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 import { resolveShareExecutionPrice } from "@/lib/corporations/marketExecution";
 import { deriveCeoArchetype } from "@/lib/turn/ceoArchetype";
@@ -1237,6 +1244,13 @@ export async function foundNppCorporationsSurplus(
   // ₳ investment capital; the core enforces exact per-NPP affordability (fee is
   // FX-converted there). minFunds doubles as a rough ₳ threshold.
   const minFunds = NPP_FOUNDING_FEE * NPP_FOUNDING_FUNDS_BUFFER;
+  const fxByCcy = await loadFxRatesByCurrency(db);
+  const homeRateOf = (countryId: CountryId): number => {
+    const currency = preset
+      ? getSeedCurrencyCode(countryId, preset)
+      : (COUNTRY_CURRENCY_MAP[countryId] ?? "USD");
+    return fxByCcy.get(currency) ?? 1;
+  };
   // v4 autonomy sets `econScopeCountries` to null (global), which removed the
   // only barrier that had been keeping the NPP economic brain out of planned
   // economies: the v3 scope was a player-enablement rail, never a
@@ -1245,12 +1259,23 @@ export async function foundNppCorporationsSurplus(
   // change. One gameState read plus one federalBudget $in, once per sweep.
   const blockedSet = await loadPrivateEnterpriseBlockedCountries(db);
   const blockedCountries = [...blockedSet];
+  const knownCountries = Object.keys(COUNTRY_CURRENCY_MAP) as CountryId[];
   const candidates = await db
     .collection<NPP>("npps")
     .find(
       {
         retiredAt: null,
-        nppInvestmentCashAnchor: { $gte: minFunds },
+        // The fee is quoted in local currency and charged in ₳, so what an NPP
+        // needs in ₳ depends on its home rate. A flat ₳ bar excluded every NPP
+        // in a cheap-fee currency (a 100k fee is a few hundred ₳ in yen or lira)
+        // and every NPP in a dear one fell short of it anyway.
+        $or: [
+          ...knownCountries.map((countryId) => ({
+            countryId,
+            nppInvestmentCashAnchor: { $gte: localToAnchor(minFunds, homeRateOf(countryId)) },
+          })),
+          { countryId: { $nin: knownCountries }, nppInvestmentCashAnchor: { $gte: minFunds } },
+        ],
         ...countryScopeFilter(countryScope),
         // Applied last and combined explicitly: `countryScopeFilter` writes its
         // own `countryId` key, so a second one here would silently clobber it.
@@ -1294,10 +1319,17 @@ export async function foundNppCorporationsSurplus(
   }
 
   const rng = makeSeededRng(`npp-found-corp:${currentTurn}${NPP_ACTION_RNG_SALT}`);
-  const fxByCcy = await loadFxRatesByCurrency(db);
 
   // Sector choice follows the market: one price read and one count per sweep.
   const priceDocs = await db.collection<CommodityPrice>("commodityPrices").find({}).toArray();
+  // Entry answers shortage: the more markets run short, the more NPPs try to
+  // found and the more foundings one sweep may complete.
+  const shortagePressure = foundingShortagePressure(
+    priceDocs.map((p) => (p.basePrice && p.globalPrice ? p.globalPrice / p.basePrice : null))
+  );
+  const maxFoundings = foundingSweepCap(shortagePressure);
+  const chanceMultiplier = foundingChanceMultiplier(shortagePressure);
+  let founded = 0;
   const { priceRatioOf } = buildNppPriceSignals(new Map(priceDocs.map((p) => [p.commodity, p])));
   const cellCounts = await db
     .collection<Corporation>("corporations")
@@ -1313,7 +1345,8 @@ export async function foundNppCorporationsSurplus(
 
   for (const npp of candidates) {
     const archetype = deriveCeoArchetype(npp.personality);
-    if (rng() >= NPP_FOUNDING_BASE_PROBABILITY_BY_ARCHETYPE[archetype]) continue;
+    if (founded >= maxFoundings) break;
+    if (rng() >= NPP_FOUNDING_BASE_PROBABILITY_BY_ARCHETYPE[archetype] * chanceMultiplier) continue;
 
     if (alreadyCeoIds.has(npp._id.toString())) continue;
 
@@ -1329,11 +1362,8 @@ export async function foundNppCorporationsSurplus(
     existingByCell.set(cell, (existingByCell.get(cell) ?? 0) + 1);
 
     const homeCountry = (npp.countryId ?? "US") as CountryId;
-    const homeCurrency = preset
-      ? getSeedCurrencyCode(homeCountry, preset)
-      : (COUNTRY_CURRENCY_MAP[homeCountry] ?? "USD");
-    const homeRate = fxByCcy.get(homeCurrency) ?? 1;
-    await nppFoundCorporation(
+    const homeRate = homeRateOf(homeCountry);
+    const outcome = await nppFoundCorporation(
       db,
       npp,
       sectorType,
@@ -1343,5 +1373,6 @@ export async function foundNppCorporationsSurplus(
       blockedSet,
       preset
     );
+    if (outcome.ok) founded++;
   }
 }

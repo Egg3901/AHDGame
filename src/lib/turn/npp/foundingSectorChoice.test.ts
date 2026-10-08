@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { foundingSectorWeights, pickWeightedIndex } from "./foundingSectorChoice";
+import {
+  foundingChanceMultiplier,
+  foundingSectorWeights,
+  foundingShortagePressure,
+  foundingSweepCap,
+  pickWeightedIndex,
+} from "./foundingSectorChoice";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { SECTOR_SUPPLY } from "@/lib/constants/commodities";
 
@@ -61,5 +67,23 @@ describe("pickWeightedIndex", () => {
 
   it("falls back to uniform when every weight is zero", () => {
     expect(pickWeightedIndex([0, 0, 0, 0], 0.6)).toBe(2);
+  });
+});
+
+describe("founding responds to shortage", () => {
+  it("measures the share of priced markets that are short", () => {
+    expect(foundingShortagePressure([2, 1.2, 1, 0.8, null])).toBeCloseTo(0.5, 9);
+    expect(foundingShortagePressure([null, Number.NaN])).toBe(0);
+    expect(foundingShortagePressure([])).toBe(0);
+  });
+
+  it("widens the sweep cap and the chance with pressure, bounded", () => {
+    expect(foundingSweepCap(0)).toBe(3);
+    expect(foundingSweepCap(1)).toBe(12);
+    expect(foundingSweepCap(7)).toBe(12);
+    expect(foundingSweepCap(0.79)).toBeGreaterThan(foundingSweepCap(0.2));
+    expect(foundingChanceMultiplier(0)).toBe(1);
+    expect(foundingChanceMultiplier(1)).toBe(3);
+    expect(foundingChanceMultiplier(-1)).toBe(1);
   });
 });
