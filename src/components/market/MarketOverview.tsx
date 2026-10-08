@@ -15,6 +15,7 @@ import type { SupplyOffersResponse } from "./SupplyDealsPanel";
 import { PreviewCard, PreviewRow, pctText, toneClass } from "./marketUi";
 import { useMarketJson } from "./useMarketJson";
 import { COMMODITY_LABELS } from "@/lib/constants/commodities";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 
 const byDesc =
   <T,>(score: (t: T) => number) =>
@@ -67,7 +68,7 @@ export function MarketOverview({
             key={l._id}
             href={`/corporation/${l.sequentialId}`}
             left={`${l.tickerSymbol ? `${l.tickerSymbol} ` : ""}${l.name}`}
-            right={`${formatListingPrice(l.sharePrice, l.liquidCurrencyCode)} ${pctText(l.priceChange24h)}`}
+            right={`${formatListingPrice(l.sharePrice, l.liquidCurrencyCode as CurrencyCode | null | undefined)} ${pctText(l.priceChange24h)}`}
             rightTone={toneClass(l.priceChange24h)}
           />
         ))}
