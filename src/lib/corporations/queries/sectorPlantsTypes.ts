@@ -108,11 +108,10 @@ export interface SectorPlantsSection {
   /** Untapped demand in this (state, sectorType) market, units/day. */
   headroomUnits: number;
   /**
-   * Weighted expansion appetite in sector output units: unmet world demand across this
-   * sector's output mix (min over legs - the market stops absorbing when the
-   * first leg saturates). 0 in a glut. `headroomUnits` above is the unowned
-   * pool = claimable market SHARE, a different thing; the UI must not present
-   * it as demand (ticket #1027 follow-up).
+   * Weighted expansion appetite across the output mix, including latent demand.
+   * It can remain positive while one output has no unmet demand. It is not an
+   * all-output sell-through limit. Use measuredDemandGapUnits for automatic
+   * sizing; headroomUnits measures claimable market share.
    *
    * 0 while `roomHeldByOwnIdle`: this sector's own idle capacity reaches the
    * market before any new build would.
