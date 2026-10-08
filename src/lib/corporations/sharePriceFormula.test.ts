@@ -3,6 +3,7 @@ import {
   annualizedTrailingGrowthRate,
   clampSplitCooldownPrevAnchor,
   computeSharePrices,
+  subsidiarySprawlMultiplier,
   type SharePriceInput,
 } from "./sharePriceFormula";
 import {
@@ -154,5 +155,24 @@ describe("annualizedTrailingGrowthRate — plants growth-premium input", () => {
       sectorGrowthRate: annualizedTrailingGrowthRate(121, [{ turn: 98, sectorNpv: 100 }], 100, TPY),
     });
     expect(growing).toBeGreaterThan(flat);
+  });
+});
+
+describe("subsidiary sprawl discount (suggestion #363)", () => {
+  it("is free up to 3 subsidiaries, ramps linearly, caps at -50% from 9", () => {
+    expect(subsidiarySprawlMultiplier(0)).toBe(1);
+    expect(subsidiarySprawlMultiplier(3)).toBe(1);
+    expect(subsidiarySprawlMultiplier(4)).toBeCloseTo(1 - 0.5 / 6);
+    expect(subsidiarySprawlMultiplier(6)).toBeCloseTo(0.75);
+    expect(subsidiarySprawlMultiplier(9)).toBeCloseTo(0.5);
+    expect(subsidiarySprawlMultiplier(20)).toBeCloseTo(0.5);
+  });
+
+  it("discounts the fundamental, not the smoothed price, so it does not compound", () => {
+    const undiscounted = price({});
+    expect(price({ subsidiaryCount: 9 })).toBeCloseTo(undiscounted * 0.5, 1);
+    // Rate-limited path seeded at the discounted price stays put turn over turn.
+    const settled = price({ subsidiaryCount: 9, previousSharePrice: undiscounted * 0.5 });
+    expect(settled).toBeCloseTo(undiscounted * 0.5, 1);
   });
 });

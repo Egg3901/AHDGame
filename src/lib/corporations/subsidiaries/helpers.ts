@@ -143,3 +143,21 @@ export function subsidiaryCeoBlockMessage(reason: SubsidiaryCeoBlockReason): str
     ? "This player already operates another subsidiary of the same parent."
     : "A subsidiary must be run by a different player than the parent.";
 }
+
+/**
+ * Formalized-subsidiary count per controlling parent corp id (hex). Derived the
+ * same way as everywhere else: >50% voting control plus the formalization marker.
+ */
+export function formalizedSubsidiaryCountByParentId(
+  corporations: readonly Corporation[]
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const corp of corporations) {
+    if (corp.subsidiaryFormalizedAtTurn == null) continue;
+    const parent = getControllingCorporateParent(corp);
+    if (!parent) continue;
+    const key = parent.corporationId.toString();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
