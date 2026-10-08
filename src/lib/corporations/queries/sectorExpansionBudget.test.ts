@@ -76,23 +76,24 @@ beforeEach(async () => {
   db.collectionMocks.corporateSectors.find().toArray.mockResolvedValue([sector]);
   db.collection("gameState").findOne.mockResolvedValue({ currentTurn: 100 });
   db.collection("gameConfig").findOne.mockResolvedValue({ marketGovernorRampTurns: 48 });
-  db.collection("tradeFlowSnapshots").findOne.mockImplementation(async (query) =>
-    query.turn === 100
-      ? {
-          turn: 100,
-          books: {
-            US: {
-              advertising: {
-                supply: 1000,
-                domesticDemand: 5000,
-                demand: 5000,
-                imports: 0,
-                exports: 0,
+  db.collection("tradeFlowSnapshots").findOne.mockImplementation(
+    async (query: { turn?: number }) =>
+      query.turn === 100
+        ? {
+            turn: 100,
+            books: {
+              US: {
+                advertising: {
+                  supply: 1000,
+                  domesticDemand: 5000,
+                  demand: 5000,
+                  imports: 0,
+                  exports: 0,
+                },
               },
             },
-          },
-        }
-      : null
+          }
+        : null
   );
 });
 
@@ -120,8 +121,11 @@ describe("sector expansion budget payload", () => {
   it.each(["pending", "defaulted"])(
     "withholds a budget when a %s loan needs servicing",
     async (status) => {
-      db.collection("bankLoans").findOne.mockImplementation(async (query) =>
-        query.status.$in.includes(status) ? { _id: new ObjectId(), status, principal: 1000 } : null
+      db.collection("bankLoans").findOne.mockImplementation(
+        async (query: { status: { $in: string[] } }) =>
+          query.status.$in.includes(status)
+            ? { _id: new ObjectId(), status, principal: 1000 }
+            : null
       );
       expect((await loadPlants()).investment.operatingReserveAnchor).toBeNull();
     }
