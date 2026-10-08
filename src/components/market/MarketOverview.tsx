@@ -14,6 +14,7 @@ import { vsBasePct } from "./CommoditiesPanel";
 import type { SupplyOffersResponse } from "./SupplyDealsPanel";
 import { PreviewCard, PreviewRow, pctText, toneClass } from "./marketUi";
 import { useMarketJson } from "./useMarketJson";
+import { CorporationLogo } from "@/components/corporation/CorporationLogo";
 import { COMMODITY_LABELS } from "@/lib/constants/commodities";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
@@ -67,7 +68,17 @@ export function MarketOverview({
           <PreviewRow
             key={l._id}
             href={`/corporation/${l.sequentialId}`}
-            left={`${l.tickerSymbol ? `${l.tickerSymbol} ` : ""}${l.name}`}
+            left={
+              <span className="flex min-w-0 items-center gap-2">
+                <CorporationLogo
+                  logoUrl={l.logoUrl}
+                  name={l.name}
+                  size="h-5 w-5"
+                  className="rounded"
+                />
+                <span className="truncate">{`${l.tickerSymbol ? `${l.tickerSymbol} ` : ""}${l.name}`}</span>
+              </span>
+            }
             right={`${formatListingPrice(l.sharePrice, l.liquidCurrencyCode as CurrencyCode | null | undefined)} ${pctText(l.priceChange24h)}`}
             rightTone={toneClass(l.priceChange24h)}
           />
@@ -158,7 +169,17 @@ export function MarketOverview({
         {offerRows.map((o) => (
           <PreviewRow
             key={o.id}
-            left={`${COMMODITY_LABELS[o.commodity]} ${o.side === "sell" ? "sold" : "wanted"} by ${o.corporationName}${o.ai ? " (AI)" : ""}`}
+            left={
+              <span className="flex min-w-0 items-center gap-2">
+                <CorporationLogo
+                  logoUrl={o.corporationLogoUrl}
+                  name={o.corporationName}
+                  size="h-5 w-5"
+                  className="rounded"
+                />
+                <span className="truncate">{`${COMMODITY_LABELS[o.commodity]} ${o.side === "sell" ? "offered" : "sought"} by ${o.corporationName}${o.ai ? " (NPP)" : ""}`}</span>
+              </span>
+            }
             right={pctText(o.pricePremium * 100)}
             rightTone={toneClass(-o.pricePremium)}
           />

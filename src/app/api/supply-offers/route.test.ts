@@ -8,7 +8,8 @@ vi.mock("@/lib/api/requireAuth", () => ({
   requireBasicAuth: vi.fn().mockResolvedValue({ ok: true, user: { userId: "not-an-object-id" } }),
 }));
 vi.mock("@/lib/turn/currentTurn", () => ({ getCurrentTurn: vi.fn().mockResolvedValue(10) }));
-vi.mock("@/lib/corporations/supplyExchange/listingView", () => ({
+vi.mock("@/lib/corporations/supplyExchange/listingView", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/corporations/supplyExchange/listingView")>()),
   loadOpenOffers: (...args: unknown[]) => loadOpenOffers(...args),
 }));
 vi.mock("@/lib/mongodb", () => ({
@@ -36,7 +37,9 @@ describe("GET /api/supply-offers", () => {
     const body = await res.json();
     expect(body).toMatchObject({ enabled: true, page: 2, hasMore: true, total: 42 });
     expect(loadOpenOffers.mock.calls[0][1]).toMatchObject({
-      commodity: undefined,
+      commodities: [],
+      kind: "all",
+      sort: "newest",
       page: 2,
       limit: 20,
     });
@@ -45,12 +48,36 @@ describe("GET /api/supply-offers", () => {
 
   it("still filters by commodity", async () => {
     await get("?commodity=oil");
-    expect(loadOpenOffers.mock.calls[0][1]).toMatchObject({ commodity: "oil", page: 1, limit: 60 });
+    expect(loadOpenOffers.mock.calls[0][1]).toMatchObject({
+      commodities: ["oil"],
+      page: 1,
+      limit: 60,
+    });
     expect(countDocuments).toHaveBeenCalledWith({ commodity: "oil", expiresAtTurn: { $gt: 10 } });
+  });
+
+  it("passes kind, side, sort and a commodity list through to the read and the count", async () => {
+    await get("?kind=player&side=buy&sort=volume&commodity=oil,coal");
+    expect(loadOpenOffers.mock.calls[0][1]).toMatchObject({
+      commodities: ["oil", "coal"],
+      kind: "player",
+      side: "buy",
+      sort: "volume",
+    });
+    expect(countDocuments).toHaveBeenCalledWith({
+      commodity: { $in: ["oil", "coal"] },
+      side: "buy",
+      aiListed: { $ne: true },
+      expiresAtTurn: { $gt: 10 },
+    });
+    await get("?kind=npp");
+    expect(countDocuments).toHaveBeenLastCalledWith({ aiListed: true, expiresAtTurn: { $gt: 10 } });
   });
 
   it("rejects an unknown commodity and bad paging", async () => {
     expect((await get("?commodity=nope")).status).toBe(400);
+    expect((await get("?kind=bots")).status).toBe(400);
+    expect((await get("?sort=random")).status).toBe(400);
     expect((await get("?page=0")).status).toBe(400);
     expect((await get("?pageSize=500")).status).toBe(400);
   });

@@ -19,6 +19,9 @@ vi.mock("@/contexts/CurrencyContext", () => ({
     formatListingPrice: (x: number) => `P${x}`,
   }),
 }));
+vi.mock("@/app/country/[code]/stockmarket/components/MarketOverview", () => ({
+  StockMarketChart: () => <div data-testid="market-chart" />,
+}));
 vi.mock("@/app/country/[code]/stockmarket/components/StockList", () => ({
   StockList: () => <div>stock-list</div>,
 }));
@@ -105,18 +108,28 @@ beforeEach(() => {
 });
 
 describe("MarketHub", () => {
-  it("shows headline figures and loads only the overview data lazily", async () => {
+  it("puts the chart on top, without headline tiles, and collapses it", async () => {
     search = "";
+    window.localStorage.clear();
     render(<MarketHub />);
     expect(screen.getByRole("tab", { name: "Overview" }).getAttribute("aria-selected")).toBe(
       "true"
     );
-    await waitFor(() => expect(screen.getByText("110")).toBeTruthy());
-    expect(screen.getByText("+10.00% last turn")).toBeTruthy();
-    expect(screen.getByText("7")).toBeTruthy();
-    expect(screen.getByText("1 above")).toBeTruthy();
-    expect(screen.getByText("1 below")).toBeTruthy();
-    expect(calls.some((u) => u.startsWith("/api/bonds"))).toBe(true);
+    expect(screen.getByTestId("market-chart")).toBeTruthy();
+    expect(screen.queryByText("Market index")).toBeNull();
+    expect(screen.queryByText("Open supply offers")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Hide chart" }));
+    expect(screen.queryByTestId("market-chart")).toBeNull();
+    expect(window.localStorage.getItem("market.chartOpen")).toBe("0");
+    await waitFor(() => expect(calls.some((u) => u.startsWith("/api/bonds"))).toBe(true));
+  });
+
+  it("restores a collapsed chart from storage", async () => {
+    search = "";
+    window.localStorage.setItem("market.chartOpen", "0");
+    render(<MarketHub />);
+    await waitFor(() => expect(screen.queryByTestId("market-chart")).toBeNull());
+    expect(screen.getByRole("button", { name: "Show chart" })).toBeTruthy();
   });
 
   it("does not fetch bonds or funds on an unrelated tab", async () => {
@@ -135,13 +148,29 @@ describe("MarketHub", () => {
     expect(replace).toHaveBeenCalledWith("/market?tab=bonds", { scroll: false });
   });
 
-  it("labels AI offers on the supply tab", async () => {
+  it("labels NPP offers and defaults the supply tab to players", async () => {
     search = "tab=supply";
     render(<MarketHub />);
-    await waitFor(() => expect(screen.getByText("AI")).toBeTruthy());
-    expect(
-      calls.filter((u) => u.startsWith("/api/supply-offers")).some((u) => u.includes("page=1"))
-    ).toBe(true);
+    await waitFor(() => expect(screen.getAllByText("NPP").length).toBeGreaterThan(0));
+    expect(screen.queryByText("AI")).toBeNull();
+    expect(screen.getByRole("button", { name: "Players" }).getAttribute("aria-pressed")).toBe(
+      "true"
+    );
+    expect(calls.some((u) => u.startsWith("/api/supply-offers") && u.includes("kind=player"))).toBe(
+      true
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Seeking (buy)" }));
+    await waitFor(() =>
+      expect(calls.some((u) => u.includes("side=buy") && u.includes("kind=player"))).toBe(true)
+    );
+  });
+
+  it("shows volume, value and a premium chip for an offer", async () => {
+    search = "tab=supply";
+    render(<MarketHub />);
+    await waitFor(() => expect(screen.getByText("+10%")).toBeTruthy());
+    expect(screen.getByText("Offering")).toBeTruthy();
+    expect(screen.getByText("~A660")).toBeTruthy();
   });
 
   it("falls back to the overview for an unknown tab", () => {

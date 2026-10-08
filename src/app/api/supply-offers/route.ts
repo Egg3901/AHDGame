@@ -1,3 +1,4 @@
+import type { SupplyListing } from "@/lib/db/types/supplyListing";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
@@ -7,20 +8,30 @@ import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COMMODITY_TYPES } from "@/lib/constants/commodities";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import type { Corporation, GameConfig } from "@/lib/db/types";
-import { loadOpenOffers } from "@/lib/corporations/supplyExchange/listingView";
+import { loadOpenOffers, openOffersFilter } from "@/lib/corporations/supplyExchange/listingView";
 
 const MAX_OFFERS = 60;
 const privateHeaders = { "Cache-Control": "private, no-store" };
 const querySchema = z.object({
-  commodity: z.enum(COMMODITY_TYPES).optional(),
+  /** One commodity, or a comma list of them. */
+  commodity: z
+    .string()
+    .optional()
+    .transform((v) => (v ? v.split(",").filter(Boolean) : []))
+    .pipe(z.array(z.enum(COMMODITY_TYPES)).max(COMMODITY_TYPES.length)),
+  kind: z.enum(["player", "npp", "all"]).default("all"),
+  side: z.enum(["buy", "sell"]).optional(),
+  sort: z.enum(["volume", "premium", "newest"]).default("newest"),
   page: z.coerce.number().int().min(1).max(1000).default(1),
   pageSize: z.coerce.number().int().min(1).max(MAX_OFFERS).default(MAX_OFFERS),
 });
 
 /**
- * GET /api/supply-offers?commodity=&page=&pageSize=: open standing offers plus
- * the corporations the viewer can take them with. Omit `commodity` to list
- * every commodity (the market hub). Read only; taking an offer goes through
+ * GET /api/supply-offers?commodity=&kind=&side=&sort=&page=&pageSize=: open
+ * standing offers plus the corporations the viewer can take them with. Omit
+ * `commodity` to list every commodity (the market hub); pass a comma list for
+ * several. `kind` is player, npp or all (players first); `sort` is newest,
+ * volume or premium. Read only; taking an offer goes through
  * the corporation's own take route.
  */
 export async function GET(request: Request) {
@@ -30,10 +41,13 @@ export async function GET(request: Request) {
     const params = new URL(request.url).searchParams;
     const query = querySchema.safeParse({
       commodity: params.get("commodity") ?? undefined,
+      kind: params.get("kind") ?? undefined,
+      side: params.get("side") ?? undefined,
+      sort: params.get("sort") ?? undefined,
       page: params.get("page") ?? undefined,
       pageSize: params.get("pageSize") ?? undefined,
     });
-    if (!query.success) return errorResponse(400, "Invalid commodity or paging");
+    if (!query.success) return errorResponse(400, "Invalid filter or paging");
     const db = await getDb();
     const config = await db
       .collection<GameConfig>("gameConfig")
@@ -68,16 +82,23 @@ export async function GET(request: Request) {
     ]);
     const [{ offers, hasMore }, total] = await Promise.all([
       loadOpenOffers(db, {
-        commodity: query.data.commodity,
+        commodities: query.data.commodity,
+        kind: query.data.kind,
+        side: query.data.side,
+        sort: query.data.sort,
         turn,
         viewerCorpIds: new Set(mine.map((c) => c._id.toString())),
         limit: query.data.pageSize,
         page: query.data.page,
       }),
-      db.collection("supplyListings").countDocuments({
-        ...(query.data.commodity ? { commodity: query.data.commodity } : {}),
-        expiresAtTurn: { $gt: turn },
-      }),
+      db.collection<SupplyListing>("supplyListings").countDocuments(
+        openOffersFilter({
+          commodities: query.data.commodity,
+          kind: query.data.kind,
+          side: query.data.side,
+          turn,
+        })
+      ),
     ]);
     return NextResponse.json(
       {

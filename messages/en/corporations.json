@@ -261,6 +261,7 @@
       "expiry": "Offers expire after 168 turns. Posting does not reserve capacity, but anyone who takes your offer starts a contract on these terms. You can withdraw an offer at any time.",
       "own": "Your offers ({count}/10)",
       "withdraw": "Withdraw",
+      "npp": "NPP",
       "filter": "Filter commodity",
       "all": "All commodities",
       "loading": "Loading offers...",
