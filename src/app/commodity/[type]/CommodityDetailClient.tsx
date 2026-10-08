@@ -163,6 +163,12 @@ export default function CommodityDetailClient({ initialData }: CommodityDetailCl
           </Link>
           <span aria-hidden>/</span>
           <span className="text-foreground font-medium">{data.label}</span>
+          <Link
+            href={`/commodity/${data.commodity}/offers`}
+            className="ml-auto text-foreground underline decoration-card-border underline-offset-2 hover:decoration-foreground"
+          >
+            Supply offers
+          </Link>
         </nav>
 
         <HeroPanel

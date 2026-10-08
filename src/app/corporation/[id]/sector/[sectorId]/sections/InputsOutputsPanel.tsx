@@ -12,6 +12,8 @@ import {
   convertCommodityPrice,
 } from "@/lib/commodity-map/commodityPriceDisplay";
 import ShortageBadge from "../components/ShortageBadge";
+import InputOffersHint from "../components/InputOffersHint";
+import { costliestInput } from "../lib/costliestInput";
 import DetailsDisclosure from "../components/DetailsDisclosure";
 import type { CommoditiesData, CommodityFlow, ExtractionCapacityRow, PlantsData } from "../types";
 import { fmtUnits, fmtPct } from "../lib/plants";
@@ -58,6 +60,7 @@ export default function InputsOutputsPanel({
   forexEnabled,
   exchangeRates,
 }: InputsOutputsPanelProps) {
+  const costliest = costliestInput(commodities.demands);
   const currencyCode = getCommodityDisplayCurrency(countryId);
   const price = (v: number) =>
     fmtPrice(convertCommodityPrice(v, currencyCode, forexEnabled, exchangeRates));
@@ -139,6 +142,7 @@ export default function InputsOutputsPanel({
               ))}
             </ul>
           )}
+          {costliest && <InputOffersHint flow={costliest} />}
           {commodities.throughput?.bindingInput && (
             <p className="mt-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-body-sm text-foreground">
               Short supply of{" "}

@@ -30,6 +30,11 @@ import {
   supplyAgreementRequiresState,
 } from "@/lib/market/commodityMarketScope";
 import type { State } from "@/lib/db/types/state";
+import {
+  checkSupplyContractParties,
+  requireSupplyExchangeAccess,
+} from "@/lib/corporations/supplyExchange/guards";
+import { notifySupplyAgreementEvent } from "@/lib/corporations/supplyExchange/notifications";
 
 /**
  * Private supply agreement lifecycle (bilateral, both-consent). Either CEO can
@@ -42,7 +47,7 @@ type AgreementTerms = Pick<
   "commodity" | "stateId" | "volumeCap" | "pricePremium" | "exclusive" | "durationTurns"
 >;
 
-function makeOffer(args: {
+export function makeOffer(args: {
   revision: number;
   proposedByCorpId: ObjectId;
   terms: Omit<AgreementTerms, "commodity" | "stateId">;
@@ -77,7 +82,7 @@ function latestOffer(agreement: SupplyAgreement): SupplyAgreementOffer {
   };
 }
 
-async function validateCapacity(
+export async function validateCapacity(
   db: Db,
   supplier: Corporation,
   terms: Pick<AgreementTerms, "commodity" | "stateId" | "volumeCap">
@@ -143,9 +148,9 @@ async function validateCapacity(
   return { volumeCapValidated: true, currentTurn, currentYear: world?.currentYear };
 }
 
-class SupplyAgreementCommandError extends Error {}
+export class SupplyAgreementCommandError extends Error {}
 
-function responseForCommandError(error: SupplyAgreementCommandError): NextResponse {
+export function responseForCommandError(error: SupplyAgreementCommandError): NextResponse {
   return errorResponse(400, error.message);
 }
 
@@ -155,7 +160,7 @@ async function notifyOfferRecipient(args: {
   agreementId: ObjectId;
   commodity: CommodityType;
   revision: number;
-  action: "proposed" | "countered";
+  action: "proposed" | "countered" | "amended";
 }): Promise<void> {
   if (!args.recipient.userId) return;
   await createNotification({
@@ -169,6 +174,20 @@ async function notifyOfferRecipient(args: {
       offerRevision: args.revision,
     },
   });
+}
+
+/** Both corporations of an agreement, or null when either no longer exists. */
+async function loadParties(
+  db: Db,
+  agreement: Pick<SupplyAgreement, "supplierCorpId" | "buyerCorpId">
+): Promise<{ supplier: Corporation; buyer: Corporation } | null> {
+  const corps = await db
+    .collection<Corporation>("corporations")
+    .find({ _id: { $in: [agreement.supplierCorpId, agreement.buyerCorpId] } })
+    .toArray();
+  const supplier = corps.find((c) => c._id.equals(agreement.supplierCorpId));
+  const buyer = corps.find((c) => c._id.equals(agreement.buyerCorpId));
+  return supplier && buyer ? { supplier, buyer } : null;
 }
 
 /** POST /api/corporations/[id]/supply-agreements: open a negotiation. */
@@ -187,6 +206,8 @@ export async function proposeSupplyAgreement(request: Request, initiatingCorpId:
     const initiator = resolved.corporation;
     const ceoCheck = requireCeo(initiator, auth.user.userId);
     if (ceoCheck) return ceoCheck;
+    const gate = await requireSupplyExchangeAccess(db, auth.user.userId);
+    if (gate) return gate;
 
     const body = parsed.data;
     const isSupplierInitiated = !!body.buyerCorpId;
@@ -239,6 +260,8 @@ export async function proposeSupplyAgreement(request: Request, initiatingCorpId:
     }
     const supplier = isSupplierInitiated ? initiator : counterparty;
     const buyer = isSupplierInitiated ? counterparty : initiator;
+    const partiesError = await checkSupplyContractParties(db, { supplier, buyer, commodity });
+    if (partiesError) return errorResponse(403, partiesError);
 
     let volumeCapValidated = false;
     let currentTurn = 0;
@@ -364,6 +387,10 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
     }
 
     const body = parsed.data;
+    if (body.action !== "cancel") {
+      const gate = await requireSupplyExchangeAccess(db, auth.user.userId);
+      if (gate) return gate;
+    }
     const isSupplier = agreement.supplierCorpId.equals(corp._id);
     const isBuyer = agreement.buyerCorpId.equals(corp._id);
     if (!isSupplier && !isBuyer) {
@@ -386,6 +413,14 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
           "This legacy proposal cannot be accepted because this service now sells in a local state market. Ask the supplier to propose it again naming the state."
         );
       }
+      const parties = await loadParties(db, agreement);
+      if (!parties) return errorResponse(404, "Counterparty corporation not found");
+      const partiesError = await checkSupplyContractParties(db, {
+        supplier: parties.supplier,
+        buyer: parties.buyer,
+        commodity: agreement.commodity,
+      });
+      if (partiesError) return errorResponse(403, partiesError);
       const gameState = await db
         .collection<GameState>("gameState")
         .findOne({ _id: "current" }, { projection: { currentTurn: 1 } });
@@ -424,15 +459,34 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
         delta: [{ field: "status", before: "pending", after: "active" }],
         outcome: "ok",
       });
+      const author = isSupplier ? parties.buyer : parties.supplier;
+      await notifySupplyAgreementEvent({
+        recipient: author,
+        actor: corp,
+        agreementId: agreement._id!,
+        commodity: agreement.commodity,
+        event: "accepted",
+      });
       return NextResponse.json({ success: true, status: "active" });
     }
 
-    if (body.action === "counter") {
+    if (body.action === "counter" || body.action === "amend") {
+      const amending = body.action === "amend";
       if (agreement.status !== "pending") {
-        return errorResponse(400, "Only pending agreements can be countered");
+        return errorResponse(
+          400,
+          amending
+            ? "Only pending agreements can be amended"
+            : "Only pending agreements can be countered"
+        );
       }
-      if (currentOfferAuthor.equals(corp._id)) {
-        return errorResponse(403, "Only the counterparty can make the next offer");
+      if (amending !== currentOfferAuthor.equals(corp._id)) {
+        return errorResponse(
+          403,
+          amending
+            ? "Only the author of the current offer can amend it"
+            : "Only the counterparty can make the next offer"
+        );
       }
       if (isStateScopedCommodity(agreement.commodity) && !agreement.stateId) {
         return errorResponse(
@@ -449,14 +503,15 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
         );
       }
 
-      const supplier = isSupplier
-        ? corp
-        : await db
-            .collection<Corporation>("corporations")
-            .findOne({ _id: agreement.supplierCorpId });
-      if (!supplier) {
-        return errorResponse(404, "Supplier corporation not found");
-      }
+      const parties = await loadParties(db, agreement);
+      if (!parties) return errorResponse(404, "Counterparty corporation not found");
+      const supplier = parties.supplier;
+      const partiesError = await checkSupplyContractParties(db, {
+        supplier,
+        buyer: parties.buyer,
+        commodity: agreement.commodity,
+      });
+      if (partiesError) return errorResponse(403, partiesError);
       let capacity: { volumeCapValidated: boolean; currentTurn: number };
       try {
         capacity = await validateCapacity(db, supplier, {
@@ -497,12 +552,17 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
         $push: { offers: offer },
         ...(body.durationTurns === undefined ? { $unset: { durationTurns: "" } } : {}),
       };
-      const result = await db
-        .collection<SupplyAgreement>("supplyAgreements")
-        .updateOne(
-          { _id: agreement._id, status: "pending", proposedByCorpId: currentOfferAuthor },
-          update
-        );
+      const result = await db.collection<SupplyAgreement>("supplyAgreements").updateOne(
+        {
+          _id: agreement._id,
+          status: "pending",
+          proposedByCorpId: currentOfferAuthor,
+          // An amendment rewrites the author's own offer, so it must lose to
+          // any counter that landed after this agreement was read.
+          ...(amending ? { updatedAt: agreement.updatedAt } : {}),
+        },
+        update
+      );
       if (result.matchedCount === 0) {
         return errorResponse(409, "This offer is no longer current");
       }
@@ -525,20 +585,14 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
         outcome: "ok",
       });
 
-      const counterpartyId = isSupplier ? agreement.buyerCorpId : agreement.supplierCorpId;
-      const counterparty = await db
-        .collection<Corporation>("corporations")
-        .findOne({ _id: counterpartyId });
-      if (counterparty) {
-        await notifyOfferRecipient({
-          recipient: counterparty,
-          proposer: corp,
-          agreementId: agreement._id!,
-          commodity: agreement.commodity,
-          revision,
-          action: "countered",
-        });
-      }
+      await notifyOfferRecipient({
+        recipient: isSupplier ? parties.buyer : parties.supplier,
+        proposer: corp,
+        agreementId: agreement._id!,
+        commodity: agreement.commodity,
+        revision,
+        action: amending ? "amended" : "countered",
+      });
       return NextResponse.json({ success: true, status: "pending", revision });
     }
 
@@ -589,6 +643,24 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
         delta: [{ field: "status", before: agreement.status, after: nextStatus }],
         outcome: "ok",
       });
+      const other = await db
+        .collection<Corporation>("corporations")
+        .findOne(
+          { _id: isSupplier ? agreement.buyerCorpId : agreement.supplierCorpId },
+          { projection: { userId: 1 } }
+        );
+      if (other) {
+        await notifySupplyAgreementEvent({
+          recipient: other,
+          actor: corp,
+          agreementId: agreement._id!,
+          commodity: agreement.commodity,
+          event: "cancelled",
+          detail: immediate
+            ? "The proposal was withdrawn."
+            : `It keeps settling until turn ${cancelEffectiveTurn}.`,
+        });
+      }
       return NextResponse.json({
         success: true,
         status: nextStatus,
@@ -599,7 +671,7 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
       });
     }
 
-    return errorResponse(400, "Unknown action (accept|counter|cancel)");
+    return errorResponse(400, "Unknown action (accept|counter|amend|cancel)");
   } catch (error) {
     return handleRouteError(error);
   }

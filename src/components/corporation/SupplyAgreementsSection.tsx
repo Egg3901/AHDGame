@@ -244,7 +244,7 @@ export default function SupplyAgreementsSection({
     }));
   }
 
-  async function handleCounter(e: React.FormEvent, agreementId: string) {
+  async function handleCounter(e: React.FormEvent, agreementId: string, amend = false) {
     e.preventDefault();
     const draft = counterDrafts[agreementId];
     const cap = Number(draft?.volumeCap);
@@ -274,7 +274,7 @@ export default function SupplyAgreementsSection({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "counter",
+          action: amend ? "amend" : "counter",
           volumeCap: cap,
           pricePremium: premium / 100,
           exclusive: draft?.exclusive === true,
@@ -283,7 +283,10 @@ export default function SupplyAgreementsSection({
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        showToast(t("negotiation.counterOfferSent"), "success");
+        showToast(
+          t(amend ? "negotiation.offerAmended" : "negotiation.counterOfferSent"),
+          "success"
+        );
         setCounterOpenId(null);
         await load();
       } else {
@@ -412,6 +415,7 @@ export default function SupplyAgreementsSection({
     const canRespond = a.status === "pending" && currentOffer.proposedByCorpId !== corpId;
     const canAccept = canRespond;
     const canCounter = canRespond;
+    const canAmend = a.status === "pending" && currentOffer.proposedByCorpId === corpId;
     const canCancel = a.status === "pending" || a.status === "active";
     const counterparty =
       role === "supplier"
@@ -584,7 +588,7 @@ export default function SupplyAgreementsSection({
             </div>
           )}
 
-        {(canAccept || canCounter || canCancel) && (
+        {(canAccept || canCounter || canAmend || canCancel) && (
           <div className="flex flex-wrap gap-2 border-t border-card-border pt-3">
             {canAccept && (
               <button
@@ -606,6 +610,16 @@ export default function SupplyAgreementsSection({
                 {t("negotiation.counter")}
               </button>
             )}
+            {canAmend && (
+              <button
+                type="button"
+                disabled={busyId === a._id}
+                onClick={() => openCounter(a)}
+                className="inline-flex h-7 items-center rounded-md border border-card-border px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-card-elevated disabled:opacity-50"
+              >
+                {t("negotiation.amend")}
+              </button>
+            )}
             {canCancel && (
               <button
                 type="button"
@@ -619,12 +633,14 @@ export default function SupplyAgreementsSection({
           </div>
         )}
 
-        {counterOpenId === a._id && canCounter && (
+        {counterOpenId === a._id && (canCounter || canAmend) && (
           <form
-            onSubmit={(event) => void handleCounter(event, a._id)}
+            onSubmit={(event) => void handleCounter(event, a._id, canAmend)}
             className="space-y-3 border-t border-card-border pt-3"
           >
-            <p className="text-xs font-semibold text-foreground">{t("negotiation.yourCounter")}</p>
+            <p className="text-xs font-semibold text-foreground">
+              {t(canAmend ? "negotiation.yourAmendment" : "negotiation.yourCounter")}
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-xs text-muted">
                 <span className="font-semibold text-foreground">
@@ -706,7 +722,9 @@ export default function SupplyAgreementsSection({
                 disabled={busyId === a._id}
                 className="inline-flex h-7 items-center rounded-md border border-primary bg-primary px-2.5 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50"
               >
-                {busyId === a._id ? t("negotiation.sending") : t("negotiation.sendCounter")}
+                {busyId === a._id
+                  ? t("negotiation.sending")
+                  : t(canAmend ? "negotiation.sendAmendment" : "negotiation.sendCounter")}
               </button>
             </div>
           </form>

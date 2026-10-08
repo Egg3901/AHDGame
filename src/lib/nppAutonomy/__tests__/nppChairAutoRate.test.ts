@@ -4,6 +4,7 @@ import {
   computeNppChairRateTarget,
   computeNppChairRateStep,
   processNppChairAutoRate,
+  isStandingAdviceDue,
 } from "../nppChairAutoRate";
 import { RATE_HISTORY_MAX } from "@/lib/db/types/centralBank";
 import { SYSTEM_RATE_ACTOR } from "@/lib/centralBank/rateHistory";
@@ -266,7 +267,7 @@ describe("processNppChairAutoRate", () => {
     expect(updateOne).not.toHaveBeenCalled();
   });
 
-  it("leaves a government-controlled bank alone (pre-1997 Bank of England)", async () => {
+  it("leaves a government-controlled bank alone while the government is using the rate", async () => {
     // #1250: the gate was `chairMode !== "npp"` and nothing else, so the
     // autonomous chair kept setting Bank Rate on a bank whose rate belongs to
     // the Treasury. Because the government shares the one `lastRateChangeTurn`
@@ -279,17 +280,94 @@ describe("processNppChairAutoRate", () => {
     const bank = {
       _id: "UK" as any,
       primeRate: 0.25,
-      lastRateChangeTurn: 550,
+      lastRateChangeTurn: 695,
       chairMode: "npp",
     } as any;
 
     // Era START 1953 < BOE_INDEPENDENCE_YEAR, and no explicit statute, so the
-    // UK bank resolves to government-controlled.
+    // UK bank resolves to government-controlled. The government moved the rate
+    // five turns ago, inside the idle window, so nothing happens.
     await processNppChairAutoRate(db, bank, "UK" as any, 700, 1963, false, 1953);
 
     expect(updateOne).not.toHaveBeenCalled();
   });
 
+  it("acts on standing advice once the government has left the rate alone for a quarter", async () => {
+    // The 1991 UK sat at 4.5% for 28 turns through 15% inflation because the
+    // government never used the lever. After GOVERNMENT_RATE_IDLE_TURNS the
+    // Treasury applies the bank's bounded Taylor step, without touching the
+    // government's own cooldown field (#1250).
+    const { db, updateOne } = mockRateDb(
+      { economicFactors: { inflationRate: 15 } },
+      { economic: { gdpGrowth: { value: 9 } } }
+    );
+    const bank = { _id: "UK" as any, primeRate: 4.5, chairMode: "npp" } as any;
+
+    await processNppChairAutoRate(db, bank, "UK" as any, 28, 1991, false, 1991);
+
+    expect(updateOne).toHaveBeenCalledTimes(1);
+    const op = (
+      updateOne.mock.calls[0] as unknown as [unknown, { $set: Record<string, unknown> }]
+    )[1];
+    expect(op.$set.primeRate).toBe(5.25);
+    expect(op.$set.lastStandingAdviceTurn).toBe(28);
+    expect(op.$set).not.toHaveProperty("lastRateChangeTurn");
+    const pushed = pushedRecord(updateOne)!;
+    expect(pushed.$each[0].changedByName).toBe("Treasury, on the bank's standing advice");
+    expect(pushed.$each[0].changedBy).toBe(SYSTEM_RATE_ACTOR);
+  });
+
+  it("paces standing-advice moves by the normal cooldown", async () => {
+    const { db, updateOne } = mockRateDb(
+      { economicFactors: { inflationRate: 15 } },
+      { economic: { gdpGrowth: { value: 9 } } }
+    );
+    const recent = {
+      _id: "UK" as any,
+      primeRate: 5.25,
+      chairMode: "npp",
+      lastStandingAdviceTurn: 26,
+    } as any;
+    await processNppChairAutoRate(db, recent, "UK" as any, 30, 1991, false, 1991);
+    expect(updateOne).not.toHaveBeenCalled();
+
+    const due = {
+      _id: "UK" as any,
+      primeRate: 5.25,
+      chairMode: "npp",
+      lastStandingAdviceTurn: 24,
+    } as any;
+    await processNppChairAutoRate(db, due, "UK" as any, 30, 1991, false, 1991);
+    expect(updateOne).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("isStandingAdviceDue", () => {
+  it("counts the idle window from world start when the government never moved", () => {
+    expect(isStandingAdviceDue({}, 11)).toBe(false);
+    expect(isStandingAdviceDue({}, 12)).toBe(true);
+  });
+
+  it("restarts the idle window after any government move", () => {
+    expect(isStandingAdviceDue({ lastRateChangeTurn: 40, lastStandingAdviceTurn: 30 }, 51)).toBe(
+      false
+    );
+    expect(isStandingAdviceDue({ lastRateChangeTurn: 40, lastStandingAdviceTurn: 30 }, 52)).toBe(
+      true
+    );
+  });
+
+  it("waits a cooldown between its own moves", () => {
+    expect(isStandingAdviceDue({ lastRateChangeTurn: 0, lastStandingAdviceTurn: 20 }, 25)).toBe(
+      false
+    );
+    expect(isStandingAdviceDue({ lastRateChangeTurn: 0, lastStandingAdviceTurn: 20 }, 26)).toBe(
+      true
+    );
+  });
+});
+
+describe("processNppChairAutoRate (independence and cooldown)", () => {
   it("still runs for the UK once independence has been granted by statute", async () => {
     // An explicit `governmentControlled: false` written by legislation beats the
     // historical default, and the technocrat chair takes the rate back.

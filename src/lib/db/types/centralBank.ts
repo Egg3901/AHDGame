@@ -46,6 +46,13 @@ export const AGGRESSIVE_CUT_SCRUTINY = 10;
 export const RATE_CHANGE_COOLDOWN_TURNS = 6;
 
 /**
+ * Turns a government that holds the policy rate may leave it untouched before
+ * the Treasury acts on the bank's standing advice (one quarter at 48 turns per
+ * year). The government can still set the rate at any time.
+ */
+export const GOVERNMENT_RATE_IDLE_TURNS = 12;
+
+/**
  * Rate-change records kept on a bank. Every writer must slice to this same
  * number: the FOMC path capped at 96 while the direct-set path capped at 50, so
  * whichever moved the rate last silently truncated the other's records. One
@@ -321,6 +328,12 @@ export interface CentralBank {
   bankReserveRequirement?: number;
   /** Turn number of the chair's most recent rate change. Used to enforce a cooldown between adjustments. */
   lastRateChangeTurn?: number;
+  /**
+   * Turn of the most recent standing-advice move on a government-controlled
+   * bank (see `processNppChairAutoRate`). Kept apart from `lastRateChangeTurn`
+   * so the fallback never starts or extends the government's own cooldown.
+   */
+  lastStandingAdviceTurn?: number;
   /** Chair infamy (0-100). Ticks up with high inflation / low growth, down with the inverse. */
   chairInfamy: number;
   /**

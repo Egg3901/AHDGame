@@ -59,6 +59,7 @@ const TYPE_LABELS: Partial<Record<NotificationType, string>> = {
   world_event_resolved: "World event result",
   extraction_capacity_bound: "Capacity warning",
   corp_supply_agreement_damages: "Contract shortfall",
+  corp_supply_agreement_update: "Supply agreement",
   bank_supervision_breach: "Banking breach",
   bank_supervision_cleared: "Banking cleared",
   welcome: "Welcome",
