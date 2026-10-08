@@ -5,12 +5,14 @@ import {
   getInitialNationalBudgetsForPreset,
   getNationalBudgetSeedConfigsForPreset,
 } from "./budgets";
+import { IRISH_GROSS_GOVERNMENT_DEBT_1991_IEP } from "./nominalGdp1991";
 
 describe("1991 player fiscal openings", () => {
   it.each([
     ["US", 3_665_000_000_000, 939_213_600_000],
     ["UK", 194_118_000_000, 229_306_050_000],
     ["JP", 172_000_000_000_000, 123_714_000_000_000],
+    ["IE", IRISH_GROSS_GOVERNMENT_DEBT_1991_IEP, 12_799_224_185.566666],
   ] as const)(
     "%s preserves historic debt and receipts with a small coupon-inclusive deficit",
     (countryId, principal, revenue) => {
@@ -131,11 +133,12 @@ describe("1991 player fiscal openings", () => {
     }
   });
 
-  it("IE opens within receipts after debt service (it enacts no spending laws)", () => {
+  it("IE opens within receipts after debt service", () => {
     const budget = getInitialNationalBudgetsForPreset("1991-default").find(
       (row) => row.countryId === "IE"
     )!;
-    // The seeded book is Ireland's runtime spending; unfitted it ran a 13% deficit.
+    // Ireland's runtime spending is its seeded law book, priced from the fitted
+    // baseline above; unfitted it ran a 13% deficit.
     expect(budget.surplus / budget.gdp).toBeGreaterThanOrEqual(-0.0051);
     expect(budget.surplus / budget.gdp).toBeLessThan(0);
     const programs = budget.spending.total - budget.spending.debtInterest;

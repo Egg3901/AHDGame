@@ -320,7 +320,7 @@ export async function GET() {
         stateResourceCapacity:
           "Per-state extraction ceilings (oil/coal/iron/copper/natural_gas/timber/rare_earth). Required for commodity margin math; unseeded states get empty-default so extraction is capped at 0.",
         stateSectorSpecializations:
-          "Per-state/region primary (+10pp) and secondary (+5pp) corporation sector profit margin specializations.",
+          "Per-state/region primary (+5pp) and secondary (+2.5pp) corporation sector profit margin specializations.",
         forex:
           "Forex layer: exchange rates, central banks for every forex-active country, forex indexes, and the gameState.forexEnabled flag",
         commodityPrices:

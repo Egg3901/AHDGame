@@ -296,7 +296,7 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
         effectiveSupply,
         lookups.exportIntensityByCountry.get(sectorCountryId) ?? EMPTY_EXPORT_INTENSITY
       );
-  // Home state +10%, home nation +5%, international 0%
+  // Home state +5%, home nation +2.5%, international 0%
   const homeLocationMod = getHomeLocationMarginBonus(
     sector.stateId,
     corp.headquartersState,
@@ -307,7 +307,7 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
     lookups.stateSectorSpecializationByState.get(sector.stateId),
     operatingSectorType
   );
-  // Sector type match: +10pp primary, +5pp secondary, -15pp mismatch. SOEs are
+  // Sector type match: +5pp primary, +2.5pp secondary, -15pp mismatch. SOEs are
   // exempt - a NatCorp is a diversified state holding company, not a
   // specialized private firm (Bug #0775).
   const sectorTypeMatchMod = isStateOwned(corp)

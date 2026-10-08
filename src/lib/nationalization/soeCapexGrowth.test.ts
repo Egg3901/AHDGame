@@ -3,7 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import { processSoeOperations } from "./soeOperations";
 import { loadTreasuryCashContext } from "./treasuryLedger";
-import { SOE_GROWTH_ORDER_SHARE } from "./rules/soeGrowth";
+import { soeGrowthOrderShare } from "./rules/soeGrowth";
 import { CAPACITY_BUILD_TURNS } from "@/lib/constants/capacityEconomy";
 
 /**
@@ -107,7 +107,7 @@ describe("state capex growth", () => {
     // Replacement still lands instantly, growth does NOT: it is a build order.
     expect(s.capitalStock).toBeCloseTo(depreciationOnlyStock, 6);
     expect(s.buildQueue).toHaveLength(1);
-    expect(s.buildQueue![0].unitsOrdered).toBeCloseTo(STOCK * SOE_GROWTH_ORDER_SHARE, 6);
+    expect(s.buildQueue![0].unitsOrdered).toBeCloseTo(STOCK * soeGrowthOrderShare(2), 6);
     expect(s.buildQueue![0].onlineTurn).toBe(TURN + CAPACITY_BUILD_TURNS("energy"));
     expect(s.buildQueue![0].costPaidAnchor).toBeGreaterThan(0);
   });
@@ -142,7 +142,7 @@ describe("state capex growth", () => {
   });
 
   it("refuses growth the treasury cannot cover and still pays the replacement", async () => {
-    // Enough cash for the replacement, far too little for a 5% order.
+    // Enough cash for the replacement, far too little for the growth order.
     const probe = world({});
     await run(probe);
     const replacementPaid =

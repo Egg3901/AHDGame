@@ -392,7 +392,7 @@ export default function MarginsPanel({
                 modifier={margins.stateSectorSpecializationModifier}
                 rawValue={null}
                 rawUnit=""
-                tooltip="This state favors certain sectors. Primary specialization: +10%. Secondary: +5%."
+                tooltip="This state favors certain sectors. Primary specialization: +5%. Secondary: +2.5%."
                 icon={Star}
               />
             )}
@@ -470,7 +470,7 @@ export default function MarginsPanel({
               modifier={margins.homeLocationModifier}
               rawValue={null}
               rawUnit=""
-              tooltip="Sectors in your HQ state get +10% margin. Sectors in the same nation (different state) get +5%. International sectors get no bonus."
+              tooltip="Sectors in your HQ state get +5% margin. Sectors in the same nation (different state) get +2.5%. International sectors get no bonus."
               icon={MapPin}
             />
             {margins.sectorTypeMatchModifier !== 0 && (
@@ -479,7 +479,7 @@ export default function MarginsPanel({
                 modifier={margins.sectorTypeMatchModifier}
                 rawValue={null}
                 rawUnit=""
-                tooltip="Sectors matching your primary type get +10%. Secondary type match: +5%. Mismatched: -15% penalty."
+                tooltip="Sectors matching your primary type get +5%. Secondary type match: +2.5%. Mismatched: -15% penalty."
                 icon={Layers}
               />
             )}

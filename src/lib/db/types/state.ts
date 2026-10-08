@@ -156,7 +156,7 @@ export interface State {
       revenue: number;
       /**
        * `"primary"` when this sector matches `sectorSpecializations.primary`
-       * (state grants +10pp margin bonus); `"secondary"` for +5pp.
+       * (state grants +5pp margin bonus); `"secondary"` for +2.5pp.
        * `null` when the live sector isn't a seeded specialization.
        */
       specializationBonus: "primary" | "secondary" | null;
