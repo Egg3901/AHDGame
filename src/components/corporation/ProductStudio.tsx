@@ -31,6 +31,7 @@ const DOMAIN_COPY = {
     namePlaceholder: "Working title",
     nameLabel: "Title",
     lifted: "media sectors",
+    liftedOne: "media sector",
   },
   manufacturing: {
     title: "Manufactured products",
@@ -41,6 +42,7 @@ const DOMAIN_COPY = {
     namePlaceholder: "Product name",
     nameLabel: "Product name",
     lifted: "plants",
+    liftedOne: "plant",
   },
 } as const;
 
@@ -202,6 +204,7 @@ function FundingTable({
               <Td numeric={false} className="w-8">
                 <input
                   type="radio"
+                  className="accent-primary"
                   name={name}
                   aria-label={row.label}
                   checked={selected === row.id}
@@ -328,6 +331,7 @@ function DomainPanel({
                   id={`name-${domain.domain}`}
                   value={name}
                   maxLength={60}
+                  className="!h-9 !rounded-md !px-2 !py-1 !text-sm"
                   placeholder={copy.namePlaceholder}
                   onChange={(event) => setName(event.target.value)}
                 />
@@ -355,7 +359,9 @@ function DomainPanel({
               <p className="text-xs text-muted">
                 {selected.liftedSectorCount === 0
                   ? `No ${copy.lifted} would be lifted by this line yet.`
-                  : `A hit lifts your ${selected.liftedSectorCount} ${copy.lifted}, which earn ${money(
+                  : `A hit lifts your ${selected.liftedSectorCount} ${
+                      selected.liftedSectorCount === 1 ? copy.liftedOne : copy.lifted
+                    }, which ${selected.liftedSectorCount === 1 ? "earns" : "earn"} ${money(
                       selected.baselineRevenueAnchor
                     )} per turn now, for ${turnsToDays(studio.boostTurns)}.`}{" "}
                 Chances are before events and move with your decisions. The spend comes out of
@@ -486,13 +492,13 @@ function ActiveVenture({
         {venture.odds && (
           <KVRow
             label="Revenue lift if it hits"
-            value={
-              base !== undefined
-                ? `${range(venture.odds.boostLow, venture.odds.boostHigh)}, ${money(
-                    base * venture.odds.boostLow
-                  )} to ${money(base * venture.odds.boostHigh)} per turn`
-                : range(venture.odds.boostLow, venture.odds.boostHigh)
-            }
+            value={range(venture.odds.boostLow, venture.odds.boostHigh)}
+          />
+        )}
+        {venture.odds && base !== undefined && (
+          <KVRow
+            label="Lift in money per turn"
+            value={`${money(base * venture.odds.boostLow)} to ${money(base * venture.odds.boostHigh)}`}
           />
         )}
         {venture.pendingChargeAnchor > 0 && (

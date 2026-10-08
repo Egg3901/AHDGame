@@ -356,6 +356,7 @@ export default function AdvertisingAgreementsPanel({
             min="1"
             max="100"
             value={sharePct}
+            className="!h-9 !rounded-md !px-2 !py-1 !text-sm"
             onChange={(event) => setSharePct(event.target.value)}
           />
         </div>
@@ -369,6 +370,7 @@ export default function AdvertisingAgreementsPanel({
             min="4"
             max="192"
             value={durationTurns}
+            className="!h-9 !rounded-md !px-2 !py-1 !text-sm"
             onChange={(event) => setDurationTurns(event.target.value)}
           />
           <p className="mt-1 text-xs text-muted">4 to 192 turns. 24 turns is one day.</p>
@@ -401,7 +403,7 @@ export default function AdvertisingAgreementsPanel({
     return (
       <section className="min-w-0 border-b border-card-border pb-1.5">
         <details>
-          <summary className="flex min-h-8 cursor-pointer items-center text-sm font-semibold text-foreground">
+          <summary className="cursor-pointer py-1.5 text-sm font-semibold text-foreground">
             Buy coverage advertising from a media corporation
           </summary>
           <div className="pt-1">{form}</div>
