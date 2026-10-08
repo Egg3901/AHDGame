@@ -56,30 +56,49 @@ export function toListingView(
   };
 }
 
-/** Open, non-stale offers for one commodity, with publishers resolved in one batch read. */
+export interface OpenOffersPage {
+  offers: SupplyListingView[];
+  /** More rows exist past this page (before stale offers are dropped). */
+  hasMore: boolean;
+}
+
+/**
+ * Open, non-stale offers with publishers resolved in one batch read. Without a
+ * commodity it spans every commodity. `page` is 1-based; stale offers are
+ * dropped after the page is read, so a page can come back a little short.
+ */
 export async function loadOpenOffers(
   db: Db,
   args: {
-    commodity: CommodityType;
+    commodity?: CommodityType;
     turn: number;
     viewerCorpIds: ReadonlySet<string>;
     limit: number;
+    page?: number;
   }
-): Promise<SupplyListingView[]> {
-  const rows = await db
+): Promise<OpenOffersPage> {
+  const page = Math.max(1, args.page ?? 1);
+  const found = await db
     .collection<SupplyListing>("supplyListings")
-    .find({ commodity: args.commodity, expiresAtTurn: { $gt: args.turn } })
+    .find({
+      ...(args.commodity ? { commodity: args.commodity } : {}),
+      expiresAtTurn: { $gt: args.turn },
+    })
     .sort({ updatedAt: -1, _id: 1 })
-    .limit(args.limit)
+    .skip((page - 1) * args.limit)
+    .limit(args.limit + 1)
     .toArray();
-  if (rows.length === 0) return [];
+  const hasMore = found.length > args.limit;
+  const rows = hasMore ? found.slice(0, args.limit) : found;
+  if (rows.length === 0) return { offers: [], hasMore: false };
   const publishers = await db
     .collection<Corporation>("corporations")
     .find({ _id: { $in: rows.map((r) => r.corporationId) } })
     .project<PublisherFields>(PUBLISHER_PROJECTION)
     .toArray();
   const byId = new Map(publishers.map((c) => [c._id.toString(), c]));
-  return rows
+  const offers = rows
     .map((row) => toListingView(row, byId.get(row.corporationId.toString()), args.viewerCorpIds))
     .filter((view): view is SupplyListingView => view !== null);
+  return { offers, hasMore };
 }
