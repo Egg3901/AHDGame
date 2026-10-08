@@ -17,6 +17,7 @@ import {
 } from "@/lib/market/capital";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
 import type { CorporateSector } from "@/lib/db/types";
+import { retoolOperatingCapacityRatio } from "@/lib/corporations/retooling/rules";
 import type { SectorClearingResult } from "@/lib/market/clearing";
 import type { MarketContext } from "@/lib/market/marketContext";
 import type { CorporationLookups } from "../types";
@@ -24,7 +25,17 @@ import type { CorporationLookups } from "../types";
 export interface MarketTiersInput {
   sector: Pick<
     CorporateSector,
-    "_id" | "clearingStartTurn" | "throughputStartTurn" | "capitalStock"
+    | "_id"
+    | "clearingStartTurn"
+    | "throughputStartTurn"
+    | "capitalStock"
+    | "sectorType"
+    | "industryModel"
+    | "mediaDiscriminator"
+    | "strategyId"
+    | "transitionFromStrategyId"
+    | "transitionStartTurn"
+    | "retoolRescaleApplied"
   >;
   market: MarketContext;
   priceRatioByCommodity: CorporationLookups["priceRatioByCommodity"];
@@ -163,8 +174,20 @@ export function computeMarketTiers(input: MarketTiersInput): MarketTiersResult {
         currentGrowthRate: perTurnGrowthRate,
       })
     : 0;
+  // Ticket 1424: mid-retool, owned stock sits on the DESTINATION strategy's
+  // units while `impliedUnits` is measured on the BLENDED recipe. Comparing
+  // them raw read a standard to vehicle_assembly plant as ~2% utilized (2.26
+  // vehicle units against 85 blended units) and the governor baseline, which
+  // carries this factor, cut realized revenue to ~3% of nameplate while inputs
+  // were still billed on the full operating capacity. Express the stock in the
+  // same blended units the plants tier operates (1 off-transition and for any
+  // stock not yet converted, so non-retool sectors are byte-identical).
+  const capitalStockOnImpliedBasis =
+    market.capitalEnabled && market.plantsEnabled
+      ? newCapitalStock * retoolOperatingCapacityRatio({ ...sector, currentTurn })
+      : newCapitalStock;
   const capitalFactor = market.capitalEnabled
-    ? capitalUtilizationFactor(newCapitalStock, impliedUnits)
+    ? capitalUtilizationFactor(capitalStockOnImpliedBasis, impliedUnits)
     : 1;
 
   return {
