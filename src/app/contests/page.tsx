@@ -11,6 +11,8 @@ import {
   type PastRoundData,
   type ReferralBoardData,
 } from "@/lib/contests/queries";
+import { ensureContestsOpen } from "@/lib/contests/engine";
+import { isSingleplayer } from "@/lib/singleplayer";
 import { ReferralInviteLink } from "./ReferralInviteLink";
 import { RoundCountdown } from "./RoundCountdown";
 
@@ -323,6 +325,8 @@ export default async function ContestsPage() {
     getAuthUserWithCharacter(),
   ]);
   const db = await getDb();
+  // Contests are a multiplayer feature; a fresh world opens its rounds on the first visit.
+  if (!isSingleplayer()) await ensureContestsOpen(db);
   const data = await loadContestsPage(
     db,
     auth ? { userId: auth.userId, characterId: auth.character?._id.toString() ?? null } : null

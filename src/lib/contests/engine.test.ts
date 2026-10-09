@@ -17,7 +17,7 @@ vi.mock("./prize", () => ({
   }),
 }));
 
-import { runContests } from "./engine";
+import { ensureContestsOpen, runContests } from "./engine";
 import { payContestPrize } from "./prize";
 import { getHeadOfGovernmentCharacterIds } from "@/lib/api/headOfGovernment";
 import { applyPatreonStatus } from "@/lib/patreon/service";
@@ -124,6 +124,9 @@ function fakeDb(seed: Record<string, Doc[]>) {
           },
         };
         return cursor;
+      },
+      async countDocuments(filter: Doc = {}) {
+        return docs.filter((d) => matches(d, filter)).length;
       },
       async findOne(filter: Doc) {
         const doc = docs.find((d) => matches(d, filter));
@@ -303,6 +306,42 @@ describe("runContests: opening rounds", () => {
 
     await expect(runContests(staleRead, 10, now)).resolves.toMatchObject({ opened: 0 });
     expect(rounds(data).filter((r) => r.kind !== "referrals_iteration")).toHaveLength(5);
+  });
+});
+
+describe("opening without waiting for a turn", () => {
+  it("fills standings the moment a round opens", async () => {
+    const { db, data } = fakeDb(
+      world(10, { small: 400_000, mid: 2e6, big: 3e7 }, { alice: 5, bob: 9, carol: 1 })
+    );
+
+    await runContests(db, 10, now);
+
+    const influence = rounds(data).find((r) => r.kind === "influence_gain")!;
+    expect(influence.standings).toHaveLength(3);
+    expect(influence.standings.every((s) => s.score === 0)).toBe(true);
+    expect(influence.refreshedAt).toEqual(now);
+  });
+
+  it("opens missing rounds from a page view, at most once a minute per process", async () => {
+    const { db, data } = fakeDb(
+      world(10, { small: 400_000, mid: 2e6, big: 3e7 }, { alice: 0, bob: 0, carol: 0 })
+    );
+    data.gameState[0].currentTurn = 12;
+    globalThis._ahdContestsOpenCheckedAt = undefined;
+
+    await ensureContestsOpen(db, now);
+    const opened = rounds(data).filter((r) => r.kind !== "referrals_iteration");
+    expect(opened).toHaveLength(5);
+    expect(opened.every((r) => r.startTurn === 12)).toBe(true);
+
+    // A second view inside the minute does nothing, even with a round missing.
+    data.contestRounds = data.contestRounds.filter((r) => r.kind !== "approval_gain");
+    await ensureContestsOpen(db, new Date(now.getTime() + 30_000));
+    expect(rounds(data).some((r) => r.kind === "approval_gain")).toBe(false);
+
+    await ensureContestsOpen(db, new Date(now.getTime() + 61_000));
+    expect(rounds(data).some((r) => r.kind === "approval_gain")).toBe(true);
   });
 });
 
