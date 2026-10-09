@@ -2,7 +2,7 @@ import { suppressTracing } from "@sentry/nextjs";
 import { createPrivateKey, sign } from "node:crypto";
 import { connect, constants } from "node:http2";
 import type { DeliveryResult, PushDevice, PushProvider } from "./types";
-import { PUSH_PREVIEW } from "./policy";
+import type { PushPreview } from "./policy";
 
 export function providerConfigured(provider: PushProvider): boolean {
   if (process.env.NATIVE_PUSH_ENABLED !== "true") return false;
@@ -67,7 +67,7 @@ async function fcmAccessToken(): Promise<string> {
     googlePending = undefined;
   }
 }
-async function sendFcm(device: PushDevice): Promise<DeliveryResult> {
+async function sendFcm(device: PushDevice, preview: PushPreview): Promise<DeliveryResult> {
   const accessToken = await fcmAccessToken();
   const response = await fetch(
     `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(process.env.FCM_PROJECT_ID!)}/messages:send`,
@@ -79,7 +79,18 @@ async function sendFcm(device: PushDevice): Promise<DeliveryResult> {
       body: JSON.stringify({
         message: {
           token: device.token,
-          data: PUSH_PREVIEW,
+          // Data only: the app draws the alert, so 2.3.x builds (which ignore
+          // everything but `path`) keep showing their fixed text.
+          data: {
+            title: preview.title,
+            subtitle: preview.subtitle,
+            body: preview.body,
+            path: preview.path,
+            href: preview.href,
+            thread: preview.thread,
+            count: String(preview.count),
+            id: preview.id,
+          },
           android: {
             priority: "high",
             ttl: "300s",
@@ -129,7 +140,7 @@ function apnsAccessToken(): string {
   appleToken = { value, expiresAt: Date.now() + 45 * 60_000, identity };
   return value;
 }
-async function sendApns(device: PushDevice): Promise<DeliveryResult> {
+async function sendApns(device: PushDevice, preview: PushPreview): Promise<DeliveryResult> {
   const authorization = `bearer ${apnsAccessToken()}`;
   const origin =
     device.environment === "development"
@@ -154,7 +165,8 @@ async function sendApns(device: PushDevice): Promise<DeliveryResult> {
       "apns-topic": "net.lakesidegames.ahdclient",
       "apns-push-type": "alert",
       "apns-priority": "10",
-      "apns-collapse-id": "ahd-inbox",
+      // A retried delivery of the same newest alert replaces itself.
+      "apns-collapse-id": preview.id,
       "apns-expiration": String(Math.floor(Date.now() / 1000) + 300),
     });
     request.on("error", () => finish("retry"));
@@ -166,20 +178,25 @@ async function sendApns(device: PushDevice): Promise<DeliveryResult> {
     request.end(
       JSON.stringify({
         aps: {
-          alert: { title: PUSH_PREVIEW.title, body: PUSH_PREVIEW.body },
+          alert: { title: preview.title, subtitle: preview.subtitle, body: preview.body },
           sound: "default",
-          "thread-id": "ahd-inbox",
+          "thread-id": `ahd-${preview.thread}`,
         },
-        path: PUSH_PREVIEW.path,
+        path: preview.path,
+        href: preview.href,
+        id: preview.id,
       })
     );
   });
 }
-export async function sendNativePush(device: PushDevice): Promise<DeliveryResult> {
+export async function sendNativePush(
+  device: PushDevice,
+  preview: PushPreview
+): Promise<DeliveryResult> {
   if (!providerConfigured(device.provider)) return "retry";
   try {
     return await suppressTracing(() =>
-      device.provider === "fcm" ? sendFcm(device) : sendApns(device)
+      device.provider === "fcm" ? sendFcm(device, preview) : sendApns(device, preview)
     );
   } catch {
     return "retry";
