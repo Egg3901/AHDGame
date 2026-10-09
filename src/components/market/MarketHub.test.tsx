@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, cleanup } from "@testing-library/react";
 import { clearMarketJsonCache } from "./useMarketJson";
 
+vi.mock("@/contexts/AuthDataContext", () => ({ useAuthMe: () => ({ navData: null }) }));
+vi.mock("@/hooks/useGameEvents", () => ({ useGameTurnStatus: () => null }));
+
 let search = "";
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({
