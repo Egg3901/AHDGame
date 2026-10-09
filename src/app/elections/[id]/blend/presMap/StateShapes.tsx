@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { BLEND, FONT } from "@/components/blend/tokens";
 import type { StateGeo } from "./usStatesGeo";
-import type { PresMapOverlay, PresMapState } from "./presMapModel";
+import { stateFigure, type PresMapOverlay, type PresMapState } from "./presMapModel";
 import { CALLOUT_STATES } from "./usStates";
 import { labelFits } from "./mapView";
 
@@ -84,7 +84,9 @@ export const StatePaths = memo(function StatePaths({ geo, states }: ShapesProps)
             aria-label={
               s
                 ? s.caption
-                  ? `${s.name}, ${s.ev} electoral votes, ${s.caption}`
+                  ? s.evLabel !== undefined
+                    ? `${s.name}, ${s.caption}`
+                    : `${s.name}, ${s.ev} electoral votes, ${s.caption}`
                   : `${s.name}, ${s.ev} electoral votes, ${s.leaderName} leads by ${s.margin.toFixed(1)} points`
                 : undefined
             }
@@ -116,7 +118,8 @@ export const StateLabels = memo(function StateLabels({ geo, states, k, scale }: 
         const s = states[g.id];
         if (!s || CALLOUT_SET.has(g.id)) return null;
         if (!labelFits(g, k, scale, LABEL_PX * 2.2)) return null;
-        const showEv = labelFits(g, k, scale, LABEL_PX * 3.4);
+        const figure = stateFigure(s);
+        const showEv = !!figure && labelFits(g, k, scale, LABEL_PX * 3.4);
         return (
           <text key={g.id} x={g.centroid[0]} fill={s.ink} fontSize={size} fontWeight={700}>
             <tspan x={g.centroid[0]} y={g.centroid[1] + (showEv ? -size * 0.1 : size * 0.35)}>
@@ -130,7 +133,7 @@ export const StateLabels = memo(function StateLabels({ geo, states, k, scale }: 
                 fontWeight={500}
                 opacity={0.8}
               >
-                {s.ev}
+                {figure}
               </tspan>
             ) : null}
           </text>

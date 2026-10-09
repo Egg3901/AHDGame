@@ -26,6 +26,7 @@ import type { ElectionDetail } from "./ElectionDetailTypes";
 import BackButton from "@/components/BackButton";
 import { PrimaryBlendView } from "../blend/PrimaryBlendView";
 import { GeneralBlendView } from "../blend/GeneralBlendView";
+import { presidentialTitle } from "../blend/PresidentialStage";
 import { ResultsBlendView } from "../blend/ResultsBlendView";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
 import { BLEND } from "@/components/blend/tokens";
@@ -505,9 +506,15 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   if (election.electionType === "president" && localIsEnded && currentResults) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
-        {blendNav}
+        <div className="lg:hidden">{blendNav}</div>
         {confirmDialogNode}
-        <ResultsBlendView data={currentResults} route="concluded" />
+        <ResultsBlendView
+          data={currentResults}
+          route="concluded"
+          election={election}
+          stageTitle={presidentialTitle(electionYear)}
+          stageNav={<ElectionNavigation election={election} />}
+        />
 
         <BlendScope title="Also on this race">
           <GeneralPhaseView
@@ -547,13 +554,15 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   ) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
-        {blendNav}
+        <div className="lg:hidden">{blendNav}</div>
         {confirmDialogNode}
         <GeneralBlendView
           election={election}
           electionId={id}
           wire={wire}
           onRefresh={fetchElection}
+          stageTitle={presidentialTitle(electionYear)}
+          stageNav={<ElectionNavigation election={election} />}
         />
 
         {/* Everything the hero above does not already say. The college bar, the
@@ -648,9 +657,14 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   ) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
-        {blendNav}
+        <div className="lg:hidden">{blendNav}</div>
         {confirmDialogNode}
-        <PrimaryBlendView election={election} wire={wire} />
+        <PrimaryBlendView
+          election={election}
+          wire={wire}
+          stageTitle={presidentialTitle(electionYear)}
+          stageNav={<ElectionNavigation election={election} />}
+        />
 
         <BlendScope
           title="Also on this race"

@@ -10,12 +10,10 @@ import {
   type CountySortKey,
   type SortDir,
 } from "./countyModel";
+import { cachedCounties, countyKey, loadCounties } from "./countyStore";
 
 type CountyLoad =
   { status: "loading" } | { status: "unavailable" } | { status: "ready"; data: CountyApiResponse };
-
-/** Responses kept for the page's lifetime, keyed by race, state and turn. */
-const countyCache = new Map<string, CountyApiResponse>();
 
 const COLUMNS: { key: CountySortKey; label: string; align: "left" | "right" }[] = [
   { key: "name", label: "County", align: "left" },
@@ -38,7 +36,7 @@ export interface CountySectionProps {
  * state is opened, never for the national map itself.
  */
 export function CountySection({ electionId, stateId, turn, candidate }: CountySectionProps) {
-  const cacheKey = `${electionId}|${stateId}|${turn ?? ""}`;
+  const cacheKey = countyKey(electionId, stateId, turn);
   /** Outcome of the last request, tagged with the key it answered. */
   const [settled, setSettled] = useState<{ key: string; load: CountyLoad } | null>(null);
   const [sort, setSort] = useState<{ key: CountySortKey; dir: SortDir }>({
@@ -47,7 +45,7 @@ export function CountySection({ electionId, stateId, turn, candidate }: CountySe
   });
   const [hovered, setHovered] = useState<string | null>(null);
 
-  const cached = countyCache.get(cacheKey);
+  const cached = cachedCounties(cacheKey);
   const load: CountyLoad = cached
     ? { status: "ready", data: cached }
     : settled?.key === cacheKey
@@ -55,31 +53,19 @@ export function CountySection({ electionId, stateId, turn, candidate }: CountySe
       : { status: "loading" };
 
   useEffect(() => {
-    if (countyCache.has(cacheKey)) return;
-    const controller = new AbortController();
-    (async () => {
-      try {
-        const res = await fetch(
-          `/api/elections/${electionId}/state/${stateId}/subdivision-results`,
-          {
-            signal: controller.signal,
-          }
-        );
-        const data = res.ok ? ((await res.json()) as CountyApiResponse) : null;
-        if (!data || !Array.isArray(data.subdivisions) || data.subdivisions.length === 0) {
-          setSettled({ key: cacheKey, load: { status: "unavailable" } });
-          return;
-        }
-        countyCache.set(cacheKey, data);
-        setSettled({ key: cacheKey, load: { status: "ready", data } });
-      } catch (err) {
-        if ((err as { name?: string }).name !== "AbortError") {
-          setSettled({ key: cacheKey, load: { status: "unavailable" } });
-        }
-      }
-    })();
-    return () => controller.abort();
-  }, [cacheKey, electionId, stateId]);
+    if (cachedCounties(cacheKey)) return;
+    let live = true;
+    loadCounties(electionId, stateId, turn).then((data) => {
+      if (!live) return;
+      setSettled({
+        key: cacheKey,
+        load: data ? { status: "ready", data } : { status: "unavailable" },
+      });
+    });
+    return () => {
+      live = false;
+    };
+  }, [cacheKey, electionId, stateId, turn]);
 
   const readyData = load.status === "ready" ? load.data : null;
   const rows = useMemo(
