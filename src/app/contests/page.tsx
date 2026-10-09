@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { publicPageMetadata } from "@/lib/siteMetadata";
 import { LocalTime } from "@/components/time/LocalTime";
-import type { ContestRecordKind, ContestStanding } from "@/lib/db/types/contestRound";
+import type { ContestRecordKind } from "@/lib/db/types/contestRound";
 import {
   loadContestsPage,
   type ContestCardData,
@@ -13,13 +13,15 @@ import {
 } from "@/lib/contests/queries";
 import { ensureContestsOpen } from "@/lib/contests/engine";
 import { isSingleplayer } from "@/lib/singleplayer";
+import { prizeShares } from "@/lib/contests/rules";
+import { ContestEntry } from "./ContestEntry";
 import { ReferralInviteLink } from "./ReferralInviteLink";
 import { RoundCountdown } from "./RoundCountdown";
 
 export const metadata: Metadata = publicPageMetadata({
   title: "Contests | A House Divided",
   description:
-    "Weekly contests for corporate growth, National Influence and government approval, plus the referral leaderboard.",
+    "Weekly contests for business and personal wealth growth, National Influence, government approval, legislation and party growth, plus the referral leaderboard.",
   pathname: "/contests",
 });
 
@@ -29,44 +31,50 @@ type T = Awaited<ReturnType<typeof getTranslations<"contests">>>;
 
 const DATE_OPTIONS: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" };
 
-function formatScore(t: T, locale: string, kind: ContestRecordKind, score: number): string {
+/** A contest's unit, applied to a score (signed) or a gap (unsigned). */
+function formatUnit(
+  t: T,
+  locale: string,
+  kind: ContestRecordKind,
+  amount: number,
+  signed: boolean
+): string {
   if (kind === "referrals_weekly" || kind === "referrals_iteration") {
-    return t("scores.referrals", { count: score });
+    return t("scores.referrals", { count: amount });
   }
+  if (kind === "legislator_bills") return t("scores.bills", { count: amount });
+  const whole = kind === "influence_gain" || kind === "party_growth";
   const value = new Intl.NumberFormat(locale, {
-    maximumFractionDigits: kind === "influence_gain" ? 0 : 1,
-    signDisplay: "exceptZero",
-  }).format(score);
+    maximumFractionDigits: whole ? 0 : 1,
+    ...(signed ? { signDisplay: "exceptZero" as const } : {}),
+  }).format(amount);
   if (kind === "influence_gain") return t("scores.influence", { value });
   if (kind === "approval_gain") return t("scores.approval", { value });
+  if (kind === "party_growth") return t("scores.members", { value });
   return t("scores.percent", { value });
 }
 
-function formatAnchor(locale: string, amount: number): string {
-  return `₳${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(amount)}`;
-}
-
-function entryLabel(
-  kind: ContestRecordKind,
-  s: Pick<ContestStanding, "subjectName" | "characterName">
-) {
-  // Character entries are the character; corporate and government entries name their player.
-  return kind === "influence_gain" || kind === "referrals_weekly"
-    ? s.subjectName
-    : `${s.subjectName} · ${s.characterName}`;
+function formatScore(t: T, locale: string, kind: ContestRecordKind, score: number): string {
+  return formatUnit(t, locale, kind, score, true);
 }
 
 /** Gap to the leader in the contest's own unit, without a sign. */
 function formatGap(t: T, locale: string, kind: ContestRecordKind, gap: number): string {
-  if (kind === "referrals_weekly" || kind === "referrals_iteration") {
-    return t("scores.referrals", { count: gap });
-  }
-  const value = new Intl.NumberFormat(locale, {
-    maximumFractionDigits: kind === "influence_gain" ? 0 : 1,
-  }).format(gap);
-  if (kind === "influence_gain") return t("scores.influence", { value });
-  if (kind === "approval_gain") return t("scores.approval", { value });
-  return t("scores.percent", { value });
+  return formatUnit(t, locale, kind, gap, false);
+}
+
+/** Entries that are a character need no owner; corporations, parties and governments name theirs. */
+function showsOwner(kind: ContestRecordKind): boolean {
+  return (
+    kind === "corp_growth_small" ||
+    kind === "corp_growth_large" ||
+    kind === "approval_gain" ||
+    kind === "party_growth"
+  );
+}
+
+function formatAnchor(locale: string, amount: number): string {
+  return `₳${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(amount)}`;
 }
 
 /** Podium colours: the top three ranks read as gold, silver and bronze. */
@@ -76,17 +84,15 @@ const RANK_COLOR: Record<number, string> = {
   3: "text-orange-400",
 };
 
+/** Podium rows: the top three read as gold, silver and bronze. */
+const PODIUM_STYLE: Record<number, string> = {
+  1: "border-gold/40 bg-gold/10",
+  2: "border-zinc-300/30 bg-zinc-300/5",
+  3: "border-orange-400/30 bg-orange-400/5",
+};
+
 function scoreColor(score: number): string {
   return score > 0 ? "text-success" : score < 0 ? "text-error" : "text-muted";
-}
-
-function PrizeTag({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="shrink-0 text-right">
-      <div className="text-xs text-muted">{label}</div>
-      <div className="text-lg font-bold tabular-nums text-gold">{value}</div>
-    </div>
-  );
 }
 
 function ContestCard({
@@ -100,11 +106,13 @@ function ContestCard({
   locale: string;
   signedIn: boolean;
 }) {
-  const [leader, ...chasers] = contest.leaders;
-  const leading = leader && leader.score > 0 ? leader : null;
-  const rest = leading ? chasers : contest.leaders;
+  const shares = prizeShares(contest.kind);
+  const placed = contest.leaders.filter((s) => s.rank <= shares.length && s.score > 0);
+  const rest = contest.leaders.filter((s) => !placed.includes(s));
+  const leading = placed[0] ?? null;
   const viewer = contest.viewer;
   const gap = viewer && leading && viewer.rank > 1 ? leading.score - viewer.score : null;
+  const showOwner = showsOwner(contest.kind);
 
   return (
     <section className="flex min-w-0 flex-col rounded-xl border border-card-border bg-card p-5">
@@ -115,21 +123,46 @@ function ContestCard({
           </h2>
           <p className="mt-1 text-sm text-muted">{t(`kinds.${contest.kind}.rules`)}</p>
         </div>
-        <PrizeTag label={t("prizeLabel")} value={formatAnchor(locale, contest.prizeAnchor)} />
-      </div>
-
-      {leading ? (
-        <div className="mt-5 flex items-end justify-between gap-4 border-b border-card-border pb-4">
-          <div className="min-w-0">
-            <div className="text-xs font-medium text-gold">{t("leading")}</div>
-            <div className="mt-0.5 break-words text-xl font-semibold text-foreground">
-              {entryLabel(contest.kind, leading)}
-            </div>
+        <div className="shrink-0 text-right">
+          <div className="text-xs text-muted">{t("prizeLabel")}</div>
+          <div className="text-lg font-bold tabular-nums text-gold">
+            {formatAnchor(locale, contest.prizeAnchor)}
           </div>
-          <div className="shrink-0 text-2xl font-bold tabular-nums text-success">
-            {formatScore(t, locale, contest.kind, leading.score)}
+          <div className="text-xs text-muted">
+            {shares.length === 1 ? t("split.winnerTakesAll") : t("split.podium")}
           </div>
         </div>
+      </div>
+
+      {placed.length > 0 ? (
+        <ol className="mt-4 space-y-1.5 border-b border-card-border pb-4">
+          {placed.map((s) => {
+            const mine = viewer?.subjectId === s.subjectId;
+            return (
+              <li
+                key={s.subjectId}
+                className={`flex items-center gap-3 rounded-lg border px-3 py-2 ${PODIUM_STYLE[s.rank] ?? ""} ${mine ? "ring-1 ring-primary" : ""}`}
+              >
+                <span
+                  className={`w-5 shrink-0 text-right text-lg font-bold tabular-nums ${RANK_COLOR[s.rank] ?? "text-muted"}`}
+                >
+                  {s.rank}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <ContestEntry {...s} showOwner={showOwner} size={s.rank === 1 ? "lg" : "sm"} />
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className={`block font-semibold tabular-nums ${scoreColor(s.score)}`}>
+                    {formatScore(t, locale, contest.kind, s.score)}
+                  </span>
+                  <span className="block text-xs tabular-nums text-gold">
+                    {formatAnchor(locale, Math.round(contest.prizeAnchor * shares[s.rank - 1]))}
+                  </span>
+                </span>
+              </li>
+            );
+          })}
+        </ol>
       ) : (
         <p className="mt-5 border-b border-card-border pb-4 text-sm text-muted">{t("noLeaders")}</p>
       )}
@@ -143,13 +176,11 @@ function ContestCard({
                 key={s.subjectId}
                 className={`-mx-2 flex items-center gap-3 rounded-md px-2 py-1.5 ${mine ? "bg-primary/10" : ""}`}
               >
-                <span
-                  className={`w-5 shrink-0 text-right font-semibold tabular-nums ${RANK_COLOR[s.rank] ?? "text-muted"}`}
-                >
+                <span className="w-5 shrink-0 text-right font-semibold tabular-nums text-muted">
                   {s.rank}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-foreground">
-                  {entryLabel(contest.kind, s)}
+                <span className="min-w-0 flex-1">
+                  <ContestEntry {...s} showOwner={showOwner} />
                 </span>
                 <span className={`shrink-0 tabular-nums ${scoreColor(s.score)}`}>
                   {formatScore(t, locale, contest.kind, s.score)}
@@ -224,14 +255,23 @@ function ReferralCard({
           ) : (
             <ol className="mt-4 space-y-1.5 text-sm">
               {board.leaders.map((l) => (
-                <li key={l.rank} className="flex items-center justify-between gap-3">
-                  <span className="text-foreground">
+                <li
+                  key={l.rank}
+                  className={`flex items-center justify-between gap-3 ${l.rank <= 3 ? `rounded-lg border px-3 py-1.5 ${PODIUM_STYLE[l.rank]}` : "px-3"}`}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
                     <span
-                      className={`mr-2 inline-block w-5 text-right font-semibold tabular-nums ${RANK_COLOR[l.rank] ?? "text-muted"}`}
+                      className={`inline-block w-5 shrink-0 text-right font-semibold tabular-nums ${RANK_COLOR[l.rank] ?? "text-muted"}`}
                     >
                       {l.rank}
                     </span>
-                    {l.name || t("past.formerPlayer")}
+                    <ContestEntry
+                      subjectName={l.name || t("past.formerPlayer")}
+                      characterName={l.name}
+                      avatarUrl={l.avatarUrl}
+                      characterHref={l.characterHref}
+                      showOwner={false}
+                    />
                   </span>
                   <span className="tabular-nums text-muted">
                     {t("scores.referrals", { count: l.count })}
@@ -289,13 +329,20 @@ function PastWinners({ past, t, locale }: { past: PastRoundData[]; t: T; locale:
               {round.winners.map((w) => (
                 <div
                   key={`${round.id}-${w.rank ?? 1}`}
-                  className="mt-1 flex flex-wrap items-baseline justify-between gap-2 text-muted"
+                  className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-muted"
                 >
-                  <span className="text-foreground">
-                    {round.kind === "referrals_iteration"
-                      ? `#${w.rank} ${w.subjectName || t("past.formerPlayer")}`
-                      : entryLabel(round.kind, w)}{" "}
-                    <span className="text-muted">
+                  <span className="flex min-w-0 items-center gap-2 text-foreground">
+                    <span
+                      className={`w-4 shrink-0 text-right text-xs font-semibold tabular-nums ${RANK_COLOR[w.rank ?? 1] ?? "text-muted"}`}
+                    >
+                      {w.rank ?? 1}
+                    </span>
+                    <ContestEntry
+                      {...w}
+                      subjectName={w.subjectName || t("past.formerPlayer")}
+                      showOwner={showsOwner(round.kind)}
+                    />
+                    <span className="shrink-0 text-muted">
                       {formatScore(t, locale, round.kind, w.score)}
                     </span>
                   </span>

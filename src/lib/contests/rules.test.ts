@@ -9,7 +9,8 @@ import {
   countWeeklyReferrals,
   iterationChanged,
   gainScore,
-  pickWinner,
+  pickPlacings,
+  placePrizeAnchor,
   rankStandings,
   referralGrantDecision,
   roundBelongsToEarlierWorld,
@@ -93,16 +94,46 @@ describe("approvalEntryEligible", () => {
   });
 });
 
-describe("rankStandings and pickWinner", () => {
-  it("orders by score, ties by subject id", () => {
-    const ranked = rankStandings([standing("b", 5), standing("a", 5), standing("c", 9)]);
-    expect(ranked.map((s) => s.subjectId)).toEqual(["c", "a", "b"]);
-    expect(pickWinner(ranked)?.subjectId).toBe("c");
+describe("rankStandings and pickPlacings", () => {
+  it("orders by score, ties by subject id, and places the top three", () => {
+    const ranked = rankStandings([
+      standing("b", 5),
+      standing("a", 5),
+      standing("c", 9),
+      standing("d", 2),
+    ]);
+    expect(ranked.map((s) => s.subjectId)).toEqual(["c", "a", "b", "d"]);
+    expect(pickPlacings("influence_gain", ranked).map((s) => s.subjectId)).toEqual(["c", "a", "b"]);
   });
 
-  it("pays nobody when the leader did not grow", () => {
-    expect(pickWinner(rankStandings([standing("a", 0), standing("b", -3)]))).toBeNull();
-    expect(pickWinner([])).toBeNull();
+  it("places only the leader in government approval", () => {
+    const ranked = rankStandings([standing("a", 4), standing("b", 3)]);
+    expect(pickPlacings("approval_gain", ranked).map((s) => s.subjectId)).toEqual(["a"]);
+  });
+
+  it("places only positive scores", () => {
+    expect(
+      pickPlacings("influence_gain", rankStandings([standing("a", 3), standing("b", 0)]))
+    ).toEqual([expect.objectContaining({ subjectId: "a" })]);
+    expect(
+      pickPlacings("influence_gain", rankStandings([standing("a", 0), standing("b", -3)]))
+    ).toEqual([]);
+    expect(pickPlacings("influence_gain", [])).toEqual([]);
+  });
+});
+
+describe("placePrizeAnchor", () => {
+  it("splits the prize 50/30/20", () => {
+    const prize = contestPrizeAnchor("corp_growth_small");
+    expect(placePrizeAnchor("corp_growth_small", 1)).toBe(Math.round(prize * 0.5));
+    expect(placePrizeAnchor("corp_growth_small", 2)).toBe(Math.round(prize * 0.3));
+    expect(placePrizeAnchor("corp_growth_small", 3)).toBe(Math.round(prize * 0.2));
+    expect(placePrizeAnchor("corp_growth_small", 4)).toBe(0);
+  });
+
+  it("pays government approval winner takes all", () => {
+    expect(placePrizeAnchor("approval_gain", 1)).toBe(contestPrizeAnchor("approval_gain"));
+    expect(placePrizeAnchor("approval_gain", 2)).toBe(0);
   });
 });
 
