@@ -56,20 +56,21 @@ const NOW = new Date(START.getTime() + 20 * 3_600_000);
 interface Case {
   name: string;
   election: Partial<Election>;
-  candidates: Partial<ElectionCandidate>[];
+  /** Filing fields, plus the enriched policy position of each candidate. */
+  candidates: (Partial<ElectionCandidate> & { charEP?: number; charSP?: number })[];
   tally?: Partial<ElectionVoteTally>;
   preset?: string;
   /** Map fields compared between the whole and split runs. */
   maps: (keyof ElectionVoteTally)[];
 }
 
-const party = (id: string, i: number) => ({ party: id, charEP: i - 1.5, charSP: 1.5 - i });
+const position = (i: number) => ({ charEP: i - 1.5, charSP: 1.5 - i });
 
 const CASES: Case[] = [
   {
     name: "Irish PR-STV ranked ballots",
     election: { countryId: "IE", electionType: "dail", state: "DUB", totalSeats: 3 },
-    candidates: ["1", "1", "2", "3"].map((p, i) => ({ party: p, isNPP: i > 1, ...party(p, i) })),
+    candidates: ["1", "1", "2", "3"].map((p, i) => ({ party: p, isNPP: i > 1, ...position(i) })),
     tally: { countingMethod: "pr_stv", rankedBallots: [] },
     maps: ["totalVotes"],
   },
@@ -157,7 +158,7 @@ const CASES: Case[] = [
     },
     candidates: ["1", "2", "3", "4"].map((p, i) => ({
       party: p,
-      ...party(p, i),
+      ...position(i),
       russianCouncilNomination: {
         registrationOrder: i + 1,
       } as unknown as ElectionCandidate["russianCouncilNomination"],
@@ -191,7 +192,7 @@ async function seed(db: Db, c: Case) {
     ...c.election,
   } as Election;
   const candidates = c.candidates.map(
-    (row, i) =>
+    ({ charEP: _ep, charSP: _sp, ...row }, i) =>
       ({
         _id: ids.people[i][0],
         electionId,
