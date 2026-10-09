@@ -5,6 +5,13 @@ import { ensureIndex } from "./helpers";
 // primary snapshots, politician sorts, and the unread-mail counter hit on every auth/me.
 export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
   log("Performance indexes:");
+  await ensureIndex(
+    db,
+    "checkpointRuns",
+    { startedAt: 1 },
+    { name: "checkpointRuns_startedAt", expireAfterSeconds: 7 * 86400 },
+    log
+  );
 
   // Native Grand Assembly replacement journals are queried once per chamber.
   await ensureIndex(
