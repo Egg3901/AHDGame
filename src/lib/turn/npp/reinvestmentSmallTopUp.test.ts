@@ -13,6 +13,7 @@ describe("existing autonomous plant top-ups", () => {
     const quote = computeBuildCost({
       sectorType: "retail",
       units: 1,
+      strategyId: null,
       year: CAPACITY_ANCHOR_YEAR,
       preset: "2019-default",
       eraUnitScale: 1,
