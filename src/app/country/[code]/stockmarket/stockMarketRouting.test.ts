@@ -1,17 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildRuntimeExchangeMeta, getStockMarketBasePath } from "./stockMarketRouting";
+import { buildRuntimeExchangeMeta } from "./stockMarketRouting";
 
 describe("stockMarketRouting", () => {
-  it("keeps the selected exchange path in sync with the chosen market", () => {
-    expect(getStockMarketBasePath("global", "us")).toBe("/stockmarket/global");
-    expect(getStockMarketBasePath("UK", "us")).toBe("/country/uk/stockmarket");
-  });
-
-  it("falls back to the current country path when the selection is invalid", () => {
-    expect(getStockMarketBasePath("unknown", "us")).toBe("/country/us/stockmarket");
-    expect(getStockMarketBasePath("unknown", "global")).toBe("/stockmarket/global");
-  });
-
   it("keeps the current country exchange available before country visibility resolves", () => {
     const meta = buildRuntimeExchangeMeta(null, "US");
 

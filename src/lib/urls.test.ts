@@ -155,7 +155,7 @@ describe("page URL helpers", () => {
       expect(legislatureUrl(undefined as any)).toBe("/country/us/legislature");
     });
     it("stockmarketUrl tolerates undefined", () => {
-      expect(stockmarketUrl(undefined as any)).toBe("/country/us/stockmarket");
+      expect(stockmarketUrl(undefined as any)).toBe("/market?tab=stocks&exchange=US");
     });
   });
 });
@@ -251,7 +251,8 @@ describe("page URL helpers (pass 2)", () => {
     expect(currencyCentralBankUrl("EUR")).toBe("/centralbank/eur");
   });
   it("stockmarketUrl", () => {
-    expect(stockmarketUrl("UK")).toBe("/country/uk/stockmarket");
+    expect(stockmarketUrl("UK")).toBe("/market?tab=stocks&exchange=UK");
+    expect(stockmarketUrl("UK", "commodities")).toBe("/market?tab=commodities&exchange=UK");
   });
 });
 

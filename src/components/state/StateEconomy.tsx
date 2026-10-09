@@ -457,7 +457,7 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
           </select>
         </div>
         <Link
-          href={`${stockmarketUrl(countryId)}?tab=commodities`}
+          href={stockmarketUrl(countryId, "commodities")}
           className="pb-2 text-xs text-primary hover:underline"
         >
           View commodity prices &rarr;
