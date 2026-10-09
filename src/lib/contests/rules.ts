@@ -154,24 +154,6 @@ export const REFERRAL_AWARD_WINNERS = 3;
  */
 export const REFERRAL_ALT_LINK_THRESHOLD = DEFAULT_ALT_SCORING_THRESHOLDS.strongLink;
 
-export interface ReferralCandidate {
-  userId: string;
-  username: string;
-  count: number;
-  banned: boolean;
-}
-
-/** Most referrals first, then username, matching the admin leaderboard order. */
-export function rankReferralWinners(
-  candidates: readonly ReferralCandidate[],
-  limit = REFERRAL_AWARD_WINNERS
-): ReferralCandidate[] {
-  return candidates
-    .filter((c) => !c.banned && c.count > 0)
-    .sort((a, b) => b.count - a.count || a.username.localeCompare(b.username))
-    .slice(0, limit);
-}
-
 export interface WeeklyReferee {
   refereeUserId: string;
   referrerUserId: string;

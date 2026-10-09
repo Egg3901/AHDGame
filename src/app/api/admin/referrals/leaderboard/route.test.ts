@@ -15,8 +15,10 @@ vi.mock("@/lib/adminLog", () => ({
 
 vi.mock("@/lib/contests/referralAward", () => {
   class ReferralAwardError extends Error {}
-  return { awardReferralContest: vi.fn(), ReferralAwardError };
+  return { ReferralAwardError };
 });
+
+vi.mock("@/lib/contests/engine", () => ({ awardIterationReferralsNow: vi.fn() }));
 
 function chainFind(rows: Record<string, unknown>[]) {
   return {
@@ -220,12 +222,12 @@ describe("PATCH /api/admin/referrals/leaderboard", () => {
   it("awards the top referrers and restarts the contest", async () => {
     const { requireAdmin } = await import("@/lib/api/requireAdmin");
     const { getDb } = await import("@/lib/mongodb");
-    const { awardReferralContest } = await import("@/lib/contests/referralAward");
+    const { awardIterationReferralsNow } = await import("@/lib/contests/engine");
     const { createAdminLog } = await import("@/lib/adminLog");
     vi.mocked(requireAdmin).mockResolvedValue({ ok: true, admin: { username: "admin" } } as never);
     vi.mocked(getDb).mockResolvedValue({} as never);
     const restartedAt = new Date("2026-10-09T00:00:00Z");
-    vi.mocked(awardReferralContest).mockResolvedValue({
+    vi.mocked(awardIterationReferralsNow).mockResolvedValue({
       roundId: "referrals:1",
       restartedAt,
       usernames: ["alice"],
@@ -249,9 +251,7 @@ describe("PATCH /api/admin/referrals/leaderboard", () => {
     expect(res.status).toBe(200);
     expect(data.contestStartedAt).toBe(restartedAt.toISOString());
     expect(data.winners).toEqual([{ rank: 1, name: "alice", count: 7, alreadySupporter: false }]);
-    expect(vi.mocked(awardReferralContest).mock.calls[0][1]).toMatchObject({
-      awardedBy: "admin",
-    });
+    expect(vi.mocked(awardIterationReferralsNow).mock.calls[0][1]).toBe("admin");
     expect(createAdminLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "referral_contest_awarded" })
     );
@@ -260,11 +260,11 @@ describe("PATCH /api/admin/referrals/leaderboard", () => {
   it("returns 400 for a rejected award and for an unknown action", async () => {
     const { requireAdmin } = await import("@/lib/api/requireAdmin");
     const { getDb } = await import("@/lib/mongodb");
-    const { awardReferralContest, ReferralAwardError } =
-      await import("@/lib/contests/referralAward");
+    const { ReferralAwardError } = await import("@/lib/contests/referralAward");
+    const { awardIterationReferralsNow } = await import("@/lib/contests/engine");
     vi.mocked(requireAdmin).mockResolvedValue({ ok: true, admin: { username: "admin" } } as never);
     vi.mocked(getDb).mockResolvedValue({} as never);
-    vi.mocked(awardReferralContest).mockRejectedValue(
+    vi.mocked(awardIterationReferralsNow).mockRejectedValue(
       new ReferralAwardError("No referral contest is running")
     );
 
