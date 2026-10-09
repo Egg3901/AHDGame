@@ -111,22 +111,12 @@ const nextConfig: NextConfig = {
   // one build in five. NEXT_BUILD_CPUS caps the workers there; unset (Railway,
   // local) leaves Next's default untouched. Singleplayer keeps its own cap below.
   ...(process.env.SINGLEPLAYER !== "1" && Number(process.env.NEXT_BUILD_CPUS) > 0
-    ? {
-        experimental: {
-          cpus: Number(process.env.NEXT_BUILD_CPUS),
-          ...(process.env.CI === "true"
-            ? { webpackMemoryOptimizations: true, webpackBuildWorker: true }
-            : {}),
-        },
-      }
+    ? { experimental: { cpus: Number(process.env.NEXT_BUILD_CPUS) } }
     : {}),
   ...(process.env.SINGLEPLAYER === "1"
     ? {
         output: "standalone" as const,
         experimental: {
-          ...(process.env.CI === "true"
-            ? { webpackMemoryOptimizations: true, webpackBuildWorker: true }
-            : {}),
           // Next preloads every page and route module right after "Ready"
           // (1,300+ API routes, 200+ pages) with synchronous requires, and no
           // request is answered until that finishes: measured at 4s on Linux
@@ -147,12 +137,6 @@ const nextConfig: NextConfig = {
       }
     : {}),
   cleanDistDir: !railwayEnv,
-  webpack(config, { dev }) {
-    // Clean hosted builds do not reuse .next/cache. Avoid serializing the
-    // large route graph into a filesystem cache during compilation.
-    if (process.env.CI === "true" && !dev) config.cache = false;
-    return config;
-  },
   // The standalone Turbopack build gives an explicitly external MongoDB
   // package a generated require alias. That alias is not emitted into the
   // desktop bundle on Windows, so local worlds fail before the server starts.

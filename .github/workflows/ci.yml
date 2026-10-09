@@ -254,13 +254,9 @@ jobs:
           ( while true; do echo "[mem] $(date -u +%H:%M:%S) $(free -m | awk '/Mem:/ {printf "used=%sMB avail=%sMB ", $3, $7} /Swap:/ {printf "swap=%sMB", $3}')"; sleep 10; done ) &
           sampler=$!
           trap 'kill "$sampler" 2>/dev/null' EXIT
-          # Turbopack compilation can exhaust the 16 GB hosted runner.
-          # Webpack build workers release each compiler before page generation.
-          npm run verify:build -- --webpack
+          npm run verify:build
         env:
-          # The webpack compile reached the 6 GB heap limit with 8 GB of runner
-          # RAM still available. Leave 6 GB for native allocations and the OS.
-          NODE_OPTIONS: --max-old-space-size=10240
+          NODE_OPTIONS: --max-old-space-size=6144
           CI: "true"
           # One static-generation worker. Three exhausted the 16 GB runner and
           # got its agent killed in about one build in five; two still did on

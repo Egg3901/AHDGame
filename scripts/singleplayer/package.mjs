@@ -144,8 +144,7 @@ export function assembleSingleplayerPayload({
 
 function buildStandalone(root) {
   const nextCli = path.join(root, "node_modules", "next", "dist", "bin", "next");
-  const compilerArgs = process.env.SINGLEPLAYER_BUILD_WEBPACK === "1" ? ["--webpack"] : [];
-  const build = spawnSync(process.execPath, [nextCli, "build", ...compilerArgs], {
+  const build = spawnSync(process.execPath, [nextCli, "build"], {
     cwd: root,
     stdio: "inherit",
     env: {
