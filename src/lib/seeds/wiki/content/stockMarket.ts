@@ -79,11 +79,11 @@ The formula produces a **fundamental value** each turn, then several additional 
 
 ## Buying and selling shares
 
-From any corporation page, navigate to the Shares tab.
+From a corporation page, navigate to the Shares tab, or use the **Trade** shortcut on a tradable stock in the exchange list.
 
 ### Market orders
 
-Buy or sell immediately at the current market price through the system's market maker. Fills instantly with infinite liquidity.
+Market orders use the quoted bid or ask. The equity pool's base half-spread is 1% on each side of its midpoint, before its cash-balance adjustment. Execution depends on available shares, cash and the applicable market path; liquidity is not unlimited. Review the trade quote before confirming.
 
 ### Limit orders
 

@@ -2,7 +2,7 @@
 
 <img src="public/ahd-logo.png" alt="" width="96" align="right">
 
-A browser-based multiplayer political and economic simulation. Players create politicians, win elections, pass legislation, found corporations, and climb from state office to national leadership. The world advances one turn per real hour, and AI politicians fill every seat a player doesn't, so it stays alive at any player count.
+A browser-based multiplayer political and economic simulation. Players create politicians, win elections, pass legislation, found corporations, and climb from state office to national leadership. In normal multiplayer mode the main turn runs once per real hour. Stock markets refresh between turns at quarter-hour intervals; election returns, growth, inflation and exchange rates also have a half-hour update. Production, action refresh, campaign budgets and race deadlines remain on the main turn. Sub-hour updates skip an inactive world or a turn that is still processing; the half-hour update also skips fast mode. AI politicians fill seats a player does not, so the world stays active at any player count.
 
 Play at [ahousedividedgame.com](https://www.ahousedividedgame.com). Docs at [docs.lakesidegames.net](https://docs.lakesidegames.net). Licensed [PolyForm Noncommercial](./LICENSE.md).
 
