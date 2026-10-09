@@ -93,9 +93,17 @@ export function ChangelogMarkdown({ content, compact = false }: ChangelogMarkdow
           ) : (
             <h3 className="mb-2 mt-7 text-base font-semibold text-foreground">{children}</h3>
           ),
-        p: ({ children }) => (
-          <p className={`${body} ${lead} text-muted [&:not(:last-child)]:mb-4`}>{children}</p>
-        ),
+        p: ({ children, node }) => {
+          // Images become block figures with captions, which cannot sit in a paragraph.
+          const Tag = node?.children.some(
+            (child) => child.type === "element" && child.tagName === "img"
+          )
+            ? "div"
+            : "p";
+          return (
+            <Tag className={`${body} ${lead} text-muted [&:not(:last-child)]:mb-4`}>{children}</Tag>
+          );
+        },
         ul: ({ children }) => <ul className="mb-4 space-y-2 pl-1">{children}</ul>,
         ol: ({ children }) => (
           <ol className="mb-4 list-decimal space-y-2 pl-5 marker:text-muted">{children}</ol>
