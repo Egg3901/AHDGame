@@ -110,6 +110,11 @@ export interface PresMapState {
   overlay?: PresMapOverlay;
   /** Replaces the "+margin / tier" line in tooltips, chips and aria labels. */
   caption?: string;
+  /**
+   * Replaces the electoral-vote figure in labels, chips and tooltips. Null hides
+   * it; the primary map has no electoral votes to show.
+   */
+  evLabel?: string | null;
   broadcast?: PresMapBroadcast;
   /** A new token replays the call highlight on this state. */
   pulse?: string;
@@ -358,4 +363,9 @@ export function buildPresMapModel(election: ElectionDetail): PresMapModel {
     .map(([id]) => lookup(id));
 
   return { states, candidates: Object.fromEntries(candidates), legendCandidates };
+}
+
+/** The figure a state label carries under its code: its electoral votes unless overridden. */
+export function stateFigure(s: Pick<PresMapState, "ev" | "evLabel">): string | null {
+  return s.evLabel !== undefined ? s.evLabel : String(s.ev);
 }

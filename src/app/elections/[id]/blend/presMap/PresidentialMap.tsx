@@ -17,14 +17,29 @@ import { shadeColorForTier } from "@/lib/elections/marginTierShade";
 import { TIER_BANDS } from "../generalBlendViewModel";
 import { StatePanel } from "./StatePanel";
 import { FOG_FILL, OverlayDefs, StateLabels, StatePaths } from "./StateShapes";
-import type { PresMapModel, PresMapState } from "./presMapModel";
+import { stateFigure, type PresMapModel, type PresMapState } from "./presMapModel";
 import { CALLOUT_STATES } from "./usStates";
 import { loadUsStateGeo, MAP_HEIGHT, MAP_WIDTH, type StateGeo } from "./usStatesGeo";
 import { usePanZoom } from "./usePanZoom";
-import { MAX_ZOOM, MIN_ZOOM, isIdentityView } from "./mapView";
+import { MIN_ZOOM, MAX_ZOOM, visibleBox } from "./mapView";
+import { COUNTY_ZOOM, CountyPaths, countyOpacity, useCountyRows } from "./CountyLayer";
+import type { CountyRow } from "./countyModel";
 
 /** Container width at which the state overview sits over the map instead of rising as a sheet. */
 const PANEL_MIN_WIDTH = 640;
+
+/** The stage zooms far enough to read single counties in the smallest states. */
+const STAGE_MAX_ZOOM = 30;
+/** Zoom past which the open state shows its counties on its own. */
+const SELECTED_COUNTY_ZOOM = 1.5;
+
+/** A broadcast state keeps its counties back until it is called. */
+function countiesAllowed(s: PresMapState): boolean {
+  return !s.broadcast || s.broadcast.countiesOpen;
+}
+
+/** Width of the state overview docked over the stage's right edge. */
+const STAGE_PANEL_WIDTH = 380;
 
 export interface PresidentialMapProps {
   /**
@@ -42,9 +57,39 @@ export interface PresidentialMapProps {
   renderPanel?: (state: PresMapState, onClose: () => void) => ReactNode;
   /** Replaces the margin-tier colour key. */
   legend?: ReactNode;
+  /**
+   * `inline` (default) is a block in the page flow, locked until the reader
+   * unlocks it. `stage` fills its parent, always pans and zooms, and reveals
+   * county results as the reader zooms in.
+   */
+  variant?: "inline" | "stage";
+  /**
+   * Draw county results over states on deep zoom (stage only). A state on the
+   * broadcast view only shows its counties once `broadcast.countiesOpen`.
+   */
+  counties?: boolean;
+  /** Told whenever the open state changes. */
+  onSelectState?: (stateId: string | null) => void;
 }
 
-type Hover = { id: string; x: number; y: number } | null;
+type Hover = { id: string; county?: string; x: number; y: number } | null;
+
+function useElementSize(ref: React.RefObject<HTMLElement | null>): { w: number; h: number } {
+  const [size, setSize] = useState({ w: MAP_WIDTH, h: MAP_HEIGHT });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setSize({ w: el.clientWidth || MAP_WIDTH, h: el.clientHeight || MAP_HEIGHT });
+    const ro = new ResizeObserver(([entry]) => {
+      const w = Math.round(entry.contentRect.width);
+      const h = Math.round(entry.contentRect.height);
+      if (w > 0 && h > 0) setSize({ w, h });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return size;
+}
 
 function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
   const [width, setWidth] = useState(MAP_WIDTH);
@@ -76,12 +121,24 @@ export function PresidentialMap({
   turn,
   renderPanel,
   legend,
+  variant = "inline",
+  counties = variant === "stage",
+  onSelectState,
 }: PresidentialMapProps) {
+  const stage = variant === "stage";
   const frameRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const width = useElementWidth(frameRef);
-  const scale = width / MAP_WIDTH;
+  const inlineWidth = useElementWidth(frameRef);
+  const stageSize = useElementSize(frameRef);
+  const width = stage ? stageSize.w : inlineWidth;
+  // The stage fits the whole country into whatever shape its frame is; the
+  // inline map is always drawn at the map's own aspect ratio.
+  const scale = stage
+    ? Math.min(stageSize.w / MAP_WIDTH, stageSize.h / MAP_HEIGHT)
+    : width / MAP_WIDTH;
+  const frameW = stage ? stageSize.w / scale : MAP_WIDTH;
+  const frameH = stage ? stageSize.h / scale : MAP_HEIGHT;
   const wide = width >= PANEL_MIN_WIDTH;
 
   const [geo, setGeo] = useState<StateGeo[] | null>(null);
@@ -103,20 +160,63 @@ export function PresidentialMap({
 
   const pz = usePanZoom({
     svgRef,
-    enabled: unlocked,
+    enabled: stage || unlocked,
     scale,
     width: MAP_WIDTH,
     height: MAP_HEIGHT,
+    frame: stage ? { frameWidth: frameW, frameHeight: frameH, maxZoom: STAGE_MAX_ZOOM } : undefined,
   });
 
   const states = model.states;
   const geoById = useMemo(() => new Map((geo ?? []).map((g) => [g.id, g])), [geo]);
   const selectedState: PresMapState | null = selected ? (states[selected] ?? null) : null;
 
-  const select = useCallback((id: string | null) => {
-    setSelected(id);
-    setHover(null);
-  }, []);
+  const select = useCallback(
+    (id: string | null) => {
+      setSelected(id);
+      setHover(null);
+      onSelectState?.(id);
+    },
+    [onSelectState]
+  );
+
+  // County layer: every state in view once the zoom passes the threshold.
+  const candidate = useCallback(
+    (id: string) => model.candidates[id] ?? { name: "Unknown", color: "#9CA3AF" },
+    [model]
+  );
+  const k = pz.view.k;
+  const countyStates = useMemo(() => {
+    if (!stage || !counties || !geo) return [];
+    // The open state shows its counties as soon as the map has flown to it;
+    // the rest fade in only on deep zoom.
+    const open =
+      selected && states[selected] && countiesAllowed(states[selected]) ? selected : null;
+    if (k < COUNTY_ZOOM) return open && k >= SELECTED_COUNTY_ZOOM ? [open] : [];
+    const box = visibleBox(pz.view, MAP_WIDTH, MAP_HEIGHT, {
+      frameWidth: frameW,
+      frameHeight: frameH,
+    });
+    return geo
+      .filter((g) => {
+        const s = states[g.id];
+        if (!s || !countiesAllowed(s)) return false;
+        return (
+          g.x0 < box.x1 && g.x0 + g.width > box.x0 && g.y0 < box.y1 && g.y0 + g.height > box.y0
+        );
+      })
+      .map((g) => g.id)
+      .sort();
+  }, [stage, counties, geo, k, pz.view, frameW, frameH, states, selected]);
+  const countyRows = useCountyRows(electionId, turn, countyStates, candidate);
+  // Rows for states that are in view now; ones loaded earlier stay cached.
+  const shownCountyRows = useMemo(() => {
+    const out: Record<string, CountyRow[]> = {};
+    for (const id of countyStates) if (countyRows[id]) out[id] = countyRows[id];
+    return out;
+  }, [countyStates, countyRows]);
+  const countyAlpha = k < COUNTY_ZOOM && countyStates.length > 0 ? 1 : countyOpacity(k);
+  const countyLoading = countyStates.some((id) => !countyRows[id]);
 
   useEffect(() => {
     if (!selectedState) return;
@@ -136,7 +236,31 @@ export function PresidentialMap({
   const onClick = (e: MouseEvent<SVGSVGElement>) => {
     if (pz.consumeDrag()) return;
     const id = stateAt(e.target);
-    if (id) select(id === selected ? null : id);
+    // The stage never toggles a state shut on a second click, so a double
+    // click (which zooms) leaves the state it zoomed to open.
+    if (!id) return;
+    if (!stage) {
+      select(id === selected ? null : id);
+      return;
+    }
+    select(id);
+    // From the national view, fly to the state, framed left of the panel.
+    if (k < COUNTY_ZOOM) zoomToState(id);
+  };
+  const zoomToState = (id: string) => {
+    const g = geoById.get(id);
+    if (!g) return;
+    pz.zoomToBox(
+      { x0: g.x0, y0: g.y0, x1: g.x0 + g.width, y1: g.y0 + g.height },
+      STAGE_PANEL_WIDTH / scale
+    );
+  };
+  const onDoubleClick = (e: MouseEvent<SVGSVGElement>) => {
+    if (!stage) return;
+    const id = stateAt(e.target);
+    if (!id) return;
+    e.preventDefault();
+    zoomToState(id);
   };
   const onKeyDown = (e: KeyboardEvent<SVGSVGElement>) => {
     if (e.key !== "Enter" && e.key !== " ") return;
@@ -154,13 +278,18 @@ export function PresidentialMap({
       setHover((h) => (h ? null : h));
       return;
     }
-    setHover({ id, x: e.clientX - rect.left, y: e.clientY - rect.top });
+    const county = (e.target as Element).getAttribute?.("data-county") ?? undefined;
+    setHover({ id, county, x: e.clientX - rect.left, y: e.clientY - rect.top });
   };
 
   const selectedGeo = selected ? geoById.get(selected) : undefined;
   const hoverGeo = hover && hover.id !== selected ? geoById.get(hover.id) : undefined;
   const hoverState = hover ? states[hover.id] : undefined;
-  const atRest = isIdentityView(pz.view);
+  const atRest = pz.view.k === pz.rest.k && pz.view.x === pz.rest.x && pz.view.y === pz.rest.y;
+  const hoverCounty =
+    hover?.county && countyAlpha > 0
+      ? countyRows[hover.id]?.find((r) => r.id === hover.county)
+      : undefined;
   const pulsing = useMemo(() => Object.values(states).filter((s) => s.pulse), [states]);
 
   const panel = selectedState ? (
@@ -184,24 +313,47 @@ export function PresidentialMap({
   const callouts = CALLOUT_STATES.map((id) => states[id]).filter((s): s is PresMapState => !!s);
 
   return (
-    <div style={{ fontFamily: FONT.sans, color: BLEND.ink }}>
+    <div
+      style={
+        stage
+          ? {
+              fontFamily: FONT.sans,
+              color: BLEND.ink,
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+            }
+          : { fontFamily: FONT.sans, color: BLEND.ink }
+      }
+    >
       <div
         ref={frameRef}
-        style={{
-          position: "relative",
-          background: BLEND.inset,
-          border: `1px solid ${BLEND.hairline}`,
-          // Room for the overview beside the map without it scrolling at once.
-          minHeight: selectedState && wide ? 640 : undefined,
-        }}
+        style={
+          stage
+            ? {
+                position: "relative",
+                flex: 1,
+                minHeight: 0,
+                overflow: "hidden",
+                background: BLEND.inset,
+              }
+            : {
+                position: "relative",
+                background: BLEND.inset,
+                border: `1px solid ${BLEND.hairline}`,
+                // Room for the overview beside the map without it scrolling at once.
+                minHeight: selectedState && wide ? 640 : undefined,
+              }
+        }
       >
         <svg
           ref={svgRef}
-          viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
+          viewBox={`0 0 ${frameW} ${frameH}`}
           role="group"
           aria-label="US presidential map by state"
-          data-locked={unlocked ? "false" : "true"}
+          data-locked={stage || unlocked ? "false" : "true"}
           onClick={onClick}
+          onDoubleClick={onDoubleClick}
           onKeyDown={onKeyDown}
           onPointerDown={pz.handlers.onPointerDown}
           onPointerMove={onMove}
@@ -211,11 +363,11 @@ export function PresidentialMap({
           style={{
             display: "block",
             width: "100%",
-            height: "auto",
-            aspectRatio: `${MAP_WIDTH} / ${MAP_HEIGHT}`,
+            height: stage ? "100%" : "auto",
+            aspectRatio: stage ? undefined : `${MAP_WIDTH} / ${MAP_HEIGHT}`,
             // Locked: the browser keeps vertical scrolling. Unlocked: gestures are ours.
-            touchAction: unlocked ? "none" : "pan-y pinch-zoom",
-            cursor: unlocked ? (pz.dragging ? "grabbing" : "grab") : "default",
+            touchAction: stage || unlocked ? "none" : "pan-y pinch-zoom",
+            cursor: stage || unlocked ? (pz.dragging ? "grabbing" : "grab") : "default",
             userSelect: "none",
           }}
         >
@@ -223,6 +375,10 @@ export function PresidentialMap({
             <g transform={`translate(${pz.view.x} ${pz.view.y}) scale(${pz.view.k})`}>
               <OverlayDefs states={states} />
               <StatePaths geo={geo} states={states} />
+              <CountyPaths rows={shownCountyRows} opacity={countyAlpha} />
+              {countyAlpha > 0 ? (
+                <StateBorders geo={geo} ids={countyStates} opacity={countyAlpha} />
+              ) : null}
               {pulsing.map((s) => {
                 const g = geoById.get(s.id);
                 return g ? (
@@ -281,8 +437,9 @@ export function PresidentialMap({
         ) : null}
 
         <MapControls
+          stage={stage}
           unlocked={unlocked}
-          canZoomIn={pz.view.k < MAX_ZOOM}
+          canZoomIn={pz.view.k < (stage ? STAGE_MAX_ZOOM : MAX_ZOOM)}
           canZoomOut={pz.view.k > MIN_ZOOM}
           atRest={atRest}
           onToggle={() => {
@@ -293,7 +450,11 @@ export function PresidentialMap({
           onReset={pz.reset}
         />
 
-        {!unlocked && geo ? (
+        {stage && geo ? (
+          <StageHint k={k} countiesOn={counties} loading={countyLoading && countyAlpha > 0} />
+        ) : null}
+
+        {!stage && !unlocked && geo ? (
           <div
             style={{
               position: "absolute",
@@ -310,11 +471,19 @@ export function PresidentialMap({
           </div>
         ) : null}
 
-        {hoverState && hover ? (
+        {hoverState && hover && hoverCounty ? (
+          <CountyTip
+            county={hoverCounty}
+            state={hoverState}
+            x={hover.x}
+            y={hover.y}
+            frameWidth={width}
+          />
+        ) : hoverState && hover ? (
           <HoverTip state={hoverState} x={hover.x} y={hover.y} frameWidth={width} />
         ) : null}
 
-        {selectedState && wide ? (
+        {selectedState && panel && (wide || stage) ? (
           <aside
             aria-label={`${selectedState.name} overview`}
             style={{
@@ -322,7 +491,7 @@ export function PresidentialMap({
               top: 0,
               right: 0,
               bottom: 0,
-              width: Math.min(400, Math.round(width * 0.5)),
+              width: stage ? STAGE_PANEL_WIDTH : Math.min(400, Math.round(width * 0.5)),
               overflowY: "auto",
               padding: 16,
               background: BLEND.rail,
@@ -335,58 +504,213 @@ export function PresidentialMap({
         ) : null}
       </div>
 
-      {legend ?? <MapKey model={model} />}
-
-      {callouts.length > 0 ? (
-        <div style={{ marginTop: 14 }}>
-          <div style={{ ...BLEND_LABEL, marginBottom: 6 }}>Small states and DC</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {callouts.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => select(s.id === selected ? null : s.id)}
-                title={
-                  s.caption
-                    ? `${s.name}: ${s.caption}`
-                    : `${s.name}: ${s.leaderName} +${s.margin.toFixed(1)}pp`
-                }
-                aria-label={
-                  s.caption
-                    ? `${s.name}, ${s.ev} electoral votes, ${s.caption}`
-                    : `${s.name}, ${s.ev} electoral votes, ${s.leaderName} leads by ${s.margin.toFixed(1)} points`
-                }
-                aria-pressed={s.id === selected}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "baseline",
-                  gap: 6,
-                  padding: "6px 9px",
-                  cursor: "pointer",
-                  font: "inherit",
-                  fontFamily: FONT.mono,
-                  fontSize: 11,
-                  color: s.ink,
-                  background: s.fill,
-                  border: `1px solid ${s.id === selected ? BLEND.ink : "transparent"}`,
-                }}
-              >
-                <b style={{ fontWeight: 700 }}>{s.id}</b>
-                <span style={{ opacity: 0.8 }}>{s.ev}</span>
-                {s.broadcast ? null : (
-                  <span style={{ opacity: 0.65, fontSize: 10 }}>+{s.margin.toFixed(1)}</span>
-                )}
-              </button>
-            ))}
-          </div>
+      {stage ? (
+        <div
+          style={{
+            padding: "10px 16px 12px",
+            borderTop: `1px solid ${BLEND.hairline}`,
+            background: BLEND.page,
+          }}
+        >
+          {callouts.length > 0 ? (
+            <CalloutChips callouts={callouts} selected={selected} onSelect={select} stage />
+          ) : null}
+          {legend ?? <MapKey model={model} />}
         </div>
+      ) : (
+        (legend ?? <MapKey model={model} />)
+      )}
+
+      {!stage && callouts.length > 0 ? (
+        <CalloutChips callouts={callouts} selected={selected} onSelect={select} />
       ) : null}
 
-      {selectedState && !wide ? (
+      {selectedState && !wide && !stage ? (
         <BottomSheet label={`${selectedState.name} overview`} onClose={() => select(null)}>
           {panel}
         </BottomSheet>
       ) : null}
+    </div>
+  );
+}
+
+/** One button per small state and DC, which are too small to click on the map. */
+function CalloutChips({
+  callouts,
+  selected,
+  onSelect,
+  stage = false,
+}: {
+  callouts: PresMapState[];
+  selected: string | null;
+  onSelect: (id: string | null) => void;
+  stage?: boolean;
+}) {
+  return (
+    <div style={{ marginTop: stage ? 0 : 14, marginBottom: stage ? 8 : 0 }}>
+      <div style={{ ...BLEND_LABEL, marginBottom: 6 }}>Small states and DC</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+        {callouts.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onSelect(s.id === selected && !stage ? null : s.id)}
+            title={
+              s.caption
+                ? `${s.name}: ${s.caption}`
+                : `${s.name}: ${s.leaderName} +${s.margin.toFixed(1)}pp`
+            }
+            aria-label={
+              s.caption
+                ? `${s.name}, ${s.ev} electoral votes, ${s.caption}`
+                : `${s.name}, ${s.ev} electoral votes, ${s.leaderName} leads by ${s.margin.toFixed(1)} points`
+            }
+            aria-pressed={s.id === selected}
+            style={{
+              display: "inline-flex",
+              alignItems: "baseline",
+              gap: 6,
+              padding: "6px 9px",
+              cursor: "pointer",
+              font: "inherit",
+              fontFamily: FONT.mono,
+              fontSize: 11,
+              color: s.ink,
+              background: s.fill,
+              border: `1px solid ${s.id === selected ? BLEND.ink : "transparent"}`,
+            }}
+          >
+            <b style={{ fontWeight: 700 }}>{s.id}</b>
+            {stateFigure(s) ? <span style={{ opacity: 0.8 }}>{stateFigure(s)}</span> : null}
+            {s.broadcast || s.evLabel !== undefined ? null : (
+              <span style={{ opacity: 0.65, fontSize: 10 }}>+{s.margin.toFixed(1)}</span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** State outlines drawn over the county layer, so state lines stay legible. */
+function StateBorders({ geo, ids, opacity }: { geo: StateGeo[]; ids: string[]; opacity: number }) {
+  const set = new Set(ids);
+  return (
+    <g opacity={opacity} pointerEvents="none">
+      {geo
+        .filter((g) => set.has(g.id))
+        .map((g) => (
+          <path
+            key={g.id}
+            d={g.d}
+            fill="none"
+            stroke={BLEND.ink}
+            strokeOpacity={0.55}
+            strokeWidth={1.2}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+    </g>
+  );
+}
+
+/** Bottom-left readout on the stage: how to drive it, and where counties begin. */
+function StageHint({
+  k,
+  countiesOn,
+  loading,
+}: {
+  k: number;
+  countiesOn: boolean;
+  loading: boolean;
+}) {
+  const text = !countiesOn
+    ? "SCROLL TO ZOOM / DRAG TO PAN"
+    : k < COUNTY_ZOOM
+      ? "SCROLL OR DOUBLE-CLICK A STATE TO ZOOM IN FOR COUNTY RESULTS"
+      : loading
+        ? "LOADING COUNTY RESULTS..."
+        : "COUNTY RESULTS";
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 10,
+        left: 12,
+        padding: "3px 7px",
+        background: "rgba(14,14,20,.78)",
+        fontFamily: FONT.mono,
+        fontSize: 10,
+        letterSpacing: ".08em",
+        color: BLEND.mutedDim,
+        pointerEvents: "none",
+      }}
+    >
+      {text}
+      <span style={{ marginLeft: 10, opacity: 0.7 }}>{k.toFixed(1)}x</span>
+    </div>
+  );
+}
+
+function CountyTip({
+  county,
+  state,
+  x,
+  y,
+  frameWidth,
+}: {
+  county: CountyRow;
+  state: PresMapState;
+  x: number;
+  y: number;
+  frameWidth: number;
+}) {
+  const flip = x > frameWidth - 230;
+  return (
+    <div
+      role="tooltip"
+      style={{
+        position: "absolute",
+        left: flip ? x - 14 : x + 14,
+        top: Math.max(4, y - 10),
+        transform: flip ? "translateX(-100%)" : undefined,
+        pointerEvents: "none",
+        zIndex: 5,
+        padding: "8px 10px",
+        minWidth: 180,
+        background: BLEND.page,
+        border: `1px solid ${BLEND.hairlineStrong}`,
+        boxShadow: "0 6px 18px rgba(0,0,0,.5)",
+        fontSize: 12.5,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 14, fontWeight: 600 }}>
+        <span>{county.name}</span>
+        <span style={{ fontFamily: FONT.mono, fontWeight: 500, color: BLEND.muted }}>
+          {state.id}
+        </span>
+      </div>
+      {county.winnerName ? (
+        <div
+          style={{
+            marginTop: 4,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            color: BLEND.muted,
+          }}
+        >
+          <i
+            aria-hidden
+            style={{ width: 8, height: 8, display: "block", background: county.winnerColor }}
+          />
+          {county.winnerName}
+          <span style={{ fontFamily: FONT.mono, fontSize: 11 }}>+{county.margin.toFixed(1)}pp</span>
+        </div>
+      ) : null}
+      <div style={{ marginTop: 2, fontFamily: FONT.mono, fontSize: 11, color: BLEND.mutedDim }}>
+        {Math.round(county.votes).toLocaleString("en-US")} votes
+      </div>
     </div>
   );
 }
@@ -433,6 +757,7 @@ function ControlButton({
 }
 
 function MapControls({
+  stage,
   unlocked,
   canZoomIn,
   canZoomOut,
@@ -441,6 +766,7 @@ function MapControls({
   onZoom,
   onReset,
 }: {
+  stage: boolean;
   unlocked: boolean;
   canZoomIn: boolean;
   canZoomOut: boolean;
@@ -453,32 +779,34 @@ function MapControls({
     <div
       style={{
         position: "absolute",
-        top: 8,
-        left: 8,
+        top: stage ? 36 : 8,
+        left: stage ? 14 : 8,
         display: "flex",
         flexDirection: "column",
         gap: 4,
       }}
     >
-      <ControlButton
-        label={unlocked ? "Lock map (page scrolling resumes)" : "Unlock map to pan and zoom"}
-        onClick={onToggle}
-        active={unlocked}
-      >
-        <svg
-          width="15"
-          height="15"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          aria-hidden
+      {stage ? null : (
+        <ControlButton
+          label={unlocked ? "Lock map (page scrolling resumes)" : "Unlock map to pan and zoom"}
+          onClick={onToggle}
+          active={unlocked}
         >
-          <rect x="3" y="7" width="10" height="7" />
-          {unlocked ? <path d="M5 7V5a3 3 0 0 1 5.6-1.5" /> : <path d="M5 7V5a3 3 0 0 1 6 0v2" />}
-        </svg>
-      </ControlButton>
-      {unlocked ? (
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            aria-hidden
+          >
+            <rect x="3" y="7" width="10" height="7" />
+            {unlocked ? <path d="M5 7V5a3 3 0 0 1 5.6-1.5" /> : <path d="M5 7V5a3 3 0 0 1 6 0v2" />}
+          </svg>
+        </ControlButton>
+      )}
+      {stage || unlocked ? (
         <>
           <ControlButton label="Zoom in" onClick={() => onZoom(1)} disabled={!canZoomIn}>
             +
@@ -538,7 +866,7 @@ function HoverTip({
       <div style={{ display: "flex", justifyContent: "space-between", gap: 14, fontWeight: 600 }}>
         <span>{state.name}</span>
         <span style={{ fontFamily: FONT.mono, fontWeight: 500, color: BLEND.muted }}>
-          {state.ev} EV
+          {state.evLabel !== undefined ? state.evLabel : `${state.ev} EV`}
         </span>
       </div>
       {state.leaderName ? (
