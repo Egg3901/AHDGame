@@ -58,6 +58,7 @@ vi.mock("@/contexts/RegisteredCountriesContext", () => {
 
 vi.mock("@/hooks/useGameEvents", () => ({
   useGameTurnStatus: () => null,
+  useGameEvents: () => {},
 }));
 
 vi.mock("@/lib/observability/fetchJson", () => ({
