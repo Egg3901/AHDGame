@@ -22,6 +22,8 @@ export interface CampaignSummary {
   managerName: string | null;
   isExact: boolean;
   isMine?: boolean;
+  /** Only on the reader's own campaign. */
+  budget?: { netIncome: number };
 }
 
 /** Sum of a campaign's four operation levels. */
@@ -32,8 +34,8 @@ export function totalCampaignLevels(campaign: CampaignSummary): number {
 /**
  * The campaigns running in an election, with the API's fog-of-war applied.
  *
- * Shared by the standalone campaigns panel and the presidential general
- * screen's tickets table. `refreshKey` refetches without flashing the loading
+ * Shared by the presidential general screen's tickets table and the primary
+ * screen's field table. `refreshKey` refetches without flashing the loading
  * state, so a table that is already on screen does not blank on every turn.
  */
 export function useElectionCampaigns(
