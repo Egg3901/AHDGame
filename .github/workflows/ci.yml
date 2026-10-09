@@ -247,7 +247,9 @@ jobs:
           # Webpack build workers release each compiler before page generation.
           npm run verify:build -- --webpack
         env:
-          NODE_OPTIONS: --max-old-space-size=6144
+          # The webpack compile reached the 6 GB heap limit with 8 GB of runner
+          # RAM still available. Leave 6 GB for native allocations and the OS.
+          NODE_OPTIONS: --max-old-space-size=10240
           CI: "true"
           # One static-generation worker. Three exhausted the 16 GB runner and
           # got its agent killed in about one build in five; two still did on
@@ -270,6 +272,14 @@ jobs:
       - name: Start isolated Mongo replica set
         run: |
           docker run --detach --name federation-mongo --publish 27991:27017 mongo:8.0 --replSet federationQualification --bind_ip_all
+          # Wait until the entrypoint finishes chown before mongosh can create
+          # files in /data/db. Probing earlier can make that chown fail.
+          mongo_started=0
+          for attempt in $(seq 1 60); do
+            if docker logs federation-mongo 2>&1 | grep -q 'Waiting for connections'; then mongo_started=1; break; fi
+            sleep 1
+          done
+          test "$mongo_started" = 1
           for attempt in $(seq 1 30); do
             if docker exec federation-mongo mongosh --quiet --eval 'quit(db.adminCommand({ping: 1}).ok ? 0 : 1)'; then break; fi
             sleep 1
