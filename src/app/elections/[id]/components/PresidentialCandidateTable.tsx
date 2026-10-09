@@ -7,6 +7,7 @@ import { formatVotes } from "./ElectionDetailHelpers";
 import type { CandidateDetail } from "./ElectionDetailTypes";
 import { CsInfoIcon } from "./CsInfoIcon";
 import { NppAbbr } from "@/components/elections/NppAbbr";
+import { GlossaryTerm } from "@/components/ui/GlossaryTerm";
 import { countedTurns } from "@/lib/elections/snapshotTurns";
 
 /**
@@ -107,14 +108,30 @@ export function PresidentialCandidateTable({
               <th className="px-3 py-3">#</th>
               <th className="px-3 py-3">Candidate</th>
               <th className="hidden px-3 py-3 lg:table-cell">Running mate</th>
-              <th className="px-3 py-3 text-right">EV</th>
+              <th className="px-3 py-3 text-right">
+                <GlossaryTerm
+                  term="Electoral votes"
+                  label="EV"
+                  definition="Electoral votes won. A candidate needs a majority of the electoral college to win outright."
+                />
+              </th>
               <th className="px-3 py-3 text-right">Vote %</th>
               <th className="px-3 py-3 text-right">Votes</th>
-              <th className="hidden px-3 py-3 text-right lg:table-cell">Fav</th>
-              <th className="hidden px-3 py-3 text-right lg:table-cell">NPI</th>
+              <th className="hidden px-3 py-3 text-right lg:table-cell">
+                <GlossaryTerm term="favorability" label="Fav" />
+              </th>
+              <th className="hidden px-3 py-3 text-right lg:table-cell">
+                <GlossaryTerm term="NPI" />
+              </th>
               <th className="hidden px-3 py-3 text-right lg:table-cell">Cash</th>
               {showCampaignStrength && (
-                <th className="hidden px-3 py-3 text-right lg:table-cell">CS</th>
+                <th className="hidden px-3 py-3 text-right lg:table-cell">
+                  <GlossaryTerm
+                    term="Campaign strength"
+                    label="CS"
+                    definition="Built up by players contributing to the campaign. It multiplies the candidate's votes, up to double at very high strength."
+                  />
+                </th>
               )}
               <th className="hidden px-3 py-3 text-center lg:table-cell">Endorsements</th>
               {canEndorse && <th className="px-3 py-3 text-center">Endorse</th>}

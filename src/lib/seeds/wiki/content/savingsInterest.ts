@@ -30,10 +30,10 @@ When the [Central Bank Chair](/wiki/central-banks) raises rates, your savings yi
 
 ## Per-turn accrual
 
-Interest accrues **every turn** but is only **credited quarterly** (every 12 turns, i.e. \`TURNS_PER_YEAR / 4\`). The per-turn accrual is:
+Interest accrues **every turn** but is only **credited quarterly** (every 12 turns, a quarter of the 48-turn game year). The per-turn accrual is:
 
 \`\`\`
-perTurnAccrual = balance × (APY / 100) / TURNS_PER_YEAR
+perTurnAccrual = balance × (APY / 100) / 48
 \`\`\`
 
 With 48 turns per year and a real rate of 4% (APY 2%):

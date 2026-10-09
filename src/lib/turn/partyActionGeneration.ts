@@ -235,7 +235,7 @@ export async function processPartyActionGeneration(
         category: "ps_investment",
         direction: "debit",
         amount: gain.investmentDebit,
-        memo: `PS investment budget ($${gain.investmentDebit.toLocaleString()})`,
+        memo: `Political Strength purchase ($${gain.investmentDebit.toLocaleString()})`,
         turn,
         now,
       });
@@ -382,7 +382,7 @@ export async function processPartyActionGeneration(
         category: "ps_investment",
         direction: "debit",
         amount: gain.investmentDebit,
-        memo: `PS investment budget ($${gain.investmentDebit.toLocaleString()})`,
+        memo: `Political Strength purchase ($${gain.investmentDebit.toLocaleString()})`,
         turn,
         now,
       });

@@ -58,7 +58,7 @@ describe("BuildOrgPanel", () => {
     renderPanel();
     await waitFor(() => expect(screen.getByText("This click")).toBeTruthy());
     expect(screen.getByText("Cost")).toBeTruthy();
-    expect(screen.getByText("Org share")).toBeTruthy();
+    expect(screen.getByText("Organization share")).toBeTruthy();
     expect(screen.getByText(/\+1\.25/)).toBeTruthy();
   });
 
@@ -144,7 +144,7 @@ describe("BuildOrgPanel", () => {
     renderPanel({ canBuildOrg: false });
     await waitFor(() =>
       expect(
-        (screen.getByRole("button", { name: "Build org" }) as HTMLButtonElement).disabled
+        (screen.getByRole("button", { name: "Build organization" }) as HTMLButtonElement).disabled
       ).toBe(true)
     );
   });
@@ -175,9 +175,10 @@ describe("BuildOrgPanel", () => {
       })
     );
     renderPanel({ ps: 30 });
-    await waitFor(() => expect(screen.getByText("National PS")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("National party PS")).toBeTruthy());
     expect(screen.getByText("4")).toBeTruthy();
-    expect(screen.getByText(/\/ Nat'l/)).toBeTruthy();
+    // The national cap is not loaded on this panel, so no "/ cap" suffix is shown.
+    expect(screen.queryByText(/^\/ /)).toBeNull();
   });
 
   // ── Treasury cost (2026-09-02) ──────────────────────────────────────────
@@ -269,8 +270,8 @@ describe("BuildOrgPanel", () => {
     );
     renderPanel();
 
-    const stateButton = await screen.findByRole("button", { name: /State PS/ });
-    const nationalButton = screen.getByRole("button", { name: /Nat'l PS/ });
+    const stateButton = await screen.findByRole("button", { name: /\(state PS\)/ });
+    const nationalButton = screen.getByRole("button", { name: /\(national PS\)/ });
     // US state 37,500 × 0.075 = 2,813; national 75,000 × 0.075 = 5,625.
     expect(stateButton.getAttribute("title")).toMatch(/\$2,813/);
     expect(nationalButton.getAttribute("title")).toMatch(/\$5,625/);
@@ -308,8 +309,8 @@ describe("BuildOrgPanel", () => {
     );
     renderPanel();
 
-    const stateButton = await screen.findByRole("button", { name: /State PS/ });
-    const nationalButton = screen.getByRole("button", { name: /Nat'l PS/ });
+    const stateButton = await screen.findByRole("button", { name: /\(state PS\)/ });
+    const nationalButton = screen.getByRole("button", { name: /\(national PS\)/ });
     // 2x the flat rates: state 2,813 -> 5,625 ; national 5,625 -> 11,250.
     expect(stateButton.getAttribute("title")).toMatch(/\$5,625/);
     expect(nationalButton.getAttribute("title")).toMatch(/\$11,250/);
@@ -361,12 +362,12 @@ describe("BuildOrgPanel", () => {
     renderPanel({ ps: 5 });
 
     const stateButton = (await screen.findByRole("button", {
-      name: /State PS/,
+      name: /\(state PS\)/,
     })) as HTMLButtonElement;
     expect(stateButton.disabled).toBe(true);
-    expect(stateButton.getAttribute("title")).toMatch(/Need 8 PS.*state pool has 5/);
+    expect(stateButton.getAttribute("title")).toMatch(/Need 8 PS.*state party has 5/);
     // The national pool still covers it, so that button stays live.
-    const nationalButton = screen.getByRole("button", { name: /Nat'l PS/ });
+    const nationalButton = screen.getByRole("button", { name: /\(national PS\)/ });
     expect((nationalButton as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -375,12 +376,12 @@ describe("BuildOrgPanel", () => {
     renderPanel({ ps: 2 });
 
     const stateButton = (await screen.findByRole("button", {
-      name: /State PS/,
+      name: /\(state PS\)/,
     })) as HTMLButtonElement;
-    const nationalButton = screen.getByRole("button", { name: /Nat'l PS/ });
+    const nationalButton = screen.getByRole("button", { name: /\(national PS\)/ });
     expect(stateButton.disabled).toBe(true);
     expect((nationalButton as HTMLButtonElement).disabled).toBe(true);
-    expect(nationalButton.getAttribute("title")).toMatch(/Need 6 PS.*national pool has 2/);
+    expect(nationalButton.getAttribute("title")).toMatch(/Need 6 PS.*national party has 2/);
   });
 
   it("keeps the buttons live when the reserve covers the ladder cost", async () => {
@@ -388,7 +389,7 @@ describe("BuildOrgPanel", () => {
     renderPanel({ ps: 5 });
 
     const stateButton = (await screen.findByRole("button", {
-      name: /State PS/,
+      name: /\(state PS\)/,
     })) as HTMLButtonElement;
     expect(stateButton.disabled).toBe(false);
   });

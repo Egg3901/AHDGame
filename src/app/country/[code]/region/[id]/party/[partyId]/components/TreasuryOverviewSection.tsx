@@ -123,7 +123,7 @@ export function TreasuryOverviewSection({
               <div
                 className="bg-warning/70 transition-all"
                 style={{ width: `${psPct}%` }}
-                title={`PS Investment: ${psPct.toFixed(0)}%`}
+                title={`Political Strength purchases: ${psPct.toFixed(0)}%`}
               />
             )}
             <div
@@ -148,7 +148,7 @@ export function TreasuryOverviewSection({
             {psPct > 0 && (
               <span className="flex items-center gap-1">
                 <span className="inline-block h-2 w-2 rounded-sm bg-warning/70" />
-                PS investment {psPct.toFixed(0)}%
+                Political Strength {psPct.toFixed(0)}%
               </span>
             )}
             <span className="flex items-center gap-1">
@@ -245,13 +245,13 @@ export function TreasuryOverviewSection({
             return (
               <div className="px-6 py-3 flex items-center justify-between text-sm">
                 <span className="text-muted">
-                  PS investment spending / hr
-                  <FundraisingTooltip text="Treasury automatically converted each turn to grow state party strength, up to your budget. Nothing is spent while you're at your PS cap — there's no headroom to invest into." />
+                  Political Strength purchases / hr
+                  <FundraisingTooltip text="Treasury money spent each turn buying Political Strength (PS) for the state party, up to your PS budget. Nothing is spent while the party's PS is already at its maximum." />
                 </span>
                 <span className="tabular-nums font-medium text-error flex items-center gap-1.5">
                   {atPsCap && psSpend <= 0 && (
                     <span className="text-xs font-normal text-muted px-1.5 py-0.5 rounded bg-warning/10 border border-warning/30">
-                      at PS cap
+                      PS full
                     </span>
                   )}
                   <span>
@@ -267,7 +267,7 @@ export function TreasuryOverviewSection({
         <div className="px-6 py-3.5 flex items-center justify-between text-sm font-semibold bg-background/20">
           <span>
             Net income / hr
-            <FundraisingTooltip text="Revenue minus GOTV, suppression, and PS investment spending. The actual amount added to the treasury each turn." />
+            <FundraisingTooltip text="Revenue minus get-out-the-vote, suppression, and Political Strength spending. The actual amount added to the treasury each turn." />
           </span>
           {isMember || user?.isAdmin ? (
             <span className={`tabular-nums ${netIncome >= 0 ? "text-success" : "text-error"}`}>

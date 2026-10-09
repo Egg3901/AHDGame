@@ -32,7 +32,7 @@ without corporation snapshot:
 Annualises per-turn income and maps it through a saturating exponential (a curve that grows fast at first then levels off) so that very high income asymptotically approaches 100:
 
 \`\`\`
-annualIncome   = perTurnIncome × TURNS_PER_YEAR
+annualIncome   = perTurnIncome × 48   // turns per year
 incomeScore    = 100 × (1 − exp(−k_income × annualIncome))
 // saturates near 100 at ~2.5M annual income
 \`\`

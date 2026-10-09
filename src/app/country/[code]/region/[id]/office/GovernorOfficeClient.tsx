@@ -184,7 +184,7 @@ export function GovernorOfficeClient(props: Props) {
               </div>
             )}
             <div className="flex flex-col px-5 py-3">
-              <span className="text-body-sm font-medium text-muted">Office AP</span>
+              <span className="text-body-sm font-medium text-muted">Office action points</span>
               <span className="text-base font-bold tabular-nums">
                 {props.gubernatorialActions}/{GUBERNATORIAL_ACTION_CAP}
               </span>

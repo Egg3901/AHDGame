@@ -79,10 +79,10 @@ export function BuildOrgControl({
           : others.length === 2
             ? `${others[0]} and ${others[1]}`
             : `${others.slice(0, -1).join(", ")}, and ${others[others.length - 1]}`;
-      return `${focusPartyAbbr} is tied with ${otherList} at ${topOrgPct.toFixed(1)}% Org.`;
+      return `${focusPartyAbbr} is tied with ${otherList} at ${topOrgPct.toFixed(1)}% Organization.`;
     }
     if (isLeader) {
-      return `${focusPartyAbbr} leads the state with ${topOrgPct.toFixed(1)}% Org.`;
+      return `${focusPartyAbbr} leads the state with ${topOrgPct.toFixed(1)}% Organization.`;
     }
     return (
       `${focusPartyAbbr} ranks ${narrative.rank} of ${narrative.totalParties}, ` +
@@ -127,7 +127,7 @@ export function BuildOrgControl({
       });
       const d = await r.json();
       if (!r.ok) {
-        showToast(apiErrorText(d, "Build Org failed"), "error");
+        showToast(apiErrorText(d, "Build Organization failed"), "error");
         return;
       }
       const cashCost = d.cashCost as number | undefined;
@@ -136,7 +136,7 @@ export function BuildOrgControl({
           ? ` and ${CURRENCY_SYMBOLS[buildOrgCurrency as keyof typeof CURRENCY_SYMBOLS] ?? "$"}${Math.round(cashCost).toLocaleString("en-US")}`
           : "";
       showToast(
-        `+${(d.contributionUnits as number).toFixed(0)} Org unit, share ${(d.orgGain as number) >= 0 ? "+" : ""}${(d.orgGain as number).toFixed(2)}% for ${(d.psCost as number).toFixed(0)} PS${cash}`,
+        `Organization ${(d.orgGain as number) >= 0 ? "+" : ""}${(d.orgGain as number).toFixed(2)}% for ${(d.psCost as number).toFixed(0)} PS${cash}`,
         "success"
       );
       // Apply the server's next-click estimate immediately so the line reflects
@@ -159,8 +159,8 @@ export function BuildOrgControl({
   // foothold, so we don't duplicate that check client-side.
   const buildOrgDisabled = !viewerPartyId || busy;
   const buildOrgTitle = !viewerPartyId
-    ? "Join a party to build Org in this state"
-    : "Spend Political Strength to grow your party's Org in this state (requires a player or official here)";
+    ? "Join a party to build organization in this state"
+    : "Spend Political Strength to grow your party's Organization in this state (needs a party player or official here)";
 
   const buttonClass =
     "rounded-lg bg-primary px-3.5 py-2 text-body font-semibold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50";
@@ -180,11 +180,11 @@ export function BuildOrgControl({
                 className={buttonClass}
                 title={
                   poolPS
-                    ? `Build Org from state pool (${poolPS.statePoolPS.toFixed(0)} PS)`
+                    ? `Spend the state party's PS (has ${poolPS.statePoolPS.toFixed(0)})`
                     : buildOrgTitle
                 }
               >
-                {busy ? "Building…" : "Build org with state PS"}
+                {busy ? "Building…" : "Build Organization (state party PS)"}
               </button>
             )}
             {eligibleScopes?.national && (
@@ -195,11 +195,11 @@ export function BuildOrgControl({
                 className={buttonClass}
                 title={
                   poolPS
-                    ? `Build Org from national pool (${poolPS.nationalPoolPS.toFixed(0)} PS)`
+                    ? `Spend the national party's PS (has ${poolPS.nationalPoolPS.toFixed(0)})`
                     : buildOrgTitle
                 }
               >
-                {busy ? "Building…" : "Build org with national PS"}
+                {busy ? "Building…" : "Build Organization (national party PS)"}
               </button>
             )}
           </>
@@ -211,36 +211,35 @@ export function BuildOrgControl({
             className={buttonClass}
             title={buildOrgTitle}
           >
-            {busy ? "Building…" : "Build org"}
+            {busy ? "Building…" : "Build Organization"}
           </button>
         )}
         {!viewerPartyId && (
-          <span className="text-body-sm text-muted">Join a party to build Org here.</span>
+          <span className="text-body-sm text-muted">Join a party to build organization here.</span>
         )}
       </div>
 
       {estimate?.ok ? (
         <div className="space-y-0.5">
           <p className="text-body-sm text-muted">
-            Next click costs{" "}
+            Next build costs{" "}
             <span className="font-medium tabular-nums text-foreground">
               {estimate.effectiveCost.toFixed(0)} PS
               {estimate.cashPrice !== undefined
                 ? ` and ${CURRENCY_SYMBOLS[buildOrgCurrency as keyof typeof CURRENCY_SYMBOLS] ?? "$"}${Math.round(estimate.cashPrice).toLocaleString("en-US")}`
                 : ""}
             </span>{" "}
-            for{" "}
+            and adds{" "}
             <span className="font-medium tabular-nums text-foreground">
-              +{estimate.contributionUnits.toFixed(0)} unit (
               {estimate.projectedGain >= 0 ? "+" : ""}
-              {estimate.projectedGain.toFixed(2)}% share)
+              {estimate.projectedGain.toFixed(2)}% Organization
             </span>
             .
           </p>
           {estimate.fundedFraction !== undefined && estimate.fundedFraction < 1 ? (
             <span className="block text-body-sm text-warning">
-              Partly funded: the treasury covers {Math.round(estimate.fundedFraction * 100)}% of
-              this click.
+              Partly funded: the party treasury covers {Math.round(estimate.fundedFraction * 100)}%
+              of this build.
             </span>
           ) : null}
         </div>

@@ -296,7 +296,7 @@ export function StatePartyAnalyticsTab({
       <section className="space-y-4">
         <SectionHeader
           title="Local organization"
-          description="This section shows the state party's current bucket-derived organization share. Build Org adds fixed contribution units, and organization can decay if the party becomes inactive here."
+          description="The state party's share of all the organization built in this state. Build Organization adds to it, and a party that stops building here slowly loses share."
           link={data.links.treasury}
         />
         {data.org ? (

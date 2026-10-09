@@ -142,7 +142,7 @@ export function TreasuryOverview({
               <div
                 className="bg-warning transition-all hover:bg-warning/90"
                 style={{ width: `${psPct}%` }}
-                title={`PS Investment: ${psPct.toFixed(0)}%`}
+                title={`Political Strength purchases: ${psPct.toFixed(0)}%`}
               />
             )}
             <div
@@ -168,7 +168,7 @@ export function TreasuryOverview({
             {psPct > 0 && (
               <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-warning/10 text-warning border border-warning/20">
                 <span className="h-2 w-2 rounded-full bg-warning" />
-                PS investment {psPct.toFixed(0)}%
+                Political Strength {psPct.toFixed(0)}%
               </span>
             )}
             <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-success/10 text-success border border-success/20">
@@ -271,14 +271,14 @@ export function TreasuryOverview({
             return (
               <div className="px-6 py-4 flex items-center justify-between text-sm group hover:bg-card-elevated/20 transition-colors">
                 <span className="text-foreground font-medium flex items-center gap-2">
-                  PS investment spending / hr
-                  <Tooltip text="Treasury automatically converted each turn to grow national party strength, up to your budget. Nothing is spent while you're at your PS cap — there's no headroom to invest into." />
+                  Political Strength purchases / hr
+                  <Tooltip text="Treasury money spent each turn buying Political Strength (PS) for the national party, up to your PS budget. Nothing is spent while the party's PS is already at its maximum." />
                 </span>
                 <span className="tabular-nums font-medium text-error">
                   <div className="flex items-center gap-2">
                     {atPsCap && psSpend <= 0 && (
                       <span className="text-xs font-normal text-muted px-1.5 py-0.5 rounded bg-warning/10 border border-warning/30">
-                        at PS cap
+                        PS full
                       </span>
                     )}
                     <span>-{fmt(psSpend, party.countryId)}</span>
@@ -294,7 +294,7 @@ export function TreasuryOverview({
         <div className="px-6 py-4 flex items-center justify-between text-sm font-bold bg-card-muted/20">
           <span className="flex items-center gap-2">
             Net income / hr
-            <Tooltip text="Revenue minus GOTV, suppression, and PS investment spending. The actual amount added to the treasury each turn." />
+            <Tooltip text="Revenue minus get-out-the-vote, suppression, and Political Strength spending. The actual amount added to the treasury each turn." />
           </span>
           {isInParty || isAdmin ? (
             <span className={`tabular-nums ${netIncome >= 0 ? "text-success" : "text-error"}`}>

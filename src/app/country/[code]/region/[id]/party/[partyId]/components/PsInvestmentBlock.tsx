@@ -27,7 +27,7 @@ interface PsInvestmentBlockProps {
 
 /**
  * Chair-set per-turn PS investment budget input, with live-preview of
- * expected `+PS / turn` and a clamp warning if the budget exceeds the
+ * expected PS per turn and a clamp warning if the budget exceeds the
  * `PS_INVESTMENT_MAX_TIERS` cap. Used on both the State Treasurer tab and
  * the National Party Hub.
  *
@@ -61,7 +61,7 @@ export function PsInvestmentBlock({
 
   return (
     <div className="px-6 py-5 border-b border-card-border/40">
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-1">
         <svg
           className="h-4 w-4 text-muted"
           fill="none"
@@ -71,12 +71,21 @@ export function PsInvestmentBlock({
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
-        <div className="text-body-sm font-medium text-muted">PS investment / turn</div>
+        <div className="text-body-sm font-medium text-muted">
+          Political Strength (PS) budget per turn
+        </div>
       </div>
+      <p className="mb-3 text-xs text-muted leading-snug">
+        PS is what the party spends to build Organization in states (the Build Organization buttons
+        on each state page) and to campaign for its candidates. The party gets{" "}
+        <span className="font-semibold">{flatPassivePerTurn} PS</span> free every turn. Set a budget
+        here to buy more from the treasury.
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         <Input
           type="text"
           inputMode="decimal"
+          aria-label="Political Strength budget per turn"
           placeholder={`Up to ${fmt(psInvestmentMaxDisplay, countryId)}`}
           value={psInvestmentBudget}
           onChange={(e) => setPsInvestmentBudget(e.target.value)}
@@ -91,41 +100,39 @@ export function PsInvestmentBlock({
           {savingPsInvestment ? "Saving…" : "Save"}
         </button>
         <div className="text-xs tabular-nums">
-          <span className="text-muted">From spend: </span>
+          <span className="text-muted">Buys: </span>
           <span className={`font-bold ${overCap ? "text-error" : "text-success"}`}>
-            +{explicitPsPerTurn.toFixed(2)} PS / turn
+            +{explicitPsPerTurn.toFixed(2)} PS per turn
           </span>
         </div>
       </div>
       <div className="mt-2 rounded-md border border-card-border/40 bg-background/30 px-3 py-2 text-xs">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <span className="text-muted text-body-sm font-medium">Total this turn</span>
+          <span className="text-muted text-body-sm font-medium">PS gained per turn</span>
           <span className="tabular-nums font-bold text-success">
-            +{totalPsPerTurn.toFixed(2)} PS / turn
+            +{totalPsPerTurn.toFixed(2)} PS
           </span>
         </div>
         <div className="mt-1 text-[11px] text-muted leading-relaxed">
-          <span className="font-semibold">+{flatPassivePerTurn}</span> flat passive (every turn, no
-          treasury needed) + <span className="font-semibold">+{explicitPsPerTurn.toFixed(2)}</span>{" "}
-          from your spend below.
+          <span className="font-semibold">{flatPassivePerTurn}</span> free +{" "}
+          <span className="font-semibold">{explicitPsPerTurn.toFixed(2)}</span> bought with your
+          budget
         </div>
       </div>
       <div className="mt-2 text-xs text-muted leading-snug">
-        A flat <span className="font-semibold">+{flatPassivePerTurn} PS / turn</span> applies every
-        turn regardless of treasury. Your <span className="font-semibold">spend</span> debits
-        treasury and converts to PS at{" "}
-        <span className="font-semibold">{fmt(psInvestmentRateDisplay, countryId)} / +1 PS</span>, up
-        to <span className="font-semibold">+{PS_INVESTMENT_MAX_TIERS} PS / turn</span>. Growth is
-        limited only by the hard cap — near it, spend buys (and is charged for) just the PS that
-        fits below the cap.
+        Every <span className="font-semibold">{fmt(psInvestmentRateDisplay, countryId)}</span> of
+        budget buys 1 PS, up to{" "}
+        <span className="font-semibold">{PS_INVESTMENT_MAX_TIERS} PS per turn</span>. The money
+        comes out of the party treasury each turn. Once the party&apos;s PS reserve is full, nothing
+        more is bought or charged.
       </div>
       {overCap && (
         <div className="mt-1 text-xs text-error">
-          Budget exceeds the {fmt(psInvestmentMaxDisplay, countryId)} cap (max +
-          {PS_INVESTMENT_MAX_TIERS} PS / turn).
+          Budget is over the {fmt(psInvestmentMaxDisplay, countryId)} limit, which already buys the
+          maximum of {PS_INVESTMENT_MAX_TIERS} PS per turn.
         </div>
       )}
-      <div className="mt-1 text-xs text-muted">Available: {fmt(treasury, countryId)}</div>
+      <div className="mt-1 text-xs text-muted">Party treasury: {fmt(treasury, countryId)}</div>
     </div>
   );
 }

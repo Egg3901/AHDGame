@@ -34,9 +34,9 @@ export function StatePartyMap({
         color: orgFill(value),
         label: r.name,
         tooltip: [
-          `Org: ${r.organization.toFixed(0)}%`,
-          `Reg: ${r.registrationPct.toFixed(0)}%`,
-          `PS: ${r.politicalStrength.toFixed(0)}`,
+          `Organization: ${r.organization.toFixed(0)}%`,
+          `Registration: ${r.registrationPct.toFixed(0)}%`,
+          `Political Strength: ${r.politicalStrength.toFixed(0)}`,
           `NPPs: ${r.nppCount}`,
         ],
       };
