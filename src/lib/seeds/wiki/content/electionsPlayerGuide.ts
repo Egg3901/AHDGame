@@ -2,6 +2,14 @@ export const electionsPlayerGuideContent = `# Elections: A Granular Player Guide
 
 The elections UI has three levels: the country election board, the individual race page, and your campaign page. Each answers a different question. This guide explains what to read, what moves a race, and where national political influence fits.
 
+## Results, maps and replay
+
+In normal multiplayer mode, general-election returns update at half past the hour as well as during the main hourly turn. Campaign budgets, action refresh and race deadlines stay on the main turn. A tick may be skipped while a turn is processing; faster returns do not mean another action allowance.
+
+Presidential races offer a full-screen map with state and county views, campaign presence and a road-to-270 strip for Electoral College races. Open a state in the map to inspect its results and campaign options. Popular-vote views answer a different question from the Electoral College count.
+
+For a finished presidential race with recorded weekly history, choose **Replay the campaign** above the map. Play or pause, or move the slider to a recorded week. Switch between electoral-vote leadership and popular-vote margin, and zoom into counties. Choose **Final result** to return to the concluded race. Replay follows stored campaign snapshots; it does not rerun the election or change its outcome.
+
 ## The three screens
 
 ### 1. Country election board

@@ -12,3 +12,5 @@ areas: [fullstack]
 ## What changed
 
 - Sponsoring a bill in the Bundestag, Supreme Soviet and other national legislatures now unlocks The First Draft.
+
+The achievement check runs once and cannot refund actions or fail a proposal after the bill has landed. Follow-up: #3665 (8642894934), including a regression for achievement-service failure.
