@@ -1,9 +1,12 @@
 "use client";
 
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { useGameEvents } from "@/hooks/useGameEvents";
 
 import { InlineError } from "@/components/ui/InlineError";
-import { apiErrorText } from "@/lib/errors/catalog";
+import { apiErrorText, newRequestRef, parseErrorBody } from "@/lib/errors/catalog";
+import { toDisplayError } from "@/lib/errors/client";
+import { captureClientExceptionWithId } from "@/lib/observability/sentryClientLazy";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
@@ -13,7 +16,7 @@ import BackButton from "@/components/BackButton";
 import { useToast } from "@/contexts/ToastContext";
 import { getExchangeForCountry } from "@/lib/constants/exchangeRegistry";
 import type { MoneyPeriod } from "@/lib/constants/moneyTimescale";
-import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import { CorporationMasthead } from "@/components/corporation/CorporationMasthead";
 import { HostileTakeoverCard } from "@/components/corporation/HostileTakeoverCard";
 import { SubsidiaryManagementCard } from "@/components/corporation/SubsidiaryManagementCard";
@@ -218,16 +221,26 @@ export default function CorporationDetailPage() {
         // Only set page-level error on initial load — refresh failures should not
         // destroy the entire page when we already have valid data displayed.
         setError(apiErrorText(data, "Corporation not found"));
-        setErrorRef(typeof data.eventId === "string" ? data.eventId : null);
+        setErrorRef(parseErrorBody(data).ref ?? null);
       } else {
         showToast(apiErrorText(data, "Failed to refresh corporation data"), "error");
       }
-    } catch {
+    } catch (err) {
+      const display = toDisplayError(err, "Failed to load corporation data");
+      const ref =
+        (await captureClientExceptionWithId(err, {
+          tags: { feature: "corporation-detail", error_code: display.code },
+          extra: { url: makeCorpApiUrl() },
+        })) ?? newRequestRef();
+      const message = apiErrorText(
+        { error: display.message, code: display.code, ref },
+        display.message
+      );
       if (!hasLoaded.current) {
-        setError("Network error");
-        setErrorRef(null);
+        setError(message);
+        setErrorRef(ref);
       } else {
-        showToast("Failed to refresh corporation data", "error");
+        showToast(message, "error");
       }
     } finally {
       hasLoaded.current = true;
@@ -1153,7 +1166,11 @@ export default function CorporationDetailPage() {
                       sectors={sectors}
                       isCeo={isCeo}
                       corpId={id}
-                      corporationType={corporation.type}
+                      corporationType={getOperatingSectorType(
+                        corporation.type,
+                        corporation.industryModel,
+                        corporation.mediaDiscriminator
+                      )}
                       corporationSecondaryType={corporation.secondaryType}
                       liquidCapital={corporation.liquidCapital}
                       liquidCurrencyCode={corporation.liquidCurrencyCode}
@@ -1173,13 +1190,9 @@ export default function CorporationDetailPage() {
                       plantsMode={corporation.plantsMode === true}
                       mediaOperatingModelsEnabled={corporation.mediaOperatingModelsEnabled === true}
                       expandOnMount={searchParams.get("expand") === "1"}
-                      expandSectorType={
-                        CORPORATION_TYPES.includes(
-                          searchParams.get("sectorType") as CorporationType
-                        )
-                          ? (searchParams.get("sectorType") as CorporationType)
-                          : undefined
-                      }
+                      expandSectorType={OPERATING_SECTOR_TYPES.find(
+                        (t) => t === searchParams.get("sectorType")
+                      )}
                       expandStateId={searchParams.get("state") ?? undefined}
                       onExpandDeepLinkConsumed={() => {
                         const p = new URLSearchParams(searchParams.toString());

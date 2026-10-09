@@ -1,3 +1,4 @@
+import { tradeCorporationFund } from "@/lib/indexFunds/corporationTrade";
 import { resumeFundCommandAudit } from "@/lib/indexFunds/playerCommandAudit";
 import {
   claimFundCommand,
@@ -68,6 +69,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       return errorResponse(parsed.status, parsed.error);
     }
     const { units, operationId, payCurrency } = parsed.data;
+    if (parsed.data.corporationId)
+      return tradeCorporationFund(
+        db,
+        auth.userId,
+        characterId,
+        fund,
+        { ...parsed.data, corporationId: parsed.data.corporationId },
+        "subscribe"
+      );
     claimedOperationId = operationId;
     const command = await claimFundCommand(db, characterId, operationId, {
       fundId: fund._id.toHexString(),

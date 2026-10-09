@@ -1,7 +1,8 @@
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import type { CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import { commandEconomySoeSectors } from "@/lib/constants/commandEconomy";
 import { NPP_CAPITAL_STATES } from "@/lib/admin/spawnNppCorporation";
 import { generateCountryOwnedSeedData } from "./budgets";
@@ -116,7 +117,13 @@ describe("generateCountryOwnedSeedData", () => {
         expect(soe.corporation.isPrimaryNationalCorporation).toBe(false);
         expect(soe.corporation.assignedSectorTypes).toEqual([st.sector]);
         expect(soe.sectors.length).toBeGreaterThan(0);
-        expect(soe.sectors.every((s) => s.sectorType === st.sector)).toBe(true);
+        expect(
+          soe.sectors.every(
+            (s) =>
+              getOperatingSectorType(s.sectorType, s.industryModel, s.mediaDiscriminator) ===
+              st.sector
+          )
+        ).toBe(true);
         expect(st.planTarget).toBeGreaterThan(0);
         expect(st.output).toBe(st.planTarget); // starts on-plan
         expect(st.directorId).toBeNull();
@@ -335,7 +342,13 @@ describe("generateCountryOwnedSeedData", () => {
           expect(soe.corporation.isPrimaryNationalCorporation).toBe(false);
           expect(soe.corporation.assignedSectorTypes).toEqual([st.sector]);
           expect(soe.sectors.length).toBeGreaterThan(0);
-          expect(soe.sectors.every((s) => s.sectorType === st.sector && s.revenue > 0)).toBe(true);
+          expect(
+            soe.sectors.every(
+              (s) =>
+                getOperatingSectorType(s.sectorType, s.industryModel, s.mediaDiscriminator) ===
+                  st.sector && s.revenue > 0
+            )
+          ).toBe(true);
           expect(st.planTarget).toBeGreaterThan(0);
           expect(st.output).toBe(st.planTarget);
           expect(st.directorId).toBeNull();
@@ -405,13 +418,14 @@ describe("generateCountryOwnedSeedData", () => {
         const soes = data.filter(
           (e) => e.corporation.countryOwnerId === countryId && e.corporation.soe
         );
-        expect(soes).toHaveLength(CORPORATION_TYPES.length);
+        expect(soes).toHaveLength(OPERATING_SECTOR_TYPES.length);
         const sectorCount = soes.reduce((n, e) => n + e.sectors.length, 0);
         const capacityStateCount = WARSAW_PACT_STATES[countryId].filter(
           (state) => Object.keys(capacity[`${countryId}:${state.id}`]?.resources ?? {}).length > 0
         ).length;
         expect(sectorCount).toBe(
-          (CORPORATION_TYPES.length - 1) * WARSAW_PACT_STATES[countryId].length + capacityStateCount
+          (OPERATING_SECTOR_TYPES.length - 1) * WARSAW_PACT_STATES[countryId].length +
+            capacityStateCount
         );
       }
     });
@@ -662,7 +676,7 @@ describe("generateCountryOwnedSeedData", () => {
           // (guards the fix from overcorrecting into a duplicate-seeding bug).
           // Eastern-bloc full SOE stack = one sector per CorporationType per state.
           expect(totalSectors).toBeGreaterThanOrEqual(states.length);
-          expect(totalSectors).toBeLessThanOrEqual(states.length * CORPORATION_TYPES.length);
+          expect(totalSectors).toBeLessThanOrEqual(states.length * OPERATING_SECTOR_TYPES.length);
         }
       });
     }

@@ -17,14 +17,14 @@ function seedEntry(corpId: ObjectId, stateIds: string[]): CountryOwnedSeedData {
       name: "East German Automobiles Enterprise",
       countryId: "DD",
       countryOwnerId: "DD",
-      type: "automobiles",
+      type: "manufacturing_vehicles",
     },
     sectors: stateIds.map((stateId) => ({
       _id: new ObjectId(),
       corporationId: corpId,
       countryId: "DD",
       stateId,
-      sectorType: "automobiles",
+      sectorType: "manufacturing_vehicles",
       revenue: 100,
     })),
   } as unknown as CountryOwnedSeedData;
@@ -69,7 +69,11 @@ describe("upsertCountryOwnedCorpEntries", () => {
 
     expect(result.repointed).toBe(1);
     const [filter, update] = db.collectionMocks.corporateSectors.updateOne.mock.calls[0];
-    expect(filter).toMatchObject({ countryId: "DD", stateId: "BEO", sectorType: "automobiles" });
+    expect(filter).toMatchObject({
+      countryId: "DD",
+      stateId: "BEO",
+      sectorType: "manufacturing_vehicles",
+    });
     expect(update).toEqual({ $set: { corporationId: CANONICAL_SOE } });
     // The stale enterprise AND the bare issuer are both candidates to move off.
     const staleIds = (filter.corporationId as { $in: ObjectId[] }).$in.map(String);

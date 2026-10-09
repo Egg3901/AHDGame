@@ -36,7 +36,9 @@ describe("manufacturing line gating", () => {
   });
 
   it("a dedicated vehicle sector can make cars but not appliances", () => {
-    const sectors = [plant("a", "standard", { sectorType: "automobiles" })];
+    const sectors = [
+      plant("a", "standard", { sectorType: "manufacturing", industryModel: "vehicles" }),
+    ];
     const available = ids(sectors);
     expect(available).toContain("passenger_car");
     expect(available).not.toContain("home_appliance");

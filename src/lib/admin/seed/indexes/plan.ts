@@ -131,6 +131,8 @@ export const LIVE_WORLD_MANUAL_SEED_INDEXES: Readonly<Record<string, string>> = 
   "apiAbuseScans.aas_detectedAt_ttl": TTL_REASON,
   "apiAccessLog.aal_timestamp_ttl": TTL_REASON,
   "auditAnomalies.auditAnomalies_detectedAt_ttl": TTL_REASON,
+  "checkpointRuns.checkpointRuns_startedAt":
+    "TTL index: checkpoint telemetry expires after seven days; the checkpoint recorder creates this index on running worlds",
   "financialTxLog.financialTxLog_expiresAt_ttl": TTL_REASON,
   "gameHealthSnapshots.ghs_timestamp_ttl": TTL_REASON,
   "identityObservations.identityObservations_lastSeen_ttl": TTL_REASON,

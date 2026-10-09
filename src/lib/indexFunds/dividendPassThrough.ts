@@ -16,6 +16,11 @@
  * corporation pays dividends.
  */
 
+import {
+  anchorToCorpLiquidCapital,
+  resolveCorpLiquidCurrencyCode,
+  loadFxRatesRecord,
+} from "@/lib/currency/corporationCapital";
 import type { Db, ObjectId } from "mongodb";
 import type {
   Character,
@@ -152,6 +157,26 @@ export async function processIndexFundDividend(
     .map((p) => p.imperialCharacterId!);
 
   const nppIds = positions.filter((p) => p.holderKind === "npp" && p.nppId).map((p) => p.nppId!);
+  const holderCorpIds = positions
+    .filter((p) => p.holderKind === "corporation" && p.corporationId)
+    .map((p) => p.corporationId!);
+  const holderCorps = holderCorpIds.length
+    ? await db
+        .collection<Corporation>("corporations")
+        .find(
+          { _id: { $in: holderCorpIds } },
+          { projection: { name: 1, liquidCurrencyCode: 1, countryId: 1 } }
+        )
+        .toArray()
+    : [];
+  const holderCorpById = new Map(holderCorps.map((c) => [c._id.toString(), c]));
+  const corpRates = holderCorps.length && forexEnabled ? await loadFxRatesRecord(db) : {};
+  const corpOps: {
+    updateOne: {
+      filter: { _id: ObjectId };
+      update: { $inc: Record<string, number>; $set: { updatedAt: Date } };
+    };
+  }[] = [];
   const [characterDocs, imperialDocs, nppDocs] = await Promise.all([
     characterIds.length > 0
       ? db
@@ -268,6 +293,39 @@ export async function processIndexFundDividend(
       );
       holdersPaid++;
       distributedAnchor += holderDividend;
+    } else if (position.holderKind === "corporation" && position.corporationId) {
+      const corp = holderCorpById.get(position.corporationId.toString());
+      if (!corp) continue;
+      const currency = resolveCorpLiquidCurrencyCode(corp);
+      const rate = forexEnabled && currency ? corpRates[currency] : 1;
+      if (!rate || rate <= 0) continue;
+      const native = anchorToCorpLiquidCapital(holderDividend, corp, rate);
+      corpOps.push({
+        updateOne: {
+          filter: { _id: corp._id },
+          update: { $inc: { liquidCapital: native }, $set: { updatedAt: now } },
+        },
+      });
+      dividendTxEntries.push(
+        buildIndexFundDividendTxEntry({
+          fund,
+          holder: {
+            holderKind: "corporation",
+            holderId: corp._id,
+            holderName: corp.name,
+            currencyCode: currency ?? "USD",
+          },
+          amountAnchor: holderDividend,
+          amountNative: native,
+          units: position.units,
+          corporationId,
+          corporationName,
+          turn,
+          createdAt: now,
+        })
+      );
+      holdersPaid++;
+      distributedAnchor += holderDividend;
     } else if (position.holderKind === "npp" && position.nppId) {
       const npp = nppById.get(position.nppId.toString());
       if (!npp) continue;
@@ -303,6 +361,7 @@ export async function processIndexFundDividend(
     }
   }
 
+  if (corpOps.length > 0) await db.collection("corporations").bulkWrite(corpOps);
   if (characterOps.length > 0) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await db.collection("characters").bulkWrite(characterOps as any);
@@ -447,11 +506,16 @@ export async function processIndexFundDividendsBatch(
   const charIds: ObjectId[] = [];
   const impIds: ObjectId[] = [];
   const nppIds: ObjectId[] = [];
+  const corporateHolderIds: ObjectId[] = [];
   for (const key of fundIdStrs) {
     for (const p of positionsByFund.get(key) ?? []) {
       if (p.holderKind === "character" && p.characterId) charIds.push(p.characterId);
       if (p.holderKind === "imperial_character" && p.imperialCharacterId)
         impIds.push(p.imperialCharacterId);
+      if (p.holderKind === "corporation" && p.corporationId) {
+        corpIds.push(p.corporationId);
+        corporateHolderIds.push(p.corporationId);
+      }
       if (p.holderKind === "npp" && p.nppId) nppIds.push(p.nppId);
     }
   }
@@ -459,9 +523,12 @@ export async function processIndexFundDividendsBatch(
     corpIds.length
       ? db
           .collection<Corporation>("corporations")
-          .find({ _id: { $in: corpIds } }, { projection: { name: 1 } })
+          .find(
+            { _id: { $in: corpIds } },
+            { projection: { name: 1, countryId: 1, liquidCurrencyCode: 1 } }
+          )
           .toArray()
-      : Promise.resolve([] as Pick<Corporation, "_id" | "name">[]),
+      : Promise.resolve([] as Corporation[]),
     charIds.length
       ? db
           .collection<Character>("characters")
@@ -482,6 +549,10 @@ export async function processIndexFundDividendsBatch(
       : Promise.resolve([]),
   ]);
   const nppById = new Map(nppDocs.map((n) => [n._id.toString(), n]));
+  const holderCorpByIdBatch = new Map(corpDocs.map((c) => [c._id.toString(), c]));
+  const corpRatesBatch =
+    corporateHolderIds.length && forexEnabled ? await loadFxRatesRecord(db) : {};
+  const corporateInc = new Map<string, { id: ObjectId; inc: Record<string, number> }>();
   const corpNameById = new Map(corpDocs.map((c) => [c._id.toString(), c.name]));
   const charNameById = new Map(charDocs.map((c) => [c._id.toString(), c.name]));
   const impNameById = new Map(impDocs.map((c) => [c._id.toString(), c.name]));
@@ -597,6 +668,34 @@ export async function processIndexFundDividendsBatch(
         );
         holdersPaid++;
         distributedAnchor += holderDividend;
+      } else if (position.holderKind === "corporation" && position.corporationId) {
+        const corp = holderCorpByIdBatch.get(position.corporationId.toString());
+        if (!corp) continue;
+        const currency = resolveCorpLiquidCurrencyCode(corp);
+        const rate = forexEnabled && currency ? corpRatesBatch[currency] : 1;
+        if (!rate || rate <= 0) continue;
+        const native = anchorToCorpLiquidCapital(holderDividend, corp, rate);
+        addInc(corporateInc, corp._id, { liquidCapital: native });
+        holderTxEntries.push(
+          buildIndexFundDividendTxEntry({
+            fund,
+            holder: {
+              holderKind: "corporation",
+              holderId: corp._id,
+              holderName: corp.name,
+              currencyCode: currency ?? "USD",
+            },
+            amountAnchor: holderDividend,
+            amountNative: native,
+            units: position.units,
+            corporationId: accrual.corporationId,
+            corporationName,
+            turn,
+            createdAt: now,
+          })
+        );
+        holdersPaid++;
+        distributedAnchor += holderDividend;
       } else if (position.holderKind === "npp" && position.nppId) {
         const npp = nppById.get(position.nppId.toString());
         if (!npp) continue;
@@ -692,6 +791,9 @@ export async function processIndexFundDividendsBatch(
         update: { $inc: { cashAnchor: e.amt }, $set: { updatedAt: now } },
       },
     }));
+  const corporateOps = [...corporateInc.values()].map((e) => ({
+    updateOne: { filter: { _id: e.id }, update: { $inc: e.inc, $set: { updatedAt: now } } },
+  }));
   const charOps = [...charInc.values()].map((e) => ({
     updateOne: { filter: { _id: e.id }, update: { $inc: e.inc, $set: { updatedAt: now } } },
   }));
@@ -707,6 +809,7 @@ export async function processIndexFundDividendsBatch(
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
   await Promise.all([
+    corporateOps.length ? db.collection("corporations").bulkWrite(corporateOps) : Promise.resolve(),
     fundOps.length ? db.collection("indexFunds").bulkWrite(fundOps as any[]) : Promise.resolve(),
     charOps.length ? db.collection("characters").bulkWrite(charOps as any[]) : Promise.resolve(),
     impOps.length

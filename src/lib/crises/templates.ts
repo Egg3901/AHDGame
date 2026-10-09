@@ -2137,7 +2137,12 @@ export const UNION_BAN_GENERAL_STRIKE_TEMPLATE: CrisisTemplate = {
   durationByScope: { country: UNION_BAN_STRIKE_DURATION_TURNS },
   effects: [
     marginShock(-22, "Steel and heavy plants stopped by the walkout", "physical", "manufacturing"),
-    marginShock(-22, "Car assembly lines stopped by the walkout", "physical", "automobiles"),
+    marginShock(
+      -22,
+      "Car assembly lines stopped by the walkout",
+      "physical",
+      "manufacturing_vehicles"
+    ),
     marginShock(-26, "Docks and freight shut down", "physical", "logistics"),
     marginShock(-9, "Nothing is moving, so nothing is being delivered", "financial"),
     fx("tick", "metric", "economy", "gdp", -0.06, "A stopped economy produces nothing"),

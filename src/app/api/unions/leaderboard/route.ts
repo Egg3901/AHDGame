@@ -12,7 +12,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import type { CorporateSector, FederalBudget, Union } from "@/lib/db/types";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
           countryId: u.countryId,
           countryName: COUNTRY_CONFIGS[u.countryId]?.name ?? u.countryId,
           sectorType: u.sectorType,
-          sectorLabel: CORPORATION_TYPE_LABELS[u.sectorType] ?? u.sectorType,
+          sectorLabel: OPERATING_SECTOR_TYPE_LABELS[u.sectorType] ?? u.sectorType,
           leaderName: owner?.name ?? (u.ownerId ? "Unknown" : null),
           // Identity for the avatar and the profile link. Null for a vacant
           // seat, and null for a leader whose doc has gone (retired NPP,

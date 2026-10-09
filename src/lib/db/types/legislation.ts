@@ -2,7 +2,7 @@ import type { ObjectId } from "mongodb";
 import type { MetricCategoryId } from "./stateMetrics";
 import type { CountryId } from "@/lib/constants/countries";
 import type { WarGoal } from "@/lib/military/warGoals";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { NationalizationProvisionDetail } from "@/lib/nationalization/billTargetPreview";
 import type { BillVoteSnapshot } from "./voteSnapshot";
@@ -119,7 +119,7 @@ export interface PolicyProvision {
 export interface TariffProvision {
   type: "tariff";
   scopeType: "economy_wide" | "sector" | "origin_country" | "corporation";
-  targetSectorType?: CorporationType;
+  targetSectorType?: OperatingSectorType;
   targetOriginCountryId?: CountryId;
   targetCorporationId?: ObjectId;
   rate: number;
@@ -129,7 +129,7 @@ export interface SubsidyProvision {
   type: "subsidy";
   scopeType: "sector" | "economy_wide";
   /** Required when scopeType = "sector" */
-  targetSectorType?: CorporationType;
+  targetSectorType?: OperatingSectorType;
   /** Optional — filters to sectors using this strategy. Only valid when scopeType = "sector". */
   targetStrategyId?: string;
   domesticOnly: boolean;
@@ -138,7 +138,7 @@ export interface SubsidyProvision {
 export interface EndSubsidyProvision {
   type: "end_subsidy";
   scopeType: "sector" | "economy_wide";
-  targetSectorType?: CorporationType;
+  targetSectorType?: OperatingSectorType;
   targetStrategyId?: string;
 }
 
@@ -164,7 +164,7 @@ export interface NationalizeProvision {
    * Industry-wide sector target: nationalize this sector type across the country
    * (XOR `targetCorporationId`). Pairs with `sectorCarveFraction` + `sectorScope`.
    */
-  targetSectorType?: CorporationType;
+  targetSectorType?: OperatingSectorType;
   /** Fraction carved from each in-scope holder (0 < f ≤ 1); defaults to 1 (the whole industry). */
   sectorCarveFraction?: number;
   /** Which pools the sector taking sweeps; defaults to "all". */
@@ -197,7 +197,7 @@ export interface PrivatizeProvision {
 export interface DesignateStrategicSectorProvision {
   type: "designate_strategic_sector";
   /** The sector type to designate strategic in the bill's country (arms the trigger). */
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
 }
 
 /**

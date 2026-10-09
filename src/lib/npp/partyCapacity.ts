@@ -18,7 +18,7 @@ export const NPP_CAPACITY_TIERS: ReadonlyArray<{ upTo: number; slotsPerMember: n
  * The party-wide ceiling scales with the size of the country, so a big party in
  * the US is not held to the same total as one in a 12-region country.
  */
-export const NPP_CEILING_PER_REGION = 3;
+export const NPP_CEILING_PER_REGION = 6;
 /** No country's ceiling falls below this, so small countries keep today's limit. */
 export const NPP_CEILING_FLOOR = 25;
 /** Activity must be recent enough to count toward NPP capacity. */
@@ -133,5 +133,5 @@ export function partyNppCapacityError(
   partyNppCount: number
 ): string | null {
   if (partyNppCount < capacity.maxNpps) return null;
-  return `Party NPP capacity reached (${partyNppCount}/${capacity.maxNpps}). Capacity is 5 NPPs for each of the first 5 active members, 4 each for the next 5, 3 each up to 20, then 2 each, up to ${capacity.ceiling} in this country (3 per region, at least ${NPP_CEILING_FLOOR}); active members need 2 game actions in the last 14 days.`;
+  return `Party NPP capacity reached (${partyNppCount}/${capacity.maxNpps}). Capacity is 5 NPPs for each of the first 5 active members, 4 each for the next 5, 3 each up to 20, then 2 each, up to ${capacity.ceiling} in this country (${NPP_CEILING_PER_REGION} per region, at least ${NPP_CEILING_FLOOR}); active members need 2 game actions in the last 14 days.`;
 }

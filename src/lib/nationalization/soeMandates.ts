@@ -4,8 +4,9 @@
  * its posture. No DB. Metric paths are `${category}.${field}` into StateMetrics
  * and were verified against src/lib/db/types/stateMetrics.ts.
  */
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import type { Corporation, CorporateSector, SoeMandate } from "@/lib/db/types";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import {
   SOE_MANDATE_CONTRIBUTION_AT_FULL_SHARE,
@@ -32,11 +33,11 @@ export interface MandateContribution {
   delta: number;
 }
 
-export const MANDATE_MAP: Partial<Record<CorporationType, MandateContributionDef[]>> = {
+export const MANDATE_MAP: Partial<Record<OperatingSectorType, MandateContributionDef[]>> = {
   healthcare: [{ metricPath: "healthcare.physicianRate", direction: 1, weight: 1 }],
   energy: [{ metricPath: "infrastructure.powerGridReliability", direction: 1, weight: 1 }],
   logistics: [{ metricPath: "infrastructure.roadCondition", direction: 1, weight: 1 }],
-  automobiles: [{ metricPath: "infrastructure.roadCondition", direction: 1, weight: 1 }],
+  manufacturing_vehicles: [{ metricPath: "infrastructure.roadCondition", direction: 1, weight: 1 }],
   construction: [{ metricPath: "infrastructure.roadCondition", direction: 1, weight: 1 }],
   telecommunications: [{ metricPath: "infrastructure.broadbandAccess", direction: 1, weight: 1 }],
   technology: [{ metricPath: "infrastructure.broadbandAccess", direction: 1, weight: 1 }],
@@ -63,7 +64,7 @@ export const MANDATE_MAP: Partial<Record<CorporationType, MandateContributionDef
  * instead of the generic publicTrust. Empty by default; the generic map applies.
  */
 const COUNTRY_OVERRIDES: Partial<
-  Record<CountryId, Partial<Record<CorporationType, MandateContributionDef[]>>>
+  Record<CountryId, Partial<Record<OperatingSectorType, MandateContributionDef[]>>>
 > = {
   DE: {
     defense: [{ metricPath: "governance.bundeswehrReadiness", direction: 1, weight: 1 }],
@@ -82,7 +83,7 @@ export function resolveSectorMandate(
   };
 }
 
-function defsFor(countryId: CountryId, sectorType: CorporationType): MandateContributionDef[] {
+function defsFor(countryId: CountryId, sectorType: OperatingSectorType): MandateContributionDef[] {
   return COUNTRY_OVERRIDES[countryId]?.[sectorType] ?? MANDATE_MAP[sectorType] ?? [];
 }
 
@@ -91,7 +92,10 @@ function defsFor(countryId: CountryId, sectorType: CorporationType): MandateCont
  * per-country overrides). Read-only accessor over the mandate map for display
  * (e.g. the National Corporation Overview's public-mandate scorecard).
  */
-export function getMandateMetricPaths(countryId: CountryId, sectorType: CorporationType): string[] {
+export function getMandateMetricPaths(
+  countryId: CountryId,
+  sectorType: OperatingSectorType
+): string[] {
   return defsFor(countryId, sectorType).map((d) => d.metricPath);
 }
 
@@ -103,7 +107,8 @@ export function getMandateMetricPaths(countryId: CountryId, sectorType: Corporat
  */
 export function getMandateContributions(
   countryId: CountryId,
-  sector: Pick<CorporateSector, "sectorType">,
+  sector: Pick<CorporateSector, "sectorType"> &
+    Partial<Pick<CorporateSector, "industryModel" | "mediaDiscriminator">>,
   mandate: SoeMandate,
   soeShare: number
 ): MandateContribution[] {
@@ -114,7 +119,12 @@ export function getMandateContributions(
   const base = SOE_MANDATE_CONTRIBUTION_AT_FULL_SHARE * share * controlMult;
 
   const out: MandateContribution[] = [];
-  for (const def of defsFor(countryId, sector.sectorType)) {
+  const lane = getOperatingSectorType(
+    sector.sectorType,
+    sector.industryModel,
+    sector.mediaDiscriminator
+  );
+  for (const def of defsFor(countryId, lane)) {
     const magnitude = Math.min(SOE_MANDATE_PER_METRIC_CAP, base * def.weight);
     out.push({ metricPath: def.metricPath, delta: magnitude * def.direction });
   }

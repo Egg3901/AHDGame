@@ -31,7 +31,7 @@ import { eraForPreset } from "@/lib/seeds/presetSelector";
  * Pricing blend: 50% global + 25% national (country-aggregate) + 25% regional (state-level).
  */
 
-import type { CorporationType } from "./corporations";
+import type { OperatingSectorType } from "./corporations";
 import type { CountryId } from "./countries";
 import {
   getEffectiveStrategyRatesForOperatingModel,
@@ -1395,7 +1395,7 @@ function normalizeFlows(
 }
 
 export function computeCommodityMarginModifier(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   /** Map of commodity -> { supplyUnits, demandUnits } for this state or global */
   commodityBalances: Map<CommodityType, { supply: number; demand: number }>,
   /**
@@ -1437,7 +1437,7 @@ export function computeCommodityMarginModifier(
  * Returns a margin modifier in percentage points (e.g., +5.5 means +5.5% margin).
  */
 export function computeCommoditySurplusBonus(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   commodityBalances: Map<CommodityType, { supply: number; demand: number }>,
   /**
    * Optional override flow rates — supersedes SECTOR_SUPPLY[sectorType]. Pass
@@ -1471,7 +1471,7 @@ export function computeCommoditySurplusBonus(
  * commodity input penalties. Positive modifiers (oversupply benefits) are unaffected.
  */
 export function applyRetailPenaltyFactor(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   commodityInputMod: number
 ): number {
   if (sectorType === "retail" && commodityInputMod < 0) {
@@ -1493,7 +1493,7 @@ export function applyRetailPenaltyFactor(
  * @returns { inputMod, surplusMod } — both in percentage points of margin
  */
 export function computeBlendedMarginModifiers(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   globalBalances: Map<CommodityType, { supply: number; demand: number }>,
   nationalBalances: Map<CommodityType, { supply: number; demand: number }>,
   stateBalances: Map<CommodityType, { supply: number; demand: number }>,
@@ -1614,7 +1614,7 @@ interface CommodityFlow {
  * What each sector type SUPPLIES (produces).
  * Retail does not supply commodities — it is a pure consumer-facing sector.
  */
-export const SECTOR_SUPPLY: Partial<Record<CorporationType, CommodityFlow[]>> = {
+export const SECTOR_SUPPLY: Partial<Record<OperatingSectorType, CommodityFlow[]>> = {
   manufacturing: [
     { commodity: "steel", rate: 0.4 },
     { commodity: "building_materials", rate: 0.2 },
@@ -1636,7 +1636,7 @@ export const SECTOR_SUPPLY: Partial<Record<CorporationType, CommodityFlow[]>> = 
   // Reduced from 0.55 → 0.50: food moved to oversupply (D/S ~0.85×) so the prior
   // supply boost is now counterproductive. Lower rate brings supply back toward balance.
   agriculture: [{ commodity: "food", rate: 0.5 }],
-  automobiles: [{ commodity: "vehicles", rate: 0.5 }],
+  manufacturing_vehicles: [{ commodity: "vehicles", rate: 0.5 }],
   financial: [{ commodity: "financial_services", rate: 0.5 }],
   media: [{ commodity: "advertising", rate: 0.5 }],
   defense: [
@@ -1650,7 +1650,7 @@ export const SECTOR_SUPPLY: Partial<Record<CorporationType, CommodityFlow[]>> = 
     { commodity: "software", rate: 0.2 },
     { commodity: "network_services", rate: 0.4 },
   ],
-  entertainment: [
+  media_entertainment: [
     { commodity: "advertising", rate: 0.2 },
     { commodity: "entertainment_services", rate: 0.4 },
   ],
@@ -1684,7 +1684,7 @@ export const SECTOR_SUPPLY: Partial<Record<CorporationType, CommodityFlow[]>> = 
  * flowing through retail channels. Retail demand is scaled at runtime
  * by GDP growth (50% national average + 50% regional) via computeRetailDemandMultiplier.
  */
-export const SECTOR_DEMAND: Partial<Record<CorporationType, CommodityFlow[]>> = {
+export const SECTOR_DEMAND: Partial<Record<OperatingSectorType, CommodityFlow[]>> = {
   manufacturing: [
     { commodity: "energy", rate: 0.15 },
     { commodity: "iron", rate: 0.1 },
@@ -1756,7 +1756,7 @@ export const SECTOR_DEMAND: Partial<Record<CorporationType, CommodityFlow[]>> = 
     { commodity: "timber", rate: 0.04 },
     { commodity: "plastics", rate: 0.05 },
   ],
-  automobiles: [
+  manufacturing_vehicles: [
     { commodity: "steel", rate: 0.25 },
     { commodity: "iron", rate: 0.08 },
     { commodity: "electronics", rate: 0.15 },
@@ -1828,7 +1828,7 @@ export const SECTOR_DEMAND: Partial<Record<CorporationType, CommodityFlow[]>> = 
     { commodity: "real_estate_services", rate: 0.03 },
     { commodity: "rare_earth", rate: 0.09 },
   ],
-  entertainment: [
+  media_entertainment: [
     { commodity: "software", rate: 0.15 },
     { commodity: "electronics", rate: 0.1 },
     { commodity: "energy", rate: 0.06 },
@@ -1907,7 +1907,7 @@ export function computeCommoditySummary(
   const demandMap = new Map<CommodityType, number>();
 
   for (const sector of sectors) {
-    const st = sector.sectorType as CorporationType;
+    const st = sector.sectorType as OperatingSectorType;
 
     const supplies = SECTOR_SUPPLY[st];
     if (supplies) {
@@ -2201,7 +2201,7 @@ export function computeRawSupplyDemand(
   const outputDemandDeltasByState = new Map<string, Map<CommodityType, number>>();
   const recordOutputDemandDelta = (
     sector: { countryId?: string; stateId: string; mediaDiscriminator?: string | null },
-    sectorType: CorporationType,
+    sectorType: OperatingSectorType,
     commodity: CommodityType,
     outputUnits: number
   ) => {
@@ -2225,11 +2225,12 @@ export function computeRawSupplyDemand(
   }
 
   for (const sector of sectors) {
+    // Persisted types are strings here; an unknown one simply has no recipe.
     const st = getOperatingSectorType(
       sector.sectorType,
       sector.industryModel,
       sector.mediaDiscriminator
-    ) as CorporationType;
+    ) as OperatingSectorType;
 
     // Ensure state map exists (no base stabilizer — state level is fully dynamic)
     if (!byState.has(sector.stateId)) {
@@ -2457,7 +2458,7 @@ export function computeRawSupplyDemand(
     }
 
     // World Events v1 Phase 1: temporary world-event sector demand bump
-    // (e.g. royal-event's tourism bump, modeled on the "entertainment"
+    // (e.g. royal-event's tourism bump, modeled on the media entertainment
     // sector — see worldEvents/handlers/royalEvent.ts). Additive with the
     // retail GDP multiplier above, not a replacement for it.
     if (sectorDemandModifierPct && sector.countryId) {

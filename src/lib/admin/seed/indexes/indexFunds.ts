@@ -47,6 +47,25 @@ export async function seedIndexFundIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  await ensureIndex(
+    db,
+    "indexFundPositions",
+    { fundId: 1, corporationId: 1 },
+    {
+      name: "fund_corporation_unique",
+      unique: true,
+      partialFilterExpression: { holderKind: "corporation" },
+    },
+    log
+  );
+  await ensureIndex(
+    db,
+    "indexFundPositions",
+    { corporationId: 1, holderKind: 1 },
+    { name: "corporation_fund_portfolio", sparse: true },
+    log
+  );
+
   // Transaction history per fund, newest first (grows unboundedly)
   await ensureIndex(
     db,

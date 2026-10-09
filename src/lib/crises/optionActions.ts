@@ -15,7 +15,13 @@ import type {
 import type { NationalizeProvision } from "@/lib/db/types/legislation";
 import type { DocketCase } from "@/lib/db/types/scotus";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPE_LABELS,
+  type CorporationType,
+  type OperatingSectorType,
+  operatingSectorFilter,
+  type ManufacturingIndustryModel,
+} from "@/lib/constants/corporations";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
@@ -60,6 +66,15 @@ import { applyConflictOutcome } from "@/lib/livingConflict/engine";
 import type { MacroMetricsDoc } from "@/lib/db/types/macroMetrics";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
 
+/** Crisis actions name an operating lane; rows store its identity. */
+function laneFilter(sectorType: string) {
+  return operatingSectorFilter(sectorType) as {
+    sectorType: CorporationType;
+    industryModel?: ManufacturingIndustryModel | null;
+    mediaDiscriminator?: "entertainment" | null;
+  };
+}
+
 /**
  * Context handed to every crisis option-action handler. The crisis is
  * country-scoped for action-bearing crises (the steel strike and its kin), so
@@ -81,7 +96,7 @@ export interface CrisisActionContext {
 
 /** Human-readable sector label (steel is produced by the "manufacturing" sector). */
 function sectorLabelFor(sectorType: string): string {
-  return CORPORATION_TYPE_LABELS[sectorType as CorporationType] ?? sectorType;
+  return OPERATING_SECTOR_TYPE_LABELS[sectorType as OperatingSectorType] ?? sectorType;
 }
 
 // ── 1. Executive taking ────────────────────────────────────────────────────
@@ -105,7 +120,7 @@ async function executiveNationalize(ctx: CrisisActionContext, sectorType: string
 
   const sectors = await db
     .collection<CorporateSector>("corporateSectors")
-    .find({ countryId: ctx.countryId as CountryId, sectorType: sectorType as CorporationType })
+    .find({ countryId: ctx.countryId as CountryId, ...laneFilter(sectorType) })
     .toArray();
   if (sectors.length === 0) {
     console.warn(`[crisis] executiveNationalize: no ${sectorType} sectors in ${ctx.countryId}`);
@@ -313,7 +328,7 @@ async function emergencyNationalizeBill(
 
   const provision: NationalizeProvision = {
     type: "nationalize",
-    targetSectorType: sectorType as CorporationType,
+    targetSectorType: sectorType as OperatingSectorType,
     sectorScope: "all",
     sectorCarveFraction: sectorCarveFraction ?? 1,
   };
@@ -547,7 +562,7 @@ async function openBargaining(ctx: CrisisActionContext, sectorType: string): Pro
 
   const unions = await db
     .collection<Union>("unions")
-    .find({ countryId: ctx.countryId as CountryId, sectorType: sectorType as CorporationType })
+    .find({ countryId: ctx.countryId as CountryId, ...laneFilter(sectorType) })
     .toArray();
   if (unions.length === 0) {
     console.warn(`[crisis] openBargaining: no union for ${sectorType} in ${ctx.countryId}`);
@@ -614,7 +629,7 @@ async function settleWageFloor(ctx: CrisisActionContext, sectorType: string): Pr
   const sectors = await db
     .collection<CorporateSector>("corporateSectors")
     .find(
-      { countryId: ctx.countryId as CountryId, sectorType: sectorType as CorporationType },
+      { countryId: ctx.countryId as CountryId, ...laneFilter(sectorType) },
       { projection: { _id: 1, corporationId: 1 } }
     )
     .toArray();
@@ -625,7 +640,7 @@ async function settleWageFloor(ctx: CrisisActionContext, sectorType: string): Pr
 
   const union = await db
     .collection<Union>("unions")
-    .findOne({ countryId: ctx.countryId as CountryId, sectorType: sectorType as CorporationType });
+    .findOne({ countryId: ctx.countryId as CountryId, ...laneFilter(sectorType) });
   const now = new Date();
   const SETTLEMENT_TERM_TURNS = 48;
 
@@ -636,7 +651,7 @@ async function settleWageFloor(ctx: CrisisActionContext, sectorType: string): Pr
     campaignId: new ObjectId(),
     unionId: union?._id ?? new ObjectId(),
     countryId: country,
-    sectorType: sectorType as CorporationType,
+    sectorType: laneFilter(sectorType).sectorType,
     employerCorporationId: sectors[0].corporationId ?? new ObjectId(),
     sectorIds: sectors.map((s) => s._id),
     wageLevel: clampWageLevel(WAGE_LEVEL_MAX),

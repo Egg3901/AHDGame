@@ -1,10 +1,11 @@
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { constantPriceOutput } from "./rules/outputVolume";
 import type { Db } from "mongodb";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { warDamageByCountry, type WarDamage } from "@/lib/military/warDamage";
 import type { CorporateSector, UnownedSector, Corporation, Bond } from "@/lib/db/types";
 import type { FederalBudget, StateBudget } from "@/lib/db/types/budget";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import {
   fxRateForSectorHostFromMap,
   loadValuationFxRates,
@@ -38,7 +39,8 @@ export interface SectorRevenueTax {
     Array<{
       revenue: number;
       currentGrowthRate: number;
-      sectorType?: CorporationType;
+      /** Operating lane, so lane-keyed tables (carbon mix, model alignment) resolve. */
+      sectorType?: OperatingSectorType;
       realizedRevenue?: number;
       /** Host-currency nameplate — plants GDP signal (ticket #1084). */
       hostRevenue: number;
@@ -48,7 +50,7 @@ export interface SectorRevenueTax {
     }>
   >;
   /** Per-state unowned-sector revenue (₳-native). */
-  unownedByState: Map<string, Array<{ revenue: number; sectorType?: CorporationType }>>;
+  unownedByState: Map<string, Array<{ revenue: number; sectorType?: OperatingSectorType }>>;
   /** Federal sales-tax rate by countryId. */
   federalSalesTaxByCountry: Map<string, number>;
   /** State sales-tax rate by stateId. */
@@ -100,6 +102,8 @@ export async function sectorRevenueTaxProvider(db: Db, turn = 0): Promise<Sector
           | "growthRate"
           | "corporationId"
           | "sectorType"
+          | "industryModel"
+          | "mediaDiscriminator"
           | "countryId"
         >
       >({
@@ -117,8 +121,10 @@ export async function sectorRevenueTaxProvider(db: Db, turn = 0): Promise<Sector
         transitionFromStrategyId: 1,
         transitionStartTurn: 1,
         currentGrowthRate: 1,
-        // P3c: the environment tier derives the carbon mix from sector types.
+        // P3c: the environment tier derives the carbon mix from operating lanes.
         sectorType: 1,
+        industryModel: 1,
+        mediaDiscriminator: 1,
         // Legacy fallback for pre-split sectors — without this projection,
         // undefined × revenue poisons the weighted average with NaN.
         growthRate: 1,
@@ -128,10 +134,17 @@ export async function sectorRevenueTaxProvider(db: Db, turn = 0): Promise<Sector
     db
       .collection<UnownedSector>("unownedSectors")
       .find({})
-      .project<Pick<UnownedSector, "_id" | "stateId" | "revenue" | "sectorType">>({
+      .project<
+        Pick<
+          UnownedSector,
+          "_id" | "stateId" | "revenue" | "sectorType" | "industryModel" | "mediaDiscriminator"
+        >
+      >({
         stateId: 1,
         revenue: 1,
         sectorType: 1,
+        industryModel: 1,
+        mediaDiscriminator: 1,
       })
       .toArray(),
     db
@@ -187,12 +200,13 @@ export async function sectorRevenueTaxProvider(db: Db, turn = 0): Promise<Sector
       hostRealizedRevenue?: number;
       outputVolume?: number;
       currentGrowthRate: number;
-      sectorType?: CorporationType;
+      /** Operating lane, so lane-keyed tables (carbon mix, model alignment) resolve. */
+      sectorType?: OperatingSectorType;
     }>
   >();
   const unownedByState = new Map<
     string,
-    Array<{ revenue: number; sectorType?: CorporationType }>
+    Array<{ revenue: number; sectorType?: OperatingSectorType }>
   >();
 
   for (const sector of ownedSectors) {
@@ -222,14 +236,25 @@ export async function sectorRevenueTaxProvider(db: Db, turn = 0): Promise<Sector
       ...(hostRealized !== undefined ? { hostRealizedRevenue: hostRealized } : {}),
       ...(outputVolume !== null ? { outputVolume } : {}),
       currentGrowthRate: growth,
-      sectorType: sector.sectorType,
+      sectorType: getOperatingSectorType(
+        sector.sectorType,
+        sector.industryModel,
+        sector.mediaDiscriminator
+      ),
     });
     ownedByState.set(sector.stateId, list);
   }
 
   for (const sector of unownedSectors) {
     const list = unownedByState.get(sector.stateId) ?? [];
-    list.push({ revenue: sector.revenue, sectorType: sector.sectorType });
+    list.push({
+      revenue: sector.revenue,
+      sectorType: getOperatingSectorType(
+        sector.sectorType,
+        sector.industryModel,
+        sector.mediaDiscriminator
+      ),
+    });
     unownedByState.set(sector.stateId, list);
   }
 

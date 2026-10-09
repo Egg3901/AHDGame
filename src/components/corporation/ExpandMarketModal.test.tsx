@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ExpandMarketModal from "./ExpandMarketModal";
-import { FOUNDABLE_CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 
 const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
 
@@ -94,8 +94,7 @@ describe("ExpandMarketModal plants market finder", () => {
     // `select.options` — happy-dom's live HTMLCollection proxy throws "Cannot convert a Symbol
     // value to a number" on access under 20.10.2. (#310 left this assertion stale, past a red verify.)
     const optionEls = within(sectorTypeSelect).getAllByRole("option");
-    expect(optionEls).toHaveLength(FOUNDABLE_CORPORATION_TYPES.length);
-    expect(optionEls.map((option) => option.getAttribute("value"))).not.toContain("automobiles");
+    expect(optionEls).toHaveLength(OPERATING_SECTOR_TYPES.length);
     expect(optionEls.map((option) => option.textContent)).toContain("Retail (secondary)");
     expect(screen.getByText("9,050")).toBeTruthy();
     expect(screen.getByText("farms")).toBeTruthy();

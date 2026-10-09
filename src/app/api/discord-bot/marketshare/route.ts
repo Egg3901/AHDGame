@@ -5,8 +5,13 @@ import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
 import { checkRateLimit, rateLimitResponse, BOT_FINANCIAL_LIMITS } from "@/lib/api/rateLimit";
 import type { Corporation, CorporateSector, State, User } from "@/lib/db/types";
-import { CORPORATION_TYPES, CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPE_LABELS,
+  isOperatingSectorType,
+  operatingSectorFilter,
+  OPERATING_SECTOR_TYPES,
+} from "@/lib/constants/corporations";
+
 import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import {
@@ -45,18 +50,20 @@ export async function GET(request: Request) {
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     const url = new URL(request.url);
-    const sectorType = url.searchParams.get("type") as CorporationType | null;
+    const requestedType = url.searchParams.get("type");
     const countryParam = url.searchParams.get("country") as CountryId | null;
     const stateIdParam = url.searchParams.get("state");
     const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10));
     const discordIdParam = url.searchParams.get("discordId");
 
-    if (!sectorType || !CORPORATION_TYPES.includes(sectorType)) {
+    if (!isOperatingSectorType(requestedType)) {
       return errorResponse(
         400,
-        `Must provide a valid type. Options: ${CORPORATION_TYPES.join(", ")}`
+        `Must provide a valid type. Options: ${OPERATING_SECTOR_TYPES.join(", ")}`
       );
     }
+    const sectorType = requestedType;
+    const laneFilter = operatingSectorFilter(sectorType);
 
     if (countryParam && !COUNTRY_IDS.includes(countryParam)) {
       return errorResponse(400, `Invalid country. Options: ${COUNTRY_IDS.join(", ")}`);
@@ -116,7 +123,7 @@ export async function GET(request: Request) {
       db
         .collection<CorporateSector>("corporateSectors")
         .find({
-          sectorType,
+          ...laneFilter,
           stateId: { $in: [...scopedStateIds] },
         })
         .toArray(),
@@ -253,7 +260,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       found: totalItems > 0 || totalMarket > 0,
       sectorType,
-      sectorLabel: CORPORATION_TYPE_LABELS[sectorType],
+      sectorLabel: OPERATING_SECTOR_TYPE_LABELS[sectorType],
       scope: {
         country: resolvedCountry,
         stateId: stateIdParam,

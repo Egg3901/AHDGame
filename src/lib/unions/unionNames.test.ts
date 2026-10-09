@@ -5,7 +5,9 @@ import { genericUnionName, getUnionName } from "@/lib/unions/unionNames";
 
 describe("getUnionName", () => {
   it("returns a historical US auto union for 2019", () => {
-    expect(getUnionName("US", "automobiles", "2019-default")).toBe("United Auto Workers");
+    expect(getUnionName("US", "manufacturing_vehicles", "2019-default")).toBe(
+      "United Auto Workers"
+    );
   });
 
   it("returns era-appropriate UK mining union for 1953", () => {
@@ -84,7 +86,7 @@ describe("getUnionName", () => {
     });
 
     it("Japan 1953 predates the 1972 auto workers' confederation", () => {
-      expect(getUnionName("JP", "automobiles", "1953-default")).toBe(
+      expect(getUnionName("JP", "manufacturing_vehicles", "1953-default")).toBe(
         "All Japan Automobile Industry Workers' Union"
       );
     });
@@ -111,7 +113,7 @@ describe("getUnionName", () => {
     });
 
     it("US 1999 predates SAG-AFTRA (2012) and NNU (2009)", () => {
-      expect(getUnionName("US", "entertainment", "1999-default")).toBe("Screen Actors Guild");
+      expect(getUnionName("US", "media_entertainment", "1999-default")).toBe("Screen Actors Guild");
       expect(getUnionName("US", "healthcare", "1999-default")).toBe(
         "Service Employees International Union"
       );

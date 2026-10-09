@@ -249,8 +249,11 @@ export function centralBankUrl(countryId: CountryId | string): string {
   return `/country/${lowerCountry(countryId)}/central-bank`;
 }
 
-export function stockmarketUrl(countryId: CountryId | string): string {
-  return `/country/${lowerCountry(countryId)}/stockmarket`;
+export function stockmarketUrl(countryId: CountryId | string, tab = "stocks"): string {
+  const code = lowerCountry(countryId).toUpperCase();
+  const params = new URLSearchParams({ tab });
+  if (code !== "GLOBAL") params.set("exchange", code);
+  return `/market?${params.toString()}`;
 }
 
 export function forexUrl(countryId: CountryId | string): string {

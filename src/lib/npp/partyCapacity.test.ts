@@ -29,25 +29,25 @@ describe("party NPP capacity", () => {
     }
   });
 
-  it("scales the ceiling at 3 per region with a floor of 25", () => {
+  it("scales the ceiling at 6 per region with a floor of 25", () => {
     expect(calculateNppCeiling(0)).toBe(25);
-    expect(calculateNppCeiling(5)).toBe(25);
-    expect(calculateNppCeiling(12)).toBe(36);
-    expect(calculateNppCeiling(24)).toBe(72);
-    expect(calculateNppCeiling(51)).toBe(153);
+    expect(calculateNppCeiling(4)).toBe(25);
+    expect(calculateNppCeiling(12)).toBe(72);
+    expect(calculateNppCeiling(24)).toBe(144);
+    expect(calculateNppCeiling(51)).toBe(306);
   });
 
   it("clamps member capacity to the country ceiling", () => {
-    expect(calculatePartyNppCapacity(40, calculateNppCeiling(12))).toBe(36);
+    expect(calculatePartyNppCapacity(40, calculateNppCeiling(12))).toBe(72);
     expect(calculatePartyNppCapacity(40, calculateNppCeiling(51))).toBe(115);
     expect(calculatePartyNppCapacity(3, calculateNppCeiling(5))).toBe(15);
-    expect(calculatePartyNppCapacity(100, calculateNppCeiling(5))).toBe(25);
+    expect(calculatePartyNppCapacity(100, calculateNppCeiling(4))).toBe(25);
   });
 
   it("names the country ceiling when capacity is reached", () => {
     expect(
-      partyNppCapacityError({ activeMemberCount: 40, maxNpps: 36, ceiling: 36 }, 36)
-    ).toContain("up to 36 in this country");
+      partyNppCapacityError({ activeMemberCount: 40, maxNpps: 72, ceiling: 72 }, 72)
+    ).toContain("up to 72 in this country");
   });
 
   it("treats negative or fractional member counts safely", () => {
@@ -85,7 +85,7 @@ describe("party NPP capacity", () => {
     await expect(getPartyNppCapacity(db as unknown as Db, "US", "10", now)).resolves.toEqual({
       activeMemberCount: 1,
       maxNpps: 5,
-      ceiling: 153,
+      ceiling: 306,
     });
     expect(db.collectionMocks.states.countDocuments).toHaveBeenCalledWith({ countryId: "US" });
 

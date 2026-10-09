@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { getSectorTechEffects, type TechCorpView } from "@/lib/constants/techTree";
 import { isSectorTechTreesEnabled } from "./featureFlag";
 
@@ -9,7 +9,7 @@ import { isSectorTechTreesEnabled } from "./featureFlag";
  */
 export async function getCorpTechGrowthCostMultiplier(
   corp: TechCorpView,
-  sectorType: CorporationType
+  sectorType: OperatingSectorType
 ): Promise<number> {
   if (!(await isSectorTechTreesEnabled())) return 1;
   return getSectorTechEffects(corp, sectorType).growthCostMultiplier;

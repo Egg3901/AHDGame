@@ -28,7 +28,7 @@ import {
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { seedUnions } from "@/lib/admin/seed/seedUnions";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { INACTIVE_CEO_TURN_THRESHOLD } from "@/lib/turn/corporation/inactiveCeoSectorShed";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
@@ -187,7 +187,7 @@ export async function processUnionsTurn(db: Db, turn?: number): Promise<UnionsTu
   const seededCountryIds = await db
     .collection<State>("states")
     .distinct("countryId", { _id: { $not: /^NATIONAL_/ } });
-  const expectedUnionCount = seededCountryIds.length * CORPORATION_TYPES.length;
+  const expectedUnionCount = seededCountryIds.length * OPERATING_SECTOR_TYPES.length;
   if (unionCount < expectedUnionCount) {
     console.warn(
       `[unionsTurn] labourSystemMode is 'full' but union roster is incomplete (${unionCount}/${expectedUnionCount}), backfilling via seedUnions(reset:false)`

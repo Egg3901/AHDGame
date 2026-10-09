@@ -3,7 +3,7 @@ import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, getAccessedCollections, type MockDb } from "@/lib/test-utils/mockDb";
 import { stubMarketizationDb } from "@/lib/test-utils/stubMarketizationDb";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -100,9 +100,9 @@ describe("batchSpawnNppCorporations - planned-economy gate", () => {
 
     const spawn = await batchSpawn();
     const result = await spawn(db, "US", { perSectorCount: 1 });
-    expect(result).toHaveLength(CORPORATION_TYPES.length);
+    expect(result).toHaveLength(OPERATING_SECTOR_TYPES.length);
     expect(base.collectionMocks.corporations!.insertOne.mock.calls).toHaveLength(
-      CORPORATION_TYPES.length
+      OPERATING_SECTOR_TYPES.length
     );
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
@@ -116,8 +116,8 @@ describe("batchSpawnNppCorporations - planned-economy gate", () => {
     const spawn = await batchSpawn();
     const result = await spawn(db, "US", { perSectorCount: 1 });
     expect(result).toEqual([]);
-    expect(consoleErrorSpy).toHaveBeenCalledTimes(CORPORATION_TYPES.length);
-    for (const [index, type] of CORPORATION_TYPES.entries()) {
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(OPERATING_SECTOR_TYPES.length);
+    for (const [index, type] of OPERATING_SECTOR_TYPES.entries()) {
       const [prefix, err] = consoleErrorSpy.mock.calls[index] as [string, Error];
       expect(prefix).toContain(type);
       expect(prefix).toContain("US");

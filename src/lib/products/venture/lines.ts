@@ -5,7 +5,7 @@
  * so a corporation that only builds vehicles cannot release a washing machine.
  */
 import { getOperatingSectorType, SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { getMediaOperatingModel } from "@/lib/mediaOperatingModels/catalog";
 import { MEDIA_PRODUCT_KINDS } from "../mediaProductCatalog";
 import { MANUFACTURING_PRODUCT_KINDS, getManufacturingProductKind } from "../manufacturingCatalog";
@@ -139,7 +139,7 @@ export function liftedSectorIds(input: {
     .filter((sector) => {
       if (sector.mothballed) return false;
       const operating = getOperatingSectorType(sector.sectorType, sector.industryModel);
-      if (!kind.sectorTypes.includes(operating as CorporationType)) return false;
+      if (!kind.sectorTypes.includes(operating as OperatingSectorType)) return false;
       const strategy = SECTOR_STRATEGIES[operating as keyof typeof SECTOR_STRATEGIES]?.find(
         (candidate) => candidate.id === (sector.strategyId ?? "standard")
       );

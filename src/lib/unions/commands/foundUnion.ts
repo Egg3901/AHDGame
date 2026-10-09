@@ -9,12 +9,13 @@
  * sectors, no services, and must organize its way into the industry exactly
  * like an NPP challenger would.
  */
+import { operatingSectorIdentity, type OperatingSectorType } from "@/lib/constants/corporations";
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Character, Union } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import type { CorporationType } from "@/lib/constants/corporations";
+
 import { BASE_APPROVAL } from "@/lib/unions/unionDues";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
@@ -37,7 +38,8 @@ export { MAX_UNION_NAME_LENGTH, MIN_UNION_NAME_LENGTH, UNION_FOUNDING_ACTION_COS
 
 export interface FoundUnionInput {
   countryId: CountryId;
-  sectorType: CorporationType;
+  /** Operating lane the union organizes (the vehicles lane is its own industry). */
+  sectorType: OperatingSectorType;
   name: string;
 }
 
@@ -101,7 +103,10 @@ export async function foundUnion(
   // unions organizing the same industry in the same country cannot share one.
   const existingNames = await db
     .collection<Union>("unions")
-    .find({ countryId: input.countryId, sectorType: input.sectorType }, { projection: { name: 1 } })
+    .find(
+      { countryId: input.countryId, ...operatingSectorIdentity(input.sectorType) },
+      { projection: { name: 1 } }
+    )
     .toArray();
   const nameLower = name.toLowerCase();
   if (existingNames.some((u) => (u.name ?? "").trim().toLowerCase() === nameLower)) {
@@ -193,7 +198,7 @@ export async function foundUnion(
     const insertResult = await db.collection<Union>("unions").insertOne({
       _id: new ObjectId(),
       countryId: input.countryId,
-      sectorType: input.sectorType,
+      ...operatingSectorIdentity(input.sectorType),
       name,
       ownerId: character._id,
       ownerType: "character",

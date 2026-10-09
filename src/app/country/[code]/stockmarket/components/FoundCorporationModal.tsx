@@ -4,7 +4,7 @@ import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useMemo, useState } from "react";
 import { getEraFoundingBounds, getEraFounderShares } from "@/lib/constants/sectorSeedEra";
 import {
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPE_LABELS,
   CORPORATION_FOUNDING_COST,
   CORPORATION_STARTING_CAPITAL,
   MIN_CORPORATION_STARTING_CAPITAL,
@@ -13,7 +13,7 @@ import {
   IPO_MIN_FLOAT_PCT,
   IPO_MAX_FLOAT_PCT,
 } from "@/lib/constants/corporations";
-import { FOUNDABLE_CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { computeIpoIssuance } from "@/lib/corporations/ipoIssuance";
 import {
   SUPERSHARE_MIN_MULTIPLIER,
@@ -25,10 +25,6 @@ import {
   getFoundingConfidenceMultiplier,
 } from "@/lib/corporations/foundingCosts";
 import { fetchJson } from "@/lib/observability/fetchJson";
-
-const FOUNDABLE_ENTRIES = FOUNDABLE_CORPORATION_TYPES.map(
-  (key) => [key, CORPORATION_TYPE_LABELS[key]] as const
-);
 
 export function FoundCorporationModal({
   open,
@@ -61,8 +57,8 @@ export function FoundCorporationModal({
   const [foundName, setFoundName] = useState("");
   const [tickerSymbol, setTickerSymbol] = useState("");
   /** No default — prevents one-click founding as Financial when the player meant to pick another sector. */
-  const [foundType, setFoundType] = useState<CorporationType | "">("");
-  const [secondaryType, setSecondaryType] = useState<CorporationType | "">("");
+  const [foundType, setFoundType] = useState<OperatingSectorType | "">("");
+  const [secondaryType, setSecondaryType] = useState<OperatingSectorType | "">("");
   // Treasury the player commits, held in LOCAL currency — exactly what they
   // type and see. The ₳ (anchor) amount sent to the API is DERIVED from this.
   // Holding the local value directly, instead of re-deriving the field from a
@@ -420,13 +416,13 @@ export function FoundCorporationModal({
               <div className="relative">
                 <select
                   value={foundType}
-                  onChange={(e) => setFoundType(e.target.value as CorporationType | "")}
+                  onChange={(e) => setFoundType(e.target.value as OperatingSectorType | "")}
                   className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none cursor-pointer appearance-none"
                 >
                   <option value="" disabled>
                     Select sector…
                   </option>
-                  {FOUNDABLE_ENTRIES.map(([key, label]) => (
+                  {Object.entries(OPERATING_SECTOR_TYPE_LABELS).map(([key, label]) => (
                     <option key={key} value={key}>
                       {label}
                     </option>
@@ -460,15 +456,17 @@ export function FoundCorporationModal({
               <div className="relative">
                 <select
                   value={secondaryType}
-                  onChange={(e) => setSecondaryType(e.target.value as CorporationType | "")}
+                  onChange={(e) => setSecondaryType(e.target.value as OperatingSectorType | "")}
                   className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none cursor-pointer appearance-none"
                 >
                   <option value="">None</option>
-                  {FOUNDABLE_ENTRIES.filter(([key]) => key !== foundType).map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
+                  {Object.entries(OPERATING_SECTOR_TYPE_LABELS)
+                    .filter(([key]) => key !== foundType)
+                    .map(([key, label]) => (
+                      <option key={key} value={key}>
+                        {label}
+                      </option>
+                    ))}
                 </select>
                 <div className="absolute right-3 top-2.5 pointer-events-none text-muted">
                   <svg

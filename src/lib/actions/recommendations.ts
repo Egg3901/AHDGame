@@ -24,7 +24,7 @@ import {
   FUNDS_CRITICAL_THRESHOLD,
   ACTIONS_LOW_THRESHOLD,
 } from "./recommendationsConstants";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, OperatingSectorType } from "@/lib/constants/corporations";
 import { buildOnboardingStepContent } from "@/lib/onboarding/checklist";
 import { chapterIdsForPlan, resolveTutorialPlan } from "@/lib/onboarding/tutorialPlan";
 
@@ -51,7 +51,7 @@ export interface ActionRecommendation {
     type: string; // ActionType | 'split' | 'gotv' | 'suppression'
     targetState?: string;
     targetStateName?: string; // Human-readable state name
-    targetSectorType?: CorporationType;
+    targetSectorType?: OperatingSectorType;
     targetDemographic?: { category: string; group: string };
     estimatedCost: { ap: number; funds: number };
     estimatedBenefit: string;
@@ -478,7 +478,7 @@ export function findUnownedOpportunities(
         type: "split",
         targetState: topOpp.stateId,
         targetStateName: topOpp.stateName,
-        targetSectorType: sectorType as CorporationType,
+        targetSectorType: sectorType as OperatingSectorType,
         estimatedCost: {
           ap: 0,
           funds: topOpp.splitCost,
@@ -718,7 +718,7 @@ export function generateRecommendations(
                 type: "split",
                 targetState: economy.stateId,
                 targetStateName: economy.stateName,
-                targetSectorType: sector.type as CorporationType,
+                targetSectorType: sector.type as OperatingSectorType,
                 estimatedCost: { ap: 0, funds: sector.splitCost },
                 estimatedBenefit: `${sector.estimatedCapturePercent.toFixed(1)}% market share`,
                 targetUnownedRevenue: sector.unownedRevenue,
@@ -796,7 +796,7 @@ export function generateRecommendations(
         estimatedCost: { ap: 0, funds: 1_000_000 }, // Approximate founding cost
         estimatedBenefit: "Passive income, market influence",
       },
-      link: "/corporation/new",
+      link: "/market",
     });
   }
 

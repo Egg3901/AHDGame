@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { CARVE_FRACTION_MAX, CARVE_FRACTION_MIN } from "@/lib/nationalization/constants";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 
 /**
  * Executive nationalization request. Either a whole-corp taking
@@ -58,7 +58,7 @@ export type AuctionBidBody = z.infer<typeof auctionBidSchema>;
 
 /** Designate / remove a strategic sector type (spec §6.3/§8). */
 export const designateStrategicSectorSchema = z.object({
-  sectorType: z.enum(CORPORATION_TYPES),
+  sectorType: z.enum(OPERATING_SECTOR_TYPES),
 });
 
 export type DesignateStrategicSectorBody = z.infer<typeof designateStrategicSectorSchema>;

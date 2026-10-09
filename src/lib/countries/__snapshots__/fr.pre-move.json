@@ -69,7 +69,7 @@
       "agriculture": 15,
       "construction": 10,
       "energy": 8,
-      "automobiles": 6,
+      "manufacturing_vehicles": 6,
       "chemical_industries": 5,
       "financial": 5,
       "retail": 5,
@@ -80,7 +80,7 @@
       "media": 2,
       "healthcare": 2,
       "extraction": 2,
-      "entertainment": 1,
+      "media_entertainment": 1,
       "technology": 0
     }
   },
@@ -405,7 +405,7 @@
     "value": {
       "1953": {
         "manufacturing": "CGT Metalworkers' Federation",
-        "automobiles": "CGT Metalworkers' Federation",
+        "manufacturing_vehicles": "CGT Metalworkers' Federation",
         "chemical_industries": "CGT Chemical Industries Federation",
         "construction": "CGT Building and Wood Federation",
         "energy": "CGT Energy Federation",
@@ -417,14 +417,14 @@
         "technology": "CGT Metalworkers' Federation",
         "financial": "CGT Bank and Insurance Federation",
         "telecommunications": "CGT Post and Telecommunications Federation",
-        "entertainment": "CGT Culture and Media Federation",
+        "media_entertainment": "CGT Culture and Media Federation",
         "defense": "CGT Metalworkers' Federation",
         "agriculture": "CGT Agricultural Workers' Federation",
         "real_estate": "CGT Building and Wood Federation"
       },
       "1979": {
         "manufacturing": "CGT Metalworkers' Federation",
-        "automobiles": "CGT Metalworkers' Federation",
+        "manufacturing_vehicles": "CGT Metalworkers' Federation",
         "chemical_industries": "CGT Chemical Industries Federation",
         "construction": "CGT Building and Wood Federation",
         "energy": "CGT Energy Federation",
@@ -436,14 +436,14 @@
         "technology": "CGT Metalworkers' Federation",
         "financial": "CGT Bank and Insurance Federation",
         "telecommunications": "CGT Post and Telecommunications Federation",
-        "entertainment": "CGT Culture and Media Federation",
+        "media_entertainment": "CGT Culture and Media Federation",
         "defense": "CGT Metalworkers' Federation",
         "agriculture": "CGT Agricultural Workers' Federation",
         "real_estate": "CGT Building and Wood Federation"
       },
       "1991": {
         "manufacturing": "CGT Metalworkers' Federation",
-        "automobiles": "CGT Metalworkers' Federation",
+        "manufacturing_vehicles": "CGT Metalworkers' Federation",
         "chemical_industries": "CGT Chemical Industries Federation",
         "construction": "CGT Building and Wood Federation",
         "energy": "CGT Energy Federation",
@@ -455,14 +455,14 @@
         "technology": "CGT Metalworkers' Federation",
         "financial": "CGT Bank and Insurance Federation",
         "telecommunications": "CGT Post and Telecommunications Federation",
-        "entertainment": "CGT Culture and Media Federation",
+        "media_entertainment": "CGT Culture and Media Federation",
         "defense": "CGT Metalworkers' Federation",
         "agriculture": "CGT Agricultural Workers' Federation",
         "real_estate": "CGT Building and Wood Federation"
       },
       "1999": {
         "manufacturing": "CGT Metalworkers' Federation",
-        "automobiles": "CGT Metalworkers' Federation",
+        "manufacturing_vehicles": "CGT Metalworkers' Federation",
         "chemical_industries": "CGT Chemical Industries Federation",
         "construction": "CGT Building and Wood Federation",
         "energy": "CGT Energy Federation",
@@ -474,14 +474,14 @@
         "technology": "CGT Metalworkers' Federation",
         "financial": "CGT Bank and Insurance Federation",
         "telecommunications": "CGT Post and Telecommunications Federation",
-        "entertainment": "CGT Culture and Media Federation",
+        "media_entertainment": "CGT Culture and Media Federation",
         "defense": "CGT Metalworkers' Federation",
         "agriculture": "CGT Agricultural Workers' Federation",
         "real_estate": "CGT Building and Wood Federation"
       },
       "2007": {
         "manufacturing": "CGT Metalworkers' Federation",
-        "automobiles": "CGT Metalworkers' Federation",
+        "manufacturing_vehicles": "CGT Metalworkers' Federation",
         "chemical_industries": "CGT Chemical Industries Federation",
         "construction": "CGT Building and Wood Federation",
         "energy": "CGT Energy Federation",
@@ -493,14 +493,14 @@
         "technology": "CGT Metalworkers' Federation",
         "financial": "CGT Bank and Insurance Federation",
         "telecommunications": "CGT Post and Telecommunications Federation",
-        "entertainment": "CGT Culture and Media Federation",
+        "media_entertainment": "CGT Culture and Media Federation",
         "defense": "CGT Metalworkers' Federation",
         "agriculture": "CGT Agricultural Workers' Federation",
         "real_estate": "CGT Building and Wood Federation"
       },
       "2019": {
         "manufacturing": "CGT Metalworkers' Federation",
-        "automobiles": "CGT Metalworkers' Federation",
+        "manufacturing_vehicles": "CGT Metalworkers' Federation",
         "chemical_industries": "CGT Chemical Industries Federation",
         "construction": "CGT Building and Wood Federation",
         "energy": "CGT Energy Federation",
@@ -512,14 +512,14 @@
         "technology": "CGT Metalworkers' Federation",
         "financial": "CGT Bank and Insurance Federation",
         "telecommunications": "CGT Post and Telecommunications Federation",
-        "entertainment": "CGT Culture and Media Federation",
+        "media_entertainment": "CGT Culture and Media Federation",
         "defense": "CGT Metalworkers' Federation",
         "agriculture": "CGT Agricultural Workers' Federation",
         "real_estate": "CGT Building and Wood Federation"
       },
       "2023": {
         "manufacturing": "CGT Metalworkers' Federation",
-        "automobiles": "CGT Metalworkers' Federation",
+        "manufacturing_vehicles": "CGT Metalworkers' Federation",
         "chemical_industries": "CGT Chemical Industries Federation",
         "construction": "CGT Building and Wood Federation",
         "energy": "CGT Energy Federation",
@@ -531,14 +531,14 @@
         "technology": "CGT Metalworkers' Federation",
         "financial": "CGT Bank and Insurance Federation",
         "telecommunications": "CGT Post and Telecommunications Federation",
-        "entertainment": "CGT Culture and Media Federation",
+        "media_entertainment": "CGT Culture and Media Federation",
         "defense": "CGT Metalworkers' Federation",
         "agriculture": "CGT Agricultural Workers' Federation",
         "real_estate": "CGT Building and Wood Federation"
       },
       "2027": {
         "manufacturing": "CGT Metalworkers' Federation",
-        "automobiles": "CGT Metalworkers' Federation",
+        "manufacturing_vehicles": "CGT Metalworkers' Federation",
         "chemical_industries": "CGT Chemical Industries Federation",
         "construction": "CGT Building and Wood Federation",
         "energy": "CGT Energy Federation",
@@ -550,7 +550,7 @@
         "technology": "CGT Metalworkers' Federation",
         "financial": "CGT Bank and Insurance Federation",
         "telecommunications": "CGT Post and Telecommunications Federation",
-        "entertainment": "CGT Culture and Media Federation",
+        "media_entertainment": "CGT Culture and Media Federation",
         "defense": "CGT Metalworkers' Federation",
         "agriculture": "CGT Agricultural Workers' Federation",
         "real_estate": "CGT Building and Wood Federation"
@@ -1257,7 +1257,7 @@
       "real_estate": 11,
       "financial": 9,
       "retail": 8,
-      "automobiles": 8,
+      "manufacturing_vehicles": 8,
       "agriculture": 8,
       "healthcare": 7,
       "energy": 7,
@@ -1265,7 +1265,7 @@
       "chemical_industries": 5,
       "defense": 5,
       "logistics": 4,
-      "entertainment": 3,
+      "media_entertainment": 3,
       "technology": 2,
       "media": 1
     }
@@ -1280,7 +1280,7 @@
       "retail": 8,
       "real_estate": 8,
       "construction": 7,
-      "automobiles": 6,
+      "manufacturing_vehicles": 6,
       "defense": 5,
       "financial": 4,
       "healthcare": 4,
@@ -1289,7 +1289,7 @@
       "telecommunications": 3,
       "technology": 1,
       "media": 3,
-      "entertainment": 2
+      "media_entertainment": 2
     }
   },
   "COUNTRY_SECTOR_WEIGHTS_1991": {
@@ -1299,7 +1299,7 @@
       "real_estate": 11,
       "financial": 9,
       "retail": 8,
-      "automobiles": 8,
+      "manufacturing_vehicles": 8,
       "agriculture": 8,
       "healthcare": 7,
       "energy": 7,
@@ -1307,7 +1307,7 @@
       "chemical_industries": 5,
       "defense": 5,
       "logistics": 4,
-      "entertainment": 3,
+      "media_entertainment": 3,
       "technology": 2,
       "media": 1
     }

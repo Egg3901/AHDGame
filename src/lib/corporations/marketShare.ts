@@ -25,8 +25,12 @@ import {
 } from "@/lib/currency/gdpAnchorRate";
 import { type CountryId } from "@/lib/constants/countries";
 import { SECTOR_MARKET_GDP_FRACTION, SECTOR_TYPE_COUNT } from "@/lib/constants/corporations";
-import type { CorporationType, MediaDiscriminator } from "@/lib/constants/corporations";
-import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
+import type {
+  CorporationType,
+  OperatingSectorType,
+  MediaDiscriminator,
+} from "@/lib/constants/corporations";
+
 import {
   computeSectorImpliedUnits,
   computeUnownedHeadroomUnits,
@@ -38,15 +42,12 @@ type MarketIdentity = {
   mediaDiscriminator: CorporateSector["mediaDiscriminator"] | null;
 };
 
-/** Legacy entertainment rows and canonical media/entertainment rows are one market. */
+/** One market per operating lane identity. */
 function marketIdentity(
   sectorType: CorporateSector["sectorType"],
   industryModel?: string | null,
   mediaDiscriminator?: CorporateSector["mediaDiscriminator"] | null
 ): MarketIdentity {
-  if (sectorType === "entertainment") {
-    return { sectorType: "media", industryModel: null, mediaDiscriminator: "entertainment" };
-  }
   return {
     sectorType,
     industryModel: industryModel ?? null,
@@ -72,16 +73,6 @@ function marketIdentityQuery(
 }
 
 function marketIdentityConditions(identity: MarketIdentity): Filter<CorporateSector>[] {
-  if (identity.mediaDiscriminator === "entertainment") {
-    return [
-      {
-        sectorType: "media",
-        industryModel: null,
-        mediaDiscriminator: "entertainment",
-      } as Filter<CorporateSector>,
-      { sectorType: "entertainment", industryModel: null },
-    ];
-  }
   return [
     {
       sectorType: identity.sectorType,
@@ -318,7 +309,7 @@ export function marketUnitsFromAnchor(
  * `strategyId` falls back to the default mix.
  */
 export function sectorCapacityUnits(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   capitalStock: number | null | undefined,
   revenueAnchor: number,
   strategyId: string | null | undefined,
@@ -341,7 +332,7 @@ export function sectorCapacityUnits(
 
 /** Unowned headroom in units: persisted `headroomUnits`, else fallback (b). */
 export function unownedHeadroomUnitsOf(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   headroomUnits: number | null | undefined,
   revenue: number,
   unitScale: number,
@@ -452,11 +443,7 @@ export function buildMarketShareBySectorId(
   for (const sector of sectors) {
     const key = bucketKey(
       sector.stateId,
-      getOperatingSectorType(
-        sector.sectorType,
-        sector.industryModel,
-        sector.mediaDiscriminator
-      ) as CorporationType,
+      sector.sectorType,
       sector.industryModel,
       sector.mediaDiscriminator
     );
@@ -469,11 +456,7 @@ export function buildMarketShareBySectorId(
     const sectorId = sector._id.toString();
     const key = bucketKey(
       sector.stateId,
-      getOperatingSectorType(
-        sector.sectorType,
-        sector.industryModel,
-        sector.mediaDiscriminator
-      ) as CorporationType,
+      sector.sectorType,
       sector.industryModel,
       sector.mediaDiscriminator
     );
@@ -594,7 +577,7 @@ export function buildNationalDominanceShareBySectorId(
     const key = corpNatKey(
       corpId,
       countryId,
-      sector.sectorType as CorporationType,
+      sector.sectorType,
       sector.industryModel,
       sector.mediaDiscriminator
     );

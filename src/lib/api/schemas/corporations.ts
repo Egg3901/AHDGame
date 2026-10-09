@@ -2,8 +2,7 @@ import { z } from "zod";
 import { MAX_REGION_ID_LENGTH } from "@/lib/constants/states";
 import { WAGE_LEVEL_MIN, WAGE_LEVEL_MAX } from "@/lib/labour/laborCost";
 import {
-  CORPORATION_TYPES,
-  FOUNDABLE_CORPORATION_TYPES,
+  OPERATING_SECTOR_TYPES,
   MAX_GROWTH_RATE,
   MIN_GROWTH_RATE,
   MAX_DIVIDEND_RATE,
@@ -59,19 +58,6 @@ const ipoTermsSchema = z
     message: `Floating more than ${IPO_MAX_FLOAT_PCT}% requires a dual-class supershare structure`,
   });
 
-/**
- * Automobiles and entertainment were folded into manufacturing (vehicles
- * model) and media (entertainment discriminator) in 1.12. Legacy rows keep the
- * old types, but nothing new may be founded with them.
- */
-const foundableTypeSchema = z.enum(FOUNDABLE_CORPORATION_TYPES, {
-  error: (issue) =>
-    typeof issue.input === "string" &&
-    (CORPORATION_TYPES as readonly string[]).includes(issue.input)
-      ? `"${issue.input}" is no longer a foundable sector. Found a manufacturing corporation (vehicles) or a media corporation (entertainment) instead.`
-      : "Invalid sector type",
-});
-
 export const foundCorporationSchema = z.object({
   name: moderatedNameSchema("Name", 2, 60),
   tickerSymbol: z
@@ -86,7 +72,8 @@ export const foundCorporationSchema = z.object({
           message: "Ticker contains prohibited language",
         })
     ),
-  type: foundableTypeSchema,
+  /** Operating lane to found in: a corporation type, or the vehicles/entertainment lane. */
+  type: z.enum(OPERATING_SECTOR_TYPES),
   /**
    * Shape only. The real bounds are era-scaled and therefore not knowable
    * here: a 1953 world's minimum is ~1/70th of the modern one, so validating
@@ -100,7 +87,7 @@ export const foundCorporationSchema = z.object({
     .int("Starting capital must be a whole number")
     .positive("Starting capital must be a positive amount")
     .optional(),
-  secondaryType: foundableTypeSchema.optional(),
+  secondaryType: z.enum(OPERATING_SECTOR_TYPES).optional(),
   ipo: ipoTermsSchema.optional(),
 });
 
@@ -132,8 +119,8 @@ export const updateCorporationSettingsSchema = z.object({
       z.null(),
     ])
     .optional(),
-  secondaryType: foundableTypeSchema.nullable().optional(),
-  primaryType: foundableTypeSchema.optional(),
+  secondaryType: z.enum(OPERATING_SECTOR_TYPES).nullable().optional(),
+  primaryType: z.enum(OPERATING_SECTOR_TYPES).optional(),
 });
 
 export const renameCorporationSchema = z.object({
@@ -158,7 +145,8 @@ export const expandSectorSchema = z.object({
     .trim()
     .min(1, "Invalid state ID")
     .max(MAX_REGION_ID_LENGTH, "Invalid state ID"),
-  sectorType: z.enum(CORPORATION_TYPES).optional(),
+  /** Operating lane to open; omitted means the corporation's own lane. */
+  sectorType: z.enum(OPERATING_SECTOR_TYPES).optional(),
 });
 
 export const setGrowthRateSchema = z.object({
@@ -249,7 +237,7 @@ export const bulkSectorOperationsSchema = z
   .object({
     countryId: countryIdSchema,
     // Omitted/null → apply to every sector type the corp holds in this country (Corporate-Wide).
-    sectorType: z.enum(CORPORATION_TYPES).optional(),
+    sectorType: z.enum(OPERATING_SECTOR_TYPES).optional(),
     targetGrowthRate: z
       .number()
       .min(MIN_GROWTH_RATE, `Growth rate cannot be below ${MIN_GROWTH_RATE}%`)

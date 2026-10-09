@@ -4,11 +4,13 @@ Time, money, and actions are the three resources that bind every decision in A H
 
 ## Time: turns, days, and years
 
-- **1 turn = 1 real hour = 1 game week.**
+- **1 turn = 1 game week; in normal multiplayer mode, 1 real hour.**
 - **24 turns = 1 real day = 24 game weeks.**
 - **48 turns = 2 real days ≈ 1 game year** (the game uses a compressed 48-week year that cleanly maps electoral cycles onto real-world time).
 
-The turn processor fires once per hour, on the hour. Every turn advances the world: actions refresh, elections tick toward resolution, bills age, NPPs act, markets settle, and metrics update. There are no overnight breaks: the simulation is continuous and there are no resets.
+The turn processor fires once per hour, on the hour. Every turn advances the world: actions refresh, elections tick toward resolution, bills age, NPPs act, markets settle, and metrics update. There are no overnight breaks. Iteration resets are separate, announced world changes; they are not part of the hourly clock.
+
+Quarter-hour stock updates run between main turns. At half past the hour, election returns, growth, inflation and exchange rates can also advance. These updates do not grant actions, spend another campaign budget, run production or move race deadlines. They skip an inactive world or a processing turn; the half-hour macro update also skips fast mode.
 
 ## Term cycles
 

@@ -3,7 +3,6 @@ import { ObjectId } from "mongodb";
 import type { CorporateSector, UnownedSector } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CorporationType } from "@/lib/constants/corporations";
-import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { resolveNationalCorporationForSector } from "./nationalCorporation";
 import { writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
@@ -64,15 +63,10 @@ export async function incrementNatCorpSectorRevenue(
   if (revenueDeltaAnchor <= 0) return "noop";
 
   const now = new Date();
-  const operatingType = getOperatingSectorType(
-    params.sectorType,
-    params.industryModel,
-    params.mediaDiscriminator
-  ) as CorporationType;
   const corp = await resolveNationalCorporationForSector(
     db,
     params.countryId,
-    operatingType,
+    params.sectorType,
     params.industryModel,
     params.mediaDiscriminator
   );

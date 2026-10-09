@@ -272,8 +272,8 @@
       "healthcare": 1,
       "telecommunications": 0,
       "media": 0,
-      "automobiles": 0,
-      "entertainment": 0,
+      "manufacturing_vehicles": 0,
+      "media_entertainment": 0,
       "technology": 0
     }
   },
@@ -2392,7 +2392,7 @@
         "chemical_industries": "All-China Federation of Trade Unions",
         "healthcare": "All-China Federation of Trade Unions",
         "retail": "All-China Federation of Trade Unions",
-        "automobiles": "All-China Federation of Trade Unions",
+        "manufacturing_vehicles": "All-China Federation of Trade Unions",
         "technology": "All-China Federation of Trade Unions",
         "energy": "All-China Federation of Trade Unions",
         "agriculture": "All-China Federation of Trade Unions",
@@ -2400,7 +2400,7 @@
         "construction": "All-China Federation of Trade Unions",
         "defense": "All-China Federation of Trade Unions",
         "telecommunications": "All-China Federation of Trade Unions",
-        "entertainment": "All-China Federation of Trade Unions",
+        "media_entertainment": "All-China Federation of Trade Unions",
         "logistics": "All-China Federation of Trade Unions",
         "extraction": "All-China Federation of Trade Unions"
       },
@@ -2411,7 +2411,7 @@
         "chemical_industries": "All-China Federation of Trade Unions",
         "healthcare": "All-China Federation of Trade Unions",
         "retail": "All-China Federation of Trade Unions",
-        "automobiles": "All-China Federation of Trade Unions",
+        "manufacturing_vehicles": "All-China Federation of Trade Unions",
         "technology": "All-China Federation of Trade Unions",
         "energy": "All-China Federation of Trade Unions",
         "agriculture": "All-China Federation of Trade Unions",
@@ -2419,7 +2419,7 @@
         "construction": "All-China Federation of Trade Unions",
         "defense": "All-China Federation of Trade Unions",
         "telecommunications": "All-China Federation of Trade Unions",
-        "entertainment": "All-China Federation of Trade Unions",
+        "media_entertainment": "All-China Federation of Trade Unions",
         "logistics": "All-China Federation of Trade Unions",
         "extraction": "All-China Federation of Trade Unions"
       },
@@ -2430,7 +2430,7 @@
         "chemical_industries": "All-China Federation of Trade Unions",
         "healthcare": "All-China Federation of Trade Unions",
         "retail": "All-China Federation of Trade Unions",
-        "automobiles": "All-China Federation of Trade Unions",
+        "manufacturing_vehicles": "All-China Federation of Trade Unions",
         "technology": "All-China Federation of Trade Unions",
         "energy": "All-China Federation of Trade Unions",
         "agriculture": "All-China Federation of Trade Unions",
@@ -2438,7 +2438,7 @@
         "construction": "All-China Federation of Trade Unions",
         "defense": "All-China Federation of Trade Unions",
         "telecommunications": "All-China Federation of Trade Unions",
-        "entertainment": "All-China Federation of Trade Unions",
+        "media_entertainment": "All-China Federation of Trade Unions",
         "logistics": "All-China Federation of Trade Unions",
         "extraction": "All-China Federation of Trade Unions"
       },
@@ -2449,7 +2449,7 @@
         "chemical_industries": "All-China Federation of Trade Unions",
         "healthcare": "All-China Federation of Trade Unions",
         "retail": "All-China Federation of Trade Unions",
-        "automobiles": "All-China Federation of Trade Unions",
+        "manufacturing_vehicles": "All-China Federation of Trade Unions",
         "technology": "All-China Federation of Trade Unions",
         "energy": "All-China Federation of Trade Unions",
         "agriculture": "All-China Federation of Trade Unions",
@@ -2457,7 +2457,7 @@
         "construction": "All-China Federation of Trade Unions",
         "defense": "All-China Federation of Trade Unions",
         "telecommunications": "All-China Federation of Trade Unions",
-        "entertainment": "All-China Federation of Trade Unions",
+        "media_entertainment": "All-China Federation of Trade Unions",
         "logistics": "All-China Federation of Trade Unions",
         "extraction": "All-China Federation of Trade Unions"
       },
@@ -2468,7 +2468,7 @@
         "chemical_industries": "All-China Federation of Trade Unions",
         "healthcare": "All-China Federation of Trade Unions",
         "retail": "All-China Federation of Trade Unions",
-        "automobiles": "All-China Federation of Trade Unions",
+        "manufacturing_vehicles": "All-China Federation of Trade Unions",
         "technology": "All-China Federation of Trade Unions",
         "energy": "All-China Federation of Trade Unions",
         "agriculture": "All-China Federation of Trade Unions",
@@ -2476,7 +2476,7 @@
         "construction": "All-China Federation of Trade Unions",
         "defense": "All-China Federation of Trade Unions",
         "telecommunications": "All-China Federation of Trade Unions",
-        "entertainment": "All-China Federation of Trade Unions",
+        "media_entertainment": "All-China Federation of Trade Unions",
         "logistics": "All-China Federation of Trade Unions",
         "extraction": "All-China Federation of Trade Unions"
       },
@@ -2487,7 +2487,7 @@
         "chemical_industries": "All-China Federation of Trade Unions",
         "healthcare": "All-China Federation of Trade Unions",
         "retail": "All-China Federation of Trade Unions",
-        "automobiles": "All-China Federation of Trade Unions",
+        "manufacturing_vehicles": "All-China Federation of Trade Unions",
         "technology": "All-China Federation of Trade Unions",
         "energy": "All-China Federation of Trade Unions",
         "agriculture": "All-China Federation of Trade Unions",
@@ -2495,7 +2495,7 @@
         "construction": "All-China Federation of Trade Unions",
         "defense": "All-China Federation of Trade Unions",
         "telecommunications": "All-China Federation of Trade Unions",
-        "entertainment": "All-China Federation of Trade Unions",
+        "media_entertainment": "All-China Federation of Trade Unions",
         "logistics": "All-China Federation of Trade Unions",
         "extraction": "All-China Federation of Trade Unions"
       },
@@ -2506,7 +2506,7 @@
         "chemical_industries": "All-China Federation of Trade Unions",
         "healthcare": "All-China Federation of Trade Unions",
         "retail": "All-China Federation of Trade Unions",
-        "automobiles": "All-China Federation of Trade Unions",
+        "manufacturing_vehicles": "All-China Federation of Trade Unions",
         "technology": "All-China Federation of Trade Unions",
         "energy": "All-China Federation of Trade Unions",
         "agriculture": "All-China Federation of Trade Unions",
@@ -2514,7 +2514,7 @@
         "construction": "All-China Federation of Trade Unions",
         "defense": "All-China Federation of Trade Unions",
         "telecommunications": "All-China Federation of Trade Unions",
-        "entertainment": "All-China Federation of Trade Unions",
+        "media_entertainment": "All-China Federation of Trade Unions",
         "logistics": "All-China Federation of Trade Unions",
         "extraction": "All-China Federation of Trade Unions"
       },
@@ -2525,7 +2525,7 @@
         "chemical_industries": "All-China Federation of Trade Unions",
         "healthcare": "All-China Federation of Trade Unions",
         "retail": "All-China Federation of Trade Unions",
-        "automobiles": "All-China Federation of Trade Unions",
+        "manufacturing_vehicles": "All-China Federation of Trade Unions",
         "technology": "All-China Federation of Trade Unions",
         "energy": "All-China Federation of Trade Unions",
         "agriculture": "All-China Federation of Trade Unions",
@@ -2533,7 +2533,7 @@
         "construction": "All-China Federation of Trade Unions",
         "defense": "All-China Federation of Trade Unions",
         "telecommunications": "All-China Federation of Trade Unions",
-        "entertainment": "All-China Federation of Trade Unions",
+        "media_entertainment": "All-China Federation of Trade Unions",
         "logistics": "All-China Federation of Trade Unions",
         "extraction": "All-China Federation of Trade Unions"
       }
@@ -4369,10 +4369,10 @@
       "extraction": 4,
       "agriculture": 3,
       "telecommunications": 3,
-      "automobiles": 2,
+      "manufacturing_vehicles": 2,
       "media": 1,
       "defense": 1,
-      "entertainment": 1
+      "media_entertainment": 1
     }
   },
   "COUNTRY_SECTOR_WEIGHTS_1979": {
@@ -4392,9 +4392,9 @@
       "technology": 0,
       "financial": 0,
       "real_estate": 0,
-      "automobiles": 0,
+      "manufacturing_vehicles": 0,
       "media": 0,
-      "entertainment": 0
+      "media_entertainment": 0
     }
   },
   "COUNTRY_SECTOR_WEIGHTS_1991": {
@@ -4412,11 +4412,11 @@
       "real_estate": 3,
       "healthcare": 3,
       "defense": 2,
-      "automobiles": 1,
+      "manufacturing_vehicles": 1,
       "telecommunications": 1,
       "technology": 1,
       "media": 1,
-      "entertainment": 1
+      "media_entertainment": 1
     }
   },
   "COUNTRY_TO_ISO_NUMERIC": {

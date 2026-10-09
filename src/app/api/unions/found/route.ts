@@ -12,7 +12,7 @@ import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import { countryIdSchema } from "@/lib/api/schemas/country";
 import { containsBlockedName } from "@/lib/moderation";
 import {
@@ -23,7 +23,7 @@ import {
 
 const foundUnionSchema = z.object({
   countryId: countryIdSchema,
-  sectorType: z.enum(CORPORATION_TYPES),
+  sectorType: z.enum(OPERATING_SECTOR_TYPES),
   name: z
     .string()
     .trim()

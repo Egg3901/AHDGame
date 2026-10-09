@@ -62,7 +62,7 @@ import {
 } from "@/lib/nppAutonomy/v3/party/nppBuildOrg";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import type { Corporation } from "@/lib/db/types/corporation";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 import { buildNppPriceSignals } from "@/lib/turn/npp/priceSignals";
 import {
@@ -76,7 +76,7 @@ import {
   challengerBoost,
   computeSectorConcentration,
 } from "@/lib/turn/npp/rules/sectorConcentration";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import { resolveShareExecutionPrice } from "@/lib/corporations/marketExecution";
 import { deriveCeoArchetype } from "@/lib/turn/ceoArchetype";
 
@@ -1334,16 +1334,39 @@ export async function foundNppCorporationsSurplus(
   const chanceMultiplier = foundingChanceMultiplier(shortagePressure);
   let founded = 0;
   const { priceRatioOf } = buildNppPriceSignals(new Map(priceDocs.map((p) => [p.commodity, p])));
+  // Group canonical persisted identities by the operating lane used by founding.
+  const operatingLaneExpression = (typeField: string) => ({
+    $switch: {
+      branches: [
+        {
+          case: {
+            $and: [{ $eq: [typeField, "manufacturing"] }, { $eq: ["$industryModel", "vehicles"] }],
+          },
+          then: "manufacturing_vehicles",
+        },
+        {
+          case: {
+            $and: [
+              { $eq: [typeField, "media"] },
+              { $eq: ["$mediaDiscriminator", "entertainment"] },
+            ],
+          },
+          then: "media_entertainment",
+        },
+      ],
+      default: typeField,
+    },
+  });
   const cellCounts = await db
     .collection<Corporation>("corporations")
     .aggregate<{ _id: { c: string; t: string }; n: number }>([
-      { $group: { _id: { c: "$countryId", t: "$type" }, n: { $sum: 1 } } },
+      { $group: { _id: { c: "$countryId", t: operatingLaneExpression("$type") }, n: { $sum: 1 } } },
     ])
     .toArray();
   const existingByCell = new Map<string, number>(
     cellCounts.map((row) => [`${row._id.c}:${row._id.t}`, row.n])
   );
-  const existingCount = (countryId: string, type: CorporationType) =>
+  const existingCount = (countryId: string, type: OperatingSectorType) =>
     existingByCell.get(`${countryId}:${type}`) ?? 0;
   // Capacity per firm per sector, world-wide, so a sector one firm dominates
   // draws new founders. One grouped read per sweep.
@@ -1352,7 +1375,7 @@ export async function foundNppCorporationsSurplus(
     .aggregate<{ _id: { t: string; c: ObjectId }; w: number }>([
       {
         $group: {
-          _id: { t: "$sectorType", c: "$corporationId" },
+          _id: { t: operatingLaneExpression("$sectorType"), c: "$corporationId" },
           w: { $sum: { $ifNull: ["$capitalStock", 0] } },
         },
       },
@@ -1375,13 +1398,15 @@ export async function foundNppCorporationsSurplus(
 
     const homeCountryForSector = (npp.countryId ?? "US") as CountryId;
     const weights = foundingSectorWeights({
-      types: CORPORATION_TYPES as readonly CorporationType[],
+      types: OPERATING_SECTOR_TYPES as readonly OperatingSectorType[],
       countryId: homeCountryForSector,
       priceRatioOf,
       existingCount,
       challengerBoostOf: (type) => challengerBoost(concentrationBySector.get(type)),
     });
-    const sectorType = CORPORATION_TYPES[pickWeightedIndex(weights, rng())] as CorporationType;
+    const sectorType = OPERATING_SECTOR_TYPES[
+      pickWeightedIndex(weights, rng())
+    ] as OperatingSectorType;
     const cell = `${homeCountryForSector}:${sectorType}`;
     existingByCell.set(cell, (existingByCell.get(cell) ?? 0) + 1);
 

@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { EXTRACTABLE_RESOURCES, type ExtractableResource } from "@/lib/constants/commodities";
 
 type SupplyRates = Partial<Record<string, number>>;
@@ -9,7 +9,7 @@ type SupplyRates = Partial<Record<string, number>>;
  * actually have. Missing docs mean legacy/uncapped state data.
  */
 export function applyExtractionResourceCapacityToSupply<T extends SupplyRates>(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   supplyRates: T,
   stateResources: Partial<Record<ExtractableResource, number>> | null | undefined
 ): T {

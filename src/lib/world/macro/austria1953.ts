@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { MacroCountryState } from "./types";
 import { buildMacroCountryFromSpec, type MacroCountrySeedSpec } from "./seedBuilder";
 
@@ -14,7 +14,7 @@ export const AUSTRIA_ENTITY_ID = "AT";
  * - GDP scaled to game units (~12% of West Germany's authored 1953 regional sum).
  * - Sector mix: VOEST steel / alpine hydro / Erzberg iron / Matzen oil / timber.
  */
-const AUSTRIA_1953_SECTOR_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const AUSTRIA_1953_SECTOR_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   manufacturing: 26,
   agriculture: 14,
   energy: 8,
@@ -23,14 +23,14 @@ const AUSTRIA_1953_SECTOR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   chemical_industries: 5,
   logistics: 5,
   retail: 5,
-  automobiles: 3,
+  manufacturing_vehicles: 3,
   financial: 3,
   real_estate: 3,
   healthcare: 2,
   defense: 2,
   telecommunications: 2,
   media: 2,
-  entertainment: 2,
+  media_entertainment: 2,
   technology: 0,
 };
 

@@ -112,7 +112,7 @@ describe("isEligibleIndexFundConstituent", () => {
       isEligibleIndexFundConstituent(entertainmentCorp, {
         scope: "global",
         kind: "sector",
-        sectorType: "entertainment",
+        sectorType: "media_entertainment",
       })
     ).toBe(true);
     expect(
@@ -137,7 +137,7 @@ describe("isEligibleIndexFundConstituent", () => {
       isEligibleIndexFundConstituent(vehicleCorp, {
         scope: "global",
         kind: "sector",
-        sectorType: "automobiles",
+        sectorType: "manufacturing_vehicles",
       })
     ).toBe(true);
     expect(

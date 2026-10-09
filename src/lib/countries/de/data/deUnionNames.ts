@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 /**
  * DE's trade-union names, by era.
@@ -12,9 +12,9 @@ import type { CorporationType } from "@/lib/constants/corporations";
  * map -- is a separate thing and stays there.
  */
 
-export const DE_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
+export const DE_UNION_NAMES_MODERN: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "IG Metall",
-  automobiles: "IG Metall",
+  manufacturing_vehicles: "IG Metall",
   chemical_industries: "IG BCE",
   construction: "IG BAU",
   energy: "IG BCE",
@@ -26,24 +26,24 @@ export const DE_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
   technology: "IG Metall",
   financial: "ver.di",
   telecommunications: "ver.di",
-  entertainment: "ver.di",
+  media_entertainment: "ver.di",
   defense: "IG Metall",
   agriculture: "IG BAU",
   real_estate: "IG BAU",
 };
 
-export const DE_UNION_NAMES_1999: Partial<Record<CorporationType, string>> = {
+export const DE_UNION_NAMES_1999: Partial<Record<OperatingSectorType, string>> = {
   ...DE_UNION_NAMES_MODERN,
   healthcare: "ÖTV",
   logistics: "ÖTV",
   retail: "Gewerkschaft Handel, Banken und Versicherungen",
   financial: "Gewerkschaft Handel, Banken und Versicherungen",
   media: "IG Medien",
-  entertainment: "IG Medien",
+  media_entertainment: "IG Medien",
   telecommunications: "Deutsche Postgewerkschaft",
 };
 
-export const DE_UNION_NAMES_1991: Partial<Record<CorporationType, string>> = {
+export const DE_UNION_NAMES_1991: Partial<Record<OperatingSectorType, string>> = {
   ...DE_UNION_NAMES_1999,
   chemical_industries: "IG Chemie-Papier-Keramik",
   construction: "IG Bau-Steine-Erden",
@@ -53,15 +53,15 @@ export const DE_UNION_NAMES_1991: Partial<Record<CorporationType, string>> = {
   agriculture: "Gewerkschaft Gartenbau, Land- und Forstwirtschaft",
 };
 
-export const DE_UNION_NAMES_1979: Partial<Record<CorporationType, string>> = {
+export const DE_UNION_NAMES_1979: Partial<Record<OperatingSectorType, string>> = {
   ...DE_UNION_NAMES_1991,
   media: "IG Druck und Papier",
-  entertainment: "Deutsche Angestellten-Gewerkschaft",
+  media_entertainment: "Deutsche Angestellten-Gewerkschaft",
 };
 
-export const DE_UNION_NAMES_1953: Partial<Record<CorporationType, string>> = {
+export const DE_UNION_NAMES_1953: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "IG Metall",
-  automobiles: "IG Metall",
+  manufacturing_vehicles: "IG Metall",
   chemical_industries: "IG Chemie-Papier-Keramik",
   construction: "IG Bau-Steine-Erden",
   energy: "IG Bergbau",
@@ -73,7 +73,7 @@ export const DE_UNION_NAMES_1953: Partial<Record<CorporationType, string>> = {
   technology: "IG Metall",
   financial: "Gewerkschaft Handel, Banken und Versicherungen",
   telecommunications: "Deutsche Postgewerkschaft",
-  entertainment: "Deutsche Angestellten-Gewerkschaft",
+  media_entertainment: "Deutsche Angestellten-Gewerkschaft",
   defense: "IG Metall",
   agriculture: "Gewerkschaft Gartenbau, Land- und Forstwirtschaft",
   real_estate: "IG Bau-Steine-Erden",

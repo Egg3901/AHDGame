@@ -39,7 +39,7 @@ describe("computeBuildCost", () => {
     };
     expect(
       computeBuildCost({ ...shared, sectorType: "manufacturing", industryModel: "vehicles" })
-    ).toEqual(computeBuildCost({ ...shared, sectorType: "automobiles" }));
+    ).toEqual(computeBuildCost({ ...shared, sectorType: "manufacturing_vehicles" }));
   });
 
   it("is units × era price × dominance × rate, hand-computed", () => {

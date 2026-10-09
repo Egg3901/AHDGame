@@ -18,8 +18,11 @@
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import type { CorporationType } from "@/lib/constants/corporations";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+
+import {
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import { COMMODITY_LABELS, type CommodityType } from "@/lib/constants/commodities";
 import {
   getOperatingSectorLabel,
@@ -36,7 +39,7 @@ import { resolveSectorStrategy, typeFacilityCount } from "./sectorTypeMetrics";
 const MAX_DEMAND_ROWS = 5;
 
 interface SectorStrategyPanelProps {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   /** Every sector of this type the corporation owns. */
   sectors: SectorDetail[];
   isCeo: boolean;
@@ -111,7 +114,7 @@ export function SectorStrategyPanel({
   // sectorType is already the operating type resolved by SectorsTab.
   const strategyType = sectorType;
   const label =
-    getOperatingSectorLabel(sectorType) ?? CORPORATION_TYPE_LABELS[sectorType] ?? sectorType;
+    getOperatingSectorLabel(sectorType) ?? OPERATING_SECTOR_TYPE_LABELS[sectorType] ?? sectorType;
   const strategies: SectorStrategy[] = getSectorStrategies(
     strategyType,
     mediaOperatingModelsEnabled,

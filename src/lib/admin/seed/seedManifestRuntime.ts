@@ -652,6 +652,7 @@ export const RUNTIME: CollectionEntry[] = [
       "Mixed collection. World rows (turn_summary, game_action, fund_event, party_change) are read by turn number and recent-activity windows, so they are wiped on reset. Login/logout rows (IP, user agent, fingerprint, tracking id) and character_deleted markers are account history that alt detection and the moderation dossier read; reset keeps them. Partial delete in resetGameWorld (PRESERVED_ACTIVITY_LOG_TYPES); the 30-day TTL still bounds everything.",
   },
   { name: "turnLogs", category: "runtime" },
+  { name: "checkpointRuns", category: "runtime" },
   {
     name: "singleplayerRuntime",
     category: "runtime",

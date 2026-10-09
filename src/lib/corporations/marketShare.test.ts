@@ -143,22 +143,22 @@ describe("plants tier — unit-denominated market share", () => {
     expect(Number.isFinite(shares.get("a")!)).toBe(true);
   });
 
-  it("separates generic media while joining canonical and legacy entertainment rows", () => {
+  it("separates generic media from the entertainment lane", () => {
     const sectors = [
       { ...sector("generic", 100), sectorType: "media", mediaDiscriminator: null },
-      { ...sector("canonical-ent", 100), sectorType: "media", mediaDiscriminator: "entertainment" },
-      { ...sector("legacy-ent", 100), sectorType: "entertainment" },
+      { ...sector("ent-a", 100), sectorType: "media", mediaDiscriminator: "entertainment" },
+      { ...sector("ent-b", 100), sectorType: "media", mediaDiscriminator: "entertainment" },
     ] as unknown as CorporateSector[];
     const shares = build(sectors, []);
 
     expect(shares.get("generic")).toBe(100);
-    expect(shares.get("canonical-ent")).toBe(50);
-    expect(shares.get("legacy-ent")).toBe(50);
+    expect(shares.get("ent-a")).toBe(50);
+    expect(shares.get("ent-b")).toBe(50);
   });
 });
 
 describe("national dominance share market identity", () => {
-  it("keeps media lanes distinct and treats legacy entertainment as its canonical lane", () => {
+  it("keeps media lanes distinct", () => {
     const nationalStateId = "US-CA";
     const sectors = [
       {
@@ -180,11 +180,12 @@ describe("national dominance share market identity", () => {
         corporationId: "b",
       },
       {
-        _id: "legacy-ent",
+        _id: "ent-b",
         stateId: nationalStateId,
         countryId: "US",
         revenue: 100,
-        sectorType: "entertainment",
+        sectorType: "media",
+        mediaDiscriminator: "entertainment",
         corporationId: "c",
       },
     ] as unknown as CorporateSector[];
@@ -197,7 +198,7 @@ describe("national dominance share market identity", () => {
 
     expect(shares.get("generic")).toBe(100);
     expect(shares.get("canonical-ent")).toBe(50);
-    expect(shares.get("legacy-ent")).toBe(50);
+    expect(shares.get("ent-b")).toBe(50);
   });
 });
 

@@ -31,7 +31,7 @@ import type {
 import { loadEuroAdoptionConditions } from "@/lib/currency/euro/adoption";
 import { euroAdoptionRefusal } from "@/lib/currency/euro/rules";
 import { type CountryId } from "@/lib/constants/countries";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CommodityType } from "@/lib/constants/commodities";
 import {
   CATEGORY_TO_POLICY_DOMAINS,
@@ -90,7 +90,7 @@ export type ValidatedProvisions =
       tariffProvisions: {
         type: "tariff";
         scopeType: "economy_wide" | "sector" | "origin_country" | "corporation";
-        targetSectorType?: CorporationType;
+        targetSectorType?: OperatingSectorType;
         targetOriginCountryId?: CountryId;
         targetCorporationId?: ObjectId;
         rate: number;
@@ -145,7 +145,7 @@ export async function validateBillProvisions(
   const validatedTariffProvisions: {
     type: "tariff";
     scopeType: "economy_wide" | "sector" | "origin_country" | "corporation";
-    targetSectorType?: CorporationType;
+    targetSectorType?: OperatingSectorType;
     targetOriginCountryId?: CountryId;
     targetCorporationId?: ObjectId;
     rate: number;
@@ -356,7 +356,9 @@ export async function validateBillProvisions(
         validatedSubsidyProvisions.push({
           type: "subsidy",
           scopeType: p.scopeType,
-          ...(p.targetSectorType && { targetSectorType: p.targetSectorType as CorporationType }),
+          ...(p.targetSectorType && {
+            targetSectorType: p.targetSectorType as OperatingSectorType,
+          }),
           ...(p.targetStrategyId && { targetStrategyId: p.targetStrategyId }),
           domesticOnly: p.domesticOnly ?? false,
         });
@@ -364,7 +366,9 @@ export async function validateBillProvisions(
         validatedSubsidyProvisions.push({
           type: "end_subsidy",
           scopeType: p.scopeType,
-          ...(p.targetSectorType && { targetSectorType: p.targetSectorType as CorporationType }),
+          ...(p.targetSectorType && {
+            targetSectorType: p.targetSectorType as OperatingSectorType,
+          }),
           ...(p.targetStrategyId && { targetStrategyId: p.targetStrategyId }),
         });
       }
@@ -595,7 +599,7 @@ export async function validateBillProvisions(
       const p = rawP as {
         type: "tariff";
         scopeType: "economy_wide" | "sector" | "origin_country" | "corporation";
-        targetSectorType?: CorporationType;
+        targetSectorType?: OperatingSectorType;
         targetOriginCountryId?: CountryId;
         targetCorporationId?: ObjectId;
         rate: number;

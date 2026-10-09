@@ -2,8 +2,14 @@ import type { Db, ObjectId } from "mongodb";
 import { isPrivateEnterpriseBlocked } from "@/lib/economy/queries/privateEnterpriseGate";
 import { ObjectId as Oid } from "mongodb";
 import type { Character, Corporation, CorporateSector } from "@/lib/db/types";
-import type { CorporationType } from "@/lib/constants/corporations";
-import { CEO_INITIAL_SHARES, DEFAULT_SHARE_PRICE } from "@/lib/constants/corporations";
+
+import {
+  CEO_INITIAL_SHARES,
+  DEFAULT_SHARE_PRICE,
+  operatingSectorIdentity,
+  corporationTypeOfLane,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
@@ -51,7 +57,8 @@ import {
 export interface SpinOffInput {
   parent: Corporation;
   callerUserId: ObjectId;
-  sectorType: CorporationType;
+  /** Operating lane carved out (the vehicles lane moves only vehicle plants). */
+  sectorType: OperatingSectorType;
   name: string;
   tickerSymbol?: string;
   appointedCeoType: "character" | "npp";
@@ -117,7 +124,7 @@ export async function spinOff(
   // Parent must have ≥1 sector of the requested type.
   const sectors = await db
     .collection<CorporateSector>("corporateSectors")
-    .find({ corporationId: parent._id, sectorType })
+    .find({ corporationId: parent._id, ...operatingSectorIdentity(sectorType) })
     .toArray();
   if (sectors.length === 0) {
     return fail("The parent does not operate any sector of that type.");
@@ -213,7 +220,13 @@ export async function spinOff(
       _id: newCorpId,
       name: nameTrimmed,
       tickerSymbol: tickerSymbol?.trim() || (await generateTickerSymbol(db, nameTrimmed)),
-      type: sectorType,
+      type: corporationTypeOfLane(sectorType),
+      ...(operatingSectorIdentity(sectorType).industryModel
+        ? { industryModel: operatingSectorIdentity(sectorType).industryModel }
+        : {}),
+      ...(operatingSectorIdentity(sectorType).mediaDiscriminator
+        ? { mediaDiscriminator: operatingSectorIdentity(sectorType).mediaDiscriminator }
+        : {}),
       ceoId,
       ceoType: ceoTypeResolved,
       ceoVacant: false,

@@ -7,7 +7,7 @@
 import type { Db } from "mongodb";
 import type { StrategicSectorDesignation } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 
 const COLLECTION = "strategicSectorDesignations";
@@ -16,7 +16,7 @@ export async function designateStrategicSector(
   db: Db,
   args: {
     countryId: CountryId;
-    sectorType: CorporationType;
+    sectorType: OperatingSectorType;
     turn: number;
     source: "legislation" | "executive" | "seed";
     sourceRef?: string;
@@ -43,7 +43,7 @@ export async function designateStrategicSector(
 export async function removeStrategicSectorDesignation(
   db: Db,
   countryId: CountryId,
-  sectorType: CorporationType
+  sectorType: OperatingSectorType
 ): Promise<void> {
   await db.collection<StrategicSectorDesignation>(COLLECTION).deleteOne({ countryId, sectorType });
 }
@@ -52,7 +52,7 @@ export async function removeStrategicSectorDesignation(
 export async function getDesignatedSectorTypes(
   db: Db,
   countryId: CountryId
-): Promise<Set<CorporationType>> {
+): Promise<Set<OperatingSectorType>> {
   const docs = await db
     .collection<StrategicSectorDesignation>(COLLECTION)
     .find({ countryId }, { projection: { sectorType: 1 } })
@@ -62,11 +62,11 @@ export async function getDesignatedSectorTypes(
 
 /** True if the corp operates a sector of a designated type IN the given country. */
 export function corpHasStrategicSector(
-  designatedTypes: ReadonlySet<CorporationType>,
+  designatedTypes: ReadonlySet<OperatingSectorType>,
   countryId: CountryId,
   corpSectors: {
     countryId: CountryId;
-    sectorType: CorporationType;
+    sectorType: OperatingSectorType;
     industryModel?: string | null;
     mediaDiscriminator?: string | null;
   }[]
@@ -76,11 +76,7 @@ export function corpHasStrategicSector(
       s.countryId === countryId &&
       (designatedTypes.has(s.sectorType) ||
         designatedTypes.has(
-          getOperatingSectorType(
-            s.sectorType,
-            s.industryModel,
-            s.mediaDiscriminator
-          ) as CorporationType
+          getOperatingSectorType(s.sectorType, s.industryModel, s.mediaDiscriminator)
         ))
   );
 }

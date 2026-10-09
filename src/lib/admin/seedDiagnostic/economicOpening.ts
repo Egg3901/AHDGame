@@ -3,7 +3,7 @@
  * checkEconomicOpening reads fiscal, currency, capital and market documents.
  */
 import type { Db } from "mongodb";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import {
   getOperatingSectorType,
   getStrategyForOperatingModel,
@@ -135,7 +135,7 @@ export async function checkEconomicOpening(db: Db, preset: string): Promise<Seed
       "competitor-names",
       new Set(local.map((corp) => corp.name.toLowerCase())).size === local.length
     );
-    for (const type of CORPORATION_TYPES) {
+    for (const type of OPERATING_SECTOR_TYPES) {
       const peers = local.filter(
         (corp) =>
           getOperatingSectorType(corp.type, corp.industryModel, corp.mediaDiscriminator) === type

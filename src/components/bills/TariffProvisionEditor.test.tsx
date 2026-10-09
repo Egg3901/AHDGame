@@ -63,7 +63,7 @@ describe("TariffProvisionEditor", () => {
         {...baseProps}
         value={[
           { scopeType: "economy_wide", rate: 10 },
-          { scopeType: "sector", targetSectorType: "automobiles", rate: 10 },
+          { scopeType: "sector", targetSectorType: "manufacturing_vehicles", rate: 10 },
           { scopeType: "origin_country", targetOriginCountryId: "US", rate: 10 },
         ]}
         onChange={vi.fn()}

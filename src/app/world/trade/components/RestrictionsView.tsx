@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CommodityType } from "@/lib/constants/commodities";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import type { TariffScopeType } from "@/lib/db/types/tariff";
 import type { WorldTradeLedger } from "@/lib/trade/queries/worldTradeLedger";
 import { formatEmbargoProvisionLabel } from "@/lib/legislature/embargoProvisionLabel";
@@ -13,7 +16,7 @@ interface TariffItem {
   /** Country imposing the tariff (where the bill passed). */
   countryId: CountryId;
   scopeType: TariffScopeType;
-  targetSectorType: CorporationType | null;
+  targetSectorType: OperatingSectorType | null;
   targetOriginCountryId: CountryId | null;
   targetCorporationName: string | null;
   rate: number;
@@ -176,7 +179,7 @@ export default function RestrictionsView({ ledger }: { ledger: WorldTradeLedger 
         return "All imported goods";
       case "sector":
         return t.targetSectorType
-          ? `${CORPORATION_TYPE_LABELS[t.targetSectorType] ?? t.targetSectorType} sector`
+          ? `${OPERATING_SECTOR_TYPE_LABELS[t.targetSectorType] ?? t.targetSectorType} sector`
           : "Sector tariff";
       case "origin_country":
         return t.targetOriginCountryId

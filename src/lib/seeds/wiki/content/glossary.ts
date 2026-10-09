@@ -132,7 +132,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **Total Appeal Pipeline**: The per-turn formula used to calculate how many votes each candidate receives from each demographic group. Components: reach, appeal, approval scalar, party org scalar. Used identically for vote accumulation and polling projections.
 
-**Turn**: One unit of game time = one game week = one real hour. The hourly cron processes all game phases during a turn.
+**Turn**: One unit of game time = one game week. In normal multiplayer mode, the main turn runs once per real hour. Quarter-hour market updates and the half-hour election, growth, inflation and exchange-rate updates do not grant another action refresh or advance race deadlines. Sub-hour updates wait while a main turn is processing; fast mode uses its own main-turn cadence.
 
 **Turn log**: A record of everything that happened during a turn: which elections resolved, which bills advanced, which phases ran. Stored for 24 hours. Visible to admins; key events visible to players via notifications.
 

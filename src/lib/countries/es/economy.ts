@@ -1,6 +1,6 @@
 import type { CountryEconomy } from "../contract";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 
 /**
@@ -34,8 +34,8 @@ const sectorWeightsBase = {
   real_estate: 12,
   retail: 9,
   agriculture: 9,
-  entertainment: 8,
-  automobiles: 7,
+  media_entertainment: 8,
+  manufacturing_vehicles: 7,
   construction: 7,
   financial: 6,
   healthcare: 6,
@@ -50,10 +50,10 @@ const sectorWeightsBase = {
 // No COST_SCALE_ANCHORS row; the folder omits `costScaleAnchors` rather than defaulting it.
 /**
  * ⚠ THE CAST IS LOAD-BEARING, for the same reason as the cabinet groups:
- * JSON.parse widens each sector name to `string`, and `CorporationType[]` is a
+ * JSON.parse widens each sector name to `string`, and `OperatingSectorType[]` is a
  * union array. Caught by typecheck alone.
  */
-const strategicSectors: CorporationType[] = [];
+const strategicSectors: OperatingSectorType[] = [];
 const treasuryPsRate = {
   national: 70000,
   state: 35000,
@@ -114,9 +114,9 @@ export const ES_ECONOMY: CountryEconomy = {
         telecommunications: 2,
         media: 2,
         healthcare: 2,
-        automobiles: 1,
+        manufacturing_vehicles: 1,
         chemical_industries: 1,
-        entertainment: 1,
+        media_entertainment: 1,
         technology: 0,
       },
       "1979": {
@@ -126,9 +126,9 @@ export const ES_ECONOMY: CountryEconomy = {
         construction: 8,
         energy: 7,
         real_estate: 7,
-        automobiles: 5,
+        manufacturing_vehicles: 5,
         chemical_industries: 5,
-        entertainment: 7,
+        media_entertainment: 7,
         financial: 3,
         healthcare: 3,
         defense: 3,
@@ -143,8 +143,8 @@ export const ES_ECONOMY: CountryEconomy = {
         real_estate: 12,
         retail: 9,
         agriculture: 9,
-        entertainment: 8,
-        automobiles: 7,
+        media_entertainment: 8,
+        manufacturing_vehicles: 7,
         construction: 7,
         financial: 6,
         healthcare: 6,

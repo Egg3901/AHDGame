@@ -1,5 +1,5 @@
 import type { ObjectId } from "mongodb";
-import type { CorporationType } from "../../constants/corporations";
+import type { OperatingSectorType } from "../../constants/corporations";
 import type { CountryId } from "../../constants/countries";
 import type { BillVoteSnapshot } from "./voteSnapshot";
 import type { PolicyShiftLedgerEntry, ResetLawProvision } from "./legislation";
@@ -55,7 +55,7 @@ export interface StateBillPolicyProvision {
 export interface StateBillSubsidyProvision {
   type: "subsidy";
   scopeType: "sector" | "economy_wide";
-  targetSectorType?: CorporationType;
+  targetSectorType?: OperatingSectorType;
   targetStrategyId?: string;
   domesticOnly: boolean;
 }
@@ -63,7 +63,7 @@ export interface StateBillSubsidyProvision {
 export interface StateBillEndSubsidyProvision {
   type: "end_subsidy";
   scopeType: "sector" | "economy_wide";
-  targetSectorType?: CorporationType;
+  targetSectorType?: OperatingSectorType;
   targetStrategyId?: string;
 }
 

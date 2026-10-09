@@ -6,18 +6,18 @@ Corporations are listed on country-specific stock exchanges. Players can buy and
 
 | Country | Exchange | URL |
 | --- | --- | --- |
-| United States | NYSE | /country/us/stockmarket |
-| United Kingdom | FTSE | /country/uk/stockmarket |
-| Germany | DAX | /country/de/stockmarket |
-| Japan | Nikkei | /country/jp/stockmarket |
-| Ireland | ISEQ | /country/ie/stockmarket |
-| Brazil | B3 | /country/br/stockmarket |
-| China | SSE | /country/cn/stockmarket |
-| Nigeria | NGX | /country/ng/stockmarket |
+| United States | NYSE | /market?tab=stocks&exchange=US |
+| United Kingdom | FTSE | /market?tab=stocks&exchange=UK |
+| Germany | DAX | /market?tab=stocks&exchange=DE |
+| Japan | Nikkei | /market?tab=stocks&exchange=JP |
+| Ireland | ISEQ | /market?tab=stocks&exchange=IE |
+| Brazil | B3 | /market?tab=stocks&exchange=BR |
+| China | SSE | /market?tab=stocks&exchange=CN |
+| Nigeria | NGX | /market?tab=stocks&exchange=NG |
 
-21 exchanges are configured in total (every country with an \`exchangeName\` set); legacy \`/stockmarket/[country]\` URLs still work and redirect to the \`/country/[code]/stockmarket\` form above.
+21 exchanges are configured in total (every country with an \`exchangeName\` set). The Market page provides the exchange selector and redirects older stock-market page URLs to the matching exchange view.
 
-Exchange pages display: market cap, share price, total revenue, net income, CEO, sector type, and headquarters location. Price history is shown as **OHLC candlestick charts** (open, high, low, close per period).
+The Market page displays market cap, share price, total revenue, net income, CEO, sector type, and headquarters location. Price history is shown as **OHLC candlestick charts** (open, high, low, close per period).
 
 ## Share price formula
 
@@ -79,11 +79,11 @@ The formula produces a **fundamental value** each turn, then several additional 
 
 ## Buying and selling shares
 
-From any corporation page, navigate to the Shares tab.
+From a corporation page, navigate to the Shares tab, or use the **Trade** shortcut on a tradable stock in the exchange list.
 
 ### Market orders
 
-Buy or sell immediately at the current market price through the system's market maker. Fills instantly with infinite liquidity.
+Market orders use the quoted bid or ask. The equity pool's base half-spread is 1% on each side of its midpoint, before its cash-balance adjustment. Execution depends on available shares, cash and the applicable market path; liquidity is not unlimited. Review the trade quote before confirming.
 
 ### Limit orders
 

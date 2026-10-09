@@ -17,7 +17,7 @@ import type { Corporation } from "@/lib/db/types";
 import { shouldRedactCorporation } from "@/lib/corporations/redaction";
 import { isSectorTechTreesEnabled } from "@/lib/corporations/techTree/featureFlag";
 import {
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPE_LABELS,
   RD_INNOVATION_INTERVAL,
   RD_INNOVATION_SCORE_THRESHOLD,
 } from "@/lib/constants/corporations";
@@ -272,7 +272,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     return NextResponse.json({
       enabled: true,
       sectorType: operatingSectorType,
-      sectorLabel: CORPORATION_TYPE_LABELS[operatingSectorType] ?? operatingSectorType,
+      sectorLabel: OPERATING_SECTOR_TYPE_LABELS[operatingSectorType] ?? operatingSectorType,
       currencyCode: corporation.liquidCurrencyCode ?? "USD",
       currentYear,
       currentDecadeId: getDecadeForYear(currentYear).id,

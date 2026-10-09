@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import { Skeleton } from "@/components/ui";
 import { CorporationLogo } from "@/components/corporation/CorporationLogo";
 import { useAuthMe } from "@/contexts/AuthDataContext";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { regionUrl } from "@/lib/urls";
 
@@ -16,7 +16,7 @@ type SectorSort = "revenue" | "type" | "state" | "country" | "margin" | "growth"
 
 type SectorRow = {
   id: string;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   sectorTypeLabel: string;
   stateId: string;
   stateName: string;
@@ -47,7 +47,7 @@ type SectorsResponse = {
   sectors: SectorRow[];
   counts: { unowned: number; owned: number; forSale: number };
   filters: {
-    sectorTypes: { value: CorporationType; label: string }[];
+    sectorTypes: { value: OperatingSectorType; label: string }[];
     countries: { value: CountryId; label: string; flag: string }[];
   };
 };
@@ -94,7 +94,7 @@ export default function SectorsPage() {
     const corpType = navData.myCorporationType;
     const corpCountry = navData.myCorporationCountryId;
     const charCountry = navData.characterCountryId;
-    if (corpType && CORPORATION_TYPES.includes(corpType as CorporationType)) {
+    if (corpType && OPERATING_SECTOR_TYPES.includes(corpType as OperatingSectorType)) {
       setTypeFilter(corpType);
     }
     const country = corpCountry || charCountry;

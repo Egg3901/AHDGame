@@ -68,11 +68,13 @@ describe("getEffectiveTariffRate", () => {
       makeTariff({
         countryId: "US",
         scopeType: "sector",
-        targetSectorType: "automobiles",
+        targetSectorType: "manufacturing_vehicles",
         rate: 25,
       }),
     ];
-    expect(getEffectiveTariffRate(tariffs, "US", "automobiles", "UK", undefined)).toBe(25);
+    expect(getEffectiveTariffRate(tariffs, "US", "manufacturing_vehicles", "UK", undefined)).toBe(
+      25
+    );
     expect(getEffectiveTariffRate(tariffs, "US", "manufacturing", "UK", undefined)).toBe(0);
     const canonical = [
       makeTariff({
@@ -82,7 +84,9 @@ describe("getEffectiveTariffRate", () => {
         rate: 10,
       }),
     ];
-    expect(getEffectiveTariffRate(canonical, "US", "automobiles", "UK", undefined)).toBe(10);
+    expect(getEffectiveTariffRate(canonical, "US", "manufacturing_vehicles", "UK", undefined)).toBe(
+      10
+    );
   });
 
   it("applies sector tariff only to matching sector", () => {

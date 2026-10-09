@@ -1,3 +1,4 @@
+import { migration as corporateFundPositions } from "./entries/2026-10-09-corporate-fund-positions";
 import { migration as governmentAccountability } from "./entries/2026-10-04-government-accountability";
 import { migration as bankFailurePoliticsIndex } from "./entries/2026-10-04-bank-failure-politics-index";
 // Central registry of deployable migrations, in chronological order. Each
@@ -116,6 +117,7 @@ import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-m
 import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank-treasury-trade-indexes";
 import { migration as underwritingRecoveryIndexes } from "./entries/2026-10-04-underwriting-recovery-indexes";
 import { migration as advertisingAgreementIndexes } from "./entries/2026-10-05-advertising-agreement-indexes";
+import { migration as foldAutomobileEntertainmentTypes } from "./entries/2026-10-05-fold-automobile-entertainment-types";
 import { migration as activateLiveDemographicsV2 } from "./entries/2026-10-07-activate-live-demographics-v2";
 
 export const MIGRATIONS: Migration[] = [
@@ -352,10 +354,12 @@ export const MIGRATIONS: Migration[] = [
   underwritingRecoveryIndexes,
   bankFailurePoliticsIndex,
   advertisingAgreementIndexes,
+  foldAutomobileEntertainmentTypes,
   productVentureIndexes,
   campaignFieldOfficeIndexes,
   // 15-minute market cap chart rows; also in the startup allowlist.
   marketCapTickIndexes,
+  corporateFundPositions,
   subhourWikiCadence,
   // Suggestion #363: spin-offs were created with no tech. Additive heal.
   backfillSpinOffTechBaselines,

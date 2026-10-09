@@ -9,9 +9,9 @@ import {
 describe("media operating model catalog", () => {
   it("lists only the current media and entertainment sector lanes", () => {
     expect(MEDIA_OPERATING_MODELS).toHaveLength(8);
-    expect(MEDIA_OPERATING_MODELS.flatMap((model) => model.sectorTypes)).not.toContain(
-      "media_entertainment"
-    );
+    expect(
+      [...new Set(MEDIA_OPERATING_MODELS.flatMap((model) => model.sectorTypes))].sort()
+    ).toEqual(["media", "media_entertainment"]);
   });
 
   it("keeps streaming outside the 1953 opening world and on the current tech lanes", () => {
@@ -19,14 +19,14 @@ describe("media operating model catalog", () => {
     expect(streaming?.availableFromYear).toBeGreaterThan(1953);
     expect(streaming?.technologies).toEqual({
       media: { decade: "2009", nodeName: "Streaming Platforms" },
-      entertainment: { decade: "2009", nodeName: "Streaming Distribution" },
+      media_entertainment: { decade: "2009", nodeName: "Streaming Distribution" },
     });
   });
 
   it("points every paid technology prerequisite at a node in its existing sector lane", () => {
     for (const model of MEDIA_OPERATING_MODELS) {
       for (const [sectorType, technology] of Object.entries(model.technologies)) {
-        const node = TECH_TREE[sectorType as "media" | "entertainment"].find(
+        const node = TECH_TREE[sectorType as "media" | "media_entertainment"].find(
           (candidate) =>
             candidate.decadeId === technology.decade && candidate.name === technology.nodeName
         );

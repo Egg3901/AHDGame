@@ -106,8 +106,6 @@ describe("1991 bootstrap recovery", () => {
         preset: "1991-default",
         startingParties: "none",
         resetReference: true,
-        fresh1991VehicleModelSeed: true,
-        fresh1991MediaTaxonomySeed: true,
         preIteration: true,
       })
     );

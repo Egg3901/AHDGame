@@ -48,9 +48,11 @@ describe("runRequiredStartupMigrations", () => {
       "2026-10-04-manufacturing-product-projects-v2-index",
       "2026-10-04-underwriting-recovery-indexes",
       "2026-10-05-advertising-agreement-indexes",
+      "2026-10-05-fold-automobile-entertainment-types",
       "2026-10-08-product-venture-indexes",
       "2026-10-09-campaign-field-office-indexes",
       "2026-10-09-market-cap-tick-indexes",
+      "2026-10-09-corporate-fund-positions",
       "2026-10-09-subhour-wiki-cadence",
     ]);
     expect(REQUIRED_STARTUP_MIGRATIONS.every((migration) => migration.idempotent)).toBe(true);

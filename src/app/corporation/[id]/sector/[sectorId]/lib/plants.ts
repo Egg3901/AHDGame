@@ -1,5 +1,5 @@
 import type { PlantIdleCauseKey } from "../types";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { facilityVocabulary } from "@/lib/constants/facilityVocabulary";
 
 /**
@@ -44,7 +44,7 @@ export interface IdleCauseMeta {
  * this stays one source of copy instead of seventeen.
  */
 export function idleCauseMeta(
-  sectorType: CorporationType | string | null | undefined
+  sectorType: OperatingSectorType | string | null | undefined
 ): Record<PlantIdleCauseKey, IdleCauseMeta> {
   const v = facilityVocabulary(sectorType);
   const sites = v.plural;

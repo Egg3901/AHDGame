@@ -51,6 +51,14 @@ campaign
 - **Campaign Funds** (starts ₳250,000): ads, polls, donor network, NPP influence. This is "funds" on action buttons.
 - **Cash on Hand** (starts ₳0): player-to-player wires from Portfolio. Do not mix them up.
 
+## Contests and community games
+
+In multiplayer, open **Contests** next to Help. Weekly rounds compare small and large corporation growth, National Influence gained, government approval gained and successful referrals. Growth excludes injected capital, and an approval entry requires the same player head of government throughout the round. Check the leaderboard for your current standing and configured prize; a flat round has no winner. Rounds open on the first visit, and scores refresh through the contest system.
+
+Iteration referrals count new players who create a character during the current iteration. Weekly and iteration ranking exclude banned referees, self-referrals and strong linked accounts. The top three iteration referrers can earn Supporter for the next iteration; paying subscriptions are separate.
+
+The Discord bot also offers casino games, paid in your character's home currency. Available games include blackjack, slots, roulette, crash, craps, high-low, races, lottery and poker. Limits depend on the shared bank and the game: the latest bank limits cap a stake at 12.5% and a payout at 25%. Review the quoted stake and payout before playing. A house game returns the stake if its bank cannot cover a win.
+
 ## Go deeper when you need it
 
 - [Create a Character](/wiki/create-a-character): every onboarding click.

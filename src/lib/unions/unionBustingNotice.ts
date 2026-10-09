@@ -24,7 +24,7 @@
 
 import type { Db, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
 import type { Character, Union, UnionOrganizer } from "@/lib/db/types";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
 
@@ -83,7 +83,7 @@ export async function notifyUnionOfBustingAttempt(
       .toArray();
 
     const sectorLabel =
-      CORPORATION_TYPE_LABELS[input.sectorType as CorporationType] ?? input.sectorType;
+      OPERATING_SECTOR_TYPE_LABELS[input.sectorType as CorporationType] ?? input.sectorType;
     const message = bustingMessage(union, input, sectorLabel);
     const seen = new Set<string>();
     const inputs: NotificationInput[] = [];

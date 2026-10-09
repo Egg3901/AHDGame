@@ -5,7 +5,7 @@
 import { validateProductAllocations, type ProductPlantAllocation } from "./plantAllocations";
 export { validateProductAllocations, type ProductPlantAllocation } from "./plantAllocations";
 import { getOperatingSectorType, SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
-import type { CorporationType, ManufacturingIndustryModel } from "@/lib/constants/corporations";
+import type { OperatingSectorType, ManufacturingIndustryModel } from "@/lib/constants/corporations";
 import { getStrategyAvailability } from "@/lib/constants/techTree/strategyAvailability";
 import type { TechLane } from "@/lib/constants/techTree/nodes";
 import { getManufacturingProductKind, MANUFACTURING_PRODUCT_KINDS } from "../manufacturingCatalog";
@@ -61,7 +61,7 @@ export function legalManufacturingProductKinds(
     if (options?.techTreesEnabled && options.currentYear != null) {
       const availability = getStrategyAvailability(
         {
-          type: operatingType as CorporationType,
+          type: operatingType as OperatingSectorType,
           unlockedTechNodeIds: options.unlockedTechNodeIds
             ? [...options.unlockedTechNodeIds]
             : undefined,
@@ -75,7 +75,7 @@ export function legalManufacturingProductKinds(
     }
     for (const kind of MANUFACTURING_PRODUCT_KINDS) {
       if (
-        kind.sectorTypes.includes(operatingType as CorporationType) &&
+        kind.sectorTypes.includes(operatingType as OperatingSectorType) &&
         kind.strategyIds.includes(strategy.id) &&
         (strategy.supply[kind.outputCommodity] ?? 0) > 0
       ) {
@@ -110,7 +110,7 @@ export function isLegalManufacturingProductForPlant(
     !kind ||
     !hasRealCapacity(plant) ||
     !kind.sectorTypes.includes(
-      getOperatingSectorType(plant.sectorType, plant.industryModel) as CorporationType
+      getOperatingSectorType(plant.sectorType, plant.industryModel) as OperatingSectorType
     )
   ) {
     return false;
@@ -125,7 +125,7 @@ export function isLegalManufacturingProductForPlant(
     options.currentYear != null &&
     getStrategyAvailability(
       {
-        type: operatingType as CorporationType,
+        type: operatingType as OperatingSectorType,
         industryModel: plant.industryModel,
         unlockedTechNodeIds: options.unlockedTechNodeIds
           ? [...options.unlockedTechNodeIds]

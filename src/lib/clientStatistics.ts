@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 
 /**
  * Anonymous aggregate telemetry ingress validation.
@@ -92,7 +92,7 @@ const setupSchema = z.strictObject({
 });
 
 const sectorRevenueSchema = z
-  .partialRecord(z.enum(CORPORATION_TYPES), z.number().finite().min(0).max(1e15))
+  .partialRecord(z.enum(OPERATING_SECTOR_TYPES), z.number().finite().min(0).max(1e15))
   .refine((map) => Object.keys(map).length <= MAX_SECTOR_ENTRIES);
 
 const metricsSchema = z

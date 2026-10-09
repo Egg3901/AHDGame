@@ -29,6 +29,7 @@ import {
 import { creditCorpLiquidCapital } from "@/lib/financialTxLog/atomicCashGuard";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { sellFundHoldingsForRedemptionCash } from "@/lib/indexFunds/fundRedemptionLiquidity";
+import { payCorporateWindUpHolders } from "./corporateHolderPayout";
 import { payFundHolderCash } from "./holderPayout";
 import { recordAudit } from "@/lib/audit/recordAudit";
 
@@ -159,9 +160,18 @@ export async function completeWindUp(
   // rather than the sponsor covering an unfundable quote.
   const finalNav = totalUnits > 0 ? fund.cashAnchor / totalUnits : 0;
 
-  let holdersPaid = 0;
-  let distributedAnchor = 0;
+  const corporatePayout = await payCorporateWindUpHolders(
+    db,
+    fund,
+    positions,
+    finalNav,
+    currentTurn,
+    now
+  );
+  let holdersPaid = corporatePayout.holdersPaid;
+  let distributedAnchor = corporatePayout.distributedAnchor;
   for (const position of positions) {
+    if (position.holderKind === "corporation") continue;
     const payoutAnchor = Math.floor(position.units * finalNav);
     if (payoutAnchor <= 0) continue;
     const paid = await payFundHolderCash(db, fund, position, payoutAnchor, currentTurn, now);

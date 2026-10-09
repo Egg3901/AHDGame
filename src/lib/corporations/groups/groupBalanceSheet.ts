@@ -19,7 +19,7 @@
 
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import {
   corpLiquidCapitalToAnchor,
   loadFxRatesByCurrency,
@@ -52,7 +52,7 @@ export interface GroupBalanceSheet {
   totalRevenueAnchor: number;
   totalSectorCount: number;
   /** Industries the group operates in anywhere, deduplicated. */
-  industries: CorporationType[];
+  industries: OperatingSectorType[];
   /** Countries the group has sectors in. */
   countries: string[];
 }
@@ -100,7 +100,7 @@ export async function loadGroupBalanceSheet(
 
   const revenueByCorp = new Map<string, number>();
   const sectorCountByCorp = new Map<string, number>();
-  const industries = new Set<CorporationType>();
+  const industries = new Set<OperatingSectorType>();
   const corpById = new Map(corps.map((c) => [c._id.toString(), c]));
 
   for (const sector of sectors) {

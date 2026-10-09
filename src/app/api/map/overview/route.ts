@@ -11,7 +11,7 @@ import { computeGovernorMap } from "@/lib/map/governorService";
 import { computeApprovalMap, type MapApprovalState } from "@/lib/map/approvalService";
 import { computeLeanMap } from "@/lib/map/leanService";
 import { computePresidentialMap } from "@/lib/map/presidentialService";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import { buildRegionRoster, filterPoliticalUsRoster } from "@/lib/map/rosterService";
 import { loadUsPoliticalStateIds } from "@/lib/elections/usPoliticalHome";
 import type { State } from "@/lib/db/types";
@@ -37,13 +37,13 @@ async function computeSectorSpecializationMap(
     if (!spec) continue;
     result[state._id] = {
       primary: spec.primary,
-      primaryLabel: CORPORATION_TYPE_LABELS[spec.primary],
+      primaryLabel: OPERATING_SECTOR_TYPE_LABELS[spec.primary],
       secondary: spec.secondary,
-      secondaryLabel: CORPORATION_TYPE_LABELS[spec.secondary],
+      secondaryLabel: OPERATING_SECTOR_TYPE_LABELS[spec.secondary],
       tooltip: [
         state.name,
-        `Primary: ${CORPORATION_TYPE_LABELS[spec.primary]} (+10pp)`,
-        `Secondary: ${CORPORATION_TYPE_LABELS[spec.secondary]} (+5pp)`,
+        `Primary: ${OPERATING_SECTOR_TYPE_LABELS[spec.primary]} (+10pp)`,
+        `Secondary: ${OPERATING_SECTOR_TYPE_LABELS[spec.secondary]} (+5pp)`,
       ],
     };
   }

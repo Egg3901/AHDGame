@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { CommodityData } from "@/app/country/[code]/stockmarket/types";
@@ -20,6 +20,17 @@ import { SUPPLY_PAGE_SIZE, SupplyDealsPanel, type SupplyOffersResponse } from ".
 import { DEFAULT_OFFER_FILTERS, offersQuery } from "./supplyOfferUi";
 import { StockMarketChart } from "@/app/country/[code]/stockmarket/components/MarketOverview";
 import { useMarketJson } from "./useMarketJson";
+
+import { MarketCorporationAction } from "./MarketCorporationAction";
+import { useEnabledCountries, useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
+import { buildRuntimeExchangeMeta } from "@/app/country/[code]/stockmarket/stockMarketRouting";
+import {
+  ExchangeSelector,
+  type ExchangeCompareRow,
+} from "@/app/country/[code]/stockmarket/components/ExchangeSelector";
+import { getExchangeApiKey } from "@/lib/constants/exchangeRegistry";
+import { aggregateExchangeTotals } from "@/lib/stockExchange/aggregate";
+import type { ExchangeData } from "@/app/country/[code]/stockmarket/types";
 
 const CHART_KEY = "market.chartOpen";
 
@@ -51,6 +62,18 @@ export function MarketHub() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const tab = parseMarketTab(searchParams.get("tab"));
+  const enabledCountries = useEnabledCountries();
+  const countryName = useCountryDisplayName();
+  const exchangeMeta = useMemo(
+    () => buildRuntimeExchangeMeta(new Set(enabledCountries), "US", countryName),
+    [enabledCountries, countryName]
+  );
+  const selectedExchange = searchParams.get("exchange")?.toUpperCase() ?? "global";
+  const exchangeFilter = exchangeMeta[selectedExchange] ? selectedExchange : "global";
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareData, setCompareData] = useState<Record<string, ExchangeCompareRow>>({});
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareLoaded, setCompareLoaded] = useState(false);
 
   // Shared with the overview and the commodities, sectors and supply tabs
   // through the response cache.
@@ -63,20 +86,68 @@ export function MarketHub() {
   const supplyEnabled = offers.data?.enabled === true;
   const [chartOpen, setChartOpen] = useChartOpen();
 
+  useEffect(() => {
+    if (!compareOpen || compareLoaded) return;
+    let cancelled = false;
+    void Promise.all(
+      Object.entries(exchangeMeta).map(async ([key, meta]) => {
+        try {
+          const response = await fetch(
+            `/api/stock-exchange?exchange=${encodeURIComponent(meta.exchangeApi)}`,
+            { cache: "no-store" }
+          );
+          if (!response.ok) return null;
+          const json = (await response.json()) as ExchangeData;
+          const listings = json.listings ?? [];
+          return [
+            key,
+            { listings: listings.length, marketCap: aggregateExchangeTotals(listings).marketCap },
+          ] as const;
+        } catch {
+          return null;
+        }
+      })
+    ).then((rows) => {
+      if (cancelled) return;
+      setCompareData(
+        Object.fromEntries(rows.filter((row): row is NonNullable<typeof row> => row !== null))
+      );
+      setCompareLoading(false);
+      setCompareLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [compareOpen, compareLoaded, exchangeMeta]);
+
   const setTab = (next: MarketTab) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", next);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
+  const setExchange = (next: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "global") params.delete("exchange");
+    else params.set("exchange", next);
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
+  const exchangeApi =
+    exchangeFilter === "global" ? "global" : (getExchangeApiKey(exchangeFilter) ?? "global");
+
   return (
     <div className="min-h-screen bg-background pb-16">
       <main className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6">
-        <div>
-          <h1 className="text-heading-lg font-bold text-foreground">The Market</h1>
-          <p className="text-sm text-muted">
-            Stocks, bonds, funds, sectors, commodities, supply deals and currencies in one place.
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-heading-lg font-bold text-foreground">The Market</h1>
+            <p className="text-sm text-muted">
+              Stocks, bonds, funds, sectors, commodities, supply deals and currencies in one place.
+            </p>
+          </div>
+          <MarketCorporationAction />
         </div>
 
         <section aria-label="Stock market chart">
@@ -96,8 +167,22 @@ export function MarketHub() {
               {chartOpen ? "Hide chart" : "Show chart"}
             </button>
           </div>
+          <div className="mt-3 flex w-full min-w-0 flex-wrap items-start justify-end">
+            <ExchangeSelector
+              exchangeMeta={exchangeMeta}
+              exchangeFilter={exchangeFilter}
+              compareData={compareData}
+              compareLoading={compareLoading}
+              compareOpen={compareOpen}
+              onToggleCompare={() => {
+                if (!compareOpen && !compareLoaded) setCompareLoading(true);
+                setCompareOpen(!compareOpen);
+              }}
+              onSelect={setExchange}
+            />
+          </div>
           {chartOpen && (
-            <StockMarketChart exchangeFilter="global" refreshKey={null} currentTurn={0} />
+            <StockMarketChart exchangeFilter={exchangeFilter} refreshKey={null} currentTurn={0} />
           )}
         </section>
 
@@ -135,7 +220,7 @@ export function MarketHub() {
               loading={commodities.loading || sectors.loading || offers.loading}
             />
           )}
-          {tab === "stocks" && <StocksPanel />}
+          {tab === "stocks" && <StocksPanel exchange={exchangeApi} />}
           {tab === "bonds" && <BondsPanel />}
           {tab === "funds" && <FundsPanel />}
           {tab === "sectors" && <SectorsPanel />}

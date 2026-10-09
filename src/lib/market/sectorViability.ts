@@ -1,5 +1,5 @@
 import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { SectorStrategy } from "@/lib/constants/sectorStrategies";
 import { priceRealizationFactor } from "@/lib/market/priceRealization";
 
@@ -14,7 +14,7 @@ export interface ViabilityScenario {
 }
 
 export interface StrategyViability {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   strategyId: string;
   strategyName: string;
   balancedOutputRate: number;
@@ -48,7 +48,7 @@ export function evaluateRecipeScenario(
 }
 
 export function analyzeStrategyViability(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   strategy: SectorStrategy
 ): StrategyViability {
   const balancedInputShare = rateSum(strategy.demand);

@@ -9,6 +9,8 @@
 //     healthiest get ~0. maxBoost is capped server-side at 3.0 (300%).
 // Auth: requireAdmin
 
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
+import { operatingSectorIdentity } from "@/lib/constants/corporations";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
@@ -26,7 +28,7 @@ import {
   distressRankingToBoostMap,
 } from "@/lib/economy/sectorDistress";
 import type { UnownedSector, GameState, ExchangeRate } from "@/lib/db/types";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
@@ -150,30 +152,36 @@ export async function POST(request: Request) {
     if (body.maxBoost == null) {
       const allUnowned = await db.collection<UnownedSector>("unownedSectors").find({}).toArray();
       const open = allUnowned.filter(
-        (u) => !redirectBuckets.has(bucketKey(u.stateId, u.sectorType))
+        (u) =>
+          !redirectBuckets.has(
+            bucketKey(u.stateId, u.sectorType, u.industryModel, u.mediaDiscriminator)
+          )
       );
-      // Grouped by sectorType: the ₳ → units factor is per-sector, so a single
-      // updateMany across mixed types cannot maintain `headroomUnits` correctly.
-      const idsByType = new Map<CorporationType, UnownedSector["_id"][]>();
+      // Grouped by operating lane: the ₳ → units factor is per lane, so a single
+      // updateMany across mixed lanes cannot maintain `headroomUnits` correctly.
+      const idsByType = new Map<OperatingSectorType, UnownedSector["_id"][]>();
       for (const u of open) {
-        const t = u.sectorType as CorporationType;
+        const t = getOperatingSectorType(u.sectorType, u.industryModel, u.mediaDiscriminator);
         const list = idsByType.get(t) ?? [];
         list.push(u._id);
         idsByType.set(t, list);
       }
       let modifiedCount = 0;
-      for (const [sectorType, ids] of idsByType) {
+      for (const [lane, ids] of idsByType) {
         if (ids.length === 0) continue;
+        const identity = operatingSectorIdentity(lane);
         const res = await db
           .collection<UnownedSector>("unownedSectors")
           .updateMany({ _id: { $in: ids } }, [
             {
               $set: unownedPoolBoostSet(
-                sectorType,
+                identity.sectorType,
                 LEGACY_BOOST_MULTIPLIER,
                 now,
                 plantsEnabled,
-                eraUnitScale
+                eraUnitScale,
+                identity.industryModel,
+                identity.mediaDiscriminator
               ),
             },
           ]);
@@ -209,15 +217,21 @@ export async function POST(request: Request) {
 
     let totalModified = 0;
     let totalRedirected = 0;
-    for (const [sectorType, boost] of boostMap.entries()) {
+    for (const [lane, boost] of boostMap.entries()) {
       if (boost <= 0) continue;
       const multiplier = 1 + boost;
+      const identity = operatingSectorIdentity(lane);
       const sectorDocs = await db
         .collection<UnownedSector>("unownedSectors")
-        .find({ sectorType: sectorType as CorporationType })
+        .find(identity)
         .toArray();
       const openIds = sectorDocs
-        .filter((u) => !redirectBuckets.has(bucketKey(u.stateId, u.sectorType)))
+        .filter(
+          (u) =>
+            !redirectBuckets.has(
+              bucketKey(u.stateId, u.sectorType, u.industryModel, u.mediaDiscriminator)
+            )
+        )
         .map((u) => u._id);
       if (openIds.length > 0) {
         const { modifiedCount } = await db
@@ -225,11 +239,13 @@ export async function POST(request: Request) {
           .updateMany({ _id: { $in: openIds } }, [
             {
               $set: unownedPoolBoostSet(
-                sectorType as CorporationType,
+                identity.sectorType,
                 multiplier,
                 now,
                 plantsEnabled,
-                eraUnitScale
+                eraUnitScale,
+                identity.industryModel,
+                identity.mediaDiscriminator
               ),
             },
           ]);

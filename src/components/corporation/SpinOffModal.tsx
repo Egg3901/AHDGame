@@ -3,7 +3,10 @@
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import { spinOffCostAnchor } from "@/lib/corporations/subsidiaries/constants";
 import { PlayerSelector } from "@/components/PlayerSelector";
 import { useDialogA11y } from "@/components/ui";
@@ -98,7 +101,7 @@ export function SpinOffModal({
           >
             {sectorOptions.map((o) => (
               <option key={o.type} value={o.type}>
-                {CORPORATION_TYPE_LABELS[o.type as CorporationType] ?? o.type} ({o.count})
+                {OPERATING_SECTOR_TYPE_LABELS[o.type as OperatingSectorType] ?? o.type} ({o.count})
               </option>
             ))}
           </select>

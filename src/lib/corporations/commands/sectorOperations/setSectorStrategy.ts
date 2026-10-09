@@ -7,7 +7,7 @@ import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { CorporateSector, GameConfig, GameState } from "@/lib/db/types";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
-import type { CorporationType } from "@/lib/constants/corporations";
+
 import {
   SECTOR_STRATEGIES,
   getOperatingSectorType,
@@ -16,7 +16,10 @@ import {
   STRATEGY_COOLDOWN_TURNS,
   getMediaOperatingModelStrategies,
 } from "@/lib/constants/sectorStrategies";
-import { getMediaOperatingModel } from "@/lib/mediaOperatingModels/catalog";
+import {
+  getMediaOperatingModel,
+  type MediaOperatingModelSector,
+} from "@/lib/mediaOperatingModels/catalog";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { setSectorStrategySchema as setStrategySchema } from "@/lib/api/schemas/corporations";
 import {
@@ -99,7 +102,7 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
       sector.sectorType,
       sector.industryModel,
       sector.mediaDiscriminator
-    ) as CorporationType;
+    );
     const strategies = SECTOR_STRATEGIES[sectorType];
     if (!strategies) {
       return errorResponse(400, "No strategies available for this sector type");
@@ -115,7 +118,7 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
       if (!operatingModelsEnabled) {
         return errorResponse(404, "Media operating models are not available.");
       }
-      if (!operatingModel.sectorTypes.includes(sectorType as "media" | "entertainment")) {
+      if (!operatingModel.sectorTypes.includes(sectorType as MediaOperatingModelSector)) {
         return errorResponse(400, "Invalid model for this sector type.");
       }
     }
@@ -272,7 +275,7 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
     const marketMode = await getMarketSystemModeForDb(db);
     const plantsEnabled = marketAtLeast(marketMode, "plants");
     const rescale = retoolRescaleFields({
-      sectorType,
+      sectorType: sector.sectorType,
       industryModel: sector.industryModel,
       mediaDiscriminator: sector.mediaDiscriminator,
       fromStrategyId: currentStrategyId,

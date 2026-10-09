@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { uniform } from "@/lib/seeds/reference/uniformUnionName";
 
 /**
@@ -13,18 +13,18 @@ import { uniform } from "@/lib/seeds/reference/uniformUnionName";
  * map -- is a separate thing and stays there.
  */
 
-export const RO_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = uniform(
+export const RO_UNION_NAMES_MODERN: Partial<Record<OperatingSectorType, string>> = uniform(
   "National Trade Union Bloc"
 );
 
-export const RO_UNION_NAMES_1991: Partial<Record<CorporationType, string>> = uniform(
+export const RO_UNION_NAMES_1991: Partial<Record<OperatingSectorType, string>> = uniform(
   "National Confederation of Free Trade Unions of Romania"
 );
 
-export const RO_UNION_NAMES_1979: Partial<Record<CorporationType, string>> = uniform(
+export const RO_UNION_NAMES_1979: Partial<Record<OperatingSectorType, string>> = uniform(
   "General Union of Trade Unions of Romania"
 );
 
-export const RO_UNION_NAMES_1953: Partial<Record<CorporationType, string>> = uniform(
+export const RO_UNION_NAMES_1953: Partial<Record<OperatingSectorType, string>> = uniform(
   "General Confederation of Labour"
 );

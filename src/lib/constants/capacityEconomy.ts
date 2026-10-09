@@ -21,14 +21,14 @@ import {
   investmentBuildTurns,
 } from "@/lib/corporations/investment/rules";
 import {
-  CORPORATION_TYPES,
+  OPERATING_SECTOR_TYPES,
   GROWTH_COST_MULTIPLIER,
   acumenGrowthCostMultiplier,
   acumenRateSensitivity,
   dominanceDensityFactor,
   getDominanceGrowthCostMultiplier,
   getNationalDominanceGrowthCostMultiplier,
-  type CorporationType,
+  type OperatingSectorType,
   type MediaDiscriminator,
 } from "./corporations";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
@@ -67,15 +67,11 @@ const DEFAULT_STRATEGY_ID = "standard";
  * strategies, which cannot be a 1953 world's baseline.
  */
 export function defaultSupplyRates(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   industryModel?: string | null,
   mediaDiscriminator?: MediaDiscriminator | null
 ): Partial<Record<CommodityType, number>> {
-  const operatingType = getOperatingSectorType(
-    sectorType,
-    industryModel,
-    mediaDiscriminator
-  ) as CorporationType;
+  const operatingType = getOperatingSectorType(sectorType, industryModel, mediaDiscriminator);
   const strategies = SECTOR_STRATEGIES[operatingType] ?? [];
   const chosen =
     strategies.find((s) => s.id === DEFAULT_STRATEGY_ID) ??
@@ -98,7 +94,7 @@ export function defaultSupplyRates(
  * of a stored pair by the era ratio, silently and permanently.
  */
 export function capacityUnitYield(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   unitScale: number,
   industryModel?: string | null,
   mediaDiscriminator?: MediaDiscriminator | null
@@ -126,7 +122,7 @@ export function safeUnitScale(unitScale: number | null | undefined): number {
  * era unit scale in the denominator: one 1953 unit earns era-scale ₳.
  */
 export function revenuePerCapacityUnit(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   unitScale: number,
   industryModel?: string | null,
   mediaDiscriminator?: MediaDiscriminator | null
@@ -170,17 +166,13 @@ export function unitYieldForSupply(
  * 500. `capacityRescaleRatio` reads 0 as "nothing to do" and returns 1.
  */
 export function revenuePerCapacityUnitForStrategy(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   strategyId: string | null | undefined,
   unitScale: number,
   industryModel?: string | null,
   mediaDiscriminator?: MediaDiscriminator | null
 ): number {
-  const operatingType = getOperatingSectorType(
-    sectorType,
-    industryModel,
-    mediaDiscriminator
-  ) as CorporationType;
+  const operatingType = getOperatingSectorType(sectorType, industryModel, mediaDiscriminator);
   if (!SECTOR_STRATEGIES[operatingType]?.length) return 0;
   const strategy = getStrategyForOperatingModel(
     sectorType,
@@ -228,7 +220,7 @@ export function revenuePerCapacityUnitForStrategy(
  */
 export function rescaleCapacityForStrategyChange(
   capitalStock: number | null | undefined,
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   fromStrategyId: string | null | undefined,
   toStrategyId: string | null | undefined,
   industryModel?: string | null,
@@ -258,7 +250,7 @@ export function rescaleCapacityForStrategyChange(
  * Returns exactly 1 whenever the rescale is undefined or a no-op.
  */
 export function capacityRescaleRatio(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   fromStrategyId: string | null | undefined,
   toStrategyId: string | null | undefined,
   industryModel?: string | null,
@@ -434,7 +426,7 @@ export function capacityEraLaborIndex(year: number | null | undefined): number {
  * Passing the originating preset keeps a 1991 world's price stable as it ages.
  */
 export function capacityPricePerUnit(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   year: number,
   unitScale: number,
   strategyId: string | null | undefined,
@@ -464,7 +456,7 @@ export function capacityPricePerUnit(
  * carries exactly the headcount `calculateWorkers` gives it today.
  */
 export function laborIntensity(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   year: number,
   unitScale: number,
   industryModel?: string | null,
@@ -496,13 +488,13 @@ export function laborIntensity(
  *
  * FLAGGED PROVISIONAL: worldsim re-tunes this whole table.
  */
-const CAPACITY_BUILD_TURNS_TABLE: Record<CorporationType, number> = {
+const CAPACITY_BUILD_TURNS_TABLE: Record<OperatingSectorType, number> = {
   // Heavy / sited / permit-bound.
   energy: 96,
   extraction: 96,
   chemical_industries: 84,
   manufacturing: 72,
-  automobiles: 72,
+  manufacturing_vehicles: 72,
   defense: 72,
   telecommunications: 60,
   real_estate: 60,
@@ -510,7 +502,7 @@ const CAPACITY_BUILD_TURNS_TABLE: Record<CorporationType, number> = {
   healthcare: 48,
   agriculture: 48,
   logistics: 36,
-  entertainment: 24,
+  media_entertainment: 24,
   media: 24,
   financial: 24,
   technology: 24,
@@ -522,7 +514,7 @@ const CAPACITY_BUILD_TURNS_TABLE: Record<CorporationType, number> = {
 export const CAPACITY_BUILD_TURNS_DEFAULT = 48;
 
 /** Turns to complete a new build. Existing orders keep their stored window. */
-export function CAPACITY_BUILD_TURNS(sectorType: CorporationType, founding = false): number {
+export function CAPACITY_BUILD_TURNS(sectorType: OperatingSectorType, founding = false): number {
   return investmentBuildTurns(
     CAPACITY_BUILD_TURNS_TABLE[sectorType] ?? CAPACITY_BUILD_TURNS_DEFAULT,
     founding
@@ -530,7 +522,7 @@ export function CAPACITY_BUILD_TURNS(sectorType: CorporationType, founding = fal
 }
 
 /** Every sector type, for exhaustive iteration in tests and tooling. */
-export const CAPACITY_SECTOR_TYPES: ReadonlyArray<CorporationType> = CORPORATION_TYPES;
+export const CAPACITY_SECTOR_TYPES: ReadonlyArray<OperatingSectorType> = OPERATING_SECTOR_TYPES;
 
 // ─── P3a: build orders, mothballing, idle upkeep ────────────────────────────
 
@@ -697,7 +689,7 @@ export function hostBuildPriceIndex(costOfLivingIndex: number | null | undefined
 
 /** Inputs to {@link computeBuildCost}. */
 export interface BuildCostInputs {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   industryModel?: string | null;
   mediaDiscriminator?: MediaDiscriminator | null;
   /** Capacity units ordered (output units/day). */

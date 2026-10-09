@@ -6,7 +6,7 @@
  * schedule as the local layer.
  */
 
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { SovereignResolutionChoice } from "@/lib/db/types/budget";
 import {
   DEFAULT_MARGIN_PENALTY_REPUDIATE,
@@ -25,7 +25,7 @@ export interface GlobalContagionInputs {
   defaultingCountryGdp: number;
   globalGdp: number;
   resolutionType: SovereignResolutionChoice;
-  corpType: CorporationType;
+  corpType: OperatingSectorType;
   currentTurn: number;
   lastDefaultTurn: number | null;
 }

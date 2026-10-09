@@ -64,6 +64,62 @@ describe("loadCorporationDetailView", () => {
     db.collection("corporationHistory");
   });
 
+  it("includes fund NAV assets in portfolio totals, book value, and equity", async () => {
+    const corporation = makeCorporation({
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+      liquidCapital: 1000,
+      shareholders: [],
+      publicFloat: 0,
+    });
+    const before = await loadCorporationDetailView({
+      db: db as unknown as Db,
+      corporation,
+      currentTurn: 10,
+      viewerUserId: null,
+    });
+    const fundId = new ObjectId();
+    db.collection("indexFundPositions");
+    db.collection("indexFunds");
+    db.collectionMocks["indexFundPositions"]!.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: new ObjectId(),
+          fundId,
+          holderKind: "corporation",
+          corporationId: corporation._id,
+          units: 5,
+        },
+      ],
+    } as never);
+    db.collectionMocks["indexFunds"]!.find.mockReturnValue({
+      toArray: async () => [
+        { _id: fundId, name: "Fund", slug: "fund", quotedNav: 20, status: "active" },
+      ],
+    } as never);
+    const after = await loadCorporationDetailView({
+      db: db as unknown as Db,
+      corporation,
+      currentTurn: 10,
+      viewerUserId: null,
+    });
+    expect(after.balanceSheet.assets.cashOnHand).toBe(1000);
+    expect(after.balanceSheet.assets.fundHoldingsValue).toBe(100);
+    expect(after.balanceSheet.assets.heldFunds).toEqual([
+      { fundId: fundId.toString(), name: "Fund", slug: "fund", units: 5, valueAnchor: 100 },
+    ]);
+    expect(
+      after.balanceSheet.assets.totalPortfolioValue - before.balanceSheet.assets.totalPortfolioValue
+    ).toBe(100);
+    expect(after.balanceSheet.assets.totalAssets - before.balanceSheet.assets.totalAssets).toBe(
+      100
+    );
+    expect(after.balanceSheet.equity.totalEquity - before.balanceSheet.equity.totalEquity).toBe(
+      100
+    );
+    expect(after.balanceSheet.equity.bookValue - before.balanceSheet.equity.bookValue).toBe(100);
+  });
+
   it("returns a stable corporation detail payload for a minimal corporation", async () => {
     const ceo = makeCharacter({
       _id: new ObjectId(),

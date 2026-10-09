@@ -112,6 +112,8 @@ export interface IncomeStatementResult {
       bankNPV?: number;
       bondHoldingsValue: number;
       stockHoldingsValue: number;
+      fundHoldingsValue: number;
+      heldFunds: NonNullable<PortfolioHoldings["heldFunds"]>;
       imfFacilityReceivablesValue: number;
       imfFacilityReceivables: {
         borrowerCorporationId: string;
@@ -400,7 +402,10 @@ export async function computeIncomeStatement(
   const totalOperatingNPV = totalSectorNPV + bankNpvLocal;
   const currentSharePrice = Math.round((corporation.sharePrice ?? MIN_SHARE_PRICE) * 100) / 100;
   const totalPortfolioAnchor =
-    totalStockHoldingsValue + totalBondHoldingsValue + imfReceivablesPrincipal;
+    totalStockHoldingsValue +
+    totalBondHoldingsValue +
+    (portfolio.totalFundHoldingsValue ?? 0) +
+    imfReceivablesPrincipal;
   const totalPortfolioValue = anchorToCorpCapital(totalPortfolioAnchor, corpCurrency, corpFxRate);
   const techAssetValueLocal = anchorToCorpCapital(
     computeTechAssetValueAnchor(corporation, gameState?.currentYear),
@@ -445,6 +450,10 @@ export async function computeIncomeStatement(
         : {}),
       bondHoldingsValue: Math.round(bondHoldingsValueLocal),
       stockHoldingsValue: Math.round(stockHoldingsValueLocal),
+      fundHoldingsValue: Math.round(
+        anchorToCorpCapital(portfolio.totalFundHoldingsValue ?? 0, corpCurrency, corpFxRate)
+      ),
+      heldFunds: portfolio.heldFunds ?? [],
       imfFacilityReceivablesValue: Math.round(imfReceivablesPrincipalLocal),
       imfFacilityReceivables: imfReceivableRows.map((r) => ({
         borrowerCorporationId: r.borrowerCorporationId,

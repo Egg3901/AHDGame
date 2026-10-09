@@ -13,6 +13,8 @@ import { PanelState, pctText, toneClass } from "./marketUi";
 import { useMarketJson } from "./useMarketJson";
 
 export const STOCKS_URL = "/api/stock-exchange?exchange=global";
+export const stocksUrl = (exchange: string) =>
+  `/api/stock-exchange?exchange=${encodeURIComponent(exchange)}`;
 export const BONDS_URL = "/api/bonds";
 export const FUNDS_URL = "/api/investment-funds?exchange=global";
 
@@ -24,8 +26,8 @@ export interface FundsResponse {
   funds?: FundListItem[];
 }
 
-export function StocksPanel() {
-  const { data, error, loading } = useMarketJson<ExchangeData>(STOCKS_URL);
+export function StocksPanel({ exchange = "global" }: { exchange?: string }) {
+  const { data, error, loading } = useMarketJson<ExchangeData>(stocksUrl(exchange));
   const [showNpp, setShowNpp] = useState(false);
   const all = data?.listings ?? [];
   const nppCount = all.filter((l) => l.isNpp).length;

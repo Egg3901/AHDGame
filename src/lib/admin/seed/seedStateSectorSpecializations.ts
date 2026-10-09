@@ -1,7 +1,10 @@
 import type { Db } from "mongodb";
 import type { State } from "@/lib/db/types";
-import type { CorporationType, StateSectorSpecialization } from "@/lib/constants/corporations";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPES,
+  type OperatingSectorType,
+  type StateSectorSpecialization,
+} from "@/lib/constants/corporations";
 import { JP_SECTOR_SPECIALIZATION } from "@/lib/countries/jp/economy";
 
 const US_OVERRIDES: Record<string, StateSectorSpecialization> = {
@@ -9,16 +12,16 @@ const US_OVERRIDES: Record<string, StateSectorSpecialization> = {
   AK: { primary: "energy", secondary: "extraction" },
   AZ: { primary: "technology", secondary: "real_estate" },
   AR: { primary: "agriculture", secondary: "retail" },
-  CA: { primary: "technology", secondary: "entertainment" },
+  CA: { primary: "technology", secondary: "media_entertainment" },
   CO: { primary: "technology", secondary: "energy" },
   CT: { primary: "financial", secondary: "healthcare" },
   DE: { primary: "financial", secondary: "chemical_industries" },
-  FL: { primary: "real_estate", secondary: "entertainment" },
+  FL: { primary: "real_estate", secondary: "media_entertainment" },
   GA: { primary: "logistics", secondary: "telecommunications" },
-  HI: { primary: "entertainment", secondary: "agriculture" },
+  HI: { primary: "media_entertainment", secondary: "agriculture" },
   ID: { primary: "agriculture", secondary: "technology" },
   IL: { primary: "financial", secondary: "logistics" },
-  IN: { primary: "manufacturing", secondary: "automobiles" },
+  IN: { primary: "manufacturing", secondary: "manufacturing_vehicles" },
   IA: { primary: "agriculture", secondary: "energy" },
   KS: { primary: "agriculture", secondary: "manufacturing" },
   KY: { primary: "manufacturing", secondary: "logistics" },
@@ -26,13 +29,13 @@ const US_OVERRIDES: Record<string, StateSectorSpecialization> = {
   ME: { primary: "agriculture", secondary: "healthcare" },
   MD: { primary: "defense", secondary: "healthcare" },
   MA: { primary: "technology", secondary: "healthcare" },
-  MI: { primary: "automobiles", secondary: "manufacturing" },
+  MI: { primary: "manufacturing_vehicles", secondary: "manufacturing" },
   MN: { primary: "healthcare", secondary: "financial" },
   MS: { primary: "agriculture", secondary: "manufacturing" },
   MO: { primary: "logistics", secondary: "agriculture" },
   MT: { primary: "agriculture", secondary: "extraction" },
   NE: { primary: "agriculture", secondary: "financial" },
-  NV: { primary: "entertainment", secondary: "real_estate" },
+  NV: { primary: "media_entertainment", secondary: "real_estate" },
   NH: { primary: "technology", secondary: "financial" },
   NJ: { primary: "chemical_industries", secondary: "telecommunications" },
   NM: { primary: "energy", secondary: "defense" },
@@ -44,9 +47,9 @@ const US_OVERRIDES: Record<string, StateSectorSpecialization> = {
   OR: { primary: "technology", secondary: "agriculture" },
   PA: { primary: "healthcare", secondary: "energy" },
   RI: { primary: "healthcare", secondary: "financial" },
-  SC: { primary: "manufacturing", secondary: "automobiles" },
+  SC: { primary: "manufacturing", secondary: "manufacturing_vehicles" },
   SD: { primary: "financial", secondary: "agriculture" },
-  TN: { primary: "healthcare", secondary: "entertainment" },
+  TN: { primary: "healthcare", secondary: "media_entertainment" },
   TX: { primary: "energy", secondary: "technology" },
   UT: { primary: "technology", secondary: "financial" },
   VT: { primary: "agriculture", secondary: "healthcare" },
@@ -62,7 +65,7 @@ const COUNTRY_DEFAULTS: Record<string, StateSectorSpecialization> = {
   US: { primary: "manufacturing", secondary: "retail" },
   UK: { primary: "financial", secondary: "media" },
   JP: JP_SECTOR_SPECIALIZATION,
-  DE: { primary: "manufacturing", secondary: "automobiles" },
+  DE: { primary: "manufacturing", secondary: "manufacturing_vehicles" },
   IE: { primary: "technology", secondary: "financial" },
   BR: { primary: "agriculture", secondary: "energy" },
   CN: { primary: "manufacturing", secondary: "technology" },
@@ -75,7 +78,7 @@ const REGIONAL_OVERRIDES: Record<string, StateSectorSpecialization> = {
   "UK:SWE": { primary: "technology", secondary: "defense" },
   "UK:EAE": { primary: "technology", secondary: "agriculture" },
   "UK:EMI": { primary: "manufacturing", secondary: "logistics" },
-  "UK:WMI": { primary: "automobiles", secondary: "manufacturing" },
+  "UK:WMI": { primary: "manufacturing_vehicles", secondary: "manufacturing" },
   "UK:YHU": { primary: "manufacturing", secondary: "logistics" },
   "UK:NWE": { primary: "media", secondary: "manufacturing" },
   "UK:NEE": { primary: "energy", secondary: "manufacturing" },
@@ -83,16 +86,16 @@ const REGIONAL_OVERRIDES: Record<string, StateSectorSpecialization> = {
   "UK:WAL": { primary: "manufacturing", secondary: "energy" },
   "UK:NIR": { primary: "agriculture", secondary: "manufacturing" },
 
-  "DE:BW": { primary: "automobiles", secondary: "manufacturing" },
-  "DE:BY": { primary: "automobiles", secondary: "manufacturing" },
+  "DE:BW": { primary: "manufacturing_vehicles", secondary: "manufacturing" },
+  "DE:BY": { primary: "manufacturing_vehicles", secondary: "manufacturing" },
   "DE:NW": { primary: "manufacturing", secondary: "chemical_industries" },
   "DE:HE": { primary: "financial", secondary: "logistics" },
   "DE:RP": { primary: "chemical_industries", secondary: "manufacturing" },
-  "DE:SL": { primary: "automobiles", secondary: "manufacturing" },
-  "DE:NI": { primary: "automobiles", secondary: "manufacturing" },
+  "DE:SL": { primary: "manufacturing_vehicles", secondary: "manufacturing" },
+  "DE:NI": { primary: "manufacturing_vehicles", secondary: "manufacturing" },
   "DE:SH": { primary: "energy", secondary: "logistics" },
   "DE:HH": { primary: "logistics", secondary: "financial" },
-  "DE:HB": { primary: "logistics", secondary: "automobiles" },
+  "DE:HB": { primary: "logistics", secondary: "manufacturing_vehicles" },
   "DE:BE": { primary: "technology", secondary: "media" },
   "DE:BB": { primary: "energy", secondary: "agriculture" },
   "DE:MV": { primary: "agriculture", secondary: "energy" },
@@ -103,11 +106,11 @@ const REGIONAL_OVERRIDES: Record<string, StateSectorSpecialization> = {
   "JP:HOK": { primary: "agriculture", secondary: "energy" },
   "JP:TOH": { primary: "manufacturing", secondary: "energy" },
   "JP:KAN": { primary: "financial", secondary: "technology" },
-  "JP:CHU": { primary: "automobiles", secondary: "manufacturing" },
+  "JP:CHU": { primary: "manufacturing_vehicles", secondary: "manufacturing" },
   "JP:KNS": { primary: "manufacturing", secondary: "technology" },
-  "JP:CGK": { primary: "automobiles", secondary: "manufacturing" },
+  "JP:CGK": { primary: "manufacturing_vehicles", secondary: "manufacturing" },
   "JP:SHI": { primary: "agriculture", secondary: "chemical_industries" },
-  "JP:KYU": { primary: "automobiles", secondary: "manufacturing" },
+  "JP:KYU": { primary: "manufacturing_vehicles", secondary: "manufacturing" },
 
   "CN:DB": { primary: "manufacturing", secondary: "energy" },
   "CN:HB": { primary: "financial", secondary: "technology" },
@@ -143,9 +146,10 @@ const REGIONAL_OVERRIDES: Record<string, StateSectorSpecialization> = {
 function rotateFallback(stateId: string): StateSectorSpecialization {
   const chars = [...stateId];
   const hash = chars.reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-  const primary = CORPORATION_TYPES[hash % CORPORATION_TYPES.length];
-  let secondary = CORPORATION_TYPES[(hash + 5) % CORPORATION_TYPES.length];
-  if (secondary === primary) secondary = CORPORATION_TYPES[(hash + 6) % CORPORATION_TYPES.length];
+  const primary = OPERATING_SECTOR_TYPES[hash % OPERATING_SECTOR_TYPES.length];
+  let secondary = OPERATING_SECTOR_TYPES[(hash + 5) % OPERATING_SECTOR_TYPES.length];
+  if (secondary === primary)
+    secondary = OPERATING_SECTOR_TYPES[(hash + 6) % OPERATING_SECTOR_TYPES.length];
   return { primary, secondary };
 }
 
@@ -157,7 +161,7 @@ function byKeyword(state: State): StateSectorSpecialization | null {
     return { primary: "financial", secondary: "media" };
   }
   if (match(["bavaria", "baden", "aichi", "osaka", "são paulo", "sao paulo"])) {
-    return { primary: "manufacturing", secondary: "automobiles" };
+    return { primary: "manufacturing", secondary: "manufacturing_vehicles" };
   }
   if (match(["texas", "alberta", "hokkaido", "rheinland", "north sea", "northeast"])) {
     return { primary: "energy", secondary: "extraction" };
@@ -218,7 +222,7 @@ export async function seedStateSectorSpecializations(
 
   await db.collection<State>("states").bulkWrite(ops);
 
-  const byPrimary = new Map<CorporationType, number>();
+  const byPrimary = new Map<OperatingSectorType, number>();
   for (const state of states) {
     const primary = inferStateSectorSpecialization(state).primary;
     byPrimary.set(primary, (byPrimary.get(primary) ?? 0) + 1);

@@ -6,7 +6,7 @@
  * (inflation pipeline handles), or rows outside the 72-turn full+decay window.
  */
 
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { SovereignResolutionChoice } from "@/lib/db/types/budget";
 import {
   DEFAULT_MARGIN_PENALTY_REPUDIATE,
@@ -22,7 +22,7 @@ export interface LocalPenaltyInputs {
   corpCountryId: string;
   defaultingCountryCode: string;
   resolutionType: SovereignResolutionChoice;
-  corpType: CorporationType;
+  corpType: OperatingSectorType;
   currentTurn: number;
   lastDefaultTurn: number | null;
 }

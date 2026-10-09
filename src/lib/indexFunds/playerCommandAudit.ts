@@ -16,14 +16,24 @@ export interface FundCommandAudit {
   fundSlug: string;
   fundTicker: string;
   currencyCode: CurrencyCode;
+  fundCurrency?: CurrencyCode;
   holderId: ObjectId;
+  holderKind?: "character" | "corporation";
   holderName: string;
   turn: number;
-  entries: Array<{ transactionId: ObjectId; amountNative: number; balanceAfter?: number }>;
+  entries: Array<{
+    transactionId: ObjectId;
+    amountNative: number;
+    anchorAmount?: number;
+    balanceAfter?: number;
+  }>;
 }
 
 interface AuditPlan {
-  rows: Array<{ collection: string; document: Document & { _id: ObjectId } }>;
+  rows: Array<{
+    collection: "financialTxLog" | "ledgerEntries" | "actionAuditLog";
+    document: Document & { _id: ObjectId };
+  }>;
 }
 interface Receipt extends Document {
   _id: string;
@@ -56,8 +66,9 @@ export async function resumeFundCommandAudit(db: Db, key: string): Promise<void>
         .findOne({
           _id: entry.transactionId,
           fundId: audit.fundId,
-          characterId: audit.holderId,
-          holderKind: "character",
+          ...(audit.holderKind === "corporation"
+            ? { corporationId: audit.holderId, holderKind: "corporation" }
+            : { characterId: audit.holderId, holderKind: "character" }),
           kind: { $in: ["subscription", "redemption"] },
         });
       if (!transaction) throw new Error("Fund command audit witness is missing");
@@ -68,11 +79,11 @@ export async function resumeFundCommandAudit(db: Db, key: string): Promise<void>
         type: sign < 0 ? "index_fund_subscribe" : "index_fund_redeem",
         turn: audit.turn,
         createdAt: transaction.createdAt,
-        subjectType: "character",
+        subjectType: audit.holderKind ?? "character",
         subjectId: audit.holderId,
         subjectName: audit.holderName,
         amount: entry.amountNative,
-        anchorAmount: sign * transaction.amountAnchor,
+        anchorAmount: sign * (entry.anchorAmount ?? transaction.amountAnchor),
         balanceAfter: entry.balanceAfter,
         currencyCode: audit.currencyCode,
         counterpartyType: "system",
@@ -82,7 +93,7 @@ export async function resumeFundCommandAudit(db: Db, key: string): Promise<void>
           fundName: audit.fundName,
           fundSlug: audit.fundSlug,
           fundTicker: audit.fundTicker,
-          fundCurrency: audit.currencyCode,
+          fundCurrency: audit.fundCurrency ?? audit.currencyCode,
           units: transaction.units,
           navAnchor: transaction.navAnchor,
           source: "player",
@@ -119,7 +130,11 @@ export async function resumeFundCommandAudit(db: Db, key: string): Promise<void>
                 source: "system",
                 action: doc.type === "index_fund_subscribe" ? "fund.buy" : "fund.sell",
                 category: "money",
-                subject: { type: "character", id: audit.holderId, name: audit.holderName },
+                subject: {
+                  type: audit.holderKind ?? "character",
+                  id: audit.holderId,
+                  name: audit.holderName,
+                },
                 amount: doc.amount,
                 currencyCode: doc.currencyCode,
                 anchorAmount: doc.anchorAmount,
@@ -145,6 +160,8 @@ export async function resumeFundCommandAudit(db: Db, key: string): Promise<void>
   }
   if (!receipt?.auditPlan) throw new Error("Fund command audit plan is unavailable");
   for (const row of receipt.auditPlan.rows) {
+    if (!["financialTxLog", "ledgerEntries", "actionAuditLog"].includes(row.collection))
+      throw new Error("Fund command audit destination is unsupported");
     await db.collection(row.collection).updateOne(
       { _id: row.document._id },
       {

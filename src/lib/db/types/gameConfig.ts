@@ -6,13 +6,6 @@ export interface GameConfig {
   productLinesV2Enabled?: boolean;
   /** Enables media product project reads and bounded quality/brand overlays; absent remains off. */
   mediaProductSlatesEnabled?: boolean;
-  /** Explicit fresh-reset marker for the 1991 automobile-to-vehicle-model seed. */
-  fresh1991VehicleModelSeed?: {
-    preset: "1991-default";
-    schema: "manufacturing-vehicles-v1";
-    status: "in_progress" | "complete";
-    startedAt: Date;
-  };
   /** Shared nominal commodity price level. Scarcity remains in price/base ratios. */
   commodityNominalPriceIndex?: number;
   /** Last commodity turn included in commodityNominalPriceIndex. */
@@ -161,13 +154,6 @@ export interface GameConfig {
   mediaEditorialEnabled?: boolean;
   /** Paid media and entertainment operating-model catalog. Default off. */
   mediaOperatingModelsEnabled?: boolean;
-  /** Combined media and entertainment taxonomy gate. Default off. */
-  fresh1991MediaTaxonomySeed?: {
-    preset: "1991-default";
-    schema: "media-entertainment-taxonomy-v1";
-    status: "in_progress" | "complete";
-    startedAt: Date;
-  };
   /** Media ownership limits and censorship effects in the advertising market. Default off. */
   mediaRegulationEnabled?: boolean;
   /**

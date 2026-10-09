@@ -11,6 +11,12 @@
  * and paying it would be the fund paying itself.
  */
 
+import {
+  anchorToCorpLiquidCapital,
+  loadFxRatesRecord,
+  resolveCorpLiquidCurrencyCode,
+} from "@/lib/currency/corporationCapital";
+import type { Corporation } from "@/lib/db/types";
 import { ObjectId, type Db } from "mongodb";
 import type { IndexFund, IndexFundPosition, IndexFundTransaction } from "@/lib/db/types/indexFund";
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
@@ -57,6 +63,26 @@ export async function payFundHolderCash(
         $set: { updatedAt: now },
       }
     );
+  } else if (position.holderKind === "corporation" && position.corporationId) {
+    const corp = await db
+      .collection<Corporation>("corporations")
+      .findOne(
+        { _id: position.corporationId },
+        { projection: { liquidCurrencyCode: 1, countryId: 1 } }
+      );
+    if (!corp) return false;
+    const currency = resolveCorpLiquidCurrencyCode(corp);
+    const rates = forexEnabled ? await loadFxRatesRecord(db) : {};
+    const rate = forexEnabled && currency ? rates[currency] : 1;
+    if (!rate || rate <= 0) throw new Error("Corporate payout exchange rate unavailable");
+    const credited = await db.collection("corporations").updateOne(
+      { _id: corp._id },
+      {
+        $inc: { liquidCapital: anchorToCorpLiquidCapital(payoutAnchor, corp, rate) },
+        $set: { updatedAt: now },
+      }
+    );
+    if (!credited.matchedCount) return false;
   } else if (position.holderKind === "npp" && position.nppId) {
     // NPP investment cash is denominated in ₳ already — no rate.
     await db
@@ -75,6 +101,7 @@ export async function payFundHolderCash(
     kind: "wind_up_distribution",
     turn: currentTurn,
     holderKind: position.holderKind,
+    ...(position.corporationId ? { corporationId: position.corporationId } : {}),
     ...(position.characterId ? { characterId: position.characterId } : {}),
     ...(position.imperialCharacterId ? { imperialCharacterId: position.imperialCharacterId } : {}),
     ...(position.nppId ? { nppId: position.nppId } : {}),

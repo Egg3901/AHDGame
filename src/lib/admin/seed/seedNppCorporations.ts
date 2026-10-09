@@ -10,13 +10,11 @@ import { chooseSeedExtractionSite } from "@/lib/extraction/rules/seedPlacement";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import type { Corporation } from "@/lib/db/types";
 import {
-  CORPORATION_TYPES,
-  type CorporationType,
-  type ManufacturingIndustryModel,
-  type MediaDiscriminator,
+  OPERATING_SECTOR_TYPES,
+  operatingSectorIdentity,
+  type OperatingSectorType,
 } from "@/lib/constants/corporations";
 import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
-import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import { computeUnownedSeedRevenue } from "@/lib/admin/seed/seedUnownedSectors";
 import { nppSeedRevenueCap } from "@/lib/admin/seed/rules/nppSeedCapacity";
@@ -128,44 +126,21 @@ export async function seedNppCorporations(
   db: Db,
   preset: string,
   startingYear: number,
-  log: (msg: string) => void = () => {},
-  vehicleModelSeed = false
+  log: (msg: string) => void = () => {}
 ): Promise<SeedNppCorporationsResult> {
   const plan = nppCorpSpawnPlan(preset, startingYear);
   const byCountry: Record<string, number> = {};
   let totalSpawned = 0;
-  const config =
-    preset === "1991-default"
-      ? await db
-          .collection<GameConfig>("gameConfig")
-          .findOne(
-            { _id: "default" },
-            { projection: { fresh1991VehicleModelSeed: 1, fresh1991MediaTaxonomySeed: 1 } }
-          )
-      : null;
-  vehicleModelSeed ||= config?.fresh1991VehicleModelSeed?.schema === "manufacturing-vehicles-v1";
 
-  const sectorMarkets: Array<{
-    type: CorporationType;
-    industryModel: ManufacturingIndustryModel | null;
-    mediaDiscriminator?: MediaDiscriminator | null;
-  }> = vehicleModelSeed
-    ? [
-        ...CORPORATION_TYPES.filter((type) => type !== "automobiles").map((type) => ({
-          type,
-          industryModel: null,
-        })),
-        { type: "manufacturing" as const, industryModel: "vehicles" as const },
-      ]
-    : CORPORATION_TYPES.map((type) => ({ type, industryModel: null }));
-  if (config?.fresh1991MediaTaxonomySeed?.status === "complete") {
-    for (const market of sectorMarkets) {
-      if (market.type === "entertainment") {
-        market.type = "media";
-        market.mediaDiscriminator = "entertainment";
-      }
-    }
-  }
+  // One market per operating lane, stored under its canonical identity.
+  const sectorMarkets = OPERATING_SECTOR_TYPES.map((lane) => {
+    const identity = operatingSectorIdentity(lane);
+    return {
+      type: identity.sectorType,
+      industryModel: identity.industryModel,
+      mediaDiscriminator: identity.mediaDiscriminator,
+    };
+  });
 
   for (const { countryId, perSectorCount } of plan) {
     const extractionSite =
@@ -200,9 +175,8 @@ export async function seedNppCorporations(
     for (const market of sectorMarkets) {
       const present = existing.filter(
         (corp) =>
-          getOperatingSectorType(corp.type, null, corp.mediaDiscriminator) ===
-            getOperatingSectorType(market.type, null, market.mediaDiscriminator) &&
-          (corp.industryModel ?? null) === market.industryModel
+          getOperatingSectorType(corp.type, corp.industryModel, corp.mediaDiscriminator) ===
+          getOperatingSectorType(market.type, market.industryModel, market.mediaDiscriminator)
       ).length;
       const missing = Math.max(0, perSectorCount - present);
       if (missing === 0) continue;
@@ -210,7 +184,7 @@ export async function seedNppCorporations(
         market.type,
         market.industryModel,
         market.mediaDiscriminator
-      ) as CorporationType;
+      ) as OperatingSectorType;
       const countrySizedCap =
         countryStates.length > 0
           ? nppSeedRevenueCap({

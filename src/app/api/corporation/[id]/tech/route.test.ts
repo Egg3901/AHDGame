@@ -99,9 +99,11 @@ describe("GET /api/corporation/[id]/tech", () => {
     const body = await res.json();
     const decade1979 = body.decades.find((d: { id: string }) => d.id === "1979");
 
-    expect(body.sectorType).toBe("automobiles");
+    expect(body.sectorType).toBe("manufacturing_vehicles");
     expect(
-      decade1979.lanes.sector.some((node: { id: string }) => node.id.startsWith("automobiles-"))
+      decade1979.lanes.sector.some((node: { id: string }) =>
+        node.id.startsWith("manufacturing_vehicles-")
+      )
     ).toBe(true);
   });
 

@@ -19,7 +19,7 @@ import {
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { emitBuildCapexTx } from "@/lib/corporations/capexTxLog";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { restoreSectorsToUnowned } from "@/lib/corporations/restoreSectorsToUnowned";
 import { applyBrandFacilityLoss } from "@/lib/corporations/brandFacilityLoss";
@@ -79,8 +79,9 @@ export async function abandonSector(_request: Request, { params }: RouteParams) 
     }
 
     const sectorLabel =
-      CORPORATION_TYPE_LABELS[sector.sectorType as keyof typeof CORPORATION_TYPE_LABELS] ??
-      sector.sectorType;
+      OPERATING_SECTOR_TYPE_LABELS[
+        sector.sectorType as keyof typeof OPERATING_SECTOR_TYPE_LABELS
+      ] ?? sector.sectorType;
     const state = await db
       .collection<State>("states")
       .findOne({ _id: sector.stateId }, { projection: { name: 1 } });
