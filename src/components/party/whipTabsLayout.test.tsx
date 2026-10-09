@@ -2,8 +2,20 @@
  * @vitest-environment happy-dom
  */
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render as rtlRender, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../messages/en/parties.json";
+
 import { WhipTabsLayout } from "./whipTabsLayout";
+
+function render(ui: ReactElement) {
+  return rtlRender(
+    <NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}>
+      {ui}
+    </NextIntlClientProvider>
+  );
+}
 
 // Avoid the runtime-config fetch in the hook; seed-derived governmentType is
 // enough for chamber-chip derivation.

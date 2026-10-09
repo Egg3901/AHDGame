@@ -127,6 +127,78 @@ describe("buildWhipDefianceSnapshot", () => {
     expect(db.collectionMocks.caucusMemberships!.find).not.toHaveBeenCalled();
   });
 
+  it("reports Supreme Court defiance and batches all nomination targets", async () => {
+    const db = createMockDb();
+    const voterId = new ObjectId();
+    const targetIds = [new ObjectId(), new ObjectId(), new ObjectId()];
+    const whips = targetIds.map((targetId, index) => ({
+      _id: new ObjectId(),
+      targetType: "scotusNomination",
+      targetId,
+      chamber: "senate",
+      direction: "for",
+      issuedBy: "nationalParty",
+      countryId: "US",
+      partyId: "1",
+      audience: "character",
+      mode: "soft",
+      createdAt: new Date(`2026-04-29T12:00:0${index}.000Z`),
+      updatedAt: new Date(`2026-04-29T12:00:0${index}.000Z`),
+    })) as unknown as BillWhip[];
+    db.collection("billWhips");
+    db.collection("scotusNominations");
+    db.collection("characters");
+    db.collection("electedOfficials");
+    db.collection("caucusMemberships");
+    db.collectionMocks.billWhips!.find.mockReturnValue({
+      sort: () => ({ toArray: async () => whips }),
+    });
+    db.collectionMocks.scotusNominations!.find.mockReturnValue({
+      toArray: async () =>
+        targetIds.map((targetId, index) => ({
+          _id: targetId,
+          status: "active",
+          nomineeName: `Nominee ${index}`,
+          votes: { [voterId.toString()]: "against" },
+        })),
+    });
+    db.collectionMocks.characters!.find.mockReturnValue({
+      project() {
+        return this;
+      },
+      toArray: async () => [{ _id: voterId, name: "Defiant Member", party: "1" }],
+    });
+    db.collectionMocks.electedOfficials!.find.mockReturnValue({
+      project() {
+        return this;
+      },
+      toArray: async () => [{ characterId: voterId, state: "CA", officeType: "senate" }],
+    });
+
+    const snapshot = await buildWhipDefianceSnapshot(db as unknown as Db, {
+      countryId: "US",
+      partyId: "1",
+      issuedBy: "nationalParty",
+    });
+
+    expect(snapshot).toMatchObject({ activeCount: 3, playerCount: 3, nppCount: 0 });
+    expect(snapshot.players.map((item) => item.targetLabel).sort()).toEqual([
+      "Supreme Court: Nominee 0",
+      "Supreme Court: Nominee 1",
+      "Supreme Court: Nominee 2",
+    ]);
+    expect(snapshot.players[0]).toMatchObject({
+      voterName: "Defiant Member",
+      voterState: "CA",
+      voterOffice: "senate",
+      currentVoteLabel: "AGAINST",
+    });
+    expect(db.collectionMocks.scotusNominations!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.characters!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.electedOfficials!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.caucusMemberships!.find).not.toHaveBeenCalled();
+  });
+
   it("shows active player defiance for a national soft whip on a bill", async () => {
     const db = createMockDb();
     const whipId = new ObjectId();
