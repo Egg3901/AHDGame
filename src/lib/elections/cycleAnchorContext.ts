@@ -187,6 +187,12 @@ export interface PresetElectionYears {
   /** Successor parliamentary elections. Null outside the 1991 preset. */
   csFederalAssembly?: number | null;
   huNationalAssembly?: number | null;
+  /**
+   * Soviet Congress of People's Deputies (1991 start only). The 1989 Congress
+   * sat for a five-year term, so its next regular election falls in 1994.
+   * The Cold War Supreme Soviet families keep `ruSupremeSoviet`.
+   */
+  ruUnionCongress?: number | null;
 }
 
 /**
@@ -311,13 +317,15 @@ export const CANONICAL_REAL_ELECTION_YEARS_BY_PRESET: Record<string, PresetElect
     fiEduskunta: 1995,
     frSenat: 1992, // real Sept 1992 Sénat renewal (series 1)
     trSenato: null, // abolished 1980 — no Cumhuriyet Senatosu by this era
-    // The USSR dissolves as this era opens — RU holds no elections by design.
+    // The Cold War Supreme Soviet families stay off; the 1991 Union Congress
+    // runs on its own `ruUnionCongress` anchor below.
     ruSupremeSoviet: null,
     ruRepublicSoviet: null,
     ddVolkskammer: null, // GDR reunified into DE in 1990 — no elections
     csFederalAssembly: 1992, // both chambers elected together after the 1990 vote
     huNationalAssembly: 1994, // next election after the 1990 multiparty vote
     plSejm: 1991, // 27 October 1991; 1993 was an early follow-up election
+    ruUnionCongress: 1994, // five-year term of the Congress elected in 1989
   },
   "1953-default": {
     house: 1954,
@@ -590,6 +598,8 @@ export interface CycleAnchors {
   plSejm: number | null;
   csFederalAssembly: number | null;
   huNationalAssembly: number | null;
+  /** `null` outside the 1991 preset (see PresetElectionYears). */
+  ruUnionCongress: number | null;
 }
 
 /** End-of-LARP-year-Y anchor: `(Y − startingYear + 1) × TURNS_PER_YEAR (+ offset)`. */
@@ -657,6 +667,8 @@ export function getCycleAnchors(ctx: CycleAnchorContext): CycleAnchors {
       years.csFederalAssembly == null ? null : endOfYear(years.csFederalAssembly, sy, off),
     huNationalAssembly:
       years.huNationalAssembly == null ? null : endOfYear(years.huNationalAssembly, sy, off),
+    ruUnionCongress:
+      years.ruUnionCongress == null ? null : endOfYear(years.ruUnionCongress, sy, off),
   };
 }
 

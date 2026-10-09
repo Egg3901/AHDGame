@@ -20,6 +20,7 @@ export const RACE_PRIORITY = [
   "npcDelegate",
   "supremeSovietDeputy",
   "nationalitiesDeputy",
+  "unionCongressDeputy",
   "governor",
 ] as const;
 
