@@ -376,12 +376,25 @@ export async function PATCH(request: Request) {
 
     if (body.action === "append") {
       const msg = toMessage(body.message, { content: body.message.content ?? "" });
-      const res = await coll.updateOne(filter, {
+      const appendFilter: Filter<Ticket> = msg.discordMessageId
+        ? { ...filter, "messages.discordMessageId": { $ne: msg.discordMessageId } }
+        : filter;
+      const res = await coll.updateOne(appendFilter, {
         $push: { messages: msg },
         ...(msg.imageUrls?.length ? { $addToSet: { imageUrls: { $each: msg.imageUrls } } } : {}),
         $set: { updatedAt: now },
       });
       if (!res.matchedCount) {
+        if (msg.discordMessageId) {
+          const existing = await coll.findOne(filter, {
+            projection: { _id: 1, "messages.discordMessageId": 1 },
+          });
+          if (
+            existing?.messages?.some((entry) => entry.discordMessageId === msg.discordMessageId)
+          ) {
+            return NextResponse.json({ ok: true, alreadyExists: true });
+          }
+        }
         return errorResponse(404, "Ticket not found");
       }
       return NextResponse.json({ ok: true });

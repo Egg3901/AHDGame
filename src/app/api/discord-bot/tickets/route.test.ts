@@ -59,6 +59,34 @@ describe("PATCH /api/discord-bot/tickets", () => {
     );
   });
 
+  it("makes replaying the same Discord follow-up idempotent", async () => {
+    db.collectionMocks.tickets.updateOne.mockResolvedValueOnce({
+      matchedCount: 0,
+      modifiedCount: 0,
+    });
+    db.collectionMocks.tickets.findOne.mockResolvedValueOnce({
+      messages: [{ discordMessageId: "discord-message-1" }],
+    });
+    const { PATCH } = await import("./route");
+    const response = await PATCH(
+      new Request("https://example.com/api/discord-bot/tickets", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "append",
+          ticketNumber: 42,
+          message: {
+            discordMessageId: "discord-message-1",
+            content: "replayed follow-up",
+          },
+        }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true, alreadyExists: true });
+  });
+
   it("records an explicit DM delivery marker", async () => {
     const { PATCH } = await import("./route");
     const response = await PATCH(
