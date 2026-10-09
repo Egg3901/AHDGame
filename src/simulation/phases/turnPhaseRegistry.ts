@@ -1145,6 +1145,13 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           };
         }
 
+        // Field-office upkeep after campaign income lands. Also sweeps offices
+        // whose campaign or race has ended, whichever resolution path ended it.
+        await runtime.runPhase("campaignFieldOffices", async () => {
+          const { processFieldOfficeUpkeep } = await import("@/lib/campaigns/fieldOffices/upkeep");
+          return processFieldOfficeUpkeep(db);
+        });
+
         // In-game year for era-gated events (same formula as fiscalYearBoundary).
         const eventsCurrentYear =
           (gameState.startingYear ?? STARTING_YEAR) + Math.floor((newTurn - 1) / TURNS_PER_YEAR);

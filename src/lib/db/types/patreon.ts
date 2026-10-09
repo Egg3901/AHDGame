@@ -13,10 +13,11 @@ export function isPlusOrBetter(tier: PatreonTier): boolean {
  * - "patreon": pledged via Patreon (default, legacy behaviour).
  * - "stripe": subscribed via the Lakeside account portal (Stripe).
  * - "bot": granted manually by the Discord bot / staff.
+ * - "contest": a referral contest award, always with an expiry.
  * Used to keep the Patreon reconciler from grace-out'ing Stripe subscribers,
  * who never appear in Patreon's member list.
  */
-export type SupporterProvider = "patreon" | "stripe" | "bot" | null;
+export type SupporterProvider = "patreon" | "stripe" | "bot" | "contest" | null;
 
 export type ProfileBorderKey =
   | "default-tint"

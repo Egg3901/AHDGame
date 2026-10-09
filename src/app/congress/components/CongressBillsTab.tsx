@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import type { BillDisplay, BillsResponse } from "@/lib/legislature/dto/billDisplay";
 import { EmptyState } from "./CongressShared";
 import { STATUS_LABELS } from "./CongressConstants";
@@ -13,115 +12,13 @@ import { BillCard } from "@/components/bills/BillCard";
 import { BillListItem, BillListStack } from "@/components/bills/BillListItem";
 import { ListRowSkeleton } from "@/components/ui";
 import { BillListControls, type BillVoteFilter } from "@/components/bills/BillListControls";
-import { VoteDonut } from "@/components/bills/VoteDonut";
-import { LocalTime } from "@/components/time/LocalTime";
-import { GameMonthTime } from "@/components/time/GameMonthTime";
+import { LegislatureSeal } from "@/components/legislature/LegislatureSeal";
+import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { NominationCard, type NominationDisplay } from "./NominationCard";
 import {
   getCurrentCongressBillVote,
   matchesCongressBillStatusFilter,
 } from "@/lib/congress/congressBillFilters";
-
-interface NominationDisplay {
-  id: string;
-  kind: "cabinet" | "scotus";
-  positionName: string;
-  nomineeCharacterName: string;
-  nomineeParty?: string;
-  proposedByPresidentName?: string;
-  votesFor: number;
-  votesAgainst: number;
-  votesAbstain: number;
-  votingEndsAt: string | null;
-  proposedAt?: string;
-  myVote: "for" | "against" | "abstain" | null;
-  isSenator?: boolean;
-}
-
-function NominationCard({ nom }: { nom: NominationDisplay }) {
-  const href =
-    nom.kind === "scotus"
-      ? `/congress/scotus-nominations/${nom.id}`
-      : `/congress/nominations/${nom.id}`;
-  const kindLabel =
-    nom.kind === "scotus"
-      ? "Supreme Court nomination · Senate confirmation required"
-      : "Cabinet nomination · Senate confirmation required";
-
-  return (
-    <Link
-      href={href}
-      className="group flex flex-col rounded-2xl border border-card-border bg-card shadow-lg overflow-hidden hover:border-primary/30 hover:shadow-panel hover:-translate-y-0.5 transition-all duration-200"
-    >
-      {/* Header */}
-      <div className="px-5 pt-4 pb-3">
-        <div className="flex items-start gap-2 flex-wrap mb-1">
-          <span className="font-bold text-sm leading-snug flex-1 min-w-0 group-hover:text-primary transition-colors">
-            {nom.nomineeCharacterName} → {nom.positionName}
-          </span>
-          <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-0.5 text-[10px] font-medium text-yellow-400 shrink-0">
-            Voting open
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="rounded-full border border-card-border px-2 py-0.5 text-[10px] text-muted">
-            senate
-          </span>
-          {nom.kind === "scotus" && (
-            <span className="rounded-full border border-card-border px-2 py-0.5 text-[10px] text-muted">
-              scotus
-            </span>
-          )}
-          {nom.nomineeParty && (
-            <span className="text-[10px] text-muted/60">{nom.nomineeParty}</span>
-          )}
-          {nom.myVote && (
-            <span
-              className={`text-[10px] font-medium ${nom.myVote === "for" ? "text-success" : nom.myVote === "against" ? "text-error" : "text-muted"}`}
-            >
-              Your vote: {nom.myVote}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Body */}
-      <div className="px-5 py-3 border-t border-card-border/40 flex gap-4 flex-1">
-        <div className="flex-1 min-w-0 space-y-2">
-          <p className="text-xs text-muted leading-relaxed">{kindLabel}</p>
-          <p className="text-[10px] text-muted/70">
-            By {nom.proposedByPresidentName ?? "President"}
-            {nom.proposedAt && (
-              <>
-                {" "}
-                · <GameMonthTime value={nom.proposedAt} />
-              </>
-            )}
-          </p>
-        </div>
-        <div className="shrink-0">
-          <VoteDonut
-            votesFor={nom.votesFor}
-            votesAgainst={nom.votesAgainst}
-            votesAbstain={nom.votesAbstain}
-            size={48}
-          />
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="px-5 py-3 border-t border-card-border/40">
-        <div className="flex items-center justify-between text-[10px] text-muted">
-          <span>{nom.proposedAt && <GameMonthTime value={nom.proposedAt} />}</span>
-          {nom.votingEndsAt && (
-            <span className="text-yellow-400">
-              Closes <LocalTime value={nom.votingEndsAt} />
-            </span>
-          )}
-        </div>
-      </div>
-    </Link>
-  );
-}
 
 export function CongressBillsTab({
   activeTab,
@@ -262,6 +159,18 @@ export function CongressBillsTab({
     (a, b) => b.priority - a.priority || new Date(b.date).getTime() - new Date(a.date).getTime()
   );
 
+  const chamberConfig = COUNTRY_CONFIGS[countryId].legislature;
+  const chamber = activeTab === "senate" ? chamberConfig.upperChamber : chamberConfig.lowerChamber;
+  const STATUS_KEYS = ["all", "active", "enrolled", "signed", "failed"] as const;
+  const statusCounts = Object.fromEntries(
+    STATUS_KEYS.map((key) => [
+      key,
+      bills.filter((b) => matchesCongressBillStatusFilter(b.status, key)).length +
+        (activeTab === "senate" && (key === "all" || key === "active") ? nominations.length : 0),
+    ])
+  ) as Record<string, number>;
+  const openVotes = statusCounts.active;
+
   const billMap = new Map(voteFiltered.map((b) => [b.id, b]));
   const nomMap = new Map(filteredNominations.map((n) => [`${n.kind}:${n.id}`, n]));
 
@@ -282,24 +191,34 @@ export function CongressBillsTab({
       )}
 
       <div className="space-y-4">
-        {canPropose && adminOverride && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-foreground">
-                {`Admin — propose a ${activeTab === "senate" ? "Senate" : "House"} bill`}
-              </p>
-              <p className="text-xs text-muted">
-                Opens to a vote in the currently selected chamber immediately.
-              </p>
-            </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl border border-card-border bg-card px-4 py-3 shadow-card">
+          <LegislatureSeal
+            countryId={countryId}
+            chamberKey={chamber?.key}
+            chamberName={chamber?.name}
+            size={52}
+          />
+          <div className="min-w-[9rem] flex-1">
+            <h2 className="truncate text-lg font-semibold leading-tight text-foreground">
+              {chamber?.name ?? (activeTab === "senate" ? "Senate" : "House")}
+            </h2>
+            <p className="mt-0.5 text-xs text-muted">
+              {chamber?.seats != null && <>{chamber.seats} seats · </>}
+              {openVotes === 0
+                ? "No open votes"
+                : `${openVotes} open vote${openVotes === 1 ? "" : "s"}`}
+            </p>
+          </div>
+          {canPropose && adminOverride && (
             <button
               onClick={() => setShowPropose(true)}
-              className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors"
+              title="Admin: opens to a vote in this chamber immediately"
+              className="shrink-0 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
             >
-              Propose bill
+              Propose bill (admin)
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
         <div className="flex w-full min-w-0 flex-wrap items-center gap-3">
           {/* Primary CTA stays first at all breakpoints so it is not pushed off-screen by filters. */}
@@ -335,27 +254,25 @@ export function CongressBillsTab({
               <button
                 key={key}
                 onClick={() => setStatusFilter(key)}
-                className={`px-3 py-1.5 font-medium transition-colors whitespace-nowrap ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 font-medium transition-colors whitespace-nowrap ${
                   statusFilter === key
                     ? "bg-primary/20 text-primary"
                     : "bg-card text-muted hover:text-foreground"
                 }`}
               >
                 {label}
+                {!loading && statusCounts[key] > 0 && (
+                  <span
+                    className={`rounded-full px-1.5 text-[10.5px] tabular-nums ${
+                      statusFilter === key ? "bg-primary/25" : "bg-muted/15"
+                    }`}
+                  >
+                    {statusCounts[key]}
+                  </span>
+                )}
               </button>
             ))}
           </div>
-          <span className="shrink-0 text-xs text-muted sm:ml-auto">
-            {sortedItems.length} item{sortedItems.length !== 1 ? "s" : ""}
-            {activeTab === "senate" && filteredNominations.length > 0 && (
-              <span className="text-muted/80">
-                {" "}
-                ({voteFiltered.length} bill{voteFiltered.length !== 1 ? "s" : ""},{" "}
-                {filteredNominations.length} nomination{filteredNominations.length !== 1 ? "s" : ""}
-                )
-              </span>
-            )}
-          </span>
         </div>
 
         <BillListControls
@@ -396,9 +313,7 @@ export function CongressBillsTab({
                 </BillListItem>
               ) : (
                 <BillListItem key={`nom-${item.kind}-${item.id}`}>
-                  <div className="p-4 sm:p-5">
-                    <NominationCard nom={nomMap.get(`${item.kind}:${item.id}`)!} />
-                  </div>
+                  <NominationCard nom={nomMap.get(`${item.kind}:${item.id}`)!} />
                 </BillListItem>
               )
             )}

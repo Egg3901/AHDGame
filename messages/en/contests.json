@@ -1,0 +1,81 @@
+{
+  "contests": {
+    "title": "Contests",
+    "intro": "Weekly races between players. When a week ends, the leader of each contest wins the cash prize shown and a new round starts. New corporations and characters join at the start of the next round.",
+    "referralIntro": "Invite players with your link. A referral counts when the player you invite creates a character.",
+    "endsAt": "Round {round} ends",
+    "entrants": "{count, plural, =0 {No entries yet} one {# entry} other {# entries}}",
+    "noRound": "The next round opens after the coming turn.",
+    "noLeaders": "No one is ahead yet. Any gain takes the lead.",
+    "rank": "#",
+    "entry": "Entry",
+    "score": "Change",
+    "yourStanding": "You are #{rank} of {count}",
+    "notEntered": "You have no entry this round.",
+    "signInToTrack": "Sign in to see where you stand.",
+    "kinds": {
+      "corp_growth_small": {
+        "title": "Small business growth",
+        "rules": "Percent growth in market cap for player-run corporations in the smaller half of the field. Capital you inject during the round does not count."
+      },
+      "corp_growth_large": {
+        "title": "Big business growth",
+        "rules": "Percent growth in market cap for player-run corporations in the larger half of the field. Capital you inject during the round does not count."
+      },
+      "influence_gain": {
+        "title": "National Influence",
+        "rules": "Most National Influence gained during the round."
+      },
+      "approval_gain": {
+        "title": "Government approval",
+        "rules": "Most approval points gained by a government led by a player. The same leader must hold office for the whole round."
+      },
+      "referrals_weekly": {
+        "title": "Weekly referrals",
+        "rules": "Most new players brought in this week."
+      },
+      "referrals_iteration": {
+        "title": "This iteration",
+        "rules": "Most new players brought in this iteration. Counting restarts when a new iteration begins."
+      }
+    },
+    "scores": {
+      "percent": "{value}%",
+      "influence": "{value} NI",
+      "approval": "{value} pts",
+      "referrals": "{count, plural, one {# referral} other {# referrals}}"
+    },
+    "referrals": {
+      "since": "Counting since",
+      "yourCount": "{count, plural, =0 {You have no referrals this iteration yet.} one {You have # referral this iteration.} other {You have # referrals this iteration.}}",
+      "yourRank": "You are #{rank}.",
+      "invite": "Your invite link",
+      "copy": "Copy link",
+      "copied": "Copied",
+      "none": "No referrals yet. Be the first.",
+      "notRunning": "The referral contest starts after the next turn."
+    },
+    "past": {
+      "title": "Recent winners",
+      "empty": "No rounds have finished yet.",
+      "round": "Round {round}",
+      "prize": "Won {prize}",
+      "supporter": "Supporter for the next iteration",
+      "alreadySupporter": "Already a supporter",
+      "formerPlayer": "Former player",
+      "iterationTitle": "Iteration referrals"
+    },
+    "referralsHeading": "Referrals",
+    "iterationPrize": "Supporter for the whole next iteration",
+    "poolLabel": "Prize pool this week",
+    "prizeLabel": "Prize",
+    "prizeLabelTop3": "Top 3 win",
+    "leading": "Leading",
+    "youLead": "You are in the lead",
+    "gapBehind": "{gap} behind the leader",
+    "countdown": "Round {round} ends in",
+    "timeLeft": "{days}d {hours}h {minutes}m",
+    "settling": "Settling after the next turn",
+    "tiedLead": "tied with the leader"
+  }
+}

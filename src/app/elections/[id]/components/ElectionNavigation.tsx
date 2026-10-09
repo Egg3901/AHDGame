@@ -23,16 +23,22 @@ function buildElectionUrl(id: string): string {
 
 interface ElectionNavigationProps {
   election: ElectionDetail;
+  /**
+   * Overrides when the "Live results" link shows. The presidential stage only
+   * offers it while results are actually coming in.
+   */
+  showLiveLink?: boolean;
 }
 
-export function ElectionNavigation({ election }: ElectionNavigationProps) {
+export function ElectionNavigation({ election, showLiveLink }: ElectionNavigationProps) {
   const { liveElectionResultsEnabled } = useWorldFlags();
   const fallbackElectionsHref = `/country/${(election.countryId ?? "US").toLowerCase()}/elections`;
   // Breadcrumb shows the scope only. The full title lives in the <h1> below —
   // rendering it twice, ~40px apart, was pure noise.
   const scopeText =
     election.state === "US" ? "National" : (US_STATE_NAMES[election.state] ?? election.state);
-  const showLiveResults = liveElectionResultsEnabled && election.status !== "upcoming";
+  const showLiveResults =
+    liveElectionResultsEnabled && election.status !== "upcoming" && showLiveLink !== false;
 
   return (
     <>

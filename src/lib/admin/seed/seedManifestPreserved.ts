@@ -192,6 +192,12 @@ export const PRESERVED: CollectionEntry[] = [
     notes: "Admin watchlist entries. Admin metadata.",
   },
   {
+    name: "contestRounds",
+    category: "preserved",
+    notes:
+      "Contest rounds and winners. Preserved so the iteration referral contest, which is awarded when the world moves to a new iteration, survives the reset that ends it. Weekly rounds from the previous world are voided, never paid, on the first post-turn run.",
+  },
+  {
     name: "supporterRequests",
     category: "preserved",
     notes: "Player supporter/perk requests. User-linked community content.",

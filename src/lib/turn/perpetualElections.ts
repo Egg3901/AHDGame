@@ -125,6 +125,7 @@ export {
   ensureRUNationalitiesElections,
   ensureRURepublicSovietElections,
   ensureRUSupremeSovietElections,
+  ensureRUUnionCongressElections,
 } from "./perpetualElections/countries/ru";
 export {
   ensureUKElections,

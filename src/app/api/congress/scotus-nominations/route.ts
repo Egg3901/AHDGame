@@ -13,6 +13,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import type { ElectedOfficial, Character } from "@/lib/db/types";
 import type { ScotusNomination } from "@/lib/db/types/scotus";
 import { computeCabinetNominationTally } from "@/lib/congress/governmentVoteBreakdown";
+import { loadNominationPeople } from "@/lib/congress/nominationPeople";
 
 // GET /api/congress/scotus-nominations — Returns all active SCOTUS nominations with the current user's vote status.
 // Auth: public
@@ -45,8 +46,9 @@ export const GET = withNoStore(async function GET() {
     const isSenator = !!senatorOfficial;
     const myCharId = myCharacter?._id.toString();
 
+    const people = await loadNominationPeople(db, "US", activeNominations);
     const nominations = await Promise.all(
-      activeNominations.map(async (n) => {
+      activeNominations.map(async (n, i) => {
         const myVote = myCharId ? (n.votes?.[myCharId] ?? null) : null;
         const tally = await computeCabinetNominationTally(db, n.countryId ?? "US", n.votes);
         return {
@@ -59,6 +61,8 @@ export const GET = withNoStore(async function GET() {
           nomineeCharacterName: n.nomineeName,
           nomineeParty: n.nomineeParty,
           proposedByPresidentName: n.proposedByPresidentName ?? "President",
+          nominee: people[i].nominee,
+          nominator: people[i].nominator,
           status: n.status,
           votesFor: tally.votesFor,
           votesAgainst: tally.votesAgainst,

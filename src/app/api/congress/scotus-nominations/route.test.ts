@@ -15,6 +15,27 @@ vi.mock("@/lib/congress/governmentVoteBreakdown", () => ({
   }),
 }));
 
+vi.mock("@/lib/congress/nominationPeople", () => ({
+  loadNominationPeople: vi.fn(async (_db: unknown, _country: unknown, noms: unknown[]) =>
+    noms.map(() => ({
+      nominee: {
+        name: "Ada Justice",
+        href: "/character/4",
+        avatarUrl: null,
+        partyName: null,
+        partyColor: null,
+      },
+      nominator: {
+        name: "Test President",
+        href: null,
+        avatarUrl: null,
+        partyName: null,
+        partyColor: null,
+      },
+    }))
+  ),
+}));
+
 describe("GET /api/congress/scotus-nominations", () => {
   let db: MockDb;
 
@@ -58,6 +79,7 @@ describe("GET /api/congress/scotus-nominations", () => {
     expect(body.nominations).toHaveLength(1);
     expect(body.nominations[0]).toMatchObject({
       id: nominationId.toString(),
+      nominee: { name: "Ada Justice", href: "/character/4" },
       kind: "scotus",
       seatNumber: 3,
       positionName: "Supreme Court Seat #3",

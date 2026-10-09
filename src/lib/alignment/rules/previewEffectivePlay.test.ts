@@ -18,6 +18,18 @@ describe("previewEffectivePlay", () => {
     expect(previewEffectivePlay({ ...input, turnCap: 7.5 })).toBe(7.5);
     expect(previewEffectivePlay({ ...input, amountLocal: 1e12 })).toBe(5);
   });
+  it("nets a rival's standing push before the cap (ticket 1371)", () => {
+    // A max play (9.95 pts) against a rival landing 9.28 a turn leaves 0.67.
+    const rival = { poleId: "EAST" as const, points: 9.28 };
+    expect(previewEffectivePlay({ ...input, amountLocal: 995, rivalPressure: rival })).toBe(0.67);
+    expect(
+      previewEffectivePlay({
+        ...input,
+        amountLocal: 995,
+        rivalPressure: { ...rival, poleId: "WEST" },
+      })
+    ).toBe(5);
+  });
   it("includes channel strength and bloc strain", () => {
     expect(previewEffectivePlay({ ...input, weight: 0.5, effectiveness: 0.6 })).toBe(3);
   });

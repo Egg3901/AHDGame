@@ -12,6 +12,20 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { BLEND, BLEND_LABEL, FONT } from "@/components/blend/tokens";
+import { useBlendGround } from "@/components/blend/useBlendGround";
+import {
+  DATA_VIEWS,
+  MOMENTUM_FULL_PP,
+  SHARE_RAMP,
+  applyCountyView,
+  applyDataView,
+  hasShareData,
+  mixToward,
+  shareCandidates,
+  shareStrength,
+  type MapDataView,
+} from "./dataViews";
+import type { PresMapCandidate } from "./presMapModel";
 import styles from "@/components/blend/blend.module.css";
 import { shadeColorForTier } from "@/lib/elections/marginTierShade";
 import { TIER_BANDS } from "../generalBlendViewModel";
@@ -140,6 +154,16 @@ export function PresidentialMap({
   const frameW = stage ? stageSize.w / scale : MAP_WIDTH;
   const frameH = stage ? stageSize.h / scale : MAP_HEIGHT;
   const wide = width >= PANEL_MIN_WIDTH;
+  const desk = useIsDesktop();
+  // The desktop stage is the whole viewport and nothing scrolls under it, so it
+  // owns its gestures from the start. Everywhere else the map sits in a
+  // scrolling page and stays locked until the reader unlocks it.
+  const freeGestures = stage && desk;
+  // Where the state overview opens: docked over the map, or as a bottom sheet.
+  const docked = stage ? desk : wide;
+  const ground = useBlendGround();
+  const [dataView, setDataView] = useState<MapDataView>("margin");
+  const [shareCandId, setShareCandId] = useState<string | null>(null);
 
   const [geo, setGeo] = useState<StateGeo[] | null>(null);
   const [geoFailed, setGeoFailed] = useState(false);
@@ -160,16 +184,26 @@ export function PresidentialMap({
 
   const pz = usePanZoom({
     svgRef,
-    enabled: stage || unlocked,
+    enabled: freeGestures || unlocked,
     scale,
     width: MAP_WIDTH,
     height: MAP_HEIGHT,
     frame: stage ? { frameWidth: frameW, frameHeight: frameH, maxZoom: STAGE_MAX_ZOOM } : undefined,
   });
 
-  const states = model.states;
+  const viewsOn = stage && hasShareData(model);
+  const pickable = useMemo(() => (viewsOn ? shareCandidates(model) : []), [viewsOn, model]);
+  const shareCand =
+    (shareCandId ? pickable.find((c) => c.id === shareCandId) : undefined) ?? pickable[0] ?? null;
+  const activeView: MapDataView = viewsOn ? dataView : "margin";
+  const viewModel = useMemo(
+    () => applyDataView(model, activeView, ground, shareCand),
+    [model, activeView, ground, shareCand]
+  );
+  const states = viewModel.states;
   const geoById = useMemo(() => new Map((geo ?? []).map((g) => [g.id, g])), [geo]);
-  const selectedState: PresMapState | null = selected ? (states[selected] ?? null) : null;
+  // The overview reads the race itself, not the repainted view.
+  const selectedState: PresMapState | null = selected ? (model.states[selected] ?? null) : null;
 
   const select = useCallback(
     (id: string | null) => {
@@ -212,10 +246,21 @@ export function PresidentialMap({
   // Rows for states that are in view now; ones loaded earlier stay cached.
   const shownCountyRows = useMemo(() => {
     const out: Record<string, CountyRow[]> = {};
-    for (const id of countyStates) if (countyRows[id]) out[id] = countyRows[id];
+    for (const id of countyStates) {
+      const rows = countyRows[id]
+        ? applyCountyView(countyRows[id], activeView, ground, shareCand)
+        : null;
+      if (rows) out[id] = rows;
+    }
     return out;
-  }, [countyStates, countyRows]);
-  const countyAlpha = k < COUNTY_ZOOM && countyStates.length > 0 ? 1 : countyOpacity(k);
+  }, [countyStates, countyRows, activeView, ground, shareCand]);
+  // Momentum has no county series, so that view stays at state level.
+  const countyAlpha =
+    activeView === "momentum"
+      ? 0
+      : k < COUNTY_ZOOM && countyStates.length > 0
+        ? 1
+        : countyOpacity(k);
   const countyLoading = countyStates.some((id) => !countyRows[id]);
 
   useEffect(() => {
@@ -252,7 +297,7 @@ export function PresidentialMap({
     if (!g) return;
     pz.zoomToBox(
       { x0: g.x0, y0: g.y0, x1: g.x0 + g.width, y1: g.y0 + g.height },
-      STAGE_PANEL_WIDTH / scale
+      docked ? STAGE_PANEL_WIDTH / scale : 0
     );
   };
   const onDoubleClick = (e: MouseEvent<SVGSVGElement>) => {
@@ -351,7 +396,7 @@ export function PresidentialMap({
           viewBox={`0 0 ${frameW} ${frameH}`}
           role="group"
           aria-label="US presidential map by state"
-          data-locked={stage || unlocked ? "false" : "true"}
+          data-locked={freeGestures || unlocked ? "false" : "true"}
           onClick={onClick}
           onDoubleClick={onDoubleClick}
           onKeyDown={onKeyDown}
@@ -366,8 +411,8 @@ export function PresidentialMap({
             height: stage ? "100%" : "auto",
             aspectRatio: stage ? undefined : `${MAP_WIDTH} / ${MAP_HEIGHT}`,
             // Locked: the browser keeps vertical scrolling. Unlocked: gestures are ours.
-            touchAction: stage || unlocked ? "none" : "pan-y pinch-zoom",
-            cursor: stage || unlocked ? (pz.dragging ? "grabbing" : "grab") : "default",
+            touchAction: freeGestures || unlocked ? "none" : "pan-y pinch-zoom",
+            cursor: freeGestures || unlocked ? (pz.dragging ? "grabbing" : "grab") : "default",
             userSelect: "none",
           }}
         >
@@ -399,7 +444,7 @@ export function PresidentialMap({
                 <path
                   d={hoverGeo.d}
                   fill="none"
-                  stroke={BLEND.ink}
+                  style={{ stroke: BLEND.ink }}
                   strokeOpacity={0.7}
                   strokeWidth={1.4}
                   vectorEffect="non-scaling-stroke"
@@ -410,7 +455,7 @@ export function PresidentialMap({
                 <path
                   d={selectedGeo.d}
                   fill="none"
-                  stroke={BLEND.ink}
+                  style={{ stroke: BLEND.ink }}
                   strokeWidth={2.2}
                   vectorEffect="non-scaling-stroke"
                   pointerEvents="none"
@@ -437,7 +482,7 @@ export function PresidentialMap({
         ) : null}
 
         <MapControls
-          stage={stage}
+          stage={freeGestures}
           unlocked={unlocked}
           canZoomIn={pz.view.k < (stage ? STAGE_MAX_ZOOM : MAX_ZOOM)}
           canZoomOut={pz.view.k > MIN_ZOOM}
@@ -450,11 +495,11 @@ export function PresidentialMap({
           onReset={pz.reset}
         />
 
-        {stage && geo ? (
+        {freeGestures && geo && (atRest || (countyLoading && countyAlpha > 0)) ? (
           <StageHint k={k} countiesOn={counties} loading={countyLoading && countyAlpha > 0} />
         ) : null}
 
-        {!stage && !unlocked && geo ? (
+        {!freeGestures && !unlocked && geo ? (
           <div
             style={{
               position: "absolute",
@@ -483,7 +528,7 @@ export function PresidentialMap({
           <HoverTip state={hoverState} x={hover.x} y={hover.y} frameWidth={width} />
         ) : null}
 
-        {selectedState && panel && (wide || stage) ? (
+        {selectedState && panel && docked ? (
           <aside
             aria-label={`${selectedState.name} overview`}
             style={{
@@ -491,7 +536,9 @@ export function PresidentialMap({
               top: 0,
               right: 0,
               bottom: 0,
-              width: stage ? STAGE_PANEL_WIDTH : Math.min(400, Math.round(width * 0.5)),
+              width: stage
+                ? Math.min(STAGE_PANEL_WIDTH, width)
+                : Math.min(400, Math.round(width * 0.5)),
               overflowY: "auto",
               padding: 16,
               background: BLEND.rail,
@@ -512,10 +559,36 @@ export function PresidentialMap({
             background: BLEND.page,
           }}
         >
-          {callouts.length > 0 ? (
-            <CalloutChips callouts={callouts} selected={selected} onSelect={select} stage />
-          ) : null}
-          {legend ?? <MapKey model={model} />}
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "8px 16px",
+              marginBottom: 8,
+            }}
+          >
+            {viewsOn ? (
+              <DataViewPicker
+                view={activeView}
+                onView={setDataView}
+                candidates={pickable}
+                shareCand={shareCand}
+                onShareCand={setShareCandId}
+              />
+            ) : (
+              <span />
+            )}
+            {callouts.length > 0 ? (
+              <CalloutChips callouts={callouts} selected={selected} onSelect={select} stage />
+            ) : null}
+          </div>
+          {activeView === "margin" ? (
+            (legend ?? <MapKey model={model} />)
+          ) : (
+            <DataViewKey view={activeView} model={model} shareCand={shareCand} ground={ground} />
+          )}
         </div>
       ) : (
         (legend ?? <MapKey model={model} />)
@@ -525,7 +598,7 @@ export function PresidentialMap({
         <CalloutChips callouts={callouts} selected={selected} onSelect={select} />
       ) : null}
 
-      {selectedState && !wide && !stage ? (
+      {selectedState && panel && !docked ? (
         <BottomSheet label={`${selectedState.name} overview`} onClose={() => select(null)}>
           {panel}
         </BottomSheet>
@@ -547,9 +620,11 @@ function CalloutChips({
   stage?: boolean;
 }) {
   return (
-    <div style={{ marginTop: stage ? 0 : 14, marginBottom: stage ? 8 : 0 }}>
-      <div style={{ ...BLEND_LABEL, marginBottom: 6 }}>Small states and DC</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+    <div style={stage ? { display: "flex", alignItems: "center", gap: 8 } : { marginTop: 14 }}>
+      <div style={{ ...BLEND_LABEL, marginBottom: stage ? 0 : 6 }}>
+        {stage ? "Small states" : "Small states and DC"}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: stage ? 3 : 4 }}>
         {callouts.map((s) => (
           <button
             key={s.id}
@@ -570,19 +645,21 @@ function CalloutChips({
               display: "inline-flex",
               alignItems: "baseline",
               gap: 6,
-              padding: "6px 9px",
+              padding: stage ? "3px 6px" : "6px 9px",
               cursor: "pointer",
               font: "inherit",
               fontFamily: FONT.mono,
-              fontSize: 11,
+              fontSize: stage ? 10 : 11,
               color: s.ink,
               background: s.fill,
               border: `1px solid ${s.id === selected ? BLEND.ink : "transparent"}`,
             }}
           >
             <b style={{ fontWeight: 700 }}>{s.id}</b>
-            {stateFigure(s) ? <span style={{ opacity: 0.8 }}>{stateFigure(s)}</span> : null}
-            {s.broadcast || s.evLabel !== undefined ? null : (
+            {!stage && stateFigure(s) ? (
+              <span style={{ opacity: 0.8 }}>{stateFigure(s)}</span>
+            ) : null}
+            {stage || s.broadcast || s.evLabel !== undefined ? null : (
               <span style={{ opacity: 0.65, fontSize: 10 }}>+{s.margin.toFixed(1)}</span>
             )}
           </button>
@@ -604,7 +681,7 @@ function StateBorders({ geo, ids, opacity }: { geo: StateGeo[]; ids: string[]; o
             key={g.id}
             d={g.d}
             fill="none"
-            stroke={BLEND.ink}
+            style={{ stroke: BLEND.ink }}
             strokeOpacity={0.55}
             strokeWidth={1.2}
             vectorEffect="non-scaling-stroke"
@@ -624,21 +701,19 @@ function StageHint({
   countiesOn: boolean;
   loading: boolean;
 }) {
-  const text = !countiesOn
-    ? "SCROLL TO ZOOM / DRAG TO PAN"
-    : k < COUNTY_ZOOM
-      ? "SCROLL OR DOUBLE-CLICK A STATE TO ZOOM IN FOR COUNTY RESULTS"
-      : loading
-        ? "LOADING COUNTY RESULTS..."
-        : "COUNTY RESULTS";
+  const text = loading
+    ? "LOADING COUNTY RESULTS..."
+    : countiesOn && k < COUNTY_ZOOM
+      ? "CLICK A STATE OR SCROLL TO ZOOM IN FOR COUNTIES"
+      : "SCROLL TO ZOOM, DRAG TO PAN";
   return (
     <div
       style={{
         position: "absolute",
         top: 10,
-        left: 12,
+        left: 56,
         padding: "3px 7px",
-        background: "rgba(14,14,20,.78)",
+        background: `color-mix(in srgb, ${BLEND.page} 80%, transparent)`,
         fontFamily: FONT.mono,
         fontSize: 10,
         letterSpacing: ".08em",
@@ -647,7 +722,6 @@ function StageHint({
       }}
     >
       {text}
-      <span style={{ marginLeft: 10, opacity: 0.7 }}>{k.toFixed(1)}x</span>
     </div>
   );
 }
@@ -896,6 +970,7 @@ function HoverTip({
 
 /** Colour key: each tier's shade in the two leading tickets' colours. */
 function MapKey({ model }: { model: PresMapModel }) {
+  const ground = useBlendGround();
   const [a, b] = model.legendCandidates;
   return (
     <div
@@ -920,7 +995,7 @@ function MapKey({ model }: { model: PresMapModel }) {
                 width: 9,
                 height: 9,
                 display: "block",
-                background: shadeColorForTier(c.color, t.tier, BLEND.page),
+                background: shadeColorForTier(c.color, t.tier, ground),
               }}
             />
           ))}
@@ -989,6 +1064,176 @@ function BottomSheet({
         />
         {children}
       </div>
+    </div>
+  );
+}
+
+/** Whether the viewport is at the desktop breakpoint (`lg`, 1024px). */
+function useIsDesktop(): boolean {
+  const [desk, setDesk] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const read = () => setDesk(mq.matches);
+    read();
+    mq.addEventListener("change", read);
+    return () => mq.removeEventListener("change", read);
+  }, []);
+  return desk;
+}
+
+const chipStyle = (on: boolean): React.CSSProperties => ({
+  padding: "4px 10px",
+  cursor: "pointer",
+  font: "inherit",
+  fontFamily: FONT.mono,
+  fontSize: 10.5,
+  letterSpacing: ".06em",
+  textTransform: "uppercase",
+  border: `1px solid ${on ? BLEND.ink : BLEND.hairlineStrong}`,
+  color: on ? BLEND.ink : BLEND.muted,
+  background: on ? BLEND.hairlineStrong : "transparent",
+});
+
+/** What the map is coloured by, and for the share view, whose share. */
+function DataViewPicker({
+  view,
+  onView,
+  candidates,
+  shareCand,
+  onShareCand,
+}: {
+  view: MapDataView;
+  onView: (v: MapDataView) => void;
+  candidates: PresMapCandidate[];
+  shareCand: PresMapCandidate | null;
+  onShareCand: (id: string) => void;
+}) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+      <span style={{ ...BLEND_LABEL, marginRight: 4 }}>Colour by</span>
+      <div
+        role="radiogroup"
+        aria-label="Colour the map by"
+        style={{ display: "inline-flex", gap: 4 }}
+      >
+        {DATA_VIEWS.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            role="radio"
+            aria-checked={view === v.id}
+            onClick={() => onView(v.id)}
+            style={chipStyle(view === v.id)}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+      {view === "share" && candidates.length > 0 ? (
+        <div
+          role="radiogroup"
+          aria-label="Whose vote share"
+          style={{ display: "inline-flex", flexWrap: "wrap", gap: 4, marginLeft: 8 }}
+        >
+          {candidates.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="radio"
+              aria-checked={shareCand?.id === c.id}
+              onClick={() => onShareCand(c.id)}
+              style={{ ...chipStyle(shareCand?.id === c.id), textTransform: "none" }}
+            >
+              <i
+                aria-hidden
+                style={{
+                  display: "inline-block",
+                  width: 8,
+                  height: 8,
+                  marginRight: 6,
+                  background: c.color,
+                }}
+              />
+              {c.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Colour key for the non-margin views. */
+function DataViewKey({
+  view,
+  model,
+  shareCand,
+  ground,
+}: {
+  view: MapDataView;
+  model: PresMapModel;
+  shareCand: PresMapCandidate | null;
+  ground: string;
+}) {
+  const keyStyle: React.CSSProperties = {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: "6px 16px",
+    fontFamily: FONT.mono,
+    fontSize: 10,
+    color: BLEND.mutedDim,
+  };
+  const swatch = (bg: string) => (
+    <i aria-hidden style={{ width: 9, height: 9, display: "block", background: bg }} />
+  );
+  if (view === "winner") {
+    return (
+      <div style={keyStyle}>
+        <span style={{ letterSpacing: ".1em" }}>LEADING IN EACH STATE:</span>
+        {shareCandidates(model).map((c) => (
+          <span key={c.id} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {swatch(c.color)}
+            {c.name}
+          </span>
+        ))}
+      </div>
+    );
+  }
+  if (view === "share" && shareCand) {
+    const stops = [SHARE_RAMP.lo, 35, 50, SHARE_RAMP.hi];
+    return (
+      <div style={keyStyle}>
+        <span style={{ letterSpacing: ".1em" }}>{shareCand.name.toUpperCase()} VOTE SHARE:</span>
+        {stops.map((p) => (
+          <span key={p} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {swatch(mixToward(ground, shareCand.color, shareStrength(p)))}
+            {p === SHARE_RAMP.lo
+              ? `${p}% or less`
+              : p === SHARE_RAMP.hi
+                ? `${p}% or more`
+                : `${p}%`}
+          </span>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div style={keyStyle}>
+      <span style={{ letterSpacing: ".1em" }}>MOMENTUM, LAST FEW TURNS:</span>
+      {shareCandidates(model)
+        .slice(0, 2)
+        .map((c) => (
+          <span key={c.id} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {swatch(mixToward(ground, c.color, 0.4))}
+            {swatch(c.color)}
+            toward {c.name} (up to {MOMENTUM_FULL_PP}pp)
+          </span>
+        ))}
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        {swatch(mixToward(ground, "#8f8f9d", 0.22))}
+        steady
+      </span>
     </div>
   );
 }

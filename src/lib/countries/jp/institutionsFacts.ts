@@ -57,6 +57,9 @@ export const JP_CONFIG: CountryConfig = {
   executiveRealmPhrase: "Japan",
   governmentType: "parliamentaryMonarchy",
   governmentTypeLabel: "Constitutional Monarchy",
+  campaignManagerNonPresidentialEnabled: true,
+  campaignRaceFamilies: ["shugiin", "snap_shugiin", "sangiin", "governor"],
+  fieldOfficeScope: "region",
   coalitionThreshold: 233,
   cabinetEligibleChamberKeys: ["shugiin", "sangiin"],
   legislature: {

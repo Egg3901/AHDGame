@@ -10,6 +10,11 @@ import {
   isValuelessNonErrorRejection,
 } from "@/lib/observability/sentryFilters";
 import { scrubSentryEvent } from "@/lib/observability/scrubSentryEvent";
+import {
+  dropSentryLog,
+  SENTRY_DATA_COLLECTION,
+  SENTRY_TRACE_LIFECYCLE,
+} from "@/lib/observability/sentryPrivacy";
 
 export function initSentryClient(): typeof Sentry.captureRouterTransitionStart {
   // Browser bundles only receive NEXT_PUBLIC_* environment variables.
@@ -30,10 +35,13 @@ export function initSentryClient(): typeof Sentry.captureRouterTransitionStart {
     release: process.env.NEXT_PUBLIC_SENTRY_RELEASE,
     environment: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT,
 
-    sendDefaultPii: false,
+    // Do not collect user identity, cookies, headers, bodies or query strings.
+    dataCollection: SENTRY_DATA_COLLECTION,
 
     // Keep production traces useful without making hot polling endpoints expensive.
     tracesSampleRate: isProduction ? 0.1 : 1.0,
+    // Keeps ignoreTransactions and beforeSendTransaction effective under v11.
+    traceLifecycle: SENTRY_TRACE_LIFECYCLE,
     ignoreTransactions: [
       "GET /api/events",
       "GET /api/game/turn/status",
@@ -43,8 +51,8 @@ export function initSentryClient(): typeof Sentry.captureRouterTransitionStart {
       "POST /api/analytics/pageview",
     ],
 
-    // Enable logs only after SaaS volume and cost have been measured.
-    enableLogs: false,
+    // Drop logs until SaaS volume and cost have been measured.
+    beforeSendLog: dropSentryLog,
 
     // Errors that originate entirely in browser extensions / injected third-party
     // scripts. These are never actionable from our code and were the bulk of the
