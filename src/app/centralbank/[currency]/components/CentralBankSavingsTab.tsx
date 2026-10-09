@@ -28,6 +28,8 @@ interface SavingsApiResponse {
   currencyCode: CurrencyCode;
   primeRate: number;
   apyPercent: number;
+  savingsHolderType?: "central-bank" | "private-bank" | "unknown";
+  savingsHolderName?: string | null;
   centralBankDepositBonusPercentPoints?: number;
   centralBankPricingProgress?: number;
   centralBankPricingTurnsRemaining?: number;
@@ -166,9 +168,15 @@ export function CentralBankSavingsTab({ countryId }: Props) {
       {/* Figures */}
       <div className="grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3 lg:grid-cols-6">
         <CentralBankFigure
-          label="APY"
-          value={`${data.apyPercent.toFixed(2)}%`}
-          hint={`Half of real ${data.primeRate.toFixed(2)}% prime${(data.centralBankDepositBonusPercentPoints ?? 0) > 0 ? ` + ${(data.centralBankDepositBonusPercentPoints ?? 0).toFixed(2)}% CB bonus` : ""}`}
+          label={data.savingsHolderType === "private-bank" ? "Your bank rate" : "APY"}
+          value={data.savingsHolderType === "unknown" ? "—" : `${data.apyPercent.toFixed(2)}%`}
+          hint={
+            data.savingsHolderType === "private-bank"
+              ? `At ${data.savingsHolderName ?? "your private bank"}`
+              : data.savingsHolderType === "unknown"
+                ? "Savings holder could not be verified"
+                : `Half of real ${data.primeRate.toFixed(2)}% prime${(data.centralBankDepositBonusPercentPoints ?? 0) > 0 ? ` + ${(data.centralBankDepositBonusPercentPoints ?? 0).toFixed(2)}% CB bonus` : ""}`
+          }
           size="lg"
         />
         <CentralBankFigure
