@@ -37,7 +37,7 @@ function assertWarning() {
   expect(note.textContent).toContain("again before the merger takes effect");
   expect(note.textContent).toContain("permanently deleted");
   expect(note.textContent).toContain("keeps ALL of its existing NPPs");
-  expect(note.textContent).toContain("5 NPPs per active player, up to 25");
+  expect(note.textContent).toContain("5 NPPs for each of the first 5 active players");
   expect(note.textContent).toContain("2 qualifying game actions in the last 14 days");
   expect(note.textContent).toContain("2 below 30% Org");
   expect(note.textContent).toContain("ALL incoming active NPPs are deleted; existing NPPs stay");
