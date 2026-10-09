@@ -369,3 +369,44 @@ export function buildPresMapModel(election: ElectionDetail): PresMapModel {
 export function stateFigure(s: Pick<PresMapState, "ev" | "evLabel">): string | null {
   return s.evLabel !== undefined ? s.evLabel : String(s.ev);
 }
+
+/**
+ * A map model from flat state tiles (the results board's): fill, ink, caption
+ * and electoral votes per state, with no per-ticket shares or trend. Used where
+ * the election payload carries no per-state tally to build a full model from,
+ * such as a race with a single ticket.
+ */
+export function presMapModelFromTiles(
+  tiles: { stateId: string; ev: number; background: string; ink: string; title: string }[]
+): PresMapModel {
+  const states: Record<string, PresMapState> = {};
+  for (const t of tiles) {
+    states[t.stateId] = {
+      id: t.stateId,
+      name: STATE_NAMES[t.stateId] ?? t.stateId,
+      ev: t.ev,
+      leaderId: "",
+      leaderName: "",
+      leaderColor: t.background,
+      margin: 0,
+      tier: "safe",
+      fill: t.background,
+      ink: t.ink,
+      shares: [],
+      totalVotes: 0,
+      trend: {
+        status: "none",
+        candidateId: null,
+        name: null,
+        color: null,
+        shiftPp: 0,
+        windowTurns: 0,
+        series: [],
+      },
+      sinceTurn: null,
+      turnsAgo: null,
+      caption: t.title,
+    };
+  }
+  return { states, candidates: {}, legendCandidates: [] };
+}

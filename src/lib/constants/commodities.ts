@@ -1706,14 +1706,18 @@ export const SECTOR_DEMAND: Partial<Record<CorporationType, CommodityFlow[]>> = 
     { commodity: "network_services", rate: 0.1 },
   ],
   energy: [
-    { commodity: "steel", rate: 0.15 },
+    // Vehicles & machinery cut 0.1 to 0.03 and steel raised 0.15 to 0.22: a power
+    // plant's ongoing draw is structural steel and fuel, not fleet machinery.
+    // Vehicles run chronically short and were the binding input on most energy
+    // plants, so the energy shortage could never pay for new capacity.
+    { commodity: "steel", rate: 0.22 },
     { commodity: "coal", rate: 0.15 },
     // Reduced oil 0.1 to 0.07 and rare_earth (covers copper) 0.07 to 0.04: energy plants are not primary oil
     // consumers (fuel switching to gas/coal is realistic), and rare_earth is already
     // severely scarce. Reduced inputs improve energy sector viability without
     // distorting the commodity signal.
     { commodity: "oil", rate: 0.07 },
-    { commodity: "vehicles", rate: 0.1 },
+    { commodity: "vehicles", rate: 0.03 },
     { commodity: "construction_services", rate: 0.05 },
     { commodity: "rare_earth", rate: 0.04 },
     { commodity: "natural_gas", rate: 0.08 },

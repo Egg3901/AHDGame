@@ -59,7 +59,9 @@ import { tallySeatsByParty } from "@/lib/turn/parliamentaryGovernment";
 import type { GoverningAgendaItem } from "@/lib/nppAutonomy/governingAgenda";
 import type { PersistedFiscalStance } from "@/lib/nppAutonomy/fiscalStance";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
-import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
+import { MARKETIZATION_SCHEDULE, isPlannedEconomy } from "@/lib/constants/commandEconomy";
+import { loadLiveMarketizationLevels } from "@/lib/economy/queries/privateEnterpriseGate";
+import { proposeNppPrivatizationBill } from "@/lib/nppAutonomy/proposeNppPrivatizationBill";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
 import { buildActiveNationalBillFilter } from "@/lib/legislature/nationalBillScope";
 import { NATIONAL_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
@@ -529,6 +531,12 @@ interface PartySponsorshipAttempt {
    * human has to read and vote on rather than the only legislative activity there is.
    */
   isPlayerCountry: boolean;
+  /**
+   * Live marketization level for a planned (or formerly planned) country,
+   * undefined elsewhere. When set, the governing party may sponsor a
+   * privatization bill instead of an ordinary policy bill.
+   */
+  marketizationLevel?: number;
 }
 
 /**
@@ -618,6 +626,26 @@ async function attemptPartySponsorship(a: PartySponsorshipAttempt): Promise<numb
       ))
     )
       return 1;
+  }
+
+  // Planned / formerly planned economies past the command ceiling sell state
+  // holdings through ordinary privatization bills. Takes this attempt's slot
+  // when its own cadence allows; otherwise the ordinary selection runs.
+  if (tag === "gov" && a.marketizationLevel !== undefined) {
+    const privatization = await proposeNppPrivatizationBill(db, {
+      countryId,
+      npp,
+      official: sponsorOfficial,
+      marketizationLevel: a.marketizationLevel,
+      currentTurn,
+      now: a.now,
+    });
+    if (privatization.ok) {
+      console.log(
+        `[nppBillSponsorship] ${countryId} (${tag}): introduced privatization bill ${privatization.billId} (${privatization.sectors} sectors, NPP: ${npp.name})`
+      );
+      return 1;
+    }
   }
 
   const recentLegislationTypeIds = await recentNppSponsoredLegislationTypeIds(
@@ -736,6 +764,20 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
   // country. Hosted/multiplayer worlds have no singleplayerConfig and resolve to
   // `normal`, which is the shipped selection behavior.
   const behaviorPolicy = await loadNppBehaviorPolicy(db);
+
+  // Live marketization dial, read once and only if a scheduled (planned or
+  // formerly planned) country reaches the sponsorship attempt. World data, not
+  // the commandEconomyEnabled flag, matching the private-enterprise gate. A
+  // failed read disables privatization for the turn rather than the phase.
+  let marketizationLevelsPromise: Promise<Map<CountryId, number>> | null = null;
+  const liveMarketizationLevel = async (countryId: CountryId): Promise<number | undefined> => {
+    if (!MARKETIZATION_SCHEDULE[countryId]) return undefined;
+    marketizationLevelsPromise ??= loadLiveMarketizationLevels(db).catch((err) => {
+      console.error("[nppBillSponsorship] marketization level read failed:", err);
+      return new Map<CountryId, number>();
+    });
+    return (await marketizationLevelsPromise).get(countryId);
+  };
 
   // Group nppOfficials by countryId
   const officialsByCountry = new Map<CountryId, ElectedOfficial[]>();
@@ -894,6 +936,7 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
         fiscalStance: directives.fiscalStance,
         goalDomains: directives.goalDomains,
         tag: "gov",
+        marketizationLevel: await liveMarketizationLevel(countryId),
       });
 
       // Opposition rival bills (V1.7): the largest non-governing party sponsors

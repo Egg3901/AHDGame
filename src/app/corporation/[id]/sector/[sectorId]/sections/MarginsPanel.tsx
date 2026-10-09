@@ -84,6 +84,9 @@ export function topMarginDrivers(margins: Margins): { label: string; value: numb
     ["Home location", margins.homeLocationModifier],
     ["State specialization", margins.stateSectorSpecializationModifier],
     ["Sector type match", margins.sectorTypeMatchModifier],
+    ["State enterprise efficiency", margins.soeEfficiencyModifier],
+    ["Expropriation risk", margins.expropriationRiskModifier],
+    ["Economic model fit", margins.economicModelAlignmentModifier],
     ["Logistics sprawl", margins.sprawlModifier],
     ["Inflation", margins.inflationModifier],
     ["National debt", margins.debtToGdpModifier],
@@ -481,6 +484,36 @@ export default function MarginsPanel({
                 rawUnit=""
                 tooltip="Sectors matching your primary type get +5%. Secondary type match: +2.5%. Mismatched: -15% penalty."
                 icon={Layers}
+              />
+            )}
+            {(margins.soeEfficiencyModifier ?? 0) !== 0 && (
+              <ModifierRow
+                label="State enterprise efficiency"
+                modifier={margins.soeEfficiencyModifier ?? 0}
+                rawValue={null}
+                rawUnit=""
+                tooltip="State-owned enterprises run less efficiently than private firms. Worse with corruption, better with transparent government, and worse again with price controls, guaranteed employment, or a state that owns too much of the economy. Between -5% and -25%."
+                icon={Landmark}
+              />
+            )}
+            {(margins.expropriationRiskModifier ?? 0) !== 0 && (
+              <ModifierRow
+                label="Expropriation risk"
+                modifier={margins.expropriationRiskModifier ?? 0}
+                rawValue={null}
+                rawUnit=""
+                tooltip="Low investor confidence in this country makes private operators price in the risk of seizure."
+                icon={Landmark}
+              />
+            )}
+            {(margins.economicModelAlignmentModifier ?? 0) !== 0 && (
+              <ModifierRow
+                label="Economic model fit"
+                modifier={margins.economicModelAlignmentModifier ?? 0}
+                rawValue={null}
+                rawUnit=""
+                tooltip="Sectors the host country's economic model favors earn more. Sectors outside it earn a little less."
+                icon={Landmark}
               />
             )}
             {margins.sprawlModifier !== 0 && (
