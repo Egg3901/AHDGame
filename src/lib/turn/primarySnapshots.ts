@@ -361,13 +361,14 @@ export async function recordPrimarySnapshots(
   // banked three slices; the primary accrual would do the same. A split turn
   // holds an early and a rest snapshot; each half is recorded once.
   const recordedParts = new Map<string, (TurnSlicePart | undefined)[]>();
-  for (const s of await db
+  const sameTurnSnapshots = await db
     .collection<PrimarySnapshot>("primarySnapshots")
     .find({
       electionId: { $in: activeElections.map((e) => e._id as ObjectId) },
       turn: currentTurn,
     })
-    .toArray()) {
+    .toArray();
+  for (const s of sameTurnSnapshots) {
     const eid = s.electionId.toString();
     recordedParts.set(eid, [...(recordedParts.get(eid) ?? []), s.slicePart]);
   }

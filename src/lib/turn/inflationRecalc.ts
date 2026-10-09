@@ -284,6 +284,16 @@ export async function runInflationRecalc(
   };
 
   const banks = await db.collection<CentralBank>("centralBanks").find({}).toArray();
+  // The half tick reads every budget once up front; it never self-heals a
+  // missing one (the turn does, through ensureFederalBudget).
+  const halfStepBudgets = halfStep
+    ? new Map(
+        (await db.collection<FederalBudget>("federalBudget").find({}).toArray()).map((b) => [
+          String(b._id),
+          b,
+        ])
+      )
+    : null;
 
   const gameStateDoc = await db.collection<GameState>("gameState").findOne({ _id: "current" });
   const preset = gameStateDoc?.preset ?? DEFAULT_SEED_PRESET;
@@ -514,11 +524,8 @@ export async function runInflationRecalc(
             exchangeRateByCountry.get(countryId) ?? exchangeRateByCountry.get(currencyAnchorId);
           const forexPressure = calculateFxInflationPressure(fxDoc?.rateHistory ?? [], turn);
 
-          // The half tick never self-heals a missing budget; the turn will.
-          const budget = halfStep
-            ? await db
-                .collection<FederalBudget>("federalBudget")
-                .findOne({ _id: getNationalBudgetId(countryId) })
+          const budget = halfStepBudgets
+            ? (halfStepBudgets.get(String(getNationalBudgetId(countryId))) ?? null)
             : await ensureFederalBudget(db, countryId, preset);
           if (!budget) return;
 
