@@ -16,6 +16,7 @@ import { seedCommodityPriceIndexes } from "./indexes/commodityPrices";
 import { seedIndexFundIndexes } from "./indexes/indexFunds";
 import { seedApiAccessIndexes } from "./indexes/apiAccess";
 import { seedCrisisInteractionIndexes } from "./indexes/crisisInteractions";
+import { seedCasinoIndexes } from "./indexes/casino";
 import { seedCrisisIndexes } from "./indexes/crises";
 import { seedActionAuditLogIndexes } from "./indexes/actionAuditLog";
 import { seedAltDetectionIndexes } from "./indexes/altDetection";
@@ -86,6 +87,7 @@ const INDEX_RUNNERS: Record<IndexTargetId, IndexModule> = {
   indexesIdentityHistory: seedIdentityHistoryIndexes,
   indexesTelemetry: seedTelemetryIndexes,
   indexesMoneyFlow: seedMoneyFlowIndexes,
+  indexesCasino: seedCasinoIndexes,
 };
 
 export interface IndexModuleEntry extends Omit<IndexTargetMeta, "id"> {
@@ -153,6 +155,7 @@ export {
   seedIndexFundIndexes,
   seedApiAccessIndexes,
   seedCrisisInteractionIndexes,
+  seedCasinoIndexes,
   seedCrisisIndexes,
   seedActionAuditLogIndexes,
   seedAltDetectionIndexes,

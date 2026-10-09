@@ -536,8 +536,6 @@
     "511b78fd180f54b581eb468f9376d64dd593cd8b3444483031ac0790db338d9b": 1,
     "e1166d622599528d1291e2d0b01563b4fd25ae6196c9339e6196521fc67a52a2": 1,
     "c7118c93282319f3e339ece6b419371a6c251b160f8bf24dee31ae664140708f": 1,
-    "5b1f748b7c0a0c9ac8e787beeb6713fcfa041e9f6c4417a92471eb130b49bf7f": 1,
-    "7fc658c9c8f8d28f1af12faddf20edc2f2c3e382f79488bbcaa5c29dda205283": 1,
     "e59f9e225e87332a00e249df5bff630605d2fb81767feb668556feb6b8fbe5ab": 1,
     "885532c6ad244690638e2840ea95c79dc7ef31e5bc087362d92986045a8fbcad": 1,
     "12703a5502aba2e2032744c0ab1a37814a8fa33da9aaecd84c82ae59c4d7b3e8": 1,
@@ -684,7 +682,9 @@
     "7ad8f1ad1fc256ef9d1054f229e410d52637d583d303e6b59c54878f3f5a807d": 1,
     "65e3ca1ee5f3ccfa8996ab7ee5180c6704508823fe28494e5f3a5b3aa056327c": 1,
     "bef3f93a7e046f4954b7e7d8c7d982b3b1c1423075f3e497f39530b8ac34df04": 1,
-    "e0c9a8bfc4dab35b49f0b2b2b80f82588247ba532ce072014f2f4285855e9c5d": 1
+    "e0c9a8bfc4dab35b49f0b2b2b80f82588247ba532ce072014f2f4285855e9c5d": 1,
+    "5b1f748b7c0a0c9ac8e787beeb6713fcfa041e9f6c4417a92471eb130b49bf7f": 1,
+    "b7f6372047e8b50351299fa9d3634942d1e00ff3f9fb0c1a595631e695aa2e24": 1
   },
   "locations": [
     {
@@ -3421,7 +3421,7 @@
       "file": "src/lib/sovereignDefault/legislative/legislativeTurn.ts",
       "operation": "updateOne",
       "owner": "processSovereignLegislativeTurn",
-      "expression": "db.collection<SovereignCrisisDecision>(\"sovereignCrisisDecisions\").updateOne({ _id: decision._id as ObjectId }, { $set: { state: \"rejected\", currentChamberIndex: null, legislativePhases: updatedPhases, resolvedAt: new Date(realtimeMs), resolvedReason: \"Legislative deadlock \u2014 auto-Repudiate (phase 9b)\", }, })",
+      "expression": "db.collection<SovereignCrisisDecision>(\"sovereignCrisisDecisions\").updateOne({ _id: decision._id as ObjectId }, { $set: { state: \"rejected\", currentChamberIndex: null, legislativePhases: updatedPhases, resolvedAt: new Date(realtimeMs), resolvedReason: \"Legislative deadlock — auto-Repudiate (phase 9b)\", }, })",
       "fingerprint": "4e8be196a9e074fcca6078089c4d06cf45a38d82c7504b78e890d3ea171cd198"
     },
     {
@@ -4517,25 +4517,25 @@
       "fingerprint": "c7118c93282319f3e339ece6b419371a6c251b160f8bf24dee31ae664140708f"
     },
     {
-      "file": "src/lib/turn/primaryResolution.ts",
+      "file": "src/lib/turn/primaryRunningMates.ts",
       "operation": "find",
       "owner": "autoAssignTentativeRunningMates",
       "expression": "db .collection<Character>(\"characters\") .find({ countryId, party, _id: { $nin: needsVp.map((n) => n.characterId) }, })",
-      "fingerprint": "bf98c89101591d88d96bff275afcc19525d6c3e6a23ec33939bf29fada75d2d5"
+      "fingerprint": "5b1f748b7c0a0c9ac8e787beeb6713fcfa041e9f6c4417a92471eb130b49bf7f"
     },
     {
-      "file": "src/lib/turn/primaryResolution.ts",
+      "file": "src/lib/turn/primaryRunningMates.ts",
       "operation": "updateOne",
       "owner": "autoAssignTentativeRunningMates",
       "expression": "db .collection<ElectionCandidate>(\"electionCandidates\") .updateOne({ _id: nominee._id }, { $set: { runningMateId: pick._id, updatedAt: new Date() } })",
-      "fingerprint": "7fc658c9c8f8d28f1af12faddf20edc2f2c3e382f79488bbcaa5c29dda205283"
+      "fingerprint": "b7f6372047e8b50351299fa9d3634942d1e00ff3f9fb0c1a595631e695aa2e24"
     },
     {
-      "file": "src/lib/turn/primaryResolution.ts",
+      "file": "src/lib/turn/primarySnapshots.ts",
       "operation": "updateOne",
       "owner": "recordPresidentialStatePollingSnapshots",
       "expression": "db.collection<ElectionVoteTally>(\"electionVoteTallies\").updateOne({ electionId: election._id }, { $push: { primaryStatePollingHistory: { $each: [{ turn: 0, recordedAt: now, byParty }], $slice: -24, }, } as never, $set: { updatedAt: now }, })",
-      "fingerprint": "6e88652e43f320adc23ac0db83c4ba1d7be395374c6a2302aaa800bb299fe00b"
+      "fingerprint": "e59f9e225e87332a00e249df5bff630605d2fb81767feb668556feb6b8fbe5ab"
     },
     {
       "file": "src/lib/electionEngine/singleSeatIncumbency.ts",

@@ -642,6 +642,8 @@ export const RUNTIME: CollectionEntry[] = [
 
   // Misc gameplay
   { name: "blackjackPendingWagers", category: "runtime" },
+  { name: "casinoHighLowSessions", category: "runtime" },
+  { name: "casinoRounds", category: "runtime" },
   { name: "actionLogs", category: "runtime" },
   {
     name: "activityLog",
