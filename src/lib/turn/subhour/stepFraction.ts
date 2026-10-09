@@ -1,17 +1,21 @@
 /**
  * Split-step contract for work that moves off the hourly turn.
  *
- * The :30 half tick applies HALF of the coming turn's step to a document and
- * stamps that document, in the same update, with `subhourStep: { turn, fraction }`
- * where `turn` is the coming turn number (currentTurn + 1). When that turn
- * runs it applies only the remainder for every document it finds stamped for
- * it, and the full step for every document that is not (the tick was
- * skipped, failed, or never reached that document). Hourly totals are
- * therefore the same whether or not the tick ran, and a crash halfway through
- * a tick cannot apply any document's half twice.
+ * The :30 half tick applies HALF of the coming turn's step to a document and,
+ * in the same update, stamps it with `subhourStep: { turn, fraction }` (turn =
+ * currentTurn + 1) and stores the start-of-hour values it overwrote under
+ * `subhourBase.<system>` (stepBase.ts). Players see and trade at the :30
+ * values for the rest of the hour.
+ *
+ * When the turn starts, rewindHalfTick.ts restores every stamped value from
+ * its stored start and clears the stamps, so every phase reads the world it
+ * would have read without the tick and the hour's full step lands exactly as
+ * before. A tick that was skipped, failed or stopped halfway therefore changes
+ * nothing about the hour's result.
  *
  * Per-document stamps, not a global ledger: the tick touches many documents
- * and must stay correct when it stops partway.
+ * and must stay correct when it stops partway, and a retried tick checks the
+ * stamp so it never records its own half-way value as a start value.
  */
 
 /** Share of the hour's step the :30 tick applies. */
