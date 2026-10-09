@@ -98,7 +98,7 @@ During this floor the country cannot roll debt, forcing it to run primary surplu
 
 | Constant | Value |
 | --- | --- |
-| BASE_DEMAND | 1.2 |
+| Base demand | 1.2 |
 | Debt-to-GDP penalty threshold | 60% of GDP |
 | Normal rate (debt/GDP, above threshold) | 0.3 |
 | Cliff rate (debt/GDP > 2.0) | 0.4 |

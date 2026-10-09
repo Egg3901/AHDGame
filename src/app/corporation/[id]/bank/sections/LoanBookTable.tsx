@@ -77,7 +77,7 @@ function HouseholdBookTable({
               <Th align="right">Target</Th>
               <Th>Share of book</Th>
               <Th align="right">Rate</Th>
-              <Th align="right">Exp. default</Th>
+              <Th align="right">Expected default</Th>
             </tr>
           </thead>
           <tbody>
