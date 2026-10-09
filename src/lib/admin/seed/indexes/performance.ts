@@ -442,6 +442,20 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
   );
   await ensureIndex(
     db,
+    "marketCapTicks",
+    { exchange: 1, at: 1 },
+    { name: "marketCapTicks_exchange_at" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "marketCapTicks",
+    { exchange: 1, turn: 1, at: 1 },
+    { name: "marketCapTicks_exchange_turn_at" },
+    log
+  );
+  await ensureIndex(
+    db,
     "wealthListHistory",
     { exchange: 1, turn: -1 },
     { name: "wealthListHistory_exchange_turn_desc" },

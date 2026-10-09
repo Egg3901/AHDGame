@@ -707,6 +707,8 @@ export async function resetGameWorld(
     resetVersionSeeds: "",
   };
   gameStateUnset.demographicFlowAttempt = "";
+  // The outgoing world's last market tick; the fresh world has none yet.
+  gameStateUnset.lastMarketTickAt = "";
   gameStateUpdate.preIterationTurns = 0;
   if (preIteration) {
     gameStateUpdate.preIteration = { active: true, startedTurn: 1 };

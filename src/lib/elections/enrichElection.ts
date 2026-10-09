@@ -3,6 +3,7 @@
  * _enrichElection retains Russian national list nominees together and uses the
  * same primary advance limit as the resolver.
  */
+import { oneRowPerTurn } from "@/lib/electionEngine/rules/turnSlice";
 import { hu1991PrimaryAdvanceLimit } from "@/lib/countries/hu/rules/assemblyCampaign1991";
 import { russianAssemblyPrimaryAdvanceLimit } from "@/lib/countries/ru/assemblyPrimaryProgression";
 import { usesLegacyPresidentialCampaign } from "@/lib/countries/ru/rules/presidentialCampaign";
@@ -1371,8 +1372,10 @@ export async function fetchDepsForElection(
           .collection<PrimarySnapshot>("primarySnapshots")
           .find({ electionId: electionOid })
           .sort({ recordedAt: 1 })
-          .limit(72)
+          .limit(144)
           .toArray()
+          // A split turn holds an early and a rest row; chart one per turn.
+          .then((rows) => oneRowPerTurn(rows).slice(0, 72))
       : Promise.resolve([] as PrimarySnapshot[]),
     isFull && isPresident
       ? db.collection<StatePartyOrg>("statePartyOrg").find({}).toArray()

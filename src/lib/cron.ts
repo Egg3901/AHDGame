@@ -1,8 +1,8 @@
 import * as cron from "node-cron";
 import { dispatchNativePush } from "@/lib/nativePush/dispatcher";
 import * as Sentry from "@sentry/nextjs";
-import { generateStockExchangeSnapshots } from "@/lib/turn/stockExchangeSnapshot";
-import { applyPriceMultipliers } from "@/lib/corporations/applyPriceMultipliers";
+import { runMarketTick } from "@/lib/turn/subhour/marketTick";
+import { runHalfHourTick } from "@/lib/turn/subhour/halfHourTick";
 import { updateCampaignFogOfWar } from "@/lib/campaigns/fogOfWar";
 import { processTurn, getGameState, initializeGameState } from "./turnSystem";
 import { shouldFireBackupTurn } from "./cron/backupFireGuard";
@@ -19,7 +19,6 @@ import { runShareFillRecoveryPass } from "@/lib/corporations/commands/shareTradi
 import { captureServerProductEvent } from "@/lib/analytics/captureServer";
 import { isCronWorkerProcess, shouldStartHostedBackgroundServices } from "@/lib/startupMode";
 import { PatreonReconcileLockBusyError, runPatreonReconcile } from "@/lib/patreon/reconcile";
-import { runElectionHalfTick } from "@/lib/turn/elections/electionHalfTick";
 
 /*
  * Sentry cron-monitor slug for the primary turn cron. Service-suffixed so
@@ -102,6 +101,9 @@ let patreonReconcileRunning = false;
  * slots double as the test selector (see `findScheduledCallback` in cron.test.ts).
  */
 export const SHARE_FILL_RECOVERY_SCHEDULE = "7,22,37,52 * * * *";
+
+/** Quarter-hour market tick; :00 (turn) and :30 (half-hour tick) run it themselves. */
+export const MARKET_TICK_SCHEDULE = "15,45 * * * *";
 
 /** Patreon benefits and grace expiry are reconciled four times each UTC day. */
 export const PATREON_RECONCILIATION_SCHEDULE = "13 */6 * * *";
@@ -297,15 +299,17 @@ export async function initializeCronJobs() {
         const shouldFire = await shouldFireBackupTurn(new Date(), currentState);
         if (!shouldFire) {
           console.log("[Cron] Backup turn skipped — primary already processed this hour");
-          // The hour's turn ran, so the half hour carries the election
-          // results tick instead (votes only; deadlines stay on the hour).
+          // The hour's turn ran, so the half hour carries the half tick
+          // instead: election results, half of the coming turn's growth,
+          // inflation and exchange-rate step, then the market tick. Race
+          // deadlines, campaign money and production stay on the hour.
           try {
-            const turn = await runElectionHalfTick();
-            if (turn != null) console.log(`[Cron] Election results tick banked turn ${turn}`);
+            const tick = await runHalfHourTick();
+            if (tick) console.log("[Cron] Half-hour tick ran for turn", tick.turn, tick);
           } catch (error) {
-            console.error("[Cron] Election results tick failed:", error);
+            console.error("[Cron] Half-hour tick failed:", error);
             Sentry.captureException(error, {
-              tags: { component: "cron", job: "electionHalfTick" },
+              tags: { component: "cron", job: "halfHourTick" },
             });
           }
           return;
@@ -438,36 +442,18 @@ export async function initializeCronJobs() {
     { timezone: "UTC" }
   );
 
+  // Quarter-hour market tick: true re-price, sentiment and order flow, and a
+  // 15-minute market cap point. :00 is the turn and :30 the half-hour tick,
+  // which both include it.
   stockExchangeRefreshCron = cron.schedule(
-    "*/15 * * * *",
+    MARKET_TICK_SCHEDULE,
     async () => {
       try {
-        const currentState = await getGameState();
-        if (!currentState?.isActive) return;
-        if (currentState.isProcessing) {
-          // Stale lock = no real turn in flight (prior process died mid-turn).
-          // Refresh prices anyway; processTurn's own findOneAndUpdate keeps
-          // takeover safe if a turn-cron tick happens to arrive concurrently.
-          // Observed 2026-05-24: this cron skipped for hours on a stuck flag.
-          const lockState = getProcessingLockState(currentState);
-          if (!lockState.isStale) {
-            console.log("[Cron] Stock exchange refresh skipped — turn in progress");
-            return;
-          }
-          console.warn(
-            `[Cron] Stale processing lock detected on stock tick (lastTouch=${
-              lockState.lastTouch?.toISOString() ?? "none"
-            }); proceeding with refresh.`
-          );
-        }
-        const { updated, pulseCount } = await applyPriceMultipliers();
-        await generateStockExchangeSnapshots(currentState.currentTurn);
-        console.log("[Cron] Stock exchange refreshed at", new Date().toISOString(), {
-          pricesUpdated: updated,
-          pulseCount,
-        });
+        const tick = await runMarketTick();
+        if (tick) console.log("[Cron] Market tick at", new Date().toISOString(), tick);
+        else console.log("[Cron] Market tick skipped (inactive or turn in progress)");
       } catch (error) {
-        console.error("[Cron] Stock exchange refresh failed:", error);
+        console.error("[Cron] Market tick failed:", error);
         Sentry.captureException(error, { tags: { component: "cron", job: "stockExchange" } });
       }
     },
@@ -629,7 +615,9 @@ export async function initializeCronJobs() {
   );
 
   console.log(`[Cron] Cron jobs initialized. Turn processing will run at ${scheduleDescription}.`);
-  console.log("[Cron] Stock exchange (prices + snapshots) will refresh every 15 minutes.");
+  console.log(
+    "[Cron] Market tick (prices + 15-minute market cap) runs at :15 and :45; :00 and :30 cover the rest."
+  );
   console.log("[Cron] Fog of war will update every hour.");
   console.log("[Cron] Player random events will sweep every 15 minutes.");
   console.log("[Cron] API abuse detection will scan every hour.");

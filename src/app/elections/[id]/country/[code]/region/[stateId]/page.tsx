@@ -8,7 +8,7 @@ import { SubdivisionMap } from "@/components/SubdivisionMap";
 import { DistrictCardGrid } from "@/components/redistricting/DistrictCardGrid";
 import type { DistrictSquareView } from "@/lib/redistricting/districtSquareResponse";
 import { resolveElectionYear } from "@/lib/utils/formatters";
-import { useGameTurnStatus } from "@/hooks/useGameEvents";
+import { useGameEvents, useGameTurnStatus } from "@/hooks/useGameEvents";
 import { useAuthMe } from "@/contexts/AuthDataContext";
 import { DEFAULT_CYCLE_ANCHOR_CONTEXT } from "@/lib/elections/cycleAnchorContext";
 import { UK_REGION_NAMES, RU_REGION_NAMES } from "@/lib/constants/states";
@@ -281,6 +281,8 @@ export default function StateElectionResultsPage({
   // "rendered more hooks than during the previous render" violation when
   // the loading state flips.
   const turnStatus = useGameTurnStatus();
+  const [refreshKey, setRefreshKey] = useState(0);
+  useGameEvents(() => setRefreshKey((key) => key + 1), ["turn_complete", "market_tick"]);
   const cycleCtx = {
     startingYear: turnStatus?.startingYear ?? DEFAULT_CYCLE_ANCHOR_CONTEXT.startingYear,
     preset: turnStatus?.preset ?? DEFAULT_CYCLE_ANCHOR_CONTEXT.preset,
@@ -397,7 +399,7 @@ export default function StateElectionResultsPage({
       }
     }
     fetchData();
-  }, [id, stateUpper, code, router]);
+  }, [id, stateUpper, code, router, refreshKey]);
 
   if (loading) {
     return (

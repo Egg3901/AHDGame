@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
   return publicPageMetadata({
     title: `Economic Outlook | ${config.name} | A House Divided`,
-    description: `GDP, growth, inflation, prime rate, credit standing, and the national sector mix for ${config.name} in A House Divided, updated as the hourly simulation advances.`,
+    description: `GDP, growth, inflation, prime rate, credit standing, and the national sector mix for ${config.name} in A House Divided, with growth and inflation updated every half hour.`,
     pathname: `/country/${code}/economy`,
   });
 }

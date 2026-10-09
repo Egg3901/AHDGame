@@ -420,4 +420,43 @@ describe("recomputeSharePricesAfterBondTurn", () => {
     // and keeps converging toward BSP over subsequent turns.
     expect(priceWithoutCooldown).toBeCloseTo(65, 5); // rate-limited 35% drop from $100 prior
   });
+
+  it("intra-hour tick reprices the live price only, with a CAS and the turn's prior", async () => {
+    const { recomputeSharePricesAfterBondTurn } = await import("./recomputeSharePrices");
+    const live = { ...corp, fundamentalSharePrice: 101.5 } as unknown as Corporation;
+    db.collectionMocks.corporations.find.mockReturnValue(makeCursor([live]));
+    db.collectionMocks.corporations.bulkWrite.mockResolvedValueOnce({ matchedCount: 1 });
+
+    const tick = await recomputeSharePricesAfterBondTurn(turn, db as unknown as Db, {
+      intraHour: true,
+    });
+    expect(tick).toEqual({ corpsRepriced: 1, corpsSkipped: 0 });
+    // History is the turn's record: a tick never rewrites it.
+    expect(db.collectionMocks.corporationHistory.bulkWrite).not.toHaveBeenCalled();
+    const [ops, options] = db.collectionMocks.corporations.bulkWrite.mock.calls[0] as [
+      Array<{
+        updateOne: { filter: Record<string, unknown>; update: { $set: { sharePrice: number } } };
+      }>,
+      { ordered: boolean },
+    ];
+    expect(ops[0].updateOne.filter).toMatchObject({ _id: live._id, fundamentalSharePrice: 101.5 });
+    expect(options).toEqual({ ordered: false });
+
+    // Same inputs as the turn: identical price, so repeated ticks cannot drift.
+    db.collectionMocks.corporations.bulkWrite.mockClear();
+    await recomputeSharePricesAfterBondTurn(turn, db as unknown as Db);
+    const turnOps = db.collectionMocks.corporations.bulkWrite.mock.calls[0][0] as typeof ops;
+    expect(turnOps[0].updateOne.update.$set.sharePrice).toBe(
+      ops[0].updateOne.update.$set.sharePrice
+    );
+  });
+
+  it("intra-hour tick counts a corp moved by a concurrent writer as skipped", async () => {
+    const { recomputeSharePricesAfterBondTurn } = await import("./recomputeSharePrices");
+    db.collectionMocks.corporations.bulkWrite.mockResolvedValueOnce({ matchedCount: 0 });
+    const tick = await recomputeSharePricesAfterBondTurn(turn, db as unknown as Db, {
+      intraHour: true,
+    });
+    expect(tick).toEqual({ corpsRepriced: 0, corpsSkipped: 1 });
+  });
 });

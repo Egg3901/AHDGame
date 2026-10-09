@@ -9,6 +9,8 @@ const state = vi.hoisted(() => ({
   eurozoneEnabled: false,
   rates: { EUR: 0.85, IEP: 0.7, GBP: 0.6 } as Record<string, number>,
   baseRates: {} as Record<string, number>,
+  onGameEvent: null as (() => void) | null,
+  eventTypes: [] as string[],
 }));
 vi.mock("@/contexts/AuthDataContext", () => ({
   useAuthMe: () => ({
@@ -21,7 +23,12 @@ vi.mock("@/contexts/AuthDataContext", () => ({
 vi.mock("@/hooks/useWorldFlags", () => ({
   useWorldFlags: () => ({ preset: "1991-default", eurozoneEnabled: state.eurozoneEnabled }),
 }));
-vi.mock("@/hooks/useGameEvents", () => ({ useGameEvents: () => {} }));
+vi.mock("@/hooks/useGameEvents", () => ({
+  useGameEvents: (callback: () => void, types: string[]) => {
+    state.onGameEvent = callback;
+    state.eventTypes = types;
+  },
+}));
 
 beforeEach(() => {
   state.countryId = "DE";
@@ -29,6 +36,8 @@ beforeEach(() => {
   state.eurozoneEnabled = false;
   state.rates = { EUR: 0.85, IEP: 0.7, GBP: 0.6 };
   state.baseRates = {};
+  state.onGameEvent = null;
+  state.eventTypes = [];
   vi.stubGlobal(
     "fetch",
     vi.fn().mockResolvedValue({
@@ -49,6 +58,14 @@ async function currency() {
 }
 
 describe("historical currency presentation through the provider", () => {
+  it("refreshes conversions on market ticks without remounting the provider", async () => {
+    const result = await currency();
+    expect(result.current.convert(100)).toBe(85);
+    expect(state.eventTypes).toContain("market_tick");
+    state.rates = { ...state.rates, EUR: 0.9 };
+    await act(async () => state.onGameEvent?.());
+    await waitFor(() => expect(result.current.convert(100)).toBe(90));
+  });
   it("displays marks and accepts marks while preserving raw ledger conversion", async () => {
     const result = await currency();
     const display = result.current.resolveDisplayAt(100, undefined);

@@ -1,5 +1,7 @@
 "use client";
 
+import { useGameEvents } from "@/hooks/useGameEvents";
+
 import {
   useCallback,
   useEffect,
@@ -178,21 +180,24 @@ export default function ElectionsClient({ code, initialElections }: ElectionsCli
     }
   }, [countryId]);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setFetchError(null);
-    try {
-      const result = await fetchAllElections(countryId);
-      setElections(result.elections);
-      if (result.error) setFetchError(apiErrorText(result, "Request failed. Try again."));
-      await fetchSecondary();
-    } catch (err) {
-      console.error("Error fetching elections:", err);
-      setFetchError(String(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [countryId, fetchSecondary]);
+  const fetchData = useCallback(
+    async (background = false) => {
+      if (!background) setLoading(true);
+      setFetchError(null);
+      try {
+        const result = await fetchAllElections(countryId);
+        setElections(result.elections);
+        if (result.error) setFetchError(apiErrorText(result, "Request failed. Try again."));
+        await fetchSecondary();
+      } catch (err) {
+        console.error("Error fetching elections:", err);
+        setFetchError(String(err));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [countryId, fetchSecondary]
+  );
 
   useEffect(() => {
     if (skipInitialFetch.current) {
@@ -202,6 +207,7 @@ export default function ElectionsClient({ code, initialElections }: ElectionsCli
     }
     fetchData();
   }, [fetchData, fetchSecondary]);
+  useGameEvents(() => void fetchData(true), ["turn_complete", "market_tick"]);
 
   const {
     actionLoading,

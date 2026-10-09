@@ -47,6 +47,8 @@ interface HarnessOpts {
   };
   demographicsV2?: boolean;
   unregistered?: number;
+  /** Fields merged over the default tally (split-turn fixtures). */
+  tally?: Record<string, unknown>;
 }
 
 function buildMockDb(opts: HarnessOpts) {
@@ -139,6 +141,7 @@ function buildMockDb(opts: HarnessOpts) {
           totalVotesByUnit: initialTotalVotesByUnit,
           unitTurnSnapshots: {},
           createdAt: startTime,
+          ...opts.tally,
         }),
         updateOne,
       };
@@ -501,4 +504,94 @@ describe("presidential engine — registration entrenchment", () => {
     },
     30_000
   );
+});
+
+describe("presidential engine: half-hour split turns", () => {
+  beforeAll(async () => {
+    await import("./presidentialElectionEngine");
+  }, 60_000);
+  beforeEach(() => vi.clearAllMocks());
+
+  const base = {
+    demId: new ObjectId().toString(),
+    repId: new ObjectId().toString(),
+    startTime: new Date("2024-11-01T00:00:00Z"),
+    endTime: new Date("2024-11-05T00:00:00Z"),
+  };
+  const NOW = new Date("2024-11-03T12:00:00Z");
+
+  async function run(tally: Record<string, unknown>, slice?: "early") {
+    const opts = { ...base, electionId: new ObjectId(), tally };
+    const { collection, updateOne } = buildMockDb(opts);
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue({ collection } as never);
+    const { accumulatePresidentVoteTurn } = await import("./presidentialElectionEngine");
+    await accumulatePresidentVoteTurn(opts.electionId, 1, NOW, undefined, slice ? { slice } : {});
+    return updateOne;
+  }
+  const total = (updateOne: ReturnType<typeof vi.fn>) =>
+    Object.values(updateOne.mock.calls[0][1].$set.totalVotes as Record<string, number>).reduce(
+      (sum, votes) => sum + votes,
+      0
+    );
+
+  it("banks half the slice early and the other half on the turn", async () => {
+    const whole = await run({});
+    const early = await run({}, "early");
+    const rest = await run({ turnSnapshots: [{ turn: 1, slicePart: "early" }] });
+    expect(whole.mock.calls[0][1].$push.turnSnapshots.slicePart).toBeUndefined();
+    expect(early.mock.calls[0][1].$push.turnSnapshots).toMatchObject({
+      turn: 1,
+      slicePart: "early",
+    });
+    expect(rest.mock.calls[0][1].$push.turnSnapshots).toMatchObject({
+      turn: 1,
+      slicePart: "rest",
+    });
+    // Each half carries half the pool; per-unit integer rounding is the only gap.
+    const wholeVotes = total(whole);
+    expect(wholeVotes).toBeGreaterThan(0);
+    expect(Math.abs(total(early) + total(rest) - wholeVotes) / wholeVotes).toBeLessThan(1e-4);
+    expect(Math.abs(total(early) - total(rest))).toBeLessThan(wholeVotes * 1e-4);
+  });
+
+  it("keeps one unit history row per turn when the rest lands", async () => {
+    const unitTurnSnapshots = Object.fromEntries(
+      ELECTORAL_VOTE_UNITS.map((unit) => [
+        unit.unitId,
+        [
+          { turn: 0, recordedAt: NOW, cumulativeVotes: {}, sharesPct: {} },
+          { turn: 1, recordedAt: NOW, cumulativeVotes: {}, sharesPct: {} },
+        ],
+      ])
+    );
+    const rest = await run({
+      turnSnapshots: [{ turn: 1, slicePart: "early" }],
+      unitTurnSnapshots,
+    });
+    const written = rest.mock.calls[0][1].$set.unitTurnSnapshots as Record<
+      string,
+      { turn: number }[]
+    >;
+    for (const unit of ELECTORAL_VOTE_UNITS) {
+      expect(written[unit.unitId].map((row) => row.turn)).toEqual([0, 1]);
+    }
+  });
+
+  it.each<[string, { turn: number; slicePart?: "early" | "rest" }[], "early" | undefined]>([
+    ["a second early tick", [{ turn: 1, slicePart: "early" }], "early"],
+    ["an early tick after the whole turn", [{ turn: 1 }], "early"],
+    ["the turn after it was counted whole", [{ turn: 1 }], undefined],
+    [
+      "the turn after both halves",
+      [
+        { turn: 1, slicePart: "early" },
+        { turn: 1, slicePart: "rest" },
+      ],
+      undefined,
+    ],
+  ])("counts nothing on %s", async (_label, turnSnapshots, slice) => {
+    const updateOne = await run({ turnSnapshots }, slice);
+    expect(updateOne).not.toHaveBeenCalled();
+  });
 });

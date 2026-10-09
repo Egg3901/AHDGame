@@ -1,5 +1,7 @@
 "use client";
 
+import { useGameEvents } from "@/hooks/useGameEvents";
+
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import BackButton from "@/components/BackButton";
@@ -35,6 +37,9 @@ export function EconomyOutlookClient() {
     data: CountryEconomyOutlook | null;
   }>({ status: "loading", data: null });
 
+  const [refreshKey, setRefreshKey] = useState(0);
+  useGameEvents(() => setRefreshKey((key) => key + 1), ["turn_complete", "market_tick"]);
+
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/country/${countryId.toLowerCase()}/economy`)
@@ -48,7 +53,7 @@ export function EconomyOutlookClient() {
     return () => {
       cancelled = true;
     };
-  }, [countryId]);
+  }, [countryId, refreshKey]);
 
   const { status, data } = fetchState;
   const loading = status === "loading";

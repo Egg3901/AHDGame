@@ -133,7 +133,7 @@ Sovereign bonds pay the prime rate plus a term premium for longer maturities, pl
 
 ### 3. Exchange rates
 
-The prime rate is one of four macro factors that drive the exchange rate target each turn. The full macro target formula is:
+The prime rate is one of four macro factors that drive the exchange rate target. In multiplayer, floating rates advance halfway at half past each hour, with the hourly turn applying the rest of the step. The full macro target formula is:
 
 \`\`\`
 macroTarget = baseRate × multiplier
@@ -150,7 +150,7 @@ multiplier = 1
 - **GDP growth**: stronger growth strengthens currency; sensitivity 0.01
 - **Trade growth**: trade surplus strengthens currency; sensitivity 0.005
 
-The actual rate converges toward this target at **5% per turn** (\`DRIFT_SPEED\`), so a full rate shock takes roughly one game year (~48 turns) to work through. On top of macro drift, two additional forces apply each turn:
+The actual rate converges toward this target at **5% per turn** (\`DRIFT_SPEED\`), so a full rate shock takes roughly one game year (~48 turns) to work through. The half-hour update exposes half of this step; the hourly turn completes it. On top of macro drift, two additional forces apply each turn:
 
 - **Volume pressure**: net buy/sell activity creates a short-term offset capped at **±5%** per turn. Volume accounts for **20%** of rate direction; macro fundamentals account for **80%**.
 - **Random noise**: ±0.4% per-turn jitter prevents perfectly predictable movement.
@@ -159,7 +159,7 @@ The actual rate converges toward this target at **5% per turn** (\`DRIFT_SPEED\`
 
 ### 4. Inflation
 
-The prime rate is a direct inflation management tool. High rates dampen borrowing and spending, reducing inflationary pressure. This relationship is captured in the per-turn inflation recalculation, which feeds GDP growth data and prime rate into an inflation model that updates every turn.
+The prime rate is a direct inflation management tool. High rates dampen borrowing and spending, reducing inflationary pressure. The inflation model uses GDP growth data and the prime rate, advances halfway at half past each hour, and completes the step on the hourly turn.
 
 ### 5. Corporate profit margins (via inflation)
 

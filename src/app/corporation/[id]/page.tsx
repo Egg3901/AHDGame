@@ -1,5 +1,7 @@
 "use client";
 
+import { useGameEvents } from "@/hooks/useGameEvents";
+
 import { InlineError } from "@/components/ui/InlineError";
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -236,6 +238,7 @@ export default function CorporationDetailPage() {
   useEffect(() => {
     fetchCorporation();
   }, [fetchCorporation]);
+  useGameEvents(() => void fetchCorporation(), ["turn_complete", "market_tick"]);
 
   useEffect(() => {
     let cancelled = false;

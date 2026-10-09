@@ -8,6 +8,9 @@ export const STATE_RUNTIME_UNSET_FIELDS = [
   "capitalStock",
   "conflictCapacityApplied",
   "outputGap",
+  // Half-hour tick stamps and start values (turn/subhour): turn-scoped.
+  "subhourStep",
+  "subhourBase",
   "sectorRealizedRevenue",
   "sectorRealizedRevenueTurn",
   "sectorRealizedRevenueUnit",
