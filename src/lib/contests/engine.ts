@@ -357,6 +357,29 @@ async function openingBaselines(
   return out;
 }
 
+/**
+ * End time for rounds opening now. A round opening while the other weekly
+ * rounds have at least half a week left joins their week, so every contest
+ * settles together and the results go out in one post; otherwise it runs a
+ * full week. Rounds opened off-cycle (a new contest kind, a missed settlement)
+ * fall into step within one round.
+ */
+async function sharedWeekEnd(db: Db, world: ContestWorld, opening: ContestKind[]): Promise<Date> {
+  const fullWeek = new Date(world.now.getTime() + CONTEST_ROUND_MS);
+  const others = await contestRounds(db)
+    .find(
+      {
+        status: "active",
+        kind: { $in: CONTEST_KINDS.filter((k) => !opening.includes(k)) },
+        endsAt: { $gte: new Date(world.now.getTime() + CONTEST_ROUND_MS / 2) },
+      },
+      { projection: { endsAt: 1 } }
+    )
+    .toArray();
+  const latest = Math.max(...others.map((r) => r.endsAt.getTime()));
+  return Number.isFinite(latest) && latest <= fullWeek.getTime() ? new Date(latest) : fullWeek;
+}
+
 async function openRounds(db: Db, world: ContestWorld, kinds: ContestKind[]): Promise<number> {
   if (kinds.length === 0) return 0;
   const last = await contestRounds(db)
@@ -367,6 +390,7 @@ async function openRounds(db: Db, world: ContestWorld, kinds: ContestKind[]): Pr
   for (const r of last) if (!lastNumber.has(r.kind)) lastNumber.set(r.kind, r.roundNumber);
 
   const baselines = await openingBaselines(db, world, kinds);
+  const endsAt = await sharedWeekEnd(db, world, kinds);
   let opened = 0;
   for (const kind of kinds) {
     const roundNumber = (lastNumber.get(kind) ?? 0) + 1;
@@ -377,7 +401,7 @@ async function openRounds(db: Db, world: ContestWorld, kinds: ContestKind[]): Pr
       roundNumber,
       status: "active",
       startedAt: world.now,
-      endsAt: new Date(world.now.getTime() + CONTEST_ROUND_MS),
+      endsAt,
       startTurn: world.turn,
       ...(world.iterationKey ? { iterationKey: world.iterationKey } : {}),
       ...(opening.tierBoundaryAnchor !== undefined
