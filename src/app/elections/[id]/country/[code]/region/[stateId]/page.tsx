@@ -438,6 +438,7 @@ export default function StateElectionResultsPage({
     supremeSovietDeputy: "Supreme Soviet Election",
     nationalitiesDeputy: "Soviet of Nationalities Election",
     republicSupremeSoviet: "Republic Supreme Soviet Election",
+    unionCongressDeputy: "Congress of People's Deputies Election",
   };
   const electionTypeTitle = electionTypeLabel[election.electionType] ?? election.electionType;
   const unitLabel = subdivisionResults?.unitLabel ?? "Subdivision";

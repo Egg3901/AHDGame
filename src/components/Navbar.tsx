@@ -515,6 +515,16 @@ export const Navbar = React.memo(function Navbar({
               />
             )}
 
+            {!user?.singleplayer && (
+              <Link
+                href="/contests"
+                className={`relative px-2.5 py-1 text-sm transition-colors hover:text-foreground ${isNavActive(pathname, "/contests") ? "font-medium text-foreground after:absolute after:bottom-0 after:left-1 after:right-1 after:h-px after:rounded-full after:bg-primary after:opacity-70" : "text-muted"}`}
+                aria-current={isNavActive(pathname, "/contests") ? "page" : undefined}
+              >
+                {t("common.contests")}
+              </Link>
+            )}
+
             <HelpDropdown
               onOpenFeedback={onOpenFeedback}
               feedbackCapturing={feedbackCapturing}
@@ -1211,6 +1221,17 @@ export const Navbar = React.memo(function Navbar({
                   </div>
                 )}
               </div>
+            )}
+
+            {!user?.singleplayer && (
+              <Link
+                href="/contests"
+                onClick={closeMobileMenu}
+                className={`flex w-full items-center rounded-lg px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-white/5 ${isNavActive(pathname, "/contests") ? "bg-white/5" : ""}`}
+                aria-current={isNavActive(pathname, "/contests") ? "page" : undefined}
+              >
+                {t("common.contests")}
+              </Link>
             )}
 
             {/* Help/Information section — collapsible, collapsed by default */}

@@ -94,6 +94,8 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // bonus has no in-world payer, so it is an attributed mint rather than
   // Phase-3 `unattributed` backlog.
   onboarding_reward: "onboarding_reward",
+  // The weekly contest prize is the same kind of system mint: no in-world payer.
+  contest_prize: "contest_prize",
   // World event treasury and wallet payouts and charges have no in-world payer
   // or recipient.
   world_event_payout: "world_event",

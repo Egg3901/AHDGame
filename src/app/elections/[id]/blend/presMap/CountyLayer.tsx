@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useMemo, useState } from "react";
 import { BLEND } from "@/components/blend/tokens";
+import { useBlendGround } from "@/components/blend/useBlendGround";
 import { buildCountyRows, type CountyRow } from "./countyModel";
 import { cachedCounties, countyKey, loadCounties } from "./countyStore";
 import { COUNTY_OFFSET_Y } from "./usStatesGeo";
@@ -31,6 +32,7 @@ export function useCountyRows(
 ): Record<string, CountyRow[]> {
   // Bumped whenever a request lands, so the memo below re-reads the cache.
   const [loaded, setLoaded] = useState(0);
+  const ground = useBlendGround();
   const idsKey = stateIds.join(",");
 
   useEffect(() => {
@@ -59,10 +61,10 @@ export function useCountyRows(
     const out: Record<string, CountyRow[]> = {};
     for (const id of seen) {
       const data = cachedCounties(countyKey(electionId, id, turn));
-      if (data) out[id] = buildCountyRows(data, candidate);
+      if (data) out[id] = buildCountyRows(data, candidate, ground);
     }
     return out;
-  }, [seen, loaded, electionId, turn, candidate]);
+  }, [seen, loaded, electionId, turn, candidate, ground]);
 }
 
 /**
@@ -86,15 +88,14 @@ export const CountyPaths = memo(function CountyPaths({
             <path
               key={row.id}
               d={row.path}
-              fill={row.fill}
-              stroke={BLEND.page}
+
               strokeOpacity={0.55}
               strokeWidth={0.5}
               strokeLinejoin="round"
               vectorEffect="non-scaling-stroke"
               data-state={stateId}
               data-county={row.id}
-              style={{ cursor: "pointer" }}
+              style={{ fill: row.fill, stroke: BLEND.page, cursor: "pointer" }}
             />
           ))}
         </g>

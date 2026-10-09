@@ -1,14 +1,14 @@
 "use client";
 
+import { useBlendGround } from "@/components/blend/useBlendGround";
 import { useMemo, useState } from "react";
 import { BLEND, BLEND_CONTAINER, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import { BlendSection } from "@/components/blend/BlendShell";
-import { BlendChipRail } from "@/components/blend/BlendRail";
 import type { ElectionDetail } from "../components/ElectionDetailTypes";
 import { PresidentialStage, presidentialTitle } from "./PresidentialStage";
+import { StageField, candidateLinks } from "./StageField";
 import { PresidentialMap } from "./presMap/PresidentialMap";
 import { buildPresMapModel, presMapModelFromTiles } from "./presMap/presMapModel";
-import { BlendVitals } from "@/components/blend/BlendVitals";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
 import {
   buildResultsBlendViewModel,
@@ -202,13 +202,15 @@ export function ResultsBlendView({
   stageTitle = presidentialTitle(data.election.electionYear),
   stageNav,
 }: ResultsBlendViewProps) {
-  const [rail, setRail] = useState<ResultsRail>("overview");
+  // The stage shows every section at once.
+  const rail: ResultsRail = "overview";
   const [sortBy, setSortBy] = useState<StateSortKey>("ev");
   const [sortDesc, setSortDesc] = useState(true);
+  const ground = useBlendGround();
 
   const vm = useMemo(
-    () => buildResultsBlendViewModel({ data, route, rail, sortBy, sortDesc }),
-    [data, route, rail, sortBy, sortDesc]
+    () => buildResultsBlendViewModel({ data, route, rail, sortBy, sortDesc, ground }),
+    [data, route, rail, sortBy, sortDesc, ground]
   );
 
   // The full model (shares, trend, county drill-down) where the race payload
@@ -217,9 +219,9 @@ export function ResultsBlendView({
   const mapModel = useMemo(() => {
     const base = presMapModelFromTiles(vm.tiles);
     if (!election) return base;
-    const full = buildPresMapModel(election);
+    const full = buildPresMapModel(election, ground);
     return { ...full, states: { ...base.states, ...full.states } };
-  }, [election, vm.tiles]);
+  }, [election, vm.tiles, ground]);
 
   // Repeat click on the active column flips direction, matching ResultsTable.
   const sort = (col: StateSortKey) => {
@@ -335,156 +337,8 @@ export function ResultsBlendView({
           </div>
         </div>
       ) : null}
-      {/* Mobile */}
-      <div className="lg:hidden" style={{ background: BLEND.page, color: BLEND.ink }}>
-        <div
-          style={{
-            position: "sticky",
-            top: 0,
-            zIndex: 5,
-            background: BLEND.rail,
-            borderBottom: `1px solid ${BLEND.hairline}`,
-            padding: "14px 16px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              paddingBottom: 9,
-              borderBottom: `1px solid ${BLEND.hairline}`,
-              fontFamily: FONT.sans,
-              fontSize: 10,
-              letterSpacing: ".2em",
-              textTransform: "uppercase",
-              color: BLEND.muted,
-            }}
-          >
-            <span>{route === "concluded" ? "Final edition" : "Live results"}</span>
-            <span style={{ fontFamily: FONT.mono, letterSpacing: ".06em" }}>
-              {vm.certifiedText}
-            </span>
-          </div>
-          <div
-            style={{
-              marginTop: 12,
-              fontFamily: FONT.mono,
-              fontSize: 9.5,
-              letterSpacing: ".16em",
-              textTransform: "uppercase",
-              color: BLEND.gold,
-            }}
-          >
-            {vm.eyebrow}
-          </div>
-          <div
-            style={{
-              marginTop: 7,
-              fontFamily: FONT.sans,
-              fontSize: 30,
-              lineHeight: 1,
-              fontWeight: 600,
-              letterSpacing: "-0.03em",
-            }}
-          >
-            {vm.winnerName ?? "Counting"}
-          </div>
-          <div
-            style={{
-              marginTop: 8,
-              fontFamily: FONT.sans,
-              fontSize: 13.5,
-              color: BLEND.muted,
-            }}
-          >
-            {vm.winnerLine}
-          </div>
-          <BlendChipRail
-            items={vm.railItems}
-            selectedId={rail}
-            onSelect={(id) => setRail(id as ResultsRail)}
-            fontSize={11}
-          />
-        </div>
-
-        <BlendVitals cells={vm.vitals} variant="mobile" />
-
-        <div style={{ padding: 16 }}>
-          {vm.showCollege ? (
-            <div style={{ marginBottom: 22 }}>
-              <EvBar vm={vm} height={28} />
-              <h2
-                style={{
-                  margin: "22px 0 12px",
-                  fontFamily: FONT.sans,
-                  fontSize: 20,
-                  fontWeight: 600,
-                }}
-              >
-                {route === "concluded" ? "The final map" : "The board"}
-              </h2>
-              <TileBoard vm={vm} columns={6} />
-            </div>
-          ) : null}
-
-          {/* The tickets and the closest states lived only in the desktop rail,
-              which is `hidden lg:block`. On a phone that left the board and a
-              winner line with no per-ticket result at all. */}
-          <div style={{ marginBottom: 22 }}>
-            <h2 style={{ margin: "0 0 8px", fontFamily: FONT.sans, fontSize: 20, fontWeight: 600 }}>
-              {route === "concluded" ? "The final tickets" : "The tickets"}
-            </h2>
-            <TicketRows vm={vm} />
-          </div>
-
-          {vm.closest.length > 0 ? (
-            <div style={{ marginBottom: 22 }}>
-              <h2
-                style={{ margin: "0 0 8px", fontFamily: FONT.sans, fontSize: 20, fontWeight: 600 }}
-              >
-                Closest states
-              </h2>
-              <ClosestRows vm={vm} />
-            </div>
-          ) : null}
-
-          {vm.showStates ? (
-            <div>
-              <h2
-                style={{ margin: "0 0 8px", fontFamily: FONT.sans, fontSize: 20, fontWeight: 600 }}
-              >
-                {route === "concluded" ? "State by state" : "Returns"}
-              </h2>
-              {vm.states.map((s) => (
-                <div
-                  key={s.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "baseline",
-                    justifyContent: "space-between",
-                    gap: 10,
-                    padding: "11px 0",
-                    borderBottom: "1px solid rgba(42,42,61,.6)",
-                  }}
-                >
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                    <i style={{ width: 8, height: 8, display: "block", background: s.dot }} />
-                    <span style={{ fontFamily: FONT.sans, fontSize: 15, fontWeight: 600 }}>
-                      {s.name}
-                    </span>
-                  </span>
-                  <span style={{ fontFamily: FONT.mono, fontSize: 11.5, color: s.marginColor }}>
-                    {s.winner === "Not reporting" ? "—" : `+${s.marginPct}%`} · {s.ev} EV
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Desktop: the full-screen map stage, then the state-by-state table. */}
-      <div className="hidden lg:block">
+      {/* The map stage, then the state-by-state table. */}
+      <div>
         <PresidentialStage
           title={stageTitle}
           kicker={
@@ -513,8 +367,35 @@ export function ResultsBlendView({
                 <EvBar vm={vm} height={28} />
               </div>
               <div style={{ marginTop: 22 }}>
-                <div style={BLEND_LABEL}>{route === "concluded" ? "Final tickets" : "Tickets"}</div>
-                <TicketRows vm={vm} />
+                {election ? (
+                  <StageField
+                    title={route === "concluded" ? "Final tickets" : "Tickets"}
+                    countryId={data.election.countryId}
+                    rows={vm.tickets.map((t) => {
+                      const c =
+                        election.allCandidates.find((x) => x.id === t.id) ??
+                        election.allCandidates.find((x) => x.characterName === t.name);
+                      return {
+                        id: t.id,
+                        name: t.name,
+                        ...candidateLinks(c, data.election.countryId),
+                        partyName: t.party,
+                        color: t.color,
+                        figure: `${t.ev} EV`,
+                        sub: `${t.pct}% · ${t.votes}`,
+                        isWinner: t.isWinner,
+                        isYou: c?.isYou,
+                      };
+                    })}
+                  />
+                ) : (
+                  <>
+                    <div style={BLEND_LABEL}>
+                      {route === "concluded" ? "Final tickets" : "Tickets"}
+                    </div>
+                    <TicketRows vm={vm} />
+                  </>
+                )}
               </div>
               {vm.closest.length > 0 ? (
                 <div
@@ -544,7 +425,32 @@ export function ResultsBlendView({
 
         <div className={BLEND_CONTAINER} style={{ background: BLEND.page }}>
           <BlendSection title={route === "concluded" ? "State by state" : "Returns"} ruled={false}>
-            {stateRows}
+            <div className="hidden lg:block">{stateRows}</div>
+            <div className="lg:hidden">
+              {vm.states.map((s) => (
+                <div
+                  key={s.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "baseline",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    padding: "11px 0",
+                    borderBottom: "1px solid rgba(42,42,61,.6)",
+                  }}
+                >
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                    <i style={{ width: 8, height: 8, display: "block", background: s.dot }} />
+                    <span style={{ fontFamily: FONT.sans, fontSize: 15, fontWeight: 600 }}>
+                      {s.name}
+                    </span>
+                  </span>
+                  <span style={{ fontFamily: FONT.mono, fontSize: 11.5, color: s.marginColor }}>
+                    {s.winner === "Not reporting" ? "—" : `+${s.marginPct}%`} · {s.ev} EV
+                  </span>
+                </div>
+              ))}
+            </div>
           </BlendSection>
         </div>
       </div>

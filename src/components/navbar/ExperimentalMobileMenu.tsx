@@ -666,6 +666,20 @@ export function ExperimentalMobileMenu({
         </div>
       )}
 
+      {!user?.singleplayer && (
+        <Link
+          href="/contests"
+          onClick={onClose}
+          aria-current={isNavActive(pathname, "/contests") ? "page" : undefined}
+          className={`flex w-full items-center gap-3 rounded-[10px] px-3.5 py-3 text-[15px] font-medium transition-colors hover:bg-white/5 ${
+            isNavActive(pathname, "/contests") ? "bg-card text-foreground" : "text-fg-2"
+          }`}
+        >
+          <NavIcon name="Contests" className="h-[18px] w-[18px]" />
+          {t("common.contests")}
+        </Link>
+      )}
+
       {/* Help section */}
       <button
         type="button"

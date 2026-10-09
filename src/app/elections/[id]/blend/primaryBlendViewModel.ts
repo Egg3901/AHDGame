@@ -11,7 +11,7 @@ import type {
   ElectionDetail,
   PartyGroup,
 } from "../components/ElectionDetailTypes";
-import { BLEND } from "@/components/blend/tokens";
+import { BLEND, BLEND_HEX } from "@/components/blend/tokens";
 import { buildCandidateColorMap } from "@/lib/campaigns/candidateColor";
 import { buildPerStateSlices } from "@/lib/elections/primaryViewModel";
 import type { CarveUpSlice } from "@/components/elections/primary/CarveUpPanel";
@@ -213,7 +213,7 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
     party?.partyColor
   );
   const colorFor = (candidateId: string): string =>
-    colorById[candidateId] ?? party?.partyColor ?? BLEND.muted;
+    colorById[candidateId] ?? party?.partyColor ?? BLEND_HEX.muted;
   const advanceCount = election.primaryAdvanceCount ?? 1;
   const currentTurn = election.gameState?.currentTurn ?? null;
 

@@ -63,6 +63,7 @@ import {
   ensureRUNationalitiesElections,
   ensureRURepublicSovietElections,
   ensureRUGovernorElections,
+  ensureRUUnionCongressElections,
   ensureDDVolkskammerElections,
   ensureDDLandAssemblyElections,
   ensureDDGovernorElections,
@@ -354,6 +355,8 @@ export const COUNTRY_ELECTION_PHASES: Partial<Record<CountryId, CountryElectionP
     { name: "ruNationalitiesElections", fn: ensureRUNationalitiesElections },
     { name: "ruRepublicSovietElections", fn: ensureRURepublicSovietElections },
     { name: "ruGovernorElections", fn: ensureRUGovernorElections },
+    // 1991 Soviet Congress of People's Deputies; gated to the Union constitution.
+    { name: "ruUnionCongressElections", fn: ensureRUUnionCongressElections },
   ],
   // DD Volkskammer + Land assemblies + Land First Secretaries — status-gated
   // + era-gated (null anchor outside 1953/1979) like RU; per-game

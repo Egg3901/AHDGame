@@ -11,7 +11,12 @@
  * Used by the campaign manager and the three presidential election screens.
  */
 
-export const BLEND = {
+/**
+ * The Blend palette as raw hex, the values the default (dark) theme renders.
+ * For colour maths only (tier shading, readable ink, gradient stops), which
+ * cannot work on a CSS variable. Anything painted should use {@link BLEND}.
+ */
+export const BLEND_HEX = {
   /** Page ground. */
   page: "#0c0c12",
   /** Left and right rail ground, one step above the page. */
@@ -54,6 +59,36 @@ export const BLEND = {
   /** Losses and drags. */
   negative: "#ef4444",
 } as const;
+
+export type BlendToken = keyof typeof BLEND_HEX;
+
+/**
+ * Blend tokens as CSS variables, so every Blend screen follows the site theme.
+ * `globals.css` binds `--blend-*` for each theme; the default theme keeps the
+ * exact hex values above, which also stand as the fallback when no theme has
+ * been applied yet.
+ */
+export const BLEND = Object.fromEntries(
+  (Object.keys(BLEND_HEX) as BlendToken[]).map((k) => [k, `var(--blend-${k}, ${BLEND_HEX[k]})`])
+) as { readonly [K in BlendToken]: string };
+
+/**
+ * The current theme's Blend page ground as hex, for shading a colour toward
+ * the page (margin tiers). Reads the live `--blend-page` from the document;
+ * falls back to the dark ground on the server or when it cannot be parsed.
+ */
+export function blendGroundHex(): string {
+  if (typeof document === "undefined") return BLEND_HEX.page;
+  const probe = document.createElement("span");
+  probe.style.color = "var(--blend-page)";
+  probe.style.display = "none";
+  document.body.appendChild(probe);
+  const rgb = getComputedStyle(probe).color;
+  probe.remove();
+  const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(rgb);
+  if (!m) return BLEND_HEX.page;
+  return "#" + [m[1], m[2], m[3]].map((n) => Number(n).toString(16).padStart(2, "0")).join("");
+}
 
 /**
  * Font stacks. JetBrains Mono and Geist are already registered in

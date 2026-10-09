@@ -10,7 +10,7 @@
 import type { ElectionDetail, CandidateDetail } from "../components/ElectionDetailTypes";
 import { buildGeneralElectionViewModel, type MarginTier } from "@/lib/elections/generalViewModel";
 import { readableInk, shadeColorForTier } from "@/lib/elections/marginTierShade";
-import { BLEND } from "@/components/blend/tokens";
+import { BLEND_HEX } from "@/components/blend/tokens";
 import { computePersuasionDriverDisplay } from "@/lib/elections/computePersuasionDriverDisplay";
 import type { DriverDisplayInputs } from "@/lib/elections/computePersuasionDriverDisplay";
 import type { PersuasionDriverCandidate } from "@/components/elections/general/PersuasionDrivers";
@@ -22,6 +22,8 @@ export interface GeneralBlendInput {
   election: ElectionDetail;
   wire: string[];
   rail: GeneralRail;
+  /** Page ground the tier shades fade toward; the theme's, as hex. */
+  ground?: string;
 }
 
 export interface GeneralTicketVM {
@@ -34,6 +36,8 @@ export interface GeneralTicketVM {
   partyId: string;
   /** Country-scoped party page. */
   partyHref: string;
+  /** The ticket's campaign page, when it runs one. */
+  campaignHref: string | null;
   mate: string | null;
   /**
    * The id a campaign keys this candidate by: the NPP id for an NPP, the
@@ -268,6 +272,7 @@ export function buildGeneralBlendViewModel(inp: GeneralBlendInput): GeneralBlend
         party: c.partyName,
         partyId: c.party,
         partyHref: `/country/${countryCode}/parties/${c.party}`,
+        campaignHref: c.campaignId ? `/campaign/${c.campaignId}` : null,
         mate: c.runningMateName ?? null,
         candidateKey: c.isNPP && c.nppId ? c.nppId : c.characterId,
         ev: evByCandidate[c.id] ?? 0,
@@ -321,7 +326,11 @@ export function buildGeneralBlendViewModel(inp: GeneralBlendInput): GeneralBlend
     .map(([stateId, info]) => {
       // Shaded against the page the tiles sit on, so a looser tier fades into
       // the board rather than blowing out toward white.
-      const background = shadeColorForTier(info.leaderColor, info.tier, BLEND.page);
+      const background = shadeColorForTier(
+        info.leaderColor,
+        info.tier,
+        inp.ground ?? BLEND_HEX.page
+      );
       const ink = readableInk(background);
       const leader = byId.get(info.leaderId);
       return {

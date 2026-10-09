@@ -6,7 +6,7 @@ import { CALLOUT_STATES } from "./usStates";
 import { labelFits } from "./mapView";
 
 /** Fill for a state the caller has no projection for (fogged, or not yet in). */
-export const FOG_FILL = "#171722";
+export const FOG_FILL = BLEND.trackAlt;
 
 const LABEL_PX = 10;
 const PATTERN_PERIOD = 7;
@@ -73,8 +73,7 @@ export const StatePaths = memo(function StatePaths({ geo, states }: ShapesProps)
           <path
             key={g.id}
             d={g.d}
-            fill={s?.overlay ? `url(#${overlayId(s.overlay)})` : (s?.fill ?? FOG_FILL)}
-            stroke={BLEND.page}
+
             strokeWidth={0.8}
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
@@ -90,7 +89,12 @@ export const StatePaths = memo(function StatePaths({ geo, states }: ShapesProps)
                   : `${s.name}, ${s.ev} electoral votes, ${s.leaderName} leads by ${s.margin.toFixed(1)} points`
                 : undefined
             }
-            style={{ cursor: s ? "pointer" : "default", outline: "none" }}
+            style={{
+              fill: s?.overlay ? `url(#${overlayId(s.overlay)})` : (s?.fill ?? FOG_FILL),
+              stroke: BLEND.page,
+              cursor: s ? "pointer" : "default",
+              outline: "none",
+            }}
           />
         );
       })}
@@ -121,7 +125,13 @@ export const StateLabels = memo(function StateLabels({ geo, states, k, scale }: 
         const figure = stateFigure(s);
         const showEv = !!figure && labelFits(g, k, scale, LABEL_PX * 3.4);
         return (
-          <text key={g.id} x={g.centroid[0]} fill={s.ink} fontSize={size} fontWeight={700}>
+          <text
+            key={g.id}
+            x={g.centroid[0]}
+            style={{ fill: s.ink }}
+            fontSize={size}
+            fontWeight={700}
+          >
             <tspan x={g.centroid[0]} y={g.centroid[1] + (showEv ? -size * 0.1 : size * 0.35)}>
               {g.id}
             </tspan>
