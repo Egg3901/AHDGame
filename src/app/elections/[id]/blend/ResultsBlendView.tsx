@@ -7,7 +7,7 @@ import { BlendChipRail } from "@/components/blend/BlendRail";
 import type { ElectionDetail } from "../components/ElectionDetailTypes";
 import { PresidentialStage, presidentialTitle } from "./PresidentialStage";
 import { PresidentialMap } from "./presMap/PresidentialMap";
-import { buildPresMapModel } from "./presMap/presMapModel";
+import { buildPresMapModel, presMapModelFromTiles } from "./presMap/presMapModel";
 import { BlendVitals } from "@/components/blend/BlendVitals";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
 import {
@@ -202,11 +202,6 @@ export function ResultsBlendView({
   stageTitle = presidentialTitle(data.election.electionYear),
   stageNav,
 }: ResultsBlendViewProps) {
-  const mapModel = useMemo(() => {
-    if (!election) return null;
-    const model = buildPresMapModel(election);
-    return Object.keys(model.states).length > 0 ? model : null;
-  }, [election]);
   const [rail, setRail] = useState<ResultsRail>("overview");
   const [sortBy, setSortBy] = useState<StateSortKey>("ev");
   const [sortDesc, setSortDesc] = useState(true);
@@ -215,6 +210,16 @@ export function ResultsBlendView({
     () => buildResultsBlendViewModel({ data, route, rail, sortBy, sortDesc }),
     [data, route, rail, sortBy, sortDesc]
   );
+
+  // The full model (shares, trend, county drill-down) where the race payload
+  // has a per-state tally; the results tiles fill any state it skips, such as
+  // every state of a single-ticket race.
+  const mapModel = useMemo(() => {
+    const base = presMapModelFromTiles(vm.tiles);
+    if (!election) return base;
+    const full = buildPresMapModel(election);
+    return { ...full, states: { ...base.states, ...full.states } };
+  }, [election, vm.tiles]);
 
   // Repeat click on the active column flips direction, matching ResultsTable.
   const sort = (col: StateSortKey) => {
@@ -526,24 +531,18 @@ export function ResultsBlendView({
             </>
           }
           map={
-            mapModel ? (
-              <PresidentialMap
-                variant="stage"
-                model={mapModel}
-                electionId={data.election.id}
-                countryId={data.election.countryId}
-                turn={null}
-              />
-            ) : (
-              <div style={{ padding: 24 }}>
-                <TileBoard vm={vm} columns={11} />
-              </div>
-            )
+            <PresidentialMap
+              variant="stage"
+              model={mapModel}
+              electionId={data.election.id}
+              countryId={data.election.countryId}
+              turn={null}
+            />
           }
+          squares={<TileBoard vm={vm} columns={11} />}
         />
 
         <div className={BLEND_CONTAINER} style={{ background: BLEND.page }}>
-          <BlendVitals cells={vm.vitals} />
           <BlendSection title={route === "concluded" ? "State by state" : "Returns"} ruled={false}>
             {stateRows}
           </BlendSection>

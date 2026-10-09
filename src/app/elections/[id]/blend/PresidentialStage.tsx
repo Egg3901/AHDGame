@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { BLEND, FONT } from "@/components/blend/tokens";
 
 /** The stage headline: "The 1992 Presidential Election". */
@@ -25,6 +25,8 @@ export interface PresidentialStageProps {
   right?: ReactNode;
   /** The map. It is given the whole centre column below the masthead. */
   map: ReactNode;
+  /** The state squares board. When given, a toggle switches between it and the map. */
+  squares?: ReactNode;
 }
 
 /**
@@ -44,7 +46,10 @@ export function PresidentialStage({
   left,
   right,
   map,
+  squares,
 }: PresidentialStageProps) {
+  const [view, setView] = useState<"map" | "squares">("map");
+  const showSquares = view === "squares" && !!squares;
   return (
     <section
       className="pres-stage"
@@ -63,10 +68,48 @@ export function PresidentialStage({
       <div className="pres-stage__centre">
         <header
           style={{
+            position: "relative",
             padding: "18px 24px 14px",
             borderBottom: `1px solid ${BLEND.hairline}`,
           }}
         >
+          {squares ? (
+            <div
+              role="tablist"
+              aria-label="Board view"
+              style={{
+                position: "absolute",
+                top: 18,
+                right: 24,
+                display: "inline-flex",
+                border: `1px solid ${BLEND.hairlineStrong}`,
+              }}
+            >
+              {(["map", "squares"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === v}
+                  onClick={() => setView(v)}
+                  style={{
+                    padding: "6px 14px",
+                    cursor: "pointer",
+                    font: "inherit",
+                    fontFamily: FONT.mono,
+                    fontSize: 11,
+                    letterSpacing: ".08em",
+                    textTransform: "uppercase",
+                    border: "none",
+                    color: view === v ? BLEND.ink : BLEND.muted,
+                    background: view === v ? BLEND.hairlineStrong : "transparent",
+                  }}
+                >
+                  {v === "map" ? "Map" : "Squares"}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {kicker ? (
             <div
               style={{
@@ -99,7 +142,13 @@ export function PresidentialStage({
           ) : null}
         </header>
         {ticker}
-        <div style={{ position: "relative", flex: 1, minHeight: 0 }}>{map}</div>
+        {showSquares ? (
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 24px" }}>
+            {squares}
+          </div>
+        ) : (
+          <div style={{ position: "relative", flex: 1, minHeight: 0 }}>{map}</div>
+        )}
       </div>
 
       {right ? (

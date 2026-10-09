@@ -878,6 +878,7 @@ export function PrimaryBlendView({
               ) : null}
             </div>
           }
+          squares={<StateBoard vm={vm} columns={11} onSelect={selectState} />}
           map={
             <PresidentialMap
               variant="stage"
@@ -951,7 +952,6 @@ export function PrimaryBlendView({
         />
 
         <div className={BLEND_CONTAINER} style={{ background: BLEND.page }}>
-          <BlendVitals cells={vm.vitals} />
           <BlendSection title="The field" ruled={false}>
             {fieldRows}
           </BlendSection>
