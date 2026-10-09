@@ -306,6 +306,8 @@ export async function loadPrimaryPartyData(
       }
     : undefined;
   const projection = projectPrimaryByState({
+    // Same seed as the live wave, so the projection sees the same state swing.
+    regionalSeed: String(election._id),
     campaignContext,
     candidates: enriched,
     candidateMeta,

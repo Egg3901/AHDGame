@@ -505,6 +505,8 @@ export async function runPrimaryStaggerWaveIfDue(
       partyCandidates.some((c) => c.candidateId === m.candidateId)
     );
     const { stateWinners, byState } = projectPrimaryByState({
+      // Same seed as the live wave, so the projection sees the same state swing.
+      regionalSeed: String(election._id),
       // Suppression is applied to the EXPECTED share as well as to the result.
       // Without this the target would be punished twice: fewer votes on the
       // night, and a momentum penalty for "missing" an expectation that never
@@ -727,6 +729,8 @@ export async function runPrimaryStaggerWaveIfDue(
           includeInfluenceInAppeal: false,
           useNationalInfluenceForReach: true,
           presidentialPrimaryNationalReach: true,
+          // Fixed per-state swing for this race; the projection passes the same.
+          primaryRegionalSeed: String(election._id),
           applyPartyFit: true, // L1 — primary-only party-fit penalty
           // Regional bases L1+C — per-candidate state-org level for this
           // state, plus per-candidate home state. Both gated on the

@@ -208,6 +208,8 @@ export async function applyPresidentialPrimaryDisplay(
     }
 
     const projection = projectPrimaryByState({
+      // Same seed as the live wave, so the projection sees the same state swing.
+      regionalSeed: candidates[0]?.electionId ? String(candidates[0].electionId) : undefined,
       campaignContext,
       candidates: projectionCandidates,
       candidateMeta,

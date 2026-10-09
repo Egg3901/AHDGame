@@ -219,6 +219,8 @@ export async function GET(req: Request) {
     });
 
     const projection = projectPrimaryByState({
+      // Same seed as the live wave, so the projection sees the same state swing.
+      regionalSeed: String(election._id),
       candidates: enriched,
       candidateMeta,
       stateIds: ALL_STATE_IDS,

@@ -1657,6 +1657,8 @@ async function recordPresidentialStatePollingSnapshots(
         };
       });
       const { byState } = projectPrimaryByState({
+        // Same seed as the live wave, so the projection sees the same state swing.
+        regionalSeed: String(election._id),
         campaignContext:
           usesCampaignAds(election, enriched) && campaignContext
             ? { ...campaignContext, campaignRulesVersion: election.campaignRulesVersion ?? 0 }

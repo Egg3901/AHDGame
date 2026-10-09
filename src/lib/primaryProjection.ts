@@ -72,6 +72,11 @@ export interface ProjectionResult {
 }
 
 export interface ProjectPrimaryInput {
+  /**
+   * The race id, seeding the fixed per-state swing (primaryRegional/rules.ts).
+   * Must match the live wave's seed or projection and result disagree.
+   */
+  regionalSeed?: string;
   campaignContext?: CampaignProjectionContext;
   /** Intra-party candidates (already enriched: policies, fav, NPI, etc.) */
   candidates: EnrichedCandidate[];
@@ -276,6 +281,7 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
         includeInfluenceInAppeal: false,
         useNationalInfluenceForReach: true,
         presidentialPrimaryNationalReach: true,
+        primaryRegionalSeed: input.regionalSeed,
         // L1 — must match `primaryStaggerPhase.ts` so the projection
         // converges with the live wave result. Without this, every
         // party-aligned win would count as an "upset" against the old-math
