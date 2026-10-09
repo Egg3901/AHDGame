@@ -46,18 +46,16 @@ describe("corporation load errors", () => {
   it("shows the server request reference for a validation failure", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              error: "Invalid corporation ID",
-              code: "BAD_REQUEST",
-              ref: "request-1234567890",
-            }),
-            { status: 400 }
-          )
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: "Invalid corporation ID",
+            code: "BAD_REQUEST",
+            ref: "request-1234567890",
+          }),
+          { status: 400 }
         )
+      )
     );
     render(<CorporationDetailPage />);
     expect(await screen.findByText("Invalid corporation ID (BAD_REQUEST)")).toBeTruthy();
