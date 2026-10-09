@@ -20,6 +20,7 @@ import { PresidentialMap } from "./presMap/PresidentialMap";
 import type { PresMapModel, PresMapState } from "./presMap/presMapModel";
 import { STATE_NAMES } from "./presMap/usStates";
 import { mixToward } from "./presMap/dataViews";
+import type { CountySource } from "./presMap/countyStore";
 import { readableInk } from "@/lib/elections/marginTierShade";
 import { useBlendGround } from "@/components/blend/useBlendGround";
 import {
@@ -371,6 +372,18 @@ export function PrimaryBlendView({
   );
 
   const ground = useBlendGround();
+  // The selected party's primary, by county, for the map's county layer.
+  const countySource = useMemo<CountySource | undefined>(
+    () =>
+      partyId
+        ? {
+            id: `primary:${partyId}:${reloadCount}`,
+            url: (stateId: string) =>
+              `/api/elections/${electionId}/primary/${partyId}/state/${stateId}/subdivision-results`,
+          }
+        : undefined,
+    [electionId, partyId, reloadCount]
+  );
   const primaryMapModel = useMemo(() => primaryMapModelFromBoard(vm, ground), [vm, ground]);
 
   const campaignLink = vm.campaignHref ? (
@@ -725,11 +738,13 @@ export function PrimaryBlendView({
           map={
             <PresidentialMap
               variant="stage"
-              counties={false}
+              // County results need the party's board, which is sign-in only.
+              counties={vm.board.length > 0 && election.countryId === "US"}
+              countySource={countySource}
               model={primaryMapModel}
               electionId={electionId}
               countryId={election.countryId}
-              turn={null}
+              turn={election.gameState?.currentTurn ?? null}
               onSelectState={(id) => (id ? selectState(id) : clearState())}
               renderPanel={(state, onClose) => (
                 <div>

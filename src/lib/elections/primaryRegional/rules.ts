@@ -107,3 +107,87 @@ export function homeDivisionMultiplier(
   const here = US_CENSUS_DIVISION[stateId.toUpperCase()];
   return home && home === here ? 1 + bonus : 1;
 }
+
+// ── County results inside a state's primary ─────────────────────────────────
+
+/**
+ * How strongly a candidate's ideology, relative to the rest of the field,
+ * moves their share between a state's left- and right-leaning counties.
+ */
+export const PRIMARY_COUNTY_LEAN_BETA = 0.15;
+/** County lean (PVI-like points) that counts as one unit of "more left / more right". */
+export const PRIMARY_COUNTY_LEAN_SCALE = 25;
+/** Fixed per-county texture, smaller than the state swing. */
+export const PRIMARY_COUNTY_SWING_SIGMA = 0.08;
+
+export interface PrimaryCountyInput {
+  id: string;
+  name: string;
+  /** Population or electorate; the county's share of the state's turnout. */
+  electorate: number;
+  /** PVI-like lean: negative left, positive right. */
+  lean?: number;
+}
+
+export interface PrimaryCountyResult {
+  id: string;
+  name: string;
+  votes: Record<string, number>;
+}
+
+/**
+ * Split one party's primary result in a state across its counties.
+ *
+ * The state-level votes are the truth: every candidate's county votes add back
+ * up to their state total. Inside that, a candidate to the left of the field
+ * (vote-weighted mean economic position) does better in the state's
+ * left-leaning counties and worse in its right-leaning ones, measured against
+ * the state's own average lean so a deep-red state still has relative swing.
+ * A small fixed per-county texture keeps neighbouring counties from reading as
+ * one block. Pure: same inputs, same counties.
+ */
+export function distributePrimaryCounties(
+  counties: PrimaryCountyInput[],
+  stateVotes: Record<string, number>,
+  econByCandidate: Record<string, number>,
+  seed: string,
+  stateId: string
+): PrimaryCountyResult[] {
+  const ids = Object.keys(stateVotes).filter((id) => stateVotes[id] > 0);
+  const totalVotes = ids.reduce((s, id) => s + stateVotes[id], 0);
+  const totalElectorate = counties.reduce((s, c) => s + Math.max(0, c.electorate), 0);
+  if (ids.length === 0 || totalVotes <= 0 || totalElectorate <= 0) return [];
+
+  const meanLean =
+    counties.reduce((s, c) => s + (c.lean ?? 0) * Math.max(0, c.electorate), 0) / totalElectorate;
+  const fieldEcon =
+    ids.reduce((s, id) => s + (econByCandidate[id] ?? 0) * stateVotes[id], 0) / totalVotes;
+
+  const rows = counties.map((c) => {
+    const turnout = totalVotes * (Math.max(0, c.electorate) / totalElectorate);
+    const dLean = ((c.lean ?? meanLean) - meanLean) / PRIMARY_COUNTY_LEAN_SCALE;
+    const raw: Record<string, number> = {};
+    let rawTotal = 0;
+    for (const id of ids) {
+      const rel = (econByCandidate[id] ?? fieldEcon) - fieldEcon;
+      // Left of the field (rel < 0) gains where the county leans left (dLean < 0).
+      // rel = 2 points left of the field in a county 2 units more left than
+      // the state: exp(0.15 * 2 * 2), about 1.8x before normalisation.
+      const tilt = Math.exp(PRIMARY_COUNTY_LEAN_BETA * rel * dLean);
+      const texture = primaryStateSwing(seed, `${stateId}:${c.id}`, id, PRIMARY_COUNTY_SWING_SIGMA);
+      raw[id] = (stateVotes[id] / totalVotes) * tilt * texture;
+      rawTotal += raw[id];
+    }
+    const votes: Record<string, number> = {};
+    for (const id of ids) votes[id] = rawTotal > 0 ? (raw[id] / rawTotal) * turnout : 0;
+    return { id: c.id, name: c.name, votes };
+  });
+
+  // Rescale each candidate so the counties sum to their state total exactly.
+  for (const id of ids) {
+    const sum = rows.reduce((s, r) => s + r.votes[id], 0);
+    const scale = sum > 0 ? stateVotes[id] / sum : 0;
+    for (const r of rows) r.votes[id] = Math.round(r.votes[id] * scale);
+  }
+  return rows;
+}

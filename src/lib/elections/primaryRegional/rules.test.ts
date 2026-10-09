@@ -4,6 +4,7 @@ import {
   PRIMARY_STATE_SWING_SIGMA,
   PRIMARY_STATE_SWING_Z_CAP,
   US_CENSUS_DIVISION,
+  distributePrimaryCounties,
   hashNormal,
   hashUnit,
   homeDivisionMultiplier,
@@ -79,5 +80,41 @@ describe("home division pull", () => {
 
   it("covers all fifty states and DC", () => {
     expect(Object.keys(US_CENSUS_DIVISION)).toHaveLength(51);
+  });
+});
+
+describe("primary county spread", () => {
+  const counties = [
+    { id: "L", name: "Left", electorate: 100, lean: -30 },
+    { id: "M", name: "Middle", electorate: 100, lean: 0 },
+    { id: "R", name: "Right", electorate: 100, lean: 30 },
+  ];
+  const votes = { left: 600, right: 400 };
+  const econ = { left: -3, right: 0 };
+
+  it("adds every candidate's counties back up to their state total", () => {
+    const rows = distributePrimaryCounties(counties, votes, econ, "race", "OH");
+    for (const id of Object.keys(votes)) {
+      const sum = rows.reduce((s, r) => s + r.votes[id], 0);
+      expect(Math.abs(sum - votes[id as keyof typeof votes])).toBeLessThanOrEqual(rows.length);
+    }
+  });
+
+  it("does better in counties that lean the candidate's way", () => {
+    const rows = distributePrimaryCounties(counties, votes, econ, "race", "OH");
+    const share = (r: (typeof rows)[number]) => r.votes.left / (r.votes.left + r.votes.right);
+    const byId = Object.fromEntries(rows.map((r) => [r.id, share(r)]));
+    expect(byId.L).toBeGreaterThan(byId.M);
+    expect(byId.M).toBeGreaterThan(byId.R);
+  });
+
+  it("is deterministic", () => {
+    expect(distributePrimaryCounties(counties, votes, econ, "race", "OH")).toEqual(
+      distributePrimaryCounties(counties, votes, econ, "race", "OH")
+    );
+  });
+
+  it("returns nothing for an empty state", () => {
+    expect(distributePrimaryCounties(counties, {}, econ, "race", "OH")).toEqual([]);
   });
 });
