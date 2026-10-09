@@ -1,8 +1,20 @@
 /** @vitest-environment happy-dom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../messages/en/parties.json";
+
 import { NppWhipPanel } from "./NppWhipPanel";
 import { PlayerWhipPanel } from "./PlayerWhipPanel";
+
+function render(ui: ReactElement) {
+  return rtlRender(
+    <NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}>
+      {ui}
+    </NextIntlClientProvider>
+  );
+}
 
 const showToast = vi.fn();
 vi.mock("@/contexts/ToastContext", () => ({ useToast: () => ({ showToast }) }));

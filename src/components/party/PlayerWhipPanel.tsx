@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useToast } from "@/contexts/ToastContext";
@@ -70,6 +71,7 @@ export function PlayerWhipPanel({
   countryId,
   endpointConfig,
 }: PlayerWhipPanelProps) {
+  const t = useTranslations("parties.whips");
   const { showToast } = useToast();
   const effectiveCountryId = countryId.toLowerCase();
   const resolvedCountryId = countryId.toUpperCase() as CountryId;
@@ -623,7 +625,7 @@ export function PlayerWhipPanel({
         }}
         renderCabinet={() => {
           if (cabinetItems.length === 0) {
-            return <p className="text-sm text-muted italic">No active nominations to whip.</p>;
+            return <p className="text-sm text-muted italic">{t("noActiveNominations")}</p>;
           }
           return (
             <div className="space-y-3">

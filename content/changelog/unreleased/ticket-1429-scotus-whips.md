@@ -14,3 +14,4 @@ areas: [fullstack]
 - Added Supreme Court nominations to NPP and player whip controls, including FOR and AGAINST directives.
 - Preserved nomination voting deadlines, NPP attempt limits, player recommendations and vote overrides, and defiance reporting.
 - Corrected the abstention tally when a hard nomination whip replaces an abstention.
+- Routed the new nomination tab and empty-state labels through the interface translation catalog.
