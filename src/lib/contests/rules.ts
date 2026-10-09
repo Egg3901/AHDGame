@@ -24,7 +24,7 @@ export const CORP_CONTEST_KINDS: readonly ContestKind[] = [
 export const CONTEST_ROUND_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Modern-era (2019) prize; scaled to the world's era by getEraNominalAmount. */
-export const CONTEST_PRIZE_MODERN = 1_000_000;
+export const CONTEST_PRIZE_MODERN = 7_500_000;
 
 /**
  * Corporations opening below this modern-era value sit out the round. A shell
