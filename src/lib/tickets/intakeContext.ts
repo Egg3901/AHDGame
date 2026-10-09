@@ -80,6 +80,32 @@ export function recentSupportVisits(visits: TicketVisit[] | undefined, now: Date
     }));
 }
 
+export function suggestIntakePage(text: string, visits: TicketVisit[]): string | null {
+  const words = text.toLowerCase().match(/[a-z]{4,}/g) ?? [];
+  const ranked = visits
+    .map((visit) => ({
+      visit,
+      score: words.reduce(
+        (score, word) => score + (visit.path.toLowerCase().includes(word) ? 1 : 0),
+        0
+      ),
+    }))
+    .sort((a, b) => b.score - a.score);
+  const suppliedPath = (text.match(/https?:\/\/[^\s<>()]+/gi) ?? [])
+    .map((value) => {
+      try {
+        const url = new URL(value);
+        return /^(?:www\.)?ahousedividedgame\.com$/i.test(url.hostname)
+          ? sanitizeSupportPath(url.pathname)
+          : null;
+      } catch {
+        return null;
+      }
+    })
+    .find(Boolean);
+  return suppliedPath ?? ranked[0]?.visit.path ?? null;
+}
+
 export function buildIntakeQuestions(
   text: string,
   visits: TicketVisit[],
@@ -87,29 +113,7 @@ export function buildIntakeQuestions(
 ): string[] {
   const questions: string[] = [];
   if (needsPage) {
-    const words = text.toLowerCase().match(/[a-z]{4,}/g) ?? [];
-    const ranked = visits
-      .map((visit) => ({
-        visit,
-        score: words.reduce(
-          (score, word) => score + (visit.path.toLowerCase().includes(word) ? 1 : 0),
-          0
-        ),
-      }))
-      .sort((a, b) => b.score - a.score);
-    const suppliedPath = (text.match(/https?:\/\/[^\s<>()]+/gi) ?? [])
-      .map((value) => {
-        try {
-          const url = new URL(value);
-          return /^(?:www\.)?ahousedividedgame\.com$/i.test(url.hostname)
-            ? sanitizeSupportPath(url.pathname)
-            : null;
-        } catch {
-          return null;
-        }
-      })
-      .find(Boolean);
-    const candidatePath = suppliedPath ?? ranked[0]?.visit.path;
+    const candidatePath = suggestIntakePage(text, visits);
     questions.push(
       candidatePath
         ? `It seems like you are reporting an issue that may affect a specific page. Is this the page you are having trouble with: <https://ahousedividedgame.com${candidatePath}>? If not, please send the correct game page or menu path.`
