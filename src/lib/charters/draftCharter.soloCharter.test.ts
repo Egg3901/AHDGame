@@ -5,7 +5,7 @@ import { ObjectId } from "mongodb";
 const ratifyCharter = vi.fn().mockResolvedValue({ partyId: "1" });
 vi.mock("./ratifyCharter", () => ({ ratifyCharter }));
 
-import { draftCharter } from "./draftCharter";
+import { draftCharter, type DraftCharterInput } from "./draftCharter";
 
 function makeDb(founderIds: ObjectId[]) {
   const insertOne = vi.fn().mockResolvedValue({});
@@ -39,7 +39,7 @@ function makeDb(founderIds: ObjectId[]) {
   return { db: { collection } as unknown as Db, insertOne };
 }
 
-const base = {
+const base: Omit<DraftCharterInput, "foundersCharacterIds" | "proposedBy"> = {
   countryId: "US",
   proposedName: "Solo Test Party",
   proposedAbbr: "STP",
