@@ -1,13 +1,17 @@
 "use client";
 
 import { useBlendGround } from "@/components/blend/useBlendGround";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BLEND, BLEND_CONTAINER, FONT, BLEND_LABEL } from "@/components/blend/tokens";
 import { BlendSection } from "@/components/blend/BlendShell";
 import type { ElectionDetail } from "../components/ElectionDetailTypes";
 import { PresidentialStage, presidentialTitle } from "./PresidentialStage";
 import { StageField, candidateLinks } from "./StageField";
-import { CollegeSnake } from "./presMap/CollegeSnake";
+import { CollegeSnake, snakeCandidates } from "./presMap/CollegeSnake";
+import { applyDataView } from "./presMap/dataViews";
+import type { CountySource } from "./presMap/countyStore";
+import { replayFrame, replayTurns } from "./replay/replayModel";
+import { ReplayControls, ReplayStart, type ReplayView } from "./replay/ReplayControls";
 import { PresidentialMap } from "./presMap/PresidentialMap";
 import { buildPresMapModel, presMapModelFromTiles } from "./presMap/presMapModel";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
@@ -230,6 +234,55 @@ export function ResultsBlendView({
     return { ...full, states: { ...base.states, ...full.states } };
   }, [election, vm.tiles, ground]);
 
+  // Race replay: the concluded race week by week, from the payload's per-state
+  // snapshots. Null while showing the final result.
+  const replayTurnList = useMemo(() => (election ? replayTurns(election) : []), [election]);
+  const canReplay = data.election.countryId === "US" && replayTurnList.length > 1;
+  const [replay, setReplay] = useState<{
+    index: number;
+    playing: boolean;
+    view: ReplayView;
+  } | null>(null);
+  const replayTurn = replay
+    ? replayTurnList[Math.min(replay.index, replayTurnList.length - 1)]
+    : null;
+  const frame = useMemo(
+    () => (election && replayTurn != null ? replayFrame(election, replayTurn) : null),
+    [election, replayTurn]
+  );
+  const frameModel = useMemo(() => {
+    if (!frame || !replay) return null;
+    const model = buildPresMapModel(frame.election, ground);
+    // Electoral view: each state flat in whoever led it that week. Popular
+    // vote: shaded by margin, as on election night.
+    return replay.view === "ev" ? applyDataView(model, "winner", ground, null) : model;
+  }, [frame, replay, ground]);
+  const replaySource = useMemo<CountySource | undefined>(
+    () =>
+      replayTurn != null
+        ? {
+            id: `turn:${replayTurn}`,
+            url: (stateId: string) =>
+              `/api/elections/${data.election.id}/state/${stateId}/subdivision-results?turn=${replayTurn}`,
+          }
+        : undefined,
+    [replayTurn, data.election.id]
+  );
+  const playing = replay?.playing ?? false;
+  useEffect(() => {
+    if (!playing) return;
+    const id = window.setInterval(() => {
+      setReplay((r) => {
+        if (!r) return r;
+        if (r.index >= replayTurnList.length - 1) return { ...r, playing: false };
+        return { ...r, index: r.index + 1 };
+      });
+    }, 1100);
+    return () => window.clearInterval(id);
+  }, [playing, replayTurnList.length]);
+  const shownModel = frameModel ?? mapModel;
+  const snakePair = snakeCandidates(mapModel) ?? [];
+
   // Repeat click on the active column flips direction, matching ResultsTable.
   const sort = (col: StateSortKey) => {
     if (sortBy === col) setSortDesc((d) => !d);
@@ -421,20 +474,41 @@ export function ResultsBlendView({
           map={
             <PresidentialMap
               variant="stage"
-              model={mapModel}
+              model={shownModel}
               electionId={data.election.id}
               countryId={data.election.countryId}
               turn={null}
+              countySource={replaySource}
               focusRequest={focus}
             />
           }
           strip={
             data.election.countryId === "US" ? (
-              <CollegeSnake
-                model={mapModel}
-                threshold={vm.threshold}
-                onSelect={(stateId) => setFocus({ stateId, nonce: Date.now() })}
-              />
+              <>
+                {replay && frame ? (
+                  <ReplayControls
+                    frame={frame}
+                    index={replay.index}
+                    playing={replay.playing}
+                    view={replay.view}
+                    candidates={snakePair}
+                    onIndex={(index) => setReplay((r) => (r ? { ...r, index } : r))}
+                    onPlaying={(p) => setReplay((r) => (r ? { ...r, playing: p } : r))}
+                    onView={(view) => setReplay((r) => (r ? { ...r, view } : r))}
+                    onExit={() => setReplay(null)}
+                  />
+                ) : canReplay ? (
+                  <ReplayStart
+                    weeks={replayTurnList.length}
+                    onStart={() => setReplay({ index: 0, playing: true, view: "ev" })}
+                  />
+                ) : null}
+                <CollegeSnake
+                  model={shownModel}
+                  threshold={vm.threshold}
+                  onSelect={(stateId) => setFocus({ stateId, nonce: Date.now() })}
+                />
+              </>
             ) : null
           }
           squares={<TileBoard vm={vm} columns={11} />}
