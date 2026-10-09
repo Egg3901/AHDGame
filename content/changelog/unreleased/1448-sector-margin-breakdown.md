@@ -15,4 +15,5 @@ areas: [frontend]
 - Crisis and disaster losses have their own line instead of sitting inside other operating costs.
 - The list of state, corporate and national conditions is folded under Condition details and no longer shows a 35% starting margin or a commodity markets figure, neither of which moves money for a sector with plants.
 - The inputs panel shows your input bill as a share of sales revenue in place of the old net effect of prices figure.
+- What goes in, what comes out now shows what your plants actually bought and made last turn, and a single product's average sale price instead of the market price, so units times price adds up to the money panel.
 - State conditions are no longer counted twice inside the policy line breakdown.
