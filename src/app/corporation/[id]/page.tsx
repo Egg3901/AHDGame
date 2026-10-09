@@ -232,7 +232,10 @@ export default function CorporationDetailPage() {
           tags: { feature: "corporation-detail", error_code: display.code },
           extra: { url: makeCorpApiUrl() },
         })) ?? newRequestRef();
-      const message = apiErrorText({ error: display.message, code: display.code, ref });
+      const message = apiErrorText(
+        { error: display.message, code: display.code, ref },
+        display.message
+      );
       if (!hasLoaded.current) {
         setError(message);
         setErrorRef(ref);
