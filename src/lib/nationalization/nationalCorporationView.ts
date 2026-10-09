@@ -4,6 +4,8 @@
  * efficiency), investor confidence, assumed bonds, the acquisition ledger. Money
  * is in the corp's local (country) currency; the page never shows ₳.
  */
+import { corporationTypeOfLane } from "@/lib/constants/corporations";
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import type { Db, ObjectId } from "mongodb";
 import type {
   Bond,
@@ -24,7 +26,7 @@ import { summarizeBuildQueue, type BuildQueueSummary } from "@/lib/corporations/
 import type { NationalizationLedgerEntry } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { computeSoeEfficiencyBreakdown, type SoeEfficiencyBreakdown } from "./soeEfficiency";
 import { politicalSoeInputs } from "@/lib/politicalLegislation/marginAdapter";
 import { isPoliticalApprovalCountry } from "@/lib/politicalLegislation/politicalApprovalProvider";
@@ -94,7 +96,7 @@ const ACQUISITION_TRIGGER_LABEL: Record<string, string> = {
 
 export interface NatViewSector {
   sectorId: string;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   stateId: string;
   /** Full region name (e.g. "Dublin"), resolved from the states collection. */
   stateName: string;
@@ -176,7 +178,7 @@ export interface NationalCorporationViewModel {
   countryId: CountryId;
   name: string;
   isPrimary: boolean;
-  assignedSectorTypes: CorporationType[];
+  assignedSectorTypes: OperatingSectorType[];
   ceoVacant: boolean;
   /** Treasury OR head-of-government — controls the official-view toggle. */
   viewerIsOfficial: boolean;
@@ -197,7 +199,7 @@ export interface NationalCorporationViewModel {
     rdSustainChancePercent: number; // breakthrough chance the current budget settles at (0–100)
   };
   /** Sector types currently designated strategic for this country (spec §6.3). */
-  designatedStrategicSectorTypes: CorporationType[];
+  designatedStrategicSectorTypes: OperatingSectorType[];
   ceo: {
     characterId: string | null;
     /** CEO character sequentialId for the profile link (falls back to characterId). */
@@ -252,7 +254,7 @@ export interface NationalCorporationViewModel {
   }>;
   mandates: Array<{
     sectorId: string;
-    sectorType: CorporationType;
+    sectorType: OperatingSectorType;
     stateId: string;
     stateName: string;
     priceControlled: boolean;
@@ -394,18 +396,21 @@ export async function buildNationalCorporationView(
     const soeShare = stateSectorRevenue > 0 ? Math.max(0, s.revenue) / stateSectorRevenue : 0;
     const publicValuePerTurn =
       Math.round(
-        getMandateContributions(countryId, { sectorType: s.sectorType }, mandate, soeShare).reduce(
+        getMandateContributions(countryId, s, mandate, soeShare).reduce(
           (sum, c) => sum + Math.abs(c.delta),
           0
         ) * 100
       ) / 100;
-    const metricPaths = getMandateMetricPaths(countryId, s.sectorType);
+    const metricPaths = getMandateMetricPaths(
+      countryId,
+      getOperatingSectorType(s.sectorType, s.industryModel, s.mediaDiscriminator)
+    );
     const mappedMetricLabels = metricPaths.map((p) => mandateMetricLabel(p, s.stateId));
     const sectorMetricLevel = metricPaths[0] ? readMetricValue(m, metricPaths[0]) : null;
 
     return {
       sectorId: String(s._id),
-      sectorType: s.sectorType,
+      sectorType: getOperatingSectorType(s.sectorType, s.industryModel, s.mediaDiscriminator),
       stateId: s.stateId,
       stateName: regionName(s.stateId),
       revenue: s.revenue,
@@ -547,7 +552,9 @@ export async function buildNationalCorporationView(
     const entry =
       vs.acquisitionTurn != null
         ? corpLedger.find(
-            (l) => l.turn === vs.acquisitionTurn && l.sectorTypes.includes(vs.sectorType)
+            (l) =>
+              l.turn === vs.acquisitionTurn &&
+              l.sectorTypes.includes(corporationTypeOfLane(vs.sectorType))
           )
         : undefined;
     if (entry) {
@@ -715,7 +722,7 @@ export async function buildNationalCorporationView(
 
   const designatedStrategicSectorTypes = Array.from(
     await getDesignatedSectorTypes(db, countryId)
-  ) as CorporationType[];
+  ) as OperatingSectorType[];
 
   return {
     corporationId: String(corp._id),

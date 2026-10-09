@@ -1,0 +1,111 @@
+{
+  "kind": "deterministic-capacity-sweep",
+  "report": [
+    {
+      "country": "US",
+      "regions": 51,
+      "ceiling": 306,
+      "localSlots": 6,
+      "rows": [
+        {
+          "members": 1,
+          "before": 5,
+          "after": 5
+        },
+        {
+          "members": 5,
+          "before": 25,
+          "after": 25
+        },
+        {
+          "members": 10,
+          "before": 45,
+          "after": 45
+        },
+        {
+          "members": 20,
+          "before": 75,
+          "after": 75
+        },
+        {
+          "members": 40,
+          "before": 115,
+          "after": 115
+        },
+        {
+          "members": 100,
+          "before": 153,
+          "after": 235
+        },
+        {
+          "members": 133,
+          "before": 153,
+          "after": 301
+        },
+        {
+          "members": 136,
+          "before": 153,
+          "after": 306
+        },
+        {
+          "members": 200,
+          "before": 153,
+          "after": 306
+        }
+      ]
+    },
+    {
+      "country": "UK",
+      "regions": 12,
+      "ceiling": 72,
+      "localSlots": 6,
+      "rows": [
+        {
+          "members": 1,
+          "before": 5,
+          "after": 5
+        },
+        {
+          "members": 5,
+          "before": 25,
+          "after": 25
+        },
+        {
+          "members": 10,
+          "before": 36,
+          "after": 45
+        },
+        {
+          "members": 20,
+          "before": 36,
+          "after": 72
+        },
+        {
+          "members": 40,
+          "before": 36,
+          "after": 72
+        },
+        {
+          "members": 100,
+          "before": 36,
+          "after": 72
+        },
+        {
+          "members": 133,
+          "before": 36,
+          "after": 72
+        },
+        {
+          "members": 136,
+          "before": 36,
+          "after": 72
+        },
+        {
+          "members": 200,
+          "before": 36,
+          "after": 72
+        }
+      ]
+    }
+  ]
+}

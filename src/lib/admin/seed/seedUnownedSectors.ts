@@ -4,8 +4,11 @@ import type { State } from "@/lib/db/types/state";
 import type { UnownedSector } from "@/lib/db/types";
 import { getCountryConfig } from "@/lib/constants/countries";
 import type { CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
-import type { CorporationType, ManufacturingIndustryModel } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPES,
+  operatingSectorIdentity,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import {
   MODERN_MIN_UNOWNED_SECTOR_REVENUE,
   getEraUnitScale,
@@ -52,8 +55,8 @@ export const COUNTRY_UNOWNED_REVENUE_MULTIPLIER: Partial<Record<CountryId, numbe
  * 0.15) is the real downstream steel sink and is multiplied x8 to soak the
  * lignite-fed steel glut.
  *
- * WHY AUTOMOBILES IS ONLY x2 (was x10, ticket-1072). Lifting the auto works to
- * x10 back-fired: automobiles OUTPUT is `vehicles`, a commodity DD cannot sell.
+ * WHY THE VEHICLES LANE IS ONLY x2 (was x10, ticket-1072). Lifting the auto works to
+ * x10 back-fired: the vehicles lane's OUTPUT is `vehicles`, a commodity DD cannot sell.
  * Every Warsaw Pact neighbour is already net-long vehicles and the West is
  * CoCom-embargoed, so the extra output just piled up unsold (live prod: DD
  * vehicles supply 3544.5 vs demand 341) while a player's nationalized IFA corp
@@ -67,17 +70,17 @@ export const COUNTRY_UNOWNED_REVENUE_MULTIPLIER: Partial<Record<CountryId, numbe
  * existing sector is cut.
  */
 export const COUNTRY_SECTOR_SEED_MULTIPLIER: Partial<
-  Record<CountryId, Partial<Record<CorporationType, number>>>
+  Record<CountryId, Partial<Record<OperatingSectorType, number>>>
 > = {
   DD: {
-    automobiles: 2,
+    manufacturing_vehicles: 2,
     construction: 8,
   },
 };
 
-/** The downstream seed multiplier for one (country, sector); 1 when unset. */
+/** The downstream seed multiplier for one (country, operating lane); 1 when unset. */
 export function countrySectorSeedMultiplier(countryId: CountryId, sectorType: string): number {
-  const value = COUNTRY_SECTOR_SEED_MULTIPLIER[countryId]?.[sectorType as CorporationType];
+  const value = COUNTRY_SECTOR_SEED_MULTIPLIER[countryId]?.[sectorType as OperatingSectorType];
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 1;
 }
 
@@ -110,7 +113,7 @@ export function computeUnownedSeedRevenue(params: {
     gdp *
       usdExchangeRate *
       getSectorSeedScale(preset) *
-      (weights[sectorType as CorporationType] ?? 0)
+      (weights[sectorType as OperatingSectorType] ?? 0)
   );
   const countryMultiplier = COUNTRY_UNOWNED_REVENUE_MULTIPLIER[countryId] ?? 1;
   // Applied AFTER the era floor so the uplift is real capacity rather than
@@ -134,9 +137,7 @@ export async function seedUnownedSectors(
   // For a live world with captured sectors, use the 1991-recompute heal script.
   refresh = false,
   /** Route (state, sectorType) buckets to the National Corporation instead of unowned. */
-  redirectToNatCorpBuckets?: ReadonlySet<string>,
-  /** Fresh 1991 only: seed the automobile recipe under manufacturing/vehicles. */
-  vehicleModelSeed = false
+  redirectToNatCorpBuckets?: ReadonlySet<string>
 ) {
   const states = await db
     .collection<State>("states")
@@ -147,24 +148,12 @@ export async function seedUnownedSectors(
   let inserted = 0;
   let redirected = 0;
   const ops: AnyBulkWriteOperation<UnownedSector>[] = [];
-  const sectorMarkets: Array<{
-    sectorType: CorporationType;
-    recipeType: CorporationType;
-    industryModel: ManufacturingIndustryModel | null;
-  }> = CORPORATION_TYPES.filter(
-    (sectorType) => !(vehicleModelSeed && sectorType === "automobiles")
-  ).map((sectorType) => ({
-    sectorType,
-    recipeType: sectorType,
-    industryModel: null,
+  // One market per operating lane. The vehicles and entertainment lanes are
+  // sized by their own seed weights and stored under their canonical identity.
+  const sectorMarkets = OPERATING_SECTOR_TYPES.map((lane) => ({
+    lane,
+    ...operatingSectorIdentity(lane),
   }));
-  if (vehicleModelSeed) {
-    sectorMarkets.push({
-      sectorType: "manufacturing",
-      recipeType: "automobiles",
-      industryModel: "vehicles",
-    });
-  }
 
   // Indexes FIRST, not after the loop. The upserts below filter on
   // {stateId, sectorType, industryModel}; with the index built afterwards every one of them is
@@ -183,13 +172,13 @@ export async function seedUnownedSectors(
     const countryId = state.countryId;
 
     for (const market of sectorMarkets) {
-      const { sectorType, recipeType, industryModel } = market;
-      const bucket = bucketKey(state._id as string, sectorType, industryModel);
+      const { lane, sectorType, industryModel, mediaDiscriminator } = market;
+      const bucket = bucketKey(state._id as string, sectorType, industryModel, mediaDiscriminator);
       const seedRevenue = computeUnownedSeedRevenue({
         gdp: state.gdp,
         countryId: countryId as CountryId,
         stateId: state._id as string,
-        sectorType: recipeType,
+        sectorType: lane,
         preset,
         boostMultiplier,
       });
@@ -198,8 +187,9 @@ export async function seedUnownedSectors(
         const result = await incrementNatCorpSectorRevenue(db, {
           countryId: countryId as CountryId,
           stateId: state._id as string,
-          sectorType: sectorType as CorporationType,
+          sectorType,
           industryModel,
+          mediaDiscriminator,
           revenueDelta: seedRevenue,
         });
         if (result !== "noop") redirected++;
@@ -212,6 +202,7 @@ export async function seedUnownedSectors(
         stateId: state._id as string,
         sectorType,
         industryModel,
+        mediaDiscriminator,
         createdAt: now,
       };
       // Batched (this branch) AND carrying the derived headroom field
@@ -221,10 +212,11 @@ export async function seedUnownedSectors(
       // denominator. The batching changes the number of round trips, not what
       // each document ends up holding.
       const headroomUnits = computeUnownedHeadroomUnits(
-        sectorType as CorporationType,
+        sectorType,
         seedRevenue,
         getEraUnitScale(preset),
-        industryModel
+        industryModel,
+        mediaDiscriminator
       );
       ops.push({
         updateOne: {
@@ -232,6 +224,7 @@ export async function seedUnownedSectors(
             stateId: state._id as string,
             sectorType,
             industryModel,
+            mediaDiscriminator,
           },
           update: refresh
             ? {

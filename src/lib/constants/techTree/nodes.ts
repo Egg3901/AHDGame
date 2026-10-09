@@ -19,7 +19,7 @@
  * stored on the node.
  */
 
-import { CORPORATION_TYPES, type CorporationType } from "../corporations";
+import { OPERATING_SECTOR_TYPES, type OperatingSectorType } from "../corporations";
 import type { TechEffect } from "./effects";
 import { TECH_DECADES } from "./decades";
 import { SECTOR_EARLY_FILL } from "./earlySectorFill";
@@ -101,7 +101,11 @@ export function corpNodeId(decadeId: string, slot: number): string {
   return `corp-${decadeId}-${slot}`;
 }
 
-export function sectorNodeId(sectorType: CorporationType, decadeId: string, slot: number): string {
+export function sectorNodeId(
+  sectorType: OperatingSectorType,
+  decadeId: string,
+  slot: number
+): string {
   return `${sectorType}-${decadeId}-${slot}`;
 }
 
@@ -398,8 +402,8 @@ const CORPORATE: Record<string, NodeSpec[]> = {
 };
 
 // ─── Sector lanes (per sector type) ──────────────────────────────────────────
-// Each of the 17 CORPORATION_TYPES has an authored specialist lane below.
-const SECTOR: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
+// Each of the 17 OPERATING_SECTOR_TYPES has an authored specialist lane below.
+const SECTOR: Partial<Record<OperatingSectorType, Record<string, NodeSpec[]>>> = {
   energy: {
     "1940": [
       {
@@ -2265,7 +2269,7 @@ const SECTOR: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
       },
     ],
   },
-  automobiles: {
+  manufacturing_vehicles: {
     "1940": [
       {
         name: "Wartime Vehicle Production",
@@ -3628,7 +3632,7 @@ const SECTOR: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
       },
     ],
   },
-  entertainment: {
+  media_entertainment: {
     "1940": [
       {
         name: "Hollywood Studio System",
@@ -4441,7 +4445,7 @@ const CORPORATE_EXTRA: Record<string, NodeSpec[]> = {
   ],
 };
 
-const SECTOR_EXTRA: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
+const SECTOR_EXTRA: Partial<Record<OperatingSectorType, Record<string, NodeSpec[]>>> = {
   energy: {
     "1979": [
       {
@@ -5034,7 +5038,7 @@ const SECTOR_EXTRA: Partial<Record<CorporationType, Record<string, NodeSpec[]>>>
       },
     ],
   },
-  automobiles: {
+  manufacturing_vehicles: {
     "1979": [
       {
         name: "Unibody Construction",
@@ -5484,7 +5488,7 @@ const SECTOR_EXTRA: Partial<Record<CorporationType, Record<string, NodeSpec[]>>>
       },
     ],
   },
-  entertainment: {
+  media_entertainment: {
     "1979": [
       {
         name: "Stereo Sound Systems",
@@ -5834,7 +5838,7 @@ const CORPORATE_EXTRA2: Record<string, NodeSpec[]> = {
   ],
 };
 
-const SECTOR_EXTRA2: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
+const SECTOR_EXTRA2: Partial<Record<OperatingSectorType, Record<string, NodeSpec[]>>> = {
   energy: {
     "1979": [
       {
@@ -6430,7 +6434,7 @@ const SECTOR_EXTRA2: Partial<Record<CorporationType, Record<string, NodeSpec[]>>
       },
     ],
   },
-  automobiles: {
+  manufacturing_vehicles: {
     "1979": [
       {
         name: "Galvanized Bodies",
@@ -6874,7 +6878,7 @@ const SECTOR_EXTRA2: Partial<Record<CorporationType, Record<string, NodeSpec[]>>
       },
     ],
   },
-  entertainment: {
+  media_entertainment: {
     "1979": [
       {
         name: "Surround Sound",
@@ -7141,7 +7145,7 @@ function specToNodeV3(
   };
 }
 
-function buildTreeForSector(sectorType: CorporationType): TechTreeNode[] {
+function buildTreeForSector(sectorType: OperatingSectorType): TechTreeNode[] {
   const nodes: TechTreeNode[] = [];
   for (const decade of TECH_DECADES) {
     const cost = DECADE_COST[decade.id] ?? 12;
@@ -7197,11 +7201,11 @@ function buildTreeForSector(sectorType: CorporationType): TechTreeNode[] {
 }
 
 /** Full tech tree, keyed by sector type. */
-export const TECH_TREE: Record<CorporationType, TechTreeNode[]> = Object.fromEntries(
-  CORPORATION_TYPES.map((t) => [t, buildTreeForSector(t)])
-) as Record<CorporationType, TechTreeNode[]>;
+export const TECH_TREE: Record<OperatingSectorType, TechTreeNode[]> = Object.fromEntries(
+  OPERATING_SECTOR_TYPES.map((t) => [t, buildTreeForSector(t)])
+) as Record<OperatingSectorType, TechTreeNode[]>;
 
-/** Sector types with an authored specialist lane. Currently all 17 CORPORATION_TYPES. */
-export const SECTORS_WITH_AUTHORED_LANE: CorporationType[] = (
-  Object.keys(SECTOR) as CorporationType[]
+/** Sector types with an authored specialist lane. Currently all 17 OPERATING_SECTOR_TYPES. */
+export const SECTORS_WITH_AUTHORED_LANE: OperatingSectorType[] = (
+  Object.keys(SECTOR) as OperatingSectorType[]
 ).filter((t) => SECTOR[t] !== undefined);

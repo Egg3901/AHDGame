@@ -56,9 +56,14 @@ describe("getMandateContributions", () => {
 
   it("returns an empty list for a sector type with no mandate mapping", () => {
     // entertainment is intentionally unmapped (no clean public-service metric).
-    expect(getMandateContributions("US", sector({ sectorType: "entertainment" }), {}, 1.0)).toEqual(
-      []
-    );
+    expect(
+      getMandateContributions(
+        "US",
+        sector({ sectorType: "media", mediaDiscriminator: "entertainment" }),
+        {},
+        1.0
+      )
+    ).toEqual([]);
   });
 
   it("maps the newly-added public-service sectors (manufacturing, retail, real estate)", () => {

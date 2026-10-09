@@ -1,6 +1,6 @@
 import type { CountryEconomy } from "../contract";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 
 /**
@@ -35,7 +35,7 @@ const baselineMonetary = {
 };
 const sectorWeightsBase = {
   manufacturing: 28,
-  automobiles: 10,
+  manufacturing_vehicles: 10,
   chemical_industries: 9,
   energy: 8,
   construction: 7,
@@ -46,10 +46,10 @@ const sectorWeightsBase = {
 // No COST_SCALE_ANCHORS row; the folder omits `costScaleAnchors` rather than defaulting it.
 /**
  * ⚠ THE CAST IS LOAD-BEARING, for the same reason as the cabinet groups:
- * JSON.parse widens each sector name to `string`, and `CorporationType[]` is a
+ * JSON.parse widens each sector name to `string`, and `OperatingSectorType[]` is a
  * union array. Caught by typecheck alone.
  */
-const strategicSectors: CorporationType[] = [];
+const strategicSectors: OperatingSectorType[] = [];
 const treasuryPsRate = {
   national: 50000,
   state: 25000,
@@ -91,14 +91,14 @@ export const CS_ECONOMY: CountryEconomy = {
         construction: 8,
         logistics: 5,
         healthcare: 4,
-        automobiles: 3,
+        manufacturing_vehicles: 3,
         retail: 1,
         media: 1,
         financial: 1,
         real_estate: 1,
         telecommunications: 1,
         technology: 1,
-        entertainment: 1,
+        media_entertainment: 1,
       },
       "1979": {
         manufacturing: 30,
@@ -111,17 +111,17 @@ export const CS_ECONOMY: CountryEconomy = {
         logistics: 5,
         healthcare: 4,
         retail: 3,
-        automobiles: 3,
+        manufacturing_vehicles: 3,
         telecommunications: 1,
         media: 1,
-        entertainment: 2,
+        media_entertainment: 2,
         financial: 1,
         real_estate: 0,
         technology: 0,
       },
       "1991": {
         manufacturing: 28,
-        automobiles: 10,
+        manufacturing_vehicles: 10,
         chemical_industries: 9,
         energy: 8,
         construction: 7,

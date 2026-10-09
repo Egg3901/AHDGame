@@ -1,3 +1,4 @@
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { NextResponse } from "next/server";
 import type { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -24,6 +25,7 @@ import {
   DEFAULT_PROFIT_MARGIN,
   DEFAULT_SECTOR_STARTING_REVENUE,
   DEFAULT_SECTOR_STARTING_WORKERS,
+  operatingSectorIdentity,
 } from "@/lib/constants/corporations";
 import {
   CAPACITY_BUILD_TURNS,
@@ -106,12 +108,15 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     // Building is allowed in any sector type. The corp's primary and secondary
     // types are highlighted in the UI and carry a margin bonus; off-type sectors
     // are a soft economic penalty, not a hard gate. When no type is requested we
-    // default to the corp's primary type.
-    const sectorType = plantsEnabled ? (requestedSectorType ?? corporation.type) : corporation.type;
-    const industryModel =
-      sectorType === corporation.type ? (corporation.industryModel ?? null) : null;
-    const mediaDiscriminator =
-      sectorType === corporation.type ? (corporation.mediaDiscriminator ?? null) : null;
+    // default to the corp's primary lane. A lane carries its identity: the
+    // vehicles lane opens a manufacturing sector with the vehicles model.
+    const corporationLane = getOperatingSectorType(
+      corporation.type,
+      corporation.industryModel,
+      corporation.mediaDiscriminator
+    );
+    const lane = plantsEnabled ? (requestedSectorType ?? corporationLane) : corporationLane;
+    const { sectorType, industryModel, mediaDiscriminator } = operatingSectorIdentity(lane);
 
     // Check the state exists. NOT scoped to the corp's home country: founding
     // abroad is allowed, and the whole command downstream is built for it — the

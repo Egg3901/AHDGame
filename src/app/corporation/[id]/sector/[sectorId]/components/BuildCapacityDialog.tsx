@@ -15,7 +15,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { AlertTriangle, ChevronDown, Info, TrendingUp } from "lucide-react";
 import type { PlantsData } from "../types";
 import { fmtUnits, fmtMult, fmtPct } from "../lib/plants";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import {
   capitalizeFacility,
   facilityPlural,
@@ -29,7 +29,7 @@ interface BuildCapacityDialogProps {
   onClose: () => void;
   plants: PlantsData;
   /** Drives the facility noun throughout the dialog. */
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   sectorLabel: string;
   submitting: boolean;
   /** Server-side error text from the last attempt, or empty. */

@@ -15,25 +15,15 @@ export function getSectorOperatingCountryId(
   return stateCountryByStateId.get(sector.stateId) ?? sector.countryId;
 }
 
-type SectorLaneClause = Pick<CorporateSector, "sectorType"> & {
-  industryModel: CorporateSector["industryModel"] | null;
-  mediaDiscriminator?: CorporateSector["mediaDiscriminator"] | null;
-};
-
 /** Lane criteria apply to owned sectors and their unowned market buckets. */
-export type SectorLaneQuery = SectorLaneClause | { $or: SectorLaneClause[] };
+export type SectorLaneQuery = Pick<CorporateSector, "sectorType"> & {
+  industryModel: CorporateSector["industryModel"] | null;
+  mediaDiscriminator: CorporateSector["mediaDiscriminator"] | null;
+};
 
 export function getCorporateSectorLaneQuery(
   sector: Pick<CorporateSector, "sectorType" | "industryModel" | "mediaDiscriminator">
 ): SectorLaneQuery {
-  if (sector.sectorType === "entertainment" || sector.mediaDiscriminator === "entertainment") {
-    return {
-      $or: [
-        { sectorType: "media", industryModel: null, mediaDiscriminator: "entertainment" },
-        { sectorType: "entertainment", industryModel: null },
-      ],
-    };
-  }
   return {
     sectorType: sector.sectorType,
     industryModel: sector.industryModel ?? null,
@@ -53,14 +43,13 @@ export function getCorporateSectorLocationKey(
   >,
   stateCountryByStateId: ReadonlyMap<string, CountryId>
 ): string {
-  const legacyEntertainment = sector.sectorType === "entertainment";
   return [
     sector.corporationId.toString(),
     getSectorOperatingCountryId(sector, stateCountryByStateId),
     sector.stateId,
-    legacyEntertainment ? "media" : sector.sectorType,
-    legacyEntertainment ? "" : (sector.industryModel ?? ""),
-    legacyEntertainment ? "entertainment" : (sector.mediaDiscriminator ?? ""),
+    sector.sectorType,
+    sector.industryModel ?? "",
+    sector.mediaDiscriminator ?? "",
   ].join(":");
 }
 

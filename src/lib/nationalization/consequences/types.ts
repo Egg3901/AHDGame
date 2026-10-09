@@ -1,6 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CompensationTier } from "../constants";
 // Reuse the canonical trigger union from eligibility (npc | unowned | distress |
 // strategic | monopoly | supermajority) so the route can pass `elig.triggers`
@@ -19,7 +19,7 @@ export interface ConsequenceContext {
   tier: CompensationTier;
   triggers: NationalizationTrigger[];
   /** Sector types involved (drives sector-flavored approval framing). */
-  sectorTypes: CorporationType[];
+  sectorTypes: OperatingSectorType[];
   /** ₳ value seized (valuation × 1.0, pre-tier) — sizes the confidence hit. */
   valuationAnchor: number;
   /** ₳ compensation actually paid — high payout softens the confidence hit. */

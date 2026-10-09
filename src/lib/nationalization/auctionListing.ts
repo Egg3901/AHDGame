@@ -7,7 +7,7 @@ import type {
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, OperatingSectorType } from "@/lib/constants/corporations";
 
 /**
  * Enriched, display-ready view of one open privatization auction (spec §13.3).
@@ -25,7 +25,7 @@ export interface AuctionListing {
   countryId: CountryId;
   leadSectorType: CorporationType;
   sectors: {
-    sectorType: CorporationType;
+    sectorType: OperatingSectorType;
     stateId: string;
     stateName: string;
     revenuePerTurn: number;

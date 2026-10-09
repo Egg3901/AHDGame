@@ -1,17 +1,18 @@
 "use client";
 
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useEffect, useId, useState } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { Modal } from "@/components/ui/Modal";
-import { CORPORATION_TYPE_LABELS, sectorFocusOptions } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS, OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import {
   CORPORATION_RENAME_COST,
   CORPORATION_RENAME_MS_PENALTY,
   CORPORATION_RENAME_COOLDOWN_TURNS,
 } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { UPLOAD_IMAGE_HINTS } from "@/lib/constants/uploadImageHints";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CorporationDetail } from "../CorporationPageTypes";
@@ -23,10 +24,10 @@ export interface CeoIdentitySettingsControlled {
   setEditDescription: (val: string) => void;
   editBrandColor: string;
   setEditBrandColor: (val: string) => void;
-  editPrimaryType: CorporationType;
-  setEditPrimaryType: (val: CorporationType) => void;
-  editSecondaryType: CorporationType | "";
-  setEditSecondaryType: (val: CorporationType | "") => void;
+  editPrimaryType: OperatingSectorType;
+  setEditPrimaryType: (val: OperatingSectorType) => void;
+  editSecondaryType: OperatingSectorType | "";
+  setEditSecondaryType: (val: OperatingSectorType | "") => void;
   saving: boolean;
   uploadingLogo: boolean;
   uploadingHeader: boolean;
@@ -135,15 +136,15 @@ export function CeoCorporationSettingsModal({
                   id={`${formId}-primary`}
                   value={editPrimaryType}
                   onChange={(e) => {
-                    const val = e.target.value as CorporationType;
+                    const val = e.target.value as OperatingSectorType;
                     setEditPrimaryType(val);
                     if (editSecondaryType === val) setEditSecondaryType("");
                   }}
                   className="w-full rounded-sm border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none"
                 >
-                  {sectorFocusOptions(corporation.type).map((t) => (
+                  {OPERATING_SECTOR_TYPES.map((t) => (
                     <option key={t} value={t}>
-                      {CORPORATION_TYPE_LABELS[t]}
+                      {OPERATING_SECTOR_TYPE_LABELS[t]}
                     </option>
                   ))}
                 </select>
@@ -162,17 +163,15 @@ export function CeoCorporationSettingsModal({
                 <select
                   id={`${formId}-secondary`}
                   value={editSecondaryType}
-                  onChange={(e) => setEditSecondaryType(e.target.value as CorporationType | "")}
+                  onChange={(e) => setEditSecondaryType(e.target.value as OperatingSectorType | "")}
                   className="w-full rounded-sm border border-card-border bg-background px-3 py-2 text-sm focus:border-primary/60 focus:outline-none"
                 >
                   <option value="">None</option>
-                  {sectorFocusOptions(corporation.secondaryType)
-                    .filter((t) => t !== editPrimaryType)
-                    .map((t) => (
-                      <option key={t} value={t}>
-                        {CORPORATION_TYPE_LABELS[t]}
-                      </option>
-                    ))}
+                  {OPERATING_SECTOR_TYPES.filter((t) => t !== editPrimaryType).map((t) => (
+                    <option key={t} value={t}>
+                      {OPERATING_SECTOR_TYPE_LABELS[t]}
+                    </option>
+                  ))}
                 </select>
                 <p className="text-xs text-muted mt-1">
                   Sectors of this type earn 2.5% more margin. It doubles the sprawl penalty once you
@@ -352,8 +351,13 @@ function useStandaloneIdentitySettings({
 }) {
   const [editDescription, setEditDescription] = useState(corporation.description || "");
   const [editBrandColor, setEditBrandColor] = useState(corporation.brandColor ?? "#3b82f6");
-  const [editPrimaryType, setEditPrimaryType] = useState<CorporationType>(corporation.type);
-  const [editSecondaryType, setEditSecondaryType] = useState<CorporationType | "">(
+  const corporationLane = getOperatingSectorType(
+    corporation.type,
+    corporation.industryModel,
+    corporation.mediaDiscriminator
+  );
+  const [editPrimaryType, setEditPrimaryType] = useState<OperatingSectorType>(corporationLane);
+  const [editSecondaryType, setEditSecondaryType] = useState<OperatingSectorType | "">(
     corporation.secondaryType ?? ""
   );
   const [saving, setSaving] = useState(false);
@@ -365,14 +369,14 @@ function useStandaloneIdentitySettings({
     if (!enabled) return;
     setEditDescription(corporation.description || "");
     setEditBrandColor(corporation.brandColor ?? "#3b82f6");
-    setEditPrimaryType(corporation.type);
+    setEditPrimaryType(corporationLane);
     setEditSecondaryType(corporation.secondaryType ?? "");
     setUploadError("");
   }, [
     enabled,
     corporation.description,
     corporation.brandColor,
-    corporation.type,
+    corporationLane,
     corporation.secondaryType,
   ]);
 
@@ -387,7 +391,7 @@ function useStandaloneIdentitySettings({
       };
       const nextSecondary = editSecondaryType || null;
       const serverSecondary = corporation.secondaryType ?? null;
-      if (editPrimaryType !== corporation.type) {
+      if (editPrimaryType !== corporationLane) {
         payload.primaryType = editPrimaryType;
       }
       if (nextSecondary !== serverSecondary) {

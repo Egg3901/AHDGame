@@ -9,7 +9,7 @@ import { computeThroughput, inputAvailability } from "@/lib/market/throughput";
 import { CAPITAL_DEPRECIATION_PER_TURN, impliedOutputUnits } from "@/lib/market/capital";
 import { computePriceRealization, priceRealizationFactor } from "@/lib/market/priceRealization";
 import type { CommodityPrice, CorporateSector, Corporation } from "@/lib/db/types";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import {
   COMMODITY_LABELS,
   COMMODITY_ICONS,
@@ -64,7 +64,7 @@ export async function buildSectorCommoditySections(args: {
   sectorRevenueAnchor: number;
   /** Persisted daily labour cost normalized to ₳, matching sectorRevenueAnchor. */
   sectorLaborCostAnchor: number | null;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   sectorCountryId: string;
   /** The world's era unit-basis scale (`getEraUnitScale(preset)`). */
   eraUnitScale: number;

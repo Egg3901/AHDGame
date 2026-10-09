@@ -129,9 +129,9 @@ describe("construction in progress", () => {
 });
 
 describe("sectorBookValueAnchor (D11)", () => {
-  it("keeps the legacy automobile list basis for manufacturing vehicle rows", () => {
-    const legacy = sectorBookValueAnchor(
-      { sectorType: "automobiles", capitalStock: 250_000, strategyId: "standard" },
+  it("prices manufacturing vehicle rows on the vehicles lane, not generic manufacturing", () => {
+    const generic = sectorBookValueAnchor(
+      { sectorType: "manufacturing", capitalStock: 250_000, strategyId: "standard" },
       1991,
       1
     );
@@ -146,7 +146,8 @@ describe("sectorBookValueAnchor (D11)", () => {
       1
     );
 
-    expect(modelled).toBe(legacy);
+    expect(modelled).toBeGreaterThan(0);
+    expect(modelled).not.toBe(generic);
   });
 
   const CAPACITY = 250;

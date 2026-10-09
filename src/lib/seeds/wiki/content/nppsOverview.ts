@@ -27,6 +27,10 @@ NPPs fill every office that players don't hold. In a legislature with 435 House 
 
 Admins can spawn NPPs in bulk (1 to 500 at a time) for any party, with weighting toward states that match the party's lean or existing NPP presence. The total NPP count scales with the game's needs: the simulation is designed to fill every seat in every country.
 
+## Party NPP capacity
+
+Party-controlled NPP capacity depends on active player membership. Each of the first five active members adds five slots; the next five add four each; members up to twenty add three each; later members add two each. The country ceiling is three NPPs per region, with a minimum ceiling of 25. That minimum applies to the ceiling, not to every party's allowance. An active member needs at least two game actions in the last fourteen real days. The party controls show its current count and capacity.
+
 ## Key constraints
 
 - **NPPs cannot run for President in a player country**: presidential races there are reserved for player candidates so there's always a meaningful player choice at the top. In a country nobody plays, with NPP autonomy active, NPPs do contest the presidency

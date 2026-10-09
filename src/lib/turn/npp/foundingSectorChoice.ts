@@ -18,7 +18,7 @@
  *
  * Pure: no database, clock or randomness. The caller passes one uniform roll.
  */
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { sectorPeakShortageScore, type CommodityPriceRatioFn } from "./marketSignals";
 
 /** Lowest shortage score a sector is treated as having, so no sector reaches zero weight. */
@@ -27,12 +27,12 @@ export const FOUNDING_MIN_SHORTAGE_SCORE = 0.5;
 export const FOUNDING_SHORTAGE_EXPONENT = 2;
 
 export function foundingSectorWeights(args: {
-  types: readonly CorporationType[];
+  types: readonly OperatingSectorType[];
   countryId: string;
   priceRatioOf: CommodityPriceRatioFn;
-  existingCount: (countryId: string, type: CorporationType) => number;
+  existingCount: (countryId: string, type: OperatingSectorType) => number;
   /** Multiplier for a concentrated sector; absent reads as 1. */
-  challengerBoostOf?: (type: CorporationType) => number;
+  challengerBoostOf?: (type: OperatingSectorType) => number;
 }): number[] {
   return args.types.map((type) => {
     const raw = sectorPeakShortageScore(type, args.countryId, args.priceRatioOf);

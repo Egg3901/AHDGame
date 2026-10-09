@@ -25,14 +25,14 @@ describe("loadActiveSectorDemandModifierPctMap", () => {
 
   it("sums multiple active modifiers for the same country+sector", async () => {
     mockModifiers(db, [
-      { countryId: "UK", sectorType: "entertainment", pct: 8, expiresAtTurn: 100 },
-      { countryId: "UK", sectorType: "entertainment", pct: 5, expiresAtTurn: 100 },
+      { countryId: "UK", sectorType: "media_entertainment", pct: 8, expiresAtTurn: 100 },
+      { countryId: "UK", sectorType: "media_entertainment", pct: 5, expiresAtTurn: 100 },
     ]);
 
     const { loadActiveSectorDemandModifierPctMap } = await import("./sectorDemandModifierMap");
     const map = await loadActiveSectorDemandModifierPctMap(db as unknown as Db, 10);
 
-    expect(map.get("UK:entertainment")).toBe(13);
+    expect(map.get("UK:media_entertainment")).toBe(13);
   });
 
   it("clamps a stacked total to the total cap", async () => {
@@ -63,14 +63,14 @@ describe("loadActiveSectorDemandModifierPctMap", () => {
 
   it("keeps unrelated country+sector keys isolated", async () => {
     mockModifiers(db, [
-      { countryId: "UK", sectorType: "entertainment", pct: 8, expiresAtTurn: 100 },
+      { countryId: "UK", sectorType: "media_entertainment", pct: 8, expiresAtTurn: 100 },
       { countryId: "US", sectorType: "technology", pct: 6, expiresAtTurn: 100 },
     ]);
 
     const { loadActiveSectorDemandModifierPctMap } = await import("./sectorDemandModifierMap");
     const map = await loadActiveSectorDemandModifierPctMap(db as unknown as Db, 10);
 
-    expect(map.get("UK:entertainment")).toBe(8);
+    expect(map.get("UK:media_entertainment")).toBe(8);
     expect(map.get("US:technology")).toBe(6);
   });
 

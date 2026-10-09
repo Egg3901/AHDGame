@@ -19,7 +19,7 @@ const plants: NppPlantsContext = {
 
 const cases = [
   ["healthcare", "healthcare_services"],
-  ["entertainment", "entertainment_services"],
+  ["media_entertainment", "entertainment_services"],
   ["logistics", "freight"],
 ] as const;
 

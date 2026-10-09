@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CommodityPriceAttribution } from "@/lib/market/priceAttribution";
 
 export interface StockListing {
@@ -7,7 +7,7 @@ export interface StockListing {
   name: string;
   /** Stock ticker symbol; absent on pre-ticker legacy corps. */
   tickerSymbol?: string;
-  type: CorporationType;
+  type: OperatingSectorType;
   typeLabel: string;
   headquartersState: string;
   headquartersStateName: string;
@@ -134,7 +134,7 @@ export interface MarketCapPoint {
   high?: number;
   /** Simulated intra-turn low for candlestick charting (absent on old records) */
   low?: number;
-  bySector?: Partial<Record<CorporationType, number>>;
+  bySector?: Partial<Record<OperatingSectorType, number>>;
 }
 
 export interface MarketHistoryResponse {
@@ -184,7 +184,7 @@ export interface BondListing {
   corporationSequentialId?: number;
   logoUrl?: string;
   brandColor?: string;
-  corporationType?: CorporationType;
+  corporationType?: OperatingSectorType;
   couponRate: number;
   pricePerUnit?: number;
   maturityLabel: string;

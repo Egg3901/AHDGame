@@ -19,7 +19,7 @@ import type {
   Union,
 } from "@/lib/db/types";
 import type { UnionEndorsement, UnionOrganizer } from "@/lib/db/types/union";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
 import { reconcileUnionOwnerCache } from "@/lib/unions/unionReconciliation";
@@ -317,7 +317,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         countryId: union.countryId,
         countryName: COUNTRY_CONFIGS[union.countryId]?.name ?? union.countryId,
         sectorType: union.sectorType,
-        sectorLabel: CORPORATION_TYPE_LABELS[union.sectorType] ?? union.sectorType,
+        sectorLabel: OPERATING_SECTOR_TYPE_LABELS[union.sectorType] ?? union.sectorType,
         ownerId: union.ownerId?.toString() ?? null,
         pendingLeaderCharacterId: union.pendingLeaderCharacterId?.toString() ?? null,
         electionOpen: isUnionLeadershipElectionOpen(union),

@@ -18,7 +18,7 @@
  * fabricated zeros.
  */
 
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, OperatingSectorType } from "@/lib/constants/corporations";
 import type {
   NppDecisionConstraint,
   NppDecisionLeg,
@@ -54,7 +54,7 @@ export interface NppCorporationHealthCorporation {
 }
 
 export interface NppCorporationHealthSectorRow {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   /** NPP-led corporations whose primary sector is this one. */
   nppLed: number;
   /** Of those, how many hold negative liquid capital. */

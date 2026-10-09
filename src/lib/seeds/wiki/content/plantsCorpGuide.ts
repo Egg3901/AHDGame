@@ -6,7 +6,7 @@ import {
   MOTHBALL_UPKEEP_FRACTION,
 } from "@/lib/constants/capacityEconomy";
 import {
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPE_LABELS,
   DOMINANCE_MARKET_SHARE_THRESHOLD,
   DOMINANCE_NATIONAL_SHARE_THRESHOLD,
   DOMINANCE_GROWTH_COST_MULT_AT_FULL,
@@ -39,7 +39,7 @@ const pct = (f: number) => `${Math.round(f * 100)}%`;
 /** Build-time table, slowest first, from the live constants. */
 const buildTurnsTable = [...CAPACITY_SECTOR_TYPES]
   .sort((a, b) => CAPACITY_BUILD_TURNS(b) - CAPACITY_BUILD_TURNS(a))
-  .map((t) => `| ${CORPORATION_TYPE_LABELS[t]} | ${CAPACITY_BUILD_TURNS(t)} |`)
+  .map((t) => `| ${OPERATING_SECTOR_TYPE_LABELS[t]} | ${CAPACITY_BUILD_TURNS(t)} |`)
   .join("\n");
 
 export const plantsCorpGuideContent = `# Running a Corporation under the Plants System

@@ -1,7 +1,7 @@
 import type { Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, OperatingSectorType } from "@/lib/constants/corporations";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { corpLiquidCapitalToAnchor } from "@/lib/currency/corporationCapital";
 import {
@@ -182,7 +182,7 @@ export function buildNppMarketEntryDiagnostic(args: {
 }
 
 type CreditDecision = {
-  shortageCreditRequest?: { amountLocal: number; sectorType: CorporationType };
+  shortageCreditRequest?: { amountLocal: number; sectorType: OperatingSectorType };
   entryDiagnostic?: NppMarketEntryDiagnostic;
 };
 

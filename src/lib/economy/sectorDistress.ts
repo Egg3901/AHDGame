@@ -1,17 +1,17 @@
 import type { Db } from "mongodb";
 import { SECTOR_SUPPLY } from "@/lib/constants/commodities";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 
 export interface SectorDistressScore {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   distress: number;
   rank: number;
 }
 
 /**
- * Scores each sector type by economic distress using global commodity prices.
+ * Scores each operating lane by economic distress using global commodity prices.
  * Higher score = more distressed = receives a larger auto-seed boost.
  *
  * Formula per sector:
@@ -27,9 +27,9 @@ export async function computeSectorDistressRanking(db: Db): Promise<SectorDistre
 
   const priceMap = new Map(commodityPrices.map((c) => [c.commodity, c]));
 
-  const scores: { sectorType: CorporationType; distress: number }[] = [];
+  const scores: { sectorType: OperatingSectorType; distress: number }[] = [];
 
-  for (const sectorType of CORPORATION_TYPES) {
+  for (const sectorType of OPERATING_SECTOR_TYPES) {
     const supplyFlows = SECTOR_SUPPLY[sectorType] ?? [];
 
     if (supplyFlows.length === 0) {
@@ -85,8 +85,8 @@ export async function computeSectorDistressRanking(db: Db): Promise<SectorDistre
 export function distressRankingToBoostMap(
   ranking: SectorDistressScore[],
   maxBoost: number
-): Map<CorporationType, number> {
-  const result = new Map<CorporationType, number>();
+): Map<OperatingSectorType, number> {
+  const result = new Map<OperatingSectorType, number>();
   const maxDistress = ranking.reduce((m, r) => Math.max(m, r.distress), 0);
   for (const { sectorType, distress } of ranking) {
     const boost = maxDistress > 0 ? maxBoost * (Math.max(0, distress) / maxDistress) : 0;

@@ -3,13 +3,13 @@
  * MANUFACTURING_PRODUCT_KINDS is the catalog consumed by eligibility and the product editor.
  */
 import type { CommodityType } from "@/lib/constants/commodities";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 export interface ManufacturingProductKind {
   id: string;
   label: string;
   outputCommodity: CommodityType;
-  sectorTypes: readonly CorporationType[];
+  sectorTypes: readonly OperatingSectorType[];
   strategyIds: readonly string[];
 }
 
@@ -19,21 +19,21 @@ export const MANUFACTURING_PRODUCT_KINDS: readonly ManufacturingProductKind[] = 
     id: "passenger_car",
     label: "Passenger car",
     outputCommodity: "vehicles",
-    sectorTypes: ["automobiles", "manufacturing"],
+    sectorTypes: ["manufacturing_vehicles", "manufacturing"],
     strategyIds: ["standard", "ev", "autonomous_driving", "vehicle_assembly"],
   },
   {
     id: "truck",
     label: "Truck",
     outputCommodity: "vehicles",
-    sectorTypes: ["automobiles", "manufacturing"],
+    sectorTypes: ["manufacturing_vehicles", "manufacturing"],
     strategyIds: ["standard", "heavy_machinery", "vehicle_heavy_machinery"],
   },
   {
     id: "commercial_vehicle",
     label: "Commercial vehicle",
     outputCommodity: "vehicles",
-    sectorTypes: ["automobiles", "manufacturing"],
+    sectorTypes: ["manufacturing_vehicles", "manufacturing"],
     strategyIds: [
       "standard",
       "ev",

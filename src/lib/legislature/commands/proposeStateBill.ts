@@ -30,7 +30,7 @@ import {
   getProvisionCostTotal,
   SUBSIDY_BILL_CATEGORIES,
 } from "@shared/constants/legislation";
-import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES, type OperatingSectorType } from "@/lib/constants/corporations";
 import type { LegislatureCommandResult } from "@/lib/legislature/commands/types";
 import { getGameState } from "@/lib/gameState";
 import { getEraContext } from "@/lib/era/context";
@@ -350,7 +350,7 @@ export async function proposeStateBill(
             type: "subsidy" as const,
             scopeType: subsidy.scopeType,
             ...(subsidy.targetSectorType
-              ? { targetSectorType: subsidy.targetSectorType as CorporationType }
+              ? { targetSectorType: subsidy.targetSectorType as OperatingSectorType }
               : {}),
             ...(subsidy.targetStrategyId ? { targetStrategyId: subsidy.targetStrategyId } : {}),
             domesticOnly: subsidy.domesticOnly,
@@ -371,7 +371,7 @@ export async function proposeStateBill(
             type: "end_subsidy" as const,
             scopeType: endSubsidy.scopeType,
             ...(endSubsidy.targetSectorType
-              ? { targetSectorType: endSubsidy.targetSectorType as CorporationType }
+              ? { targetSectorType: endSubsidy.targetSectorType as OperatingSectorType }
               : {}),
             ...(endSubsidy.targetStrategyId
               ? { targetStrategyId: endSubsidy.targetStrategyId }
@@ -516,7 +516,7 @@ export async function proposeStateBill(
       "type" in provision &&
       provision.type === "subsidy" &&
       provision.targetSectorType &&
-      !CORPORATION_TYPES.includes(provision.targetSectorType as CorporationType)
+      !OPERATING_SECTOR_TYPES.includes(provision.targetSectorType as OperatingSectorType)
     ) {
       return {
         status: 400,

@@ -57,6 +57,7 @@ import {
 } from "@/lib/constants/corporations";
 import type {
   CorporationType,
+  OperatingSectorType,
   StateMetricValues,
   MacroEconomicValues,
 } from "@/lib/constants/corporations";
@@ -279,7 +280,7 @@ export function buildSectorAttackInfo(args: {
   sectorHostFxRate: number;
   sectorHostLiquidCode: CurrencyCode | undefined;
   sector: CorporateSector;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   sectorCountryId: CountryId;
   allTariffs: Tariff[];
   activeFtaPairs: Set<string>;
@@ -520,7 +521,7 @@ export function computeTechGrowthCostReductionPct(args: {
 export function buildSectorStrategySection(args: {
   preset?: string;
   sector: CorporateSector;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   effectiveRates: { isTransitioning: boolean };
   transitionProgress: number;
   strategyTransitionMod: number;
@@ -889,7 +890,7 @@ export function computeSectorMarketPosition(args: {
  */
 export function computeSectorMarginSection(args: {
   sector: CorporateSector;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   sectorCountryId: CountryId;
   corporation: Corporation;
   state: State | null;
@@ -1054,7 +1055,7 @@ export function computeSectorMarginSection(args: {
       corporation.type,
       corporation.industryModel,
       corporation.mediaDiscriminator
-    ) as CorporationType,
+    ),
     totalCorpSectors,
     macroEcon,
     corporation.logisticsStrength ?? 0,
@@ -1134,7 +1135,7 @@ export function computeSectorMarginSection(args: {
  */
 export function buildSectorPlantsSection(args: {
   sector: CorporateSector;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   currentTurn: number;
   currentYear: number;
   governorCap: number;
@@ -1258,7 +1259,7 @@ export function buildSectorPlantsSection(args: {
     Number.isInteger(sector.plantCount) && (sector.plantCount ?? 0) >= 0
       ? (sector.plantCount as number)
       : seedPlantLedger(
-          sectorType,
+          sector.sectorType,
           sector.capitalStock,
           sector.industryModel,
           sector.mediaDiscriminator

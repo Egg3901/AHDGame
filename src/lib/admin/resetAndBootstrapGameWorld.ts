@@ -180,7 +180,7 @@ export async function resetAndBootstrapGameWorld(
   // The 1991 vehicle and media taxonomy seeds run only on a reference rebuild
   // (they need the empty market pool cleared below). A 1991 reset that kept the
   // reference collections would clear their completion markers in teardown and
-  // never re-run them, leaving legacy `automobiles`/`entertainment` markets in a
+  // never re-run them, leaving legacy vehicle/entertainment markets in a
   // world the 1991 code expects to be converted. Refuse before the seal.
   if (preset === "1991-default" && !resetReference) {
     throw new Error(
@@ -360,8 +360,6 @@ export async function resetAndBootstrapGameWorld(
       preset,
       skipRegionalCouncil,
       resetReference,
-      fresh1991VehicleModelSeed: preset === "1991-default" && resetReference,
-      fresh1991MediaTaxonomySeed: preset === "1991-default" && resetReference,
       seedOnly,
       preIteration,
       startingParties,

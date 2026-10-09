@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useGameTurnStatus } from "@/hooks/useGameEvents";
 import { STARTING_YEAR } from "@/lib/constants/turnTime";
@@ -111,7 +111,7 @@ function weightedDividendByMcap(ls: StockListing[]): number {
 }
 
 type SectorRow = {
-  type: CorporationType;
+  type: OperatingSectorType;
   label: string;
   count: number;
   marketCap: number;
@@ -147,7 +147,7 @@ export function MarketStats({
   const calendarOffset = turnStatus?.preIterationTurns ?? 0;
 
   const groupedListings = useMemo(() => {
-    const m = new Map<CorporationType, StockListing[]>();
+    const m = new Map<OperatingSectorType, StockListing[]>();
     for (const l of listings) {
       const arr = m.get(l.type) ?? [];
       arr.push(l);
@@ -172,7 +172,7 @@ export function MarketStats({
         ls.length > 0 ? ls.reduce((s, x) => s + (x.avgSectorGrowth ?? 0), 0) / ls.length : 0;
       rows.push({
         type,
-        label: CORPORATION_TYPE_LABELS[type],
+        label: OPERATING_SECTOR_TYPE_LABELS[type],
         count: ls.length,
         marketCap,
         totalRevenue,
@@ -211,11 +211,11 @@ export function MarketStats({
     const ranked = Object.entries(last.bySector)
       .filter(([, v]) => (v ?? 0) > 0)
       .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
-      .map(([k]) => k as CorporationType);
+      .map(([k]) => k as OperatingSectorType);
     const topKeys = ranked.slice(0, 5);
 
-    const seriesKeys: { key: CorporationType | "other"; label: string }[] = [
-      ...topKeys.map((k) => ({ key: k, label: CORPORATION_TYPE_LABELS[k] })),
+    const seriesKeys: { key: OperatingSectorType | "other"; label: string }[] = [
+      ...topKeys.map((k) => ({ key: k, label: OPERATING_SECTOR_TYPE_LABELS[k] })),
     ];
 
     const hasOther = ranked.length > 5;
@@ -229,7 +229,7 @@ export function MarketStats({
     const minTurn = turns[0];
     const maxTurn = turns[turns.length - 1];
 
-    const valuesAt = (pt: MarketCapPoint, key: CorporationType | "other"): number => {
+    const valuesAt = (pt: MarketCapPoint, key: OperatingSectorType | "other"): number => {
       if (key === "other") {
         const total = sumBySector(pt);
         const topSum = topKeys.reduce((s, k) => s + (pt.bySector?.[k] ?? 0), 0);

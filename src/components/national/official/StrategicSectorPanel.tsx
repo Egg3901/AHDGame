@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui";
-import { FOUNDABLE_CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPES,
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import { MAX_STRATEGIC_SECTOR_DESIGNATIONS } from "@/lib/nationalization/constants";
 import type { NatOfficialActions } from "../NationalCorporationView";
 import { apiErrorText } from "@/lib/errors/catalog";
@@ -16,7 +20,7 @@ export function StrategicSectorPanel({
   designated,
   official,
 }: {
-  designated: CorporationType[];
+  designated: OperatingSectorType[];
   official: NatOfficialActions;
 }) {
   const code = official.countryId.toLowerCase();
@@ -26,7 +30,7 @@ export function StrategicSectorPanel({
     null
   );
 
-  const undesignated = FOUNDABLE_CORPORATION_TYPES.filter((t) => !designated.includes(t));
+  const undesignated = OPERATING_SECTOR_TYPES.filter((t) => !designated.includes(t));
   const atCap = designated.length >= MAX_STRATEGIC_SECTOR_DESIGNATIONS;
 
   async function mutate(httpMethod: "POST" | "DELETE", sectorType: string, ok: string) {
@@ -73,13 +77,15 @@ export function StrategicSectorPanel({
               key={t}
               className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 text-body-xs capitalize text-gold"
             >
-              {t}
+              {OPERATING_SECTOR_TYPE_LABELS[t] ?? t}
               <button
                 type="button"
-                onClick={() => mutate("DELETE", t, `${t} removed.`)}
+                onClick={() =>
+                  mutate("DELETE", t, `${OPERATING_SECTOR_TYPE_LABELS[t] ?? t} removed.`)
+                }
                 disabled={busy}
                 className="text-gold/70 hover:text-gold"
-                aria-label={`Remove ${t}`}
+                aria-label={`Remove ${OPERATING_SECTOR_TYPE_LABELS[t] ?? t}`}
               >
                 ✕
               </button>
@@ -98,12 +104,18 @@ export function StrategicSectorPanel({
           <option value="">Select a sector type…</option>
           {undesignated.map((t) => (
             <option key={t} value={t}>
-              {t}
+              {OPERATING_SECTOR_TYPE_LABELS[t]}
             </option>
           ))}
         </select>
         <Button
-          onClick={() => mutate("POST", addType, `${addType} designated.`)}
+          onClick={() =>
+            mutate(
+              "POST",
+              addType,
+              `${OPERATING_SECTOR_TYPE_LABELS[addType as OperatingSectorType] ?? addType} designated.`
+            )
+          }
           disabled={busy || !addType || atCap}
         >
           Designate

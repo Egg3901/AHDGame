@@ -29,10 +29,11 @@ import {
   MIN_CORPORATION_STARTING_CAPITAL,
   MAX_CORPORATION_STARTING_CAPITAL,
   CORPORATION_STARTING_CAPITAL,
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPE_LABELS,
   CEO_INITIAL_SHARES,
   DEFAULT_SHARE_PRICE,
   MIN_SHARE_PRICE,
+  operatingSectorIdentity,
 } from "@/lib/constants/corporations";
 import { logWireEvent, wireHeadlineCorpFounded, wireHeadlineCorpIpo } from "@/lib/wireEvent";
 import { computeIpoIssuance } from "@/lib/corporations/ipoIssuance";
@@ -229,7 +230,7 @@ export async function GET(request: Request) {
         typeLabel:
           corp.type === "manufacturing" && corp.industryModel === "vehicles"
             ? "Vehicle manufacturing"
-            : CORPORATION_TYPE_LABELS[corp.type],
+            : OPERATING_SECTOR_TYPE_LABELS[corp.type],
         headquartersState: corp.headquartersState,
         headquartersStateName: stateNameMap.get(corp.headquartersState) ?? corp.headquartersState,
         liquidCapital: corp.liquidCapital,
@@ -280,11 +281,12 @@ export async function POST(request: Request) {
     const {
       name,
       tickerSymbol,
-      type,
+      type: lane,
       startingCapital: requestedCapital,
       secondaryType,
       ipo,
     } = parsed.data;
+    const { sectorType: type, industryModel, mediaDiscriminator } = operatingSectorIdentity(lane);
     const db = await getDb();
     // Founding is intentionally exempt from BOTH pause signals:
     // - `isActive === false` (turns paused for registration / settling) — players
@@ -311,7 +313,7 @@ export async function POST(request: Request) {
     }
 
     // Validate secondary type is distinct from primary
-    if (secondaryType !== undefined && secondaryType === type) {
+    if (secondaryType !== undefined && secondaryType === lane) {
       return errorResponse(400, "Secondary sector must be different from the primary sector");
     }
 
@@ -607,7 +609,7 @@ export async function POST(request: Request) {
         foundingGameState?.currentYear ??
         (foundingGameState?.startingYear ?? STARTING_YEAR) +
           Math.floor((Math.max(1, currentTurnAtFounding) - 1) / TURNS_PER_YEAR);
-      const grantedIds = autoGrantedNodeIds(type, yearAtFounding);
+      const grantedIds = autoGrantedNodeIds(lane, yearAtFounding);
       if (grantedIds.length > 0) {
         techGrant.unlockedTechNodeIds = grantedIds;
       }
@@ -695,6 +697,8 @@ export async function POST(request: Request) {
       tickerSymbol,
       description: undefined,
       type,
+      ...(industryModel ? { industryModel } : {}),
+      ...(mediaDiscriminator ? { mediaDiscriminator } : {}),
       ...(secondaryType ? { secondaryType } : {}),
       countryId: character.countryId,
       ceoId: character._id,
@@ -977,7 +981,7 @@ export async function POST(request: Request) {
         });
       }
 
-      const typeLabel = CORPORATION_TYPE_LABELS[type] ?? type;
+      const typeLabel = OPERATING_SECTOR_TYPE_LABELS[lane] ?? lane;
       const hqStateDoc = await db
         .collection<State>("states")
         .findOne({ _id: headquartersState }, { projection: { name: 1 } });
@@ -1001,7 +1005,7 @@ export async function POST(request: Request) {
         currencyCode: homeCurrency,
         refs: { corporationId: result.insertedId },
         outcome: "ok",
-        meta: { type, headquartersState, isPublicIpo: !!ipoResult },
+        meta: { type: lane, headquartersState, isPublicIpo: !!ipoResult },
       });
 
       if (ipoResult && ipo && !foundingSettlementPending && !foundingSettlementAborted) {

@@ -2,9 +2,9 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
-  CORPORATION_TYPES,
-  CORPORATION_TYPE_LABELS,
-  type CorporationType,
+  OPERATING_SECTOR_TYPES,
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
   SPRAWL_SECTOR_THRESHOLD,
   SPRAWL_PENALTY_PER_PAIR,
   LOGISTICS_MAX_SPRAWL_EFFECT,
@@ -55,9 +55,9 @@ interface SectorsTabProps {
   isCeo: boolean;
   corpId: string;
   /** Primary corporation type — used for expand modal type pre-selection */
-  corporationType: CorporationType;
+  corporationType: OperatingSectorType;
   /** Secondary corporation type — may be null */
-  corporationSecondaryType?: CorporationType | null;
+  corporationSecondaryType?: OperatingSectorType | null;
   /** Corporation liquid capital — used for afford checks in expand modal */
   liquidCapital: number;
   /** Corp currency code for all per-sector money fields (v0.2.6). */
@@ -86,7 +86,7 @@ interface SectorsTabProps {
   /** Deep-link from state board: open expand modal on mount. */
   expandOnMount?: boolean;
   /** Deep-link: preselect this sector type in the expand modal. */
-  expandSectorType?: CorporationType;
+  expandSectorType?: OperatingSectorType;
   /** Deep-link: focus this state once suggestions load. */
   expandStateId?: string;
   /** Called after consuming expand deep-link params (clear URL). */
@@ -143,16 +143,16 @@ export default function SectorsTab({
   // CEO identity resolves async after /character/me. Initializing open state from
   // `expandOnMount && isCeo` on first paint drops the deep link (ticket #1004).
   const [expandModalOpen, setExpandModalOpen] = useState(false);
-  const [deepLinkType] = useState<CorporationType | undefined>(expandSectorType);
+  const [deepLinkType] = useState<OperatingSectorType | undefined>(expandSectorType);
   const [deepLinkState] = useState<string | undefined>(expandStateId);
   // Set when the expand flow is opened from a type dossier, so the modal skips
   // the type picker and opens on the division the player was already reading.
-  const [expandTypeOverride, setExpandTypeOverride] = useState<CorporationType | undefined>(
+  const [expandTypeOverride, setExpandTypeOverride] = useState<OperatingSectorType | undefined>(
     undefined
   );
   const deepLinkHandledRef = useRef(false);
 
-  const openExpandModal = (type?: CorporationType) => {
+  const openExpandModal = (type?: OperatingSectorType) => {
     setExpandTypeOverride(type);
     setExpandModalOpen(true);
   };
@@ -243,7 +243,7 @@ export default function SectorsTab({
             group.industryModel,
             group.mediaDiscriminator
           ) ??
-          CORPORATION_TYPE_LABELS[group.sectorType as CorporationType] ??
+          OPERATING_SECTOR_TYPE_LABELS[group.sectorType as OperatingSectorType] ??
           group.sectorType,
       }));
   }, [sectors]);
@@ -282,7 +282,7 @@ export default function SectorsTab({
       )
     : null;
   const dossierType = operatingDossierType
-    ? (CORPORATION_TYPES.find((t) => t === operatingDossierType) ?? null)
+    ? (OPERATING_SECTOR_TYPES.find((t) => t === operatingDossierType) ?? null)
     : null;
   const dossierSectors = useMemo(
     () => (activeTypeFilter ? sectors.filter((s) => sectorIdentity(s) === activeTypeFilter) : []),
@@ -385,9 +385,7 @@ export default function SectorsTab({
         {isCeo && (
           <SmallButton
             tone="primary"
-            onClick={() =>
-              openExpandModal(selectedSectorGroup?.sectorType as CorporationType | undefined)
-            }
+            onClick={() => openExpandModal(operatingDossierType as OperatingSectorType | undefined)}
           >
             + {buildLabel}
           </SmallButton>
@@ -547,7 +545,10 @@ export default function SectorsTab({
                   (sum, s) =>
                     sum +
                     (s.plantCount ??
-                      facilitiesFromUnits(s.sectorType as CorporationType, s.capacityUnits ?? 0)),
+                      facilitiesFromUnits(
+                        s.sectorType as OperatingSectorType,
+                        s.capacityUnits ?? 0
+                      )),
                   0
                 );
                 const totalProduced = sortedSectors.reduce(

@@ -12,3 +12,7 @@ areas: [backend]
 ## What changed
 
 - A government bond reaching maturity no longer has its remaining unsold units sold to buyers on the same turn it is repaid.
+
+## Developer detail
+
+The primary market skips bonds with maturityTurn at or below the current turn, keeping due inventory stable for funded maturity snapshots while future bonds remain eligible. Includes a sovereign-primary integration regression. References: #3678, commit 9683d6140d.

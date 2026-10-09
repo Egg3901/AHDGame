@@ -18,9 +18,9 @@ import type {
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import {
-  CORPORATION_TYPES,
-  CORPORATION_TYPE_LABELS,
-  type CorporationType,
+  OPERATING_SECTOR_TYPES,
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
 } from "@/lib/constants/corporations";
 import {
   COMMODITY_TYPES,
@@ -45,7 +45,7 @@ import {
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 
 export interface CountrySectorMixEntry {
-  type: CorporationType;
+  type: OperatingSectorType;
   label: string;
   /** Σ effective (state, sector) markets across the country, ₳/day. */
   totalMarketAnchor: number;
@@ -58,7 +58,7 @@ export interface CountrySectorMixEntry {
 }
 
 interface PlantsSectorMarketInput {
-  type: CorporationType;
+  type: OperatingSectorType;
   industryModel?: string | null;
   mediaDiscriminator?: string | null;
   stateId: string;
@@ -192,7 +192,7 @@ function storedCapacityUnits(sector: PlantsSectorMarketInput): number | null {
 }
 
 interface OutputContribution {
-  type: CorporationType;
+  type: OperatingSectorType;
   industryModel?: string | null;
   /** Output-unit capacity contribution used to split a commodity market. */
   units: number;
@@ -205,7 +205,7 @@ type OutputWeights = Map<CommodityType, Map<string, OutputContribution>>;
 function addOutputWeight(
   weights: OutputWeights,
   commodity: CommodityType,
-  type: CorporationType,
+  type: OperatingSectorType,
   industryModel: string | null | undefined,
   units: number,
   anchorPerUnit: number
@@ -232,7 +232,7 @@ function fallbackOutputWeights(
   eraUnitScale: number
 ): Map<string, OutputContribution> {
   const weights = new Map<string, OutputContribution>();
-  for (const type of CORPORATION_TYPES) {
+  for (const type of OPERATING_SECTOR_TYPES) {
     const mix = defaultSupplyRates(type);
     const weight = commodityMixWeight(mix, basePrices, commodity);
     const unitYield = unitYieldForSupply(mix, eraUnitScale);
@@ -272,11 +272,11 @@ function addAllocatedLatent(
   nationalWeights: OutputWeights,
   basePrices: Record<CommodityType, number>,
   eraUnitScale: number,
-  bucketKey: (stateId: string, type: CorporationType, industryModel?: string | null) => string
+  bucketKey: (stateId: string, type: OperatingSectorType, industryModel?: string | null) => string
 ): void {
   // Convert commodity demand back through the same strategy mix that prices
   // plant capacity. Using the commodity's sticker price directly would break
-  // the plants identity for a rate such as automobiles' 0.5 vehicles per ₳.
+  // the plants identity for a rate such as the vehicles lane's 0.5 vehicles per ₳.
   if (!(latentUnits > 0)) return;
   const weights = weightsForCommodity(
     commodity,
@@ -305,7 +305,7 @@ function buildPlantsMarketAggregation(args: {
   prices: CommodityPrice[];
   eraUnitScale: number;
   currentTurn?: number;
-  bucketKey: (stateId: string, type: CorporationType, industryModel?: string | null) => string;
+  bucketKey: (stateId: string, type: OperatingSectorType, industryModel?: string | null) => string;
 }): PlantsMarketAggregation {
   const { sectors, states, prices, eraUnitScale, currentTurn, bucketKey } = args;
   const eraBasePrices = eraScaledBasePrices(eraUnitScale);
@@ -314,7 +314,7 @@ function buildPlantsMarketAggregation(args: {
   const stateOutputWeights = new Map<string, OutputWeights>();
 
   for (const sector of sectors) {
-    if (!CORPORATION_TYPES.includes(sector.type)) continue;
+    if (!OPERATING_SECTOR_TYPES.includes(sector.type)) continue;
     if (sector.mothballed) continue;
     const rates = outputRatesForSector(sector, currentTurn);
     const unitYield = unitYieldForSupply(rates, eraUnitScale);
@@ -493,11 +493,11 @@ export async function aggregateCountrySectorMix(
   // Legacy owned revenue per (state, sectorType) bucket, ₳-normalized; and the
   // running sum/count of current growth per sector type for the national mean.
   // Plants replaces the revenue buckets below with physical capacity.
-  const bucketKey = (stateId: string, type: CorporationType, industryModel?: string | null) =>
+  const bucketKey = (stateId: string, type: OperatingSectorType, industryModel?: string | null) =>
     `${stateId}::${type}::${industryModel ?? ""}`;
   const ownedByBucket = new Map<string, number>();
-  const growthSumByType = new Map<CorporationType, number>();
-  const growthCountByType = new Map<CorporationType, number>();
+  const growthSumByType = new Map<OperatingSectorType, number>();
+  const growthCountByType = new Map<OperatingSectorType, number>();
   const plantsMarketInputs: PlantsSectorMarketInput[] = [];
   for (const s of sectors) {
     const anchor = readCorpEconomicAnchor(s.revenue, hostCode, hostRate);
@@ -505,10 +505,9 @@ export async function aggregateCountrySectorMix(
       s.sectorType,
       s.industryModel,
       s.mediaDiscriminator
-    ) as CorporationType;
-    // Manufacturing models remain part of the manufacturing outlook row;
-    // entertainment keeps its separate legacy outlook row after canonicalization.
-    const type = s.industryModel === "vehicles" ? s.sectorType : operatingType;
+    );
+    // Each operating lane is its own outlook row.
+    const type = operatingType;
     ownedByBucket.set(
       bucketKey(s.stateId, type, s.industryModel),
       (ownedByBucket.get(bucketKey(s.stateId, type, s.industryModel)) ?? 0) + anchor
@@ -538,8 +537,8 @@ export async function aggregateCountrySectorMix(
       u.sectorType,
       u.industryModel,
       u.mediaDiscriminator
-    ) as CorporationType;
-    const type = u.industryModel === "vehicles" ? u.sectorType : operatingType;
+    );
+    const type = operatingType;
     const key = bucketKey(u.stateId, type, u.industryModel);
     unownedByBucket.set(key, (unownedByBucket.get(key) ?? 0) + (u.revenue ?? 0));
   }
@@ -567,7 +566,7 @@ export async function aggregateCountrySectorMix(
   ]);
   const bucketKeysByStateAndType = indexBucketKeysByStateAndType(marketBucketKeys);
 
-  return CORPORATION_TYPES.map((type) => {
+  return OPERATING_SECTOR_TYPES.map((type) => {
     let totalMarket = 0;
     let totalOwned = 0;
     let largest: { stateId: string; stateName: string; market: number } | null = null;
@@ -594,7 +593,7 @@ export async function aggregateCountrySectorMix(
     const gCount = growthCountByType.get(type) ?? 0;
     return {
       type,
-      label: CORPORATION_TYPE_LABELS[type],
+      label: OPERATING_SECTOR_TYPE_LABELS[type],
       totalMarketAnchor: Math.round(totalMarket),
       ownedPercent: totalMarket > 0 ? Math.round((totalOwned / totalMarket) * 1000) / 10 : 0,
       largestState: largest ? { stateId: largest.stateId, stateName: largest.stateName } : null,

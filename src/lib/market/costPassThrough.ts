@@ -32,7 +32,7 @@
  */
 import type { CommodityType } from "@/lib/constants/commodities";
 import { SECTOR_DEMAND, SECTOR_SUPPLY } from "@/lib/constants/commodities";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 /** Share of a producer's input-cost excess passed into its output price. */
 export const COST_PASS_THROUGH_BETA = 0.5;
@@ -44,7 +44,7 @@ export const COST_PASS_THROUGH_CAP = 1.75;
  * has no recipe or every ratio is missing (missing ratio = at base = 1).
  */
 export function sectorInputCostIndex(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   priceRatios: ReadonlyMap<CommodityType, number>
 ): number {
   const recipe = SECTOR_DEMAND[sectorType];
@@ -63,14 +63,14 @@ export function sectorInputCostIndex(
 /** commodity -> its producing sector types, weighted by output rate. */
 const PRODUCERS_BY_COMMODITY: ReadonlyMap<
   CommodityType,
-  { sectorType: CorporationType; weight: number }[]
+  { sectorType: OperatingSectorType; weight: number }[]
 > = (() => {
-  const map = new Map<CommodityType, { sectorType: CorporationType; weight: number }[]>();
+  const map = new Map<CommodityType, { sectorType: OperatingSectorType; weight: number }[]>();
   for (const [sectorType, outputs] of Object.entries(SECTOR_SUPPLY)) {
     for (const { commodity, rate } of outputs ?? []) {
       if (!(rate > 0)) continue;
       const list = map.get(commodity) ?? [];
-      list.push({ sectorType: sectorType as CorporationType, weight: rate });
+      list.push({ sectorType: sectorType as OperatingSectorType, weight: rate });
       map.set(commodity, list);
     }
   }

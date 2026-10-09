@@ -1,6 +1,6 @@
 import type { CountryEconomy } from "../contract";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 
 /**
@@ -39,7 +39,7 @@ const sectorWeightsBase = {
   retail: 10,
   construction: 9,
   logistics: 7,
-  entertainment: 6,
+  media_entertainment: 6,
   real_estate: 6,
   healthcare: 6,
   financial: 4,
@@ -48,10 +48,10 @@ const sectorWeightsBase = {
 // No COST_SCALE_ANCHORS row; the folder omits `costScaleAnchors` rather than defaulting it.
 /**
  * ⚠ THE CAST IS LOAD-BEARING, for the same reason as the cabinet groups:
- * JSON.parse widens each sector name to `string`, and `CorporationType[]` is a
+ * JSON.parse widens each sector name to `string`, and `OperatingSectorType[]` is a
  * union array. Caught by typecheck alone.
  */
-const strategicSectors: CorporationType[] = [];
+const strategicSectors: OperatingSectorType[] = [];
 const treasuryPsRate = {
   national: 50000,
   state: 25000,
@@ -95,11 +95,11 @@ export const YU_ECONOMY: CountryEconomy = {
         logistics: 4,
         healthcare: 3,
         financial: 2,
-        entertainment: 2,
+        media_entertainment: 2,
         media: 1,
         real_estate: 1,
         telecommunications: 1,
-        automobiles: 1,
+        manufacturing_vehicles: 1,
         technology: 0,
       },
       "1979": {
@@ -113,9 +113,9 @@ export const YU_ECONOMY: CountryEconomy = {
         logistics: 5,
         retail: 5,
         healthcare: 4,
-        entertainment: 5,
+        media_entertainment: 5,
         financial: 3,
-        automobiles: 2,
+        manufacturing_vehicles: 2,
         telecommunications: 1,
         media: 1,
         real_estate: 0,
@@ -127,7 +127,7 @@ export const YU_ECONOMY: CountryEconomy = {
         retail: 10,
         construction: 9,
         logistics: 7,
-        entertainment: 6,
+        media_entertainment: 6,
         real_estate: 6,
         healthcare: 6,
         financial: 4,

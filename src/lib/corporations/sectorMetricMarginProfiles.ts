@@ -22,7 +22,7 @@ import {
   CARBON_EMISSIONS_SECTORS,
   COST_OF_LIVING_SECTORS,
 } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { metricCategories, type MetricDefinition } from "@/lib/constants/metricDefinitions";
 import { getEraBand, isMetricActive } from "@/lib/era/metricCatalog";
 import { toUsd } from "@/lib/utils/fxNormalize";
@@ -102,7 +102,7 @@ const COMMON_PROFILE: ChannelWeights = {
   publicProcurement: 0.12,
 };
 
-const SECTOR_CHANNEL_PROFILES: Record<CorporationType, ChannelWeights> = {
+const SECTOR_CHANNEL_PROFILES: Record<OperatingSectorType, ChannelWeights> = {
   financial: {
     ...COMMON_PROFILE,
     laborQuality: 0.75,
@@ -161,7 +161,7 @@ const SECTOR_CHANNEL_PROFILES: Record<CorporationType, ChannelWeights> = {
     mediaTrust: 0.35,
     demographics: 0.6,
   },
-  automobiles: {
+  manufacturing_vehicles: {
     ...COMMON_PROFILE,
     laborCost: 0.75,
     laborQuality: 0.8,
@@ -239,7 +239,7 @@ const SECTOR_CHANNEL_PROFILES: Record<CorporationType, ChannelWeights> = {
     innovation: 0.75,
     publicProcurement: 0.35,
   },
-  entertainment: {
+  media_entertainment: {
     ...COMMON_PROFILE,
     laborCost: 0.55,
     consumerDemand: 0.85,
@@ -379,13 +379,13 @@ const STRATEGY_CHANNEL_OVERRIDES: Record<string, ChannelWeights> = {
     healthCapacity: 0.8,
     publicProcurement: 0.65,
   },
-  "automobiles.ev": {
+  "manufacturing_vehicles.ev": {
     digitalInfrastructure: 0.55,
     gridReliability: 1,
     environmentalCompliance: 1.05,
     innovation: 0.95,
   },
-  "automobiles.heavy_machinery": {
+  "manufacturing_vehicles.heavy_machinery": {
     physicalLogistics: 1,
     gridReliability: 0.9,
     publicProcurement: 0.55,
@@ -472,13 +472,13 @@ const STRATEGY_CHANNEL_OVERRIDES: Record<string, ChannelWeights> = {
     gridReliability: 1.15,
     innovation: 0.9,
   },
-  "entertainment.streaming": {
+  "media_entertainment.streaming": {
     digitalInfrastructure: 1,
     consumerDemand: 0.8,
     mediaTrust: 0.95,
     publicSafety: 0.15,
   },
-  "entertainment.live_venue": {
+  "media_entertainment.live_venue": {
     consumerDemand: 0.95,
     publicSafety: 0.9,
     physicalLogistics: 0.55,
@@ -576,7 +576,7 @@ function mergeProfile(
 }
 
 export function getStrategyMetricMarginProfile(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   strategyId: string | null | undefined
 ): Record<SectorMetricMarginChannel, number> {
   const normalizedStrategy = strategyId ?? "standard";
@@ -586,7 +586,7 @@ export function getStrategyMetricMarginProfile(
 }
 
 export function getBlendedStrategyMetricMarginProfile(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   strategyId: string | null | undefined,
   transitionFromStrategyId?: string | null,
   transitionProgress?: number | null
@@ -772,7 +772,7 @@ function buildHeadlineModifiers(
 }
 
 function legacyStateMetricTotal(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   stateMetrics?: StateMetrics | null
 ): number {
   if (!stateMetrics) return 0;
@@ -995,7 +995,7 @@ function computeStateMetricMarginModifierUncached(
 }
 
 export function getMetricStrategyCoverage(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   strategyId: string,
   category: MetricCategoryId,
   metricId: string

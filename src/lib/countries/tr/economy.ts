@@ -1,6 +1,6 @@
 import type { CountryEconomy } from "../contract";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 
 /**
@@ -35,14 +35,14 @@ const sectorWeightsBase = {
   real_estate: 11,
   retail: 9,
   construction: 8,
-  automobiles: 6,
+  manufacturing_vehicles: 6,
   financial: 5,
   healthcare: 5,
   energy: 5,
   logistics: 5,
   chemical_industries: 4,
   defense: 4,
-  entertainment: 4,
+  media_entertainment: 4,
   technology: 2,
   media: 2,
 };
@@ -50,10 +50,10 @@ const sectorWeightsBase = {
 // No COST_SCALE_ANCHORS row; the folder omits `costScaleAnchors` rather than defaulting it.
 /**
  * ⚠ THE CAST IS LOAD-BEARING, for the same reason as the cabinet groups:
- * JSON.parse widens each sector name to `string`, and `CorporationType[]` is a
+ * JSON.parse widens each sector name to `string`, and `OperatingSectorType[]` is a
  * union array. Caught by typecheck alone.
  */
-const strategicSectors: CorporationType[] = [];
+const strategicSectors: OperatingSectorType[] = [];
 const treasuryPsRate = {
   national: 70000,
   state: 35000,
@@ -114,9 +114,9 @@ export const TR_ECONOMY: CountryEconomy = {
         healthcare: 1,
         telecommunications: 1,
         media: 1,
-        automobiles: 0,
+        manufacturing_vehicles: 0,
         chemical_industries: 0,
-        entertainment: 1,
+        media_entertainment: 1,
         technology: 0,
       },
       "1979": {
@@ -130,13 +130,13 @@ export const TR_ECONOMY: CountryEconomy = {
         healthcare: 4,
         defense: 5,
         chemical_industries: 4,
-        automobiles: 3,
+        manufacturing_vehicles: 3,
         financial: 3,
         logistics: 4,
         telecommunications: 2,
         technology: 1,
         media: 2,
-        entertainment: 3,
+        media_entertainment: 3,
       },
       "1991": {
         manufacturing: 16,
@@ -144,14 +144,14 @@ export const TR_ECONOMY: CountryEconomy = {
         real_estate: 11,
         retail: 9,
         construction: 8,
-        automobiles: 6,
+        manufacturing_vehicles: 6,
         financial: 5,
         healthcare: 5,
         energy: 5,
         logistics: 5,
         chemical_industries: 4,
         defense: 4,
-        entertainment: 4,
+        media_entertainment: 4,
         technology: 2,
         media: 2,
       },

@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import { natMoney } from "@/components/national/natMoney";
 import { formatCompactNumber } from "@/lib/utils/formatters";
 import { apiErrorText } from "@/lib/errors/catalog";
@@ -12,7 +15,7 @@ interface RosterCorp {
   id: string;
   name: string;
   isPrimary: boolean;
-  assignedSectorTypes: CorporationType[];
+  assignedSectorTypes: OperatingSectorType[];
   sectorCount: number;
   revenuePerTurn: number;
   workers: number;
@@ -25,7 +28,7 @@ interface RosterCorp {
 interface RosterResponse {
   corporations: RosterCorp[];
   /** Sector types the primary NatCorp holds — the only ones that can be split off. */
-  splittableSectorTypes: CorporationType[];
+  splittableSectorTypes: OperatingSectorType[];
 }
 
 /**
@@ -67,7 +70,7 @@ export function StateEnterprisesPanel({
   const splitOffs = (data?.corporations ?? []).filter((c) => !c.isPrimary);
   const mergeableTypes = Array.from(
     new Set(splitOffs.flatMap((c) => c.assignedSectorTypes))
-  ) as CorporationType[];
+  ) as OperatingSectorType[];
 
   async function act(path: string, body: Record<string, unknown>, ok: string, reset: () => void) {
     if (busy || !canAct) return;
@@ -120,7 +123,7 @@ export function StateEnterprisesPanel({
                 <span className="text-xs text-muted">
                   {c.isPrimary
                     ? "· primary"
-                    : `· ${c.assignedSectorTypes.map((t) => CORPORATION_TYPE_LABELS[t]).join(", ") || "split-off"}`}
+                    : `· ${c.assignedSectorTypes.map((t) => OPERATING_SECTOR_TYPE_LABELS[t]).join(", ") || "split-off"}`}
                 </span>
               </div>
               <div className="flex items-center gap-3 text-xs text-muted">
@@ -159,7 +162,7 @@ export function StateEnterprisesPanel({
               <option value="">Select a sector type…</option>
               {(data?.splittableSectorTypes ?? []).map((t) => (
                 <option key={t} value={t}>
-                  {CORPORATION_TYPE_LABELS[t]}
+                  {OPERATING_SECTOR_TYPE_LABELS[t]}
                 </option>
               ))}
             </select>
@@ -203,7 +206,7 @@ export function StateEnterprisesPanel({
               <option value="">Select a split-off type…</option>
               {mergeableTypes.map((t) => (
                 <option key={t} value={t}>
-                  {CORPORATION_TYPE_LABELS[t]}
+                  {OPERATING_SECTOR_TYPE_LABELS[t]}
                 </option>
               ))}
             </select>

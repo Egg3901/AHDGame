@@ -1,5 +1,5 @@
 import type { CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES, type OperatingSectorType } from "@/lib/constants/corporations";
 import { getCountryIdForCurrency, type CurrencyCode } from "@/lib/constants/currencies";
 import { SOE_PERF_BASELINE } from "@/lib/economy/soe";
 
@@ -7,9 +7,9 @@ import { SOE_PERF_BASELINE } from "@/lib/economy/soe";
  * Full per-sector SOE stack for Eastern-bloc / USSR command economies (ticket
  * #1014). Under plants every sector needs state capacity — a 4–8 "commanding
  * heights" subset left the rest as unreachable unowned headroom (private
- * founding is banned). One SOE corporation per {@link CORPORATION_TYPES} entry.
+ * founding is banned). One SOE corporation per {@link OPERATING_SECTOR_TYPES} lane.
  */
-const EASTERN_BLOC_ALL_SECTORS_SOE: CorporationType[] = [...CORPORATION_TYPES];
+const EASTERN_BLOC_ALL_SECTORS_SOE: OperatingSectorType[] = [...OPERATING_SECTOR_TYPES];
 
 /**
  * Command-economy regime model.
@@ -306,12 +306,12 @@ export function plannedShare(
  * command country. Country/era-tunable: only countries listed here get the
  * multi-SOE split when `commandEconomyEnabled` is on; everyone else is untouched.
  *
- * Eastern bloc / YU: full `CorporationType` stack (plants in every sector).
+ * Eastern bloc / YU: full `OperatingSectorType` stack (plants in every sector).
  * CN keeps a shorter dual-track set. Maps design labels onto engine types —
  * heavy industry→manufacturing, consumer goods→retail, chemicals→chemical_industries,
  * transport→logistics.
  */
-export const COMMAND_ECONOMY_SOE_SECTORS: Partial<Record<CountryId, CorporationType[]>> = {
+export const COMMAND_ECONOMY_SOE_SECTORS: Partial<Record<CountryId, OperatingSectorType[]>> = {
   // USSR + union republics + Warsaw Pact + Yugoslavia: full sector stack.
   // (Historical "commanding heights only" lists left most plants missing under
   // the plants market tier — see ticket #1014 / EASTERN_BLOC_ALL_SECTORS_SOE.)
@@ -339,7 +339,9 @@ export const COMMAND_ECONOMY_SOE_SECTORS: Partial<Record<CountryId, CorporationT
 };
 
 /** The SOE sector set for a country (empty when the country isn't multi-SOE). */
-export function commandEconomySoeSectors(countryId: string | null | undefined): CorporationType[] {
+export function commandEconomySoeSectors(
+  countryId: string | null | undefined
+): OperatingSectorType[] {
   if (!countryId) return [];
   return COMMAND_ECONOMY_SOE_SECTORS[countryId as CountryId] ?? [];
 }

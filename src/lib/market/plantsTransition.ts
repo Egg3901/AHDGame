@@ -33,7 +33,7 @@ import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commo
 import { SECTOR_STRATEGIES, getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
 import { CAPITAL_SEED_HEADROOM, impliedOutputUnits } from "@/lib/market/capital";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, OperatingSectorType } from "@/lib/constants/corporations";
 
 /**
  * Rank comparison over the tier ladder.
@@ -169,7 +169,7 @@ export type PlantsPreflightWarning =
 export interface PlantsPreflightSectorAssessment {
   id: string;
   corporationId: string | null;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   /** False when `plantsStartTurn` is already set — this sector will not migrate. */
   willMigrate: boolean;
   /** The nameplate as it stands today, ₳ — the baseline the step is measured from. */
@@ -608,7 +608,7 @@ export function buildPlantsPreflightReport(
 export interface PlantsWatchSectorInput {
   id: string;
   corporationId?: string | null;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   capitalStock?: number | null;
   producedUnits?: number | null;
   soldUnits?: number | null;

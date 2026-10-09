@@ -66,9 +66,9 @@ describe("migrateUnlockedTechOnPrimaryTypeSwitch (ticket #1040)", () => {
       sectorNodeId("energy", "1940", 1),
       sectorNodeId("energy", "1950", 1),
     ];
-    const next = migrateUnlockedTechOnPrimaryTypeSwitch(ids, "energy", "entertainment", 1953);
+    const next = migrateUnlockedTechOnPrimaryTypeSwitch(ids, "energy", "media_entertainment", 1953);
     expect(next.unlockedTechNodeIds.every((id) => !id.startsWith("energy-"))).toBe(true);
-    expect(next.unlockedTechNodeIds).toContain(sectorNodeId("entertainment", "1940", 1));
-    expect(next.unlockedTechNodeIds).not.toContain(sectorNodeId("entertainment", "1950", 1));
+    expect(next.unlockedTechNodeIds).toContain(sectorNodeId("media_entertainment", "1940", 1));
+    expect(next.unlockedTechNodeIds).not.toContain(sectorNodeId("media_entertainment", "1950", 1));
   });
 });

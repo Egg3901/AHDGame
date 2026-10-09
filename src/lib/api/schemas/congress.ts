@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { containsBlockedName, containsSlur } from "@/lib/moderation";
 import { ZOD_COUNTRY_ENUM } from "@/lib/constants/countries";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import { COMMODITY_TYPES } from "@/lib/constants/commodities";
 import { schemas } from "../validate";
 import { BILL_CATEGORIES, MAX_PROVISIONS } from "@shared/constants/legislation";
@@ -132,7 +132,7 @@ export const nationalizeProvisionSchema = z
     type: z.literal("nationalize"),
     targetCorporationId: z.string().length(24).optional(),
     /** Industry-wide sector target (XOR `targetCorporationId`). */
-    targetSectorType: z.enum(CORPORATION_TYPES).optional(),
+    targetSectorType: z.enum(OPERATING_SECTOR_TYPES).optional(),
     /** Carve fraction for a sector taking (0 < f ≤ 1); defaults to 1. */
     sectorCarveFraction: z.number().gt(0).max(1).optional(),
     /** Which pools the sector taking sweeps; defaults to "all". */

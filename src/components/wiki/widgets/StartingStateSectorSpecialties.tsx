@@ -1,10 +1,10 @@
 import { BarChart2 } from "lucide-react";
 import type { CountryId } from "@/lib/constants/countries";
 import {
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPE_LABELS,
   STATE_PRIMARY_SECTOR_MARGIN_BONUS,
   STATE_SECONDARY_SECTOR_MARGIN_BONUS,
-  type CorporationType,
+  type OperatingSectorType,
 } from "@/lib/constants/corporations";
 import type { State } from "@/lib/db/types";
 import { inferStateSectorSpecialization } from "@/lib/admin/seed/seedStateSectorSpecializations";
@@ -79,7 +79,7 @@ function getSectorSpecialtyRows(countryId: StartingCountryId) {
 }
 
 function getSectorSpecialtySummary(countryId: StartingCountryId) {
-  const counts = new Map<CorporationType, { primary: number; secondary: number }>();
+  const counts = new Map<OperatingSectorType, { primary: number; secondary: number }>();
 
   for (const row of getSectorSpecialtyRows(countryId)) {
     const primaryCount = counts.get(row.primary) ?? { primary: 0, secondary: 0 };
@@ -117,7 +117,7 @@ export function SectorSpecialtySummaryChips({ countryId }: { countryId: Starting
             className="rounded-md border border-card-border bg-card-elevated px-2.5 py-1 text-xs text-muted"
           >
             <span className="font-medium text-foreground">
-              {CORPORATION_TYPE_LABELS[entry.sector]}
+              {OPERATING_SECTOR_TYPE_LABELS[entry.sector]}
             </span>
             <span className="ml-1">
               {entry.primary} primary, {entry.secondary} secondary
@@ -156,7 +156,7 @@ export function SectorSpecialtyPanel({ countryId }: { countryId: StartingCountry
         {summary.slice(0, 3).map((entry) => (
           <MiniMetric
             key={entry.sector}
-            label={CORPORATION_TYPE_LABELS[entry.sector]}
+            label={OPERATING_SECTOR_TYPE_LABELS[entry.sector]}
             value={`${entry.primary} / ${entry.secondary}`}
             detail="Primary / secondary region count"
           />
@@ -179,7 +179,7 @@ export function SectorSpecialtyPanel({ countryId }: { countryId: StartingCountry
                   Primary +{STATE_PRIMARY_SECTOR_MARGIN_BONUS}pp
                 </div>
                 <div className="mt-1 text-sm font-semibold text-foreground">
-                  {CORPORATION_TYPE_LABELS[row.primary]}
+                  {OPERATING_SECTOR_TYPE_LABELS[row.primary]}
                 </div>
                 <div className="mt-1 text-xs text-muted">
                   {formatSectorWeight(row.primaryWeight)} local sector seed share
@@ -190,7 +190,7 @@ export function SectorSpecialtyPanel({ countryId }: { countryId: StartingCountry
                   Secondary +{STATE_SECONDARY_SECTOR_MARGIN_BONUS}pp
                 </div>
                 <div className="mt-1 text-sm font-semibold text-foreground">
-                  {CORPORATION_TYPE_LABELS[row.secondary]}
+                  {OPERATING_SECTOR_TYPE_LABELS[row.secondary]}
                 </div>
                 <div className="mt-1 text-xs text-muted">
                   {formatSectorWeight(row.secondaryWeight)} local sector seed share
@@ -214,7 +214,8 @@ export function SectorSpecialtyPanel({ countryId }: { countryId: StartingCountry
               >
                 <span className="font-medium text-foreground">{row.region.name}</span>
                 <span className="text-muted">
-                  {CORPORATION_TYPE_LABELS[row.primary]} / {CORPORATION_TYPE_LABELS[row.secondary]}
+                  {OPERATING_SECTOR_TYPE_LABELS[row.primary]} /{" "}
+                  {OPERATING_SECTOR_TYPE_LABELS[row.secondary]}
                 </span>
               </div>
             ))}

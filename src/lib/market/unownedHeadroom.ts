@@ -19,7 +19,7 @@
  * strategyId of their own.
  */
 
-import type { CorporationType, MediaDiscriminator } from "@/lib/constants/corporations";
+import type { OperatingSectorType, MediaDiscriminator } from "@/lib/constants/corporations";
 import { COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
 import { getStrategyForOperatingModel } from "@/lib/constants/sectorStrategies";
 import { impliedOutputUnits } from "@/lib/market/capital";
@@ -33,7 +33,7 @@ export const UNOWNED_HEADROOM_DEFAULT_STRATEGY_ID = "standard";
  * non-positive/non-finite revenue (matches impliedOutputUnits).
  */
 export function computeUnownedHeadroomUnits(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   revenue: number,
   unitScale: number,
   industryModel?: string | null,
@@ -61,7 +61,7 @@ export function computeUnownedHeadroomUnits(
  * an unknown/absent id, so passing undefined reproduces the default behaviour.
  */
 export function computeSectorImpliedUnits(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   revenue: number,
   strategyId: string | null | undefined,
   unitScale: number,
@@ -86,7 +86,7 @@ export function computeSectorImpliedUnits(
  * (where the JS helper cannot run) without drifting from the helper.
  */
 export function unownedHeadroomUnitsPerAnchor(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   unitScale: number,
   industryModel?: string | null,
   mediaDiscriminator?: MediaDiscriminator | null
@@ -111,7 +111,7 @@ export function unownedHeadroomUnitsPerAnchor(
  * two of them had already drifted to the `0` fallback independently.
  */
 export function unownedHeadroomBaseExpr(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   unitScale: number,
   industryModel?: string | null,
   mediaDiscriminator?: MediaDiscriminator | null
@@ -159,7 +159,7 @@ export function unownedPoolLeadingField(plantsEnabled: boolean): "headroomUnits"
  * `revenue` is the field that has always existed.
  */
 export function unownedPoolCreditBaseExpr(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   plantsEnabled: boolean,
   unitScale: number,
   industryModel?: string | null,
@@ -187,7 +187,7 @@ export function unownedPoolCreditBaseExpr(
  * writer cannot pick the wrong direction for its tier.
  */
 export function unownedPoolTrailingSet(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   plantsEnabled: boolean,
   unitScale: number,
   industryModel?: string | null,
@@ -229,7 +229,7 @@ export function unownedPoolTrailingSet(
  * permanently. Extracted here so a third caller cannot reintroduce that.
  */
 export function unownedPoolBoostSet(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   multiplier: number,
   now: Date,
   plantsEnabled: boolean,

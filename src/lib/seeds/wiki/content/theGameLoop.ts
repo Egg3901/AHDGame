@@ -20,14 +20,14 @@ dashboard
 
 ## What a turn does (even while you are offline)
 
-Every real hour:
+On each main hourly turn in normal multiplayer:
 
 - Actions refresh (+4 base + office + party).
 - Campaign Funds tick from donor base and office.
 - PI decays 0.75%. NPI accrues from local PI. Infamy decays. Favorability decays if above 60.
 - Elections, bills, NPPs, and markets advance.
 
-Refresh the Dashboard after the hour if you want the new numbers.
+Refresh the Dashboard after the hour if you want the new numbers. Market prices can refresh at quarter-hour intervals, while election returns and macro indicators can move at half past the hour. Those updates do not give another action refresh. Click the turn timer to inspect turn health when processing is delayed.
 
 ## When to log in hourly
 

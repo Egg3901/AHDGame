@@ -3,11 +3,12 @@
 // bill detail view. Keeping the estimate in one place stops the editor preview,
 // the bill view, and the engine from drifting apart (e.g. the re-nationalization
 // cooldown skip — see spec §13.4).
+import { operatingSectorFilter, type OperatingSectorType } from "@/lib/constants/corporations";
 import type { Db, ObjectId } from "mongodb";
 import type { CentralBank, Character, Corporation, CorporateSector, State } from "@/lib/db/types";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import type { CountryId } from "@/lib/constants/countries";
-import type { CorporationType } from "@/lib/constants/corporations";
+
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import { writeGovBudgetLocal } from "@/lib/currency/govBudgetFields";
@@ -30,7 +31,7 @@ export interface SectorPreviewAffectedCorp {
 }
 
 export interface SectorNationalizationPreview {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   carveFraction: number;
   scope: SectorScope;
   currency: CurrencyCode;
@@ -50,13 +51,15 @@ export async function computeSectorNationalizationPreview(
   db: Db,
   params: {
     countryId: CountryId;
-    sectorType: CorporationType;
+    /** Operating lane to take (the vehicles lane takes only vehicle makers). */
+    sectorType: OperatingSectorType;
     carveFraction: number;
     scope: SectorScope;
     currentTurn: number;
   }
 ): Promise<SectorNationalizationPreview> {
   const { countryId, sectorType, scope, currentTurn } = params;
+  const laneFilter = operatingSectorFilter(sectorType);
   const f = Math.min(1, Math.max(0, params.carveFraction));
   const countryCurrency = (COUNTRY_CURRENCY_MAP[countryId] ?? "USD") as CurrencyCode;
 
@@ -84,7 +87,7 @@ export async function computeSectorNationalizationPreview(
   if (scope !== "unowned" && f > 0) {
     const sectors = await db
       .collection<CorporateSector>("corporateSectors")
-      .find({ countryId, sectorType })
+      .find({ countryId, ...laneFilter })
       .toArray();
     const byCorp = new Map<string, CorporateSector[]>();
     for (const s of sectors) {
@@ -147,7 +150,7 @@ export async function computeSectorNationalizationPreview(
   if (scope !== "corporations" && f > 0) {
     const unowned = await db
       .collection<UnownedSector>("unownedSectors")
-      .find({ countryId, sectorType })
+      .find({ countryId, ...laneFilter })
       .toArray();
     for (const u of unowned) unownedSliceRevenue += Math.round((u.revenue ?? 0) * f);
   }
@@ -313,7 +316,7 @@ export async function computeNationalizationProvisionDetail(
   db: Db,
   countryId: CountryId,
   provision: {
-    targetSectorType?: CorporationType;
+    targetSectorType?: OperatingSectorType;
     sectorCarveFraction?: number;
     sectorScope?: SectorScope;
     targetCorporationId?: ObjectId;

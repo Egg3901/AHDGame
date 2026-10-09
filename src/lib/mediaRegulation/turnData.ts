@@ -52,7 +52,7 @@ export async function loadUSMediaOutletDelivery(
     .find(
       {
         stateId: { $in: US_STATE_IDS },
-        sectorType: { $in: ["media", "entertainment"] },
+        sectorType: "media",
       },
       {
         projection: {

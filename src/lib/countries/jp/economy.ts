@@ -1,5 +1,5 @@
 import type { CostScaleAnchor } from "@/lib/budget/costs";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 import type { CurrencyCode, MonetaryBaseline } from "@/lib/constants/currencies";
 import type { EraMonetaryBaseline } from "@/lib/constants/monetaryEra";
@@ -72,8 +72,8 @@ const monetaryByEra: Record<string, EraMonetaryBaseline> = {
 };
 
 /** Sector weights by era. 1979 is the manufacturing peak; 1991 the bubble. */
-const sectorWeightsBase: Partial<Record<CorporationType, number>> = {
-  automobiles: 13,
+const sectorWeightsBase: Partial<Record<OperatingSectorType, number>> = {
+  manufacturing_vehicles: 13,
   manufacturing: 12,
   technology: 11,
   real_estate: 10,
@@ -84,16 +84,16 @@ const sectorWeightsBase: Partial<Record<CorporationType, number>> = {
   chemical_industries: 5,
   telecommunications: 4,
   logistics: 4,
-  entertainment: 3,
+  media_entertainment: 3,
   media: 3,
   energy: 2,
   defense: 2,
   agriculture: 2,
   extraction: 1,
 };
-const sectorWeights1979: Partial<Record<CorporationType, number>> = {
+const sectorWeights1979: Partial<Record<OperatingSectorType, number>> = {
   manufacturing: 30,
-  automobiles: 12,
+  manufacturing_vehicles: 12,
   technology: 5,
   chemical_industries: 6,
   energy: 5,
@@ -108,11 +108,11 @@ const sectorWeights1979: Partial<Record<CorporationType, number>> = {
   telecommunications: 2,
   extraction: 1,
   media: 2,
-  entertainment: 4,
+  media_entertainment: 4,
 };
-const sectorWeights1991: Partial<Record<CorporationType, number>> = {
+const sectorWeights1991: Partial<Record<OperatingSectorType, number>> = {
   manufacturing: 18,
-  automobiles: 12,
+  manufacturing_vehicles: 12,
   real_estate: 9,
   financial: 12,
   construction: 9,
@@ -122,7 +122,7 @@ const sectorWeights1991: Partial<Record<CorporationType, number>> = {
   healthcare: 5,
   telecommunications: 3,
   logistics: 4,
-  entertainment: 2,
+  media_entertainment: 2,
   media: 2,
   energy: 2,
   defense: 1,
@@ -130,7 +130,7 @@ const sectorWeights1991: Partial<Record<CorporationType, number>> = {
   extraction: 1,
 };
 
-const strategicSectors: CorporationType[] = ["technology", "automobiles"];
+const strategicSectors: OperatingSectorType[] = ["technology", "manufacturing_vehicles"];
 
 /** GDP and population anchors used to scale legislation costs. Balance surface. */
 const repEcon = {
@@ -251,7 +251,7 @@ export const JP_MEDIAN_INCOME_BAND = { best: 5_500_000, worst: 2_000_000 };
 
 /** Seed sector specialisation for Japanese regions with no authored override. */
 export const JP_SECTOR_SPECIALIZATION = {
-  primary: "automobiles",
+  primary: "manufacturing_vehicles",
   secondary: "technology",
 } as const;
 

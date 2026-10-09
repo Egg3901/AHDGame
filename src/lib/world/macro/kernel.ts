@@ -7,7 +7,7 @@ import {
   type CommodityType,
   type ExtractableResource,
 } from "@/lib/constants/commodities";
-import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES, type OperatingSectorType } from "@/lib/constants/corporations";
 import type { MacroCountryState, MacroMarketContribution, MacroSectorState } from "./types";
 
 /** Softens domestic demand when stability falls; keeps demand alive at low stability. */
@@ -80,9 +80,9 @@ export function computeMacroContribution(
   const demandMod = stabilityDemandModifier(stability);
 
   const commodityUnits = emptyCommodityBalances();
-  const bySector: Partial<Record<CorporationType, { output: number; demand: number }>> = {};
+  const bySector: Partial<Record<OperatingSectorType, { output: number; demand: number }>> = {};
 
-  for (const sectorType of CORPORATION_TYPES) {
+  for (const sectorType of OPERATING_SECTOR_TYPES) {
     const sector: MacroSectorState | undefined = state.sectors[sectorType];
     if (!sector) continue;
 

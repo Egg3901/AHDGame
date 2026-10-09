@@ -8,7 +8,7 @@
  *
  * Wired in by buildTreeForSector via SECTOR_EARLY_FILL.
  */
-import type { CorporationType } from "../corporations";
+import type { OperatingSectorType } from "../corporations";
 import type { TechEffect } from "./effects";
 
 interface NodeSpec {
@@ -18,7 +18,7 @@ interface NodeSpec {
   cashRevenueFraction?: number;
 }
 
-export const SECTOR_EARLY_FILL: Partial<Record<CorporationType, Record<string, NodeSpec[]>>> = {
+export const SECTOR_EARLY_FILL: Partial<Record<OperatingSectorType, Record<string, NodeSpec[]>>> = {
   manufacturing: {
     "1940": [
       {
@@ -1219,7 +1219,7 @@ export const SECTOR_EARLY_FILL: Partial<Record<CorporationType, Record<string, N
       },
     ],
   },
-  automobiles: {
+  manufacturing_vehicles: {
     "1940": [
       {
         name: "Military Jeep Tooling",
@@ -2119,7 +2119,7 @@ export const SECTOR_EARLY_FILL: Partial<Record<CorporationType, Record<string, N
       },
     ],
   },
-  entertainment: {
+  media_entertainment: {
     "1940": [
       {
         name: "Studio Lot Utilization",

@@ -1,6 +1,6 @@
 "use client";
 
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { avgGrowthTone, formatAvgGrowth } from "@/lib/economy/sectorGrowth";
 
 const TONE_CLASS = {
@@ -10,7 +10,7 @@ const TONE_CLASS = {
 } as const;
 
 export interface SectorBoardTile {
-  type: CorporationType;
+  type: OperatingSectorType;
   label: string;
   /** Total daily market size (₳-scale; caller supplies the formatter). */
   totalMarket: number;
@@ -28,8 +28,8 @@ export interface SectorBoardTile {
 
 interface SectorBoardProps {
   tiles: SectorBoardTile[];
-  selectedType: CorporationType;
-  onSelect: (type: CorporationType) => void;
+  selectedType: OperatingSectorType;
+  onSelect: (type: OperatingSectorType) => void;
   /** Formats a market size in the sector's home currency. */
   formatMarket: (value: number) => string;
   /**

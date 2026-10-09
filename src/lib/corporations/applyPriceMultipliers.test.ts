@@ -52,7 +52,7 @@ describe("applyPriceMultipliers — FTA threading", () => {
         {
           scope: "sector",
           countryId: "US",
-          sectorType: "entertainment",
+          sectorType: "media_entertainment",
           initialImpact: 0.1,
           decayRate: 1,
           createdAt: new Date(),
@@ -167,13 +167,13 @@ describe("applyPriceMultipliers — FTA threading", () => {
       type: "manufacturing",
       industryModel: "vehicles",
       mediaDiscriminator: null,
-      pulseSector: "automobiles",
+      pulseSector: "manufacturing_vehicles",
     },
     {
       type: "media",
       industryModel: null,
       mediaDiscriminator: "entertainment",
-      pulseSector: "entertainment",
+      pulseSector: "media_entertainment",
     },
   ])(
     "still applies foreign-side $pulseSector pulses to non-FTA-partner corps",

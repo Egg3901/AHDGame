@@ -1,9 +1,10 @@
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Bill, Tariff, TariffProvision } from "@/lib/db/types";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { FederalBudget, FederalTaxRates } from "@/lib/db/types/budget";
-import { sectorPolicyTargetMatches, type CorporationType } from "@/lib/constants/corporations";
+import { sectorPolicyTargetMatches, type OperatingSectorType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { fireTariffPulse } from "@/lib/corporations/sentimentEvents";
@@ -33,7 +34,7 @@ function finiteRate(value: unknown): number {
 export function getEffectiveTariffRate(
   tariffs: Tariff[],
   sectorCountryId: CountryId,
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   corpHqCountryId: CountryId,
   corpId: ObjectId | undefined,
   activeFtaPairs?: FtaPairSet
@@ -89,12 +90,13 @@ export function getEffectiveTariffRate(
 export function computeCountryTariffPressure(
   tariffs: Tariff[],
   countryId: CountryId,
-  sectors: Pick<CorporateSector, "corporationId" | "countryId" | "sectorType" | "revenue">[],
+  sectors: (Pick<CorporateSector, "corporationId" | "countryId" | "sectorType" | "revenue"> &
+    Partial<Pick<CorporateSector, "industryModel" | "mediaDiscriminator">>)[],
   corpById: Map<string, Pick<Corporation, "_id" | "countryId">>,
   ftaCoverage?: FtaCoverage
 ): number {
   let totalDomesticRevenue = 0;
-  const sectorRevenueByType = new Map<CorporationType, number>();
+  const sectorRevenueByType = new Map<OperatingSectorType, number>();
   const originRevenueByCountry = new Map<CountryId, number>();
   const corporationRevenueById = new Map<string, number>();
 
@@ -105,10 +107,12 @@ export function computeCountryTariffPressure(
 
     totalDomesticRevenue += revenue;
 
-    sectorRevenueByType.set(
+    const lane = getOperatingSectorType(
       sector.sectorType,
-      (sectorRevenueByType.get(sector.sectorType) ?? 0) + revenue
+      sector.industryModel,
+      sector.mediaDiscriminator
     );
+    sectorRevenueByType.set(lane, (sectorRevenueByType.get(lane) ?? 0) + revenue);
 
     const corp = corpById.get(sector.corporationId.toString());
     if (!corp) continue;
@@ -143,8 +147,7 @@ export function computeCountryTariffPressure(
 
     if (tariff.scopeType === "sector" && tariff.targetSectorType) {
       const exposureShare =
-        (sectorRevenueByType.get(tariff.targetSectorType as CorporationType) ?? 0) /
-        totalDomesticRevenue;
+        (sectorRevenueByType.get(tariff.targetSectorType) ?? 0) / totalDomesticRevenue;
       const sectorKey = `${countryId}:${tariff.targetSectorType}`;
       const ftaShare = ftaCoverage?.bySectorType.get(sectorKey) ?? 0;
       pressure += rate * exposureShare * (1 - ftaShare);
@@ -197,7 +200,7 @@ export function computeCountryTariffPressure(
 export function getTariffBlendWeights(
   tariffs: Tariff[],
   sectorCountryId: CountryId,
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   allSectorKeys: ReadonlySet<string>,
   ftaCoverage?: FtaCoverage
 ): { globalWeight: number; nationalWeight: number; localWeight: number } {
@@ -266,7 +269,8 @@ export function tariffRulesNeedSectorPresenceKeys(tariffs: Tariff[]): boolean {
  * cross-border sectors only; used for tariff-aware commodity margin blending.
  */
 export function buildSectorPresenceKeys(
-  sectors: Pick<CorporateSector, "corporationId" | "countryId" | "sectorType">[],
+  sectors: (Pick<CorporateSector, "corporationId" | "countryId" | "sectorType"> &
+    Partial<Pick<CorporateSector, "industryModel" | "mediaDiscriminator">>)[],
   corpById: Map<string, Pick<Corporation, "_id" | "countryId">>
 ): Set<string> {
   const keys = new Set<string>();
@@ -276,8 +280,13 @@ export function buildSectorPresenceKeys(
     const sectorCountry = sector.countryId;
     const corpCountry = corp.countryId;
     if (sectorCountry === corpCountry) continue;
-    keys.add(`${sectorCountry}:${corpCountry}:${sector.sectorType}`);
-    keys.add(`${sectorCountry}:corp:${sector.corporationId.toString()}:${sector.sectorType}`);
+    const lane = getOperatingSectorType(
+      sector.sectorType,
+      sector.industryModel,
+      sector.mediaDiscriminator
+    );
+    keys.add(`${sectorCountry}:${corpCountry}:${lane}`);
+    keys.add(`${sectorCountry}:corp:${sector.corporationId.toString()}:${lane}`);
   }
   return keys;
 }
@@ -289,7 +298,7 @@ export function buildSectorPresenceKeys(
 export function getForeignTariffMarginModifier(
   tariffs: Tariff[],
   sectorCountryId: CountryId,
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   corpHqCountryId: CountryId,
   corpId: ObjectId | undefined,
   activeFtaPairs?: FtaPairSet
@@ -330,7 +339,7 @@ export function getForeignTariffMarginModifier(
 export function getDomesticTariffMalus(
   tariffs: Tariff[],
   sectorCountryId: CountryId,
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   corpHqCountryId: CountryId,
   ftaCoverage?: FtaCoverage
 ): number {

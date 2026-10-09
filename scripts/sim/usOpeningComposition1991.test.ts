@@ -84,8 +84,6 @@ describe.runIf(process.env.AHD_SIM_REPORT === "1")(
         preset: "1991-default",
         resetReference: true,
         log: () => {},
-        fresh1991VehicleModelSeed: true,
-        fresh1991MediaTaxonomySeed: true,
       });
     }, 900_000);
 

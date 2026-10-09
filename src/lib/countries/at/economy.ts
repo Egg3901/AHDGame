@@ -1,6 +1,6 @@
 import type { CountryEconomy } from "../contract";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 
 /**
@@ -42,13 +42,13 @@ const sectorWeightsBase = {
   financial: 8,
   construction: 8,
   healthcare: 7,
-  entertainment: 7,
+  media_entertainment: 7,
   energy: 6,
   logistics: 6,
   technology: 5,
   agriculture: 4,
   chemical_industries: 4,
-  automobiles: 3,
+  manufacturing_vehicles: 3,
   media: 2,
   extraction: 2,
 };
@@ -56,10 +56,10 @@ const sectorWeightsBase = {
 // No COST_SCALE_ANCHORS row; the folder omits `costScaleAnchors` rather than defaulting it.
 /**
  * ⚠ THE CAST IS LOAD-BEARING, for the same reason as the cabinet groups:
- * JSON.parse widens each sector name to `string`, and `CorporationType[]` is a
+ * JSON.parse widens each sector name to `string`, and `OperatingSectorType[]` is a
  * union array. Caught by typecheck alone.
  */
-const strategicSectors: CorporationType[] = [];
+const strategicSectors: OperatingSectorType[] = [];
 const treasuryPsRate = {
   national: 70000,
   state: 35000,
@@ -102,7 +102,7 @@ export const AT_ECONOMY: CountryEconomy = {
         financial: 5,
         real_estate: 4,
         healthcare: 3,
-        entertainment: 3,
+        media_entertainment: 3,
         media: 2,
         telecommunications: 1,
         defense: 1,
@@ -113,7 +113,7 @@ export const AT_ECONOMY: CountryEconomy = {
         real_estate: 10,
         construction: 9,
         financial: 8,
-        entertainment: 8,
+        media_entertainment: 8,
         energy: 7,
         healthcare: 6,
         logistics: 6,

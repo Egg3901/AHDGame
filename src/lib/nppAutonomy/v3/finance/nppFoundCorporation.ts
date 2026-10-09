@@ -31,6 +31,7 @@
  * for an NPP who then turns out unable to pay.
  */
 
+import { operatingSectorIdentity, type OperatingSectorType } from "@/lib/constants/corporations";
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation, NPP } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
@@ -54,7 +55,7 @@ export type NppFoundCorporationResult =
 export async function nppFoundCorporation(
   db: Db,
   npp: Pick<NPP, "_id" | "countryId" | "party" | "homeState" | "personality">,
-  sectorType: CorporationType,
+  lane: OperatingSectorType,
   foundingFeeLocal: number,
   currentTurn: number,
   /** Pre-loaded home FX rate (local per ₳); loaded on demand when omitted. */
@@ -108,12 +109,15 @@ export async function nppFoundCorporation(
     return { ok: false, reason: "Insufficient investment capital to found a corporation." };
   }
 
-  const name = generateNppCorpName(countryId, sectorType, []);
+  const identity = operatingSectorIdentity(lane);
+  const name = generateNppCorpName(countryId, lane, []);
   let spawnResult;
   try {
     spawnResult = await spawnNppCorporation(db, {
       name,
-      type: sectorType,
+      type: identity.sectorType,
+      industryModel: identity.industryModel,
+      mediaDiscriminator: identity.mediaDiscriminator,
       countryId,
       headquartersState: npp.homeState,
       nppPartyId: npp.party,
@@ -160,7 +164,7 @@ export async function nppFoundCorporation(
     ok: true,
     corporationId: spawnResult.corporationId,
     name: spawnResult.name,
-    type: sectorType,
+    type: identity.sectorType,
     foundingFee: foundingFeeLocal,
     foundingFeeAnchor,
     investmentCashAnchor: deducted.nppInvestmentCashAnchor ?? 0,

@@ -116,6 +116,7 @@ import { migration as mediaProductProjectsV1Index } from "./entries/2026-10-04-m
 import { migration as bankTreasuryTradeIndexes } from "./entries/2026-10-04-bank-treasury-trade-indexes";
 import { migration as underwritingRecoveryIndexes } from "./entries/2026-10-04-underwriting-recovery-indexes";
 import { migration as advertisingAgreementIndexes } from "./entries/2026-10-05-advertising-agreement-indexes";
+import { migration as foldAutomobileEntertainmentTypes } from "./entries/2026-10-05-fold-automobile-entertainment-types";
 import { migration as activateLiveDemographicsV2 } from "./entries/2026-10-07-activate-live-demographics-v2";
 
 export const MIGRATIONS: Migration[] = [
@@ -352,6 +353,7 @@ export const MIGRATIONS: Migration[] = [
   underwritingRecoveryIndexes,
   bankFailurePoliticsIndex,
   advertisingAgreementIndexes,
+  foldAutomobileEntertainmentTypes,
   productVentureIndexes,
   campaignFieldOfficeIndexes,
   // 15-minute market cap chart rows; also in the startup allowlist.

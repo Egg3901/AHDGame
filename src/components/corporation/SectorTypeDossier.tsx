@@ -12,7 +12,10 @@
  * content is the copy, which lives in `sectorTypeDossier`.
  */
 
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import { facilityPlural, facilitySingular } from "@/lib/constants/facilityVocabulary";
 import { SECTOR_TYPE_BRIEFING } from "@/lib/constants/sectorTypeDossier";
 import { getOperatingSectorLabel } from "@/lib/constants/sectorStrategies";
@@ -28,7 +31,7 @@ import {
 } from "./sectorTypeMetrics";
 
 interface SectorTypeDossierProps {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   /** Every sector of this type the corporation owns, before table filtering. */
   sectors: SectorDetail[];
   /** Every sector the corporation owns, for the "share of corp revenue" line. */
@@ -51,7 +54,7 @@ export function SectorTypeDossier({
   // sectorType is the operating type (automobiles / entertainment for the
   // folded lanes), resolved by SectorsTab from the group's model fields.
   const label =
-    getOperatingSectorLabel(sectorType) ?? CORPORATION_TYPE_LABELS[sectorType] ?? sectorType;
+    getOperatingSectorLabel(sectorType) ?? OPERATING_SECTOR_TYPE_LABELS[sectorType] ?? sectorType;
   const suffix = MONEY_PERIOD_SUFFIX[timeScale];
 
   const sites = facilityPlural(sectorType);

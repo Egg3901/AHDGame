@@ -290,9 +290,7 @@ export function buildStudioView(input: {
       domain,
       enabled: input.enabled[domain],
       hasSectors: plain.some((sector) =>
-        domain === "media"
-          ? sector.sectorType === "media"
-          : sector.sectorType === "manufacturing" || sector.sectorType === "automobiles"
+        domain === "media" ? sector.sectorType === "media" : sector.sectorType === "manufacturing"
       ),
       lines,
       active: active ? view(active) : null,

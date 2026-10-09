@@ -21,11 +21,11 @@
  * distribution for any country not in the map.
  */
 
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 
-type SectorWeightMap = Partial<Record<CorporationType, number>>;
+type SectorWeightMap = Partial<Record<OperatingSectorType, number>>;
 
 export const COUNTRY_SECTOR_WEIGHTS_2027: Record<string, SectorWeightMap> = {
   US: {
@@ -38,12 +38,12 @@ export const COUNTRY_SECTOR_WEIGHTS_2027: Record<string, SectorWeightMap> = {
     construction: 6,
     logistics: 5,
     chemical_industries: 4,
-    automobiles: 4,
+    manufacturing_vehicles: 4,
     defense: 4,
     media: 4,
     telecommunications: 4,
     energy: 3,
-    entertainment: 3,
+    media_entertainment: 3,
     agriculture: 2,
     extraction: 2,
   },
@@ -53,19 +53,21 @@ export const COUNTRY_SECTOR_WEIGHTS_2027: Record<string, SectorWeightMap> = {
  * Returns the 2023 country-level sector weight map.
  * Used by `getStateSectorWeights` when the active preset is `2027-default`.
  */
-export function getCountrySectorWeights2027(countryId: CountryId): Record<CorporationType, number> {
+export function getCountrySectorWeights2027(
+  countryId: CountryId
+): Record<OperatingSectorType, number> {
   const raw = COUNTRY_SECTOR_WEIGHTS_2027[countryId] ?? {};
-  const entries = CORPORATION_TYPES.map((t) => [t, raw[t] ?? 0] as const);
+  const entries = OPERATING_SECTOR_TYPES.map((t) => [t, raw[t] ?? 0] as const);
   const total = entries.reduce((s, [, v]) => s + v, 0);
   if (total === 0) {
-    const even = 1 / CORPORATION_TYPES.length;
-    return Object.fromEntries(CORPORATION_TYPES.map((t) => [t, even])) as Record<
-      CorporationType,
+    const even = 1 / OPERATING_SECTOR_TYPES.length;
+    return Object.fromEntries(OPERATING_SECTOR_TYPES.map((t) => [t, even])) as Record<
+      OperatingSectorType,
       number
     >;
   }
   return Object.fromEntries(entries.map(([t, v]) => [t, v / total])) as Record<
-    CorporationType,
+    OperatingSectorType,
     number
   >;
 }

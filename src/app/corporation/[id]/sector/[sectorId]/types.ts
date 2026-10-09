@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { StateMetricMarginContribution } from "@/lib/corporations/stateMetricMarginTypes";
 import type { PlantSectorSplitQuote } from "@/lib/corporations/plantSectorSplit";
 import type { RetoolHint } from "@/lib/corporations/retoolHint";
@@ -8,7 +8,7 @@ export interface SectorData {
   stateId: string;
   countryId?: string;
   stateName: string;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   sectorLabel: string;
   displayName?: string | null;
   /** Target growth rate (% per game year, 48 turns), player-set goal that currentGrowthRate ticks toward */
@@ -272,8 +272,8 @@ export interface AvailableStrategy {
 
 export interface StrategyData {
   currentStrategyId: string;
-  /** Strategy catalog the sector runs (vehicles resolve to automobiles). */
-  operatingSectorType?: CorporationType;
+  /** Strategy catalog the sector runs (vehicles resolve to their operating lane). */
+  operatingSectorType?: OperatingSectorType;
   /** Whether media operating-model strategies are offered in this world. */
   mediaOperatingModelsEnabled?: boolean;
   currentStrategyName: string;

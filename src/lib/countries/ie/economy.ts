@@ -1,6 +1,6 @@
 import type { CountryEconomy } from "../contract";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 
 /** WDI 1991 current-LCU GDP, restored from EUR to IEP at the fixed conversion. */
@@ -52,10 +52,10 @@ const sectorWeightsBase = {
   media: 3,
   telecommunications: 3,
   manufacturing: 3,
-  entertainment: 2,
+  media_entertainment: 2,
   energy: 1,
   defense: 1,
-  automobiles: 1,
+  manufacturing_vehicles: 1,
   extraction: 1,
 };
 const repEcon = {
@@ -73,10 +73,10 @@ const costScaleAnchors = {
 };
 /**
  * ⚠ THE CAST IS LOAD-BEARING, for the same reason as the cabinet groups:
- * JSON.parse widens each sector name to `string`, and `CorporationType[]` is a
+ * JSON.parse widens each sector name to `string`, and `OperatingSectorType[]` is a
  * union array. Caught by typecheck alone.
  */
-const strategicSectors = ["technology", "financial"] as CorporationType[];
+const strategicSectors = ["technology", "financial"] as OperatingSectorType[];
 const treasuryPsRate = {
   national: 60000,
   state: 30000,
@@ -130,8 +130,8 @@ export const IE_ECONOMY: CountryEconomy = {
         media: 2,
         healthcare: 2,
         extraction: 1,
-        entertainment: 1,
-        automobiles: 1,
+        media_entertainment: 1,
+        manufacturing_vehicles: 1,
         chemical_industries: 1,
         technology: 0,
       },
@@ -146,13 +146,13 @@ export const IE_ECONOMY: CountryEconomy = {
         healthcare: 5,
         financial: 4,
         defense: 2,
-        automobiles: 2,
+        manufacturing_vehicles: 2,
         extraction: 2,
         logistics: 4,
         telecommunications: 2,
         technology: 1,
         media: 3,
-        entertainment: 4,
+        media_entertainment: 4,
       },
       "1991": {
         agriculture: 9,
@@ -165,12 +165,12 @@ export const IE_ECONOMY: CountryEconomy = {
         healthcare: 6,
         energy: 4,
         logistics: 4,
-        automobiles: 2,
+        manufacturing_vehicles: 2,
         media: 2,
         technology: 4,
         telecommunications: 2,
         extraction: 4,
-        entertainment: 2,
+        media_entertainment: 2,
         defense: 1,
       },
     },

@@ -1,6 +1,6 @@
 import type { CountryEconomy } from "../contract";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 
 /**
@@ -50,10 +50,10 @@ const sectorWeightsBase = {
   extraction: 4,
   agriculture: 3,
   telecommunications: 3,
-  automobiles: 2,
+  manufacturing_vehicles: 2,
   media: 1,
   defense: 1,
-  entertainment: 1,
+  media_entertainment: 1,
 };
 const repEcon = {
   gdp: 126000000000000,
@@ -70,10 +70,10 @@ const costScaleAnchors = {
 };
 /**
  * ⚠ THE CAST IS LOAD-BEARING, for the same reason as the cabinet groups:
- * JSON.parse widens each sector name to `string`, and `CorporationType[]` is a
+ * JSON.parse widens each sector name to `string`, and `OperatingSectorType[]` is a
  * union array. Caught by typecheck alone.
  */
-const strategicSectors = ["telecommunications", "technology", "energy"] as CorporationType[];
+const strategicSectors = ["telecommunications", "technology", "energy"] as OperatingSectorType[];
 const treasuryPsRate = {
   national: 500000,
   state: 250000,
@@ -125,8 +125,8 @@ export const CN_ECONOMY: CountryEconomy = {
         healthcare: 1,
         telecommunications: 0,
         media: 0,
-        automobiles: 0,
-        entertainment: 0,
+        manufacturing_vehicles: 0,
+        media_entertainment: 0,
         technology: 0,
       },
       "1979": {
@@ -144,9 +144,9 @@ export const CN_ECONOMY: CountryEconomy = {
         technology: 0,
         financial: 0,
         real_estate: 0,
-        automobiles: 0,
+        manufacturing_vehicles: 0,
         media: 0,
-        entertainment: 0,
+        media_entertainment: 0,
       },
       "1991": {
         manufacturing: 28,
@@ -161,11 +161,11 @@ export const CN_ECONOMY: CountryEconomy = {
         real_estate: 3,
         healthcare: 3,
         defense: 2,
-        automobiles: 1,
+        manufacturing_vehicles: 1,
         telecommunications: 1,
         technology: 1,
         media: 1,
-        entertainment: 1,
+        media_entertainment: 1,
       },
     },
   },

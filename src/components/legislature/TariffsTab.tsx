@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { GameMonthTime } from "@/components/time/GameMonthTime";
 
 type TariffEntry = {
@@ -65,7 +65,7 @@ export function TariffsTab({ countryId }: { countryId: string }) {
             <p className="text-sm font-medium">{SCOPE_LABELS[t.scopeType] ?? t.scopeType}</p>
             <p className="text-xs text-muted-foreground">
               {t.targetSectorType
-                ? `Sector: ${CORPORATION_TYPE_LABELS[t.targetSectorType as CorporationType] ?? t.targetSectorType}`
+                ? `Sector: ${OPERATING_SECTOR_TYPE_LABELS[t.targetSectorType as OperatingSectorType] ?? t.targetSectorType}`
                 : t.targetOriginCountryId
                   ? `Origin: ${t.targetOriginCountryId}`
                   : t.targetCorporationId

@@ -2,7 +2,7 @@
 
 import type { Dispatch, SetStateAction } from "react";
 import type { CrisisEffect } from "@/lib/db/types/crisis";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
@@ -412,7 +412,10 @@ export function CreateCrisisModal({
                       >
                         <option value="">All sectors</option>
                         {(
-                          Object.entries(CORPORATION_TYPE_LABELS) as [CorporationType, string][]
+                          Object.entries(OPERATING_SECTOR_TYPE_LABELS) as [
+                            CorporationType,
+                            string,
+                          ][]
                         ).map(([id, label]) => (
                           <option key={id} value={id}>
                             {label}

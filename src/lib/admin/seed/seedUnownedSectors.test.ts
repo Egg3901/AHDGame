@@ -14,7 +14,7 @@ function cursor(docs: unknown[]) {
 
 describe("countrySectorSeedMultiplier (ticket-1072)", () => {
   it("lifts East German automobiles and construction and nothing else", () => {
-    expect(countrySectorSeedMultiplier("DD", "automobiles")).toBe(2);
+    expect(countrySectorSeedMultiplier("DD", "manufacturing_vehicles")).toBe(2);
     expect(countrySectorSeedMultiplier("DD", "construction")).toBe(8);
     expect(countrySectorSeedMultiplier("DD", "manufacturing")).toBe(1);
     expect(countrySectorSeedMultiplier("DD", "extraction")).toBe(1);
@@ -22,14 +22,14 @@ describe("countrySectorSeedMultiplier (ticket-1072)", () => {
 
   it("is a no-op for every other country", () => {
     for (const countryId of ["CS", "PL", "DE", "US", "RU"] as const) {
-      expect(countrySectorSeedMultiplier(countryId, "automobiles")).toBe(1);
+      expect(countrySectorSeedMultiplier(countryId, "manufacturing_vehicles")).toBe(1);
       expect(countrySectorSeedMultiplier(countryId, "construction")).toBe(1);
     }
   });
 
   it("multiplies DD downstream seed revenue without touching DD upstream", () => {
     const args = { gdp: 17_156, countryId: "DD", stateId: "SN", preset: "1953-default" } as const;
-    const auto = computeUnownedSeedRevenue({ ...args, sectorType: "automobiles" });
+    const auto = computeUnownedSeedRevenue({ ...args, sectorType: "manufacturing_vehicles" });
     const construction = computeUnownedSeedRevenue({ ...args, sectorType: "construction" });
     const manufacturing = computeUnownedSeedRevenue({ ...args, sectorType: "manufacturing" });
 
@@ -166,16 +166,8 @@ describe("seedUnownedSectors refresh mode", () => {
     expect(indexOrder).toBeLessThan(writeOrder);
   });
 
-  it("seeds vehicle markets beside generic manufacturing on the registered unique index", async () => {
-    await seedUnownedSectors(
-      db as unknown as Db,
-      () => {},
-      1,
-      "1991-default",
-      true,
-      undefined,
-      true
-    );
+  it("seeds vehicle and entertainment markets beside their generic types in every era", async () => {
+    await seedUnownedSectors(db as unknown as Db, () => {}, 1, "1953-default", true);
     const operations = bulkOps(db.collectionMocks.unownedSectors.bulkWrite);
     const generic = operations.find(
       ([filter]) => filter.sectorType === "manufacturing" && filter.industryModel === null
@@ -184,8 +176,12 @@ describe("seedUnownedSectors refresh mode", () => {
       ([filter]) => filter.sectorType === "manufacturing" && filter.industryModel === "vehicles"
     );
 
+    const entertainment = operations.find(
+      ([filter]) => filter.sectorType === "media" && filter.mediaDiscriminator === "entertainment"
+    );
     expect(generic).toBeDefined();
     expect(vehicles).toBeDefined();
+    expect(entertainment).toBeDefined();
     expect(db.collectionMocks.unownedSectors.createIndex).toHaveBeenCalledWith(
       { stateId: 1, sectorType: 1, industryModel: 1, mediaDiscriminator: 1 },
       { name: "unowned_state_type_models_unique", unique: true, background: true }
