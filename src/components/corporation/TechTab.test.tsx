@@ -3,6 +3,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import corporationsMessages from "../../../messages/en/corporations.json";
 import TechTab from "./TechTab";
 
 vi.mock("@/contexts/CurrencyContext", () => ({
@@ -35,6 +37,14 @@ function makeNode(overrides: Record<string, unknown> = {}) {
     image: "https://cdn.ahousedividedgame.com/static/tech/corp/2019.webp",
     ...overrides,
   };
+}
+
+function renderTechTab() {
+  return render(
+    <NextIntlClientProvider locale="en" messages={corporationsMessages}>
+      <TechTab corporationId="624" isCeo />
+    </NextIntlClientProvider>
+  );
 }
 
 function responseWithTree(
@@ -184,7 +194,7 @@ beforeEach(() => {
 
 describe("TechTab cash pricing", () => {
   it("names the inputs that can move a technology's cash price", async () => {
-    render(<TechTab corporationId="624" isCeo />);
+    renderTechTab();
 
     await waitFor(() => expect(screen.getByText("How cash prices work")).toBeTruthy());
     expect(screen.getByText(/15% of the corporation's \$2,635,025,294 daily gross/)).toBeTruthy();
@@ -201,7 +211,7 @@ describe("TechTab research tree", () => {
       json: async () => responseWithTree(),
     } as Response);
 
-    const { container } = render(<TechTab corporationId="624" isCeo />);
+    const { container } = renderTechTab();
 
     expect(await screen.findByRole("heading", { name: "Corporate track" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Sector track" })).toBeTruthy();
@@ -219,12 +229,12 @@ describe("TechTab research tree", () => {
       json: async () => responseWithTree(),
     } as Response);
 
-    render(<TechTab corporationId="624" isCeo />);
+    renderTechTab();
 
     const unlockButtons = await screen.findAllByRole("button", { name: "Unlock" });
     fireEvent.click(unlockButtons[0]);
 
-    expect(await screen.findByText(/This is your first research in the decade/)).toBeTruthy();
+    expect(await screen.findByText(/This is your first research in 2019 to 2029/)).toBeTruthy();
     expect(
       screen.getByText(/The other track stays locked unless you abandon this decade/)
     ).toBeTruthy();
@@ -237,7 +247,7 @@ describe("TechTab research tree", () => {
       json: async () => responseWithTree("sector", true),
     } as Response);
 
-    render(<TechTab corporationId="624" isCeo />);
+    renderTechTab();
 
     expect(await screen.findByText(/Committed to the Sector track/)).toBeTruthy();
     expect(screen.getAllByText("Locked by Sector track").length).toBeGreaterThan(0);

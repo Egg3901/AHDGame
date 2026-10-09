@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { Button, Modal, Skeleton } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { useTranslations } from "next-intl";
 import { DenseSection, InlineStatus, KVList, KVRow, SmallButton } from "./dense/DenseKit";
 import { apiErrorText } from "@/lib/errors/catalog";
 
@@ -84,8 +85,6 @@ interface TechTabProps {
   isCeo: boolean;
 }
 
-const LANE_LABEL: Record<Lane, string> = { generic: "Corporate", sector: "Sector" };
-
 /** Decade labels arrive as "2019–2029"; player copy carries no dashes. */
 function decadeLabel(label: string): string {
   return label.replace(/\s*[–—]\s*/g, " to ");
@@ -93,6 +92,7 @@ function decadeLabel(label: string): string {
 
 export default function TechTab({ corporationId, isCeo }: TechTabProps) {
   const { toInternalFrom, formatFull, formatAmount } = useCurrency();
+  const t = useTranslations("corporations.techTree");
   const [data, setData] = useState<TechResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -240,9 +240,8 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
               tracks: the Corporate track boosts <em>all</em> your sectors at reduced strength,
               while the Sector track gives full-strength bonuses to your primary{" "}
               {data.sectorLabel?.toLowerCase()} sectors only. Commit to one track per decade and
-              research its branch in order. The first unlock commits that decade to a track. Future
-              decades stay locked until reached. Earlier decades are granted as baseline research
-              with no R&amp;D or cash spent.
+              research its branch in order. {t("firstUnlockCommits")} {t("futureDecadesLocked")}{" "}
+              {t("baselineResearchGrant")}
             </p>
             {current && (
               <p>
@@ -252,8 +251,7 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
                     ? `${decadeLabel(previous.label)} and ${decadeLabel(current.label)}`
                     : decadeLabel(current.label)}
                 </span>
-                . Bonuses apply from the current and previous decade only (a rolling 20 years).
-                Earlier decades are baseline research and no longer add active bonuses.
+                . {t("activeWindowBonuses")} {t("olderDecadesInactive")}
               </p>
             )}
             {data.cashPricing && (
@@ -414,23 +412,18 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
                 !reached.find((d) => d.id === confirmNode.decade)?.committedLane && (
                   <>
                     {" "}
-                    This is your first research in the decade. It commits you to the{" "}
-                    <strong>{LANE_LABEL[confirmNode.lane]}</strong> track for{" "}
-                    {decadeLabel(
-                      reached.find((d) => d.id === confirmNode.decade)?.label ?? confirmNode.decade
-                    )}
-                    . The other track stays locked unless you abandon this decade. Abandoning
-                    removes its unlocked technologies and refunds nothing.
+                    {t("firstTrackConfirmation", {
+                      track: t(`track.${confirmNode.lane}`),
+                      decade: decadeLabel(
+                        reached.find((d) => d.id === confirmNode.decade)?.label ??
+                          confirmNode.decade
+                      ),
+                    })}{" "}
+                    <strong>{t(`track.${confirmNode.lane}`)}</strong>{" "}
+                    {t("firstTrackConfirmationEnd")}
                   </>
                 )}
-              {confirmNode.node.exclusiveGroup && (
-                <>
-                  {" "}
-                  This selects this specialization and locks the other choices in this group for the
-                  decade. Abandoning the decade removes its unlocked technologies and refunds
-                  nothing.
-                </>
-              )}
+              {confirmNode.node.exclusiveGroup && <> {t("specializationConfirmation")}</>}
             </p>
             <div className="flex justify-end gap-2">
               <Button
@@ -441,7 +434,7 @@ export default function TechTab({ corporationId, isCeo }: TechTabProps) {
                 Cancel
               </Button>
               <Button variant="primary" onClick={() => void doUnlock()} disabled={!!busyNode}>
-                {busyNode ? "Unlocking..." : "Unlock technology"}
+                {busyNode ? t("unlocking") : t("unlockTechnology")}
               </Button>
             </div>
           </div>
@@ -498,9 +491,10 @@ function DecadeSection({
   onUnlock: (node: TechNode, lane: Lane) => void;
   onAbandon: () => void;
 }) {
+  const t = useTranslations("corporations.techTree");
   const canAbandon =
     viewerIsCeo && decade.reached && !decade.autoGrantedDecade && !!decade.committedLane;
-  const meta = [caption, decade.autoGrantedDecade ? "baseline research" : null]
+  const meta = [caption, decade.autoGrantedDecade ? t("baselineResearch") : null]
     .filter(Boolean)
     .join(" · ");
   return (
@@ -510,7 +504,7 @@ function DecadeSection({
       actions={
         canAbandon ? (
           <SmallButton tone="danger" onClick={onAbandon}>
-            Abandon decade
+            {t("abandonDecade")}
           </SmallButton>
         ) : undefined
       }
@@ -518,28 +512,19 @@ function DecadeSection({
     >
       <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-card-border pb-3 text-xs">
         {decade.autoGrantedDecade ? (
-          <span className="text-muted">
-            Completed decade. Both tracks are granted as baseline research with no R&amp;D or cash
-            spent.
-          </span>
+          <span className="text-muted">{t("completedBaseline")}</span>
         ) : decade.committedLane ? (
           <span className="text-warning">
-            Committed to the {LANE_LABEL[decade.committedLane]} track. The other track stays locked
-            unless this decade is abandoned.
+            {t("committedTrack", { track: t(`track.${decade.committedLane}`) })}
           </span>
         ) : decade.reached ? (
-          <span className="text-muted">
-            Choose a track by unlocking its first technology. That choice locks the other track for
-            this decade.
-          </span>
+          <span className="text-muted">{t("chooseTrack")}</span>
         ) : (
-          <span className="text-muted">
-            This decade opens when the game year reaches {decade.id}.
-          </span>
+          <span className="text-muted">{t("decadeOpens", { year: decade.id })}</span>
         )}
         {decade.committedLane && !decade.autoGrantedDecade && (
           <span className="rounded-sm border border-warning/40 px-1.5 py-0.5 text-warning">
-            {LANE_LABEL[decade.committedLane]} track selected
+            {t("trackSelected", { track: t(`track.${decade.committedLane}`) })}
           </span>
         )}
       </div>
@@ -581,6 +566,7 @@ function LaneTree({
   busyNode: string | null;
   onUnlock: (node: TechNode, lane: Lane) => void;
 }) {
+  const t = useTranslations("corporations.techTree");
   const nodes = decade.lanes[lane];
   const bySlot = new Map(nodes.map((n) => [n.slot, n]));
   const dimmed = decade.committedLane != null && decade.committedLane !== lane;
@@ -591,27 +577,27 @@ function LaneTree({
   const status = (node: TechNode): ReactNode => {
     if (node.owned) {
       return node.autoGranted ? (
-        <span className="text-muted" title="Granted automatically. No R&D or cash was spent.">
-          Baseline, no cost
+        <span className="text-muted" title={t("baselineAutoDetail")}>
+          {t("baselineNoCost")}
         </span>
       ) : (
-        <span className="text-success">Owned</span>
+        <span className="text-success">{t("owned")}</span>
       );
     }
     if (!decade.reached || node.laneLocked || node.pathLocked || !node.prereqMet) {
       return (
         <span className="text-muted">
           {node.laneLocked
-            ? `Locked by ${LANE_LABEL[decade.committedLane ?? "generic"]} track`
+            ? t("lockedByTrack", { track: t(`track.${decade.committedLane ?? "generic"}`) })
             : node.pathLocked
-              ? "Another specialization is selected"
+              ? t("specializationLocked")
               : !decade.reached
-                ? `Available from ${decade.id}`
-                : `Unlock ${prerequisiteNames(node, bySlot)} first`}
+                ? t("availableFrom", { decade: decade.id })
+                : t("unlockPrerequisite", { technology: prerequisiteNames(node, bySlot) })}
         </span>
       );
     }
-    if (!viewerIsCeo) return <span className="text-muted">Available</span>;
+    if (!viewerIsCeo) return <span className="text-muted">{t("available")}</span>;
     if (node.affordable) {
       return (
         <SmallButton
@@ -619,19 +605,21 @@ function LaneTree({
           disabled={busyNode === node.id}
           onClick={() => onUnlock(node, lane)}
         >
-          {busyNode === node.id ? "…" : "Unlock"}
+          {busyNode === node.id ? "…" : t("unlock")}
         </SmallButton>
       );
     }
     const shortfalls = [
-      (rdScore ?? 0) < node.cost ? `${node.cost - (rdScore ?? 0)} more R&D` : null,
+      (rdScore ?? 0) < node.cost ? t("needsRd", { amount: node.cost - (rdScore ?? 0) }) : null,
       (liquidCapital ?? 0) < (node.cashCost ?? 0)
-        ? `${fmtCash((node.cashCost ?? 0) - (liquidCapital ?? 0))} more cash`
+        ? t("needsCash", { amount: fmtCash((node.cashCost ?? 0) - (liquidCapital ?? 0)) })
         : null,
     ].filter((value): value is string => value !== null);
     return (
       <span className="text-warning">
-        {shortfalls.length ? `Needs ${shortfalls.join(" and ")}` : "Not available"}
+        {shortfalls.length
+          ? t("needs", { shortfalls: shortfalls.join(t("and")) })
+          : t("notAvailable")}
       </span>
     );
   };
@@ -656,15 +644,13 @@ function LaneTree({
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
         <div className="absolute inset-x-3 bottom-2 flex items-end justify-between gap-2">
           <div>
-            <h3 className="text-sm font-semibold text-white">{LANE_LABEL[lane]} track</h3>
+            <h3 className="text-sm font-semibold text-white">{t(`track.${lane}`)}</h3>
             <p className="text-[11px] text-white/80">
-              {lane === "generic"
-                ? "Reduced bonuses across all sectors"
-                : "Full bonuses for this sector"}
+              {lane === "generic" ? t("corporateEffect") : t("sectorEffect")}
             </p>
           </div>
           <span className="rounded bg-black/45 px-1.5 py-0.5 text-[11px] text-white">
-            {owned}/{nodes.length} owned
+            {t("ownedCount", { owned, total: nodes.length })}
           </span>
         </div>
       </div>
@@ -689,7 +675,7 @@ function LaneTree({
               ).map((branch, branchIndex) => (
                 <div key={branch[0]} className="flex min-w-0 flex-col items-center">
                   <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted">
-                    {branchIndex === 0 ? "Left branch" : "Right branch"}
+                    {branchIndex === 0 ? t("leftBranch") : t("rightBranch")}
                   </p>
                   {branch.map((slot, index) => {
                     const node = bySlot.get(slot);
@@ -712,13 +698,13 @@ function LaneTree({
             <div className="mt-2 border-t border-card-border pt-3 text-center">
               <p className="text-xs font-semibold text-foreground">
                 {chosenSpec
-                  ? `Specialization selected: ${chosenSpec.name}`
-                  : "Specialization choice"}
+                  ? t("specializationSelected", { name: chosenSpec.name })
+                  : t("specializationChoice")}
               </p>
               <p className="mt-0.5 text-[11px] text-muted">
                 {decade.autoGrantedDecade
-                  ? "Completed decade baseline includes all specialization options."
-                  : "Choose one. Its rivals lock for this decade. Each capstone follows its own choice."}
+                  ? t("allSpecializationsBaseline")
+                  : t("chooseSpecialization")}
               </p>
             </div>
             <div className="grid grid-cols-3 gap-2">
