@@ -34,10 +34,14 @@ import {
  *
  * The amounts are pinned in the companion data file, not recomputed here,
  * because no per-sector freight history was ever persisted: each sector only
- * carries its latest charge. They were rebuilt offline from the 49
- * `sourcingNetworkLoad` documents by re-running the turn's own apportionment
- * (`apportionFreightBilling`) per document. Each corporation turn reads the
- * previous turn's document. Turns before PR #3475 reached the turn worker
+ * carries its latest charge. They were rebuilt offline from the 50
+ * `sourcingNetworkLoad` documents (turns 28 to 77) by re-running the turn's own
+ * apportionment (`apportionFreightBilling`) per document. Each corporation turn
+ * reads the previous turn's document, and turn 79 was the first to bill at the
+ * daily rate (the ticket's sector: 19,456 a day, down from about 475,000), so
+ * the window is corporation turns 29 to 78. Documents 28 to 30 aged out of the
+ * collection before the final run; their rebuilt charges come from the first
+ * run of the same rebuild a few hours earlier. Turns before PR #3475 reached the turn worker
  * split each state bill over corporate demand only, and turns before PR #3530
  * had no goods-value cap, so those turns were rebuilt under the rules they
  * actually ran. The rebuild of the last document matched the charges the turn
