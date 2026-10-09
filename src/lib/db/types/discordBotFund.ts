@@ -1,12 +1,20 @@
 import type { ObjectId } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
+/** Lifetime figures for one casino game, in anchor units. */
+export interface CasinoGameStats {
+  handleAnchor: number;
+  paidOutAnchor: number;
+  played: number;
+}
+
 /**
- * Tracks the Discord bot's blackjack prize pool - an infinite fund that pays out winnings.
- * Initialized at $200M, increased by player losses, decreased by player wins.
+ * The Discord casino house bank (originally the blackjack prize pool, and
+ * still stored under that name). Seeded at 200M, grown by player losses and
+ * drawn down by wins. See `src/lib/casino/house.ts`.
  *
- * When forex is enabled, balances are tracked per-currency to avoid mixing currencies.
- * All wagers and payouts use the player's home currency.
+ * Solvency is `anchorBalance`. The per-currency buckets and legacy totals
+ * predate it and are kept for history only.
  */
 export interface DiscordBotFund {
   _id: ObjectId;
@@ -24,6 +32,10 @@ export interface DiscordBotFund {
   totalCollected: number;
   /** Number of games played */
   gamesPlayed: number;
+  /** House bank in anchor units. Back-filled from `currencyBalances` on first casino use. */
+  anchorBalance?: number;
+  /** Per-game lifetime figures. */
+  games?: Partial<Record<string, CasinoGameStats>>;
   createdAt: Date;
   updatedAt: Date;
 }
