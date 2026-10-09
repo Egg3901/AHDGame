@@ -19,6 +19,7 @@ import {
 import { TicketCards, TicketsTable } from "./GeneralTicketsTable";
 import { DemocraticHealthBlock } from "./DemocraticHealthBlock";
 import { PresidentialMap } from "./presMap/PresidentialMap";
+import { StateSquares } from "./presMap/StateSquares";
 import { PresidentialStage, presidentialTitle } from "./PresidentialStage";
 import { buildPresMapModel } from "./presMap/presMapModel";
 import {
@@ -913,6 +914,9 @@ export function GeneralBlendView({
               countryId={election.countryId}
               turn={election.gameState?.currentTurn ?? null}
             />
+          }
+          squares={
+            <StateSquares model={mapModel} electionId={electionId} countryId={election.countryId} />
           }
         />
 
