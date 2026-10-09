@@ -7,6 +7,7 @@ import {
 } from "./costPassThrough";
 import { SECTOR_DEMAND } from "@/lib/constants/commodities";
 import type { CommodityType } from "@/lib/constants/commodities";
+import { priceRealizationFactor } from "./priceRealization";
 
 const ratios = (entries: Partial<Record<CommodityType, number>>) =>
   new Map(Object.entries(entries)) as Map<CommodityType, number>;
@@ -17,11 +18,11 @@ describe("sectorInputCostIndex", () => {
   });
 
   it("weights each input by its recipe rate", () => {
-    // Only fertilizers moved: index = (0.15 x 2 + rest x 1) / totalRate.
+    // Only fertilizers moved; cost pressure uses the billed realization factor.
     const recipe = SECTOR_DEMAND.agriculture!;
     const totalRate = recipe.reduce((s, r) => s + r.rate, 0);
     const fert = recipe.find((r) => r.commodity === "fertilizers")!.rate;
-    const expected = (fert * 2 + (totalRate - fert)) / totalRate;
+    const expected = (fert * priceRealizationFactor(2) + (totalRate - fert)) / totalRate;
     expect(sectorInputCostIndex("agriculture", ratios({ fertilizers: 2 }))).toBeCloseTo(
       expected,
       10
@@ -52,7 +53,7 @@ describe("costPassThroughMultiplier", () => {
     // full squeeze.
     const r = ratios({ fertilizers: 2.26, plastics: 1.6, freight: 1.61 });
     const index = sectorInputCostIndex("agriculture", r);
-    expect(index).toBeGreaterThan(1.2);
+    expect(index).toBeGreaterThan(1);
     const m = costPassThroughMultiplier("food", r);
     expect(m).toBeCloseTo(1 + COST_PASS_THROUGH_BETA * (index - 1), 10);
     expect(m).toBeLessThan(index); // damped, producers still eat part of it
@@ -62,6 +63,11 @@ describe("costPassThroughMultiplier", () => {
     const everythingExpensive = ratios(
       Object.fromEntries(SECTOR_DEMAND.agriculture!.map((r) => [r.commodity, 10]))
     );
-    expect(costPassThroughMultiplier("food", everythingExpensive)).toBe(COST_PASS_THROUGH_CAP);
+    expect(costPassThroughMultiplier("food", everythingExpensive)).toBe(
+      1 + COST_PASS_THROUGH_BETA * (priceRealizationFactor(10) - 1)
+    );
+    expect(costPassThroughMultiplier("food", everythingExpensive)).toBeLessThanOrEqual(
+      COST_PASS_THROUGH_CAP
+    );
   });
 });

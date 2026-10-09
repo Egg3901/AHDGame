@@ -3,11 +3,12 @@
 // Errors: 401, 404
 
 import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
-import type { CentralBank, PortfolioHistory } from "@/lib/db/types";
+import type { CentralBank, Corporation, PortfolioHistory } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { FOREX_ACTIVE_COUNTRIES, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -26,6 +27,9 @@ import {
 import { getGameState } from "@/lib/gameState";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { loadCentralBankPricingAdjustment } from "@/lib/monetaryPolicy/centralBankPricing";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
+import { effectiveBankRatesFromPrime, playerDepositRatePercent } from "@/lib/banking/rules/rates";
 
 const DEFAULT_PRIME = 2.5;
 
@@ -86,11 +90,57 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
       db,
       gameState?.currentTurn ?? 0
     );
-    const apyPercent =
+    const centralBankApyPercent =
       Math.round(
         savingsApyPercent(primeRate, inflationRate, centralBankPricing.depositBonusPercentPoints) *
           100
       ) / 100;
+
+    const holder = character.currencyBalances?.savingsHolder?.[nationalCurrency];
+    const holderIsCentralBank =
+      !holder || holder === "centralBank" || holder === getBankId(countryId);
+    const holderId =
+      typeof holder === "string" && ObjectId.isValid(holder) ? new ObjectId(holder) : null;
+    const [bankingPolicy, holderBank] = await Promise.all([
+      loadBankingPolicy(db),
+      holderIsCentralBank || !holderId
+        ? Promise.resolve(null)
+        : db.collection<Corporation>("corporations").findOne({ _id: holderId }),
+    ]);
+    const validPrivateHolder =
+      holderBank?.bankCharter?.status === "active" &&
+      holderBank.bankCharter.currency === nationalCurrency &&
+      (holderBank.bankCharter.type === "retail" || holderBank.bankCharter.type === "universal");
+    let apyPercent = centralBankApyPercent;
+    let accrualApyPercent = centralBankApyPercent;
+    let savingsHolderType: "central-bank" | "private-bank" | "unknown" = holderIsCentralBank
+      ? "central-bank"
+      : "unknown";
+    let savingsHolderName: string | null = holderIsCentralBank ? "Central Bank" : null;
+    if (validPrivateHolder && holderBank?.bankCharter) {
+      const postedRate = effectiveBankRatesFromPrime(
+        holderBank.bankCharter,
+        primeRate
+      ).depositRatePercent;
+      const authoritative = savingsReadsAuthoritative(bankingPolicy, nationalCurrency);
+      const privateRate = playerDepositRatePercent(
+        postedRate,
+        authoritative,
+        primeRate,
+        inflationRate
+      );
+      accrualApyPercent = privateRate + (authoritative ? 0 : centralBankApyPercent);
+      apyPercent = Math.round(accrualApyPercent * 100) / 100;
+      savingsHolderType = "private-bank";
+      savingsHolderName = holderBank.name ?? "Private bank";
+    }
+    if (savingsHolderType === "unknown") {
+      // A stale or unverifiable bank pointer does not mean the account earns
+      // the central-bank rate. Keep the estimate at zero and let the UI show
+      // that the holder's rate could not be verified.
+      accrualApyPercent = 0;
+      apyPercent = 0;
+    }
 
     const liquidBalance = getPersonalBalance(character, nationalCurrency, forexEnabled);
     const savingsBalance = getSavingsBalance(character, nationalCurrency, forexEnabled);
@@ -104,7 +154,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const turnsUntilCredit = turnsUntilSavingsCredit(gameState?.currentTurn ?? 0);
     const estimatedAccrualThisTurn =
       forexEnabled && savingsBalance > 0
-        ? estimateSavingsAccrualFromApy(savingsBalance, apyPercent, nationalCurrency)
+        ? estimateSavingsAccrualFromApy(savingsBalance, accrualApyPercent, nationalCurrency)
         : 0;
 
     return NextResponse.json({
@@ -112,6 +162,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
       currencyCode: nationalCurrency,
       primeRate,
       apyPercent,
+      savingsHolderType,
+      savingsHolderName,
       centralBankDepositBonusPercentPoints: centralBankPricing.depositBonusPercentPoints,
       centralBankPricingProgress: centralBankPricing.progress,
       centralBankPricingTurnsRemaining: centralBankPricing.turnsRemaining,
