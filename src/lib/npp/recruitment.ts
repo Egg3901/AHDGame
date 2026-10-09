@@ -13,7 +13,7 @@ export interface RecruitmentSlotTier {
  * Per-state NPP recruitment slot tiers, ascending by org threshold. A party's
  * cap in a state is the slots of the highest tier whose `minOrg` the state's
  * organization meets or exceeds. The first tier (2 slots) is the always-available
- * floor; the last tier (5 slots) is the total cap.
+ * floor; the last tier (6 slots) is the total cap.
  *
  * Exported so UI surfaces can render the same tier table without duplicating the
  * thresholds — this array is the single source of truth for the cap curve.
@@ -22,7 +22,7 @@ export const RECRUITMENT_SLOT_TIERS: readonly RecruitmentSlotTier[] = [
   { minOrg: 0, slots: 2 },
   { minOrg: 30, slots: 3 },
   { minOrg: 40, slots: 4 },
-  { minOrg: 50, slots: 5 },
+  { minOrg: 50, slots: 6 },
 ];
 
 /**
@@ -52,7 +52,7 @@ export const RELOCATION_FAIR_SHARE_MULTIPLIER = 1.5;
  * Maximum NPPs of one party a region may hold *as a relocation target*.
  *
  * This is deliberately NOT `calculateRecruitmentSlots`. Recruitment slots cap
- * party *growth* — creating a brand-new NPP — and top out at 5 per region. A
+ * party *growth* — creating a brand-new NPP — and top out at 6 per region. A
  * relocation creates nobody: it is net-zero nationally. Applying the growth cap
  * to it made relocation impossible in every country with a seeded roster, where
  * one region routinely holds dozens of a party's NPPs and so reads as "full"
@@ -61,7 +61,7 @@ export const RELOCATION_FAIR_SHARE_MULTIPLIER = 1.5;
  *
  * The relocation cap is therefore the greater of the recruitment cap and the
  * party's fair national share of its own roster, scaled by
- * `RELOCATION_FAIR_SHARE_MULTIPLIER`. Small parties keep the familiar 2-5 slot
+ * `RELOCATION_FAIR_SHARE_MULTIPLIER`. Small parties keep the 2-6 slot
  * behaviour; large seeded parties get a cap that scales with the roster they
  * actually have.
  *
