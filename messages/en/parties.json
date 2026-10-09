@@ -12,6 +12,10 @@
       "confirmMessage": "You will become an Independent.",
       "confirm": "Leave party",
       "cancel": "Cancel"
+    },
+    "whips": {
+      "nominationsTab": "Nominations",
+      "noActiveNominations": "No active nominations to whip."
     }
   }
 }
