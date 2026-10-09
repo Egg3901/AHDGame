@@ -448,10 +448,7 @@ export function StatusBar({
                   </TurnStatusLink>
                 )}
                 {turnStatusLink && gameState.isActive && !isProcessing && (
-                  <MarketTickNote
-                    lastMarketTickAt={gameState.lastMarketTickAt}
-                    lastTurnProcessed={gameState.lastTurnProcessed}
-                  />
+                  <MarketTickNote lastMarketTickAt={gameState.lastMarketTickAt} />
                 )}
               </div>
             </div>

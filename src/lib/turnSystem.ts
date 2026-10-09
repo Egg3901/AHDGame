@@ -79,7 +79,7 @@ import { isSingleplayer } from "@/lib/singleplayer";
 import { reconcileFederalBudgetInvariants } from "@/lib/budget/budgetInvariants";
 import { publishPlatformEvent } from "@/lib/platformEvents";
 import type { CompletedTurnPhaseObservation, TurnPhaseRuntime } from "@/simulation/engine/types";
-import { completedTurnStatus } from "@/simulation/engine/turnCompletion";
+import { completedMarketUpdateAt, completedTurnStatus } from "@/simulation/engine/turnCompletion";
 import { startTurnMemorySampler, type TurnMemoryPeak } from "@/lib/turn/turnMemory";
 import { captureTurnPosthog } from "@/lib/analytics/turnPosthog";
 import { currentTurnBuild } from "@/lib/turn/turnBuild";
@@ -654,6 +654,7 @@ async function processTurnImpl(
     lastHealth = context.phaseResults.gameHealthSnapshot?.health ?? null;
 
     const completion = completedTurnStatus(warnings, phaseStatuses);
+    const marketUpdateAt = completedMarketUpdateAt(phaseStatuses);
     const compactPhaseTimings = Object.entries(phaseStatuses)
       .flatMap(([phase, status]) => {
         if (!status.startedAt || !status.completedAt) return [];
@@ -668,6 +669,7 @@ async function processTurnImpl(
           currentTurn: context.newTurn,
           currentYear: context.currentYear,
           lastTurnProcessed: context.gameNow,
+          ...(marketUpdateAt ? { lastMarketTickAt: marketUpdateAt } : {}),
           // Local worlds are player-paced. A browser timer may request a turn,
           // but no server cron owns one, so never render a deceptive deadline.
           nextScheduledTurn: localSingleplayer

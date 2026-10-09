@@ -199,7 +199,7 @@ export interface GameState {
   lastTurnProcessed: Date;
   nextScheduledTurn: Date | null;
   /**
-   * Last completed 15-minute market tick (stock reprice + market cap point).
+   * Wall-clock completion of the latest market update, on a turn or quarter-hour tick.
    * Drives the "markets updated" status bar note and live chart refreshes.
    */
   lastMarketTickAt?: Date;
