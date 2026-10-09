@@ -480,4 +480,26 @@ describe("POST /api/discord-bot/tickets filing context", () => {
     const response = await POST(post({ category: "bug", description: "missing title" }));
     expect(response.status).toBe(400);
   });
+
+  it("refuses to bind a ticket number already owned by another Discord channel", async () => {
+    const { ObjectId } = await import("mongodb");
+    db.collectionMocks.tickets.findOne.mockResolvedValueOnce({
+      _id: new ObjectId(),
+      ticketNumber: 1435,
+      discordChannelId: "original-channel",
+    });
+    const { POST } = await import("./route");
+    const response = await POST(
+      post({
+        category: "bug",
+        title: "Another report",
+        description: "A separate channel must not take this ticket number.",
+        ticketNumber: 1435,
+        discordChannelId: "duplicate-channel",
+      })
+    );
+
+    expect(response.status).toBe(409);
+    expect(db.collectionMocks.tickets.insertOne).not.toHaveBeenCalled();
+  });
 });
