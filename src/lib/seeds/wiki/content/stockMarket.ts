@@ -21,7 +21,7 @@ Exchange pages display: market cap, share price, total revenue, net income, CEO,
 
 ## Share price formula
 
-Share prices are computed each turn from three fundamental components:
+In multiplayer, share prices are recomputed every 15 minutes from three fundamental components. Earnings update on the hourly turn:
 
 **Tangible Book Per Share** (weight 1.0):
 \`\`\`
@@ -260,7 +260,7 @@ Each exchange displays values in that country's currency. If you hold shares in 
 
 **Growth investors:** Low or zero dividend corporations reinvest profits into expansion. Share price appreciation comes from rising tangible book value and earnings power.
 
-**Speculation:** Share prices react to economic events each turn via the fundamental formula. If you anticipate a subsidy bill passing or a major sector entering a state, position before the turn processes.
+**Speculation:** Share prices react to changing cash, bonds, rates, trading and sentiment every 15 minutes via the fundamental formula. Earnings and sector production still update on the hourly turn.
 
 **Influence:** Owning enough shares gives you a voice in CEO elections. A significant stake can swing a contested vote.
 

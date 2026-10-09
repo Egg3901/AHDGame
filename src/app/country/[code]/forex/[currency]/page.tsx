@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, use, Suspense } from "react";
+import { useGameEvents } from "@/hooks/useGameEvents";
+
+import { useState, useEffect, use, Suspense, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import * as Sentry from "@sentry/nextjs";
 import { HeroImage } from "@/components/HeroImage";
@@ -68,7 +70,7 @@ function CurrencyDetailInner({ params }: { params: Promise<{ code: string; curre
   const [loadError, setLoadError] = useState(false);
   const [tradeOpen, setTradeOpen] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     // Whole body guarded: a rejected fetch (network drop) used to skip every
     // setLoading(false) below, leaving the page spinning forever. try/finally
     // guarantees the spinner ends; the catch surfaces an error state + reports.
@@ -153,11 +155,12 @@ function CurrencyDetailInner({ params }: { params: Promise<{ code: string; curre
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    void fetchData();
+  }, [fetchData]);
+  useGameEvents(() => void fetchData(), ["turn_complete", "market_tick"]);
 
   // Redirect if currency not found after load
   const rateEntry = rates.find((r) => r.currencyCode === currencyCode);

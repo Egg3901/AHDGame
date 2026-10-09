@@ -35,22 +35,30 @@ import type { VolumeInputs } from "./rateCalculation";
 /** Volume data keyed by currency code */
 export type CurrencyVolumeMap = Record<CurrencyCode, VolumeInputs>;
 
+/**
+ * `knownRates` (currency code to rate) lets a caller that already read
+ * exchangeRates skip the second read; omitted = read them here.
+ */
 export async function computeCurrencyVolumes(
   db: Db,
   currentTurn: number,
-  union?: EuroMonetaryUnion
+  union?: EuroMonetaryUnion,
+  knownRates?: ReadonlyMap<string, number>
 ): Promise<CurrencyVolumeMap> {
   const lookbackStart = Math.max(1, currentTurn - VOLUME_LOOKBACK_TURNS);
 
-  const [trades, rates] = await Promise.all([
+  const [trades, rateByCode] = await Promise.all([
     db
       .collection<TradeHistoryEntry>("tradeHistory")
       .find({ turn: { $gte: lookbackStart } })
       .toArray(),
-    db.collection<ExchangeRate>("exchangeRates").find({}).toArray(),
+    knownRates ??
+      db
+        .collection<ExchangeRate>("exchangeRates")
+        .find({})
+        .toArray()
+        .then((rates) => new Map<string, number>(rates.map((r) => [r.currencyCode, r.rate]))),
   ]);
-
-  const rateByCode = new Map<string, number>(rates.map((r) => [r.currencyCode, r.rate]));
 
   // Each trader's signed net per currency, for how broad the net flow is.
   const netByTrader = new Map<string, Map<string, number>>();

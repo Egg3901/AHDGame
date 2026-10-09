@@ -368,14 +368,13 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     refreshRates();
   }, [refreshRates]);
 
-  // Live-refresh: rates update each turn server-side, so pull fresh values
-  // when the shared turn poller signals a turn completed. Without this, a
-  // long-lived tab keeps showing the rate snapshot from when it was loaded.
+  // Refresh conversions after the hourly turn and after market ticks, which
+  // run after the half-hour FX step. All consumers share one status poller.
   useGameEvents(
     useCallback(() => {
       refreshRates();
     }, [refreshRates]),
-    ["turn_complete"],
+    ["turn_complete", "market_tick"],
     forexEnabled
   );
 

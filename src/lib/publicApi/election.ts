@@ -1,4 +1,5 @@
 import type { CountryId } from "@/lib/constants/countries";
+import { oneRowPerTurn } from "@/lib/electionEngine/rules/turnSlice";
 import type { Db, Filter } from "mongodb";
 import { ObjectId } from "mongodb";
 import type {
@@ -415,8 +416,10 @@ export async function queryElectionDetail(db: Db, electionId: string) {
       .collection<PrimarySnapshot>("primarySnapshots")
       .find({ electionId: electionOid })
       .sort({ recordedAt: 1 })
-      .limit(72)
-      .toArray(),
+      .limit(144)
+      .toArray()
+      // A split turn holds an early and a rest row; number one point per turn.
+      .then((rows) => oneRowPerTurn(rows).slice(0, 72)),
   ]);
 
   const candidates = allCandidateRows.filter(isStandingCandidate);

@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 
 export interface GameEvent {
-  type: "turn_start" | "turn_complete" | "election_resolved" | "bill_enacted";
+  /**
+   * `market_tick` fires when a quarter-hour market tick lands (stock prices
+   * and the 15-minute market cap point). Delivered only to subscribers that
+   * ask for it by type.
+   */
+  type: "turn_start" | "turn_complete" | "election_resolved" | "bill_enacted" | "market_tick";
   payload: Record<string, unknown>;
   timestamp: string;
 }
@@ -27,6 +32,8 @@ export interface TurnStatus {
   isProcessing: boolean;
   nextScheduledTurn: string | null;
   lastTurnProcessed?: string;
+  /** Last quarter-hour market tick (ISO), null before the first one. */
+  lastMarketTickAt?: string | null;
   pausedAt?: string | null;
   pauseReason?: string | null;
   pauseKind?: "manual" | "auto-drift" | null;
@@ -57,6 +64,7 @@ const ALL_TYPES: GameEvent["type"][] = [
 
 let statusSnapshot: TurnStatus | null = null;
 let prevTurn: number | null = null;
+let prevMarketTickAt: string | null | undefined;
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
 let pollInFlight: Promise<void> | null = null;
 let lastPollAt = 0;
@@ -100,6 +108,7 @@ function resetSharedPoller() {
   clearScheduledPoll();
   statusSnapshot = null;
   prevTurn = null;
+  prevMarketTickAt = undefined;
   pollInFlight = null;
   lastPollAt = 0;
 }
@@ -126,8 +135,11 @@ function nextPollDelay(status: TurnStatus, now: Date): number {
   }
   if (status.isProcessing) return 1500;
   if (!status.nextScheduledTurn || !status.isActive) return 120_000;
-  const diff = new Date(status.nextScheduledTurn).getTime() - now.getTime();
-  if (diff < 120_000) return 15_000; // Align near-turn polling with the API's browser cache window
+  const quarterMs = 15 * 60_000;
+  const nextMarketAt = (Math.floor(now.getTime() / quarterMs) + 1) * quarterMs;
+  const nextTurnAt = new Date(status.nextScheduledTurn).getTime();
+  const diff = Math.min(nextTurnAt, nextMarketAt) - now.getTime();
+  if (diff < 120_000) return 15_000; // Align near-update polling with the API's browser cache window
   if (diff < 600_000) return 60_000; // Normal within 10 min
   return 120_000; // Relaxed when far from turn
 }
@@ -163,6 +175,11 @@ async function pollTurnStatus(force = false) {
         const now = new Date();
         const events = detectTurnEvents(prevTurn, status);
 
+        const marketTicked =
+          prevMarketTickAt !== undefined &&
+          status.lastMarketTickAt != null &&
+          status.lastMarketTickAt !== prevMarketTickAt;
+        prevMarketTickAt = status.lastMarketTickAt ?? null;
         prevTurn = status.currentTurn;
         statusSnapshot = status;
         notifyStatusListeners();
@@ -171,6 +188,13 @@ async function pollTurnStatus(force = false) {
           emitGameEvent({
             type: eventType,
             payload: { turn: status.currentTurn },
+            timestamp: now.toISOString(),
+          });
+        }
+        if (marketTicked) {
+          emitGameEvent({
+            type: "market_tick",
+            payload: { turn: status.currentTurn, at: status.lastMarketTickAt },
             timestamp: now.toISOString(),
           });
         }

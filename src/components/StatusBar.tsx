@@ -33,6 +33,7 @@ import { CorpCashStatusChip } from "./statusbar/CorpCashStatusChip";
 import { StatusChip } from "./statusbar/StatusChip";
 import { OnlineStatusDot } from "./statusbar/OnlineStatusDot";
 import { TurnStatusLink } from "./statusbar/TurnStatusLink";
+import { MarketTickNote } from "./statusbar/MarketTickNote";
 import {
   STATUS_BAR_CONTAINER_CLASS,
   statusBarRowClassName,
@@ -445,6 +446,12 @@ export function StatusBar({
                       <span className="shrink-0 text-yellow-500">Paused</span>
                     )}
                   </TurnStatusLink>
+                )}
+                {turnStatusLink && gameState.isActive && !isProcessing && (
+                  <MarketTickNote
+                    lastMarketTickAt={gameState.lastMarketTickAt}
+                    lastTurnProcessed={gameState.lastTurnProcessed}
+                  />
                 )}
               </div>
             </div>

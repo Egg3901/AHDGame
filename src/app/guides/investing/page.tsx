@@ -161,7 +161,8 @@ export default function InvestingGuidePage() {
           <section className="space-y-4">
             <SectionHeader id="share-price">3. How share price is calculated</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
-              Share price is a blended metric recalculated every turn:
+              In multiplayer, share price is a blended metric recalculated every 15 minutes.
+              Earnings update on the hourly turn:
             </p>
             <p className="text-sm text-muted leading-relaxed">
               In short: price blends what the corporation owns and its sector value (balance sheet),
