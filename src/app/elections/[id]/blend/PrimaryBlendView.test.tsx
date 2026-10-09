@@ -271,3 +271,40 @@ describe("the delegate column says what it is", () => {
     expect(screen.getAllByText(/1,695 proj\. · 312 won/)).toHaveLength(1);
   });
 });
+
+describe("campaign operations live in the field table", () => {
+  // They used to be a separate "Campaign operations" list under the stage,
+  // restating the field above it.
+  it("joins each candidate's funds, actions, levels and manager to their row", async () => {
+    stubFetch((url) =>
+      url.includes("/campaigns")
+        ? {
+            campaigns: [
+              {
+                id: "camp-1",
+                candidateId: "ch-1-a",
+                candidateName: "First Filer",
+                party: "1",
+                currencyCode: "USD",
+                funds: 1234,
+                actions: 7,
+                levels: { fundraising: 2, oppositionResearch: 1, groundGame: 3, mediaSpending: 0 },
+                managerName: "Pat Manager",
+                isExact: true,
+              },
+            ],
+          }
+        : detailFor("1", "First Filer")
+    );
+    render(<PrimaryBlendView election={election()} wire={[]} />);
+
+    await waitFor(() =>
+      expect(screen.getAllByRole("link", { name: "View campaign" }).length).toBeGreaterThan(0)
+    );
+    expect(screen.getAllByRole("link", { name: "View campaign" })[0].getAttribute("href")).toBe(
+      "/campaign/camp-1"
+    );
+    expect(screen.getAllByText(/Manager: Pat Manager/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("6").length).toBeGreaterThan(0);
+  });
+});
