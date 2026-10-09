@@ -17,16 +17,10 @@ export function nextQuarterAt(nowMs: number): number {
 
 /**
  * Status bar note: when stock prices last updated. Prices re-price every 15
- * minutes (the turn at :00, market ticks at :15/:30/:45), so the latest of the
- * market tick and the turn is the last update.
+ * minutes (the turn at :00, market ticks at :15/:30/:45). Both paths publish
+ * a wall-clock completion marker; lastTurnProcessed belongs to the game clock.
  */
-export function MarketTickNote({
-  lastMarketTickAt,
-  lastTurnProcessed,
-}: {
-  lastMarketTickAt?: string | null;
-  lastTurnProcessed?: string | null;
-}) {
+export function MarketTickNote({ lastMarketTickAt }: { lastMarketTickAt?: string | null }) {
   const [nowMs, setNowMs] = useState<number | null>(null);
   // Clock read after mount and every 30 s keeps SSR deterministic.
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -37,10 +31,8 @@ export function MarketTickNote({
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const candidates = [lastMarketTickAt, lastTurnProcessed]
-    .map((value) => (value ? new Date(value).getTime() : Number.NaN))
-    .filter((ms) => Number.isFinite(ms));
-  const lastMs = candidates.length > 0 ? Math.max(...candidates) : null;
+  const parsed = lastMarketTickAt ? new Date(lastMarketTickAt).getTime() : Number.NaN;
+  const lastMs = Number.isFinite(parsed) ? parsed : null;
   if (nowMs === null || lastMs === null) return null;
   const minutes = minutesSince(lastMs, nowMs) ?? 0;
   const ago = minutes < 1 ? "just now" : `${minutes}m ago`;

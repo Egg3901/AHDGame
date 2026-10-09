@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 
 export interface GameEvent {
   /**
-   * `market_tick` fires when a quarter-hour market tick lands (stock prices
+   * `market_tick` fires when a market update lands (stock prices
    * and the 15-minute market cap point). Delivered only to subscribers that
    * ask for it by type.
    */
@@ -32,7 +32,7 @@ export interface TurnStatus {
   isProcessing: boolean;
   nextScheduledTurn: string | null;
   lastTurnProcessed?: string;
-  /** Last quarter-hour market tick (ISO), null before the first one. */
+  /** Last completed market update in wall-clock time (ISO), null before the first one. */
   lastMarketTickAt?: string | null;
   pausedAt?: string | null;
   pauseReason?: string | null;
