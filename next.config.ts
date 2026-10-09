@@ -111,7 +111,14 @@ const nextConfig: NextConfig = {
   // one build in five. NEXT_BUILD_CPUS caps the workers there; unset (Railway,
   // local) leaves Next's default untouched. Singleplayer keeps its own cap below.
   ...(process.env.SINGLEPLAYER !== "1" && Number(process.env.NEXT_BUILD_CPUS) > 0
-    ? { experimental: { cpus: Number(process.env.NEXT_BUILD_CPUS) } }
+    ? {
+        experimental: {
+          cpus: Number(process.env.NEXT_BUILD_CPUS),
+          ...(process.env.CI === "true"
+            ? { webpackMemoryOptimizations: true, webpackBuildWorker: true }
+            : {}),
+        },
+      }
     : {}),
   ...(process.env.SINGLEPLAYER === "1"
     ? {
