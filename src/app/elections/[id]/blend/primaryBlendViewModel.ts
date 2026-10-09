@@ -121,6 +121,10 @@ export interface PrimaryTileVM {
   /** True once the state's wave has fired, so the result is settled. */
   voted: boolean;
   title: string;
+  /** Primary night: how far this state's count has got. Absent outside a night. */
+  night?: { status: string; reportingPct: number; called: boolean; closesAt: string };
+  /** The leader's own colour, for a counting state's hatch. */
+  leaderColor?: string | null;
 }
 
 export interface PrimaryCarveUpVM {
@@ -365,7 +369,8 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
    * which is how the deep dive reconciles an ad-hoc admin force-resolve too.
    */
   const isWaveComplete = (w: (typeof waves)[number]) =>
-    w.status === "complete" || (w.states.length > 0 && w.states.every((s) => voted.has(s)));
+    w.status === "complete" ||
+    (w.status !== "live" && w.states.length > 0 && w.states.every((s) => voted.has(s)));
 
   const requested = inp.selectedStateId ?? null;
   const selectedStateId =
@@ -385,6 +390,9 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
     }));
     if (isWaveComplete(w)) {
       return { label: w.label, statusText: "COMPLETE", color: BLEND.positive, states };
+    }
+    if (w.status === "live") {
+      return { label: w.label, statusText: "COUNTING NOW", color: BLEND.accent, states };
     }
     // A wave fires with `turnsRemaining` left on the clock, so the wait is the
     // difference between now and that point.
@@ -417,24 +425,53 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
         const hasVoted = voted.has(stateId);
         const name = nameFor(stateId);
 
+        const night = detail.night?.[stateId];
+        // Primary night: nothing to show until the count has a leader.
+        const counting = night != null && !["leaning", "called", "final"].includes(night.status);
         const background =
-          leader && leaderColor
-            ? hasVoted
+          leader && leaderColor && !counting
+            ? hasVoted || night?.called
               ? leaderColor
               : towardTrack(leaderColor, 0.55)
             : BLEND.track;
+        const reporting = night ? `${Math.round(night.reportingPct)}% reporting` : "";
+        const nightTitle = !night
+          ? null
+          : night.status === "polls_open"
+            ? `${name}: polls close ${new Date(night.closesAt).toLocaleTimeString([], {
+                hour: "numeric",
+                minute: "2-digit",
+              })}`
+            : counting
+              ? `${name}: counting, ${night.status === "too_early" ? "too early to call" : "no returns yet"}`
+              : night.called
+                ? `${name}: ${leader?.name ?? "winner"} projected to win, ${reporting}`
+                : `${name}: ${leader?.name ?? "no one"} leads, ${reporting}`;
 
         return {
           stateId,
           name,
-          leaderId,
-          leaderName: leader?.name ?? null,
+          leaderId: counting ? null : leaderId,
+          leaderName: counting ? null : (leader?.name ?? null),
           background,
-          ink: leader ? contrastTextColor(background) : BLEND.mutedDim,
+          ink: leader && !counting ? contrastTextColor(background) : BLEND.mutedDim,
           voted: hasVoted,
-          title: leader
-            ? `${name}: ${leader.name} ${hasVoted ? "won" : "projected to win"}`
-            : `${name}: no projection yet`,
+          title:
+            nightTitle ??
+            (leader
+              ? `${name}: ${leader.name} ${hasVoted ? "won" : "projected to win"}`
+              : `${name}: no projection yet`),
+          ...(night
+            ? {
+                night: {
+                  status: night.status,
+                  reportingPct: night.reportingPct,
+                  called: night.called,
+                  closesAt: night.closesAt,
+                },
+                leaderColor: counting ? null : leaderColor,
+              }
+            : {}),
         };
       })
     : [];

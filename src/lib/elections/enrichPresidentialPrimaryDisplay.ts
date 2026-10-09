@@ -1,6 +1,10 @@
 import { primaryWinMomentumFromTally } from "@/lib/elections/primaryRegional/rules";
 import { loadPrimaryFieldOffices } from "@/lib/elections/primaryRegional/fieldOffices";
 import { getGameTime } from "@/lib/time/gameTime";
+import {
+  activePrimaryNights,
+  primaryNightForParty,
+} from "@/lib/elections/liveResults/primaryNight";
 import { usesCampaignAds } from "@/lib/campaignTargeting/rules";
 import { loadCampaignProjectionContext } from "@/lib/campaignTargeting/audience";
 import type { Db } from "mongodb";
@@ -158,6 +162,19 @@ export async function applyPresidentialPrimaryDisplay(
       )
     : undefined;
 
+  // Primary night: per party, the states whose result is not yet called.
+  const nowMs = Date.now();
+  const nightHiddenFor = (partyId: string): Set<string> =>
+    electionId
+      ? primaryNightForParty({
+          electionId: String(electionId),
+          partyId,
+          waves: tally?.primaryWaveHistory,
+          stateVotes: tally?.primaryStateVotes?.[partyId],
+          nowMs,
+        }).hidden
+      : new Set();
+
   for (const [rawPartyId, candidateIds] of rawCandidateIdsByParty.entries()) {
     const party = partyMap.get(rawPartyId);
     if (candidateIds.length === 0) continue;
@@ -258,8 +275,16 @@ export async function applyPresidentialPrimaryDisplay(
       candidateIds,
       totalDelegates: getTotalDelegatesForFamily(family, preset),
       projectedVotesByState: projection.byState,
-      actualVotesByState: tally?.primaryStateVotes?.[rawPartyId] ?? {},
-      awardedDelegatesByState: tally?.primaryDelegatesByState?.[rawPartyId] ?? {},
+      // A state still being counted on primary night stays projected here, so
+      // the delegate race does not bank delegates the night has not called.
+      actualVotesByState: withoutStates(
+        tally?.primaryStateVotes?.[rawPartyId],
+        nightHiddenFor(rawPartyId)
+      ),
+      awardedDelegatesByState: withoutStates(
+        tally?.primaryDelegatesByState?.[rawPartyId],
+        nightHiddenFor(rawPartyId)
+      ),
       allocationByState: mergedAllocationByState,
       preset,
     });
@@ -296,11 +321,17 @@ export async function applyPresidentialPrimaryDisplay(
   // `primaryStaggerWavesRun` is the runtime source of truth for how far the
   // primary has got, so waves before it are settled and the rest are pending.
   const wavesRun = tally?.primaryStaggerWavesRun ?? 0;
+  const nightStates = activePrimaryNights(tally?.primaryWaveHistory, nowMs);
   const primaryCalendar: PrimaryCalendarWave[] = schedule.waves.map((wave, i) => ({
     label: wave.label,
     turnsRemaining: wave.turnsRemaining,
     states: wave.states,
-    status: i < wavesRun ? "complete" : "upcoming",
+    status:
+      i >= wavesRun
+        ? "upcoming"
+        : wave.states.some((s) => nightStates.has(s))
+          ? "live"
+          : "complete",
   }));
 
   return {
@@ -314,3 +345,13 @@ export async function applyPresidentialPrimaryDisplay(
 // ---------------------------------------------------------------------------
 // Core enrichment (accepts pre-fetched deps — used by both single and batch)
 // ---------------------------------------------------------------------------
+
+/** A per-state record with some states left out. */
+function withoutStates<T>(
+  byState: Readonly<Record<string, T>> | undefined,
+  hidden: ReadonlySet<string>
+): Record<string, T> {
+  if (!byState) return {};
+  if (hidden.size === 0) return { ...byState };
+  return Object.fromEntries(Object.entries(byState).filter(([s]) => !hidden.has(s)));
+}

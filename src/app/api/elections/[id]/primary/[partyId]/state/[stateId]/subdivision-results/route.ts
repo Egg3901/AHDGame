@@ -69,6 +69,11 @@ export async function GET(request: Request, { params }: RouteParams) {
     });
     if (!data) return errorResponse(404, "Party not in this race");
 
+    // Primary night: no county picture until the state has numbers to show.
+    const nightState = data.detail.night?.[regionId];
+    if (nightState && !["leaning", "called", "final"].includes(nightState.status)) {
+      return errorResponse(404, "This state is still counting");
+    }
     const stateVotes = data.detail.byState[regionId] ?? {};
     if (Object.values(stateVotes).every((v) => !(v > 0))) {
       return errorResponse(404, "No primary result for this state yet");

@@ -16,6 +16,7 @@
  * point: the carve-up on either screen is the same carve-up.
  */
 
+import { primaryNightForParty } from "@/lib/elections/liveResults/primaryNight";
 import { primaryWinMomentumFromTally } from "@/lib/elections/primaryRegional/rules";
 import { loadPrimaryFieldOffices } from "@/lib/elections/primaryRegional/fieldOffices";
 import { usesCampaignAds } from "@/lib/campaignTargeting/rules";
@@ -406,7 +407,17 @@ export async function loadPrimaryPartyData(
     color: candidateColorMap[c._id.toString()] ?? partyColor,
   }));
 
-  const votedStateIds = collectVotedStates(tally);
+  // Primary night: a wave's states are counted out live for hours after the
+  // wave runs. Until a state is called its real result stays hidden and only
+  // what has been reported is served.
+  const primaryNight = primaryNightForParty({
+    electionId: String(election._id),
+    partyId: partyKey,
+    waves: tally?.primaryWaveHistory,
+    stateVotes: tally?.primaryStateVotes?.[partyKey],
+    nowMs: Date.now(),
+  });
+  const votedStateIds = collectVotedStates(tally).filter((s) => !primaryNight.hidden.has(s));
   const byState = buildDisplayVotes({
     projection,
     tally,
@@ -414,6 +425,22 @@ export async function loadPrimaryPartyData(
     votedStateIds,
     liveCandidateIds: new Set(candidates.map((c) => c._id.toString())),
   });
+  for (const stateId of primaryNight.hidden) {
+    const revealed = primaryNight.byState[stateId]?.votes ?? {};
+    if (Object.keys(revealed).length > 0) byState[stateId] = revealed;
+  }
+  const night = Object.fromEntries(
+    Object.entries(primaryNight.byState).map(([stateId, v]) => [
+      stateId,
+      {
+        status: v.status,
+        reportingPct: v.reportingPct,
+        called: v.called,
+        calledFor: v.calledFor,
+        closesAt: v.closesAt,
+      },
+    ])
+  );
 
   const { viewerCandidate, viewerCharacter } = await resolveViewer(db, {
     viewer,
@@ -435,6 +462,7 @@ export async function loadPrimaryPartyData(
       byState,
       stateNameById,
       votedStateIds,
+      ...(Object.keys(night).length > 0 ? { night } : {}),
       viewerCampaign,
     },
     party,

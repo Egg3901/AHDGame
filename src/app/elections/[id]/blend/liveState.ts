@@ -6,7 +6,7 @@ import { FINAL_STRETCH_TURNS } from "./generalBlendViewModel";
  * only time the screen should say "live": the wire ticker, the live tally
  * kicker and the "Live results" link.
  *
- * - Primary season: once any wave has voted, there are returns.
+ * - Primary season: while a wave's primary night is counting.
  * - General: the final stretch, the window the screen itself calls Election
  *   Night. Before it the campaign is running but nothing is being called.
  * - Concluded: never; the result is final.
@@ -14,7 +14,7 @@ import { FINAL_STRETCH_TURNS } from "./generalBlendViewModel";
 export function presidentialResultsLive(election: ElectionDetail): boolean {
   if (election.isEnded || election.isUpcoming) return false;
   if (election.inPrimary) {
-    return (election.primaryCalendar ?? []).some((w) => w.status === "complete");
+    return (election.primaryCalendar ?? []).some((w) => w.status === "live");
   }
   const currentTurn = election.gameState?.currentTurn ?? null;
   if (currentTurn == null || election.endTurn == null) return false;

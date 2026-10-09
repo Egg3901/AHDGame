@@ -359,6 +359,15 @@ export function PrimaryBlendView({
     };
   }, [electionId, partyId, key, reloadCount]);
 
+  // Primary night: re-read the party's board every minute while a wave is
+  // being counted, so returns climb on screen.
+  const counting = Boolean(loaded?.detail.night && Object.keys(loaded.detail.night).length > 0);
+  useEffect(() => {
+    if (!counting) return;
+    const id = window.setInterval(() => setReloadCount((n) => n + 1), 60_000);
+    return () => window.clearInterval(id);
+  }, [counting]);
+
   const vm = useMemo(
     () =>
       buildPrimaryBlendViewModel({
@@ -914,7 +923,13 @@ function primaryMapModelFromBoard(vm: PrimaryBlendVM, ground: string): PresMapMo
       id: t.stateId,
       name: t.name || STATE_NAMES[t.stateId] || t.stateId,
       ev: 0,
-      evLabel: t.voted ? "\u2713" : null,
+      // On primary night the label is the count; otherwise a tick once voted.
+      evLabel:
+        t.night && t.night.status !== "polls_open"
+          ? `${Math.round(t.night.reportingPct)}%`
+          : t.voted
+            ? "\u2713"
+            : null,
       leaderId: t.leaderId ?? "",
       leaderName: t.leaderName ?? "",
       leaderColor: t.background,
@@ -936,6 +951,11 @@ function primaryMapModelFromBoard(vm: PrimaryBlendVM, ground: string): PresMapMo
       sinceTurn: null,
       turnsAgo: null,
       caption: t.title,
+      // Counting, with a leader but no call: hatched in the leader's colour,
+      // the general election night's "not yet called" look.
+      ...(t.night && !t.night.called && t.leaderColor
+        ? { overlay: { kind: "hatch" as const, base: t.background, colors: [t.leaderColor] } }
+        : {}),
     };
   }
   return { states, candidates: {}, legendCandidates: [] };
