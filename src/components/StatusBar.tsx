@@ -438,7 +438,12 @@ export function StatusBar({
                     </svg>
                     {gameState.isActive ? (
                       gameState.nextScheduledTurn ? (
-                        <span className="shrink-0 tabular-nums">{getTimeUntilNextTurn()}</span>
+                        <span className="shrink-0">
+                          {getTimeUntilNextTurn() !== "Processing..." && (
+                            <span className="hidden sm:inline">Turn in </span>
+                          )}
+                          <span className="tabular-nums">{getTimeUntilNextTurn()}</span>
+                        </span>
                       ) : (
                         <span className="shrink-0 text-muted">Player paced</span>
                       )
@@ -448,7 +453,10 @@ export function StatusBar({
                   </TurnStatusLink>
                 )}
                 {turnStatusLink && gameState.isActive && !isProcessing && (
-                  <MarketTickNote lastMarketTickAt={gameState.lastMarketTickAt} />
+                  <MarketTickNote
+                    lastMarketTickAt={gameState.lastMarketTickAt}
+                    statusLink={turnStatusLink}
+                  />
                 )}
               </div>
             </div>
