@@ -323,9 +323,7 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
       ? anchors.csFederalAssembly
       : ctx.preset === "1991-default" && countryId === "HU" && electionType === "nationalAssembly"
         ? anchors.huNationalAssembly
-        : ctx.preset === "1991-default" && countryId === "YU" && electionType === "federalAssembly"
-          ? anchors.yuFederalAssembly
-          : null;
+        : null;
   if (successorAnchor != null) {
     const periodHours = electionType === "chamberOfThePeople" ? 96 : 192;
     const endTurn = successorAnchor + (cycle - 1) * periodHours;

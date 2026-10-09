@@ -75,10 +75,9 @@ const CONTESTABLE_QUALIFICATION_FAMILIES = [
   "sejm",
   "senat",
   "chamberOfDeputies",
-  // 1991 Soviet Congress and SFRY Federal Chamber: no seated delegation to
-  // defend, so a cycle opened after the Founding needs the same floor.
+  // 1991 Soviet Congress: no seated delegation to defend, so a cycle opened
+  // after the Founding needs the same floor.
   "unionCongressDeputy",
-  "federalAssembly",
 ] as const;
 
 /** All election types this phase files a floor candidate into. */

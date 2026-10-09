@@ -812,7 +812,7 @@ describe("pickNextCanonicalCycle — pre-iteration founding branch", () => {
   });
 });
 
-describe("1991 Soviet Congress and SFRY Federal Chamber", () => {
+describe("1991 Soviet Congress", () => {
   const ctx1991 = { startingYear: 1991, preset: "1991-default" };
 
   it("schedules the Union Congress on a five-year cycle from 1994", () => {
@@ -848,35 +848,9 @@ describe("1991 Soviet Congress and SFRY Federal Chamber", () => {
     }
   });
 
-  it("schedules the 1991 Federal Chamber from the 1992 federal vote", () => {
-    const params = { countryId: "YU" as const, electionType: "federalAssembly", ctx: ctx1991 };
-    expect(canonicalTurnsForCycle({ ...params, cycle: 1 })).toEqual({
-      startTurn: 1,
-      primaryEndTurn: 72,
-      endTurn: 96,
-    });
-    expect(canonicalTurnsForCycle({ ...params, cycle: 2 })?.endTurn).toBe(288);
-    expect(electionToLarpYear("federalAssembly", 1, null, null, ctx1991, "YU")).toBe(1992);
-  });
-
-  it("leaves the Cold War Federal Assembly on the Volkskammer schedule", () => {
-    const ctx1953 = { startingYear: 1953, preset: "1953-default" };
-    expect(
-      canonicalTurnsForCycle({
-        countryId: "YU",
-        electionType: "federalAssembly",
-        cycle: 1,
-        ctx: ctx1953,
-      })?.endTurn
-    ).toBe(96);
-  });
-
-  it("founds both chambers during the 1991 Founding", () => {
+  it("founds the Union Congress during the 1991 Founding", () => {
     const ctx = { ...ctx1991, preIterationActive: true };
-    for (const [countryId, electionType] of [
-      ["RU", "unionCongressDeputy"],
-      ["YU", "federalAssembly"],
-    ] as const) {
+    for (const [countryId, electionType] of [["RU", "unionCongressDeputy"]] as const) {
       expect(
         pickNextCanonicalCycle({ countryId, electionType, prevCycle: 0, currentTurn: 1, ctx })
       ).toEqual({ cycle: 0, startTurn: 1, primaryEndTurn: 25, endTurn: 49 });

@@ -193,11 +193,6 @@ export interface PresetElectionYears {
    * The Cold War Supreme Soviet families keep `ruSupremeSoviet`.
    */
   ruUnionCongress?: number | null;
-  /**
-   * SFRY Federal Chamber (1991 start only). The 1986 delegation's mandate was
-   * extended past 1990; the next federal vote was held in May 1992.
-   */
-  yuFederalAssembly?: number | null;
 }
 
 /**
@@ -331,7 +326,6 @@ export const CANONICAL_REAL_ELECTION_YEARS_BY_PRESET: Record<string, PresetElect
     huNationalAssembly: 1994, // next election after the 1990 multiparty vote
     plSejm: 1991, // 27 October 1991; 1993 was an early follow-up election
     ruUnionCongress: 1994, // five-year term of the Congress elected in 1989
-    yuFederalAssembly: 1992, // first federal vote after the 1986 delegation
   },
   "1953-default": {
     house: 1954,
@@ -606,7 +600,6 @@ export interface CycleAnchors {
   huNationalAssembly: number | null;
   /** `null` outside the 1991 preset (see PresetElectionYears). */
   ruUnionCongress: number | null;
-  yuFederalAssembly: number | null;
 }
 
 /** End-of-LARP-year-Y anchor: `(Y − startingYear + 1) × TURNS_PER_YEAR (+ offset)`. */
@@ -676,8 +669,6 @@ export function getCycleAnchors(ctx: CycleAnchorContext): CycleAnchors {
       years.huNationalAssembly == null ? null : endOfYear(years.huNationalAssembly, sy, off),
     ruUnionCongress:
       years.ruUnionCongress == null ? null : endOfYear(years.ruUnionCongress, sy, off),
-    yuFederalAssembly:
-      years.yuFederalAssembly == null ? null : endOfYear(years.yuFederalAssembly, sy, off),
   };
 }
 

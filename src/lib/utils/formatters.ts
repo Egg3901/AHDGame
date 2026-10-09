@@ -606,9 +606,6 @@ export function electionToLarpYear(
     if (electionType === "nationalAssembly" && countryId === "HU") {
       return (years.huNationalAssembly ?? 1994) + (cycle - 1) * 4;
     }
-    if (electionType === "federalAssembly" && countryId === "YU") {
-      return (years.yuFederalAssembly ?? 1992) + (cycle - 1) * 4;
-    }
     if (electionType === "unionCongressDeputy") {
       return (years.ruUnionCongress ?? 1994) + (cycle - 1) * 5;
     }
