@@ -17,7 +17,7 @@ jobs:
   custom-rules:
     runs-on: ubuntu-latest
     container:
-      image: returntocorp/semgrep:latest
+      image: mirror.gcr.io/returntocorp/semgrep:latest
     steps:
       - uses: actions/checkout@v4
       - name: Semgrep (AHD project rules)
@@ -32,7 +32,7 @@ jobs:
       contents: read
       security-events: write
     container:
-      image: returntocorp/semgrep:latest
+      image: mirror.gcr.io/returntocorp/semgrep:latest
     steps:
       - uses: actions/checkout@v4
       - name: Semgrep (community rulesets)
