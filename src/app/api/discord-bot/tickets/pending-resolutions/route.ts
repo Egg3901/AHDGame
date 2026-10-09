@@ -96,6 +96,17 @@ export async function GET(request: Request) {
           "statusHistory.note": "discord-ticket-close",
         },
         {
+          // A deleted Discord channel cannot recover through channel retries.
+          // Let the bot deliver the durable receipt by DM immediately.
+          publicUpdates: {
+            $elemMatch: {
+              kind: "resolution",
+              "delivery.status": "failed",
+              "delivery.error": { $regex: /"code"\s*:\s*10003\b/ },
+            },
+          },
+        },
+        {
           publicUpdates: {
             $elemMatch: {
               kind: "resolution",
