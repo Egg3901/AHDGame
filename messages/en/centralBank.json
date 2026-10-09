@@ -30,6 +30,15 @@
     "rateCorridor": {
       "credibilityNote": "Credibility uses the neutral rate ({neutral}%) with inflation and GDP gaps; the prime–inflation spread above is descriptive.",
       "sharedCredibilityNote": "Credibility uses the shared currency area's neutral rate with inflation and GDP gaps; the prime–inflation spread above is descriptive."
+    },
+    "savings": {
+      "apy": "APY",
+      "yourBankRate": "Your bank rate",
+      "privateBank": "your private bank",
+      "atBank": "At {bank}",
+      "holderUnknown": "Savings holder could not be verified",
+      "centralRate": "Half of real {prime}% prime",
+      "centralRateWithBonus": "Half of real {prime}% prime + {bonus}% Central Bank bonus"
     }
   }
 }

@@ -3,6 +3,15 @@
     "rateCorridor": {
       "credibilityNote": "Die Glaubwürdigkeit wird am neutralen Zinssatz ({neutral}%) sowie an Inflations- und BIP-Lücken gemessen. Der Abstand zwischen Leitzins und Inflation oben dient nur zur Orientierung.",
       "sharedCredibilityNote": "Die Glaubwürdigkeit wird am neutralen Zinssatz des gemeinsamen Währungsraums sowie an Inflations- und BIP-Lücken gemessen. Der Abstand zwischen Leitzins und Inflation oben dient nur zur Orientierung."
+    },
+    "savings": {
+      "apy": "Effektiver Jahreszins",
+      "yourBankRate": "Zinssatz deiner Bank",
+      "privateBank": "deiner Privatbank",
+      "atBank": "Bei {bank}",
+      "holderUnknown": "Die Bank für dein Guthaben konnte nicht ermittelt werden",
+      "centralRate": "Die Hälfte des realen Leitzinses von {prime}%",
+      "centralRateWithBonus": "Die Hälfte des realen Leitzinses von {prime}% plus {bonus}% Zentralbankbonus"
     }
   }
 }
