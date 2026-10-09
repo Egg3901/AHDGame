@@ -1,5 +1,19 @@
-import { recentSupportVisits, buildIntakeQuestions } from "@/lib/tickets/intakeContext";
-import { TICKET_PLATFORM_VALUES, platformFromDescriptionPrefix } from "@/lib/tickets/platform";
+import {
+  recentSupportVisits,
+  buildIntakeQuestions,
+  suggestIntakePage,
+} from "@/lib/tickets/intakeContext";
+import {
+  intakeFrameSchema,
+  intakeInteractionSchema,
+  intakeResponseFields,
+  seedIntake,
+} from "@/lib/tickets/intakeState";
+import {
+  TICKET_PLATFORM_VALUES,
+  platformFromDescriptionPrefix,
+  formatTicketPlatform,
+} from "@/lib/tickets/platform";
 import { NextResponse } from "next/server";
 import { ObjectId, type Filter } from "mongodb";
 import { z } from "zod";
@@ -151,6 +165,17 @@ function isCurrentLegacyDeliveryNote(
 const updateSchema = z
   .discriminatedUnion("action", [
     z.object({ action: z.literal("append"), ...ticketIdFields, message: messageSchema }),
+    z
+      .object({
+        action: z.literal("intake"),
+        ...ticketIdFields,
+        discordChannelId: z.string().min(1).max(64),
+        intake: intakeFrameSchema.optional(),
+        interaction: intakeInteractionSchema.optional(),
+      })
+      .refine((value) => value.intake || value.interaction, {
+        message: "Intake data or a response is required",
+      }),
     z.object({
       action: z.literal("status"),
       ...ticketIdFields,
@@ -192,6 +217,56 @@ function toMessage(
     ...(imageUrls && imageUrls.length ? { imageUrls: imageUrls.slice(0, 20) } : {}),
     createdAt: m?.createdAt ? new Date(m.createdAt) : new Date(),
   };
+}
+
+/** Minimal private hydration for a persistent Discord card. Never return the navigation list. */
+export async function GET(request: Request) {
+  try {
+    if (!requireBotToken(request, false)) return errorResponse(401, "Unauthorized");
+    const params = new URL(request.url).searchParams;
+    const parsed = z
+      .object({
+        ticketNumber: z.coerce.number().int().positive().optional(),
+        discordChannelId: z.string().min(1).max(64).optional(),
+      })
+      .refine((value) => value.ticketNumber != null || value.discordChannelId)
+      .safeParse({
+        ...(params.has("ticketNumber") ? { ticketNumber: params.get("ticketNumber") } : {}),
+        ...(params.has("discordChannelId")
+          ? { discordChannelId: params.get("discordChannelId") }
+          : {}),
+      });
+    if (!parsed.success) return errorResponse(400, "A valid ticket number or channel is required");
+    const ticket = await getTicketsCollection(await getDb()).findOne(parsed.data);
+    if (!ticket) return errorResponse(404, "Ticket not found");
+    const visits = recentSupportVisits(ticket.supportRecentVisits, new Date());
+    const latest = visits[0];
+    const candidate = suggestIntakePage(`${ticket.title}\n${ticket.description}`, visits);
+    return NextResponse.json(
+      {
+        ticketNumber: ticket.ticketNumber,
+        discordChannelId: ticket.discordChannelId,
+        discordUserId: ticket.discordUserId,
+        title: ticket.title,
+        category: ticket.category,
+        status: ticket.status,
+        intake: ticket.intake ?? null,
+        intakeSuggestion: {
+          candidatePageUrl: candidate ? `https://ahousedividedgame.com${candidate}` : null,
+          platformLabel: latest
+            ? `${latest.platform}, ${latest.device}`
+            : ticket.platform
+              ? formatTicketPlatform(ticket.platform)
+              : null,
+          gameVersion: latest?.gameVersion ?? null,
+          clientVersion: latest?.clientVersion ?? null,
+        },
+      },
+      { headers: { "Cache-Control": "private, no-store" } }
+    );
+  } catch (error) {
+    return handleRouteError(error);
+  }
 }
 
 // POST /api/discord-bot/tickets — Open a support ticket from the Discord `/ticket` flow.
@@ -381,7 +456,10 @@ export async function PATCH(request: Request) {
     // a non-null assertion so the channel branch is properly typed as string.
     const filter: Filter<Ticket> | null =
       body.ticketNumber != null
-        ? { ticketNumber: body.ticketNumber }
+        ? {
+            ticketNumber: body.ticketNumber,
+            ...(body.discordChannelId ? { discordChannelId: body.discordChannelId } : {}),
+          }
         : body.discordChannelId
           ? { discordChannelId: body.discordChannelId }
           : null;
@@ -390,14 +468,120 @@ export async function PATCH(request: Request) {
     }
     const now = new Date();
 
+    if (body.action === "intake") {
+      const current = await coll.findOne(filter);
+      if (!current) return errorResponse(404, "Ticket not found");
+      if (!body.interaction) {
+        if (!current.intake && !body.intake?.cardMessageId)
+          return errorResponse(400, "Card message ID is required");
+        const frame = body.intake ?? {};
+        // Seed only once. A recovery seed must never reset a reporter's answers.
+        if (!current.intake) {
+          await coll.updateOne(
+            { ...filter, intake: { $exists: false } },
+            { $set: { intake: seedIntake(frame), updatedAt: now } }
+          );
+        } else if (frame.cardMessageId || frame.receiptUrl !== undefined) {
+          await coll.updateOne(filter, {
+            $set: {
+              ...(frame.cardMessageId ? { "intake.cardMessageId": frame.cardMessageId } : {}),
+              ...(frame.receiptUrl !== undefined ? { "intake.receiptUrl": frame.receiptUrl } : {}),
+              updatedAt: now,
+            },
+          });
+        }
+        const ticket = await coll.findOne(filter);
+        return NextResponse.json({ ok: true, intake: ticket?.intake });
+      }
+      const response = body.interaction;
+      if (current.discordUserId !== response.reporterDiscordId)
+        return errorResponse(403, "Only the reporter can confirm ticket details");
+      if (!current.intake) return errorResponse(409, "Ticket intake card is not initialized");
+      if (
+        response.action === "confirm_page" &&
+        !current.intake.candidatePageUrl &&
+        !current.intake.pageDescription
+      ) {
+        return errorResponse(400, "Provide the affected page or issue first");
+      }
+      const fields = Object.fromEntries(
+        Object.entries(intakeResponseFields(response, body.intake)).map(([key, value]) => [
+          key,
+          { $literal: value },
+        ])
+      );
+      const audit = {
+        discordMessageId: response.interactionId,
+        authorId: response.reporterDiscordId,
+        content: `Ticket details: ${response.action}${response.value ? `: ${response.value}` : ""}`,
+        createdAt: now,
+      };
+      // A normal message mirror may arrive before its intake correction. Deduplicate
+      // the response independently while preserving that already captured message.
+      const res = await coll.updateOne(
+        { ...filter, "intake.interactionIds": { $ne: response.interactionId } },
+        [
+          {
+            $set: {
+              ...fields,
+              updatedAt: now,
+              "intake.revision": { $add: [{ $ifNull: ["$intake.revision", 0] }, 1] },
+              "intake.interactionIds": {
+                $concatArrays: [
+                  { $ifNull: ["$intake.interactionIds", []] },
+                  [response.interactionId],
+                ],
+              },
+              "intake.interactions": {
+                $slice: [
+                  {
+                    $concatArrays: [
+                      { $ifNull: ["$intake.interactions", []] },
+                      { $literal: [{ ...response, createdAt: now }] },
+                    ],
+                  },
+                  -20,
+                ],
+              },
+              messages: {
+                $cond: [
+                  {
+                    $in: [response.interactionId, { $ifNull: ["$messages.discordMessageId", []] }],
+                  },
+                  "$messages",
+                  { $concatArrays: [{ $ifNull: ["$messages", []] }, { $literal: [audit] }] },
+                ],
+              },
+            },
+          },
+        ]
+      );
+      const ticket = await coll.findOne(filter);
+      return NextResponse.json({
+        ok: true,
+        intake: ticket?.intake,
+        ...(res.matchedCount ? {} : { alreadyRecorded: true }),
+      });
+    }
+
     if (body.action === "append") {
       const msg = toMessage(body.message, { content: body.message.content ?? "" });
-      const res = await coll.updateOne(filter, {
-        $push: { messages: msg },
-        ...(msg.imageUrls?.length ? { $addToSet: { imageUrls: { $each: msg.imageUrls } } } : {}),
-        $set: { updatedAt: now },
-      });
+      const res = await coll.updateOne(
+        {
+          ...filter,
+          ...(msg.discordMessageId
+            ? { "messages.discordMessageId": { $ne: msg.discordMessageId } }
+            : {}),
+        },
+        {
+          $push: { messages: msg },
+          ...(msg.imageUrls?.length ? { $addToSet: { imageUrls: { $each: msg.imageUrls } } } : {}),
+          $set: { updatedAt: now },
+        }
+      );
       if (!res.matchedCount) {
+        if (msg.discordMessageId && (await coll.findOne(filter, { projection: { _id: 1 } })))
+          return NextResponse.json({ ok: true, alreadyRecorded: true });
         return errorResponse(404, "Ticket not found");
       }
       return NextResponse.json({ ok: true });
