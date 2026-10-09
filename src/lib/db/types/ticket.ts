@@ -68,6 +68,8 @@ export interface Ticket {
     /** Absolute URL to the reporter's corporation page (if they own one). */
     corporationUrl?: string;
   };
+  /** Snapshot of recent game visits, treated as unconfirmed until the reporter replies. */
+  supportRecentVisits?: import("@/lib/tickets/intakeContext").TicketVisit[];
   category: TicketCategory;
   /** Where the reporter was playing (bot picker value), when known. */
   platform?: TicketPlatform;

@@ -93,6 +93,24 @@ describe("POST /api/analytics/pageview", () => {
       })
     );
     expect(res.status).toBe(201);
+    expect(db.collectionMocks.users.updateOne).toHaveBeenCalledWith(
+      { _id: expect.anything() },
+      {
+        $push: {
+          supportRecentVisits: {
+            $each: [
+              expect.objectContaining({
+                path: "/dashboard",
+                platform: "desktop",
+                device: "desktop",
+              }),
+            ],
+            $position: 0,
+            $slice: 5,
+          },
+        },
+      }
+    );
     const call = vi.mocked(db.collectionMocks.siteTrafficPageviews!.insertOne).mock.calls[0][0];
     expect(call).toMatchObject({
       path: "/dashboard",
