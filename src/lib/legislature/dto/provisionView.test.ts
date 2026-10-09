@@ -60,14 +60,18 @@ describe("provisionToView", () => {
     expect(view.current).toBeNull();
   });
 
-  it("carries the fiscal panel and nationalization detail through unchanged", () => {
+  it("carries the fiscal and reviewed-law impact panels through unchanged", () => {
     const view = provisionToView({
       legislationTypeName: "Health",
       proposed: { name: "Universal" },
       effectDirection: -1,
       directionLabel: "Left",
       fiscal: { currencyCode: "RUB", netDelta: 12 },
+      metricEffects: [{ metric: "Care affordability", favorableNormalizedDelta: 0.42 }],
     });
     expect(view.fiscal).toEqual({ currencyCode: "RUB", netDelta: 12 });
+    expect(view.metricEffects).toEqual([
+      { metric: "Care affordability", favorableNormalizedDelta: 0.42 },
+    ]);
   });
 });

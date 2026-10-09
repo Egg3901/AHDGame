@@ -1,6 +1,7 @@
 ---
 date: 2026-10-09
 title: Restore bill policy costs and repair corporation creation links
+date: 2026-10-09
 badges: [patch]
 areas: [fullstack]
 tags: [legislation, corporations, errors]
