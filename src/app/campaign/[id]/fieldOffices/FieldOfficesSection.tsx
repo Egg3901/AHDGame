@@ -305,8 +305,8 @@ export function FieldOfficesSection({
             >
               <div style={BLEND_LABEL}>
                 {view.liveLeanActive
-                  ? `County lean, moved by the ${view.liveLeanYear ?? "last"} presidential result`
-                  : "County lean (2020 and 2024 results)"}
+                  ? `County lean from ${view.leanSourceLabel ?? "past results"}, moved by this world's ${view.liveLeanYear ?? "last"} presidential result`
+                  : `County lean from ${view.leanSourceLabel ?? "past results"}`}
               </div>
               {view.canManage ? (
                 <div style={{ display: "flex", gap: 6 }}>

@@ -6,7 +6,8 @@ import type { LiveStateLean } from "./liveLean";
  * Where a county-scope office can stand, and how each spot leans.
  *
  * The geometry and baseline PVI come from the committed subdivision files
- * (`src/data/counties/{ST}.json`). Region scope has no subdivisions; offices
+ * (`src/data/counties/{ST}.json`), with the lean swapped for the world's era
+ * baseline (`src/data/county-leans`). Region scope has no subdivisions; offices
  * attach to the region itself.
  */
 
@@ -22,7 +23,7 @@ export interface FieldOfficeSubdivision {
   electorate: number;
   /** Share of the region electorate, 0..1. */
   electorateShare: number;
-  /** Committed real-world PVI (points, positive = right). */
+  /** Era baseline PVI for this world (points, positive = right). */
   basePvi: number;
   /** Baseline shifted by the world's own last presidential result. */
   livePvi: number;
@@ -39,12 +40,13 @@ export interface FieldOfficeRegionMap {
 export async function loadFieldOfficeRegionMap(
   scope: FieldOfficeScope,
   regionId: string,
-  live: LiveStateLean | null
+  live: LiveStateLean | null,
+  preset: string | null
 ): Promise<FieldOfficeRegionMap | null> {
   const dir = SUBDIVISION_DATA_DIR[scope];
   // regionId feeds a filesystem path; only region-code shapes get through.
   if (!dir || !/^[A-Z]{2,3}$/.test(regionId)) return null;
-  const file = await loadSubdivisionFile(dir, regionId);
+  const file = await loadSubdivisionFile(dir, regionId, { preset });
   if (!file || file.subdivisions.length === 0) return null;
 
   const total = file.subdivisions.reduce((s, c) => s + (c.electorate || 0), 0);

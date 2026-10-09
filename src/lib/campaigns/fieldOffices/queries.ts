@@ -26,6 +26,7 @@ import {
   type FieldOfficeScope,
 } from "./rules";
 import { loadFieldOfficeRegionMap } from "./subdivisions";
+import { countyLeanSourceLabel } from "@/lib/maps/countyLeans";
 
 export interface FieldOfficeDto {
   id: string;
@@ -85,6 +86,8 @@ export interface FieldOfficeView {
   /** Year of the in-world presidential race the live leans follow, if any. */
   liveLeanYear: number | null;
   liveLeanActive: boolean;
+  /** Elections the county baseline comes from for this world's era. */
+  leanSourceLabel: string | null;
 }
 
 export async function getFieldOfficeView(
@@ -150,6 +153,7 @@ export async function getFieldOfficeView(
     map: null,
     liveLeanYear: null,
     liveLeanActive: false,
+    leanSourceLabel: null,
   };
   if (!rules) return base;
 
@@ -212,10 +216,14 @@ export async function getFieldOfficeView(
   base.selectedRegionId = selected?._id ?? null;
 
   if (selected && rules.scope === "county") {
-    const live = await loadLiveStateLean(db, election.countryId);
+    const [live, preset] = await Promise.all([
+      loadLiveStateLean(db, election.countryId),
+      getGameStatePresetOrDefault(db),
+    ]);
     base.liveLeanActive = !!live;
+    base.leanSourceLabel = countyLeanSourceLabel(preset);
     base.liveLeanYear = live?.sourceYear ?? null;
-    const map = await loadFieldOfficeRegionMap(rules.scope, selected._id, live);
+    const map = await loadFieldOfficeRegionMap(rules.scope, selected._id, live, preset);
     if (map) {
       const orientation = canManage
         ? await loadCampaignOrientation(db, campaign as Campaign, election.countryId)

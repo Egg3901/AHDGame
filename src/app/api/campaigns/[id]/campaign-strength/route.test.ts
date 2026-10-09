@@ -169,15 +169,15 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
   it("returns 400 when election is not Campaign-Manager-eligible (Phase 5.5 D4 — non-US deferred)", async () => {
     // Phase 5.5 widened the eligibility matrix: US president + senate /
     // governor / house / stateSenate are now eligible. Non-US races stay
-    // explicitly rejected per D4. Use UK commons to exercise the gate.
+    // explicitly rejected per D4. Use DE bundestag (still off) to exercise the gate.
     const charId = new ObjectId();
     const campaignOid = new ObjectId();
     const electionOid = new ObjectId();
     const mockCampaign = { _id: campaignOid, electionId: electionOid, campaignStrength: 0 };
     const mockElection = {
       _id: electionOid,
-      electionType: "commons",
-      countryId: "UK",
+      electionType: "bundestag",
+      countryId: "DE",
       status: "active",
     };
 
