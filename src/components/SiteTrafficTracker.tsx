@@ -1,5 +1,6 @@
 "use client";
 
+import { GAME_VERSION } from "@/lib/marketing/marketedWorld";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
@@ -46,6 +47,7 @@ export function SiteTrafficTracker() {
       const loadTimeMs = readNavigationDurationMs();
       const body = JSON.stringify({
         path: pathname,
+        gameVersion: GAME_VERSION,
         ...(loadTimeMs !== null ? { loadTimeMs } : {}),
       });
       try {

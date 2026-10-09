@@ -18,6 +18,8 @@ export interface ModNote {
 }
 
 export interface User {
+  /** Bounded game navigation context for support, without raw device identifiers. */
+  supportRecentVisits?: import("@/lib/tickets/intakeContext").TicketVisit[];
   _id: ObjectId;
   email: string;
   /** When the current `email` was proven by a confirmation link (POST /api/auth/confirm-email). */

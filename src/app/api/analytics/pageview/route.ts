@@ -1,3 +1,12 @@
+import { ObjectId } from "mongodb";
+import { getDb } from "@/lib/mongodb";
+import type { User } from "@/lib/db/types";
+import { GAME_VERSION } from "@/lib/marketing/marketedWorld";
+import {
+  sanitizeSupportPath,
+  classifySupportRuntime,
+  SUPPORT_VISIT_LIMIT,
+} from "@/lib/tickets/intakeContext";
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
@@ -17,6 +26,11 @@ import {
 
 const bodySchema = z.object({
   path: z.string().min(1).max(520),
+  gameVersion: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+(?:[.+-][\w.-]+)?$/)
+    .max(64)
+    .optional(),
   /** Client-reported navigation timing in ms. Optional. */
   loadTimeMs: z.number().finite().nonnegative().max(120_000).optional(),
 });
@@ -86,6 +100,30 @@ export async function POST(request: Request) {
       country,
       ...(loadTimeMs !== undefined ? { loadTimeMs } : {}),
     });
+
+    const supportPath = sanitizeSupportPath(parsed.data.path);
+    if (authUser && supportPath) {
+      const db = await getDb();
+      await db.collection<User>("users").updateOne(
+        { _id: new ObjectId(authUser.userId) },
+        {
+          $push: {
+            supportRecentVisits: {
+              $each: [
+                {
+                  path: supportPath,
+                  recordedAt: new Date(),
+                  gameVersion: parsed.data.gameVersion ?? GAME_VERSION,
+                  ...classifySupportRuntime(ua),
+                },
+              ],
+              $position: 0,
+              $slice: SUPPORT_VISIT_LIMIT,
+            },
+          },
+        }
+      );
+    }
 
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (error) {
