@@ -13,6 +13,7 @@ import {
 import { allocateSeats } from "@/lib/turn/election/seatAllocation";
 import type { ElectionVoteTally, PoliticalParty } from "@/lib/db/types";
 import { getPartyHex } from "@/lib/utils/politics";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 
 // GET /api/elections/[id]/state/[stateId]/subdivision-results — sub-region
 // vote distribution + seat-consistent winners for a region in an election.
@@ -45,7 +46,10 @@ export async function GET(
       return errorResponse(404, "Subdivision map data is not available for this election");
     }
 
-    const data = await loadSubdivisionFile(modeEntry.config.dataDir, regionId);
+    // County leans follow the world's era (a 1991 world starts from 1984/1988).
+    const data = await loadSubdivisionFile(modeEntry.config.dataDir, regionId, {
+      preset: await getGameStatePresetOrDefault(db),
+    });
     if (!data) {
       return errorResponse(404, "Subdivision data not available for this region");
     }

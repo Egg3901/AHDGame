@@ -1,7 +1,8 @@
 /**
  * Influence previews estimate one play's effective share gain in isolation.
  * previewEffectivePlay applies channel strength, strain and the existing drift
- * rules; other plays and background effects are not forecast.
+ * rules; other plays and background effects are not forecast. A rival's standing push, when
+ * given, is netted against the play exactly as the turn phase nets it.
  */
 import type { AlignmentPoleId } from "@/lib/constants/alignmentEras";
 import { computeDrift, NON_ALIGNED_RESISTANCE } from "../drift";
@@ -20,6 +21,8 @@ export function previewEffectivePlay(input: {
   weight: number;
   effectiveness: number;
   turnCap: number;
+  /** A rival's standing push on the target; opposing pulls cancel before the cap. */
+  rivalPressure?: { poleId: AlignmentPoleId; points: number } | null;
 }): number {
   if (
     ![
@@ -35,10 +38,18 @@ export function previewEffectivePlay(input: {
     return 0;
   const points = Math.min(input.amountLocal / input.pointCostLocal, input.playMaxPoints);
   const resistance = input.resistsAtHalfStrength ? NON_ALIGNED_RESISTANCE : 1;
+  const rival = input.rivalPressure;
+  const rivalPull =
+    rival && rival.poleId !== input.poleId && rival.points > 0 && input.poles.includes(rival.poleId)
+      ? { [rival.poleId]: rival.points }
+      : {};
   const after = computeDrift({
     shares: input.shares,
     poles: input.poles,
-    pull: { [input.poleId]: (points / resistance) * input.weight * input.effectiveness },
+    pull: {
+      ...rivalPull,
+      [input.poleId]: (points / resistance) * input.weight * input.effectiveness,
+    },
     cap: input.turnCap,
   });
   return Math.max(

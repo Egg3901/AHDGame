@@ -32,7 +32,7 @@ describe("selfHealMissingCampaigns", () => {
     db.collection("campaigns");
 
     // Two active candidates in an eligible US president election; one in an
-    // ineligible UK commons race.
+    // ineligible DE bundestag race.
     db.collectionMocks.electionCandidates!.find.mockReturnValue(
       makeCursor([
         {
@@ -62,7 +62,7 @@ describe("selfHealMissingCampaigns", () => {
     db.collectionMocks.elections!.find.mockReturnValue(
       makeCursor([
         { _id: presElectionId, countryId: "US", electionType: "president" },
-        { _id: ukElectionId, countryId: "UK", electionType: "commons" },
+        { _id: ukElectionId, countryId: "DE", electionType: "bundestag" },
       ])
     );
 

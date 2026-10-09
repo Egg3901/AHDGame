@@ -114,6 +114,13 @@ export interface Campaign {
   groundGameTree?: CampaignOpsTree;
   mediaSpendingTree?: CampaignOpsTree;
 
+  /**
+   * Open field offices (`campaignFieldOffices`). Maintained by the open/close
+   * commands and the upkeep phase so the per-race office cap can be enforced
+   * in the same guarded write that charges for the office. Absent = 0.
+   */
+  fieldOfficeCount?: number;
+
   oppositionTargetId: ObjectId | null;
   oppositionTargetName: string | null;
 

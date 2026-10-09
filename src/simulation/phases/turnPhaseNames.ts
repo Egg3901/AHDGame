@@ -58,6 +58,7 @@ export const BASE_TURN_PHASE_NAMES = [
   "ukPartyConferences",
   "socialAxisDrift",
   "campaignTurn",
+  "campaignFieldOffices",
   "playerRandomEvents",
   "worldEventsMaintenance",
   "worldEventsScheduler",

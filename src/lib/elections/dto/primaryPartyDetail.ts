@@ -17,6 +17,15 @@ import type { PrimaryCandidateInfo } from "@/lib/elections/primaryViewModel";
  * surge route actually debits. Quoting the anchor price against a local balance
  * would let the button enable on money the route then refuses.
  */
+/** One state on primary night, without its revealed votes (those are in `byState`). */
+export interface PrimaryNightStateView {
+  status: "polls_open" | "counting" | "too_early" | "leaning" | "called" | "final";
+  reportingPct: number;
+  called: boolean;
+  calledFor: string | null;
+  closesAt: string;
+}
+
 export interface PrimaryViewerCampaign {
   currentCampaignState: string | null;
   currentTicks: number;
@@ -45,8 +54,18 @@ export interface PrimaryPartyDetail {
    */
   byState: Record<string, Record<string, number>>;
   stateNameById: Record<string, string>;
-  /** States whose wave has fired, so a board can separate locked from projected. */
+  /**
+   * States whose result is in and may be shown, so a board can separate locked
+   * from projected. A state still being counted on primary night is not listed
+   * until it is called.
+   */
   votedStateIds: string[];
+  /**
+   * Primary night: every state whose wave is still being counted, with how far
+   * the count has got. Its `byState` entry holds only the votes reported so
+   * far (or the projection while nothing is reported). Absent outside a night.
+   */
+  night?: Record<string, PrimaryNightStateView>;
   /** Null for a viewer with no candidate in this party's primary. */
   viewerCampaign: PrimaryViewerCampaign | null;
 }

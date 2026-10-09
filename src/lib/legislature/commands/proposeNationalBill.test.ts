@@ -5,6 +5,8 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { AuthUser } from "@/lib/auth";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+const checkBillSponsoredAchievements = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("@/lib/achievements/triggers", () => ({ checkBillSponsoredAchievements }));
 vi.mock("@/lib/gameState", () => ({
   getGameState: vi.fn().mockResolvedValue({ currentTurn: 5 }),
 }));
@@ -108,6 +110,22 @@ describe("proposeNationalBill — origin/current chamber storage", () => {
     const bill = insertedBill();
     expect(bill.originChamber).toBe("npc");
     expect(bill.currentChamber).toBe("npc");
+  });
+
+  it("checks the first-bill achievement for a non-US sponsor (ticket 1387)", async () => {
+    const { authUser, charId } = seatDelegate({ countryId: "CN", officeType: "npcDelegate" });
+
+    const result = await proposeNationalBill(db as unknown as Db, "CN", authUser, {
+      title: "Public Security and Criminal Justice Reform Act",
+      summary: "A test bill.",
+      chamber: "npc",
+      category: "general",
+      provisions: [],
+    });
+
+    expect(result.status).toBe(201);
+    expect(checkBillSponsoredAchievements).toHaveBeenCalledTimes(1);
+    expect(checkBillSponsoredAchievements.mock.calls[0]![1]).toEqual(charId);
   });
 
   it("leaves a US House member's bill under chamber key 'house' (identity mapping unchanged)", async () => {

@@ -7,6 +7,10 @@ import type { BillDisplay } from "@/lib/legislature/dto/billDisplay";
 // Heavy / interactive children are irrelevant to the deadline-badge logic under test.
 vi.mock("./BillVoteIndicator", () => ({ BillVoteIndicator: () => null }));
 vi.mock("@/components/time/LocalTime", () => ({ LocalTime: () => null }));
+vi.mock("next/image", () => ({
+  // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
+  default: (props: any) => <img {...props} />,
+}));
 
 // Drive the game clock: currentTurn lets us cross the override deadline turn.
 let mockClock = { realNow: new Date("2026-07-10T15:46:00Z"), currentTurn: 996 };
@@ -148,5 +152,35 @@ describe("BillCard sponsor profile link", () => {
     render(<BillCard bill={overrideBill({ status: "signed", sponsorId: null })} />);
     expect(screen.queryByRole("link", { name: "Mary Bishop" })).toBeNull();
     expect(screen.getByText("Mary Bishop")).toBeTruthy();
+  });
+});
+
+describe("BillCard sponsor portrait and chamber seal", () => {
+  it("shows the sponsor avatar", () => {
+    render(
+      <BillCard
+        bill={overrideBill({
+          status: "signed",
+          sponsorId: "aaaaaaaaaaaaaaaaaaaaaaaa",
+          sponsorAvatarUrl: "https://cdn/s.png",
+        })}
+      />
+    );
+    expect(screen.getByAltText("Mary Bishop").getAttribute("src")).toBe("https://cdn/s.png");
+  });
+
+  it("shows the national chamber seal on national bills", () => {
+    render(<BillCard bill={overrideBill({ status: "signed", countryId: "US" })} />);
+    expect(screen.getByAltText("Seal of the United States Senate")).toBeTruthy();
+  });
+
+  it("never shows a national seal on a state bill with the same chamber key", () => {
+    render(
+      <BillCard
+        bill={overrideBill({ status: "signed", countryId: "US" })}
+        timelineVariant="state"
+      />
+    );
+    expect(screen.queryByAltText("Seal of the United States Senate")).toBeNull();
   });
 });

@@ -34,7 +34,9 @@ export const CAMPAIGN_FAMILY_SCALAR_BY_ELECTION_TYPE: Readonly<Record<string, nu
   senate: 0.5,
   governor: 0.5,
   commons: 0.5,
+  special_commons: 0.3,
   shugiin: 0.5,
+  snap_shugiin: 0.5,
   sangiin: 0.5,
   bundestag: 0.5,
   ministerPresident: 0.4,
@@ -306,9 +308,9 @@ export const OPS_TREES: Record<UpgradeCategory, OpsTreeDef> = {
     branches: [
       {
         key: "a",
-        label: "Field Offices",
+        label: "Swing Canvassing",
         effectType: "swingPct",
-        description: "Boots on the ground where the race is decided — swing-area performance.",
+        description: "Door-knocking where the race is decided: swing-area performance.",
         tiers: [
           {
             level: 1,

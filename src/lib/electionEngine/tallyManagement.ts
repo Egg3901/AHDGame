@@ -8,6 +8,11 @@ import { russianCouncilVoteTotals } from "@/lib/countries/ru/rules/councilVoteTo
 import { resolveRussianCouncilBallot } from "@/lib/countries/ru/rules/councilResult";
 import { russianPresidentialVoteIncrement } from "@/lib/countries/ru/rules/presidentialVoteIncrement";
 import { campaignStrengthLookupKey } from "@/lib/campaigns/suspendEndorseLifecycle";
+import {
+  loadRaceCampaignMultiplier,
+  type RaceCampaignEffectsMemo,
+} from "@/lib/campaigns/raceCampaignEffects";
+import { getStateLean } from "@/lib/utils/demographics";
 import { applyNationalAds } from "@/lib/campaignTargeting/nationalAds";
 import { turnoutForElection } from "@/lib/campaignTargeting/rules";
 
@@ -113,7 +118,7 @@ import {
  * Per-turn memo for the lookups whose inputs repeat across a turn's elections.
  * Promises, not values, so concurrent callers share one in-flight read.
  */
-export interface VoteTurnMemo {
+export interface VoteTurnMemo extends RaceCampaignEffectsMemo {
   presidentByCountry: Map<string, Promise<Awaited<ReturnType<typeof resolvePresidentApproval>>>>;
   govExecutiveByState: Map<
     string,
@@ -869,6 +874,20 @@ export async function accumulateVoteTurn(
     );
   const EXECUTIVE_ENDORSEMENT_VOTE_BONUS = 1.015;
 
+  // Campaign Ground Game and field offices in this race's region. Keyed by
+  // the campaign's candidate (character or NPP id), not the filing row.
+  const campaignKeyByCandidateId = new Map(
+    candidates.map((c) => [c._id.toString(), campaignStrengthLookupKey(c)])
+  );
+  const campaignMultiplier = await loadRaceCampaignMultiplier(db, {
+    electionId,
+    countryId: electionCountryId,
+    regionId: stateId,
+    currentTurn: turnNumber,
+    isSwingRegion: Math.abs(getStateLean(state, stateId)) < 0.5,
+    memo,
+  });
+
   // Start with active increments. Bound Duma ballots then restore counted
   // withdrawals, which remain part of participation and certification.
   const activeCandidateIds = new Set(enriched.map((ec) => ec.candidateId));
@@ -876,9 +895,10 @@ export async function accumulateVoteTurn(
   const increments: Record<string, number> = {};
   for (const ec of enriched) {
     const raw = votesPerCandidate[ec.candidateId] ?? 0;
-    const multiplier = executiveEndorsedCandidateIds.has(ec.candidateId)
-      ? EXECUTIVE_ENDORSEMENT_VOTE_BONUS
-      : 1.0;
+    const campaignKey = campaignKeyByCandidateId.get(ec.candidateId);
+    const multiplier =
+      (executiveEndorsedCandidateIds.has(ec.candidateId) ? EXECUTIVE_ENDORSEMENT_VOTE_BONUS : 1.0) *
+      (campaignMultiplier && campaignKey ? campaignMultiplier(campaignKey) : 1.0);
     increments[ec.candidateId] = Math.round(raw * multiplier);
     newTotals[ec.candidateId] =
       (tally.totalVotes[ec.candidateId] ?? 0) + increments[ec.candidateId];

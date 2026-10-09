@@ -104,7 +104,8 @@ export interface PrimaryCalendarWave {
   /** Turns remaining in the primary when this wave fires. */
   turnsRemaining: number;
   states: string[];
-  status: "complete" | "upcoming";
+  /** "live": the wave has voted and its primary night is still counting. */
+  status: "complete" | "live" | "upcoming";
 }
 
 export interface SnapshotEntry {

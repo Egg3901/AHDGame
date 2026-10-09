@@ -6,16 +6,18 @@
  * The rule is deliberately small and bounded:
  *  - at most one development per corporation and domain (the unique activeKey
  *    index backs this, so a replay or a race cannot add a second);
- *  - eligible only if cash above the NPP cash reserve (`getNppCashFloorAnchor`,
- *    the reserve behind #3561) covers a 12-turn runway of standard funding,
- *    and the company is not insolvent, in arrears or in financial distress;
+ *  - eligible only if the lifted sectors' last settled profit per turn covers
+ *    two turns of standard funding, cash sits two turns of funding above the
+ *    NPP reserve (`getNppCashFloorAnchor`, #3561), and the company is not
+ *    insolvent, in arrears or in financial distress. NPP companies pay out
+ *    spare cash, so a cash-runway test never passes on a live world;
  *  - one seeded roll per eligible company per turn. Per-turn start hazard
  *    p = 1 / (2 x 72) = 1/144, so that about one in three eligible companies
  *    has a product in development at steady state (derivation below);
  *  - the line is drawn with weights favouring outputs that are short in the
  *    market (the same price-ratio signal NPP founding uses, #3485);
- *  - tier: standard funding, lean when headroom above the reserve is under two
- *    runways. Never all-in.
+ *  - tier: standard when profit covers four turns of funding, else lean.
+ *    Never all-in.
  *
  * Steady state. A company alternates idle and developing. Idle time before a
  * start is geometric with mean 1/p turns, development lasts D = 72 turns, so
@@ -46,7 +48,7 @@ import {
   ventureTargetAnchor,
 } from "./engine";
 import { availableVentureLines, liftedSectorIds } from "./lines";
-import { sectorTurnRevenueAnchor } from "./revenue";
+import { sectorTurnProfitAnchor, sectorTurnRevenueAnchor } from "./revenue";
 import { PRODUCT_VENTURES, ventureDocument } from "./store";
 import { ventureSector } from "./turn";
 import type { ProductVenture, VentureDomain } from "./types";
@@ -60,13 +62,15 @@ export const NPP_VENTURE_START_HAZARD =
 export const NPP_VENTURE_SHORTAGE_EXPONENT = 2;
 export const NPP_VENTURE_MIN_SHORTAGE_SCORE = 0.5;
 /**
- * Turns of standard funding the company must hold above its reserve to start.
- * Funding is debited each turn from operating income, so the company needs a
- * runway, not the whole 72-turn commitment in cash on day one.
+ * NPP companies pay out spare cash, so they never hold a long cash runway.
+ * They fund a product from income instead: the lifted sectors' last settled
+ * profit per turn must cover this many turns of standard funding.
  */
-export const NPP_VENTURE_CASH_RUNWAY_TURNS = 12;
-/** Below this many runways of headroom the company funds at the lean tier. */
-export const NPP_VENTURE_TIGHT_HEADROOM_RUNWAYS = 2;
+export const NPP_VENTURE_PROFIT_COVER = 2;
+/** Cash buffer above the reserve, in turns of standard funding. */
+export const NPP_VENTURE_CASH_BUFFER_TURNS = 2;
+/** Profit cover below this multiple funds at the lean tier. */
+export const NPP_VENTURE_STANDARD_PROFIT_COVER = 4;
 
 export type NppVentureTierId = "lean" | "standard";
 
@@ -187,6 +191,7 @@ export function selectNppVentureStarts(
       lineId: string;
       label: string;
       baseline: number;
+      profitCover: number;
       weight: number;
     }
     const candidates: Candidate[] = [];
@@ -221,15 +226,24 @@ export function selectNppVentureStarts(
               sum + sectorTurnRevenueAnchor(sector, corp, args.exchangeRatesByCurrency),
             0
           );
-        const runway =
-          referenceFundingPerTurn(ventureTargetAnchor(baseline)) * NPP_VENTURE_CASH_RUNWAY_TURNS;
-        // A funding runway must sit above the reserve.
-        if (liquidAnchor - args.reserveAnchor < runway) continue;
+        const funding = referenceFundingPerTurn(ventureTargetAnchor(baseline));
+        if (!(funding > 0)) continue;
+        const profit = sectors
+          .filter((sector) => lifted.has(sector._id.toString()))
+          .reduce(
+            (sum, sector) =>
+              sum + sectorTurnProfitAnchor(sector, corp, args.exchangeRatesByCurrency),
+            0
+          );
+        // Funded from income, with a small cash buffer over the reserve.
+        if (profit < funding * NPP_VENTURE_PROFIT_COVER) continue;
+        if (liquidAnchor - args.reserveAnchor < funding * NPP_VENTURE_CASH_BUFFER_TURNS) continue;
         candidates.push({
           domain,
           lineId: status.line.id,
           label: status.line.label,
           baseline,
+          profitCover: profit / funding,
           weight: nppLineWeight(domain, status.line.id, corp.countryId ?? "", args.priceRatioOf),
         });
       }
@@ -244,10 +258,8 @@ export function selectNppVentureStarts(
         )
       ];
     const target = ventureTargetAnchor(pick.baseline);
-    const runway = referenceFundingPerTurn(target) * NPP_VENTURE_CASH_RUNWAY_TURNS;
-    const headroom = liquidAnchor - args.reserveAnchor;
     const tier: NppVentureTierId =
-      headroom < runway * NPP_VENTURE_TIGHT_HEADROOM_RUNWAYS ? "lean" : "standard";
+      pick.profitCover < NPP_VENTURE_STANDARD_PROFIT_COVER ? "lean" : "standard";
     starts.push({
       corporationId,
       domain: pick.domain,

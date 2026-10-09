@@ -10,6 +10,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import type { CabinetNomination, ElectedOfficial, Character } from "@/lib/db/types";
 import { getCabinetPositionById } from "@/lib/constants";
 import { computeCabinetNominationTallies } from "@/lib/congress/governmentVoteBreakdown";
+import { loadNominationPeople } from "@/lib/congress/nominationPeople";
 
 // GET /api/congress/cabinet-nominations — Returns all active cabinet nominations with the current user's vote status.
 // Auth: public
@@ -47,7 +48,12 @@ export const GET = withNoStore(async function GET() {
       "US",
       activeNominations.map(({ _id, votes }) => ({ _id, votes }))
     );
-    const nominations = activeNominations.map((n) => {
+    const people = await loadNominationPeople(
+      db,
+      "US",
+      activeNominations.map((n) => ({ ...n, nomineeName: n.nomineeCharacterName }))
+    );
+    const nominations = activeNominations.map((n, i) => {
       const pos = getCabinetPositionById(n.positionId);
       const myVote = myCharId ? (n.votes?.[myCharId] ?? null) : null;
       // These are all active US nominations — recompute the seat-weighted
@@ -67,6 +73,8 @@ export const GET = withNoStore(async function GET() {
         nomineeCharacterName: n.nomineeCharacterName,
         nomineeParty: n.nomineeParty,
         proposedByPresidentName: n.proposedByPresidentName ?? "President",
+        nominee: people[i].nominee,
+        nominator: people[i].nominator,
         status: n.status,
         votesFor: tally.votesFor,
         votesAgainst: tally.votesAgainst,

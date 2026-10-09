@@ -544,6 +544,26 @@ describe("loadOrgInfluence", () => {
       expect(JSON.stringify(v.rivalIntel)).not.toContain("450000000");
     });
 
+    it("exposes a rival's standing push as points, and ignores a stale one (ticket 1371)", async () => {
+      atTurn10();
+      alignments([{ entityId: "YU", shares: { WEST: 22, EAST: 50 }, nonAligned: 28 }]);
+      macroEconomies([{ entityId: "YU", sectors: { industry: { capacity: 625 } } }]);
+      plays([
+        {
+          organizationId: "WARSAW_PACT",
+          targetEntityId: "YU",
+          appliedPoints: 9.28,
+          amountUsd: 450_000_000,
+          turn: 9,
+          resolvedTurn: 9,
+        },
+      ]);
+      const { loadOrgInfluence } = await import("./orgInfluence");
+      const v = await loadOrgInfluence(db as unknown as Db, "NATO");
+      expect(v.targets[0]!.rivalPressure).toEqual({ poleId: "EAST", points: 9.28 });
+      expect(JSON.stringify(v.targets)).not.toContain("450000000");
+    });
+
     it("excludes the viewing org's own plays from intel", async () => {
       // Those are the Recent plays panel; repeating them as "rival activity"
       // would tell a player they are being attacked by themselves.

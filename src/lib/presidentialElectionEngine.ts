@@ -90,6 +90,10 @@ import {
   isClosingVotingTurn,
 } from "@/lib/elections/presidentialGeneralRules";
 import { getGroundGameSwingBonus, getGroundGameGotvBonus } from "@/lib/campaigns/opsEffects";
+import {
+  buildFieldOfficeMultiplier,
+  loadFieldOfficesForElection,
+} from "@/lib/campaigns/fieldOffices/engine";
 import { loadPartyGroupFavorability } from "@/lib/governorOffice/address/partyGroupFavorabilityLoader";
 import {
   buildGranularElectorateSubstrate,
@@ -498,7 +502,7 @@ export async function accumulatePresidentVoteTurn(
   }
 
   // Fetch campaign ground-game bonuses. Strategic Operations v2 splits this into
-  // two channels: `swing` (+% in swing states, from starter + Field Offices) and
+  // two channels: `swing` (+% in swing states, from starter + Swing Canvassing) and
   // `gotv` (+% in ALL areas, from the Get-Out-The-Vote branch). Legacy rows fall
   // back to the old `groundGameLevel * 0.03` swing-only bonus (gotv = 0).
   // Ground-game and strength fields only. This runs for every presidential
@@ -516,6 +520,14 @@ export async function accumulatePresidentVoteTurn(
       gotv: getGroundGameGotvBonus(c.groundGameTree),
     });
   }
+
+  // Field offices: per (candidate, state) turnout multiplier. Null when no
+  // campaign in this race has opened one.
+  const fieldOfficeMultiplier = buildFieldOfficeMultiplier(
+    await loadFieldOfficesForElection(db, electionId),
+    election.countryId ?? "US",
+    turnNumber
+  );
 
   const campaignStrengthByCandidate = new Map<string, number>();
   for (const c of campaigns) {
@@ -1062,7 +1074,7 @@ export async function accumulatePresidentVoteTurn(
       }
       const afterLean = votes;
 
-      // Ground game (suspended campaigns forfeit): Field Offices boost swing
+      // Ground game (suspended campaigns forfeit): Swing Canvassing boosts swing
       // areas only; Get-Out-The-Vote boosts turnout in EVERY area. Both stack.
       if (!isSuspended) {
         const csKey =
@@ -1074,6 +1086,10 @@ export async function accumulatePresidentVoteTurn(
           if (multiplier !== 1) {
             votes = Math.round(votes * multiplier);
           }
+        }
+        if (fieldOfficeMultiplier) {
+          const officeMult = fieldOfficeMultiplier(csKey, stateId);
+          if (officeMult !== 1) votes = Math.round(votes * officeMult);
         }
       }
 

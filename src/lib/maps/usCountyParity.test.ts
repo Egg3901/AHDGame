@@ -3,6 +3,10 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { distributeSubdivisionVotes } from "@/lib/utils/subdivisionResults";
 import legacyFixtures from "./__fixtures__/usCountyParity.legacy.json";
+// The county leans the legacy outputs were captured against. The committed
+// county data has since been refreshed; this test checks the engine, so it
+// pins its inputs rather than following the data.
+import legacyLeans from "./__fixtures__/usCountyParity.leans.json";
 
 // Byte-identical outputs captured from the legacy distributeCountyVotes engine
 // (deleted in the Phase 2 unification) over real county data. The generic
@@ -41,7 +45,7 @@ describe("US county parity: generic engine === captured legacy outputs", () => {
           id: c.fips,
           name: c.name,
           electorate: c.population,
-          leanScalar: c.cookPVI,
+          leanScalar: (legacyLeans as Record<string, Record<string, number>>)[st][c.fips],
         })),
         { ...TALLIES[i] },
         Object.fromEntries(

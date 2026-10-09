@@ -72,6 +72,22 @@ export interface ProjectionResult {
 }
 
 export interface ProjectPrimaryInput {
+  /**
+   * The race id, seeding the fixed per-state swing (primaryRegional/rules.ts).
+   * Must match the live wave's seed or projection and result disagree.
+   */
+  regionalSeed?: string;
+  /**
+   * Win momentum carried into upcoming waves (candidateId → vote multiplier),
+   * from `primaryWinMomentumFromTally`. Must match the live wave's, or every
+   * momentum-assisted result reads as an upset. Omitted → no momentum.
+   */
+  winMomentum?: Readonly<Record<string, number>>;
+  /**
+   * Field offices: `(candidateId, stateId) → multiplier`, from
+   * `loadPrimaryFieldOffices`. Must match the live wave's. Omitted → none.
+   */
+  fieldOffices?: (candidateId: string, stateId: string) => number;
   campaignContext?: CampaignProjectionContext;
   /** Intra-party candidates (already enriched: policies, fav, NPI, etc.) */
   candidates: EnrichedCandidate[];
@@ -276,6 +292,7 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
         includeInfluenceInAppeal: false,
         useNationalInfluenceForReach: true,
         presidentialPrimaryNationalReach: true,
+        primaryRegionalSeed: input.regionalSeed,
         // L1 — must match `primaryStaggerPhase.ts` so the projection
         // converges with the live wave result. Without this, every
         // party-aligned win would count as an "upset" against the old-math
@@ -342,6 +359,10 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
       }
       // Rally support (matches stagger). Undefined → 1.0×.
       votes *= supportMoodMultiplier(meta?.support);
+      // Win momentum from states already won (matches stagger).
+      votes *= input.winMomentum?.[ec.candidateId] ?? 1;
+      // Field offices in this state (matches stagger).
+      votes *= input.fieldOffices?.(ec.candidateId, stateId) ?? 1;
       if (hasPlayerInPartyPrimary && ec.isNPP) {
         votes *= NPP_STAGGER_EXTRA_MULTIPLIER;
       }

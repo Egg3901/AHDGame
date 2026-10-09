@@ -4,6 +4,7 @@
 import { readFile } from "fs/promises";
 import { join } from "path";
 import type { SubdivisionInput } from "@/lib/utils/subdivisionResults";
+import { loadCountyLeans } from "./countyLeans";
 
 export interface SubdivisionFile {
   viewBox: string;
@@ -22,15 +23,21 @@ interface LegacyCdFile {
   districts: { cd: string; path: string; cookPVI: number }[];
 }
 
+/**
+ * `preset` selects the era lean baseline for US counties (see countyLeans.ts).
+ * Omitted, counties keep the committed modern `cookPVI`.
+ */
 export async function loadSubdivisionFile(
   dataDir: string,
-  regionId: string
+  regionId: string,
+  options?: { preset?: string | null }
 ): Promise<SubdivisionFile | null> {
   try {
     const filePath = join(process.cwd(), "src", "data", ...dataDir.split("/"), `${regionId}.json`);
     const raw = await readFile(filePath, "utf-8");
     const parsed = JSON.parse(raw) as SubdivisionFile | LegacyCountyFile | LegacyCdFile;
     if ("counties" in parsed) {
+      const eraLeans = options?.preset ? await loadCountyLeans(options.preset) : null;
       return {
         viewBox: parsed.viewBox,
         subdivisions: parsed.counties.map((c) => ({
@@ -38,7 +45,7 @@ export async function loadSubdivisionFile(
           name: c.name,
           path: c.path,
           electorate: c.population,
-          leanScalar: c.cookPVI,
+          leanScalar: eraLeans?.[c.fips] ?? c.cookPVI,
         })),
       };
     }

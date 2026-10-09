@@ -42,7 +42,7 @@ Approximate per-tree effects once started:
 | --- | --- | --- |
 | **Fundraising** | Passive income per turn (base ~₳35k) | Grassroots, Bundlers, Direct Mail: more passive income |
 | **Media Spending** | Base passive Favorability gain per turn | Broadcast, Television: more Favorability per turn; Rapid Response: reacts to attacks |
-| **Ground Game** | Base swing-area turnout bonus | Field Offices: bigger swing-area bonus; Get-Out-The-Vote: turnout bonus everywhere, not just swing areas; Volunteer Corps |
+| **Ground Game** | Base swing-area turnout bonus | Swing Canvassing: bigger swing-area bonus; Get-Out-The-Vote: turnout bonus everywhere, not just swing areas; Volunteer Corps |
 | **Opposition Research** | Base drain on one target (~-0.5%/turn) | Dossier: more drain; Scandal Leak; Counter-Intel: amplifies the drain |
 
 **Maintenance** is deducted from campaign funds each turn. If projected funds can't cover next turn's maintenance, branches **auto-downgrade** rather than the whole tree collapsing at once. No refund.
