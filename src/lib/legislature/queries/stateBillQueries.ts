@@ -1,3 +1,4 @@
+import { resolveResetLawProvision } from "@/lib/legislature/provisionEnrichment/resetLaw";
 import { ObjectId, type Db } from "mongodb";
 import type { AuthUser } from "@/lib/auth";
 import {
@@ -275,19 +276,7 @@ export async function listStateLegislatureBills(
           };
         }
         if (provision.type === "reset_law") {
-          return {
-            legislationTypeName: provision.titleSnapshot,
-            current: {
-              name: provision.currentLawSnapshot,
-              explanation: provision.currentLawDescriptionSnapshot,
-            },
-            proposed: {
-              name: provision.titleSnapshot,
-              explanation: provision.descriptionSnapshot,
-            },
-            effectDirection: 0,
-            directionLabel: "Center",
-          };
+          return resolveResetLawProvision(provision);
         }
         const legislationType = getLegislationTypeById(
           legislationTypeMap,
@@ -557,19 +546,7 @@ export async function getStateLegislatureBillDetail(
         };
       }
       if (provision.type === "reset_law") {
-        return {
-          legislationTypeName: provision.titleSnapshot,
-          current: {
-            name: provision.currentLawSnapshot,
-            explanation: provision.currentLawDescriptionSnapshot,
-          },
-          proposed: {
-            name: provision.titleSnapshot,
-            explanation: provision.descriptionSnapshot,
-          },
-          effectDirection: 0,
-          directionLabel: "Center",
-        };
+        return resolveResetLawProvision(provision);
       }
 
       const legislationType = getLegislationTypeById(

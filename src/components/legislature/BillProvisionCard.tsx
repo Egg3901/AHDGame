@@ -136,6 +136,11 @@ function ProvisionFiscalRow({ fiscal }: { fiscal: NonNullable<BillProvisionView[
         Net change {netDelta >= 0 ? "+" : "−"}
         {money(Math.abs(netDelta))}/yr to the treasury
       </span>
+      {fiscal.transitionCost !== undefined && fiscal.transitionCost > 0 && (
+        <span className="tabular-nums text-muted">
+          One-time transition cost {money(fiscal.transitionCost)}
+        </span>
+      )}
     </div>
   );
 }

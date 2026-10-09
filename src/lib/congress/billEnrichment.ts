@@ -1,3 +1,4 @@
+import { resolveResetLawProvision } from "@/lib/legislature/provisionEnrichment/resetLaw";
 import { describeElectoralLaw } from "@/lib/elections/electoralLaws";
 import { ECONOMIC_SYSTEM_TARGET_LABEL } from "@/lib/economy/economicSystemReformRules";
 import { warGoalLabel } from "@/lib/military/warGoals";
@@ -594,19 +595,7 @@ export async function resolveBillProvisions(
         }
 
         if (provision.type === "reset_law") {
-          provisionsResolved.push({
-            legislationTypeName: provision.titleSnapshot,
-            current: {
-              name: provision.currentLawSnapshot,
-              explanation: provision.currentLawDescriptionSnapshot,
-            },
-            proposed: {
-              name: provision.titleSnapshot,
-              explanation: provision.descriptionSnapshot,
-            },
-            effectDirection: 0,
-            directionLabel: "Center",
-          });
+          provisionsResolved.push(resolveResetLawProvision(provision));
           continue;
         }
 

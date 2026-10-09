@@ -20,6 +20,8 @@ export interface ProvisionFiscal {
   proposed?: { cost: number; revenue: number; net: number };
   current?: { cost: number; revenue: number; net: number };
   netDelta?: number;
+  /** One-time accrued transition claim, separate from annual spending. */
+  transitionCost?: number;
   currentRate?: number;
   proposedRate?: number;
   revenueDelta?: number;
