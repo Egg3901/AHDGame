@@ -15,4 +15,5 @@ areas: [frontend]
 - Scroll to zoom and drag to pan. Click a state to fly to it and open its overview; its county results appear straight away. Zoom in further and every state in view shows its counties. Hover a county for its leader, margin and votes.
 - Primary season and concluded races use the same layout. In a primary, the map is coloured by whoever leads each state in the selected party's primary, and clicking a state shows its delegate carve-up.
 - County maps in the state overview now show each county's leader in their colour instead of grey.
-- The full tickets table and the state-by-state results sit below the map. Phones keep the existing layout.
+- A Map / Squares switch above the map shows every state as an equal square instead. The map is the default.
+- Below the map sits only what the map does not already show: the full tickets table, the state-by-state results, or the primary field and campaign tools. Phones keep the existing layout.
