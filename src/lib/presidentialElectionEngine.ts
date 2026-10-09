@@ -102,6 +102,7 @@ import { eraYearContextFromGameState } from "@/lib/era/context";
 import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
 import { MONETARY_BASELINES } from "@/lib/constants/currencies";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
+import { planTurnSlice, sameTurnSliceParts } from "@/lib/electionEngine/rules/turnSlice";
 import { loadRegionalBonusMapsWithLookup } from "@/lib/primaryRegionalBonusLoader";
 import { campaignStrengthLookupKey } from "@/lib/campaigns/suspendEndorseLifecycle";
 import { computeSuspendTransferFraction } from "@/lib/campaigns/suspendEndorseAffinity";
@@ -361,7 +362,9 @@ export async function accumulatePresidentVoteTurn(
   electionId: ObjectId,
   turnNumber: number,
   now: Date,
-  calibration?: PresidentVoteTurnCalibration
+  calibration?: PresidentVoteTurnCalibration,
+  /** "early": the half-hour results tick banks half of this turn's slice. */
+  options?: { slice?: "early" }
 ): Promise<PresidentVoteTurnDryRun | void> {
   const db = await getDb();
 
@@ -376,9 +379,14 @@ export async function accumulatePresidentVoteTurn(
 
   if (!tally || !tally.totalVotesByUnit || candidates.length === 0 || !election?.endTime) return;
   // Per-turn idempotency (see tallyManagement): a re-run of a stalled turn
-  // must not bank this turn's slice again. Dry runs never persist, so they
-  // may recompute a recorded turn.
-  if (!calibration?.dryRun && tally.turnSnapshots?.some((s) => s.turn === turnNumber)) return;
+  // must not bank this turn's slice again, and a split turn banks its early
+  // and rest halves once each. Dry runs never persist, so they may recompute
+  // a recorded turn, always whole.
+  const slicePlan = calibration?.dryRun
+    ? { fraction: 1 }
+    : planTurnSlice(sameTurnSliceParts(tally.turnSnapshots, turnNumber), options?.slice);
+  if (!slicePlan) return;
+  const { slicePart, fraction: sliceFraction } = slicePlan;
 
   // Rules family: legacy races resolve to v1. The active v3 family receives
   // v3 balance corrections prospectively; accumulated ballots are untouched.
@@ -904,7 +912,8 @@ export async function accumulatePresidentVoteTurn(
     // electoral vote) are invariant; only ballot magnitudes change. Applied to
     // the TURN pool only — the distribution normalises group contributions by
     // `effTotalPool`, so scaling both would cancel to a no-op.
-    const rawTurnPool = turnVoteWeight(totalTurns, turnIndex, effTotalPool);
+    // A split turn's half carries its share of the slice, before every cap.
+    const rawTurnPool = turnVoteWeight(totalTurns, turnIndex, effTotalPool) * sliceFraction;
     const turnPool = participationSummary
       ? rawTurnPool
       : scalePoolToRegistered(rawTurnPool, registrationPoolMap.get(stateId)?.unregistered);
@@ -1180,7 +1189,9 @@ export async function accumulatePresidentVoteTurn(
   const unitTurnSnapshots = { ...(tally.unitTurnSnapshots ?? {}) };
   for (const unit of electoralVoteUnits) {
     const unitTotals = newTotalVotesByUnit[unit.unitId] ?? {};
-    const existing = unitTurnSnapshots[unit.unitId] ?? [];
+    // One cumulative row per unit per turn: a split turn's rest replaces its
+    // early row, so the 96-turn history and per-turn readers stay whole.
+    const existing = (unitTurnSnapshots[unit.unitId] ?? []).filter((s) => s.turn !== turnNumber);
     unitTurnSnapshots[unit.unitId] = [
       ...existing.slice(-95),
       {
@@ -1216,6 +1227,7 @@ export async function accumulatePresidentVoteTurn(
   const nationalTotalVotes = Object.values(newTotalVotes).reduce((sum, votes) => sum + votes, 0);
   const snapshot: VoteTurnSnapshot = {
     turn: turnNumber,
+    ...(slicePart ? { slicePart } : {}),
     recordedAt: now,
     cumulativeVotes: { ...newTotalVotes },
     sharesPct: Object.fromEntries(
@@ -1252,8 +1264,20 @@ export async function accumulatePresidentVoteTurn(
     };
   }
 
+  // The write only lands on the tally state this run read: a concurrent run
+  // that already banked this turn (or this half) leaves nothing to match.
   await db.collection<ElectionVoteTally>("electionVoteTallies").updateOne(
-    { electionId },
+    {
+      electionId,
+      turnSnapshots: {
+        $not: {
+          $elemMatch:
+            slicePart === "rest"
+              ? { turn: turnNumber, slicePart: { $ne: "early" } }
+              : { turn: turnNumber },
+        },
+      },
+    },
     {
       $set: {
         totalVotes: newTotalVotes,

@@ -31,6 +31,7 @@ import {
   NG_CAMPAIGN_TURNOUT_RATE,
 } from "@/lib/campaignTargeting/rules";
 import { NG_ZONES } from "@/lib/nigeriaPresidentialElectionEngine";
+import { planTurnSlice } from "@/lib/electionEngine/rules/turnSlice";
 
 /** Approximate NG presidential turnout (share of population voting). */
 const NG_TURNOUT_RATE = NG_CAMPAIGN_TURNOUT_RATE;
@@ -42,15 +43,25 @@ export async function accumulateNGPresidentVoteTurn(
   electionId: ObjectId,
   now: Date,
   /** Game turn being processed; guards a stalled turn's re-run (see below). */
-  turnNumber?: number
+  turnNumber?: number,
+  /** "early": the half-hour results tick banks half of this turn's slice. */
+  options?: { slice?: "early" }
 ): Promise<void> {
   const tallies = db.collection<ElectionVoteTally>("electionVoteTallies");
   const tally = await tallies.findOne({ electionId });
   if (!tally || tally.finalized) return;
   // Per-turn idempotency: this engine keeps no per-turn snapshot, so the tally
   // remembers the last turn it accrued. A re-run of a stalled turn (lock
-  // cleared, same turn number) must not add a second 10% slice.
-  if (typeof turnNumber === "number" && tally.lastAccruedTurn === turnNumber) return;
+  // cleared, same turn number) must not add a second 10% slice. A split turn
+  // marks its early half with `lastAccruedSlice`; the rest clears the mark.
+  const hasTurn = typeof turnNumber === "number";
+  const slicePlan = hasTurn
+    ? planTurnSlice(
+        tally.lastAccruedTurn === turnNumber ? [tally.lastAccruedSlice] : [],
+        options?.slice
+      )
+    : { fraction: 1 };
+  if (!slicePlan) return;
 
   const candidateParties = tally.candidateParties ?? {};
   const candidateIds = Object.keys(candidateParties);
@@ -110,7 +121,7 @@ export async function accumulateNGPresidentVoteTurn(
   for (const zone of NG_ZONES) {
     const population = popByZone.get(zone);
     if (!population || population <= 0) continue;
-    const pool = population * NG_TURNOUT_RATE * NG_PER_TURN_FRACTION;
+    const pool = population * NG_TURNOUT_RATE * NG_PER_TURN_FRACTION * slicePlan.fraction;
     const zoneOrg = orgByZoneParty.get(zone);
 
     // Weight = the candidate's party org in this zone (floored).
@@ -153,15 +164,29 @@ export async function accumulateNGPresidentVoteTurn(
     newByUnit[zone] = zoneUnit;
   }
 
+  // Land only on the accrual state read above, so a concurrent run that
+  // already banked this turn (or this half) leaves nothing to match.
   await tallies.updateOne(
-    { electionId, finalized: { $ne: true } },
+    {
+      electionId,
+      finalized: { $ne: true },
+      ...(hasTurn
+        ? slicePlan.slicePart === "rest"
+          ? { lastAccruedTurn: turnNumber, lastAccruedSlice: "early" as const }
+          : { lastAccruedTurn: { $ne: turnNumber } }
+        : {}),
+    },
     {
       $set: {
         totalVotesByUnit: newByUnit,
         totalVotes: newTotals,
-        ...(typeof turnNumber === "number" ? { lastAccruedTurn: turnNumber } : {}),
+        ...(hasTurn ? { lastAccruedTurn: turnNumber } : {}),
+        ...(slicePlan.slicePart === "early" ? { lastAccruedSlice: "early" as const } : {}),
         updatedAt: now,
       },
+      ...(hasTurn && slicePlan.slicePart !== "early"
+        ? { $unset: { lastAccruedSlice: "" as const } }
+        : {}),
     }
   );
 }

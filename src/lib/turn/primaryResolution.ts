@@ -906,8 +906,8 @@ export async function accumulateGeneralElectionVotes(
 ): Promise<void> {
   const db = await getDb();
   // Half-hour results tick (electionHalfTick.ts): early halves of races
-  // already on the board only; waves, presidential engines and new tallies
-  // stay on the turn.
+  // already counting general turns only; primary stagger waves and new
+  // tallies stay on the turn.
   const early = options?.slice === "early";
 
   // Run presidential primary stagger waves first (before general accumulation).
@@ -1136,8 +1136,8 @@ export async function accumulateGeneralElectionVotes(
       // The early half only extends a race already counting general turns:
       // a tally holding just primary ballots still has its primary to
       // resolve on the turn, which stamps or resets the tally.
-      if (early && (!hasBankedGeneralTurn(existing) || usesLegacyPresidentialCampaign(election)))
-        return;
+      if (early && !hasBankedGeneralTurn(existing)) return;
+      const slice = early ? { slice: "early" as const } : undefined;
       if (usesLegacyPresidentialCampaign(election)) {
         if (!existing && activeCandidates.length > 0) {
           await initPresidentVoteTally(election._id, activeCandidates);
@@ -1147,9 +1147,9 @@ export async function accumulateGeneralElectionVotes(
           election.countryId != null &&
           COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS.has(election.countryId)
         ) {
-          await accumulateNGPresidentVoteTurn(db, election._id, now, turn);
+          await accumulateNGPresidentVoteTurn(db, election._id, now, turn, slice);
         } else {
-          await accumulatePresidentVoteTurn(election._id, turn, now);
+          await accumulatePresidentVoteTurn(election._id, turn, now, undefined, slice);
         }
       } else {
         if (!existing && activeCandidates.length > 0) {
@@ -1163,7 +1163,7 @@ export async function accumulateGeneralElectionVotes(
           election,
           tally: existing ?? undefined,
           candidates: activeCandidates,
-          ...(early ? { slice: "early" as const } : {}),
+          ...slice,
         });
       }
     } catch (err) {

@@ -1568,7 +1568,50 @@ describe("accumulateGeneralElectionVotes", () => {
     await accumulateGeneralElectionVotes(NOW, 10);
 
     const { accumulatePresidentVoteTurn } = await import("@/lib/presidentialElectionEngine");
-    expect(accumulatePresidentVoteTurn).toHaveBeenCalledWith(electionId, 10, NOW);
+    expect(accumulatePresidentVoteTurn).toHaveBeenCalledWith(
+      electionId,
+      10,
+      NOW,
+      undefined,
+      undefined
+    );
+  });
+
+  it.each([
+    ["does not bank an early half before the general has a turn", [], false],
+    ["banks the early presidential half once the general is counting", [{ turn: 9 }], true],
+  ])("%s", async (_label, turnSnapshots, expected) => {
+    const electionId = new ObjectId();
+    const election = {
+      _id: electionId,
+      electionType: "president",
+      status: "active",
+      countryId: "US",
+      state: "US",
+      primaryEndTurn: 10,
+      endTime: new Date(NOW.getTime() + 100000),
+    };
+    db.collectionMocks["elections"] = db.collection("elections");
+    db.collectionMocks["elections"].find.mockReturnValue(makeCursor([election]));
+    db.collectionMocks["electionVoteTallies"] = db.collection("electionVoteTallies");
+    db.collectionMocks["electionVoteTallies"].find.mockReturnValue(
+      makeCursor([{ _id: new ObjectId(), electionId, turnSnapshots, primaryDelegates: {} }])
+    );
+    db.collectionMocks["electionCandidates"] = db.collection("electionCandidates");
+    db.collectionMocks["electionCandidates"].find.mockReturnValue(makeCursor([]));
+
+    await accumulateGeneralElectionVotes(NOW, 10, undefined, { slice: "early" });
+
+    const { accumulatePresidentVoteTurn, initPresidentVoteTally } =
+      await import("@/lib/presidentialElectionEngine");
+    expect(initPresidentVoteTally).not.toHaveBeenCalled();
+    if (expected) {
+      expect(accumulatePresidentVoteTurn).toHaveBeenCalledWith(electionId, 10, NOW, undefined, {
+        slice: "early",
+      });
+    } else {
+      expect(accumulatePresidentVoteTurn).not.toHaveBeenCalled();
+    }
   });
 
   it("bootstraps and catches up all due presidential waves in one turn", async () => {
