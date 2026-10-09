@@ -696,3 +696,32 @@ describe("runContests: legislator, wealth and party contests", () => {
     vi.mocked(loadExternalInflows).mockResolvedValue(new Map());
   });
 });
+
+describe("runContests: one weekly clock", () => {
+  it("opens a missing kind on the running week when it has at least half a week left", async () => {
+    const { db, data } = fakeDb(
+      world(10, { small: 400_000, mid: 2e6, big: 3e7 }, { alice: 0, bob: 0, carol: 0 })
+    );
+    await runContests(db, 10, now);
+    const weekEnd = now.getTime() + CONTEST_ROUND_MS;
+
+    // A new contest kind appears two days into the week.
+    data.contestRounds = data.contestRounds.filter((r) => r.kind !== "party_growth");
+    const later = new Date(now.getTime() + 2 * 24 * 3_600_000);
+    await runContests(db, 58, later);
+    const party = rounds(data).find((r) => r.kind === "party_growth")!;
+    expect(party.endsAt.getTime()).toBe(weekEnd);
+  });
+
+  it("runs a full week when the running week is nearly over", async () => {
+    const { db, data } = fakeDb(
+      world(10, { small: 400_000, mid: 2e6, big: 3e7 }, { alice: 0, bob: 0, carol: 0 })
+    );
+    await runContests(db, 10, now);
+    data.contestRounds = data.contestRounds.filter((r) => r.kind !== "party_growth");
+    const later = new Date(now.getTime() + 5 * 24 * 3_600_000);
+    await runContests(db, 130, later);
+    const party = rounds(data).find((r) => r.kind === "party_growth")!;
+    expect(party.endsAt.getTime()).toBe(later.getTime() + CONTEST_ROUND_MS);
+  });
+});
