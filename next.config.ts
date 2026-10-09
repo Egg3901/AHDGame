@@ -110,8 +110,16 @@ const nextConfig: NextConfig = {
   // ("took more than 60 seconds") until the runner agent was killed, in about
   // one build in five. NEXT_BUILD_CPUS caps the workers there; unset (Railway,
   // local) leaves Next's default untouched. Singleplayer keeps its own cap below.
+  // Turbopack's Node loaders run in worker threads there rather than a pool of
+  // child processes, each its own Node heap: the compile alone reached 15.7 GB
+  // of the 16 GB runner by 2026-10-09 and the agent was killed during compile.
   ...(process.env.SINGLEPLAYER !== "1" && Number(process.env.NEXT_BUILD_CPUS) > 0
-    ? { experimental: { cpus: Number(process.env.NEXT_BUILD_CPUS) } }
+    ? {
+        experimental: {
+          cpus: Number(process.env.NEXT_BUILD_CPUS),
+          turbopackPluginRuntimeStrategy: "workerThreads" as const,
+        },
+      }
     : {}),
   ...(process.env.SINGLEPLAYER === "1"
     ? {
