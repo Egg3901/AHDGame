@@ -1,9 +1,9 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 
 export interface TariffProvisionInput {
   scopeType: "economy_wide" | "sector" | "origin_country";
-  targetSectorType?: CorporationType;
+  targetSectorType?: OperatingSectorType;
   targetOriginCountryId?: CountryId;
   rate: number;
 }
@@ -11,7 +11,7 @@ export interface TariffProvisionInput {
 export interface TariffProvisionPayload {
   type: "tariff";
   scopeType: TariffProvisionInput["scopeType"];
-  targetSectorType?: CorporationType;
+  targetSectorType?: OperatingSectorType;
   targetOriginCountryId?: CountryId;
   rate: number;
 }

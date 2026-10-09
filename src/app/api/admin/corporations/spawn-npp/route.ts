@@ -11,12 +11,12 @@ import { requireAdmin } from "@/lib/api/requireAdmin";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { spawnNppCorporation } from "@/lib/admin/spawnNppCorporation";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES, operatingSectorIdentity } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 
 const spawnSchema = z.object({
   name: z.string().min(1).max(100),
-  type: z.enum(CORPORATION_TYPES),
+  type: z.enum(OPERATING_SECTOR_TYPES),
   countryId: z.string().min(1).max(5),
   headquartersState: z.string().min(1).max(20),
   startingCapital: z.number().int().min(0).optional(),
@@ -44,8 +44,13 @@ export async function POST(request: Request) {
       return errorResponse(400, `Invalid countryId: ${parsed.data.countryId}`);
     }
 
+    const { type: lane, ...rest } = parsed.data;
+    const identity = operatingSectorIdentity(lane);
     const result = await spawnNppCorporation(db, {
-      ...parsed.data,
+      ...rest,
+      type: identity.sectorType,
+      industryModel: identity.industryModel,
+      mediaDiscriminator: identity.mediaDiscriminator,
       countryId: parsed.data.countryId as CountryId,
     });
 

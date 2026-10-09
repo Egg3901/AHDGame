@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 import { computeMacroContribution } from "./kernel";
@@ -24,7 +24,7 @@ export interface MacroCountrySeedSpec {
   fiscalCapacity: number;
   stability: number;
   tradeExposure: number;
-  sectorWeights: Partial<Record<CorporationType, number>>;
+  sectorWeights: Partial<Record<OperatingSectorType, number>>;
   resources: Partial<Record<ExtractableResource, number>>;
 }
 
@@ -41,9 +41,13 @@ const REQUIRED_SCALAR_FIELDS = [
  * shortages (retail/healthcare demand > capacity) while heavy industry
  * overproduces relative to domestic absorption.
  */
-function demandRatio(sectorType: CorporationType, economicSystem: MacroEconomicSystem): number {
+function demandRatio(sectorType: OperatingSectorType, economicSystem: MacroEconomicSystem): number {
   if (economicSystem === "planned") {
-    if (sectorType === "retail" || sectorType === "healthcare" || sectorType === "entertainment") {
+    if (
+      sectorType === "retail" ||
+      sectorType === "healthcare" ||
+      sectorType === "media_entertainment"
+    ) {
       return 1.25;
     }
     if (
@@ -68,16 +72,16 @@ function demandRatio(sectorType: CorporationType, economicSystem: MacroEconomicS
 
 export function buildSectorsFromSpec(
   spec: Pick<MacroCountrySeedSpec, "annualGdpGameUnits" | "sectorWeights" | "economicSystem">
-): Partial<Record<CorporationType, MacroSectorState>> {
+): Partial<Record<OperatingSectorType, MacroSectorState>> {
   const perTurnGdp = spec.annualGdpGameUnits / MACRO_TURNS_PER_YEAR;
   const weightSum = Object.values(spec.sectorWeights).reduce((a, b) => a + (b ?? 0), 0);
   if (weightSum <= 0) {
     throw new Error("Macro seed sector weights must sum to a positive total.");
   }
 
-  const sectors: Partial<Record<CorporationType, MacroSectorState>> = {};
+  const sectors: Partial<Record<OperatingSectorType, MacroSectorState>> = {};
   for (const [sectorType, weight] of Object.entries(spec.sectorWeights) as [
-    CorporationType,
+    OperatingSectorType,
     number,
   ][]) {
     if (weight <= 0) continue;
@@ -98,7 +102,7 @@ export function buildSectorsFromSpec(
  */
 export function assessMacroSeedDataQuality(
   spec: MacroCountrySeedSpec,
-  sectors: Partial<Record<CorporationType, MacroSectorState>>
+  sectors: Partial<Record<OperatingSectorType, MacroSectorState>>
 ): MacroCountryDataQuality {
   const missingFields: string[] = [];
   const fallbackFields: string[] = [];

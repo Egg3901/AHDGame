@@ -1,5 +1,6 @@
 "use client";
 
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { useGameEvents } from "@/hooks/useGameEvents";
 
 import { InlineError } from "@/components/ui/InlineError";
@@ -13,7 +14,7 @@ import BackButton from "@/components/BackButton";
 import { useToast } from "@/contexts/ToastContext";
 import { getExchangeForCountry } from "@/lib/constants/exchangeRegistry";
 import type { MoneyPeriod } from "@/lib/constants/moneyTimescale";
-import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import { CorporationMasthead } from "@/components/corporation/CorporationMasthead";
 import { HostileTakeoverCard } from "@/components/corporation/HostileTakeoverCard";
 import { SubsidiaryManagementCard } from "@/components/corporation/SubsidiaryManagementCard";
@@ -1153,7 +1154,11 @@ export default function CorporationDetailPage() {
                       sectors={sectors}
                       isCeo={isCeo}
                       corpId={id}
-                      corporationType={corporation.type}
+                      corporationType={getOperatingSectorType(
+                        corporation.type,
+                        corporation.industryModel,
+                        corporation.mediaDiscriminator
+                      )}
                       corporationSecondaryType={corporation.secondaryType}
                       liquidCapital={corporation.liquidCapital}
                       liquidCurrencyCode={corporation.liquidCurrencyCode}
@@ -1173,13 +1178,9 @@ export default function CorporationDetailPage() {
                       plantsMode={corporation.plantsMode === true}
                       mediaOperatingModelsEnabled={corporation.mediaOperatingModelsEnabled === true}
                       expandOnMount={searchParams.get("expand") === "1"}
-                      expandSectorType={
-                        CORPORATION_TYPES.includes(
-                          searchParams.get("sectorType") as CorporationType
-                        )
-                          ? (searchParams.get("sectorType") as CorporationType)
-                          : undefined
-                      }
+                      expandSectorType={OPERATING_SECTOR_TYPES.find(
+                        (t) => t === searchParams.get("sectorType")
+                      )}
                       expandStateId={searchParams.get("state") ?? undefined}
                       onExpandDeepLinkConsumed={() => {
                         const p = new URLSearchParams(searchParams.toString());

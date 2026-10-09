@@ -8,7 +8,7 @@
  * (`corp-*`) unlocks stay. Past decades are replaced with the new type's
  * auto-grant baseline.
  */
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import {
   autoGrantedNodeIds,
   getNodeById,
@@ -30,8 +30,8 @@ export interface PrimaryTypeSwitchTechMigration {
  */
 export function migrateUnlockedTechOnPrimaryTypeSwitch(
   unlockedTechNodeIds: string[] | undefined,
-  fromType: CorporationType,
-  toType: CorporationType,
+  fromType: OperatingSectorType,
+  toType: OperatingSectorType,
   currentYear: number,
   techDecadeLane?: Record<string, string> | null
 ): PrimaryTypeSwitchTechMigration {

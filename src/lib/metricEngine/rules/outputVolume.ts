@@ -1,11 +1,11 @@
 import { REVENUE_TREND_MIN_SPAN, REVENUE_TREND_TARGET_SPAN } from "@/lib/turn/gdpGrowth";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { MediaDiscriminator } from "@/lib/constants/corporations";
 import { unitYieldForSupply } from "@/lib/constants/capacityEconomy";
 import { getEffectiveStrategyRatesForOperatingModel } from "@/lib/constants/sectorStrategies";
 
 export interface OutputVolumeSector {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   producedUnits?: number;
   strategyId?: string;
   transitionFromStrategyId?: string | null;

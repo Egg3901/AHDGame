@@ -3,11 +3,12 @@
 // State Enterprises panel on the finance-minister office page. Spec §24.
 // Auth: public read (mutating reorg/CEO routes enforce authority)
 // Errors: 400
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import type { Character, Corporation, CorporateSector } from "@/lib/db/types";
 
 interface RouteParams {
@@ -37,9 +38,18 @@ export async function GET(_request: Request, { params }: RouteParams) {
             .project<{
               corporationId: CorporateSector["corporationId"];
               sectorType: CorporateSector["sectorType"];
+              industryModel?: CorporateSector["industryModel"];
+              mediaDiscriminator?: CorporateSector["mediaDiscriminator"];
               revenue: CorporateSector["revenue"];
               workers: CorporateSector["workers"];
-            }>({ corporationId: 1, sectorType: 1, revenue: 1, workers: 1 })
+            }>({
+              corporationId: 1,
+              sectorType: 1,
+              industryModel: 1,
+              mediaDiscriminator: 1,
+              revenue: 1,
+              workers: 1,
+            })
             .toArray()
         : [];
     // Per-corp performance roll-up (cheap — from the sectors already loaded).
@@ -68,7 +78,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     // Corporation actually holds (fully or partially nationalized). A split moves
     // the primary's sectors of that type into a new corp, so types already split
     // off — or never nationalized — are naturally excluded (the primary holds
-    // none of them). Ordered by CORPORATION_TYPES for a stable dropdown.
+    // none of them). Ordered by OPERATING_SECTOR_TYPES for a stable dropdown.
     // Sorted on _id so a data bug carrying two flagged primaries (ticket #1254)
     // still yields one deterministic answer; `mergeNationalCorporations` is the
     // real collapse.
@@ -78,19 +88,21 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const primaryHeldTypes = new Set<string>();
     if (primaryId) {
       for (const s of sectors) {
-        if (String(s.corporationId) === String(primaryId)) primaryHeldTypes.add(s.sectorType);
+        if (String(s.corporationId) === String(primaryId)) {
+          primaryHeldTypes.add(
+            getOperatingSectorType(s.sectorType, s.industryModel, s.mediaDiscriminator)
+          );
+        }
       }
     }
-    const splittableSectorTypes = CORPORATION_TYPES.filter((t) =>
-      primaryHeldTypes.has(t)
-    ) as CorporationType[];
+    const splittableSectorTypes = OPERATING_SECTOR_TYPES.filter((t) => primaryHeldTypes.has(t));
 
     const corporations = corps
       .map((c) => ({
         id: String(c._id),
         name: c.name,
         isPrimary: !!c.isPrimaryNationalCorporation,
-        assignedSectorTypes: (c.assignedSectorTypes ?? []) as CorporationType[],
+        assignedSectorTypes: c.assignedSectorTypes ?? [],
         sectorCount: sectorCount.get(String(c._id)) ?? 0,
         revenuePerTurn: revenuePerTurn.get(String(c._id)) ?? 0,
         workers: workers.get(String(c._id)) ?? 0,

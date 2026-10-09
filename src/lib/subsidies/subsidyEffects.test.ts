@@ -64,19 +64,30 @@ describe("corpQualifiesForSubsidy", () => {
   });
 
   it("maps folded sector targets across the 1.12 taxonomy", () => {
-    // Callers pass the operating type: vehicle plants are "automobiles",
-    // entertainment media lanes are "entertainment".
-    const legacyAuto = makeSubsidy({ scopeType: "sector", targetSectorType: "automobiles" });
+    // Callers pass the operating type: vehicle plants are "manufacturing_vehicles",
+    // entertainment media lanes are "media_entertainment".
+    const legacyAuto = makeSubsidy({
+      scopeType: "sector",
+      targetSectorType: "manufacturing_vehicles",
+    });
     expect(
-      corpQualifiesForSubsidy(legacyAuto, "CA", "automobiles", "CA", undefined, "US", "US")
+      corpQualifiesForSubsidy(
+        legacyAuto,
+        "CA",
+        "manufacturing_vehicles",
+        "CA",
+        undefined,
+        "US",
+        "US"
+      )
     ).toBe(true);
     expect(
       corpQualifiesForSubsidy(legacyAuto, "CA", "manufacturing", "CA", undefined, "US", "US")
     ).toBe(false);
     const media = makeSubsidy({ scopeType: "sector", targetSectorType: "media" });
-    expect(corpQualifiesForSubsidy(media, "CA", "entertainment", "CA", undefined, "US", "US")).toBe(
-      true
-    );
+    expect(
+      corpQualifiesForSubsidy(media, "CA", "media_entertainment", "CA", undefined, "US", "US")
+    ).toBe(true);
   });
 
   it("strategy filter matches sector.strategyId", () => {

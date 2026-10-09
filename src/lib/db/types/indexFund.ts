@@ -1,7 +1,7 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId } from "../../constants/countries";
 import type { CurrencyCode } from "../../constants/currencies";
-import type { CorporationType } from "../../constants/corporations";
+import type { OperatingSectorType } from "../../constants/corporations";
 
 export type IndexFundScope = "country" | "global";
 /**
@@ -58,7 +58,7 @@ export interface IndexFund {
   /** Present for country-scoped funds. Omitted only for the global top-50 fund. */
   countryId?: CountryId;
   /** Present for sector funds. */
-  sectorType?: CorporationType;
+  sectorType?: OperatingSectorType;
   anchorCurrencyCode: CurrencyCode;
   status: IndexFundStatus;
   pauseReason?: IndexFundPauseReason;

@@ -146,10 +146,11 @@ export default function CorporationGuidePage() {
               </table>
             </div>
             <p className="text-sm text-muted leading-relaxed">
-              There are <strong className="text-foreground">17 sector types</strong>: Financial,
-              Media, Manufacturing, Healthcare, Retail, Automobiles, Technology, Energy,
-              Agriculture, Real Estate, Defense, Telecommunications, Entertainment, Logistics,
-              Extraction, Chemical Industries, and Construction.
+              There are <strong className="text-foreground">17 sector lines</strong>: Financial,
+              Media, Manufacturing, Healthcare, Retail, Technology, Energy, Agriculture, Real
+              Estate, Defense, Telecommunications, Logistics, Extraction, Chemical Industries, and
+              Construction, plus two specialized lines: vehicles (Automobiles) inside Manufacturing
+              and entertainment inside Media.
             </p>
             <SubHeader>Secondary type trade-off</SubHeader>
             <p className="text-sm text-muted leading-relaxed">

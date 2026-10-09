@@ -4,9 +4,11 @@ import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import type { CorporateSector, State, UnownedSector, Corporation } from "@/lib/db/types";
 import {
-  CORPORATION_TYPES,
-  CORPORATION_TYPE_LABELS,
-  type CorporationType,
+  OPERATING_SECTOR_TYPES,
+  OPERATING_SECTOR_TYPE_LABELS,
+  isOperatingSectorType,
+  operatingSectorFilter,
+  type OperatingSectorType,
 } from "@/lib/constants/corporations";
 import {
   COUNTRY_CONFIGS,
@@ -31,7 +33,7 @@ export type SectorSort = "revenue" | "type" | "state" | "country" | "margin" | "
 
 type SectorRow = {
   id: string;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   mediaDiscriminator?: string | null;
   sectorTypeLabel: string;
   stateId: string;
@@ -58,7 +60,7 @@ const PAGE_SIZE = 50;
 // GET /api/sectors — Global sector listing with filters
 // Query params:
 //   view=unowned|owned|forSale (default: unowned)
-//   type=<CorporationType> (optional filter)
+//   type=<OperatingSectorType> (optional filter)
 //   country=<CountryId> (optional filter)
 //   sort=revenue|type|state|country|margin|growth (default: revenue)
 //   dir=asc|desc (default: desc)
@@ -71,7 +73,8 @@ export async function GET(request: Request) {
     const view: SectorView =
       sp.get("view") === "owned" ? "owned" : sp.get("view") === "forSale" ? "forSale" : "unowned";
 
-    const sectorTypeFilter = sp.get("type") as CorporationType | null;
+    const requestedType = sp.get("type");
+    const sectorTypeFilter = isOperatingSectorType(requestedType) ? requestedType : null;
     const countryFilter = sp.get("country") as CountryId | null;
     const sort: SectorSort = (sp.get("sort") as SectorSort) ?? "revenue";
     const dir = sp.get("dir") === "asc" ? "asc" : "desc";
@@ -202,22 +205,7 @@ export async function GET(request: Request) {
     if (view === "unowned") {
       // Query persisted unowned sectors
       const unownedFilter: Record<string, unknown> = {};
-      if (sectorTypeFilter && CORPORATION_TYPES.includes(sectorTypeFilter)) {
-        if (sectorTypeFilter === "entertainment") {
-          unownedFilter.$and = [
-            {
-              $or: [
-                { sectorType: "entertainment" },
-                { sectorType: "media", mediaDiscriminator: "entertainment" },
-              ],
-            },
-          ];
-        } else {
-          unownedFilter.sectorType = sectorTypeFilter;
-          if (sectorTypeFilter === "media")
-            unownedFilter.mediaDiscriminator = { $ne: "entertainment" };
-        }
-      }
+      if (sectorTypeFilter) Object.assign(unownedFilter, operatingSectorFilter(sectorTypeFilter));
       Object.assign(unownedFilter, unownedScopedFilter);
 
       const unownedSectors = (
@@ -226,6 +214,7 @@ export async function GET(request: Request) {
           .find(unownedFilter, {
             projection: {
               sectorType: 1,
+              industryModel: 1,
               mediaDiscriminator: 1,
               stateId: 1,
               countryId: 1,
@@ -252,17 +241,13 @@ export async function GET(request: Request) {
           id: us._id.toString(),
           sectorType: getOperatingSectorType(
             us.sectorType,
-            undefined,
+            us.industryModel,
             us.mediaDiscriminator
-          ) as CorporationType,
+          ),
           mediaDiscriminator: us.mediaDiscriminator ?? null,
           sectorTypeLabel:
-            CORPORATION_TYPE_LABELS[
-              getOperatingSectorType(
-                us.sectorType,
-                undefined,
-                us.mediaDiscriminator
-              ) as CorporationType
+            OPERATING_SECTOR_TYPE_LABELS[
+              getOperatingSectorType(us.sectorType, us.industryModel, us.mediaDiscriminator)
             ],
           stateId: us.stateId,
           stateName: st?.name ?? us.stateId,
@@ -286,22 +271,7 @@ export async function GET(request: Request) {
     } else {
       // Owned or forSale — query corporateSectors
       const corpFilter: Record<string, unknown> = {};
-      if (sectorTypeFilter && CORPORATION_TYPES.includes(sectorTypeFilter)) {
-        if (sectorTypeFilter === "entertainment") {
-          corpFilter.$and = [
-            {
-              $or: [
-                { sectorType: "entertainment" },
-                { sectorType: "media", mediaDiscriminator: "entertainment" },
-              ],
-            },
-          ];
-        } else {
-          corpFilter.sectorType = sectorTypeFilter;
-          if (sectorTypeFilter === "media")
-            corpFilter.mediaDiscriminator = { $ne: "entertainment" };
-        }
-      }
+      if (sectorTypeFilter) Object.assign(corpFilter, operatingSectorFilter(sectorTypeFilter));
       Object.assign(corpFilter, countryScopedFilter);
       if (view === "forSale") {
         corpFilter.forSale = { $ne: null };
@@ -312,6 +282,7 @@ export async function GET(request: Request) {
         .find(corpFilter, {
           projection: {
             sectorType: 1,
+            industryModel: 1,
             mediaDiscriminator: 1,
             stateId: 1,
             countryId: 1,
@@ -373,19 +344,11 @@ export async function GET(request: Request) {
 
         rows.push({
           id: s._id.toString(),
-          sectorType: getOperatingSectorType(
-            s.sectorType,
-            undefined,
-            s.mediaDiscriminator
-          ) as CorporationType,
+          sectorType: getOperatingSectorType(s.sectorType, s.industryModel, s.mediaDiscriminator),
           mediaDiscriminator: s.mediaDiscriminator ?? null,
           sectorTypeLabel:
-            CORPORATION_TYPE_LABELS[
-              getOperatingSectorType(
-                s.sectorType,
-                undefined,
-                s.mediaDiscriminator
-              ) as CorporationType
+            OPERATING_SECTOR_TYPE_LABELS[
+              getOperatingSectorType(s.sectorType, s.industryModel, s.mediaDiscriminator)
             ],
           stateId: s.stateId,
           stateName: st?.name ?? s.stateId,
@@ -472,9 +435,9 @@ export async function GET(request: Request) {
         forSale: forSaleCount,
       },
       filters: {
-        sectorTypes: CORPORATION_TYPES.map((t) => ({
+        sectorTypes: OPERATING_SECTOR_TYPES.map((t) => ({
           value: t,
-          label: CORPORATION_TYPE_LABELS[t],
+          label: OPERATING_SECTOR_TYPE_LABELS[t],
         })),
         // Curated order preserved: COUNTRY_ORDER is hand-ordered, not
         // alphabetical, so this filters and relabels without resequencing.

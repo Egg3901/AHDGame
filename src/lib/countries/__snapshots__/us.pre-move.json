@@ -35004,12 +35004,12 @@
       "construction": 6,
       "logistics": 5,
       "chemical_industries": 5,
-      "automobiles": 4,
+      "manufacturing_vehicles": 4,
       "defense": 4,
       "media": 4,
       "telecommunications": 4,
       "energy": 3,
-      "entertainment": 3,
+      "media_entertainment": 3,
       "agriculture": 2,
       "extraction": 2
     }
@@ -35019,7 +35019,7 @@
     "value": {
       "manufacturing": 26,
       "defense": 14,
-      "automobiles": 10,
+      "manufacturing_vehicles": 10,
       "agriculture": 8,
       "energy": 7,
       "construction": 6,
@@ -35031,7 +35031,7 @@
       "healthcare": 2,
       "media": 2,
       "telecommunications": 2,
-      "entertainment": 2,
+      "media_entertainment": 2,
       "extraction": 2,
       "technology": 0
     }
@@ -35042,7 +35042,7 @@
       "manufacturing": 18,
       "real_estate": 10,
       "retail": 8,
-      "automobiles": 8,
+      "manufacturing_vehicles": 8,
       "energy": 7,
       "agriculture": 6,
       "construction": 6,
@@ -35055,7 +35055,7 @@
       "telecommunications": 3,
       "technology": 2,
       "media": 2,
-      "entertainment": 2
+      "media_entertainment": 2
     }
   },
   "COUNTRY_SECTOR_WEIGHTS_1991": {
@@ -35067,7 +35067,7 @@
       "retail": 9,
       "healthcare": 7,
       "construction": 7,
-      "automobiles": 6,
+      "manufacturing_vehicles": 6,
       "defense": 7,
       "chemical_industries": 6,
       "energy": 5,
@@ -35077,7 +35077,7 @@
       "technology": 3,
       "agriculture": 3,
       "extraction": 2,
-      "entertainment": 1
+      "media_entertainment": 1
     }
   },
   "COUNTRY_TO_ISO_NUMERIC": {
@@ -64140,7 +64140,7 @@
     "value": {
       "1953": {
         "manufacturing": "United Steelworkers of America",
-        "automobiles": "United Auto Workers",
+        "manufacturing_vehicles": "United Auto Workers",
         "extraction": "United Mine Workers of America",
         "energy": "Utility Workers Union of America",
         "construction": "United Brotherhood of Carpenters and Joiners",
@@ -64149,12 +64149,12 @@
         "defense": "International Association of Machinists",
         "telecommunications": "Communications Workers of America",
         "chemical_industries": "Oil Workers International Union",
-        "entertainment": "Screen Actors Guild",
+        "media_entertainment": "Screen Actors Guild",
         "retail": "Retail Clerks International Association"
       },
       "1979": {
         "manufacturing": "United Steelworkers of America",
-        "automobiles": "United Auto Workers",
+        "manufacturing_vehicles": "United Auto Workers",
         "extraction": "United Mine Workers of America",
         "energy": "Utility Workers Union of America",
         "construction": "United Brotherhood of Carpenters and Joiners",
@@ -64164,14 +64164,14 @@
         "logistics": "International Brotherhood of Teamsters",
         "media": "The Newspaper Guild",
         "defense": "International Association of Machinists and Aerospace Workers",
-        "entertainment": "Screen Actors Guild",
+        "media_entertainment": "Screen Actors Guild",
         "telecommunications": "Communications Workers of America",
         "chemical_industries": "Oil, Chemical and Atomic Workers Union",
         "technology": "International Brotherhood of Electrical Workers"
       },
       "1991": {
         "manufacturing": "United Steelworkers of America",
-        "automobiles": "United Auto Workers",
+        "manufacturing_vehicles": "United Auto Workers",
         "extraction": "United Mine Workers of America",
         "energy": "Utility Workers Union of America",
         "construction": "United Brotherhood of Carpenters and Joiners",
@@ -64181,14 +64181,14 @@
         "logistics": "International Brotherhood of Teamsters",
         "media": "The Newspaper Guild",
         "defense": "International Association of Machinists and Aerospace Workers",
-        "entertainment": "Screen Actors Guild",
+        "media_entertainment": "Screen Actors Guild",
         "telecommunications": "Communications Workers of America",
         "chemical_industries": "Oil, Chemical and Atomic Workers Union",
         "technology": "International Brotherhood of Electrical Workers"
       },
       "1999": {
         "manufacturing": "United Steelworkers",
-        "automobiles": "United Auto Workers",
+        "manufacturing_vehicles": "United Auto Workers",
         "extraction": "United Mine Workers of America",
         "energy": "Utility Workers Union of America",
         "construction": "United Brotherhood of Carpenters and Joiners",
@@ -64198,14 +64198,14 @@
         "logistics": "International Brotherhood of Teamsters",
         "media": "The Newspaper Guild",
         "defense": "International Association of Machinists and Aerospace Workers",
-        "entertainment": "Screen Actors Guild",
+        "media_entertainment": "Screen Actors Guild",
         "telecommunications": "Communications Workers of America",
         "chemical_industries": "United Steelworkers",
         "technology": "Communications Workers of America"
       },
       "2007": {
         "manufacturing": "United Steelworkers",
-        "automobiles": "United Auto Workers",
+        "manufacturing_vehicles": "United Auto Workers",
         "extraction": "United Mine Workers of America",
         "energy": "Utility Workers Union of America",
         "construction": "United Brotherhood of Carpenters and Joiners",
@@ -64215,14 +64215,14 @@
         "logistics": "International Brotherhood of Teamsters",
         "media": "The Newspaper Guild",
         "defense": "International Association of Machinists and Aerospace Workers",
-        "entertainment": "Screen Actors Guild",
+        "media_entertainment": "Screen Actors Guild",
         "telecommunications": "Communications Workers of America",
         "chemical_industries": "United Steelworkers",
         "technology": "Communications Workers of America"
       },
       "2019": {
         "manufacturing": "United Steelworkers",
-        "automobiles": "United Auto Workers",
+        "manufacturing_vehicles": "United Auto Workers",
         "extraction": "United Mine Workers of America",
         "energy": "Utility Workers Union of America",
         "construction": "United Brotherhood of Carpenters and Joiners",
@@ -64232,14 +64232,14 @@
         "logistics": "International Brotherhood of Teamsters",
         "media": "NewsGuild-CWA",
         "defense": "International Association of Machinists and Aerospace Workers",
-        "entertainment": "SAG-AFTRA",
+        "media_entertainment": "SAG-AFTRA",
         "telecommunications": "Communications Workers of America",
         "chemical_industries": "United Steelworkers",
         "technology": "Communications Workers of America"
       },
       "2023": {
         "manufacturing": "United Steelworkers",
-        "automobiles": "United Auto Workers",
+        "manufacturing_vehicles": "United Auto Workers",
         "extraction": "United Mine Workers of America",
         "energy": "Utility Workers Union of America",
         "construction": "United Brotherhood of Carpenters and Joiners",
@@ -64249,14 +64249,14 @@
         "logistics": "International Brotherhood of Teamsters",
         "media": "NewsGuild-CWA",
         "defense": "International Association of Machinists and Aerospace Workers",
-        "entertainment": "SAG-AFTRA",
+        "media_entertainment": "SAG-AFTRA",
         "telecommunications": "Communications Workers of America",
         "chemical_industries": "United Steelworkers",
         "technology": "Communications Workers of America"
       },
       "2027": {
         "manufacturing": "United Steelworkers",
-        "automobiles": "United Auto Workers",
+        "manufacturing_vehicles": "United Auto Workers",
         "extraction": "United Mine Workers of America",
         "energy": "Utility Workers Union of America",
         "construction": "United Brotherhood of Carpenters and Joiners",
@@ -64266,7 +64266,7 @@
         "logistics": "International Brotherhood of Teamsters",
         "media": "NewsGuild-CWA",
         "defense": "International Association of Machinists and Aerospace Workers",
-        "entertainment": "SAG-AFTRA",
+        "media_entertainment": "SAG-AFTRA",
         "telecommunications": "Communications Workers of America",
         "chemical_industries": "United Steelworkers",
         "technology": "Communications Workers of America"

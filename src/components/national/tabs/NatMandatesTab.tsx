@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { EmptyState } from "@/components/ui";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import {
   SOE_PRICE_CONTROL_PENALTY,
   SOE_PRICE_CONTROL_BONUS_MULTIPLIER,
@@ -124,7 +124,7 @@ export function NatMandatesTab({
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-body-sm font-semibold text-foreground">
-                        {CORPORATION_TYPE_LABELS[m.sectorType]}
+                        {OPERATING_SECTOR_TYPE_LABELS[m.sectorType]}
                       </span>
                       <span className="rounded-full border border-card-border bg-card-muted px-2 py-0.5 text-[10px] font-medium text-muted">
                         {m.stateName}

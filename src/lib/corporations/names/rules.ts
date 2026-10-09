@@ -2,7 +2,7 @@
  * NPP corporation names combine a local brand with an industry name.
  * chooseNppCorporationName avoids existing names, including after the pool fills.
  */
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 const LOCAL_BRANDS: Record<string, readonly string[]> = {
   US: [
@@ -24,14 +24,14 @@ const WORLD_BRANDS = [
   "Windward Loom",
   "Copper Lantern",
 ];
-const INDUSTRY_NAMES: Record<CorporationType, readonly string[]> = {
+const INDUSTRY_NAMES: Record<OperatingSectorType, readonly string[]> = {
   financial: ["Capital Partners", "Merchant Trust", "Investment House"],
   media: ["Press & Signal", "Newsroom", "Broadcast Company"],
   manufacturing: ["Industrial Works", "Foundry", "Precision Works"],
   chemical_industries: ["Applied Materials", "Chemical Works", "Process Labs"],
   healthcare: ["Care Network", "Medical Partners", "Health Services"],
   retail: ["Trading Stores", "Market House", "General Stores"],
-  automobiles: ["Motor Works", "Coachbuilders", "Vehicle Company"],
+  manufacturing_vehicles: ["Motor Works", "Coachbuilders", "Vehicle Company"],
   technology: ["Logic Works", "Computing", "Systems Laboratory"],
   energy: ["Power Company", "Gridworks", "Electric Works"],
   agriculture: ["Harvest Cooperative", "Field & Orchard", "Growers"],
@@ -39,14 +39,14 @@ const INDUSTRY_NAMES: Record<CorporationType, readonly string[]> = {
   construction: ["Civil Works", "Builders Guild", "Engineering Company"],
   defense: ["Aerospace & Defense", "Armament Works", "Defense Engineering"],
   telecommunications: ["Telephone & Cable", "Signal Networks", "Communications"],
-  entertainment: ["Pictures", "Stage & Screen", "Recording Studios"],
+  media_entertainment: ["Pictures", "Stage & Screen", "Recording Studios"],
   logistics: ["Freight Lines", "Shipping Company", "Transit Partners"],
   extraction: ["Mineral Company", "Mining & Resources", "Geological Works"],
 };
 
 export function chooseNppCorporationName(
   countryId: string,
-  type: CorporationType,
+  type: OperatingSectorType,
   existingNames: readonly string[],
   rng: () => number
 ): string {

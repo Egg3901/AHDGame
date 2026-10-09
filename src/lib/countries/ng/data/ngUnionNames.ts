@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import { uniform } from "@/lib/seeds/reference/uniformUnionName";
 
 /**
@@ -13,7 +13,7 @@ import { uniform } from "@/lib/seeds/reference/uniformUnionName";
  * map -- is a separate thing and stays there.
  */
 
-export const NG_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
+export const NG_UNION_NAMES_MODERN: Partial<Record<OperatingSectorType, string>> = {
   manufacturing: "Nigeria Labour Congress",
   extraction: "Nigeria Union of Petroleum and Natural Gas Workers",
   energy: "Nigeria Union of Petroleum and Natural Gas Workers",
@@ -27,17 +27,17 @@ export const NG_UNION_NAMES_MODERN: Partial<Record<CorporationType, string>> = {
   technology: "Nigeria Labour Congress",
   financial: "Association of Senior Staff of Banks, Insurance and Financial Institutions",
   telecommunications: "Private Telecommunications and Communications Senior Staff Association",
-  entertainment: "Nigeria Labour Congress",
+  media_entertainment: "Nigeria Labour Congress",
   defense: "Nigeria Labour Congress",
   real_estate: "Nigeria Labour Congress",
-  automobiles: "Nigeria Labour Congress",
+  manufacturing_vehicles: "Nigeria Labour Congress",
 };
 
-export const NG_UNION_NAMES_1979: Partial<Record<CorporationType, string>> = {
+export const NG_UNION_NAMES_1979: Partial<Record<OperatingSectorType, string>> = {
   ...NG_UNION_NAMES_MODERN,
   telecommunications: "Nigeria Labour Congress",
 };
 
-export const NG_UNION_NAMES_1953: Partial<Record<CorporationType, string>> = uniform(
+export const NG_UNION_NAMES_1953: Partial<Record<OperatingSectorType, string>> = uniform(
   "All-Nigeria Trade Union Federation"
 );

@@ -13,7 +13,7 @@
  * Resource keys are EXTRACTABLE_RESOURCES only; copper/gold/nickel/bauxite use
  * iron or rare_earth proxies where noted.
  */
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 import { buildMacroCountryFromSpec, type MacroCountrySeedSpec } from "./seedBuilder";
 import type { MacroCountryState } from "./types";
@@ -29,7 +29,7 @@ export const ARGENTINA_ENTITY_ID = "AR";
 export const MEXICO_ENTITY_ID = "MX";
 export const VENEZUELA_ENTITY_ID = "VE";
 
-const ET_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const ET_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Imperial Ethiopia under Haile Selassie: highland agrarian, coffee, limited industry.
   agriculture: 48,
   retail: 10,
@@ -43,14 +43,14 @@ const ET_WEIGHTS: Partial<Record<CorporationType, number>> = {
   financial: 1,
   real_estate: 1,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   telecommunications: 1,
   chemical_industries: 0,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const ZA_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const ZA_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Union of South Africa: Witwatersrand gold, coal, nascent manufacturing, apartheid labour.
   extraction: 22, // gold + coal + diamonds
   manufacturing: 18,
@@ -66,12 +66,12 @@ const ZA_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 2,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
-  automobiles: 0,
+  media_entertainment: 1,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const CU_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const CU_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Batista Cuba: sugar monoculture, US capital, tourism/services, nickel.
   agriculture: 32, // sugar + tobacco
   retail: 12,
@@ -79,7 +79,7 @@ const CU_WEIGHTS: Partial<Record<CorporationType, number>> = {
   manufacturing: 10,
   construction: 8,
   extraction: 6, // nickel
-  entertainment: 6, // tourism / Havana services proxy
+  media_entertainment: 6, // tourism / Havana services proxy
   financial: 4,
   energy: 3,
   defense: 3,
@@ -88,11 +88,11 @@ const CU_WEIGHTS: Partial<Record<CorporationType, number>> = {
   telecommunications: 1,
   media: 1,
   chemical_industries: 0,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const GT_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const GT_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Arbenz Guatemala: coffee/banana plantation economy; land reform crisis 1952–54.
   agriculture: 42,
   retail: 10,
@@ -106,14 +106,14 @@ const GT_WEIGHTS: Partial<Record<CorporationType, number>> = {
   healthcare: 2,
   real_estate: 2,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   telecommunications: 1,
   chemical_industries: 1,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const PA_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const PA_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Panama Republic: Canal Zone transit rents dominate; thin domestic industrial base.
   logistics: 28, // canal / isthmian transit
   retail: 14,
@@ -128,13 +128,13 @@ const PA_WEIGHTS: Partial<Record<CorporationType, number>> = {
   extraction: 2,
   telecommunications: 2,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   chemical_industries: 1,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const NI_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const NI_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Somoza Nicaragua: cattle/coffee/cotton; US-aligned dictatorship.
   agriculture: 40,
   retail: 10,
@@ -148,14 +148,14 @@ const NI_WEIGHTS: Partial<Record<CorporationType, number>> = {
   healthcare: 2,
   real_estate: 2,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   telecommunications: 1,
   chemical_industries: 1,
-  automobiles: 0,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const CL_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const CL_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Chile: copper (Chuquicamata / El Teniente), nitrates legacy, democratic politics.
   extraction: 22, // copper + nitrates
   agriculture: 18,
@@ -171,12 +171,12 @@ const CL_WEIGHTS: Partial<Record<CorporationType, number>> = {
   real_estate: 2,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
-  automobiles: 0,
+  media_entertainment: 1,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 
-const AR_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const AR_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Perón Argentina: Pampas agri-exports, ISI manufacturing, state-led industry.
   agriculture: 24,
   manufacturing: 20,
@@ -188,16 +188,16 @@ const AR_WEIGHTS: Partial<Record<CorporationType, number>> = {
   financial: 5,
   defense: 4,
   chemical_industries: 3,
-  automobiles: 2,
+  manufacturing_vehicles: 2,
   healthcare: 2,
   real_estate: 2,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   technology: 0,
 };
 
-const MX_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const MX_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // PRI Mexico: oil (PEMEX), ISI manufacturing, agrarian base, political stability.
   agriculture: 22,
   manufacturing: 18,
@@ -211,14 +211,14 @@ const MX_WEIGHTS: Partial<Record<CorporationType, number>> = {
   chemical_industries: 3,
   healthcare: 2,
   real_estate: 2,
-  automobiles: 2,
+  manufacturing_vehicles: 2,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
+  media_entertainment: 1,
   technology: 0,
 };
 
-const VE_WEIGHTS: Partial<Record<CorporationType, number>> = {
+const VE_WEIGHTS: Partial<Record<OperatingSectorType, number>> = {
   // Pérez Jiménez Venezuela: oil boom, iron ore (Cerro Bolívar), import-heavy consumption.
   extraction: 28, // oil + iron
   agriculture: 14,
@@ -234,8 +234,8 @@ const VE_WEIGHTS: Partial<Record<CorporationType, number>> = {
   chemical_industries: 1,
   telecommunications: 1,
   media: 1,
-  entertainment: 1,
-  automobiles: 0,
+  media_entertainment: 1,
+  manufacturing_vehicles: 0,
   technology: 0,
 };
 

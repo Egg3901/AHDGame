@@ -1,4 +1,4 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, OperatingSectorType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 
 export interface HistoryPoint {
@@ -9,7 +9,7 @@ export interface HistoryPoint {
 }
 
 export interface SectorFlow {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   label: string;
   rate: number;
 }

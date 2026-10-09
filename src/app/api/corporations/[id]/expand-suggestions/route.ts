@@ -8,7 +8,8 @@ import {
   SPLIT_BASE_CAPTURE_FRACTION,
   UNOWNED_CAPTURE_BONUS_MULTIPLIER,
   MS_CAPTURE_DIVISOR,
-  CORPORATION_TYPES,
+  isOperatingSectorType,
+  operatingSectorIdentity,
 } from "@/lib/constants/corporations";
 import type {
   Character,
@@ -27,10 +28,7 @@ import { sectorDemandGapUnits } from "@/lib/market/sectorDemandGap";
 import { commodityDemandGap, isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
 import { latentTopUpForCountry, latentTopUpForState } from "@/lib/market/latentShortageSignal";
 import { bookFor, loadReachableBooks } from "@/lib/trade/queries/loadReachableBooks";
-import {
-  getOperatingSectorType,
-  getStrategyForOperatingModel,
-} from "@/lib/constants/sectorStrategies";
+import { getStrategyForOperatingModel } from "@/lib/constants/sectorStrategies";
 import { CAPACITY_BUILD_TURNS, computeBuildCost } from "@/lib/constants/capacityEconomy";
 import { foundingStarterUnits, sectorEntryFeeAnchor } from "@/lib/corporations/foundingPlant";
 import { resolveCountryPrimeRates } from "@/lib/corporations/sectorGrowthCost";
@@ -46,7 +44,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
-import type { CorporationType } from "@/lib/constants/corporations";
+
 import type { CountryId } from "@/lib/constants/countries";
 import { calculateSplitCostAnchor } from "@/lib/corporations/marketActionCosts";
 import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
@@ -84,7 +82,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     if (!auth.ok) return auth.response;
 
     const url = new URL(request.url);
-    const sectorType = url.searchParams.get("sectorType") as CorporationType | null;
+    const requestedLane = url.searchParams.get("sectorType");
     const modeParam = url.searchParams.get("mode") ?? "unowned";
     const mode: SuggestionMode = modeParam === "playerCorp" ? "playerCorp" : "unowned";
     const ownershipParam = url.searchParams.get("ownership") ?? "all";
@@ -103,9 +101,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Optional deep-link pin from the state board "Build here" CTA.
     const pinStateId = (url.searchParams.get("state") ?? "").trim() || null;
 
-    if (!sectorType || !(CORPORATION_TYPES as readonly string[]).includes(sectorType)) {
+    if (!isOperatingSectorType(requestedLane)) {
       return errorResponse(400, "Invalid or missing sectorType");
     }
+    const lane = requestedLane;
 
     const { id } = await params;
     const db = await getDb();
@@ -113,10 +112,9 @@ export async function GET(request: Request, { params }: RouteParams) {
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
-    const industryModel =
-      sectorType === corporation.type ? (corporation.industryModel ?? null) : null;
-    const marketFilter = { sectorType, industryModel };
-    const operatingType = getOperatingSectorType(sectorType, industryModel) as CorporationType;
+    const { sectorType, industryModel, mediaDiscriminator } = operatingSectorIdentity(lane);
+    const marketFilter = { sectorType, industryModel, mediaDiscriminator };
+    const operatingType = lane;
 
     const ceoCheck = requireCeo(corporation, auth.user.userId);
     if (ceoCheck) return ceoCheck;
@@ -169,7 +167,8 @@ export async function GET(request: Request, { params }: RouteParams) {
     // quoted "room for 0". A market a corporation cannot sell into must not
     // suppress the quote for one it can.
     const supplyMix =
-      getStrategyForOperatingModel(sectorType, "standard", industryModel).supply ?? {};
+      getStrategyForOperatingModel(sectorType, "standard", industryModel, mediaDiscriminator)
+        .supply ?? {};
     const [reachableBooks, priceDocs] = plantsMode
       ? await Promise.all([
           loadReachableBooks(db),
@@ -442,7 +441,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       // Priced for the SELECTED sector type, which is what the player is about
       // to found — not `corporation.type`. Off-primary founding is exactly the
       // case where quoting the wrong type's build turns misleads most.
-      starterUnits = foundingStarterUnits(sectorType, industryModel);
+      starterUnits = foundingStarterUnits(sectorType, industryModel, mediaDiscriminator);
       foundingBuildTurns = Math.max(1, CAPACITY_BUILD_TURNS(operatingType, true));
 
       const ceoChar = corporation.ceoId
@@ -536,7 +535,13 @@ export async function GET(request: Request, { params }: RouteParams) {
         const poolHeadroomUnits = plantsMode
           ? unownedDoc?.headroomUnits != null && Number.isFinite(unownedDoc.headroomUnits)
             ? unownedDoc.headroomUnits
-            : computeUnownedHeadroomUnits(sectorType, unownedRevenue, eraUnitScale, industryModel)
+            : computeUnownedHeadroomUnits(
+                sectorType,
+                unownedRevenue,
+                eraUnitScale,
+                industryModel,
+                mediaDiscriminator
+              )
           : null;
         // Cap the pool share at what buyers in THIS market can actually absorb —
         // in a glut the pool reads huge while extra output simply goes unsold.

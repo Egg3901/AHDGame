@@ -3,6 +3,7 @@
  * Epsilon-level tolerances; nothing has run yet at post-reset turn 1.
  */
 
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import {
   STARTING_POLITICAL_COLLECTIONS,
   STARTING_POLITICAL_OFFICIAL_FILTER,
@@ -338,11 +339,27 @@ export async function checkSectors(
 
     // Sanity: revenue shares must sum to ~1 and no single sector dominate.
     // Exact weight-table match is unreliable once MIN_UNOWNED floors apply.
-    const rows = await db
-      .collection<{ sectorType?: string; revenue?: number }>("unownedSectors")
-      .find({ countryId })
-      .project({ sectorType: 1, revenue: 1 })
-      .toArray();
+    type LaneRow = {
+      sectorType?: string;
+      industryModel?: string | null;
+      mediaDiscriminator?: string | null;
+      revenue?: number;
+    };
+    // Shares are per operating lane, so the vehicles and entertainment lanes
+    // are measured against the weight tables that size them.
+    const toLaneRow = (row: LaneRow) => ({
+      sectorType: row.sectorType
+        ? getOperatingSectorType(row.sectorType, row.industryModel, row.mediaDiscriminator)
+        : row.sectorType,
+      revenue: row.revenue,
+    });
+    const rows = (
+      await db
+        .collection<LaneRow>("unownedSectors")
+        .find({ countryId })
+        .project<LaneRow>({ sectorType: 1, industryModel: 1, mediaDiscriminator: 1, revenue: 1 })
+        .toArray()
+    ).map(toLaneRow);
     let productiveRows = rows;
     if (commandSoeSeed) {
       const owners = await db
@@ -350,13 +367,22 @@ export async function checkSectors(
         .find({ countryOwnerId: countryId }, { projection: { _id: 1 } })
         .toArray();
       const owned = owners.length
-        ? await db
-            .collection<{ sectorType?: string; revenue?: number }>("corporateSectors")
-            .find(
-              { countryId, corporationId: { $in: owners.map((owner) => owner._id) } },
-              { projection: { sectorType: 1, revenue: 1 } }
-            )
-            .toArray()
+        ? (
+            await db
+              .collection<LaneRow>("corporateSectors")
+              .find(
+                { countryId, corporationId: { $in: owners.map((owner) => owner._id) } },
+                {
+                  projection: {
+                    sectorType: 1,
+                    industryModel: 1,
+                    mediaDiscriminator: 1,
+                    revenue: 1,
+                  },
+                }
+              )
+              .toArray()
+          ).map(toLaneRow)
         : [];
       const producingOwned = owned.filter((row) => Number(row.revenue) > 0);
       checks.push(

@@ -65,9 +65,9 @@ describe("applyPlannedEconomyOutputMix", () => {
   it("leaves the canonical entertainment lane on its own output mix", () => {
     // Fresh 1991 worlds store entertainment as media with an entertainment
     // discriminator. Its advertising leg is entertainment output, not state news.
-    const mix = getStrategy("entertainment", "standard").supply;
+    const mix = getStrategy("media_entertainment", "standard").supply;
     expect(applyPlannedEconomyOutputMix("media", mix, true, "entertainment")).toBe(mix);
-    expect(applyPlannedEconomyOutputMix("entertainment", mix, true, null)).toBe(mix);
+    expect(applyPlannedEconomyOutputMix("media_entertainment", mix, true, null)).toBe(mix);
   });
 
   it("does not mutate the caller's mix", () => {
@@ -86,7 +86,7 @@ describe("plannedEconomyMediaSupplyFactor", () => {
     expect(plannedEconomyMediaSupplyFactor("media", false, null)).toBe(0.1);
     expect(plannedEconomyMediaSupplyFactor("agriculture", true, null)).toBe(1);
     expect(plannedEconomyMediaSupplyFactor("agriculture", false, null)).toBe(1);
-    expect(plannedEconomyMediaSupplyFactor("entertainment", true, null)).toBe(1);
+    expect(plannedEconomyMediaSupplyFactor("media_entertainment", true, null)).toBe(1);
   });
 
   it("never derates the canonical entertainment lane", () => {

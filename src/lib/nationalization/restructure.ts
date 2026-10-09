@@ -1,9 +1,15 @@
+import {
+  operatingSectorFilter,
+  operatingSectorIdentity,
+  corporationTypeOfLane,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import type { Db } from "mongodb";
 import { recordCorporationExit } from "@/lib/corporations/exits/recordCorporationExit";
 import { ObjectId } from "mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import type { CorporationType } from "@/lib/constants/corporations";
+
 import {
   buildNationalCorporationDoc,
   ensurePrimaryNationalCorporation,
@@ -23,7 +29,7 @@ import {
 
 export interface SplitOffParams {
   countryId: CountryId;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   /** Name for the new secondary National Corporation (validated by the caller). */
   newCorpName: string;
 }
@@ -73,7 +79,7 @@ export async function splitOffSectorType(db: Db, params: SplitOffParams): Promis
     fromIds.length > 0
       ? await db
           .collection<CorporateSector>("corporateSectors")
-          .find({ corporationId: { $in: fromIds }, sectorType: params.sectorType })
+          .find({ corporationId: { $in: fromIds }, ...operatingSectorFilter(params.sectorType) })
           .toArray()
       : [];
   const transitionKeys = await reserveSectorsForTransition(
@@ -99,7 +105,13 @@ export async function splitOffSectorType(db: Db, params: SplitOffParams): Promis
     // `applyPriceMultipliers` reads, so leaving it at the default pointed every
     // split-off enterprise at the financial sector regardless of what it
     // actually operates (ticket #1271).
-    type: params.sectorType,
+    type: corporationTypeOfLane(params.sectorType),
+    ...(operatingSectorIdentity(params.sectorType).industryModel
+      ? { industryModel: operatingSectorIdentity(params.sectorType).industryModel }
+      : {}),
+    ...(operatingSectorIdentity(params.sectorType).mediaDiscriminator
+      ? { mediaDiscriminator: operatingSectorIdentity(params.sectorType).mediaDiscriminator }
+      : {}),
     isPrimaryNationalCorporation: false,
     assignedSectorTypes: [params.sectorType],
   });
@@ -152,7 +164,7 @@ export async function attachSoeOverlayIfPlanned(
   db: Db,
   countryId: CountryId,
   corpId: ObjectId,
-  sectorType: CorporationType
+  sectorType: OperatingSectorType
 ): Promise<boolean> {
   const config = await db
     .collection("gameConfig")
@@ -186,7 +198,7 @@ export async function attachSoeOverlayIfPlanned(
 
 export interface MergeBackParams {
   countryId: CountryId;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   /** Target NatCorp to fold into; defaults to the primary. */
   intoCorpId?: ObjectId;
 }

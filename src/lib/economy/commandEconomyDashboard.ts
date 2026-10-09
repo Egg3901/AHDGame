@@ -5,7 +5,10 @@
  * payload; the client renders it and re-uses the same types.
  */
 
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import {
+  OPERATING_SECTOR_TYPE_LABELS,
+  type OperatingSectorType,
+} from "@/lib/constants/corporations";
 import {
   COMMAND_CEILING,
   computePolicyStance,
@@ -20,7 +23,7 @@ export type CommandEconomyRegime = "command" | "dual-track";
 export interface SoeView {
   corpId: string;
   corpName: string;
-  sector: CorporationType;
+  sector: OperatingSectorType;
   sectorLabel: string;
   output: number;
   planTarget: number;
@@ -168,7 +171,7 @@ export interface CommandEconomyDashboard {
 export interface RawSoe {
   corpId: string;
   corpName: string;
-  sector: CorporationType;
+  sector: OperatingSectorType;
   output: number;
   planTarget: number;
   capacity: number;
@@ -201,7 +204,7 @@ export function presentSoe(raw: RawSoe, viewerCharacterId: string | null): SoeVi
     corpId: raw.corpId,
     corpName: raw.corpName,
     sector: raw.sector,
-    sectorLabel: CORPORATION_TYPE_LABELS[raw.sector] ?? raw.sector,
+    sectorLabel: OPERATING_SECTOR_TYPE_LABELS[raw.sector] ?? raw.sector,
     output,
     planTarget,
     capacity: num(raw.capacity),

@@ -9,7 +9,7 @@ import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
-import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import { isOperatingSectorType } from "@/lib/constants/corporations";
 import { isSubsidiaryCorporationsEnabled } from "@/lib/corporations/subsidiaries/featureFlag";
 import { spinOff } from "@/lib/corporations/subsidiaries/commands/spinOff";
 
@@ -49,7 +49,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success) return errorResponse(parsed.status, parsed.error);
 
-    if (!(CORPORATION_TYPES as readonly string[]).includes(parsed.data.sectorType)) {
+    if (!isOperatingSectorType(parsed.data.sectorType)) {
       return errorResponse(400, "Invalid sector type.");
     }
 
@@ -61,7 +61,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const result = await spinOff(db, {
       parent: parentResolved.corporation,
       callerUserId: new ObjectId(auth.user.userId),
-      sectorType: parsed.data.sectorType as CorporationType,
+      sectorType: parsed.data.sectorType,
       name: parsed.data.name,
       tickerSymbol: parsed.data.tickerSymbol,
       appointedCeoType: parsed.data.appointedCeoType,

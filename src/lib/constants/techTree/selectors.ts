@@ -10,7 +10,7 @@
  * `techDecadeLane`); the other lane is locked until the decade is Abandoned.
  */
 
-import type { CorporationType } from "../corporations";
+import type { OperatingSectorType } from "../corporations";
 import type { ManufacturingIndustryModel } from "../corporations";
 import type { MediaDiscriminator } from "../corporations";
 import { getOperatingSectorType } from "../sectorStrategies";
@@ -33,7 +33,7 @@ import {
 
 /** Minimal corp shape the selectors need. */
 export interface TechCorpView {
-  type: CorporationType;
+  type: OperatingSectorType;
   industryModel?: ManufacturingIndustryModel | null;
   mediaDiscriminator?: MediaDiscriminator | null;
   unlockedTechNodeIds?: string[];
@@ -42,18 +42,21 @@ export interface TechCorpView {
 }
 
 /** All nodes in a sector's tree. */
-export function getTreeForType(sectorType: CorporationType): TechTreeNode[] {
+export function getTreeForType(sectorType: OperatingSectorType): TechTreeNode[] {
   return TECH_TREE[sectorType] ?? [];
 }
 
 /** Find a node by id within a sector's tree (undefined if not part of it). */
-export function getNodeById(sectorType: CorporationType, nodeId: string): TechTreeNode | undefined {
+export function getNodeById(
+  sectorType: OperatingSectorType,
+  nodeId: string
+): TechTreeNode | undefined {
   return getTreeForType(sectorType).find((n) => n.id === nodeId);
 }
 
 /** Nodes in a sector's tree for a given decade + lane (UI columns). */
 export function getDecadeLaneNodes(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   decadeId: string,
   lane: TechLane
 ): TechTreeNode[] {
@@ -66,11 +69,7 @@ export function getUnlockedNodes(corp: TechCorpView): TechTreeNode[] {
   if (ids.length === 0) return [];
   const idSet = new Set(ids);
   return getTreeForType(
-    getOperatingSectorType(
-      corp.type,
-      corp.industryModel,
-      corp.mediaDiscriminator
-    ) as CorporationType
+    getOperatingSectorType(corp.type, corp.industryModel, corp.mediaDiscriminator)
   ).filter((n) => idSet.has(n.id));
 }
 
@@ -92,7 +91,7 @@ export function getAggregatedTechEffects(corp: TechCorpView): AggregatedTechEffe
  */
 export function getSectorTechEffects(
   corp: TechCorpView,
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   industryModel?: ManufacturingIndustryModel | null,
   mediaDiscriminator?: MediaDiscriminator | null
 ): AggregatedTechEffects {
@@ -199,7 +198,10 @@ export function getNodePrereqIds(node: TechTreeNode): string[] {
  * Ids of the OTHER members of a node's exclusive group within the same tree
  * (empty when the node has no group). Owning any of these path-locks `node`.
  */
-export function getExclusiveRivalIds(sectorType: CorporationType, node: TechTreeNode): string[] {
+export function getExclusiveRivalIds(
+  sectorType: OperatingSectorType,
+  node: TechTreeNode
+): string[] {
   if (!node.exclusiveGroup) return [];
   return getTreeForType(sectorType)
     .filter((n) => n.exclusiveGroup === node.exclusiveGroup && n.id !== node.id)
@@ -229,11 +231,7 @@ export function canUnlock(
   currentYear: number,
   funds: CanUnlockFunds
 ): CanUnlockResult {
-  const techType = getOperatingSectorType(
-    corp.type,
-    corp.industryModel,
-    corp.mediaDiscriminator
-  ) as CorporationType;
+  const techType = getOperatingSectorType(corp.type, corp.industryModel, corp.mediaDiscriminator);
   const node = getNodeById(techType, nodeId);
   if (!node) return { ok: false, reason: "unknown-node" };
   if (!isDecadeReached(node.decadeId, currentYear)) {
@@ -273,7 +271,7 @@ export function canUnlock(
  * Sector unlocks in past decades make strategies that were available before the
  * tech tree was introduced remain accessible without requiring research.
  */
-export function autoGrantedNodeIds(corpType: CorporationType, currentYear: number): string[] {
+export function autoGrantedNodeIds(corpType: OperatingSectorType, currentYear: number): string[] {
   const researchable = new Set(getResearchableDecades(currentYear).map((d) => d.id));
   const ids: string[] = [];
   for (const node of getTreeForType(corpType)) {
@@ -289,7 +287,7 @@ export function autoGrantedNodeIds(corpType: CorporationType, currentYear: numbe
 export function autoGrantedCorporateNodeIds(currentYear: number): string[] {
   const researchable = new Set(getResearchableDecades(currentYear).map((d) => d.id));
   const ids: string[] = [];
-  const firstType = Object.keys(TECH_TREE)[0] as CorporationType;
+  const firstType = Object.keys(TECH_TREE)[0] as OperatingSectorType;
   for (const node of getTreeForType(firstType)) {
     if (node.lane === "generic" && !researchable.has(node.decadeId)) ids.push(node.id);
   }
@@ -315,7 +313,7 @@ export function decadeLabel(decadeId: string): string {
  */
 export function getSectorTechEffectsForYear(
   corp: TechCorpView,
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   currentYear: number,
   industryModel?: ManufacturingIndustryModel | null,
   mediaDiscriminator?: MediaDiscriminator | null

@@ -11,7 +11,7 @@ import {
   bucketKey,
   computeStateControlledBuckets,
 } from "@/lib/nationalization/stateControlledBuckets";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, OperatingSectorType } from "@/lib/constants/corporations";
 import { revenuePerCapacityUnitForStrategy } from "@/lib/constants/capacityEconomy";
 import {
   unownedHeadroomUnitsPerAnchor,
@@ -383,7 +383,7 @@ export async function shedSectorsForCorps(
                 headroomUnits: {
                   $add: [
                     unownedPoolCreditBaseExpr(
-                      sectorType as CorporationType,
+                      sectorType as OperatingSectorType,
                       true,
                       lookups.eraUnitScale,
                       industryModel,
@@ -396,7 +396,7 @@ export async function shedSectorsForCorps(
             },
             {
               $set: unownedPoolTrailingSet(
-                sectorType as CorporationType,
+                sectorType as OperatingSectorType,
                 true,
                 lookups.eraUnitScale,
                 industryModel,

@@ -47,20 +47,36 @@ describe("getEffectiveTariffRate with FTA overrides", () => {
   it("returns 0 when sector and corp HQ are FTA partners", () => {
     const tariffs = [tariff(40)]; // 40% economy-wide US tariff
     const fta: FtaPairSet = new Set([ftaPairKey("US", "UK")]);
-    const rate = getEffectiveTariffRate(tariffs, "US", "automobiles", "UK", undefined, fta);
+    const rate = getEffectiveTariffRate(
+      tariffs,
+      "US",
+      "manufacturing_vehicles",
+      "UK",
+      undefined,
+      fta
+    );
     expect(rate).toBe(0);
   });
 
   it("returns the bill rate when no FTA covers the pair", () => {
     const tariffs = [tariff(40)];
     const fta: FtaPairSet = new Set([ftaPairKey("US", "DE")]);
-    const rate = getEffectiveTariffRate(tariffs, "US", "automobiles", "UK", undefined, fta);
+    const rate = getEffectiveTariffRate(
+      tariffs,
+      "US",
+      "manufacturing_vehicles",
+      "UK",
+      undefined,
+      fta
+    );
     expect(rate).toBe(40);
   });
 
   it("returns the bill rate when no FTA set is provided (back-compat)", () => {
     const tariffs = [tariff(25)];
-    expect(getEffectiveTariffRate(tariffs, "US", "automobiles", "UK", undefined)).toBe(25);
+    expect(getEffectiveTariffRate(tariffs, "US", "manufacturing_vehicles", "UK", undefined)).toBe(
+      25
+    );
   });
 });
 
@@ -68,13 +84,26 @@ describe("getForeignTariffMarginModifier with FTA overrides", () => {
   it("returns 0 modifier for FTA partners (rate is 0)", () => {
     const tariffs = [tariff(60)];
     const fta: FtaPairSet = new Set([ftaPairKey("US", "UK")]);
-    const mod = getForeignTariffMarginModifier(tariffs, "US", "automobiles", "UK", undefined, fta);
+    const mod = getForeignTariffMarginModifier(
+      tariffs,
+      "US",
+      "manufacturing_vehicles",
+      "UK",
+      undefined,
+      fta
+    );
     expect(mod).toBe(0);
   });
 
   it("applies the half-rate penalty for non-partners", () => {
     const tariffs = [tariff(40)];
-    const mod = getForeignTariffMarginModifier(tariffs, "US", "automobiles", "UK", undefined);
+    const mod = getForeignTariffMarginModifier(
+      tariffs,
+      "US",
+      "manufacturing_vehicles",
+      "UK",
+      undefined
+    );
     expect(mod).toBe(-20);
   });
 });
@@ -219,7 +248,7 @@ it("keeps common-market trade during treaty rejection and removes it on membersh
     getEffectiveTariffRate(
       [tariff(40, { countryId: "DE" })],
       "DE",
-      "automobiles",
+      "manufacturing_vehicles",
       "UK",
       undefined,
       before
@@ -234,7 +263,7 @@ it("keeps common-market trade during treaty rejection and removes it on membersh
     getEffectiveTariffRate(
       [tariff(40, { countryId: "DE" })],
       "DE",
-      "automobiles",
+      "manufacturing_vehicles",
       "UK",
       undefined,
       after

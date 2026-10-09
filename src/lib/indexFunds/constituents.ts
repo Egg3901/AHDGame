@@ -1,5 +1,5 @@
 import type { ObjectId } from "mongodb";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { operatingSectorTypeFor, type OperatingSectorType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type {
@@ -20,7 +20,7 @@ export type IndexFundTargetDefinition = {
   scope: IndexFundScope;
   kind: IndexFundKind;
   countryId?: CountryId;
-  sectorType?: CorporationType;
+  sectorType?: OperatingSectorType;
   /** Top-N market-cap cutoff. Defaults to 50 for global broad funds and unlimited otherwise. */
   topN?: number;
   anchorCurrencyCode: CurrencyCode;
@@ -88,23 +88,18 @@ export function isEligibleIndexFundConstituent(
     return false;
   if (definition.kind === "sector") {
     if (!definition.sectorType) return false;
-    if (definition.sectorType === "automobiles") {
-      return (
-        corporation.type === "automobiles" ||
-        (corporation.type === "manufacturing" && corporation.industryModel === "vehicles") ||
-        corporation.secondaryType === "automobiles"
-      );
+    // A vehicle maker or entertainment house belongs to its lane's fund, not
+    // the generic manufacturing or media fund.
+    if (
+      operatingSectorTypeFor(
+        corporation.type,
+        corporation.industryModel,
+        corporation.mediaDiscriminator
+      ) === definition.sectorType
+    ) {
+      return true;
     }
-    if (definition.sectorType === "manufacturing" && corporation.industryModel === "vehicles") {
-      return false;
-    }
-    if (corporation.mediaDiscriminator === "entertainment") {
-      return definition.sectorType === "entertainment";
-    }
-    return (
-      corporation.type === definition.sectorType ||
-      corporation.secondaryType === definition.sectorType
-    );
+    return corporation.secondaryType === definition.sectorType;
   }
 
   return true;

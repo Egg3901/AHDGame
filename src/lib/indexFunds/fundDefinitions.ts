@@ -1,15 +1,16 @@
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CreditRating } from "@/lib/db/types/centralBank";
 import { JP_INDEX_FUND_NAMES } from "@/lib/countries/jp/economy";
 
 /**
- * Sector fund mapping: every CorporationType gets its own standalone sector fund.
- * No composites — each game sector maps 1:1 to a fund.
+ * Sector fund mapping: every operating lane gets its own standalone sector fund.
+ * No composites — each lane maps 1:1 to a fund. The vehicles and entertainment
+ * funds track the manufacturing vehicles lane and the media entertainment lane.
  */
 export const SECTOR_FUND_MAPPINGS: readonly {
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   sectorLabel: string;
   ticker: string;
 }[] = [
@@ -19,7 +20,7 @@ export const SECTOR_FUND_MAPPINGS: readonly {
   { sectorType: "chemical_industries", sectorLabel: "Chemicals", ticker: "GLBCHM" },
   { sectorType: "healthcare", sectorLabel: "Healthcare", ticker: "GLBHLT" },
   { sectorType: "retail", sectorLabel: "Retail", ticker: "GLBRTL" },
-  { sectorType: "automobiles", sectorLabel: "Automobiles", ticker: "GLBAUT" },
+  { sectorType: "manufacturing_vehicles", sectorLabel: "Automobiles", ticker: "GLBAUT" },
   { sectorType: "technology", sectorLabel: "Technology", ticker: "GLBTEC" },
   { sectorType: "energy", sectorLabel: "Energy", ticker: "GLBENR" },
   { sectorType: "agriculture", sectorLabel: "Agriculture", ticker: "GLBAGR" },
@@ -27,7 +28,7 @@ export const SECTOR_FUND_MAPPINGS: readonly {
   { sectorType: "construction", sectorLabel: "Construction", ticker: "GLBCON" },
   { sectorType: "defense", sectorLabel: "Defense", ticker: "GLBDEF" },
   { sectorType: "telecommunications", sectorLabel: "Telecom", ticker: "GLBCOM" },
-  { sectorType: "entertainment", sectorLabel: "Entertainment", ticker: "GLBENT" },
+  { sectorType: "media_entertainment", sectorLabel: "Entertainment", ticker: "GLBENT" },
   { sectorType: "logistics", sectorLabel: "Logistics", ticker: "GLBTRN" },
   { sectorType: "extraction", sectorLabel: "Extraction & Mining", ticker: "GLBEXT" },
 ] as const;
@@ -38,14 +39,14 @@ export const SECTOR_FUND_MAPPINGS: readonly {
  * Secondary-type matching in isEligibleIndexFundConstituent still falls back
  * here if a corp's primary type differs from its sector fund type.
  */
-export const SECTOR_FUND_PRIMARY_TYPES: Record<string, CorporationType[]> = {
+export const SECTOR_FUND_PRIMARY_TYPES: Record<string, OperatingSectorType[]> = {
   Financials: ["financial"],
   Media: ["media"],
   Manufacturing: ["manufacturing"],
   Chemicals: ["chemical_industries"],
   Healthcare: ["healthcare"],
   Retail: ["retail"],
-  Automobiles: ["automobiles"],
+  Automobiles: ["manufacturing_vehicles"],
   Technology: ["technology"],
   Energy: ["energy"],
   Agriculture: ["agriculture"],
@@ -53,7 +54,7 @@ export const SECTOR_FUND_PRIMARY_TYPES: Record<string, CorporationType[]> = {
   Construction: ["construction"],
   Defense: ["defense"],
   Telecom: ["telecommunications"],
-  Entertainment: ["entertainment"],
+  Entertainment: ["media_entertainment"],
   Logistics: ["logistics"],
   "Extraction & Mining": ["extraction"],
 };
@@ -150,7 +151,7 @@ export const GLOBAL_BROAD_FUND = {
 export const SECTOR_FUND_DEFINITIONS: readonly {
   kind: "sector";
   scope: "global";
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   sectorLabel: string;
   slug: string;
   name: string;
@@ -256,7 +257,7 @@ export function getAllFundDefinitions() {
     kind: "broad" | "sector" | "bond";
     countryId?: CountryId;
     topN?: number;
-    sectorType?: CorporationType;
+    sectorType?: OperatingSectorType;
     anchorCurrencyCode: CurrencyCode;
     bondUniverse?: BondFundUniverse;
   }[] = [];

@@ -1,6 +1,6 @@
 import type { CountryEconomy } from "../contract";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { LegalStructureId } from "@/lib/constants/legalStructures";
 
 /**
@@ -33,9 +33,9 @@ const sectorWeightsBase = {
   manufacturing: 18,
   real_estate: 11,
   retail: 9,
-  automobiles: 8,
+  manufacturing_vehicles: 8,
   agriculture: 8,
-  entertainment: 7,
+  media_entertainment: 7,
   financial: 6,
   construction: 6,
   energy: 6,
@@ -50,10 +50,10 @@ const sectorWeightsBase = {
 // No COST_SCALE_ANCHORS row; the folder omits `costScaleAnchors` rather than defaulting it.
 /**
  * ⚠ THE CAST IS LOAD-BEARING, for the same reason as the cabinet groups:
- * JSON.parse widens each sector name to `string`, and `CorporationType[]` is a
+ * JSON.parse widens each sector name to `string`, and `OperatingSectorType[]` is a
  * union array. Caught by typecheck alone.
  */
-const strategicSectors: CorporationType[] = [];
+const strategicSectors: OperatingSectorType[] = [];
 const treasuryPsRate = {
   national: 70000,
   state: 35000,
@@ -105,7 +105,7 @@ export const IT_ECONOMY: CountryEconomy = {
         agriculture: 20,
         construction: 12,
         energy: 7,
-        automobiles: 6,
+        manufacturing_vehicles: 6,
         real_estate: 5,
         retail: 5,
         financial: 5,
@@ -116,7 +116,7 @@ export const IT_ECONOMY: CountryEconomy = {
         telecommunications: 2,
         media: 2,
         extraction: 1,
-        entertainment: 1,
+        media_entertainment: 1,
         technology: 0,
       },
       "1979": {
@@ -126,7 +126,7 @@ export const IT_ECONOMY: CountryEconomy = {
         construction: 8,
         chemical_industries: 5,
         energy: 6,
-        automobiles: 6,
+        manufacturing_vehicles: 6,
         real_estate: 7,
         healthcare: 4,
         defense: 3,
@@ -136,15 +136,15 @@ export const IT_ECONOMY: CountryEconomy = {
         extraction: 2,
         technology: 1,
         media: 5,
-        entertainment: 6,
+        media_entertainment: 6,
       },
       "1991": {
         manufacturing: 18,
         real_estate: 11,
         retail: 9,
-        automobiles: 8,
+        manufacturing_vehicles: 8,
         agriculture: 8,
-        entertainment: 7,
+        media_entertainment: 7,
         financial: 6,
         construction: 6,
         energy: 6,

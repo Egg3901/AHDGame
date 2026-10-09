@@ -10,7 +10,7 @@
  * a margin hit (disasterPhysicalDeferred), so the two legs always sum to the
  * pre-P3.5 total. No reads or writes here, only the turn inputs.
  */
-import type { CorporationType } from "@/lib/constants/corporations";
+
 import {
   getDominanceMarginPenalty,
   getNationalDominanceMarginPenalty,
@@ -191,7 +191,7 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
     sector.sectorType,
     sector.industryModel,
     sector.mediaDiscriminator
-  ) as CorporationType;
+  );
 
   // P3.5 SEAM — active-disaster penalties are split at their source
   // (disasterMarginPenalty.ts) into a financial leg and a physical leg.
@@ -314,11 +314,7 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
     ? 0
     : getSectorTypeMatchModifier(
         operatingSectorType,
-        getOperatingSectorType(
-          corp.type,
-          corp.industryModel,
-          corp.mediaDiscriminator
-        ) as CorporationType,
+        getOperatingSectorType(corp.type, corp.industryModel, corp.mediaDiscriminator),
         corp.secondaryType
       );
   // Logistical sprawl: -0.5% per 2 sectors over 15 for a single-type corp

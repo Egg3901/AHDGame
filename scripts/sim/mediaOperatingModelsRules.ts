@@ -17,7 +17,7 @@ import {
   rescaleBuildQueueForStrategyChange,
 } from "@/lib/constants/capacityEconomy";
 
-const LANES = ["media", "entertainment"] as const;
+const LANES = ["media", "media_entertainment"] as const;
 
 function rateTotal(rates: Partial<Record<CommodityType, number>>): number {
   return Object.values(rates).reduce<number>((total, rate) => total + (rate ?? 0), 0);

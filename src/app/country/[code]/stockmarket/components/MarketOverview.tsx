@@ -13,9 +13,9 @@ import {
   getExchangeLabel,
 } from "@/lib/constants/exchangeRegistry";
 import {
-  CORPORATION_TYPE_LABELS,
-  FOUNDABLE_CORPORATION_TYPES,
-  type CorporationType,
+  OPERATING_SECTOR_TYPE_LABELS,
+  OPERATING_SECTOR_TYPES,
+  type OperatingSectorType,
 } from "@/lib/constants/corporations";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { ExchangeFilter } from "../types";
@@ -94,7 +94,7 @@ interface CandlesResponse {
   invalidPriceTurns?: number;
 }
 
-type CompareKey = { kind: "venue"; api: string } | { kind: "sector"; sector: CorporationType };
+type CompareKey = { kind: "venue"; api: string } | { kind: "sector"; sector: OperatingSectorType };
 
 function canvasColor(color: string): string {
   const match = color.match(
@@ -508,7 +508,7 @@ export function MarketOverview({
       const info = ALL_EXCHANGES.find((e) => e.apiKey === compare.api);
       return info ? `${info.exchangeName} %` : null;
     }
-    return `${CORPORATION_TYPE_LABELS[compare.sector] ?? compare.sector} %`;
+    return `${OPERATING_SECTOR_TYPE_LABELS[compare.sector] ?? compare.sector} %`;
   }, [compare]);
 
   useEffect(() => {
@@ -599,7 +599,7 @@ export function MarketOverview({
     [exchangeApi, exchangeMeta]
   );
   const sectorOptions = useMemo(
-    () => (exchangeApi === "global" ? [...FOUNDABLE_CORPORATION_TYPES] : []),
+    () => (exchangeApi === "global" ? [...OPERATING_SECTOR_TYPES] : []),
     [exchangeApi]
   );
 
@@ -702,7 +702,7 @@ export function MarketOverview({
                 setCompare(
                   kind === "venue"
                     ? { kind: "venue", api: key }
-                    : { kind: "sector", sector: key as CorporationType }
+                    : { kind: "sector", sector: key as OperatingSectorType }
                 );
               }}
               className="px-2 py-1 rounded-md text-xs font-medium border bg-card-elevated border-card-border text-muted hover:text-foreground max-w-44"
@@ -718,7 +718,7 @@ export function MarketOverview({
               <optgroup label="Sectors">
                 {sectorOptions.map((s) => (
                   <option key={s} value={`sector:${s}`}>
-                    {CORPORATION_TYPE_LABELS[s]}
+                    {OPERATING_SECTOR_TYPE_LABELS[s]}
                   </option>
                 ))}
               </optgroup>

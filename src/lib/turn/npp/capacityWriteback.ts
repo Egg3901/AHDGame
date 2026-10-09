@@ -89,13 +89,13 @@ export function depleteUnownedPoolsForDraws(
 ): void {
   for (const draw of draws) {
     const pool = unownedIndex.get(
-      bucketKey(draw.stateId, draw.sectorType, null, draw.mediaDiscriminator)
+      bucketKey(draw.stateId, draw.sectorType, draw.industryModel, draw.mediaDiscriminator)
     );
     if (!pool) continue;
     const unitsPerAnchor = unownedHeadroomUnitsPerAnchor(
       draw.sectorType,
       eraUnitScale,
-      undefined,
+      draw.industryModel,
       draw.mediaDiscriminator
     );
     const remaining = Math.max(
@@ -105,7 +105,7 @@ export function depleteUnownedPoolsForDraws(
         pool.headroomUnits,
         pool.revenue,
         eraUnitScale,
-        undefined,
+        draw.industryModel,
         draw.mediaDiscriminator
       ) - draw.units
     );
@@ -137,6 +137,7 @@ export function buildNppFoundedSectorInserts(args: {
       countryId: ns.countryId as CountryId,
       stateId: ns.stateId,
       sectorType: ns.sectorType,
+      ...(ns.industryModel ? { industryModel: ns.industryModel } : {}),
       ...(ns.mediaDiscriminator ? { mediaDiscriminator: ns.mediaDiscriminator } : {}),
       targetGrowthRate: ns.starterOrder ? 0 : 2,
       currentGrowthRate: 0,
@@ -175,16 +176,22 @@ export async function drawFoundedCapacityFromPools(
 ): Promise<void> {
   if (draws.length === 0) return;
   await db.collection<UnownedSector>("unownedSectors").bulkWrite(
-    draws.map(({ stateId, sectorType, units, countryId, mediaDiscriminator }) => {
+    draws.map(({ stateId, sectorType, units, countryId, industryModel, mediaDiscriminator }) => {
       return {
         updateOne: {
-          filter: { stateId, sectorType, mediaDiscriminator: mediaDiscriminator ?? null },
+          filter: {
+            stateId,
+            sectorType,
+            industryModel: industryModel ?? null,
+            mediaDiscriminator: mediaDiscriminator ?? null,
+          },
           update: [
             {
               $set: {
                 stateId: { $ifNull: ["$stateId", stateId] },
                 countryId: { $ifNull: ["$countryId", countryId] },
                 sectorType: { $ifNull: ["$sectorType", sectorType] },
+                industryModel: { $ifNull: ["$industryModel", industryModel ?? null] },
                 mediaDiscriminator: {
                   $ifNull: ["$mediaDiscriminator", mediaDiscriminator ?? null],
                 },
@@ -201,7 +208,7 @@ export async function drawFoundedCapacityFromPools(
                         unownedHeadroomBaseExpr(
                           sectorType,
                           args.eraUnitScale,
-                          undefined,
+                          industryModel,
                           mediaDiscriminator
                         ),
                         units,
@@ -220,7 +227,7 @@ export async function drawFoundedCapacityFromPools(
                 sectorType,
                 true,
                 args.eraUnitScale,
-                undefined,
+                industryModel,
                 mediaDiscriminator
               ),
             },

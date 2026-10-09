@@ -3,7 +3,7 @@ import { registerEventHandler } from "@/lib/events/substrate/registry";
 import { applyDeclarativeEffects } from "@/lib/events/substrate/applyEffects";
 import { threeTierTable } from "./tiers";
 import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { seededRoll } from "@/lib/events/substrate/rng";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
@@ -101,7 +101,7 @@ const handler: EventHandler = {
     return {
       corporationId: corp._id,
       corpName: corp.name,
-      sectorLabel: CORPORATION_TYPE_LABELS[sectorType],
+      sectorLabel: OPERATING_SECTOR_TYPE_LABELS[sectorType],
       currentStrategyName: currentStrat.name,
       demandedStrategyName: picked.name,
     };

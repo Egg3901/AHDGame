@@ -1,3 +1,4 @@
+import { OPERATING_SECTOR_TYPES } from "@/lib/constants/corporations";
 import { describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
@@ -95,13 +96,11 @@ describe("seedUnions", () => {
     expect(deleteMany).toHaveBeenCalledTimes(4);
   });
 
-  it("adds a separate model-keyed union for vehicle manufacturing", async () => {
-    const { db, bulkWrite } = makeDb(["US"], {
-      modelSectors: [{ countryId: "US", sectorType: "manufacturing", industryModel: "vehicles" }],
-    });
-    await seedUnions(db, () => {}, "1991-default", false);
+  it("seeds a separate model-keyed union for vehicle manufacturing in every era", async () => {
+    const { db, bulkWrite } = makeDb(["US"]);
+    await seedUnions(db, () => {}, "1953-default", false);
     const operations = bulkWrite.mock.calls[0][0];
-    expect(operations).toHaveLength(18);
+    expect(operations).toHaveLength(OPERATING_SECTOR_TYPES.length);
     const vehicleUnion = operations.find(
       (op: { updateOne: { filter: Record<string, unknown> } }) =>
         op.updateOne.filter.industryModel === "vehicles"

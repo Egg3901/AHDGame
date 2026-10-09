@@ -10,13 +10,13 @@ describe("toPayload", () => {
   it("serializes a sector row", () => {
     const row: TariffProvisionInput = {
       scopeType: "sector",
-      targetSectorType: "automobiles",
+      targetSectorType: "manufacturing_vehicles",
       rate: 20,
     };
     expect(toPayload(row)).toEqual({
       type: "tariff",
       scopeType: "sector",
-      targetSectorType: "automobiles",
+      targetSectorType: "manufacturing_vehicles",
       rate: 20,
     });
   });
@@ -65,7 +65,7 @@ describe("validateRows", () => {
   it("allows different sectors in the same bill", () => {
     expect(
       validateRows([
-        { scopeType: "sector", targetSectorType: "automobiles", rate: 10 },
+        { scopeType: "sector", targetSectorType: "manufacturing_vehicles", rate: 10 },
         { scopeType: "sector", targetSectorType: "technology", rate: 15 },
       ])
     ).toBeNull();

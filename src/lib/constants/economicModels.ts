@@ -1,4 +1,4 @@
-import type { CorporationType } from "./corporations";
+import type { OperatingSectorType } from "./corporations";
 
 /**
  * Economic-model classification (P7). Each country and region develops a named
@@ -38,9 +38,9 @@ export interface EconomicModelArchetype {
   /** Player-facing, English. */
   name: string;
   /** null only for "mixed" (the structureless residual). */
-  primarySector: CorporationType | null;
+  primarySector: OperatingSectorType | null;
   /** 2–3 for named models; empty for "mixed". */
-  secondarySectors: CorporationType[];
+  secondarySectors: OperatingSectorType[];
   /** Budget categories this model leans on, weighted 0–1 (Spending signal). String
    *  keys = real `spending.byCategory` keys (no SpendingCategory union exists). */
   spendingSignature: Record<string, number>;
@@ -161,7 +161,7 @@ export const MODEL_ARCHETYPES: Record<EconomicModelId, EconomicModelArchetype> =
     id: "techInnovation",
     name: "Tech-Innovation Economy",
     primarySector: "technology",
-    secondarySectors: ["telecommunications", "media", "entertainment"],
+    secondarySectors: ["telecommunications", "media", "media_entertainment"],
     spendingSignature: { education: 1 },
     lawSignature: ["rd_investment", "tech_subsidy"],
     metricSynergies: [
@@ -185,7 +185,7 @@ export const MODEL_ARCHETYPES: Record<EconomicModelId, EconomicModelArchetype> =
     id: "industrialPowerhouse",
     name: "Industrial Powerhouse",
     primarySector: "manufacturing",
-    secondarySectors: ["automobiles", "chemical_industries", "logistics"],
+    secondarySectors: ["manufacturing_vehicles", "chemical_industries", "logistics"],
     spendingSignature: { infrastructure: 1 },
     lawSignature: ["industrial_policy", "export_promotion"],
     metricSynergies: [
@@ -223,7 +223,7 @@ export const MODEL_ARCHETYPES: Record<EconomicModelId, EconomicModelArchetype> =
     id: "serviceConsumer",
     name: "Service / Consumer Economy",
     primarySector: "retail",
-    secondarySectors: ["entertainment", "media", "real_estate"],
+    secondarySectors: ["media_entertainment", "media", "real_estate"],
     spendingSignature: {}, // consumer/light — no spending lean
     lawSignature: ["consumer_protection", "small_business_support"],
     metricSynergies: [

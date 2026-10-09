@@ -47,14 +47,16 @@ describe("facilitiesFromUnits", () => {
     expect(facilitiesFromUnits("energy", 250)).toBe(1);
     expect(facilitiesFromUnits("energy", 749)).toBe(2);
     expect(facilitiesFromUnits("energy", 2500)).toBe(10);
-    expect(facilitiesFromUnits("automobiles", 3.7)).toBe(3);
+    expect(facilitiesFromUnits("manufacturing_vehicles", 3.7)).toBe(3);
   });
 
   it("retains the automobile quantum for a manufacturing vehicle model", () => {
-    expect(plantSizeUnits("manufacturing", "vehicles")).toBe(plantSizeUnits("automobiles"));
+    expect(plantSizeUnits("manufacturing", "vehicles")).toBe(
+      plantSizeUnits("manufacturing_vehicles")
+    );
     expect(facilitiesFromUnits("manufacturing", 3.7, "vehicles")).toBe(3);
     expect(revenuePerCapacityUnit("manufacturing", 1, "vehicles")).toBe(
-      revenuePerCapacityUnit("automobiles", 1)
+      revenuePerCapacityUnit("manufacturing_vehicles", 1)
     );
   });
 });

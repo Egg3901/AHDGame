@@ -1,7 +1,7 @@
 import type { V3LaneContent } from "./types";
 
-/** v3 slots 10-15 for automobiles: entries (0-2) and capstones (3-5) per decade. */
-export const AUTOMOBILES_V3: V3LaneContent = {
+/** v3 slots 10-15 for the manufacturing vehicles lane: entries (0-2) and capstones (3-5) per decade. */
+export const VEHICLES_V3: V3LaneContent = {
   "1940": [
     {
       name: "Arsenal Line Conversion",

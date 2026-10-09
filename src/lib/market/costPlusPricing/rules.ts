@@ -1,8 +1,11 @@
 import type { CommodityType } from "@/lib/constants/commodities";
 import { priceRealizationFactor } from "../priceRealization";
 
+/** Accepts a stored sector type or an operating lane. */
 export function supportsCostPlusPricing(sectorType: string): boolean {
-  return ["manufacturing", "automobiles", "chemical_industries", "defense"].includes(sectorType);
+  return ["manufacturing", "manufacturing_vehicles", "chemical_industries", "defense"].includes(
+    sectorType
+  );
 }
 
 /** Same damped input prices used in physical P&L, weighted by recipe spend. */

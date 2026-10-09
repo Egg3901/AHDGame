@@ -59,9 +59,7 @@ function marketValueFor(
   mediaDiscriminator?: string | null
 ): MarketValue {
   const output =
-    SECTOR_SUPPLY[
-      getOperatingSectorType(sectorType, undefined, mediaDiscriminator) as CorporationType
-    ] ?? [];
+    SECTOR_SUPPLY[getOperatingSectorType(sectorType, undefined, mediaDiscriminator)] ?? [];
   let demand = 0;
   let supply = 0;
   let delivered = 0;

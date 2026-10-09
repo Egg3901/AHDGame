@@ -36,7 +36,7 @@ const LEGACY_INPUTS = {
     vehicles: 0.025,
     plastics: 0.06,
   },
-  automobiles: {
+  manufacturing_vehicles: {
     steel: 0.21,
     iron: 0.08,
     electronics: 0.13,

@@ -1,6 +1,6 @@
 import type { CrisisEconomicExposure } from "@/lib/livingConflict/rules/economicExposure";
 import type { CommodityType, ExtractableResource } from "@/lib/constants/commodities";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 
 /** Aggregate sector slice for a sphere-macro (Tier-2) country. */
@@ -18,7 +18,7 @@ export interface MacroMarketContribution {
   /** Commodity units added to the shared global supply/demand each normal turn. */
   byCommodity: Partial<Record<CommodityType, { supply: number; demand: number }>>;
   /** Sector-level output/demand used for admin diagnostics. */
-  bySector: Partial<Record<CorporationType, { output: number; demand: number }>>;
+  bySector: Partial<Record<OperatingSectorType, { output: number; demand: number }>>;
   /** Turn on which this contribution was last recomputed. */
   computedOnTurn: number;
 }
@@ -73,7 +73,7 @@ export interface MacroCountryState {
   /** Optional shock multiplier applied on the next kernel tick (default 1). */
   shockModifier: number;
   resources: Partial<Record<ExtractableResource, number>>;
-  sectors: Partial<Record<CorporationType, MacroSectorState>>;
+  sectors: Partial<Record<OperatingSectorType, MacroSectorState>>;
   contribution: MacroMarketContribution;
   dataQuality: MacroCountryDataQuality;
   lastMacroTickTurn: number | null;
@@ -104,8 +104,8 @@ export interface MacroCountryDiagnostics {
   tradeExposure: number;
   shockModifier: number;
   resources: Partial<Record<ExtractableResource, number>>;
-  sectors: Partial<Record<CorporationType, MacroSectorState>>;
-  sectorContributions: Partial<Record<CorporationType, { output: number; demand: number }>>;
+  sectors: Partial<Record<OperatingSectorType, MacroSectorState>>;
+  sectorContributions: Partial<Record<OperatingSectorType, { output: number; demand: number }>>;
   commodityContributions: Partial<Record<CommodityType, { supply: number; demand: number }>>;
   /** Loud missing/fallback report — empty arrays mean a complete authored seed. */
   dataQuality: MacroCountryDataQuality;

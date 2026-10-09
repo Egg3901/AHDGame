@@ -33,7 +33,7 @@
  * Each rebalance should record its motivation in commits and the design doc.
  */
 
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 // ============================================================================
 // Trigger / market demand (Section 3 of design)
@@ -152,13 +152,13 @@ export const DEFAULT_MARGIN_FULL_PENALTY_TURNS = 48;
 export const DEFAULT_MARGIN_DECAY_TURNS = 24;
 // Total margin window = 72 turns
 
-export const DEFAULT_MARGIN_SECTOR_MULTIPLIERS: Record<CorporationType, number> = {
+export const DEFAULT_MARGIN_SECTOR_MULTIPLIERS: Record<OperatingSectorType, number> = {
   // Tier 1 (1.5x) — heaviest losers
   financial: 1.5,
   // Tier 2 (1.3x) — FX/import-sensitive, leverage-dependent, consumer-facing
   manufacturing: 1.3,
   retail: 1.3,
-  automobiles: 1.3,
+  manufacturing_vehicles: 1.3,
   chemical_industries: 1.3,
   real_estate: 1.3,
   construction: 1.3,
@@ -167,7 +167,7 @@ export const DEFAULT_MARGIN_SECTOR_MULTIPLIERS: Record<CorporationType, number> 
   telecommunications: 1.0,
   healthcare: 1.0,
   media: 1.0,
-  entertainment: 1.0,
+  media_entertainment: 1.0,
   logistics: 1.0,
   defense: 1.0,
   // Tier 4 (0.7x) — export-positive, partial winners

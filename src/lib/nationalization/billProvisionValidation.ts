@@ -7,7 +7,7 @@ import type {
   DesignateStrategicSectorProvision,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES, type OperatingSectorType } from "@/lib/constants/corporations";
 import { CARVE_FRACTION_MIN, CARVE_FRACTION_MAX } from "./constants";
 import { isStateOwned } from "./nationalCorporation";
 import { isPrivateEnterpriseBlocked } from "@/lib/economy/queries/privateEnterpriseGate";
@@ -67,7 +67,7 @@ export async function validateNationalizationProvisions(
         if (isStateOwned(corp)) return fail("That corporation is already state-owned.");
         out.push({ type: "nationalize", targetCorporationId: corp._id });
       } else {
-        if (!CORPORATION_TYPES.includes(r.targetSectorType as CorporationType)) {
+        if (!OPERATING_SECTOR_TYPES.includes(r.targetSectorType as OperatingSectorType)) {
           return fail("Invalid sector type to nationalize.");
         }
         const fraction = r.sectorCarveFraction ?? 1;
@@ -78,7 +78,7 @@ export async function validateNationalizationProvisions(
         }
         out.push({
           type: "nationalize",
-          targetSectorType: r.targetSectorType as CorporationType,
+          targetSectorType: r.targetSectorType as OperatingSectorType,
           sectorCarveFraction: fraction,
           sectorScope: scope as "all" | "corporations" | "unowned" | "npp_unowned",
         });
@@ -88,12 +88,12 @@ export async function validateNationalizationProvisions(
 
     if (p.type === "designate_strategic_sector") {
       const r = raw as { sectorType?: string };
-      if (!r.sectorType || !CORPORATION_TYPES.includes(r.sectorType as CorporationType)) {
+      if (!r.sectorType || !OPERATING_SECTOR_TYPES.includes(r.sectorType as OperatingSectorType)) {
         return fail("Invalid sector type for strategic designation.");
       }
       out.push({
         type: "designate_strategic_sector",
-        sectorType: r.sectorType as CorporationType,
+        sectorType: r.sectorType as OperatingSectorType,
       });
       continue;
     }

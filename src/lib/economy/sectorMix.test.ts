@@ -117,7 +117,7 @@ describe("aggregateCountrySectorMix", () => {
         corporationId: new ObjectId(),
         countryId: "US",
         stateId: "CA",
-        sectorType: "automobiles",
+        sectorType: "manufacturing_vehicles",
         // The owned nameplate is deliberately much smaller than the open
         // market. A plants board must not mistake ownership for the whole
         // industry.
@@ -134,7 +134,7 @@ describe("aggregateCountrySectorMix", () => {
       {
         stateId: "CA",
         countryId: "US",
-        sectorType: "automobiles",
+        sectorType: "manufacturing_vehicles",
         // This authored row is intentionally stale and must not set the plants
         // market denominator.
         revenue: 999_999,
@@ -173,7 +173,7 @@ describe("aggregateCountrySectorMix", () => {
     db.collectionMocks.gameConfig!.findOne.mockResolvedValue({ marketSystemMode: "plants" });
 
     const mix = await aggregateCountrySectorMix(db as unknown as Db, "US");
-    const automobiles = mix.find((s) => s.type === "automobiles")!;
+    const automobiles = mix.find((s) => s.type === "manufacturing_vehicles")!;
 
     // Two built automobile capacity units are $100,000 of plant nameplate.
     // The vehicle ledger has another 40 visible units plus 10 units that were
@@ -183,7 +183,7 @@ describe("aggregateCountrySectorMix", () => {
     expect(automobiles.totalMarketAnchor).toBe(2_600_000);
     expect(automobiles.ownedPercent).toBeCloseTo(3.8, 1);
 
-    const entertainment = mix.find((s) => s.type === "entertainment")!;
+    const entertainment = mix.find((s) => s.type === "media_entertainment")!;
     // Entertainment has no plant yet, but its consumer-service demand still
     // creates a real latent market.
     // The standard entertainment mix is one-third entertainment services by
@@ -205,7 +205,7 @@ describe("aggregateCountrySectorMix", () => {
         corporationId: new ObjectId(),
         countryId: "US",
         stateId: "CA",
-        sectorType: "automobiles",
+        sectorType: "manufacturing_vehicles",
         revenue: 10_000,
         realizedRevenue: 0,
         capitalStock: 2,
@@ -240,7 +240,7 @@ describe("aggregateCountrySectorMix", () => {
     db.collectionMocks.gameConfig!.findOne.mockResolvedValue({ marketSystemMode: "plants" });
 
     const mix = await aggregateCountrySectorMix(db as unknown as Db, "US");
-    const automobiles = mix.find((s) => s.type === "automobiles")!;
+    const automobiles = mix.find((s) => s.type === "manufacturing_vehicles")!;
 
     // Owned nameplate only: two built units are $100,000 of plant.
     expect(automobiles.totalMarketAnchor).toBe(100_000);
@@ -287,11 +287,11 @@ describe("aggregateCountrySectorMix", () => {
     db.collectionMocks.gameConfig!.findOne.mockResolvedValue({ marketSystemMode: "plants" });
 
     const mix = await aggregateCountrySectorMix(db as unknown as Db, "US");
-    const manufacturing = mix.find((sector) => sector.type === "manufacturing")!;
+    const vehicles = mix.find((sector) => sector.type === "manufacturing_vehicles")!;
 
     // CA contributes one $50k nameplate. TX has no persisted market row, but
-    // its latent demand still expands the manufacturing market physically.
-    expect(manufacturing.totalMarketAnchor).toBeGreaterThan(50_000);
-    expect(manufacturing.ownedPercent).toBeLessThan(100);
+    // its latent demand still expands the vehicles market physically.
+    expect(vehicles.totalMarketAnchor).toBeGreaterThan(50_000);
+    expect(vehicles.ownedPercent).toBeLessThan(100);
   });
 });

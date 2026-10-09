@@ -172,8 +172,16 @@ describe("bootstrapWorldsimCorporations", () => {
   });
 
   it("skips countries that already have NPP corps, so a retry attempts nothing", async () => {
-    const { CORPORATION_TYPES } = await import("@/lib/constants/corporations");
-    const complete = CORPORATION_TYPES.flatMap((type) => Array(3).fill({ type }));
+    const { OPERATING_SECTOR_TYPES, operatingSectorIdentity } =
+      await import("@/lib/constants/corporations");
+    const complete = OPERATING_SECTOR_TYPES.flatMap((lane) => {
+      const identity = operatingSectorIdentity(lane);
+      return Array(3).fill({
+        type: identity.sectorType,
+        industryModel: identity.industryModel,
+        mediaDiscriminator: identity.mediaDiscriminator,
+      });
+    });
     base.collectionMocks.corporations!.find.mockImplementation(
       (filter: Record<string, unknown>) => ({
         project: () => ({
@@ -219,8 +227,10 @@ describe("bootstrapWorldsimCorporations", () => {
   });
 
   it("fills missing sectors when finance seed already created two NPP banks", async () => {
-    const { CORPORATION_TYPES } = await import("@/lib/constants/corporations");
-    const existing: Array<{ type: string }> = [{ type: "financial" }, { type: "financial" }];
+    const { OPERATING_SECTOR_TYPES } = await import("@/lib/constants/corporations");
+    const { getOperatingSectorType } = await import("@/lib/constants/sectorStrategies");
+    type Row = { type: string; industryModel?: string | null; mediaDiscriminator?: string | null };
+    const existing: Row[] = [{ type: "financial" }, { type: "financial" }];
     base.collectionMocks.corporations!.find.mockReturnValue({
       project: () => ({ toArray: async () => existing }),
     });
@@ -228,14 +238,16 @@ describe("bootstrapWorldsimCorporations", () => {
       async (
         _db: unknown,
         _countryId: CountryId,
-        options: { sectorTypes: string[]; perSectorCount: number }
+        options: { sectorMarkets: Row[]; perSectorCount: number }
       ) => {
-        for (const type of options.sectorTypes) {
+        for (const market of options.sectorMarkets) {
           for (let i = 0; i < options.perSectorCount; i++) {
-            existing.push({ type });
+            existing.push({ ...market });
           }
         }
-        return Array(options.perSectorCount * options.sectorTypes.length).fill({ countryId: "JP" });
+        return Array(options.perSectorCount * options.sectorMarkets.length).fill({
+          countryId: "JP",
+        });
       }
     );
 
@@ -243,11 +255,16 @@ describe("bootstrapWorldsimCorporations", () => {
       countryIds: ["JP"],
       perSectorCount: 3,
     });
-    expect(first.spawnedByCountry.JP).toBe(CORPORATION_TYPES.length * 3 - 2);
-    expect(existing).toHaveLength(CORPORATION_TYPES.length * 3);
+    expect(first.spawnedByCountry.JP).toBe(OPERATING_SECTOR_TYPES.length * 3 - 2);
+    expect(existing).toHaveLength(OPERATING_SECTOR_TYPES.length * 3);
     expect(existing.filter((corp) => corp.type === "financial")).toHaveLength(3);
-    for (const type of CORPORATION_TYPES) {
-      expect(existing.filter((corp) => corp.type === type)).toHaveLength(3);
+    for (const lane of OPERATING_SECTOR_TYPES) {
+      expect(
+        existing.filter(
+          (corp) =>
+            getOperatingSectorType(corp.type, corp.industryModel, corp.mediaDiscriminator) === lane
+        )
+      ).toHaveLength(3);
     }
 
     batchSpawnNppCorporations.mockClear();

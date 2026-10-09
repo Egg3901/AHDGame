@@ -44,34 +44,25 @@ describe("sectorLocation", () => {
     );
   });
 
-  it("uses one duplicate identity for legacy and canonical entertainment lanes", () => {
+  it("keeps the entertainment lane distinct from generic media", () => {
     const corpId = new ObjectId();
     const stateCountryByStateId = new Map([["LON", "UK" as const]]);
-    const legacy = {
+    const entertainment = {
       corporationId: corpId,
       countryId: "UK" as const,
       stateId: "LON",
-      sectorType: "entertainment" as const,
-    };
-    const canonical = {
-      ...legacy,
       sectorType: "media" as const,
       mediaDiscriminator: "entertainment" as const,
     };
-    const generic = { ...legacy, sectorType: "media" as const, mediaDiscriminator: null };
+    const generic = { ...entertainment, mediaDiscriminator: null };
 
-    expect(getCorporateSectorLocationKey(legacy, stateCountryByStateId)).toBe(
-      getCorporateSectorLocationKey(canonical, stateCountryByStateId)
-    );
     expect(getCorporateSectorLocationKey(generic, stateCountryByStateId)).not.toBe(
-      getCorporateSectorLocationKey(canonical, stateCountryByStateId)
+      getCorporateSectorLocationKey(entertainment, stateCountryByStateId)
     );
-    expect(getCorporateSectorLaneQuery(legacy)).toEqual({
-      $or: [
-        { sectorType: "media", industryModel: null, mediaDiscriminator: "entertainment" },
-        { sectorType: "entertainment", industryModel: null },
-      ],
+    expect(getCorporateSectorLaneQuery(entertainment)).toEqual({
+      sectorType: "media",
+      industryModel: null,
+      mediaDiscriminator: "entertainment",
     });
-    expect(getCorporateSectorLaneQuery(canonical)).toEqual(getCorporateSectorLaneQuery(legacy));
   });
 });

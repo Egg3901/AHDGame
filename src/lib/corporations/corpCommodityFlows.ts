@@ -38,11 +38,12 @@ import {
   plantsSupplyScaledUnits,
 } from "@/lib/constants/commodities";
 import type { CommodityType, ExtractableResource } from "@/lib/constants/commodities";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import {
   applyPlannedEconomyOutputMix,
   getEffectiveStrategyRatesForOperatingModel,
   plannedEconomyMediaSupplyFactor,
+  getOperatingSectorType,
 } from "@/lib/constants/sectorStrategies";
 import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 import { freshMilitaryDiversion } from "@/lib/military/arsenal";
@@ -248,10 +249,11 @@ export function computeSectorCommodityUnits(
   const usesStrategySupply =
     Boolean(sector.strategyId && sector.strategyId !== "standard") ||
     Boolean(sector.transitionFromStrategyId);
-  const operatingType =
-    sector.sectorType === "media" && sector.mediaDiscriminator === "entertainment"
-      ? "entertainment"
-      : sector.sectorType;
+  const operatingType = getOperatingSectorType(
+    sector.sectorType,
+    sector.industryModel,
+    sector.mediaDiscriminator
+  );
   const ledgerSupplyRates: Partial<Record<CommodityType, number>> = usesStrategySupply
     ? rates.supply
     : Object.fromEntries(
@@ -435,7 +437,7 @@ export function computeCorpCommodityFlows(
         if (!list.some((s) => s.sectorId === sectorId)) {
           list.push({
             sectorId,
-            label: CORPORATION_TYPE_LABELS[sector.sectorType],
+            label: OPERATING_SECTOR_TYPE_LABELS[sector.sectorType],
           });
           outputSectorsByCommodity.set(commodity, list);
         }

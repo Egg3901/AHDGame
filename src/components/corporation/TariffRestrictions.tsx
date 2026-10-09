@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 
 interface TariffEntry {
   id: string;
@@ -99,7 +99,7 @@ export function TariffRestrictions({
               <td className="border-b border-card-border/60 py-1.5 pr-2 text-xs text-muted">
                 {country}, {SCOPE_LABELS[t.scopeType] ?? t.scopeType}
                 {t.targetSectorType
-                  ? `, ${CORPORATION_TYPE_LABELS[t.targetSectorType as CorporationType] ?? t.targetSectorType}`
+                  ? `, ${OPERATING_SECTOR_TYPE_LABELS[t.targetSectorType as OperatingSectorType] ?? t.targetSectorType}`
                   : ""}
               </td>
               <td className="whitespace-nowrap border-b border-card-border/60 py-1.5 text-right font-mono text-[13px] text-warning">

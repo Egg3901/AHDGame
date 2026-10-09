@@ -49,7 +49,7 @@ describe("media regulation availability", () => {
     expect(isFairnessDoctrineBroadcastOutlet("media", "legacy_broadcast")).toBe(true);
     expect(isFairnessDoctrineBroadcastOutlet("media", "radio_network")).toBe(true);
     expect(isFairnessDoctrineBroadcastOutlet("media", "newspaper")).toBe(false);
-    expect(isFairnessDoctrineBroadcastOutlet("entertainment", "film_studio")).toBe(false);
+    expect(isFairnessDoctrineBroadcastOutlet("media_entertainment", "film_studio")).toBe(false);
   });
 
   it("offers the national ownership bill only after measured US concentration exceeds 65%", () => {

@@ -15,9 +15,9 @@ import type { GameState } from "@/lib/db/types/gameState";
 import {
   DEFAULT_PROFIT_MARGIN,
   DEFAULT_SECTOR_STARTING_WORKERS,
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPE_LABELS,
 } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { CorporationType, OperatingSectorType } from "@/lib/constants/corporations";
 import { z } from "zod";
 import { logWireEvent } from "@/lib/wireEvent";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -55,7 +55,7 @@ interface SplitResolution {
   randomRoll: number;
   attackCostLocal: number;
   defenderCorporationName: string;
-  sectorType: CorporationType;
+  sectorType: OperatingSectorType;
   plantsTransferred: number;
   capacityTransferred: number;
   bookValueTransferredAnchor: number;
@@ -489,7 +489,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const result: SplitResolution = resolution;
-    const sectorLabel = CORPORATION_TYPE_LABELS[result.sectorType] ?? result.sectorType;
+    const sectorLabel = OPERATING_SECTOR_TYPE_LABELS[result.sectorType] ?? result.sectorType;
     // Suggestion #324: say what moved in value terms too, so the defender can
     // tell plants seized from cash, revenue, or profit. The $ below is the
     // transferred plants' book value, not revenue or profit.

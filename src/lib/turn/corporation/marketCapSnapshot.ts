@@ -1,6 +1,7 @@
+import { getOperatingSectorType } from "@/lib/constants/sectorStrategies";
 import type { Db, ObjectId } from "mongodb";
 import type { Corporation, MarketCapHistory, CorporationHistory } from "@/lib/db/types";
-import type { CorporationType } from "@/lib/constants/corporations";
+import type { OperatingSectorType } from "@/lib/constants/corporations";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { logWireEvent, wireHeadlineCorpCreditRating } from "@/lib/wireEvent";
 import { createNotifications } from "@/lib/notifications";
@@ -157,7 +158,7 @@ export async function snapshotMarketCap(
   const exchangeCaps: Record<string, number> = {};
   for (const ex of ALL_EXCHANGES) exchangeCaps[ex.apiKey] = 0;
 
-  const bySector: Partial<Record<CorporationType, number>> = {};
+  const bySector: Partial<Record<OperatingSectorType, number>> = {};
 
   const snapshotByCorpId = new Map(corpSnapshots.map((s) => [s.corpId.toString(), s]));
 
@@ -204,7 +205,8 @@ export async function snapshotMarketCap(
         exchangeCaps[apiKey] += capAnchor;
       }
 
-      bySector[corp.type] = (bySector[corp.type] ?? 0) + capAnchor;
+      const lane = getOperatingSectorType(corp.type, corp.industryModel, corp.mediaDiscriminator);
+      bySector[lane] = (bySector[lane] ?? 0) + capAnchor;
     }
   }
 
@@ -405,7 +407,7 @@ export async function snapshotMarketCap(
     exchangeCaps: exchangeCapsFormatted,
     bySector: Object.fromEntries(
       Object.entries(bySector).map(([k, v]) => [k, Math.round(v)])
-    ) as Partial<Record<CorporationType, number>>,
+    ) as Partial<Record<OperatingSectorType, number>>,
     createdAt: now,
   };
 

@@ -40,8 +40,8 @@ import {
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
 import type { CommodityType } from "@/lib/constants/commodities";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
-import type { CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
+import type { CorporationType, OperatingSectorType } from "@/lib/constants/corporations";
 import { SECTOR_STRATEGIES } from "@/lib/constants/sectorStrategies";
 import { getStateResourceCapacityCollection } from "@/lib/db/collections/stateResourceCapacity";
 import { computeRollingAnnualizedPercentChange } from "@/lib/utils/rollingAnnualizedChange";
@@ -67,8 +67,8 @@ import type { RealizedLeaderboardSector } from "@/lib/commodities/realizedCommod
 function buildSectorFlowRows(
   commodity: CommodityType,
   kind: "supply" | "demand"
-): { sectorType: CorporationType; label: string; rate: number }[] {
-  const rows: { sectorType: CorporationType; label: string; rate: number }[] = [];
+): { sectorType: OperatingSectorType; label: string; rate: number }[] {
+  const rows: { sectorType: OperatingSectorType; label: string; rate: number }[] = [];
   const baseFlows = kind === "supply" ? SECTOR_SUPPLY : SECTOR_DEMAND;
 
   for (const [sectorType, flows] of Object.entries(baseFlows)) {
@@ -76,8 +76,8 @@ function buildSectorFlowRows(
     for (const flow of flows) {
       if (flow.commodity === commodity) {
         rows.push({
-          sectorType: sectorType as CorporationType,
-          label: CORPORATION_TYPE_LABELS[sectorType as CorporationType],
+          sectorType: sectorType as OperatingSectorType,
+          label: OPERATING_SECTOR_TYPE_LABELS[sectorType as OperatingSectorType],
           rate: flow.rate,
         });
       }
@@ -85,7 +85,7 @@ function buildSectorFlowRows(
   }
 
   for (const [sectorType, strategies] of Object.entries(SECTOR_STRATEGIES)) {
-    const st = sectorType as CorporationType;
+    const st = sectorType as OperatingSectorType;
     const baseCommodities = new Set((baseFlows[st] ?? []).map((f) => f.commodity));
     for (const strat of strategies) {
       if (strat.id === "standard") continue;
@@ -95,7 +95,7 @@ function buildSectorFlowRows(
       if (baseCommodities.has(commodity)) continue;
       rows.push({
         sectorType: st,
-        label: `${CORPORATION_TYPE_LABELS[st]} — ${strat.name}`,
+        label: `${OPERATING_SECTOR_TYPE_LABELS[st]} — ${strat.name}`,
         rate,
       });
     }
@@ -135,7 +135,7 @@ function buildCorpVolumeRows(
         typeLabel: corp?.type
           ? corp.type === "manufacturing" && corp.industryModel === "vehicles"
             ? "Vehicle manufacturing"
-            : CORPORATION_TYPE_LABELS[corp.type]
+            : OPERATING_SECTOR_TYPE_LABELS[corp.type]
           : undefined,
         sequentialId: corp?.sequentialId,
         logoUrl: corp?.logoUrl,

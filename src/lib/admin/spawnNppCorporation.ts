@@ -19,7 +19,8 @@ import { autoGrantedNodeIds } from "@/lib/constants/techTree";
 import { resolveGameYear } from "@/lib/era/era";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import {
-  CORPORATION_TYPES,
+  OPERATING_SECTOR_TYPES,
+  operatingSectorIdentity,
   type CorporationType,
   type ManufacturingIndustryModel,
   type MediaDiscriminator,
@@ -28,6 +29,7 @@ import {
   DEFAULT_PROFIT_MARGIN,
   DEFAULT_SECTOR_STARTING_REVENUE,
   DEFAULT_SECTOR_STARTING_WORKERS,
+  type OperatingSectorType,
 } from "@/lib/constants/corporations";
 import { COUNTRY_CURRENCY_MAP, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import {
@@ -407,7 +409,7 @@ export async function spawnNppCorporation(
   const techGrantIds =
     techGameState?.sectorTechTreesEnabled === true
       ? autoGrantedNodeIds(
-          getOperatingSectorType(type, industryModel) as CorporationType,
+          getOperatingSectorType(type, industryModel, mediaDiscriminator),
           resolveGameYear(techGameState) ?? getStartingYearForPreset(preset)
         )
       : [];
@@ -686,8 +688,8 @@ export async function batchSpawnNppCorporations(
   db: Db,
   countryId: CountryId,
   options?: {
-    /** Specific sector types to spawn (default: all 17) */
-    sectorTypes?: CorporationType[];
+    /** Specific sector types to spawn (default: every operating lane) */
+    sectorTypes?: OperatingSectorType[];
     /** Explicit model identities, used by fresh model-aware seeds. */
     sectorMarkets?: Array<{
       type: CorporationType;
@@ -739,7 +741,14 @@ export async function batchSpawnNppCorporations(
     mediaDiscriminator?: MediaDiscriminator | null;
   }> =
     options?.sectorMarkets ??
-    (options?.sectorTypes ?? [...CORPORATION_TYPES]).map((type) => ({ type }));
+    (options?.sectorTypes ?? OPERATING_SECTOR_TYPES).map((lane) => {
+      const identity = operatingSectorIdentity(lane);
+      return {
+        type: identity.sectorType,
+        industryModel: identity.industryModel,
+        mediaDiscriminator: identity.mediaDiscriminator,
+      };
+    });
   const perSectorCount = Math.max(1, Math.floor(options?.perSectorCount ?? 1));
   const results: SpawnNppCorporationResult[] = [];
   const existingNames = (
@@ -751,15 +760,15 @@ export async function batchSpawnNppCorporations(
   ).map((corp) => corp.name);
 
   for (const { type, industryModel, mediaDiscriminator } of sectorMarkets) {
+    const lane = getOperatingSectorType(type, industryModel, mediaDiscriminator);
     for (let i = 0; i < perSectorCount; i++) {
       // Generate a thematic name based on sector and country — passing the
       // growing results list (including same-sector prior spawns this loop)
       // keeps names distinct across all perSectorCount competitors.
-      const name = generateNppCorpName(
-        countryId,
-        getOperatingSectorType(type, industryModel, mediaDiscriminator) as CorporationType,
-        [...existingNames, ...results.map((r) => r.name)]
-      );
+      const name = generateNppCorpName(countryId, lane, [
+        ...existingNames,
+        ...results.map((r) => r.name),
+      ]);
 
       try {
         const result = await spawnNppCorporation(db, {
@@ -779,7 +788,7 @@ export async function batchSpawnNppCorporations(
         if (options?.limitToUnownedPool && err instanceof UnownedSeedCapacityExhaustedError) {
           break;
         }
-        console.error(`[spawnNpp] Failed to spawn ${type} corp for ${countryId}:`, err);
+        console.error(`[spawnNpp] Failed to spawn ${lane} corp for ${countryId}:`, err);
         // Continue with other sectors/slots
       }
     }
@@ -791,7 +800,7 @@ export async function batchSpawnNppCorporations(
 /** Country and industry flavor, with collision-safe choices from the shared rules. */
 export function generateNppCorpName(
   countryId: CountryId,
-  type: CorporationType,
+  type: OperatingSectorType,
   existingNames: string[]
 ): string {
   return chooseNppCorporationName(countryId, type, existingNames, Math.random);

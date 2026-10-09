@@ -12,7 +12,7 @@ import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import { corporationQueryFromParamId, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { Corporation } from "@/lib/db/types";
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { isOperatingSectorType } from "@/lib/constants/corporations";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { isIndexFundsEnabled } from "@/lib/indexFunds/featureFlag";
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
 
     if (body.countryId && !COUNTRY_CONFIGS[body.countryId as never])
       return errorResponse(400, "Unknown country");
-    if (body.sectorType && !CORPORATION_TYPES.includes(body.sectorType as never))
+    if (body.sectorType && !isOperatingSectorType(body.sectorType))
       return errorResponse(400, "Unknown industry");
 
     const query = corporationQueryFromParamId(body.sponsorCorporationId);

@@ -12,7 +12,7 @@ import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import type { Corporation, Bond, NewsPost, State } from "@/lib/db/types";
 import { formatSectorTypeSlugsInText } from "@/lib/utils/formatSectorTypeSlugsInText";
-import { CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS } from "@/lib/constants/corporations";
 import { BOND_MATURITY_LABELS, type BondMaturityTurns } from "@/lib/db/types/bond";
 import type { WireEvent } from "@/lib/wireEvent";
 
@@ -134,7 +134,8 @@ export async function GET() {
 
       for (const c of recentCorps) {
         const typeLabel =
-          CORPORATION_TYPE_LABELS[c.type as keyof typeof CORPORATION_TYPE_LABELS] ?? c.type;
+          OPERATING_SECTOR_TYPE_LABELS[c.type as keyof typeof OPERATING_SECTOR_TYPE_LABELS] ??
+          c.type;
         const hqLabel = stateNameById.get(c.headquartersState) ?? c.headquartersState;
         items.push({
           id: `corp-${c._id}`,

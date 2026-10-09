@@ -8,12 +8,12 @@ import {
   economicModelEra,
   type EconomicModelId,
 } from "./economicModels";
-import { CORPORATION_TYPES } from "./corporations";
+import { OPERATING_SECTOR_TYPES } from "./corporations";
 import { metricCategories } from "./metricDefinitions";
 import { getCountryConfig } from "./countries";
 
 const allMetricIds = new Set(metricCategories.flatMap((c) => c.metrics.map((m) => m.id)));
-const corpTypes = new Set<string>(CORPORATION_TYPES);
+const corpTypes = new Set<string>(OPERATING_SECTOR_TYPES);
 
 describe("MODEL_ARCHETYPES registry", () => {
   it("defines exactly the 10 declared model ids", () => {
@@ -49,7 +49,8 @@ describe("MODEL_ARCHETYPES registry", () => {
       if (a.primarySector) covered.add(a.primarySector);
       a.secondarySectors.forEach((s) => covered.add(s));
     }
-    for (const t of CORPORATION_TYPES) expect(covered.has(t), `sector ${t} uncovered`).toBe(true);
+    for (const t of OPERATING_SECTOR_TYPES)
+      expect(covered.has(t), `sector ${t} uncovered`).toBe(true);
   });
 
   it("every spendingSignature key is a real budget category", () => {

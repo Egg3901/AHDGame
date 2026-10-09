@@ -56,7 +56,7 @@ describe("sector seed weights", () => {
     expect(topSector("US", "WY")).toBe("energy");
     expect(topSector("UK", "NWE")).toBe("media");
     expect(topSector("DE", "HH")).toBe("logistics");
-    expect(topSector("JP", "CHU")).toBe("automobiles");
+    expect(topSector("JP", "CHU")).toBe("manufacturing_vehicles");
     expect(topSector("CN", "XB")).toBe("energy");
     expect(topSector("IE", "COR")).toBe("chemical_industries");
     expect(topSector("BR", "NORTE")).toBe("extraction");
@@ -72,7 +72,7 @@ describe("sector seed weights (1953 preset)", () => {
     )[0][0] as CorporationType;
 
   it("bends the 1953 baseline into era-correct state specialties (no anachronistic tech)", () => {
-    expect(top1953("US", "MI")).toBe("automobiles");
+    expect(top1953("US", "MI")).toBe("manufacturing_vehicles");
     expect(top1953("US", "PA")).toBe("manufacturing");
     expect(top1953("US", "TX")).toBe("extraction");
     expect(top1953("US", "ND")).toBe("agriculture");

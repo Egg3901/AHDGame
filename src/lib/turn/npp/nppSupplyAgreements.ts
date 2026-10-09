@@ -25,7 +25,11 @@ import type { SupplyListing } from "@/lib/db/types/supplyListing";
 import { isCurtained, isPlannedEconomy } from "@/lib/constants/commandEconomy";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { SECTOR_DEMAND, SECTOR_SUPPLY } from "@/lib/constants/commodities";
-import type { CorporationType, MediaDiscriminator } from "@/lib/constants/corporations";
+import type {
+  CorporationType,
+  OperatingSectorType,
+  MediaDiscriminator,
+} from "@/lib/constants/corporations";
 import {
   CONTRACT_CANCEL_NOTICE_TURNS,
   CONTRACT_OVERCOMMIT_TOLERANCE,
@@ -134,7 +138,7 @@ function liveStatuses(status: SupplyAgreement["status"]): boolean {
 }
 
 function commoditiesOf(
-  sectorType: CorporationType,
+  sectorType: OperatingSectorType,
   side: "supply" | "demand",
   strategyId: string | null | undefined,
   transitionFrom: string | null | undefined,
@@ -155,11 +159,7 @@ function commoditiesOf(
   const mix = side === "supply" ? rates.supply : rates.demand;
   const fromStrategy = (Object.keys(mix) as CommodityType[]).filter((c) => (mix[c] ?? 0) > 0);
   if (fromStrategy.length > 0) return fromStrategy;
-  const operatingType = getOperatingSectorType(
-    sectorType,
-    industryModel,
-    mediaDiscriminator
-  ) as CorporationType;
+  const operatingType = getOperatingSectorType(sectorType, industryModel, mediaDiscriminator);
   const table = side === "supply" ? SECTOR_SUPPLY[operatingType] : SECTOR_DEMAND[operatingType];
   return (table ?? []).filter((f) => f.rate > 0).map((f) => f.commodity);
 }

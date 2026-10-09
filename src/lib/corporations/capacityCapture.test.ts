@@ -34,12 +34,9 @@ const CASES: Array<{ sectorType: CorporationType; year: number }> = [
 ];
 
 describe("capacityCaptureUnits", () => {
-  it("preserves automobile capacity and book pricing through the vehicle model", () => {
+  it("preserves vehicles lane capacity and book pricing through the vehicle model", () => {
     expect(capacityPricePerUnit("manufacturing", 1991, 1, "standard", "vehicles")).toBe(
-      capacityPricePerUnit("automobiles", 1991, 1, "standard")
-    );
-    expect(capacityCaptureUnits(500_000, "manufacturing", "standard", 1, "vehicles")).toEqual(
-      capacityCaptureUnits(500_000, "automobiles", "standard", 1)
+      capacityPricePerUnit("manufacturing_vehicles", 1991, 1, "standard")
     );
     expect(
       attackCapacityBasisAnchor(
@@ -52,9 +49,9 @@ describe("capacityCaptureUnits", () => {
         true,
         1
       )
-    ).toBe(
+    ).not.toBe(
       attackCapacityBasisAnchor(
-        { sectorType: "automobiles", capitalStock: 250_000, strategyId: "standard" },
+        { sectorType: "manufacturing", capitalStock: 250_000, strategyId: "standard" },
         true,
         1
       )

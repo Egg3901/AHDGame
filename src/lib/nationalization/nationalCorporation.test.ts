@@ -160,7 +160,7 @@ describe("resolveNationalCorporationForSector", () => {
       _id: splitId,
       countryId: "CN",
       countryOwnerId: "CN",
-      assignedSectorTypes: ["automobiles"],
+      assignedSectorTypes: ["manufacturing_vehicles"],
     });
 
     const corp = await resolveNationalCorporationForSector(
@@ -173,7 +173,7 @@ describe("resolveNationalCorporationForSector", () => {
     expect(corp._id.toString()).toBe(splitId.toString());
     expect(db.collectionMocks.corporations.findOne).toHaveBeenCalledWith({
       countryOwnerId: "CN",
-      assignedSectorTypes: "automobiles",
+      assignedSectorTypes: "manufacturing_vehicles",
     });
   });
 

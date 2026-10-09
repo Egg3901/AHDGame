@@ -11,7 +11,7 @@ import type { Character } from "@/lib/db/types/character";
 import { bulkFetchCharacterNames } from "@/lib/db/characterLookup";
 import { toAbsoluteUploadUrl } from "@/lib/discord";
 import {
-  CORPORATION_TYPE_LABELS,
+  OPERATING_SECTOR_TYPE_LABELS,
   calcMarketingGrowth,
   getUnemploymentMarginModifier,
   getStateSectorSpecializationMarginBonus,
@@ -392,7 +392,7 @@ async function buildCorpDetail(nameLower: string): Promise<CorpDetailPayload> {
       name: corporation.name,
       description: corporation.description ?? null,
       type: corporation.type,
-      typeLabel: CORPORATION_TYPE_LABELS[corporation.type],
+      typeLabel: OPERATING_SECTOR_TYPE_LABELS[corporation.type],
       brandColor: corporation.brandColor ?? null,
       // Absolutise relative upload paths so Discord embeds can fetch them.
       logoUrl: toAbsoluteUploadUrl(corporation.logoUrl, BASE_URL),

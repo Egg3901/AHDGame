@@ -29,7 +29,7 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { parseJsonBody } from "@/lib/api/validate";
 import { schemas } from "@/lib/api/validate";
 import type { Corporation, CorporateSector, State } from "@/lib/db/types";
-import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
 import {
   anchorToCorpLiquidCapital,
   getCorpFxRate,
@@ -258,7 +258,7 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
       .findOne({ _id: sector.stateId }, { projection: { name: 1 } });
     const stateName = stateDoc?.name ?? sector.stateId;
     const sectorLabel =
-      CORPORATION_TYPE_LABELS[sector.sectorType as CorporationType] ?? sector.sectorType;
+      OPERATING_SECTOR_TYPE_LABELS[sector.sectorType as CorporationType] ?? sector.sectorType;
 
     if (existingBuyerSector) {
       // Brand facility-loss (Boeing rule): the seller is losing this sector, so
@@ -568,7 +568,7 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
           return errorResponse(
             400,
             `Your corporation already operates a ${
-              CORPORATION_TYPE_LABELS[sector.sectorType as CorporationType]
+              OPERATING_SECTOR_TYPE_LABELS[sector.sectorType as CorporationType]
             } sector in this state.`
           );
         }

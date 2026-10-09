@@ -11,7 +11,7 @@ import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import { isOperatingSectorType, type OperatingSectorType } from "@/lib/constants/corporations";
 import { assertTreasuryAuthority } from "@/lib/nationalization/authority";
 import { splitOffSectorType } from "@/lib/nationalization/restructure";
 
@@ -42,7 +42,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!parsed.success) {
       return errorResponse(parsed.status, parsed.error);
     }
-    if (!CORPORATION_TYPES.includes(parsed.data.sectorType as CorporationType)) {
+    if (!isOperatingSectorType(parsed.data.sectorType)) {
       return errorResponse(400, "Invalid sector type");
     }
 
@@ -58,7 +58,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const result = await splitOffSectorType(db, {
       countryId,
-      sectorType: parsed.data.sectorType as CorporationType,
+      sectorType: parsed.data.sectorType as OperatingSectorType,
       newCorpName: parsed.data.newCorpName,
     });
 

@@ -125,9 +125,12 @@ function world(
 }
 
 describe("buyer-funded secured property sale", () => {
-  it.each(["media", "entertainment"])(
-    "preserves canonical entertainment identity against a buyer's %s lane",
-    async (buyerLane) => {
+  it.each([
+    { buyerLane: "media", buyerDiscriminator: "entertainment" },
+    { buyerLane: "media", buyerDiscriminator: null },
+  ])(
+    "preserves canonical entertainment identity against a buyer's media lane ($buyerDiscriminator)",
+    async ({ buyerLane, buyerDiscriminator }) => {
       const w = world();
       await w.db
         .collection("corporateSectors")
@@ -138,12 +141,20 @@ describe("buyer-funded secured property sale", () => {
       const original = w.memory.collection("corporateSectors").docs[0];
       w.memory.seed("corporateSectors", [
         original,
-        { _id: new ObjectId(), corporationId: w.buyerId, stateId: "US-CA", sectorType: buyerLane },
+        {
+          _id: new ObjectId(),
+          corporationId: w.buyerId,
+          stateId: "US-CA",
+          sectorType: buyerLane,
+          mediaDiscriminator: buyerDiscriminator,
+        },
       ]);
       const result = await buySecuredConstructionProperty(w.input);
-      expect(result.ok).toBe(buyerLane === "media");
+      // A buyer already running this exact lane in the state cannot take a second one.
+      const sameLane = buyerDiscriminator === "entertainment";
+      expect(result.ok).toBe(!sameLane);
       expect(w.memory.collection("corporations").docs[1].liquidCapital).toBe(
-        buyerLane === "media" ? 850_000 : 1_000_000
+        sameLane ? 1_000_000 : 850_000
       );
     }
   );

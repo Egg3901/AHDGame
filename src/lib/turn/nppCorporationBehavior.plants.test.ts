@@ -219,7 +219,13 @@ describe("NPP expansion under plants — price parity", () => {
       // `countryId` rides along so the drawdown can UPSERT a pool row that does
       // not exist yet — without it the draw matched nothing and the NPP took its
       // starter capacity for free.
-      { stateId: "CA", sectorType: "manufacturing", units: EXPECTED_UNITS, countryId: "US" },
+      {
+        stateId: "CA",
+        sectorType: "manufacturing",
+        industryModel: null,
+        units: EXPECTED_UNITS,
+        countryId: "US",
+      },
     ]);
   });
 

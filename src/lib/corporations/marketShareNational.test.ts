@@ -200,7 +200,7 @@ describe("fetchCorporationNationalSectorSharesByCountry", () => {
 });
 
 describe("fetchSectorCompetitorCount", () => {
-  it("queries the canonical entertainment lane with legacy alias compatibility", async () => {
+  it("queries the canonical entertainment lane", async () => {
     const ownId = new ObjectId();
     const rivalId = new ObjectId();
     const distinct = vi.fn().mockResolvedValue([ownId, rivalId]);
@@ -228,7 +228,6 @@ describe("fetchSectorCompetitorCount", () => {
           industryModel: null,
           mediaDiscriminator: "entertainment",
         },
-        { stateId: "US-CA", sectorType: "entertainment", industryModel: null },
       ],
     });
   });

@@ -68,7 +68,7 @@
       "agriculture": 20,
       "construction": 12,
       "energy": 7,
-      "automobiles": 6,
+      "manufacturing_vehicles": 6,
       "real_estate": 5,
       "retail": 5,
       "financial": 5,
@@ -79,7 +79,7 @@
       "telecommunications": 2,
       "media": 2,
       "extraction": 1,
-      "entertainment": 1,
+      "media_entertainment": 1,
       "technology": 0
     }
   },
@@ -404,7 +404,7 @@
     "value": {
       "1953": {
         "manufacturing": "FIOM-CGIL",
-        "automobiles": "FIOM-CGIL",
+        "manufacturing_vehicles": "FIOM-CGIL",
         "technology": "FIOM-CGIL",
         "defense": "FIOM-CGIL",
         "chemical_industries": "FILCEA-CGIL",
@@ -419,7 +419,7 @@
       },
       "1979": {
         "manufacturing": "FIOM-CGIL",
-        "automobiles": "FIOM-CGIL",
+        "manufacturing_vehicles": "FIOM-CGIL",
         "technology": "FIOM-CGIL",
         "defense": "FIOM-CGIL",
         "chemical_industries": "FILCEA-CGIL",
@@ -434,7 +434,7 @@
       },
       "1991": {
         "manufacturing": "FIOM-CGIL",
-        "automobiles": "FIOM-CGIL",
+        "manufacturing_vehicles": "FIOM-CGIL",
         "technology": "FIOM-CGIL",
         "defense": "FIOM-CGIL",
         "chemical_industries": "FILCEA-CGIL",
@@ -452,7 +452,7 @@
       },
       "1999": {
         "manufacturing": "FIOM-CGIL",
-        "automobiles": "FIOM-CGIL",
+        "manufacturing_vehicles": "FIOM-CGIL",
         "chemical_industries": "FILCEA-CGIL",
         "construction": "FILLEA-CGIL",
         "energy": "FLAEI-CISL",
@@ -464,14 +464,14 @@
         "technology": "FIOM-CGIL",
         "financial": "FISAC-CGIL",
         "telecommunications": "SLC-CGIL",
-        "entertainment": "SLC-CGIL",
+        "media_entertainment": "SLC-CGIL",
         "defense": "FIOM-CGIL",
         "agriculture": "FLAI-CGIL",
         "real_estate": "FILLEA-CGIL"
       },
       "2007": {
         "manufacturing": "FIOM-CGIL",
-        "automobiles": "FIOM-CGIL",
+        "manufacturing_vehicles": "FIOM-CGIL",
         "chemical_industries": "FILCEM-CGIL",
         "construction": "FILLEA-CGIL",
         "energy": "FLAEI-CISL",
@@ -483,14 +483,14 @@
         "technology": "FIOM-CGIL",
         "financial": "FISAC-CGIL",
         "telecommunications": "SLC-CGIL",
-        "entertainment": "SLC-CGIL",
+        "media_entertainment": "SLC-CGIL",
         "defense": "FIOM-CGIL",
         "agriculture": "FLAI-CGIL",
         "real_estate": "FILLEA-CGIL"
       },
       "2019": {
         "manufacturing": "FIOM-CGIL",
-        "automobiles": "FIOM-CGIL",
+        "manufacturing_vehicles": "FIOM-CGIL",
         "chemical_industries": "FILCTEM-CGIL",
         "construction": "FILLEA-CGIL",
         "energy": "FLAEI-CISL",
@@ -502,14 +502,14 @@
         "technology": "FIOM-CGIL",
         "financial": "FISAC-CGIL",
         "telecommunications": "SLC-CGIL",
-        "entertainment": "SLC-CGIL",
+        "media_entertainment": "SLC-CGIL",
         "defense": "FIOM-CGIL",
         "agriculture": "FLAI-CGIL",
         "real_estate": "FILLEA-CGIL"
       },
       "2023": {
         "manufacturing": "FIOM-CGIL",
-        "automobiles": "FIOM-CGIL",
+        "manufacturing_vehicles": "FIOM-CGIL",
         "chemical_industries": "FILCTEM-CGIL",
         "construction": "FILLEA-CGIL",
         "energy": "FLAEI-CISL",
@@ -521,14 +521,14 @@
         "technology": "FIOM-CGIL",
         "financial": "FISAC-CGIL",
         "telecommunications": "SLC-CGIL",
-        "entertainment": "SLC-CGIL",
+        "media_entertainment": "SLC-CGIL",
         "defense": "FIOM-CGIL",
         "agriculture": "FLAI-CGIL",
         "real_estate": "FILLEA-CGIL"
       },
       "2027": {
         "manufacturing": "FIOM-CGIL",
-        "automobiles": "FIOM-CGIL",
+        "manufacturing_vehicles": "FIOM-CGIL",
         "chemical_industries": "FILCTEM-CGIL",
         "construction": "FILLEA-CGIL",
         "energy": "FLAEI-CISL",
@@ -540,7 +540,7 @@
         "technology": "FIOM-CGIL",
         "financial": "FISAC-CGIL",
         "telecommunications": "SLC-CGIL",
-        "entertainment": "SLC-CGIL",
+        "media_entertainment": "SLC-CGIL",
         "defense": "FIOM-CGIL",
         "agriculture": "FLAI-CGIL",
         "real_estate": "FILLEA-CGIL"
@@ -1232,9 +1232,9 @@
       "manufacturing": 18,
       "real_estate": 11,
       "retail": 9,
-      "automobiles": 8,
+      "manufacturing_vehicles": 8,
       "agriculture": 8,
-      "entertainment": 7,
+      "media_entertainment": 7,
       "financial": 6,
       "construction": 6,
       "energy": 6,
@@ -1255,7 +1255,7 @@
       "construction": 8,
       "chemical_industries": 5,
       "energy": 6,
-      "automobiles": 6,
+      "manufacturing_vehicles": 6,
       "real_estate": 7,
       "healthcare": 4,
       "defense": 3,
@@ -1265,7 +1265,7 @@
       "extraction": 2,
       "technology": 1,
       "media": 5,
-      "entertainment": 6
+      "media_entertainment": 6
     }
   },
   "COUNTRY_SECTOR_WEIGHTS_1991": {
@@ -1274,9 +1274,9 @@
       "manufacturing": 18,
       "real_estate": 11,
       "retail": 9,
-      "automobiles": 8,
+      "manufacturing_vehicles": 8,
       "agriculture": 8,
-      "entertainment": 7,
+      "media_entertainment": 7,
       "financial": 6,
       "construction": 6,
       "energy": 6,

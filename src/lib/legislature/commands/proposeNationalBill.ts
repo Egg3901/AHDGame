@@ -8,7 +8,7 @@ import type { AuthUser } from "@/lib/auth";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
+import { CORPORATION_TYPES, type OperatingSectorType } from "@/lib/constants/corporations";
 import {
   checkDuplicateProvisions,
   checkDuplicateResetLawFamilies,
@@ -435,7 +435,7 @@ export async function proposeNationalBill(
     if (
       provision.scopeType === "sector" &&
       provision.targetSectorType &&
-      !CORPORATION_TYPES.includes(provision.targetSectorType as CorporationType)
+      !OPERATING_SECTOR_TYPES.includes(provision.targetSectorType as OperatingSectorType)
     ) {
       return {
         status: 400,
