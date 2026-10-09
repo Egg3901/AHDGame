@@ -238,6 +238,7 @@ export function ExperimentalMobileMenu({
             {t("common.signOut")}
           </button>
         )}
+        <MobileVersionLink onClose={onClose} />
       </div>
     );
   }
@@ -247,7 +248,7 @@ export function ExperimentalMobileMenu({
       onClickCapture={trackDestination}
       className={
         navigationVariant === "b"
-          ? "min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 py-3.5 lg:hidden"
+          ? "min-h-0 flex flex-1 flex-col overflow-y-auto overscroll-contain px-3.5 py-3.5 lg:hidden"
           : `border-t border-card-border/60 bg-card/70 px-3.5 py-3.5 backdrop-blur-xl lg:hidden ${MOBILE_MENU_PANEL_CLASS}`
       }
     >
@@ -369,14 +370,7 @@ export function ExperimentalMobileMenu({
               handleSwitchImperial={handleSwitchImperial}
             />
           )}
-          <Link
-            href="/changelog"
-            onClick={onClose}
-            className="flex items-center justify-center border-t border-card-border px-4 py-2 text-center text-xs text-muted transition-colors hover:text-foreground"
-          >
-            v{process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"} ·{" "}
-            {process.env.NEXT_PUBLIC_GIT_COMMIT ?? "dev"}
-          </Link>
+          <MobileVersionLink onClose={onClose} />
         </div>
       )}
 
@@ -841,7 +835,21 @@ export function ExperimentalMobileMenu({
           </Link>
         </div>
       )}
+      {navigationVariant === "b" && <MobileVersionLink onClose={onClose} />}
     </div>
+  );
+}
+
+function MobileVersionLink({ onClose }: { onClose: () => void }) {
+  return (
+    <Link
+      href="/changelog"
+      onClick={onClose}
+      className="mt-auto flex shrink-0 items-center justify-center border-t border-card-border px-4 py-2 text-center text-xs text-muted transition-colors hover:text-foreground"
+    >
+      v{process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"} ·{" "}
+      {process.env.NEXT_PUBLIC_GIT_COMMIT ?? "dev"}
+    </Link>
   );
 }
 
