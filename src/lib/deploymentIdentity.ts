@@ -51,3 +51,18 @@ export function ownsConfiguredWebhooks(owner: string | undefined): boolean {
   }
   return false;
 }
+
+/** Service slug of the live game. The solo charter waiver never applies here. */
+const PRODUCTION_SERVICE_SLUG = "main-site";
+
+/**
+ * True when this deployment lets one tester found a party alone (1 to 3
+ * founders instead of exactly 3). Opt-in through the dedicated
+ * `AHD_SANDBOX_SOLO_CHARTER` variable, set to exactly "1" or "true". Forced
+ * off on the production service even if the variable leaks onto it.
+ */
+export function isSoloCharterTestingEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const flag = env.AHD_SANDBOX_SOLO_CHARTER;
+  if (flag !== "1" && flag !== "true") return false;
+  return deploymentServiceSlug(env) !== PRODUCTION_SERVICE_SLUG;
+}
