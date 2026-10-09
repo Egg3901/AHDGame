@@ -5,6 +5,11 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { scrubSentryEvent } from "@/lib/observability/scrubSentryEvent";
+import {
+  dropSentryLog,
+  SENTRY_DATA_COLLECTION,
+  SENTRY_TRACE_LIFECYCLE,
+} from "@/lib/observability/sentryPrivacy";
 
 const railwayEnv = process.env.RAILWAY_ENVIRONMENT_NAME || process.env.RAILWAY_SERVICE_NAME;
 const isProduction = railwayEnv === "production";
@@ -22,11 +27,11 @@ Sentry.init({
 
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
   tracesSampleRate: isProduction ? 0.1 : 1,
+  traceLifecycle: SENTRY_TRACE_LIFECYCLE,
 
-  enableLogs: false,
+  beforeSendLog: dropSentryLog,
 
-  // Do not send default user PII from edge requests.
-  // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
-  sendDefaultPii: false,
+  // Do not collect user identity, cookies, headers, bodies or query strings.
+  dataCollection: SENTRY_DATA_COLLECTION,
   beforeSend: scrubSentryEvent,
 });
