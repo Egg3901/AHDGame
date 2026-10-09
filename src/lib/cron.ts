@@ -1,6 +1,7 @@
 import * as cron from "node-cron";
 import { dispatchNativePush } from "@/lib/nativePush/dispatcher";
 import * as Sentry from "@sentry/nextjs";
+import { trackCheckpoint } from "@/lib/turn/subhour/checkpointTelemetry";
 import { runMarketTick } from "@/lib/turn/subhour/marketTick";
 import { runHalfHourTick } from "@/lib/turn/subhour/halfHourTick";
 import { updateCampaignFogOfWar } from "@/lib/campaigns/fogOfWar";
@@ -304,7 +305,7 @@ export async function initializeCronJobs() {
           // inflation and exchange-rate step, then the market tick. Race
           // deadlines, campaign money and production stay on the hour.
           try {
-            const tick = await runHalfHourTick();
+            const tick = await trackCheckpoint("half-hour", () => runHalfHourTick());
             if (tick) console.log("[Cron] Half-hour tick ran for turn", tick.turn, tick);
           } catch (error) {
             console.error("[Cron] Half-hour tick failed:", error);
@@ -449,7 +450,7 @@ export async function initializeCronJobs() {
     MARKET_TICK_SCHEDULE,
     async () => {
       try {
-        const tick = await runMarketTick();
+        const tick = await trackCheckpoint("markets", () => runMarketTick());
         if (tick) console.log("[Cron] Market tick at", new Date().toISOString(), tick);
         else console.log("[Cron] Market tick skipped (inactive or turn in progress)");
       } catch (error) {
