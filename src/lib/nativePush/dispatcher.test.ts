@@ -26,6 +26,9 @@ const device: PushDevice = {
 const notification = {
   _id: new ObjectId(),
   type: "general_win",
+  title: "You won the Ohio Senate race",
+  message: "You carried 54.2% of the vote.",
+  metadata: { electionId: "aaaaaaaaaaaaaaaaaaaaaaaa" },
   read: false,
   createdAt: new Date(),
 };
@@ -41,9 +44,18 @@ beforeEach(() => {
   vi.mocked(sendNativePush).mockResolvedValue("sent");
 });
 describe("native push inbox dispatch", () => {
-  it("sends one private alert for new activity and advances only the leased device", async () => {
+  it("sends one alert with the newest notification's content and advances only the leased device", async () => {
     await dispatchNativePush(db as unknown as Db);
-    expect(sendNativePush).toHaveBeenCalledWith(device);
+    expect(sendNativePush).toHaveBeenCalledWith(
+      device,
+      expect.objectContaining({
+        title: "You won the Ohio Senate race",
+        body: "You carried 54.2% of the vote.",
+        href: "/elections/aaaaaaaaaaaaaaaaaaaaaaaa",
+        path: "/notifications",
+        count: 1,
+      })
+    );
     expect(db.collection("nativePushDevices").updateOne).toHaveBeenCalledWith(
       { _id: device._id, revision: device.revision },
       expect.objectContaining({ $set: expect.objectContaining({ cursorId: notification._id }) })

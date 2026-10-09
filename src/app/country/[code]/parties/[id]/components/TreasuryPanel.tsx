@@ -158,9 +158,12 @@ export function TreasuryPanel({
       });
       const d = await r.json();
       if (!r.ok) {
-        showToast(apiErrorText(d, "Failed to set PS investment"), "error");
+        showToast(apiErrorText(d, "Failed to save the Political Strength budget"), "error");
       } else {
-        showToast(`PS investment set: +${d.expectedPsPerTurn.toFixed(2)} PS / turn`, "success");
+        showToast(
+          `Political Strength budget saved: +${d.expectedPsPerTurn.toFixed(2)} PS per turn`,
+          "success"
+        );
         onPartyRefresh();
       }
     } catch {

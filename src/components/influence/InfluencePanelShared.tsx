@@ -145,7 +145,7 @@ export function CharacterResources({ actions, funds, candidateNPI }: CharacterRe
       </div>
       {candidateNPI != null && (
         <div>
-          <span className="text-muted">Candidate NPI: </span>
+          <span className="text-muted">Candidate national influence (NPI): </span>
           <span className="font-medium text-purple-400">{candidateNPI.toFixed(1)}%</span>
         </div>
       )}

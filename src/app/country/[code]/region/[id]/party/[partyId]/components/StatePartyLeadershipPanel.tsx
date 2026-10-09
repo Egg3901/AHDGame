@@ -198,7 +198,7 @@ export function StatePartyLeadershipPanel({
           <div className="text-body-sm font-medium text-muted">Campaigner</div>
           <span
             className="rounded-full border border-card-border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted"
-            title="Chair-assigned. Spends state PS to Build Org on the state party's behalf."
+            title="Chair-assigned. Spends the state party's Political Strength (PS) to build Organization on its behalf."
           >
             Spend on behalf
           </span>
@@ -230,9 +230,9 @@ export function StatePartyLeadershipPanel({
           }}
         />
         <p className="text-[11px] text-muted">
-          Picker filtered to party members with a home state in {stateParty.stateId}. Campaigners
-          spend PS to Build Org; NPP Management, Move, and Recruitment stay chair / vice-chair /
-          admin.
+          Only party members whose home state is {stateParty.stateId} can be picked. Campaigners can
+          spend the state party&apos;s PS to build Organization. Managing, moving, and recruiting
+          non-player politicians (NPPs) stays with the chair, vice chair, and admins.
         </p>
       </div>
 

@@ -11,15 +11,15 @@ export interface PsSpendButtonsProps {
   /** Accent color for the primary (filled) button. */
   color: string;
   busy: boolean;
-  /** Idle label, e.g. "Build Org" / "Contest". */
+  /** Idle label, e.g. "Build organization" / "Contest". */
   label: string;
   /** Busy label, e.g. "Building…" / "Contesting…". */
   busyLabel: string;
   /** Disabled state for the single (unlabeled) button. */
   singleDisabled: boolean;
-  /** Disabled state for the State PS button. */
+  /** Disabled state for the state PS button. */
   stateDisabled: boolean;
-  /** Disabled state for the Nat'l PS button. */
+  /** Disabled state for the national PS button. */
   nationalDisabled: boolean;
   /** Optional tooltips. */
   singleTitle?: string;
@@ -33,13 +33,13 @@ export interface PsSpendButtonsProps {
 /**
  * Shared PS-pool spend buttons for Build Org / Contest. Renders one labeled
  * button per PS pool the viewer is eligible for: a national-tier officer always
- * gets the `· Nat'l PS` button; a state-tier officer gets `· State PS`; a
+ * gets the `(national PS)` button; a state-tier officer gets `(state PS)`; a
  * dual-role officer gets both. When the viewer is eligible for neither pool (or
  * eligibility is not yet known), a single unlabeled button is shown and the
  * server resolves the canonical pool.
  *
  * Styling: the State button (or the sole eligible button) is filled with
- * `color`; a Nat'l button shown alongside the State button is an outline.
+ * `color`; a national button shown alongside the state button is an outline.
  */
 export function PsSpendButtons({
   scopes,
@@ -77,7 +77,7 @@ export function PsSpendButtons({
             className={filledClass}
             style={filledStyle}
           >
-            {busy ? busyLabel : `${label} · State PS`}
+            {busy ? busyLabel : `${label} (state PS)`}
           </button>
         )}
         {showNational && (
@@ -89,7 +89,7 @@ export function PsSpendButtons({
             className={showState ? outlineClass : filledClass}
             style={showState ? outlineStyle : filledStyle}
           >
-            {busy ? busyLabel : `${label} · Nat'l PS`}
+            {busy ? busyLabel : `${label} (national PS)`}
           </button>
         )}
       </div>

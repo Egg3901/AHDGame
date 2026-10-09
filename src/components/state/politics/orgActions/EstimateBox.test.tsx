@@ -18,8 +18,8 @@ describe("EstimateBox", () => {
     expect(screen.getByText("This click")).toBeTruthy();
     expect(screen.getByText("Cost")).toBeTruthy();
     expect(screen.getByText("7")).toBeTruthy();
-    expect(screen.getByText(/base 5 \+ ladder 2/)).toBeTruthy();
-    expect(screen.getByText("Org share")).toBeTruthy();
+    expect(screen.getByText(/base 5 \+ 2 for recent builds/)).toBeTruthy();
+    expect(screen.getByText("Organization share")).toBeTruthy();
     expect(screen.getByText(/\+1\.25/)).toBeTruthy();
   });
 
@@ -32,7 +32,7 @@ describe("EstimateBox", () => {
         gain={{ label: "Estimated share", value: 1, sign: "+", unit: "Org" }}
       />
     );
-    expect(screen.queryByText(/ladder \d/)).toBeNull();
+    expect(screen.queryByText(/for recent builds/)).toBeNull();
     expect(screen.getByText(/Base cost/i)).toBeTruthy();
   });
 

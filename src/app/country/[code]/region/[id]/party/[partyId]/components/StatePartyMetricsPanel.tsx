@@ -88,7 +88,7 @@ export function StatePartyMetricsPanel({ stateParty }: StatePartyMetricsPanelPro
             <h2 className="font-semibold">Party organization</h2>
             <Tooltip
               label="About party organization"
-              content="Your share of this state's organization bucket. Each Build Org click adds one fixed unit. Organization can decay if your party becomes inactive in this state or region."
+              content="Your party's share of all the organization built in this state. Each Build Organization click adds one unit. A party that stops building here slowly loses share."
             />
           </div>
           <p className="text-xs text-muted/70 leading-relaxed max-w-md">

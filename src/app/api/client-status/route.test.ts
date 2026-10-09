@@ -15,7 +15,7 @@ vi.mock("@/lib/mongodb", () => ({
 
 interface RecordedOp {
   collection: string;
-  op: "findOne" | "find" | "aggregate";
+  op: "findOne" | "find" | "aggregate" | "countDocuments";
   filter?: unknown;
   options?: unknown;
 }
@@ -24,6 +24,7 @@ interface FakeSeed {
   findOne?: Record<string, unknown> | null;
   find?: Record<string, unknown>[];
   aggregate?: Record<string, unknown>[];
+  count?: number;
 }
 
 function createFakeDb(seeds: Record<string, FakeSeed>, ops: RecordedOp[]): Db {
@@ -42,6 +43,10 @@ function createFakeDb(seeds: Record<string, FakeSeed>, ops: RecordedOp[]): Db {
         toArray: async () => rows,
       };
       return cursor;
+    },
+    countDocuments: async (filter?: unknown) => {
+      ops.push({ collection: name, op: "countDocuments", filter });
+      return seeds[name]?.count ?? 0;
     },
     aggregate: () => {
       ops.push({ collection: name, op: "aggregate" });
@@ -270,6 +275,70 @@ describe("GET /api/client-status", () => {
       // Dividend/bond income still served for the standard personal-cash tooltip.
       expect(touched.has("corporations")).toBe(true);
       expect(touched.has("bonds")).toBe(true);
+    });
+  });
+  describe("phone widget extras", () => {
+    async function getWidgets(query: string, seed: (userId: ObjectId) => Record<string, FakeSeed>) {
+      const ops: RecordedOp[] = [];
+      const userId = new ObjectId();
+      const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+      vi.mocked(requireBasicAuth).mockResolvedValue({
+        ok: true,
+        user: { userId: userId.toHexString() },
+      } as never);
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue(createFakeDb(seed(userId), ops));
+      const response = await GET(new Request(`http://localhost/api/client-status?${query}`));
+      return { ops, body: (await response.json()) as Record<string, unknown> };
+    }
+    const clocked = (userId: ObjectId, preferences: Record<string, unknown> = {}) => ({
+      ...seedIndependentCharacter(userId),
+      users: {
+        findOne: {
+          _id: userId,
+          activeCharacterType: "standard",
+          notificationPreferences: preferences,
+        },
+      },
+      gameState: {
+        findOne: {
+          _id: "current",
+          currentTurn: 50,
+          startingYear: 1953,
+          isActive: true,
+          nextScheduledTurn: new Date("2026-10-09T22:00:00Z"),
+        },
+      },
+      notifications: { count: 3 },
+      playerMail: { count: 2 },
+    });
+
+    it("are left out of the web status bar poll", async () => {
+      const { ops, body } = await getWidgets("layout=full", clocked);
+      expect(body).not.toHaveProperty("inbox");
+      expect(body).not.toHaveProperty("turn");
+      expect(ops.some((op) => op.op === "countDocuments")).toBe(false);
+    });
+
+    it("add the turn clock and the navbar's inbox counts on request", async () => {
+      const { body } = await getWidgets("layout=minimal&widgets=1", clocked);
+      expect(body.inbox).toEqual({ unread: 3, mail: 2 });
+      expect(body.turn).toMatchObject({
+        current: 50,
+        nextAt: "2026-10-09T22:00:00.000Z",
+        active: true,
+      });
+      expect(typeof (body.turn as { date: unknown }).date).toBe("string");
+    });
+
+    it("respect muted mail and inbox mutes", async () => {
+      const { ops, body } = await getWidgets("layout=minimal&widgets=1", (userId) =>
+        clocked(userId, { muteMail: true, mutedTypes: ["general_win"] })
+      );
+      expect(body.inbox).toEqual({ unread: 3, mail: 0 });
+      expect(ops.some((op) => op.collection === "playerMail")).toBe(false);
+      const unread = ops.find((op) => op.collection === "notifications");
+      expect(unread?.filter).toMatchObject({ type: { $nin: ["general_win"] }, read: false });
     });
   });
 });

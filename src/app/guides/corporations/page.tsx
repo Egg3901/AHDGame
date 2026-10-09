@@ -325,7 +325,9 @@ Escalation drops by 1 each turn. Costs halve if you wait`}</FormulaBlock>
                     <td className="px-4 py-2.5">
                       <Tag variant="neutral">±4%</Tag>
                     </td>
-                    <td className="px-4 py-2.5">Tech, Chemicals, Healthcare, Mfg, Defense</td>
+                    <td className="px-4 py-2.5">
+                      Tech, Chemicals, Healthcare, Manufacturing, Defense
+                    </td>
                     <td className="px-4 py-2.5">Pivot at skill index 50</td>
                   </tr>
                   <tr>
@@ -350,7 +352,7 @@ Escalation drops by 1 each turn. Costs halve if you wait`}</FormulaBlock>
                       <Tag variant="neutral">±3%</Tag>
                     </td>
                     <td className="px-4 py-2.5">
-                      Mfg, Retail, Agri, Autos, Const, Logistics, Extraction
+                      Manufacturing, Retail, Agriculture, Autos, Construction, Logistics, Extraction
                     </td>
                     <td className="px-4 py-2.5">Pivot at condition index 60</td>
                   </tr>
@@ -359,7 +361,9 @@ Escalation drops by 1 each turn. Costs halve if you wait`}</FormulaBlock>
                     <td className="px-4 py-2.5">
                       <Tag variant="negative">−3%</Tag>
                     </td>
-                    <td className="px-4 py-2.5">Energy, Chemicals, Mfg, Autos, Extraction</td>
+                    <td className="px-4 py-2.5">
+                      Energy, Chemicals, Manufacturing, Autos, Extraction
+                    </td>
                     <td className="px-4 py-2.5">3-25 MT per capita</td>
                   </tr>
                   <tr>
@@ -368,7 +372,8 @@ Escalation drops by 1 each turn. Costs halve if you wait`}</FormulaBlock>
                       <Tag variant="neutral">±3%</Tag>
                     </td>
                     <td className="px-4 py-2.5">
-                      Chemicals, Mfg, Retail, Agri, Const, Logistics, Extraction
+                      Chemicals, Manufacturing, Retail, Agriculture, Construction, Logistics,
+                      Extraction
                     </td>
                     <td className="px-4 py-2.5">Pivot at index 100</td>
                   </tr>
@@ -815,7 +820,7 @@ Scaled growth  = 0.65 × ln(1 + dailyBudget / 100,000)
                   </li>
                   <li>
                     • <strong className="text-foreground">Carbon emission caps</strong>. Energy,
-                    Chemicals, Mfg, Autos, Extraction
+                    Chemicals, Manufacturing, Autos, Extraction
                   </li>
                   <li>
                     • <strong className="text-foreground">High sovereign debt</strong>. −15% cap on

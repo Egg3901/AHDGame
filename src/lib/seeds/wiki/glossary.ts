@@ -35,6 +35,11 @@ export const WIKI_GLOSSARY = {
       "Non-Player Politician. An autonomous politician the game generates to fill seats and primaries. NPPs vote, campaign, and follow whip directives.",
     aliases: ["non-player politician", "non-player politicians", "NPPs"],
   },
+  PS: {
+    definition:
+      "Political Strength. A party's reserve for party actions. It pays for Build Organization in states and for party campaigning. Parties gain some free every turn and can buy more from the treasury.",
+    aliases: ["political strength"],
+  },
   GOTV: {
     definition:
       "Get Out The Vote. A party action that boosts demographic turnout in a state or region. It stacks with player canvassing, subject to the turnout cap.",
@@ -107,8 +112,8 @@ export const WIKI_GLOSSARY = {
   },
   "party org": {
     definition:
-      "Party organization in a state: ground infrastructure from 0 to 100. It scales general-election votes. Presidential primaries use party influence, not org.",
-    aliases: ["party organization", "org score"],
+      "Organization (Org). A party's percentage share of the ground game in a state, grown with Build Organization. It scales general-election votes. Presidential primaries use party influence, not org.",
+    aliases: ["party organization", "org score", "Org"],
   },
   whip: {
     definition:
