@@ -173,7 +173,7 @@ export function FoundUnionModal({
                 </option>
                 {Object.entries(OPERATING_SECTOR_TYPE_LABELS).map(([key, label]) => (
                   <option key={key} value={key}>
-                    {CORPORATION_TYPE_LABELS[key]}
+                    {label}
                   </option>
                 ))}
               </select>

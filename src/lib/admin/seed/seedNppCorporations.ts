@@ -180,7 +180,7 @@ export async function seedNppCorporations(
         market.type,
         market.industryModel,
         market.mediaDiscriminator
-      ) as CorporationType;
+      ) as OperatingSectorType;
       const countrySizedCap =
         countryStates.length > 0
           ? nppSeedRevenueCap({

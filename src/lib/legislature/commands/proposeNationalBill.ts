@@ -8,7 +8,7 @@ import type { AuthUser } from "@/lib/auth";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { CORPORATION_TYPES, type OperatingSectorType } from "@/lib/constants/corporations";
+import { OPERATING_SECTOR_TYPES, type OperatingSectorType } from "@/lib/constants/corporations";
 import {
   checkDuplicateProvisions,
   checkDuplicateResetLawFamilies,
