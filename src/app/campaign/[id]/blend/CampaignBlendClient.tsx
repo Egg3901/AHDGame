@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CampaignData } from "@/lib/campaigns/dto/campaignView";
@@ -62,7 +63,14 @@ export function CampaignBlendClient({
   onRefreshMe,
   onRetarget,
 }: CampaignBlendClientProps) {
-  const [rail, setRail] = useState<CampaignRail>("overview");
+  // Deep link from the presidential map: `?tab=field&region=OH` opens the
+  // field offices section on that state.
+  const searchParams = useSearchParams();
+  const linkedRegion = searchParams?.get("region")?.toUpperCase() ?? null;
+  const fieldRegion = linkedRegion && /^[A-Z]{2,3}$/.test(linkedRegion) ? linkedRegion : null;
+  const [rail, setRail] = useState<CampaignRail>(
+    searchParams?.get("tab") === "field" ? "field" : "overview"
+  );
   const [expanded, setExpanded] = useState<UpgradeCategory | null>(null);
   const [ledgerPage, setLedgerPage] = useState(0);
   const [ledgerTab, setLedgerTab] = useState<LedgerTab>("activity");
@@ -309,7 +317,11 @@ export function CampaignBlendClient({
       ) : null}
 
       {showField ? (
-        <FieldOfficesSection campaignId={campaign.id} onChanged={refreshAfterField} />
+        <FieldOfficesSection
+          campaignId={campaign.id}
+          onChanged={refreshAfterField}
+          initialRegion={fieldRegion}
+        />
       ) : null}
 
       {showMoney && vm.money ? (
@@ -609,6 +621,7 @@ export function CampaignBlendClient({
             campaignId={campaign.id}
             onChanged={refreshAfterField}
             variant="mobile"
+            initialRegion={fieldRegion}
           />
         ) : null}
         {showMoney && vm.money ? (

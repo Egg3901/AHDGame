@@ -24,6 +24,8 @@ export interface PresidentialStageProps {
   deck?: ReactNode;
   /** Strip under the masthead (the wire ticker). */
   ticker?: ReactNode;
+  /** A second strip above the map (the 270 snake). */
+  strip?: ReactNode;
   /** Previous / next cycle navigation, top of the left rail. */
   nav?: ReactNode;
   /** The scoreboard: head-to-head, college or delegate bar, the field. */
@@ -189,6 +191,7 @@ export function PresidentialStage({
   kicker,
   deck,
   ticker,
+  strip,
   nav,
   left,
   right,
@@ -326,6 +329,7 @@ export function PresidentialStage({
           {toggle}
         </header>
         {ticker}
+        {strip}
         {showSquares ? (
           <div className="pres-stage__board pres-stage__board--squares">{squares}</div>
         ) : (
