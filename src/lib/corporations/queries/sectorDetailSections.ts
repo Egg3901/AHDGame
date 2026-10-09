@@ -86,6 +86,7 @@ import {
   fxRateForSectorHostFromMap,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
+import { computeMarketSharePercent } from "@/lib/corporations/marketShare";
 import { getLegalStructureForCorp } from "@/lib/corporations/legalStructure";
 import {
   getSectorStrategies,
@@ -822,9 +823,11 @@ export function computeSectorMarketPosition(args: {
   );
   const siblingRevenueAnchorById = new Map<string, number>();
   for (const s of siblingsSectors) {
+    // A loss-making or unsettled row must not shrink the market below a
+    // producer's own revenue, or that producer reads as more than 100%.
     siblingRevenueAnchorById.set(
       s._id.toString(),
-      readCorpEconomicAnchor(s.revenue, hostCode, hostRate)
+      Math.max(0, readCorpEconomicAnchor(s.revenue, hostCode, hostRate))
     );
   }
   const totalOwnedRevenue = siblingsSectors.reduce(
@@ -838,8 +841,11 @@ export function computeSectorMarketPosition(args: {
   const effectiveMarket = Math.max(0, Math.round(totalOwnedRevenue));
   // Focal sector's own revenue in ₳ for market-share + competitor ratios.
   const sectorRevenueAnchor = siblingRevenueAnchorById.get(sector._id.toString()) ?? 0;
-  const marketShare =
-    effectiveMarket > 0 ? Math.round((sectorRevenueAnchor / effectiveMarket) * 10000) / 100 : 0;
+  // Ratio against the unrounded total so rounding the displayed market size
+  // down cannot push a sole producer past 100%; clamped as a backstop.
+  const shareOf = (revAnchor: number): number =>
+    Math.round(computeMarketSharePercent(revAnchor, totalOwnedRevenue) * 100) / 100;
+  const marketShare = shareOf(sectorRevenueAnchor);
 
   const competitors = siblingsSectors
     .filter((s) => s.corporationId.toString() !== corporation._id.toString())
@@ -863,8 +869,7 @@ export function computeSectorMarketPosition(args: {
         // own corp currency), which compared incoherently against the anchor-
         // denominated `totalMarket` / `unownedRevenue`.
         revenue: Math.round(revAnchor),
-        marketShare:
-          effectiveMarket > 0 ? Math.round((revAnchor / effectiveMarket) * 10000) / 100 : 0,
+        marketShare: shareOf(revAnchor),
       };
     });
 

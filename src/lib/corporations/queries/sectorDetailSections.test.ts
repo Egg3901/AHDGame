@@ -5,6 +5,7 @@ import {
   buildSectorStrategySection,
   buildSectorForSaleInfo,
   computeSectorTaxSection,
+  computeSectorMarketPosition,
 } from "@/lib/corporations/queries/sectorDetailSections";
 import type { Corporation, CorporateSector, FederalBudget, StateBudget } from "@/lib/db/types";
 
@@ -162,5 +163,46 @@ describe("pledged property sale affordability", () => {
       conflict: true,
       eligible: false,
     });
+  });
+});
+
+describe("computeSectorMarketPosition share bounds", () => {
+  const position = (revenues: number[]) => {
+    const corp = makeCorp({ countryId: "US" });
+    const sectors = revenues.map((revenue, i) =>
+      makeSector({
+        corporationId: i === 0 ? corp._id : new ObjectId(),
+        revenue,
+        stateId: "US-CA",
+        countryId: "US",
+        sectorType: "manufacturing",
+      })
+    );
+    return computeSectorMarketPosition({
+      state: null,
+      sector: sectors[0],
+      sectorCountryId: "US",
+      corporation: corp,
+      siblingCorps: [],
+      siblingsSectors: sectors,
+      siblingFxByCurrency: new Map(),
+      unownedDoc: null,
+    });
+  };
+
+  it("never exceeds 100% when a sibling reports negative revenue", () => {
+    const result = position([1000, -800]);
+    expect(result.marketShare).toBe(100);
+    expect(result.competitors[0].marketShare).toBe(0);
+  });
+
+  it("a sole producer with fractional revenue reads exactly 100%", () => {
+    expect(position([1.4]).marketShare).toBe(100);
+  });
+
+  it("shares in a cell add to 100%", () => {
+    const result = position([300, 100]);
+    expect(result.marketShare).toBe(75);
+    expect(result.competitors[0].marketShare).toBe(25);
   });
 });
