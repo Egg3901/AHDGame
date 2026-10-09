@@ -500,6 +500,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
             stateId: sector.stateId,
             sectorType: sector.sectorType,
             industryModel: sector.industryModel ?? null,
+            mediaDiscriminator: sector.mediaDiscriminator ?? null,
           })
           .toArray(),
       ]);

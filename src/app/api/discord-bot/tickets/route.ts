@@ -149,12 +149,16 @@ function isCurrentLegacyDeliveryNote(
   note: string,
   resolutionCreatedAt: unknown
 ): boolean {
-  const resolutionTime = new Date(String(resolutionCreatedAt ?? "")).getTime();
+  const resolutionTime =
+    resolutionCreatedAt instanceof Date
+      ? resolutionCreatedAt.getTime()
+      : new Date(String(resolutionCreatedAt ?? "")).getTime();
   return (
     history?.some((entry) => {
       if (entry.note !== note) return false;
       if (!Number.isFinite(resolutionTime)) return true;
-      const deliveryTime = new Date(String(entry.at ?? "")).getTime();
+      const deliveryTime =
+        entry.at instanceof Date ? entry.at.getTime() : new Date(String(entry.at ?? "")).getTime();
       return Number.isFinite(deliveryTime) && deliveryTime >= resolutionTime;
     }) === true
   );
@@ -200,6 +204,62 @@ const updateSchema = z
   .refine((d) => d.ticketNumber != null || d.discordChannelId, {
     message: "ticketNumber or discordChannelId is required",
   });
+
+type CloseTicketState = Pick<Ticket, "status" | "discordChannelId"> & {
+  resolution?: {
+    message?: string;
+    createdAt?: Date;
+    deliveredAt?: Date | null;
+    channelDelivery?: { status?: string; postedAt?: Date };
+  };
+  statusHistory?: Array<{ note?: string; at?: Date }>;
+};
+
+function closeDeliveryState(deliveryState: CloseTicketState) {
+  const currentDmDeliveryNote = dmDeliveryNote(deliveryState.resolution?.createdAt);
+  const hasDmDeliveryMarker =
+    deliveryState.statusHistory?.some((entry) => entry.note === currentDmDeliveryNote) === true;
+  // Before channel and DM delivery were tracked separately, Ops and the old
+  // bot wrote deliveredAt after posting in the ticket channel. Only channel-
+  // less legacy tickets can treat that timestamp as a delivered DM.
+  const resolutionDelivered = Boolean(
+    hasDmDeliveryMarker ||
+    (!deliveryState.discordChannelId && deliveryState.resolution?.deliveredAt)
+  );
+  const clearLegacyChannelMarker = Boolean(
+    deliveryState.discordChannelId && deliveryState.resolution?.deliveredAt && !hasDmDeliveryMarker
+  );
+  const resolutionCreatedAt = deliveryState.resolution?.createdAt;
+  const resolutionTime =
+    resolutionCreatedAt instanceof Date
+      ? resolutionCreatedAt.getTime()
+      : new Date(String(resolutionCreatedAt ?? "")).getTime();
+  const postedAt = deliveryState.resolution?.channelDelivery?.postedAt;
+  const channelDeliveryTime =
+    postedAt instanceof Date ? postedAt.getTime() : new Date(String(postedAt ?? "")).getTime();
+  const channelDeliveryIsCurrent =
+    deliveryState.resolution?.channelDelivery?.status === "posted" &&
+    (!Number.isFinite(resolutionTime) ||
+      !Number.isFinite(channelDeliveryTime) ||
+      channelDeliveryTime >= resolutionTime);
+  const channelUpdatePosted =
+    channelDeliveryIsCurrent ||
+    deliveryState.statusHistory?.some(
+      (entry) => entry.note === channelDeliveryNote(resolutionCreatedAt)
+    ) === true ||
+    isCurrentLegacyDeliveryNote(
+      deliveryState.statusHistory,
+      "resolution-channel-delivered",
+      resolutionCreatedAt
+    );
+  return {
+    resolutionDelivered,
+    clearLegacyChannelMarker,
+    channelUpdatePosted,
+    resolutionTime,
+    currentDmDeliveryNote,
+  };
+}
 
 function toMessage(
   m: z.infer<typeof messageSchema> | undefined,
@@ -743,71 +803,88 @@ export async function PATCH(request: Request) {
       discordChannelId?: string;
       statusHistory?: Array<{ note?: string; at?: Date }>;
     };
-    const currentDmDeliveryNote = dmDeliveryNote(deliveryState.resolution?.createdAt);
-    const hasDmDeliveryMarker =
-      deliveryState.statusHistory?.some((entry) => entry.note === currentDmDeliveryNote) === true;
-    // Before channel and DM delivery were tracked separately, Ops and the old
-    // bot wrote deliveredAt after posting in the ticket channel. Only channel-
-    // less legacy tickets can treat that timestamp as a delivered DM.
-    const resolutionDelivered = Boolean(
-      hasDmDeliveryMarker ||
-      (!deliveryState.discordChannelId && deliveryState.resolution?.deliveredAt)
-    );
-    const clearLegacyChannelMarker = Boolean(
-      deliveryState.discordChannelId &&
-      deliveryState.resolution?.deliveredAt &&
-      !hasDmDeliveryMarker
-    );
-    const resolutionCreatedAt = deliveryState.resolution?.createdAt;
-    const resolutionTime = new Date(String(resolutionCreatedAt ?? "")).getTime();
-    const channelDeliveryTime = new Date(
-      String(deliveryState.resolution?.channelDelivery?.postedAt ?? "")
-    ).getTime();
-    const channelDeliveryIsCurrent =
-      deliveryState.resolution?.channelDelivery?.status === "posted" &&
-      (!Number.isFinite(resolutionTime) ||
-        !Number.isFinite(channelDeliveryTime) ||
-        channelDeliveryTime >= resolutionTime);
-    const channelUpdatePosted =
-      channelDeliveryIsCurrent ||
-      deliveryState.statusHistory?.some(
-        (entry) => entry.note === channelDeliveryNote(resolutionCreatedAt)
-      ) === true ||
-      isCurrentLegacyDeliveryNote(
-        deliveryState.statusHistory,
-        "resolution-channel-delivered",
-        resolutionCreatedAt
-      );
+    const {
+      resolutionDelivered,
+      clearLegacyChannelMarker,
+      channelUpdatePosted,
+      resolutionTime,
+      currentDmDeliveryNote,
+    } = closeDeliveryState(deliveryState);
     const writesNewResolution = Boolean(
-      body.resolution && !resolutionDelivered && !channelUpdatePosted
+      body.resolution &&
+      !resolutionDelivered &&
+      !channelUpdatePosted &&
+      body.resolution !== deliveryState.resolution?.message
     );
-    const res = await coll.updateOne(filter, {
-      $set: {
-        status: "closed",
-        closedAt: now,
-        ...(closedBy ? { closedBy } : {}),
-        ...(clearLegacyChannelMarker ? { "resolution.deliveredAt": null } : {}),
-        ...(writesNewResolution
+    if (existing.status === "closed" && !writesNewResolution && !clearLegacyChannelMarker) {
+      return NextResponse.json({
+        ok: true,
+        alreadyClosed: true,
+        channelUpdatePosted,
+        resolutionDelivered,
+        resolutionVersion: Number.isFinite(resolutionTime) ? resolutionTime : null,
+        finalOutcome: deliveryState.resolution?.message,
+      });
+    }
+    // Compare the outcome read above so parallel retries cannot replace its
+    // timestamp or append another close event after a different request wins.
+    const res = await coll.updateOne(
+      {
+        ...filter,
+        status: existing.status,
+        "resolution.createdAt": deliveryState.resolution?.createdAt ?? { $exists: false },
+        "resolution.message": deliveryState.resolution?.message ?? { $exists: false },
+        ...(clearLegacyChannelMarker
+          ? { "statusHistory.note": { $ne: currentDmDeliveryNote } }
+          : {}),
+      },
+      {
+        $set: {
+          status: "closed",
+          ...(existing.status !== "closed"
+            ? { closedAt: now, ...(closedBy ? { closedBy } : {}) }
+            : {}),
+          ...(clearLegacyChannelMarker ? { "resolution.deliveredAt": null } : {}),
+          ...(writesNewResolution
+            ? {
+                "resolution.message": body.resolution,
+                "resolution.createdAt": now,
+                ...(closedBy ? { "resolution.closedBy": closedBy } : {}),
+              }
+            : {}),
+          updatedAt: now,
+        },
+        ...(existing.status !== "closed" || writesNewResolution
           ? {
-              "resolution.message": body.resolution,
-              "resolution.createdAt": now,
-              ...(closedBy ? { "resolution.closedBy": closedBy } : {}),
+              $push: {
+                statusHistory: {
+                  status: "closed",
+                  at: now,
+                  source: "bot",
+                  ...(closedBy ? { by: closedBy } : {}),
+                  ...(body.resolution ? { note: "discord-ticket-close" } : {}),
+                },
+              },
             }
           : {}),
-        updatedAt: now,
-      },
-      $push: {
-        statusHistory: {
-          status: "closed",
-          at: now,
-          source: "bot",
-          ...(closedBy ? { by: closedBy } : {}),
-          ...(body.resolution ? { note: "discord-ticket-close" } : {}),
-        },
-      },
-    });
+      }
+    );
     if (!res.matchedCount) {
-      return errorResponse(404, "Ticket not found");
+      const current = await coll.findOne(filter);
+      if (!current) return errorResponse(404, "Ticket not found");
+      // A concurrent close or delivery acknowledgement owns the canonical state.
+      // A later reopen must never be mistaken for a successful close.
+      if (current.status !== "closed")
+        return errorResponse(409, "Ticket changed; retry closing it");
+      const state = closeDeliveryState(current);
+      return NextResponse.json({
+        ok: true,
+        alreadyClosed: true,
+        channelUpdatePosted: state.channelUpdatePosted,
+        resolutionDelivered: state.resolutionDelivered,
+        resolutionVersion: Number.isFinite(state.resolutionTime) ? state.resolutionTime : null,
+        finalOutcome: current.resolution?.message,
+      });
     }
     return NextResponse.json({
       ok: true,

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { deploymentServiceSlug, ownsConfiguredWebhooks } from "./deploymentIdentity";
+import {
+  deploymentServiceSlug,
+  isSoloCharterTestingEnabled,
+  ownsConfiguredWebhooks,
+} from "./deploymentIdentity";
 
 describe("deploymentServiceSlug", () => {
   it("slugifies the Railway service name", () => {
@@ -84,5 +88,41 @@ describe("ownsConfiguredWebhooks (#1208)", () => {
     expect(ownsConfiguredWebhooks("some-other-world")).toBe(false);
     expect(ownsConfiguredWebhooks("some-other-world")).toBe(false);
     expect(console.warn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("isSoloCharterTestingEnabled", () => {
+  const env = (e: Record<string, string>) => e as unknown as NodeJS.ProcessEnv;
+
+  it("is off when the variable is unset or has any other value", () => {
+    expect(isSoloCharterTestingEnabled(env({ RAILWAY_SERVICE_NAME: "Sandbox Staging" }))).toBe(
+      false
+    );
+    for (const v of ["0", "yes", "TRUE", ""]) {
+      expect(
+        isSoloCharterTestingEnabled(
+          env({ AHD_SANDBOX_SOLO_CHARTER: v, RAILWAY_SERVICE_NAME: "Sandbox Staging" })
+        )
+      ).toBe(false);
+    }
+  });
+
+  it("is on for exactly 1 or true off the production service", () => {
+    for (const v of ["1", "true"]) {
+      expect(
+        isSoloCharterTestingEnabled(
+          env({ AHD_SANDBOX_SOLO_CHARTER: v, RAILWAY_SERVICE_NAME: "Sandbox Staging" })
+        )
+      ).toBe(true);
+    }
+    expect(isSoloCharterTestingEnabled(env({ AHD_SANDBOX_SOLO_CHARTER: "1" }))).toBe(true);
+  });
+
+  it("is forced off on the production service", () => {
+    expect(
+      isSoloCharterTestingEnabled(
+        env({ AHD_SANDBOX_SOLO_CHARTER: "1", RAILWAY_SERVICE_NAME: "Main Site" })
+      )
+    ).toBe(false);
   });
 });

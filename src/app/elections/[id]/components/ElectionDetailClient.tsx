@@ -19,8 +19,6 @@ import { UpcomingElectionView } from "./UpcomingElectionView";
 import { GeneralPhaseView } from "./GeneralPhaseView";
 import { PrimaryPhaseView } from "./PrimaryPhaseView";
 import { PrimaryMapPills } from "./PrimaryMapPills";
-import { CampaignsListPanel } from "./CampaignsListPanel";
-import { CampaignManagerTab } from "./CampaignManagerTab";
 import { ElectionDetailSkeleton } from "./ElectionDetailSkeleton";
 import { StateOrganizationTab } from "@/app/political-operations/components/StateOrganizationTab";
 import type { ElectionDetail } from "./ElectionDetailTypes";
@@ -59,6 +57,8 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   const [election, setElection] = useState<ElectionDetail | null>(initialElection);
   const [wire, setWire] = useState<string[]>([]);
   const [results, setResults] = useState<ElectionResultsResponse | null>(null);
+  /** Race whose results payload failed to load, so the page stops waiting on it. */
+  const [resultsFailedId, setResultsFailedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(initialElection === null);
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
@@ -189,13 +189,17 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     (async () => {
       try {
         const res = await fetch(`/api/elections/${resultsId}/results`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (!cancelled) setResultsFailedId(resultsId);
+          return;
+        }
         const payload = (await res.json()) as ElectionResultsResponse;
         // Defensive against a stale proxy/cache response as well as client
         // navigation races: a payload may render only the race it names.
         if (!cancelled && payload.election.id === resultsId) setResults(payload);
       } catch {
         // non-critical: the page falls back to the existing concluded view
+        if (!cancelled) setResultsFailedId(resultsId);
       }
     })();
     return () => {
@@ -553,21 +557,6 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     </div>
   ) : null;
 
-  // The primary's campaign tooling is not on the stage anywhere, so it stays
-  // below the field.
-  const primaryCampaignTools =
-    election.countryId === "US" ? (
-      <div className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
-        {!!election.myCharId && (
-          <section id="state-org" className="mt-6 scroll-mt-6">
-            <StateOrganizationTab showHubLink />
-          </section>
-        )}
-        <CampaignsListPanel electionId={id} />
-        {!!election.myCharId && <CampaignManagerTab electionId={id} />}
-      </div>
-    ) : null;
-
   if (nightWatch.pending) return <ElectionDetailSkeleton />;
   if (nightWatch.hold.show && nightWatch.data) {
     return (
@@ -584,8 +573,17 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   }
 
   // Concluded presidential race: the same Blend results screen the live
-  // dashboard uses, chipped "Concluded". Falls through to the existing view
-  // until the results payload arrives, or if it fails to load.
+  // dashboard uses, chipped "Concluded". Holds on the skeleton until the
+  // results payload arrives, so the old page does not flash first, and falls
+  // through to it only if the payload fails to load.
+  if (
+    election.electionType === "president" &&
+    localIsEnded &&
+    !currentResults &&
+    resultsFailedId !== election.id
+  ) {
+    return <ElectionDetailSkeleton />;
+  }
   if (election.electionType === "president" && localIsEnded && currentResults) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
@@ -657,7 +655,6 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
         />
 
         {desktopTail}
-        {primaryCampaignTools}
       </div>
     );
   }
@@ -776,26 +773,16 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
 
             {/* Campaign Presence is the presidential ground-game build-up
                 loop. It lives on Political Operations, but that page is not
-                where candidates actually sit. Surface the builder here for
-                every phase, including upcoming (you invest between cycles). */}
+                where candidates actually sit. Every other presidential phase
+                renders the stage, which carries presence on its own map, so
+                this only reaches the upcoming page (you invest between
+                cycles). */}
             {election.countryId === "US" &&
               election.electionType === "president" &&
               !!election.myCharId && (
                 <section id="state-org" className="mt-6 scroll-mt-6">
                   <StateOrganizationTab showHubLink />
                 </section>
-              )}
-
-            {/* Campaign panels — shown for all non-upcoming US presidential
-                elections (components return null gracefully when no campaigns
-                exist yet) */}
-            {election.countryId === "US" &&
-              election.electionType === "president" &&
-              !localIsUpcoming && (
-                <>
-                  <CampaignsListPanel electionId={id} />
-                  {!!election.myCharId && <CampaignManagerTab electionId={id} />}
-                </>
               )}
           </div>
         </div>

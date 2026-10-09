@@ -48,12 +48,15 @@ export const draftCharterSchema = z.object({
     .regex(/^[A-Za-z0-9]+$/, "Abbreviation must be alphanumeric"),
   platform: platformSchema,
   /**
-   * Three founder characterIds (24-char hex ObjectIds). Must include the
+   * Three founder characterIds (1 to 3 when solo charter testing is enabled; draftCharter enforces the exact count) (24-char hex ObjectIds). Must include the
    * proposer's character. Same `userId` may back multiple character
    * entries (multi-persona play / admin testing) — uniqueness is at the
    * character level.
    */
-  foundersCharacterIds: z.array(objectIdHex).length(3, "Exactly 3 founders required"),
+  foundersCharacterIds: z
+    .array(objectIdHex)
+    .min(1, "Exactly 3 founders required")
+    .max(3, "Exactly 3 founders required"),
   /**
    * F4 founding-cohort picks — two player-positionable NPPs in adjacent
    * states. Optional for backward-compat with legacy clients; absent →

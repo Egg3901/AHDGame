@@ -8,11 +8,14 @@ describe("legacyStockMarketRedirectUrl", () => {
     );
   });
 
-  it("maps the old listings tab and drops tabs that have no hub equivalent", () => {
+  it("maps the old listings tab and keeps the wealth list and drops tabs that have no hub equivalent", () => {
     expect(legacyStockMarketRedirectUrl("US", { tab: "listings" })).toBe(
       "/market?tab=stocks&exchange=US"
     );
-    expect(legacyStockMarketRedirectUrl("US", { tab: "wealth" })).toBe("/market?exchange=US");
+    expect(legacyStockMarketRedirectUrl("US", { tab: "wealth" })).toBe(
+      "/market?tab=wealth&exchange=US"
+    );
+    expect(legacyStockMarketRedirectUrl("US", { tab: "auctions" })).toBe("/market?exchange=US");
   });
 
   it("uses global market when the old route has no exchange", () => {

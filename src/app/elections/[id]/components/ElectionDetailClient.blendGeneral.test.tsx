@@ -53,16 +53,12 @@ vi.mock("./PresidentialMapWithStateDetail", () => ({
 }));
 vi.mock("./ElectionHeader", () => ({ ElectionHeader: () => null }));
 vi.mock("./AdminSection", () => ({ AdminSection: () => null }));
-vi.mock("./CampaignsListPanel", () => ({
-  CampaignsListPanel: () => <div data-testid="campaigns-list" />,
-}));
-vi.mock("./CampaignManagerTab", () => ({
-  CampaignManagerTab: () => <div data-testid="campaign-manager" />,
-}));
 vi.mock("@/app/political-operations/components/StateOrganizationTab", () => ({
-  StateOrganizationTab: () => null,
+  StateOrganizationTab: () => <div data-testid="presence-map" />,
 }));
-vi.mock("../blend/PrimaryBlendView", () => ({ PrimaryBlendView: () => null }));
+vi.mock("../blend/PrimaryBlendView", () => ({
+  PrimaryBlendView: () => <div data-testid="primary-stage" />,
+}));
 vi.mock("../blend/ResultsBlendView", () => ({ ResultsBlendView: () => null }));
 
 import { ElectionDetailClient } from "./ElectionDetailClient";
@@ -106,18 +102,20 @@ describe("the Blend general page does not print the same standing twice", () => 
     expect(generalPhaseProps).toHaveLength(0);
   });
 
-  it("drops the Your Campaign card, which the campaigns list already covers", () => {
-    // It repeated the funds, actions and levels shown against your own row in
-    // that list, behind a second link to the same page.
-    const { queryByTestId } = renderPage();
-    expect(queryByTestId("campaign-manager")).toBeNull();
+  it("puts nothing under the primary stage but the stage", () => {
+    // The primary used to mount the Campaign Presence builder below the stage,
+    // which drew a second US map of its own, plus the campaigns list and a
+    // Your Campaign card. The stage map carries presence, the field table
+    // carries campaign operations and the rail carries your campaign.
+    const { getByTestId, queryByTestId } = renderPage({ inPrimary: true });
+    expect(getByTestId("primary-stage")).toBeTruthy();
+    expect(queryByTestId("presence-map")).toBeNull();
   });
 
-  it("leaves campaign operations to the hero's tickets table", () => {
-    // They were a separate list at the foot of this block, restating the
-    // tickets above it. They are columns of that table now.
-    const { queryByTestId } = renderPage();
-    expect(queryByTestId("campaigns-list")).toBeNull();
+  it("keeps the presence builder on an upcoming race, where nothing else carries it", () => {
+    const { getByTestId, queryByTestId } = renderPage({ isUpcoming: true });
+    expect(queryByTestId("primary-stage")).toBeNull();
+    expect(getByTestId("presence-map")).toBeTruthy();
   });
 
   it("leaves both blocks whole on a race with no Blend hero above them", () => {

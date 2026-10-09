@@ -124,7 +124,9 @@ export default function MarketPositionPanel({
   // sector docs (older than the field's introduction).
   const sectorCurrency = COUNTRY_CURRENCY_MAP[(sector.countryId ?? "US") as CountryId] ?? "USD";
   const corpCurrency = (corporation.liquidCurrencyCode ?? sectorCurrency) as CurrencyCode;
-  const marketCurrencyNote = `Market values are normalized for forex. Local mode shows ${sectorCurrency}, this sector's home currency; other display modes convert from the same underlying value.`;
+  const marketCurrencyNote = `Total market is the combined revenue of every producer in this state and industry, per turn. Shares are each producer's revenue divided by that total, so they add up to 100% and never exceed it. Market values are normalized for forex. Local mode shows ${sectorCurrency}, this sector's home currency; other display modes convert from the same underlying value.`;
+  const yourShareNote =
+    "Your revenue in this state and industry divided by the total market. It is capped at 100%. Your revenue shown beside it is what you actually earned, so it can differ slightly from the figure the share uses.";
   const fmtMarketChip = (v: number) => formatAmountChip(v, sectorCurrency);
   const fmtCorpSectorMoney = (v: number) =>
     formatAmount(toInternalFrom(v, corpCurrency), corpCurrency);
@@ -309,7 +311,11 @@ export default function MarketPositionPanel({
             </span>
           </div>
           <div>
-            <span className="block text-body-sm font-medium text-muted">Your share</span>
+            <Tooltip content={yourShareNote}>
+              <span className="block cursor-help text-body-sm font-medium text-muted">
+                Your share
+              </span>
+            </Tooltip>
             <span className="text-sm font-bold tabular-nums text-primary">
               {market.marketShare}%
             </span>

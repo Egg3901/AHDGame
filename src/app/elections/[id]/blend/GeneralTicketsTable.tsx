@@ -49,11 +49,11 @@ function campaignFor(
 }
 
 /** What goes in a campaign cell when there is no campaign figure to show. */
-function missing(loading: boolean) {
+export function missing(loading: boolean) {
   return <span style={{ color: BLEND.mutedDimmer }}>{loading ? "…" : PLACEHOLDER}</span>;
 }
 
-function campaignFigures(
+export function campaignFigures(
   campaign: CampaignSummary | undefined,
   loading: boolean
 ): { funds: ReactNode; actions: ReactNode; levels: ReactNode } {
@@ -65,6 +65,19 @@ function campaignFigures(
     funds: (
       <span style={{ color: OPS_LEVER_COLOR.fundraising }}>
         {formatCurrencyFaceAmount(campaign.funds ?? 0, campaign.currencyCode)}
+        {campaign.budget ? (
+          <span
+            style={{
+              display: "block",
+              fontSize: 10.5,
+              color: campaign.budget.netIncome >= 0 ? BLEND.positive : BLEND.negative,
+            }}
+          >
+            {campaign.budget.netIncome >= 0 ? "+" : "-"}
+            {formatCurrencyFaceAmount(Math.abs(campaign.budget.netIncome), campaign.currencyCode)}
+            /turn
+          </span>
+        ) : null}
       </span>
     ),
     actions: campaign.actions ?? 0,
@@ -146,7 +159,7 @@ function MateAndManager({
   );
 }
 
-function ViewCampaign({ campaign }: { campaign: CampaignSummary }) {
+export function ViewCampaign({ campaign }: { campaign: CampaignSummary }) {
   return (
     <Link
       href={`/campaign/${campaign.id}`}
@@ -167,7 +180,7 @@ function ViewCampaign({ campaign }: { campaign: CampaignSummary }) {
   );
 }
 
-function FogNote({ campaigns }: { campaigns: CampaignSummary[] }) {
+export function FogNote({ campaigns }: { campaigns: CampaignSummary[] }) {
   if (campaigns.length === 0 || campaigns.some((c) => c.isExact)) return null;
   return (
     <div style={{ marginTop: 12, fontFamily: FONT.sans, fontSize: 12, color: BLEND.mutedDim }}>
