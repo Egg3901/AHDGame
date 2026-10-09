@@ -4,7 +4,7 @@ import type { Character, GameState, User } from "@/lib/db/types";
 import type { DiscordBotFund, CasinoGameStats } from "@/lib/db/types/discordBotFund";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { buildPersonalBalanceInc, getHomeCurrency } from "@/lib/currency/characterFunds";
-import { getCurrencyFxRate, loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
+import { getCurrencyFxRate } from "@/lib/currency/corporationCapital";
 import {
   atomicallyDebitCharacterCash,
   refundCharacterCash,
@@ -113,11 +113,12 @@ export async function loadHouse(db: Db): Promise<DiscordBotFund & { anchorBalanc
   if (typeof fund.anchorBalance === "number")
     return fund as DiscordBotFund & { anchorBalance: number };
 
-  const rates = await loadFxRatesByCurrency(db);
+  // Era-rate fallback covers buckets in a currency with no live rate (a
+  // legacy DDM balance on a euro-era world, say) instead of counting them 1:1.
   let anchorBalance = 0;
   for (const [code, amount] of Object.entries(fund.currencyBalances ?? {})) {
     if (typeof amount !== "number" || amount <= 0) continue;
-    anchorBalance += toAnchor(amount, rates.get(code as CurrencyCode) ?? 1);
+    anchorBalance += toAnchor(amount, await getCurrencyFxRate(db, code as CurrencyCode));
   }
   if (!fund.currencyBalances) anchorBalance = Math.max(0, fund.balance ?? 0);
   anchorBalance = Math.floor(anchorBalance);
