@@ -128,6 +128,7 @@ export async function queryCountryEconomy(db: Db, country: string) {
           "revenue.total": 1,
           "spending.total": 1,
           "economicFactors.inflationRate": 1,
+          "economicFactors.gdpGrowth": 1,
           investorConfidence: 1,
         },
       }
@@ -151,7 +152,13 @@ export async function queryCountryEconomy(db: Db, country: string) {
     typeof budgetInflation === "number" && Number.isFinite(budgetInflation)
       ? budgetInflation
       : (inflationHistory.at(-1)?.rate ?? null);
-  const latestGdpGrowth = gdpGrowthHistory.at(-1)?.rate ?? null;
+  // Same rule for growth: the budget figure is live (it moves at the :30 half
+  // tick too), the history is the hourly series.
+  const budgetGdpGrowth = budget?.economicFactors?.gdpGrowth;
+  const latestGdpGrowth =
+    typeof budgetGdpGrowth === "number" && Number.isFinite(budgetGdpGrowth)
+      ? budgetGdpGrowth
+      : (gdpGrowthHistory.at(-1)?.rate ?? null);
 
   // Anchored totals, matching the stock market page and the Economy page card.
   // The raw sum added currencies together. See lib/stockExchange/aggregate.

@@ -32,14 +32,20 @@ const MIN_ANNUAL_INFLATION_PERCENT = -100;
  * clamped, which keeps the factor strictly positive.
  */
 export function householdPriceTurnFactor(
-  annualInflationPercent: number | null | undefined
+  annualInflationPercent: number | null | undefined,
+  stepFraction = 1
 ): number {
   const inflation =
     typeof annualInflationPercent === "number" && Number.isFinite(annualInflationPercent)
       ? Math.max(MIN_ANNUAL_INFLATION_PERCENT, annualInflationPercent)
       : 0;
   const annualFactor = 1 + (HOUSEHOLD_PRICE_INFLATION_PASSTHROUGH * inflation) / 100;
-  return Math.pow(annualFactor, 1 / TURNS_PER_YEAR);
+  // A fraction of a turn takes the same share of the turn's exponent, so two
+  // halves at one CPI reading compound to exactly one turn.
+  return Math.pow(
+    annualFactor,
+    stepFraction === 1 ? 1 / TURNS_PER_YEAR : stepFraction / TURNS_PER_YEAR
+  );
 }
 
 /**
@@ -53,13 +59,15 @@ export function householdPriceTurnFactor(
  */
 export function advanceHouseholdPriceIndex(
   previousIndex: number | null | undefined,
-  annualInflationPercent: number | null | undefined
+  annualInflationPercent: number | null | undefined,
+  /** Share of a turn to advance; the :30 half tick passes 0.5. */
+  stepFraction = 1
 ): number {
   const prior =
     typeof previousIndex === "number" && Number.isFinite(previousIndex) && previousIndex > 0
       ? previousIndex
       : HOUSEHOLD_PRICE_INDEX_BASELINE;
-  const next = prior * householdPriceTurnFactor(annualInflationPercent);
+  const next = prior * householdPriceTurnFactor(annualInflationPercent, stepFraction);
 
   // The turn factor is always positive, but a long deflationary run could still
   // underflow a tiny prior. Never write a zero, negative or non-finite level.
