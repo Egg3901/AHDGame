@@ -176,6 +176,8 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
             return !(operand as unknown[]).some((o) => equalsAny(value, o));
           case "$exists":
             return (value !== undefined) === Boolean(operand);
+          case "$size":
+            return Array.isArray(value) && value.length === operand;
           case "$regex": {
             if (typeof value !== "string") return false;
             const flags = typeof condition["$options"] === "string" ? condition["$options"] : "";

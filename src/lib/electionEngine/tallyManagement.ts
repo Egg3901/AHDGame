@@ -210,9 +210,9 @@ export async function accumulateVoteTurn(
   const election =
     options?.election ?? (await db.collection<Election>("elections").findOne({ _id: electionId }));
   if (!election || !election.endTime) return;
+  // Ranked ballots split cleanly: each half casts its own first-preference
+  // increments, and identical rankings merge by adding weights.
   const isPrStv = tally.countingMethod === "pr_stv";
-  // Ranked ballots are drawn whole per turn; they keep the hourly path.
-  if (isPrStv && slicePart === "early") return;
   if (isPrStv) {
     if (election.countryId !== "IE" || !["dail", "localCouncil"].includes(election.electionType))
       throw new Error("Ranked PR-STV is supported only for Irish Dail and local council races");
@@ -568,12 +568,10 @@ export async function accumulateVoteTurn(
     election.countryId === "RU" &&
     election.electionType === "federationCouncilMember" &&
     election.russianCouncilRound != null;
-  // Bespoke national ballot systems keep the hourly path.
-  if (
-    slicePart === "early" &&
-    (isBgOrdinary || isHuBound || isJapanMixed || isBgFounding || isBoundDuma || isBoundCouncil)
-  )
-    return;
+  // Bespoke national ballot systems split like the rest: every per-slice
+  // clamp below is against the cumulative register (so two halves clamp to
+  // the same total as one slice), and their per-district, list and ledger
+  // maps add each half's increments.
   const alreadyCast = isPrStv
     ? Object.values(tally.totalVotes).reduce((sum, votes) => sum + votes, 0)
     : isBoundCouncil
@@ -1226,14 +1224,24 @@ export async function accumulateVoteTurn(
     $push: { turnSnapshots: snapshot } as never,
   };
   // STV totals and original ballots must commit together, and a concurrent
-  // replay must not overwrite another turn's ballot receipt.
+  // replay must not overwrite another turn's ballot receipt. The rest of a
+  // split turn lands only beside that turn's early half.
   const tallyFilter = isPrStv
-    ? {
-        electionId,
-        finalized: false,
-        "turnSnapshots.turn": { $ne: turnNumber },
-        turnSnapshots: { $size: tally.turnSnapshots.length },
-      }
+    ? slicePart === "rest"
+      ? {
+          electionId,
+          finalized: false,
+          turnSnapshots: {
+            $size: tally.turnSnapshots.length,
+            $not: { $elemMatch: { turn: turnNumber, slicePart: { $ne: "early" } } },
+          },
+        }
+      : {
+          electionId,
+          finalized: false,
+          "turnSnapshots.turn": { $ne: turnNumber },
+          turnSnapshots: { $size: tally.turnSnapshots.length },
+        }
     : { electionId };
   if (options?.tallyWrites) {
     options.tallyWrites.push({ updateOne: { filter: tallyFilter, update: tallyUpdate } });
