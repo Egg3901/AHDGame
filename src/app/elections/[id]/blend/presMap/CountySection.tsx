@@ -1,5 +1,6 @@
 "use client";
 
+import { useBlendGround } from "@/components/blend/useBlendGround";
 import { useEffect, useMemo, useState } from "react";
 import { BLEND, FONT } from "@/components/blend/tokens";
 import {
@@ -44,6 +45,7 @@ export function CountySection({ electionId, stateId, turn, candidate }: CountySe
     dir: "desc",
   });
   const [hovered, setHovered] = useState<string | null>(null);
+  const ground = useBlendGround();
 
   const cached = cachedCounties(cacheKey);
   const load: CountyLoad = cached
@@ -69,8 +71,8 @@ export function CountySection({ electionId, stateId, turn, candidate }: CountySe
 
   const readyData = load.status === "ready" ? load.data : null;
   const rows = useMemo(
-    () => (readyData ? buildCountyRows(readyData, candidate) : []),
-    [readyData, candidate]
+    () => (readyData ? buildCountyRows(readyData, candidate, ground) : []),
+    [readyData, candidate, ground]
   );
   const sorted = useMemo(() => sortCountyRows(rows, sort.key, sort.dir), [rows, sort]);
 
@@ -94,8 +96,7 @@ export function CountySection({ electionId, stateId, turn, candidate }: CountySe
           <path
             key={row.id}
             d={row.path}
-            fill={row.fill}
-            stroke={hovered === row.id ? BLEND.ink : BLEND.page}
+            style={{ fill: row.fill, stroke: hovered === row.id ? BLEND.ink : BLEND.page }}
             strokeWidth={hovered === row.id ? 1.6 : 0.5}
             vectorEffect="non-scaling-stroke"
             onPointerEnter={() => setHovered(row.id)}

@@ -5,7 +5,7 @@
  * colour once the state is projected.
  */
 
-import { BLEND } from "@/components/blend/tokens";
+import { BLEND, BLEND_HEX } from "@/components/blend/tokens";
 import { readableInk, shadeColorForTier } from "@/lib/elections/marginTierShade";
 import type { ElectionResultsResponse, ResultsUnit } from "@/lib/elections/liveResults/types";
 import type {
@@ -56,13 +56,13 @@ export function paintFor(
         overlay: { kind: "hatch", base: FOG_NIGHT_FILL, colors: [GREY_HATCH] },
       };
     case "lean": {
-      const tint = shadeColorForTier(leaderColor, "lean", BLEND.page);
+      const tint = shadeColorForTier(leaderColor, "lean", BLEND_HEX.page);
       return { fill: tint, overlay: { kind: "hatch", base: tint, colors: [leaderColor] } };
     }
     case "stripe": {
       const colors = [leaderColor, runnerUpColor ?? GREY_HATCH];
       return {
-        fill: shadeColorForTier(leaderColor, "tossup", BLEND.page),
+        fill: shadeColorForTier(leaderColor, "tossup", BLEND_HEX.page),
         overlay: { kind: "stripe", base: leaderColor, colors },
       };
     }

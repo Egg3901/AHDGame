@@ -27,6 +27,7 @@ const ALLOWED_WITHOUT_CHARACTER = [
   "/create-character",
   "/profile",
   "/help",
+  "/contests",
   "/guides",
   "/feedback",
   "/admin",

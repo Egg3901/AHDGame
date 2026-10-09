@@ -14,7 +14,6 @@ import {
   getStateSectorSpecializationMarginBonus,
   calculateWorkers,
   getDominanceRegulatoryBurden,
-  getExpropriationRiskMarginModifier,
   softCapEffectiveMargin,
 } from "@/lib/constants/corporations";
 import type { CorporationType, StateMetricValues } from "@/lib/constants/corporations";
@@ -24,10 +23,11 @@ import {
 } from "@/lib/constants/techTree/selectors";
 import { computeBlendedMarginModifiers } from "@/lib/constants/commodities";
 import type { CommodityType } from "@/lib/constants/commodities";
-import { computeSoeEfficiencyPenalty } from "@/lib/nationalization/soeEfficiency";
+import {
+  computeOwnershipMarginTerms,
+  roundOwnershipTerms,
+} from "@/lib/nationalization/ownershipMarginTerms";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
-import { sociMultiplier } from "@/lib/nationalization/concentration";
-import { resolveSectorMandate } from "@/lib/nationalization/soeMandates";
 import { getRevenueMultiplier, getInputMultiplier } from "@/lib/utils/productionPolicy";
 import { priceRealizationFactor } from "@/lib/market/priceRealization";
 import { isLabourWagesEnabled } from "@/lib/labour/featureFlag";
@@ -228,6 +228,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
     macroByCountry,
     sociByCountry,
     investorConfidenceByCountry,
+    economicModelByCountry,
     gameState,
   } = stateCtx;
   const {
@@ -465,28 +466,22 @@ export function buildSectorDetails(ctx: SectorRowContext) {
     const financialRevenue =
       (sectorRealizedRevenueLocal ??
         sectorRevenueLocal * revenueMultiplier * revenueRealizationRatio) + freightIncome;
-    // Dynamic SOE efficiency (spec §11.3) — same shared function as the turn math
-    // and the budget estimate, so display stays aligned. Private corps get 0.
-    const soeMandate = resolveSectorMandate(corporation, sector);
-    const soeEfficiency = isStateOwned(corporation)
-      ? computeSoeEfficiencyPenalty({
-          corruptionIndex: metrics.fullMetrics?.governance?.corruptionIndex?.value ?? null,
-          governmentTransparency:
-            metrics.fullMetrics?.governance?.governmentTransparency?.value ?? null,
-          priceControlled: soeMandate.priceControlled === true,
-          employmentGuaranteed: soeMandate.employmentGuaranteed === true,
-          concentrationMultiplier: sociMultiplier(
-            sociByCountry.get(corporation.countryOwnerId ?? "") ?? 0
-          ),
-        })
-      : 0;
-    // Expropriation-risk drag (spec §12.4 feed 1) — private corps only, same fn
-    // and per-country confidence the turn uses.
-    const expropriationRisk = isStateOwned(corporation)
-      ? 0
-      : getExpropriationRiskMarginModifier(
-          investorConfidenceByCountry.get(sectorCountryId) ?? null
-        );
+    // Ownership terms the turn applies inside the margin stack: SOE efficiency
+    // (spec §11.3), expropriation risk (spec §12.4 feed 1), economic-model
+    // alignment (§6.2). Same shared functions and inputs as the turn.
+    const ownershipTerms = computeOwnershipMarginTerms({
+      corporation,
+      sector,
+      sectorType: st,
+      corruptionIndex: metrics.fullMetrics?.governance?.corruptionIndex?.value ?? null,
+      governmentTransparency:
+        metrics.fullMetrics?.governance?.governmentTransparency?.value ?? null,
+      ownerSoci: sociByCountry.get(corporation.countryOwnerId ?? "") ?? 0,
+      investorConfidence: investorConfidenceByCountry.get(sectorCountryId),
+      economicModel: economicModelByCountry.get(sectorCountryId),
+    });
+    const soeEfficiency = ownershipTerms.soeEfficiencyModifier;
+    const expropriationRisk = ownershipTerms.expropriationRiskModifier;
     const techEffects =
       currentYear != null
         ? getSectorTechEffectsForYear(
@@ -499,7 +494,11 @@ export function buildSectorDetails(ctx: SectorRowContext) {
         : getSectorTechEffects(techCorpView, st, sector.industryModel, sector.mediaDiscriminator);
     const techMarginBonus = techEffects.marginBonusPp;
     const stackMargin = softCapEffectiveMargin(
-      mods.effective + soeEfficiency + expropriationRisk + techMarginBonus
+      mods.effective +
+        soeEfficiency +
+        expropriationRisk +
+        ownershipTerms.economicModelAlignmentModifier +
+        techMarginBonus
     );
     // The margin the engine ACTUALLY applied last turn. Under plants the stored
     // field is an OUTPUT of the physical P&L (sectorTurn.ts P3.5:
@@ -750,6 +749,7 @@ export function buildSectorDetails(ctx: SectorRowContext) {
       techMarginBonus: techMarginBonus !== 0 ? techMarginBonus : null,
       marketSharePercent: sectorMarketSharePct,
       ...mods,
+      ...roundOwnershipTerms(ownershipTerms),
       commoditySupplyDemandBlendPct,
       profit: Math.round(profit),
       workers:

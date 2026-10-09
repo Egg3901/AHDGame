@@ -824,6 +824,17 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
                   );
                 })}
 
+                {!user?.singleplayer && (
+                  <Link
+                    href="/contests"
+                    aria-current={isNavActive(pathname, "/contests") ? "page" : undefined}
+                    className={navTabClassName(isNavActive(pathname, "/contests"))}
+                  >
+                    <NavIcon name="Contests" />
+                    <NavItemLabel>{t("common.contests")}</NavItemLabel>
+                  </Link>
+                )}
+
                 {/* Help — classic-nav order: after World */}
                 <div
                   className="relative shrink-0"

@@ -1,5 +1,7 @@
 import type { Db } from "mongodb";
 import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
+import { loadEconomicModelsByCountry } from "@/lib/economicModels/queries";
+import type { EconomicModelState } from "@/lib/constants/economicModels";
 import type {
   Corporation,
   CorporateSector,
@@ -26,6 +28,8 @@ export interface StateViewContext {
   investorConfidenceByCountry: Map<string, number | undefined>;
   /** Per-country SOCI for the SOE overreach term: same source the turn reads. */
   sociByCountry: Map<string, number>;
+  /** Per-country lagged economic model for the alignment margin term. */
+  economicModelByCountry: Map<string, EconomicModelState>;
   federalBudgets: FederalBudget[];
   gameState: GameState | null;
 }
@@ -98,23 +102,34 @@ export async function loadStateViewContext(
   const stateCountryMap = new Map(allStates.map((s) => [s._id, s.countryId]));
 
   const countryIds = [...new Set(states.map((s) => s.countryId))];
-  const federalBudgets = await db
-    .collection<FederalBudget>("federalBudget")
-    .find(
-      { countryId: { $in: countryIds } },
-      {
-        projection: {
-          countryId: 1,
-          "economicFactors.inflationRate": 1,
-          debtToGdpRatio: 1,
-          surplus: 1,
-          gdp: 1,
-          "taxRates.domesticCorporateTax": 1,
-          "taxRates.foreignCorporateTax": 1,
-        },
-      }
-    )
-    .toArray();
+  if (corporation.countryOwnerId && !countryIds.includes(corporation.countryOwnerId)) {
+    countryIds.push(corporation.countryOwnerId);
+  }
+  const [federalBudgets, economicModelByCountry] = await Promise.all([
+    db
+      .collection<FederalBudget>("federalBudget")
+      .find(
+        { countryId: { $in: countryIds } },
+        {
+          projection: {
+            countryId: 1,
+            "economicFactors.inflationRate": 1,
+            debtToGdpRatio: 1,
+            surplus: 1,
+            gdp: 1,
+            "taxRates.domesticCorporateTax": 1,
+            "taxRates.foreignCorporateTax": 1,
+            // Read by the expropriation-risk and SOE overreach margin terms.
+            // Missing from this projection, both maps were always empty and
+            // the corp page computed those terms as zero.
+            investorConfidence: 1,
+            stateOwnershipConcentration: 1,
+          },
+        }
+      )
+      .toArray(),
+    loadEconomicModelsByCountry(db, countryIds),
+  ]);
 
   const macroByCountry = new Map<string, MacroEconomicValues>(
     federalBudgets.map((b) => [
@@ -165,6 +180,7 @@ export async function loadStateViewContext(
     macroByCountry,
     investorConfidenceByCountry,
     sociByCountry,
+    economicModelByCountry,
     federalBudgets,
     gameState,
   };

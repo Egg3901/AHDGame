@@ -83,7 +83,7 @@ export interface InputsCostResult {
  *
  * Reachable books in partitioned markets can print far above the world
  * (live US iron ~3.27 vs world ~0.77). The input bill now prices through the
- * same realization damping revenue does (`ratio^0.5`, max 1.5x, see
+ * same realization damping revenue does (`ratio^0.5`, max 2x, see
  * `computeInputsCost`), so capping the ratio here still matters: it lowers the
  * value fed into that factor rather than a raw linear price. Taking the cheaper
  * of the two keeps cheap-local discounts (the original overlay) without
@@ -226,7 +226,7 @@ export function computeInputsCost(args: {
     const ratio = priceRatios.get(key);
     const premium = statePremiums?.get(key);
     // Buy-sell symmetry: the bill prices through the SAME realization function
-    // revenue does (clamp(ratio^0.5, 0.7, 1.5), priceRealization.ts). Before
+    // revenue does (clamp(ratio^0.5, 0.7, MAX), priceRealization.ts). Before
     // this, a seller realized at most 1.5x base on a shortage while paying raw
     // linear ratios (2.5-3x) for the same shortage on the buy side, so any
     // recipe with fat input rates went structurally negative the moment the

@@ -2,10 +2,18 @@ import type { Db, ObjectId } from "mongodb";
 import type { ActivityLog, Character, User } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 
-/** Each currently active player supports this many party NPPs. */
-export const NPP_SLOTS_PER_ACTIVE_MEMBER = 5;
-/** No party may recruit above this total, regardless of its membership size. */
-export const PARTY_NPP_HARD_CAP = 25;
+/**
+ * NPP slots each active member adds, with gentle diminishing returns and no
+ * ceiling. Small parties get the full 5 per member; larger parties keep growing
+ * at a slower rate so one player cannot field an army, but a big party is never
+ * flat-capped. Tiers apply in order: `upTo` is the last member count in a tier.
+ */
+export const NPP_CAPACITY_TIERS: ReadonlyArray<{ upTo: number; slotsPerMember: number }> = [
+  { upTo: 5, slotsPerMember: 5 },
+  { upTo: 10, slotsPerMember: 4 },
+  { upTo: 20, slotsPerMember: 3 },
+  { upTo: Number.POSITIVE_INFINITY, slotsPerMember: 2 },
+];
 /** Activity must be recent enough to count toward NPP capacity. */
 export const NPP_ACTIVE_MEMBER_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 /** A member needs more than a login or a single click to support NPP capacity. */
@@ -17,7 +25,16 @@ export interface PartyNppCapacity {
 }
 
 export function calculatePartyNppCapacity(activeMemberCount: number): number {
-  return Math.min(PARTY_NPP_HARD_CAP, Math.max(0, activeMemberCount) * NPP_SLOTS_PER_ACTIVE_MEMBER);
+  const members = Math.max(0, Math.floor(activeMemberCount));
+  let capacity = 0;
+  let counted = 0;
+  for (const tier of NPP_CAPACITY_TIERS) {
+    if (counted >= members) break;
+    const inTier = Math.min(members, tier.upTo) - counted;
+    capacity += inTier * tier.slotsPerMember;
+    counted += inTier;
+  }
+  return capacity;
 }
 
 /**
@@ -95,5 +112,5 @@ export function partyNppCapacityError(
   partyNppCount: number
 ): string | null {
   if (partyNppCount < capacity.maxNpps) return null;
-  return `Party NPP capacity reached (${partyNppCount}/${capacity.maxNpps}). Capacity is 5 NPPs per active member, up to ${PARTY_NPP_HARD_CAP}; active members need 2 game actions in the last 14 days.`;
+  return `Party NPP capacity reached (${partyNppCount}/${capacity.maxNpps}). Capacity is 5 NPPs for each of the first 5 active members, 4 each for the next 5, 3 each up to 20, then 2 each; active members need 2 game actions in the last 14 days.`;
 }

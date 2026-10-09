@@ -6,6 +6,7 @@ import {
   ensureRUNationalitiesElections,
   ensureRURepublicSovietElections,
   ensureRUSupremeSovietElections,
+  ensureRUUnionCongressElections,
 } from "./elections/perpetual";
 
 /**
@@ -37,6 +38,7 @@ const phases: CountryElectionPhaseEntry[] = [
   { name: "ruNationalitiesElections", fn: ensureRUNationalitiesElections },
   { name: "ruRepublicSovietElections", fn: ensureRURepublicSovietElections },
   { name: "ruGovernorElections", fn: ensureRUGovernorElections },
+  { name: "ruUnionCongressElections", fn: ensureRUUnionCongressElections },
 ];
 
 export const RU_ELECTIONS: CountryElections = {
@@ -56,4 +58,5 @@ export {
   ensureRUNationalitiesElections,
   ensureRURepublicSovietElections,
   ensureRUSupremeSovietElections,
+  ensureRUUnionCongressElections,
 };

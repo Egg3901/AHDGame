@@ -3,7 +3,7 @@ import type { ElectionDetail, VoteTurnSnapshot } from "../../components/Election
 import { TIER_BANDS } from "../generalBlendViewModel";
 import { classifyMarginTier } from "@/lib/elections/generalViewModel";
 import { shadeColorForTier } from "@/lib/elections/marginTierShade";
-import { BLEND } from "@/components/blend/tokens";
+import { BLEND_HEX as BLEND } from "@/components/blend/tokens";
 import {
   buildPresMapModel,
   computePollingChange,

@@ -28,10 +28,10 @@ import BackButton from "@/components/BackButton";
 import { PrimaryBlendView } from "../blend/PrimaryBlendView";
 import { GeneralBlendView } from "../blend/GeneralBlendView";
 import { presidentialTitle } from "../blend/PresidentialStage";
+import { presidentialResultsLive } from "../blend/liveState";
 import { ResultsBlendView } from "../blend/ResultsBlendView";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
 import { BLEND } from "@/components/blend/tokens";
-import { BlendScope } from "@/components/blend/BlendScope";
 import { NightBroadcast } from "../night/NightBroadcast";
 import { useNightWatch } from "../night/useNightBroadcast";
 import { isNightWindow } from "../night/nightModel";
@@ -468,22 +468,6 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // without the field fall back to 1.
   const advancingCount = election.primaryAdvanceCount ?? 1;
 
-  // Previous/Next for the three Blend screens below.
-  //
-  // Each of them is an early return that bypasses the legacy layout at the
-  // bottom of this file, which is the only place ElectionNavigation was ever
-  // rendered. That is how presidential races lost their history: the buttons
-  // went with the rebuild, and /elections lists only upcoming and active races,
-  // so a concluded cycle had no route in at all.
-  //
-  // Toned for the dark Blend page rather than reusing the light card styling
-  // the legacy layout gives it.
-  const blendNav = (
-    <div className="mx-auto max-w-6xl px-4 pt-4 sm:px-6" style={{ color: BLEND.ink }}>
-      <ElectionNavigation election={election} />
-    </div>
-  );
-
   const currentResults = results?.election.id === election.id ? results : null;
 
   // The presidential stage's left rail opens with the cycle navigation, the
@@ -491,7 +475,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // the old page header below the stage, which the desktop no longer renders.
   const stageRailTop = (
     <div>
-      <ElectionNavigation election={election} />
+      <ElectionNavigation election={election} showLiveLink={presidentialResultsLive(election)} />
       {canEnter &&
         (election.bulgarianFoundingRound?.round === 1 ||
           Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
@@ -544,12 +528,12 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     </div>
   );
 
-  // Below the desktop stage only what the stage does not already show: the
-  // admin tools, for admins. Everything else under "Also on this race" (the old
-  // header, a second map, the trends, the schedule, a second results table) is
-  // the phone layout's, and stays there.
+  // Below the stage only what the stage does not already show: the admin
+  // tools, for admins. The old "Also on this race" block (the old header, a
+  // second map, the trends, the schedule, a second results table) repeated the
+  // stage and is gone.
   const desktopTail = election.isAdmin ? (
-    <div className="mx-auto hidden max-w-7xl px-4 pb-10 sm:px-6 lg:block lg:px-8">
+    <div className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
       <AdminSection
         electionId={id}
         electionType={election.electionType}
@@ -564,11 +548,11 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     </div>
   ) : null;
 
-  // The primary's campaign tooling is not on the stage anywhere, so the
-  // desktop keeps it below the field.
+  // The primary's campaign tooling is not on the stage anywhere, so it stays
+  // below the field.
   const primaryCampaignTools =
     election.countryId === "US" ? (
-      <div className="mx-auto hidden max-w-7xl px-4 pb-12 sm:px-6 lg:block lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
         {!!election.myCharId && (
           <section id="state-org" className="mt-6 scroll-mt-6">
             <StateOrganizationTab showHubLink />
@@ -600,7 +584,6 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   if (election.electionType === "president" && localIsEnded && currentResults) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
-        <div className="lg:hidden">{blendNav}</div>
         {confirmDialogNode}
         <ResultsBlendView
           data={currentResults}
@@ -610,30 +593,6 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           stageNav={stageRailTop}
         />
 
-        <div className="lg:hidden">
-          <BlendScope title="Also on this race">
-            <GeneralPhaseView
-              election={election}
-              electionId={id}
-              localInPrimary={localInPrimary}
-              localIsEnded={localIsEnded}
-              amInRace={amInRace}
-              onSuccess={fetchElection}
-            />
-
-            <AdminSection
-              electionId={id}
-              electionType={election.electionType}
-              isAdmin={election.isAdmin}
-              adminOpen={adminOpen}
-              localInPrimary={localInPrimary}
-              localIsEnded={localIsEnded}
-              candidates={election.allCandidates}
-              onToggleAdmin={() => setAdminOpen((o) => !o)}
-              onSuccess={fetchElection}
-            />
-          </BlendScope>
-        </div>
         {desktopTail}
       </div>
     );
@@ -651,7 +610,6 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   ) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
-        <div className="lg:hidden">{blendNav}</div>
         {confirmDialogNode}
         <GeneralBlendView
           election={election}
@@ -666,81 +624,6 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             per-ticket tally and the deadline strip all appear up there, so the
             blocks below are asked to leave them out rather than print the same
             standing twice on one page. */}
-        <div className="lg:hidden">
-          <BlendScope
-            title="Also on this race"
-            lede="Trends, state drivers, turnout and the factor ledger."
-          >
-            {canEnter &&
-              (election.bulgarianFoundingRound?.round === 1 ||
-                Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
-                <BgFoundingConstituencyPicker
-                  allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
-                  regionId={election.state}
-                  value={huDistrictId}
-                  onChange={setHuDistrictId}
-                />
-              )}
-            {canEnter && election.hungarianAssemblyRound?.round === 1 && (
-              <Hu1991ConstituencyPicker
-                allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
-                regionId={election.state}
-                value={huDistrictId}
-                onChange={setHuDistrictId}
-              />
-            )}
-            <ElectionHeader
-              election={election}
-              electionYear={electionYear}
-              localInPrimary={localInPrimary}
-              localIsEnded={localIsEnded}
-              localIsUpcoming={localIsUpcoming}
-              canEnter={canEnter}
-              canWithdraw={canWithdraw}
-              actionLoading={actionLoading}
-              onEnter={handleEnter}
-              onWithdraw={handleWithdraw}
-            />
-
-            <GeneralPhaseView
-              election={election}
-              electionId={id}
-              localInPrimary={localInPrimary}
-              localIsEnded={localIsEnded}
-              amInRace={amInRace}
-              onSuccess={fetchElection}
-              showCollegeSummary={false}
-              showNationalMood={false}
-              showDemocraticHealth={false}
-              tabbedDetail
-            />
-
-            <ElectionScheduleCard
-              election={election}
-              localIsUpcoming={localIsUpcoming}
-              localInPrimary={localInPrimary}
-              localIsEnded={localIsEnded}
-              showStatusStrip={false}
-            />
-
-            <AdminSection
-              electionId={id}
-              electionType={election.electionType}
-              isAdmin={election.isAdmin}
-              adminOpen={adminOpen}
-              localInPrimary={localInPrimary}
-              localIsEnded={localIsEnded}
-              candidates={election.allCandidates}
-              onToggleAdmin={() => setAdminOpen((o) => !o)}
-              onSuccess={fetchElection}
-            />
-
-            {/* Campaign operations used to close this block as their own list.
-              They are columns of the tickets table in the hero above now, so
-              each ticket's funds, actions, levels and campaign link sit beside
-              its standing. */}
-          </BlendScope>
-        </div>
         {desktopTail}
       </div>
     );
@@ -757,7 +640,6 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   ) {
     return (
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
-        <div className="lg:hidden">{blendNav}</div>
         {confirmDialogNode}
         <PrimaryBlendView
           election={election}
@@ -766,81 +648,6 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           stageNav={stageRailTop}
         />
 
-        <div className="lg:hidden">
-          <BlendScope
-            title="Also on this race"
-            lede="Filing, the state map, and your campaign operations."
-          >
-            {canEnter &&
-              (election.bulgarianFoundingRound?.round === 1 ||
-                Boolean(election.bulgarianFoundingRound?.newNominationDistrictIds?.length)) && (
-                <BgFoundingConstituencyPicker
-                  allowedDistrictIds={election.bulgarianFoundingRound?.newNominationDistrictIds}
-                  regionId={election.state}
-                  value={huDistrictId}
-                  onChange={setHuDistrictId}
-                />
-              )}
-            {canEnter && election.hungarianAssemblyRound?.round === 1 && (
-              <Hu1991ConstituencyPicker
-                allowedDistrictIds={election.hungarianAssemblyRound?.vacancyDistrictIds}
-                regionId={election.state}
-                value={huDistrictId}
-                onChange={setHuDistrictId}
-              />
-            )}
-            <ElectionHeader
-              election={election}
-              electionYear={electionYear}
-              localInPrimary={localInPrimary}
-              localIsEnded={localIsEnded}
-              localIsUpcoming={localIsUpcoming}
-              canEnter={canEnter}
-              canWithdraw={canWithdraw}
-              actionLoading={actionLoading}
-              onEnter={handleEnter}
-              onWithdraw={handleWithdraw}
-            />
-
-            {/* The primary masthead already reads "CLOSES IN N TURNS", so the
-              strip restated the countdown in a box of its own, exactly as it
-              did on the general screen. */}
-            <ElectionScheduleCard
-              election={election}
-              localIsUpcoming={localIsUpcoming}
-              localInPrimary={localInPrimary}
-              localIsEnded={localIsEnded}
-              showStatusStrip={false}
-            />
-
-            <PrimaryMapPills election={election} activeParties={activeParties} />
-
-            <AdminSection
-              electionId={id}
-              electionType={election.electionType}
-              isAdmin={election.isAdmin}
-              adminOpen={adminOpen}
-              localInPrimary={localInPrimary}
-              localIsEnded={localIsEnded}
-              candidates={election.allCandidates}
-              onToggleAdmin={() => setAdminOpen((o) => !o)}
-              onSuccess={fetchElection}
-            />
-
-            {election.countryId === "US" && !!election.myCharId && (
-              <section id="state-org" className="mt-6 scroll-mt-6">
-                <StateOrganizationTab showHubLink />
-              </section>
-            )}
-
-            {election.countryId === "US" && (
-              <>
-                <CampaignsListPanel electionId={id} />
-                {!!election.myCharId && <CampaignManagerTab electionId={id} />}
-              </>
-            )}
-          </BlendScope>
-        </div>
         {desktopTail}
         {primaryCampaignTools}
       </div>

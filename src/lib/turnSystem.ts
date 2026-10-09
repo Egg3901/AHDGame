@@ -72,6 +72,7 @@ import {
   getSingleplayerPhasePredicate,
 } from "@/simulation/phases/singleplayerPhases";
 import { runPostTurnIntegrityScans } from "@/lib/turn/postTurnScans";
+import { runContestsAfterTurn } from "@/lib/contests/engine";
 import { getAnomalyScanCadencePredicate } from "@/simulation/phases/anomalyScanCadence";
 import { isSingleplayer } from "@/lib/singleplayer";
 import { reconcileFederalBudgetInvariants } from "@/lib/budget/budgetInvariants";
@@ -715,6 +716,8 @@ async function processTurnImpl(
       void runPostTurnIntegrityScans(db, context.newTurn).catch((err) =>
         console.warn("[post-turn] integrity scans failed to start", err)
       );
+      // Weekly contests read the committed turn's values; never blocks the turn.
+      void runContestsAfterTurn(db, context.newTurn);
     }
 
     emit({
