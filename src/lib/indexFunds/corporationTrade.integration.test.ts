@@ -249,7 +249,7 @@ describe("corporation fund accounting", () => {
       else
         await processIndexFundDividendsBatch(
           db,
-          [{ fundId, corporationId, sharesHeld: 1, amountAnchor: 1000 }],
+          [{ fundId, corporationId, shares: 1, amountAnchor: 1000 }],
           5
         );
       expect(memory.collection("corporations").docs[0].liquidCapital).toBe(100500);

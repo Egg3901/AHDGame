@@ -58,7 +58,7 @@ describe("fund purchase dialog", () => {
       target: { value: "123456789012345678901234" },
     });
     fireEvent.change(screen.getByLabelText("Units (whole numbers)"), { target: { value: "2" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Subscribe", exact: true }).at(-1)!);
+    fireEvent.click(screen.getAllByRole("button", { name: "Subscribe" }).at(-1)!);
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
     const post = fetch.mock.calls.find(([, init]) => init?.method === "POST");
     expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({
@@ -89,7 +89,7 @@ describe("fund purchase dialog", () => {
       expect(screen.getByText("Your cash").nextElementSibling?.textContent).toBe("$500")
     );
     fireEvent.change(screen.getByLabelText("Units (whole numbers)"), { target: { value: "1.5" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Subscribe", exact: true }).at(-1)!);
+    fireEvent.click(screen.getAllByRole("button", { name: "Subscribe" }).at(-1)!);
     expect(screen.getByRole("alert").textContent).toContain("whole unit");
   });
 });
@@ -100,6 +100,7 @@ describe("fund holdings pagination", () => {
       <BondHoldingsPanel
         holdings={Array.from({ length: 12 }, (_, i) => ({
           bondId: `bond-${i}`,
+          sequentialId: i,
           issuerName: `Issuer ${i}`,
           units: 1,
           couponRate: 5,
@@ -123,6 +124,7 @@ describe("fund holdings pagination", () => {
   it("paginates actual and target constituents independently without changing portfolio totals", () => {
     const holdings = Array.from({ length: 12 }, (_, i) => ({
       corporationId: `corp-${i}`,
+      sequentialId: i,
       corporationName: `Company ${i}`,
       tickerSymbol: `C${i}`,
       shares: 1,
