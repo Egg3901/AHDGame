@@ -33,7 +33,9 @@ export function classifySupportRuntime(
   const tablet = /iPad|Tablet|Android(?!.*Mobile)/i.test(text);
   const mobile = ios || android || /Mobile/i.test(text);
   const desktop = /Mozilla|Chrome|Firefox|Safari|Electron/i.test(text);
-  const version = text.match(/\bAHDClient(?:-Mobile)?\/(\d+\.\d+\.\d+(?:[.+-][\w.-]+)?)/i)?.[1];
+  const version = text.match(
+    /\bAHDClient(?:-(?:Mobile|Desktop))?\/(\d+\.\d+\.\d+(?:[.+-][\w.-]+)?)/i
+  )?.[1];
   return {
     platform: ios
       ? "ios"
@@ -95,10 +97,22 @@ export function buildIntakeQuestions(
         ),
       }))
       .sort((a, b) => b.score - a.score);
-    const candidate = ranked[0]?.visit;
+    const suppliedPath = (text.match(/https?:\/\/[^\s<>()]+/gi) ?? [])
+      .map((value) => {
+        try {
+          const url = new URL(value);
+          return /^(?:www\.)?ahousedividedgame\.com$/i.test(url.hostname)
+            ? sanitizeSupportPath(url.pathname)
+            : null;
+        } catch {
+          return null;
+        }
+      })
+      .find(Boolean);
+    const candidatePath = suppliedPath ?? ranked[0]?.visit.path;
     questions.push(
-      candidate
-        ? `It seems like you are reporting an issue that may affect a specific page. Is this the page you are having trouble with: <https://ahousedividedgame.com${candidate.path}>? If not, please send the correct game page or menu path.`
+      candidatePath
+        ? `It seems like you are reporting an issue that may affect a specific page. Is this the page you are having trouble with: <https://ahousedividedgame.com${candidatePath}>? If not, please send the correct game page or menu path.`
         : "Which game page or menu path are you having trouble with?"
     );
   }

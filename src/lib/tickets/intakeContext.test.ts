@@ -36,6 +36,11 @@ describe("ticket intake context", () => {
       clientVersion: "1.4.2",
     });
     expect(classifySupportRuntime("Mozilla Macintosh Mobile/15 Safari").platform).toBe("ios");
+    expect(classifySupportRuntime("Mozilla Windows AHDClient-Desktop/1.0.3")).toEqual({
+      platform: "desktop",
+      device: "desktop",
+      clientVersion: "1.0.3",
+    });
     expect(classifySupportRuntime(null)).toEqual({ platform: "unknown", device: "unknown" });
   });
   it("bounds, deduplicates and excludes stale visits and non-allowlisted fields", () => {
@@ -52,6 +57,18 @@ describe("ticket intake context", () => {
     expect(result).toHaveLength(5);
     expect(result[0].path).toBe("/market");
     expect(JSON.stringify(result)).not.toContain("secret");
+  });
+  it("prefers the reporter's game link over an inferred visit", () => {
+    expect(
+      buildIntakeQuestions(
+        "Button failed on https://ahousedividedgame.com/corporation/42?token=private",
+        [visit("/market")],
+        true
+      )[0]
+    ).toContain("/corporation/42>");
+    expect(
+      buildIntakeQuestions("https://evil.test/secret", [visit("/market")], true)[0]
+    ).not.toContain("evil.test");
   });
   it("asks every reporter to confirm platform and never claims unknown versions", () => {
     expect(buildIntakeQuestions("moderation", [], false)).toHaveLength(1);
