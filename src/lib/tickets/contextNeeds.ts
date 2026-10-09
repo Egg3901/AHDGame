@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { stripPlatformPrefix } from "./platform";
 
 /**
  * Creation-time missing-context inference for Discord support tickets.
@@ -47,17 +48,38 @@ export interface CreationContextInput {
   hasGameIdentity: boolean;
   /** Reporter corporation URL resolved at filing, if any. */
   corporationUrl?: string | null;
+  /**
+   * The page the reporter's recent visits point at (`suggestIntakePage`). The
+   * intake card already offers it for a one-tap confirm, so asking the player
+   * to paste a link as well is a question we have answered.
+   */
+  suggestedPagePath?: string | null;
+}
+
+function reportText(title: string, description: string): string {
+  return `${title || ""}\n${stripPlatformPrefix(description || "")}`.slice(0, 12_000);
+}
+
+/**
+ * True when the player's own words point at a page and carry no usable page
+ * link. Reads past the bot's platform line, whose labels ("web browser",
+ * "Mobile") would otherwise count as page words.
+ */
+export function reportMentionsPageWithoutLink(title: string, description: string): boolean {
+  const text = reportText(title, description);
+  if (!PAGE_WORDS.test(text)) return false;
+  const urls = text.match(URL_RE) || [];
+  return !urls.some(isUsefulPageUrl);
 }
 
 /** Which follow-up details are missing at filing time. Deterministic. */
 export function inferCreationContextNeeds(input: CreationContextInput): TicketContextNeed[] {
-  const text = `${input.title || ""}\n${input.description || ""}`.slice(0, 12_000);
+  const text = reportText(input.title, input.description);
   const needed: TicketContextNeed[] = [];
   if (!input.hasGameIdentity) needed.push("discord");
   if (CORP_WORDS.test(text) && !input.corporationUrl) needed.push("corporation");
-  if (PAGE_WORDS.test(text)) {
-    const urls = text.match(URL_RE) || [];
-    if (!urls.some(isUsefulPageUrl)) needed.push("page");
+  if (!input.suggestedPagePath && reportMentionsPageWithoutLink(input.title, input.description)) {
+    needed.push("page");
   }
   return needed;
 }
