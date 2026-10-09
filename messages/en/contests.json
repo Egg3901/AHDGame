@@ -1,0 +1,64 @@
+{
+  "contests": {
+    "title": "Contests",
+    "intro": "Weekly races between players. When a week ends, the leader of each contest wins {prize} in personal cash and a new round starts. New corporations and characters join at the start of the next round.",
+    "referralIntro": "The referral contest runs all iteration. The top three referrers earn Supporter benefits for the next iteration.",
+    "endsAt": "Round {round} ends",
+    "entrants": "{count, plural, =0 {No entries yet} one {# entry} other {# entries}}",
+    "noRound": "The next round opens after the coming turn.",
+    "noLeaders": "No one is ahead yet. Standings update every turn.",
+    "rank": "#",
+    "entry": "Entry",
+    "score": "Change",
+    "yourStanding": "You are #{rank} of {count}",
+    "notEntered": "You have no entry this round.",
+    "signInToTrack": "Sign in to see where you stand.",
+    "kinds": {
+      "corp_growth_small": {
+        "title": "Small business growth",
+        "rules": "Percent growth in market cap for player-run corporations in the smaller half of the field. Capital you inject during the round does not count."
+      },
+      "corp_growth_large": {
+        "title": "Big business growth",
+        "rules": "Percent growth in market cap for player-run corporations in the larger half of the field. Capital you inject during the round does not count."
+      },
+      "influence_gain": {
+        "title": "National Influence",
+        "rules": "Most National Influence gained during the round."
+      },
+      "approval_gain": {
+        "title": "Government approval",
+        "rules": "Most approval points gained by a government led by a player. The same leader must hold office for the whole round."
+      },
+      "referrals": {
+        "title": "Referrals",
+        "rules": "Players you invite who go on to create a character."
+      }
+    },
+    "scores": {
+      "percent": "{value}%",
+      "influence": "{value} NI",
+      "approval": "{value} pts",
+      "referrals": "{count, plural, one {# referral} other {# referrals}}"
+    },
+    "referrals": {
+      "since": "Counting since",
+      "notRunning": "The referral contest is between iterations. It restarts soon.",
+      "yourCount": "{count, plural, =0 {You have no referrals this iteration yet.} one {You have # referral this iteration.} other {You have # referrals this iteration.}}",
+      "yourRank": "You are #{rank}.",
+      "invite": "Your invite link",
+      "copy": "Copy link",
+      "copied": "Copied",
+      "none": "No referrals yet. Be the first."
+    },
+    "past": {
+      "title": "Recent winners",
+      "empty": "No rounds have finished yet.",
+      "round": "Round {round}",
+      "prize": "Won {prize}",
+      "supporter": "Supporter until {date}",
+      "alreadySupporter": "Already a supporter",
+      "formerPlayer": "Former player"
+    }
+  }
+}

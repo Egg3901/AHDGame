@@ -90,6 +90,7 @@ export type AdminLogAction =
   | "public_viewing_disabled"
   | "referral_contest_started"
   | "referral_contest_reset"
+  | "referral_contest_awarded"
   | "registration_enabled"
   | "registration_disabled"
   | "ip_collision_check_enabled"

@@ -1,0 +1,64 @@
+{
+  "contests": {
+    "title": "Wettbewerbe",
+    "intro": "Wöchentliche Rennen zwischen Spielern. Am Ende jeder Woche gewinnt die Spitze jedes Wettbewerbs {prize} als persönliches Bargeld, und eine neue Runde beginnt. Neue Unternehmen und Charaktere steigen zu Beginn der nächsten Runde ein.",
+    "referralIntro": "Der Empfehlungswettbewerb läuft die ganze Iteration. Die drei besten Werber erhalten Supporter-Vorteile für die nächste Iteration.",
+    "endsAt": "Runde {round} endet",
+    "entrants": "{count, plural, =0 {Noch keine Teilnehmer} one {# Teilnahme} other {# Teilnahmen}}",
+    "noRound": "Die nächste Runde startet nach dem kommenden Zug.",
+    "noLeaders": "Noch liegt niemand vorn. Die Wertung wird jeden Zug aktualisiert.",
+    "rank": "#",
+    "entry": "Teilnahme",
+    "score": "Veränderung",
+    "yourStanding": "Du bist #{rank} von {count}",
+    "notEntered": "Du nimmst in dieser Runde nicht teil.",
+    "signInToTrack": "Melde dich an, um deinen Platz zu sehen.",
+    "kinds": {
+      "corp_growth_small": {
+        "title": "Wachstum kleiner Unternehmen",
+        "rules": "Prozentuales Wachstum der Marktkapitalisierung von Spielerunternehmen in der kleineren Hälfte des Feldes. Kapital, das du während der Runde einschießt, zählt nicht."
+      },
+      "corp_growth_large": {
+        "title": "Wachstum großer Unternehmen",
+        "rules": "Prozentuales Wachstum der Marktkapitalisierung von Spielerunternehmen in der größeren Hälfte des Feldes. Kapital, das du während der Runde einschießt, zählt nicht."
+      },
+      "influence_gain": {
+        "title": "Nationaler Einfluss",
+        "rules": "Der größte Zuwachs an Nationalem Einfluss in der Runde."
+      },
+      "approval_gain": {
+        "title": "Regierungszustimmung",
+        "rules": "Die meisten Zustimmungspunkte für eine Regierung unter Führung eines Spielers. Dieselbe Person muss die ganze Runde im Amt bleiben."
+      },
+      "referrals": {
+        "title": "Empfehlungen",
+        "rules": "Spieler, die du einlädst und die einen Charakter erstellen."
+      }
+    },
+    "scores": {
+      "percent": "{value} %",
+      "influence": "{value} NE",
+      "approval": "{value} Pkt.",
+      "referrals": "{count, plural, one {# Empfehlung} other {# Empfehlungen}}"
+    },
+    "referrals": {
+      "since": "Gezählt seit",
+      "notRunning": "Der Empfehlungswettbewerb pausiert zwischen den Iterationen. Er startet bald wieder.",
+      "yourCount": "{count, plural, =0 {Du hast in dieser Iteration noch keine Empfehlungen.} one {Du hast in dieser Iteration # Empfehlung.} other {Du hast in dieser Iteration # Empfehlungen.}}",
+      "yourRank": "Du bist #{rank}.",
+      "invite": "Dein Einladungslink",
+      "copy": "Link kopieren",
+      "copied": "Kopiert",
+      "none": "Noch keine Empfehlungen. Sei die erste Person."
+    },
+    "past": {
+      "title": "Letzte Gewinner",
+      "empty": "Noch ist keine Runde beendet.",
+      "round": "Runde {round}",
+      "prize": "{prize} gewonnen",
+      "supporter": "Supporter bis {date}",
+      "alreadySupporter": "Bereits Supporter",
+      "formerPlayer": "Ehemaliger Spieler"
+    }
+  }
+}

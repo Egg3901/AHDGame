@@ -22,6 +22,16 @@ type RefereeRow = {
 
 type ViewMode = "allTime" | "contest";
 
+type AwardedRow = { rank: number; name: string; count: number; alreadySupporter: boolean };
+
+/** Default supporter award length: roughly one iteration. */
+const DEFAULT_AWARD_DAYS = 60;
+
+function defaultAwardDate(): string {
+  const d = new Date(Date.now() + DEFAULT_AWARD_DAYS * 24 * 60 * 60 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+
 export function ReferralLeaderboardPanel() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -31,6 +41,8 @@ export function ReferralLeaderboardPanel() {
   const [contestStartedAt, setContestStartedAt] = useState<string | null>(null);
   const [allTime, setAllTime] = useState<LeaderRow[]>([]);
   const [contest, setContest] = useState<LeaderRow[]>([]);
+  const [supporterUntil, setSupporterUntil] = useState(defaultAwardDate);
+  const [awarded, setAwarded] = useState<AwardedRow[] | null>(null);
 
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [refereesByKey, setRefereesByKey] = useState<Record<string, RefereeRow[]>>({});
@@ -170,6 +182,43 @@ export function ReferralLeaderboardPanel() {
     }
   };
 
+  const handleAwardContest = async () => {
+    const until = new Date(`${supporterUntil}T23:59:59`);
+    if (Number.isNaN(until.getTime())) {
+      setError("Pick a supporter end date");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Give the top 3 referrers Supporter until ${until.toDateString()}, then restart the contest from zero?`
+      )
+    ) {
+      return;
+    }
+    setActionLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/referrals/leaderboard", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "award-and-restart", supporterUntil: until.toISOString() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(typeof data.error === "string" ? data.error : "Could not award contest");
+        return;
+      }
+      setAwarded(Array.isArray(data.winners) ? (data.winners as AwardedRow[]) : []);
+      setContestMode(!!data.contestMode);
+      setContestStartedAt(typeof data.contestStartedAt === "string" ? data.contestStartedAt : null);
+      await fetchData();
+    } catch {
+      setError("Network error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="rounded-xl border border-card-border bg-card p-6 shadow-card">
@@ -251,6 +300,43 @@ export function ReferralLeaderboardPanel() {
           Contest (rolling)
         </button>
       </div>
+
+      {contestMode && (
+        <div className="mb-4 flex flex-col gap-2 rounded-lg border border-card-border bg-background/40 p-3 sm:flex-row sm:items-end">
+          <label className="flex flex-col gap-1 text-xs text-muted">
+            Top 3 get Supporter until
+            <input
+              type="date"
+              value={supporterUntil}
+              onChange={(e) => setSupporterUntil(e.target.value)}
+              className="rounded-md border border-card-border bg-card px-2 py-1.5 text-sm text-foreground"
+            />
+          </label>
+          <Button variant="primary" onClick={handleAwardContest} isLoading={actionLoading}>
+            Award top 3 &amp; restart
+          </Button>
+          <p className="text-xs text-muted sm:ml-2 sm:self-center">
+            Paying supporters keep their own plan. Winners show on the public Contests page.
+          </p>
+        </div>
+      )}
+
+      {awarded && (
+        <div className="mb-4 rounded-lg border border-card-border bg-card-muted/30 p-3 text-sm">
+          {awarded.length === 0 ? (
+            <p className="text-muted">No qualifying referrers. The contest restarted.</p>
+          ) : (
+            <ul className="space-y-1">
+              {awarded.map((w) => (
+                <li key={w.rank} className="text-foreground">
+                  #{w.rank} {w.name}: {w.count} referrals
+                  {w.alreadySupporter ? " (already a supporter, no change)" : ""}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {error ? <p className="mb-4 text-body-sm text-error">{error}</p> : null}
 

@@ -13,6 +13,11 @@ vi.mock("@/lib/adminLog", () => ({
   createAdminLog: vi.fn(),
 }));
 
+vi.mock("@/lib/contests/referralAward", () => {
+  class ReferralAwardError extends Error {}
+  return { awardReferralContest: vi.fn(), ReferralAwardError };
+});
+
 function chainFind(rows: Record<string, unknown>[]) {
   return {
     project: vi.fn().mockReturnThis(),
@@ -202,5 +207,76 @@ describe("PATCH /api/admin/referrals/leaderboard", () => {
       { upsert: true }
     );
     expect(usersUpdate).toHaveBeenCalledWith({}, { $set: { referralContestCount: 0 } });
+  });
+
+  function awardRequest(body: unknown) {
+    return new Request("http://localhost/api/admin/referrals/leaderboard", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("awards the top referrers and restarts the contest", async () => {
+    const { requireAdmin } = await import("@/lib/api/requireAdmin");
+    const { getDb } = await import("@/lib/mongodb");
+    const { awardReferralContest } = await import("@/lib/contests/referralAward");
+    const { createAdminLog } = await import("@/lib/adminLog");
+    vi.mocked(requireAdmin).mockResolvedValue({ ok: true, admin: { username: "admin" } } as never);
+    vi.mocked(getDb).mockResolvedValue({} as never);
+    const restartedAt = new Date("2026-10-09T00:00:00Z");
+    vi.mocked(awardReferralContest).mockResolvedValue({
+      roundId: "referrals:1",
+      restartedAt,
+      usernames: ["alice"],
+      winners: [
+        {
+          rank: 1,
+          characterId: "c1",
+          characterName: "Alice A",
+          subjectId: "u1",
+          subjectName: "Alice A",
+          score: 7,
+          alreadySupporter: false,
+        },
+      ],
+    });
+
+    const res = await PATCH(
+      awardRequest({ action: "award-and-restart", supporterUntil: "2026-12-01T23:59:59.000Z" })
+    );
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.contestStartedAt).toBe(restartedAt.toISOString());
+    expect(data.winners).toEqual([{ rank: 1, name: "alice", count: 7, alreadySupporter: false }]);
+    expect(vi.mocked(awardReferralContest).mock.calls[0][1]).toMatchObject({
+      supporterUntil: new Date("2026-12-01T23:59:59.000Z"),
+      adminUsername: "admin",
+    });
+    expect(createAdminLog).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "referral_contest_awarded" })
+    );
+  });
+
+  it("returns 400 for a rejected award and for a missing date", async () => {
+    const { requireAdmin } = await import("@/lib/api/requireAdmin");
+    const { getDb } = await import("@/lib/mongodb");
+    const { awardReferralContest, ReferralAwardError } =
+      await import("@/lib/contests/referralAward");
+    vi.mocked(requireAdmin).mockResolvedValue({ ok: true, admin: { username: "admin" } } as never);
+    vi.mocked(getDb).mockResolvedValue({} as never);
+    vi.mocked(awardReferralContest).mockRejectedValue(
+      new ReferralAwardError("No referral contest is running")
+    );
+
+    const rejected = await PATCH(
+      awardRequest({ action: "award-and-restart", supporterUntil: "2026-12-01T23:59:59.000Z" })
+    );
+    expect(rejected.status).toBe(400);
+    expect((await rejected.json()).error).toBe("No referral contest is running");
+
+    const missing = await PATCH(awardRequest({ action: "award-and-restart" }));
+    expect(missing.status).toBe(400);
   });
 });
