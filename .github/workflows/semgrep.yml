@@ -16,8 +16,10 @@ jobs:
   # hit here is a real problem and should block the PR.
   custom-rules:
     runs-on: ubuntu-latest
+    # Pulled through Google's Docker Hub mirror: same image digest, but no
+    # Docker Hub anonymous rate limit, which can red this required check.
     container:
-      image: returntocorp/semgrep:latest
+      image: mirror.gcr.io/returntocorp/semgrep:latest
     steps:
       - uses: actions/checkout@v4
       - name: Semgrep (AHD project rules)
@@ -32,7 +34,7 @@ jobs:
       contents: read
       security-events: write
     container:
-      image: returntocorp/semgrep:latest
+      image: mirror.gcr.io/returntocorp/semgrep:latest
     steps:
       - uses: actions/checkout@v4
       - name: Semgrep (community rulesets)
