@@ -6,7 +6,7 @@
 
 import { classifyMarginTier, type MarginTier } from "@/lib/elections/generalViewModel";
 import { shadeColorForTier } from "@/lib/elections/marginTierShade";
-import { BLEND } from "@/components/blend/tokens";
+import { BLEND, BLEND_HEX } from "@/components/blend/tokens";
 
 /** The slice of the subdivision-results response the panel reads. */
 export interface CountyApiResponse {
@@ -37,6 +37,12 @@ export interface CountyRow {
   tier: MarginTier;
   fill: string;
   votes: number;
+  /**
+   * Share of the county's vote, 0..100, keyed by candidate name. Keyed by
+   * name rather than id because the tally behind this route and the election
+   * payload can key the same ticket differently.
+   */
+  shareByName: Record<string, number>;
 }
 
 export type CountySortKey = "name" | "leader" | "margin" | "votes";
@@ -65,9 +71,26 @@ function resolveCandidate(
   return known ?? null;
 }
 
+function shareByName(
+  data: CountyApiResponse,
+  candidate: (id: string) => { name: string; color: string } | undefined,
+  votes: Record<string, number>
+): Record<string, number> {
+  const total = Object.values(votes).reduce((s, v) => s + v, 0);
+  const out: Record<string, number> = {};
+  if (total <= 0) return out;
+  for (const [id, v] of Object.entries(votes)) {
+    const name = resolveCandidate(data, candidate, id)?.name;
+    if (name) out[name] = (out[name] ?? 0) + (v / total) * 100;
+  }
+  return out;
+}
+
 export function buildCountyRows(
   data: CountyApiResponse,
-  candidate: (id: string) => { name: string; color: string } | undefined
+  candidate: (id: string) => { name: string; color: string } | undefined,
+  /** Page ground the tier shades fade toward; the theme's, as hex. */
+  ground: string = BLEND_HEX.page
 ): CountyRow[] {
   return data.subdivisions.map((sub) => {
     const tier = classifyMarginTier(sub.margin);
@@ -81,8 +104,9 @@ export function buildCountyRows(
       winnerColor: winner?.color ?? NEUTRAL_FILL,
       margin: sub.margin,
       tier,
-      fill: winner ? shadeColorForTier(winner.color, tier, BLEND.page) : NEUTRAL_FILL,
+      fill: winner ? shadeColorForTier(winner.color, tier, ground) : BLEND.trackAlt,
       votes: Object.values(sub.votes ?? {}).reduce((s, v) => s + v, 0),
+      shareByName: shareByName(data, candidate, sub.votes ?? {}),
     };
   });
 }

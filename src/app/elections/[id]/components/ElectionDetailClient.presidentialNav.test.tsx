@@ -39,13 +39,22 @@ vi.mock("@/hooks/useGameEvents", () => ({
 // still in flight, so a bare `findByText` can resolve against the wrong paint
 // and pass whether or not the fix is present.
 vi.mock("../blend/GeneralBlendView", () => ({
-  GeneralBlendView: () => <div data-testid="blend-general" />,
+  // The views render the navigation at the top of the stage's left rail.
+  GeneralBlendView: ({ stageNav }: { stageNav?: React.ReactNode }) => (
+    <div data-testid="blend-general">{stageNav}</div>
+  ),
 }));
 vi.mock("../blend/PrimaryBlendView", () => ({
-  PrimaryBlendView: () => <div data-testid="blend-primary" />,
+  // The views render the navigation at the top of the stage's left rail.
+  PrimaryBlendView: ({ stageNav }: { stageNav?: React.ReactNode }) => (
+    <div data-testid="blend-primary">{stageNav}</div>
+  ),
 }));
 vi.mock("../blend/ResultsBlendView", () => ({
-  ResultsBlendView: () => <div data-testid="blend-results" />,
+  // The views render the navigation at the top of the stage's left rail.
+  ResultsBlendView: ({ stageNav }: { stageNav?: React.ReactNode }) => (
+    <div data-testid="blend-results">{stageNav}</div>
+  ),
 }));
 vi.mock("./GeneralPhaseView", () => ({ GeneralPhaseView: () => null }));
 vi.mock("./ElectionScheduleCard", () => ({ ElectionScheduleCard: () => null }));

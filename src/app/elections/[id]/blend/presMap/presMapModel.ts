@@ -11,7 +11,7 @@
 import type { ElectionDetail, VoteTurnSnapshot } from "../../components/ElectionDetailTypes";
 import { classifyMarginTier, type MarginTier } from "@/lib/elections/generalViewModel";
 import { readableInk, shadeColorForTier } from "@/lib/elections/marginTierShade";
-import { BLEND } from "@/components/blend/tokens";
+import { BLEND_HEX } from "@/components/blend/tokens";
 import { STATE_NAMES } from "./usStates";
 
 const FALLBACK_COLOR = "#9CA3AF";
@@ -283,7 +283,11 @@ export function describeTrend(trend: PresMapTrend): string {
   return `Trending toward ${trend.name}, margin swing ${trend.shiftPp.toFixed(1)} pts over the last ${turns}.`;
 }
 
-export function buildPresMapModel(election: ElectionDetail): PresMapModel {
+export function buildPresMapModel(
+  election: ElectionDetail,
+  /** Page ground the tier shades fade toward; the theme's, as hex. */
+  ground: string = BLEND_HEX.page
+): PresMapModel {
   const gv = election.generalVotes;
   const currentTurn = election.gameState?.currentTurn ?? null;
 
@@ -314,7 +318,7 @@ export function buildPresMapModel(election: ElectionDetail): PresMapModel {
     const margin = ((ranked[0][1] - ranked[1][1]) / total) * 100;
     const tier = classifyMarginTier(margin);
     const leader = lookup(ranked[0][0]);
-    const fill = shadeColorForTier(leader.color, tier, BLEND.page);
+    const fill = shadeColorForTier(leader.color, tier, ground);
 
     const current = sharesFromVotes(data.votesByCandidate);
     const snapshots = gv?.stateVotesOverTime?.[stateId];

@@ -74,27 +74,25 @@ function data(): ElectionResultsResponse {
 }
 
 /**
- * The desktop tree is `hidden lg:block` and the mobile one `lg:hidden`, so both
- * are in the DOM at once and anything reaching both layouts appears twice.
- * Asserting "at least one" is what let a rail-only block ship as invisible on
- * mobile, so these count.
+ * One stage serves every width, so each figure appears exactly once. These
+ * count rather than assert "at least one", so a duplicated block shows up.
  */
 describe("ResultsBlendView", () => {
-  it("gives every ticket's result to both layouts, not the desktop rail alone", () => {
+  it("gives every ticket's result on the stage", () => {
     render(<ResultsBlendView data={data()} route="concluded" />);
     // The compact vote total appears only on a ticket row; the candidate's name
     // also shows in the states table's winner column, so it cannot be counted.
-    expect(screen.getAllByText("71.9M")).toHaveLength(2);
-    expect(screen.getAllByText("67.1M")).toHaveLength(2);
+    expect(screen.getAllByText("71.9M")).toHaveLength(1);
+    expect(screen.getAllByText("67.1M")).toHaveLength(1);
   });
 
-  it("names the winner on both layouts", () => {
+  it("names the winner", () => {
     render(<ResultsBlendView data={data()} route="concluded" />);
-    // The winner's star sits beside their row in each tree.
-    expect(screen.getAllByText("★")).toHaveLength(2);
+    // The winner's star sits beside their row in the final tickets.
+    expect(screen.getAllByText("★")).toHaveLength(1);
   });
 
-  it("lists the closest states on both layouts", () => {
+  it("lists the closest states", () => {
     render(<ResultsBlendView data={data()} route="concluded" />);
     expect(screen.getAllByText("Pennsylvania").length).toBeGreaterThanOrEqual(2);
   });
