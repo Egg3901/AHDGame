@@ -17,10 +17,13 @@ import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 
 // GET /api/elections/[id]/state/[stateId]/subdivision-results — sub-region
 // vote distribution + seat-consistent winners for a region in an election.
+// Optional `?turn=N` (concluded presidential races only): the counties as of
+// that turn, from the tally's per-turn state snapshot, for the race replay. A
+// live race is refused so its past weeks cannot be read ahead of the screen.
 // Auth: public
 // Errors: 400, 404
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; stateId: string }> }
 ) {
   try {
@@ -29,6 +32,11 @@ export async function GET(
     // regionId feeds a filesystem path — reject anything but region-code shapes.
     if (!/^[A-Z]{2,3}$/.test(regionId)) {
       return errorResponse(400, "Invalid region ID");
+    }
+    const turnParam = req.nextUrl.searchParams.get("turn");
+    const atTurn = turnParam == null ? null : Number(turnParam);
+    if (atTurn != null && (!Number.isInteger(atTurn) || atTurn < 0)) {
+      return errorResponse(400, "Invalid turn");
     }
 
     const db = await getDb();
@@ -68,6 +76,7 @@ export async function GET(
           candidateNames: 1,
           candidateParties: 1,
           seatsEstimate: 1,
+          ...(atTurn != null ? { [`unitTurnSnapshots.${regionId}`]: 1 } : {}),
         },
       }
     );
@@ -79,9 +88,23 @@ export async function GET(
       return errorResponse(400, "Tally state mismatch");
     }
 
-    const regionVotes = isPresident
+    let regionVotes = isPresident
       ? (tally.totalVotesByUnit?.[regionId] ?? tally.totalVotes)
       : tally.totalVotes;
+    if (atTurn != null) {
+      if (!isPresident || !["resolved", "completed"].includes(String(election.status))) {
+        return errorResponse(
+          400,
+          "Turn replay is only available for a concluded presidential race"
+        );
+      }
+      // The state's last snapshot at or before the turn.
+      const snap = (tally.unitTurnSnapshots?.[regionId] ?? [])
+        .filter((s) => s.turn <= atTurn)
+        .sort((a, b) => b.turn - a.turn)[0];
+      if (!snap) return errorResponse(404, "No result for this state at that turn");
+      regionVotes = snap.cumulativeVotes;
+    }
 
     // Party docs: colors, economic positions, and abbreviations for baselines.
     const uniquePartySeqIds = [...new Set(Object.values(tally.candidateParties ?? {}))]

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiErrorText } from "@/lib/errors/catalog";
+import { fetchJson } from "@/lib/observability/fetchJson";
 import { formatStatePresenceCost, statePresenceNextCost } from "@/lib/campaigns/statePresenceCost";
 import { BLEND, BLEND_LABEL, FONT } from "@/components/blend/tokens";
 
@@ -45,16 +46,19 @@ export function useMyCampaign(args: {
   useEffect(() => {
     if (!enabled) return;
     const controller = new AbortController();
-    fetch("/api/political-operations/state-org/list", { signal: controller.signal })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((body: { canBuild?: boolean; fxRate?: number; states?: PresenceRow[] } | null) => {
-        if (!body) return;
+    fetchJson<{ canBuild?: boolean; fxRate?: number; states?: PresenceRow[] }>(
+      "/api/political-operations/state-org/list",
+      { signal: controller.signal, feature: "presidential-map-presence" }
+    )
+      .then((body) => {
         setCanBuild(Boolean(body.canBuild));
         if (typeof body.fxRate === "number") setFxRate(body.fxRate);
         setRows(Object.fromEntries((body.states ?? []).map((r) => [r.stateId, r])));
       })
-      .catch(() => {
-        // Non-critical: the map simply shows no presence layer.
+      .catch((err: unknown) => {
+        // fetchJson reports the failure; the map just shows no presence layer.
+        if ((err as { name?: string }).name !== "AbortError")
+          setError("Could not load your campaign.");
       });
     return () => controller.abort();
   }, [enabled]);
