@@ -2,6 +2,7 @@
 
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { PortfolioChart } from "@/components/charts/PortfolioChart";
 import { type CountryId } from "@/lib/constants/countries";
@@ -28,6 +29,8 @@ interface SavingsApiResponse {
   currencyCode: CurrencyCode;
   primeRate: number;
   apyPercent: number;
+  savingsHolderType?: "central-bank" | "private-bank" | "unknown";
+  savingsHolderName?: string | null;
   centralBankDepositBonusPercentPoints?: number;
   centralBankPricingProgress?: number;
   centralBankPricingTurnsRemaining?: number;
@@ -68,6 +71,7 @@ interface Props {
 }
 
 export function CentralBankSavingsTab({ countryId }: Props) {
+  const t = useTranslations("centralBank");
   const homeCurrency = COUNTRY_CURRENCY_MAP[countryId];
   const sym = CURRENCY_SYMBOLS[homeCurrency] ?? "$";
   const { formatAmount } = useCurrency();
@@ -166,9 +170,22 @@ export function CentralBankSavingsTab({ countryId }: Props) {
       {/* Figures */}
       <div className="grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3 lg:grid-cols-6">
         <CentralBankFigure
-          label="APY"
-          value={`${data.apyPercent.toFixed(2)}%`}
-          hint={`Half of real ${data.primeRate.toFixed(2)}% prime${(data.centralBankDepositBonusPercentPoints ?? 0) > 0 ? ` + ${(data.centralBankDepositBonusPercentPoints ?? 0).toFixed(2)}% CB bonus` : ""}`}
+          label={
+            data.savingsHolderType === "private-bank" ? t("savings.yourBankRate") : t("savings.apy")
+          }
+          value={data.savingsHolderType === "unknown" ? "—" : `${data.apyPercent.toFixed(2)}%`}
+          hint={
+            data.savingsHolderType === "private-bank"
+              ? t("savings.atBank", { bank: data.savingsHolderName ?? t("savings.privateBank") })
+              : data.savingsHolderType === "unknown"
+                ? t("savings.holderUnknown")
+                : (data.centralBankDepositBonusPercentPoints ?? 0) > 0
+                  ? t("savings.centralRateWithBonus", {
+                      prime: data.primeRate.toFixed(2),
+                      bonus: (data.centralBankDepositBonusPercentPoints ?? 0).toFixed(2),
+                    })
+                  : t("savings.centralRate", { prime: data.primeRate.toFixed(2) })
+          }
           size="lg"
         />
         <CentralBankFigure

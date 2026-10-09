@@ -59,7 +59,7 @@ export const NPP_GROWTH_MIN_UTILIZATION = 0.85;
  * to this share of run capacity a turn and reassesses next turn (a player adds a
  * chunk to a selling-out plant, not 10,000x it because they hold cash). Growth
  * compounds over turns and self-limits — a plant that outruns its demand sees
- * fill/utilization fall and stops. Floored at one facility so a small plant can
+ * fill/utilization fall and stops. Floored at one unit so an existing small plant can
  * still take a first step.
  */
 export const NPP_GROWTH_MAX_STEP_OF_RUN = 0.5;

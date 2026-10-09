@@ -63,6 +63,7 @@ import {
   type StrategySituation,
 } from "@/lib/turn/npp/corpStrategy";
 import { memoizeOnce } from "@/lib/turn/npp/rules/strategyCadence";
+import { existingPlantGrowthStep, existingPlantGrowthUnits } from "./rules/existingPlantGrowth";
 import { lossChronicityUpdates } from "@/lib/turn/npp/costMothball";
 import {
   resolveFoundingShortfallReason,
@@ -1211,11 +1212,6 @@ export function makeNppCorpDecision(
       // gate a rare-earth price spike could make a mine keep adding capacity
       // after the state's geology was already exhausted; production was capped,
       // but the balance sheet and national sector mix kept inflating.
-      const facilityUnits = foundingStarterUnits(
-        sector.sectorType,
-        sector.industryModel as "vehicles" | null | undefined,
-        sector.mediaDiscriminator
-      );
       const utilization = capitalStock > 0 ? runUnits / capitalStock : 0;
       const extractionHeadroom =
         sector.sectorType === "extraction"
@@ -1280,7 +1276,7 @@ export function makeNppCorpDecision(
         Math.max(0, cashLocal - effectiveCashFloor) *
         Math.min(1, NPP_GROWTH_DEPLOY_FRACTION * challengerPull);
       // Demand anchor: grow by at most this share of proven throughput a turn
-      // (at least one facility for demand-side sectors), not the whole treasury
+      // (at least one unit for demand-side sectors), not the whole treasury
       // at once. Extraction growth is additionally scaled by finite deposit
       // headroom and never floors up to a facility when the deposit cannot
       // support one.
@@ -1288,16 +1284,14 @@ export function makeNppCorpDecision(
       const growthStepUnits =
         sector.sectorType === "extraction"
           ? Math.floor(runUnits * growthStepOfRun * extractionHeadroom)
-          : Math.max(facilityUnits, Math.floor(runUnits * growthStepOfRun));
+          : existingPlantGrowthStep(runUnits, growthStepOfRun);
       const growthCapUnits = Math.min(
         growthStepUnits,
         Math.floor(growthStepUnits * NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH - pendingUnits)
       );
-      // Units the growth budget affords, bounded by that step. Growth only fires
-      // if it clears one whole facility — below that the plant just replaces
-      // depreciation, so a cash-poor corp keeps its maintenance rather than
-      // bundling an unaffordable growth leg that would sink the whole order past
-      // the entry floor.
+      // Existing-site top-ups use the player's one-unit minimum. Keep the
+      // throughput step, in-flight ceiling and protected cash reserve; a full
+      // facility minimum belongs to greenfield entry, not an operating plant.
       const affordableGrowthUnits =
         canGrow && perUnitGrowthLocal > 0
           ? Math.floor(
@@ -1308,10 +1302,7 @@ export function makeNppCorpDecision(
               )
             )
           : 0;
-      const growthUnits =
-        affordableGrowthUnits >= facilityUnits && growthCapUnits >= facilityUnits
-          ? affordableGrowthUnits
-          : 0;
+      const growthUnits = existingPlantGrowthUnits(affordableGrowthUnits, growthCapUnits);
       const units = replacementUnits + growthUnits;
       if (!(units > 0)) {
         observeReinvestCandidate(

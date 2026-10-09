@@ -89,4 +89,77 @@ describe("GET /api/country/[code]/central-bank/savings", () => {
     expect(data.savingsHistory[0].turn).toBe(101);
     expect(data.savingsHistory[data.savingsHistory.length - 1].turn).toBe(600);
   });
+
+  it("reports the selected private bank rate for a bank-held savings account", async () => {
+    const userId = new ObjectId().toString();
+    const charId = new ObjectId();
+    const bankId = new ObjectId("6ac3cb72f6b04c52a0086c01");
+
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({ ok: true, user: { userId } } as never);
+
+    const { getCharacterByUserId } = await import("@/lib/db/characterLookup");
+    vi.mocked(getCharacterByUserId).mockResolvedValue({
+      _id: charId,
+      countryId: "BR",
+      currencyBalances: {
+        personal: { BRL: 0 },
+        savings: { BRL: 248_848 },
+        savingsHolder: { BRL: bankId.toHexString() },
+      },
+      savingsAccountsOpened: { BRL: true },
+    } as any);
+
+    const { getGameState } = await import("@/lib/gameState");
+    vi.mocked(getGameState).mockResolvedValue({ currentTurn: 72, preset: "1991" } as any);
+
+    db.collectionMocks.centralBanks.findOne.mockResolvedValue({
+      _id: "BR",
+      primeRate: 23,
+      inflationHistory: [{ turn: 72, rate: 9.31 }],
+    });
+    db.collection("gameConfig");
+    db.collectionMocks.gameConfig.findOne.mockResolvedValue({
+      privateBankingEnabled: true,
+      savingsAccountsMode: "authoritative",
+      savingsAccountsReadCurrencies: ["BRL"],
+      centralBankPricingPhaseIn: { startedTurn: 2 },
+    });
+    db.collection("corporations");
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: bankId,
+      name: "Example Bank",
+      bankCharter: {
+        status: "active",
+        type: "retail",
+        currency: "BRL",
+        depositOffset: -2.875,
+      },
+    });
+
+    const { GET } = await import("./route");
+    const res = await GET(new Request("http://localhost/api/country/br/central-bank/savings"), {
+      params: Promise.resolve({ code: "br" }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.savingsHolderType).toBe("private-bank");
+    expect(data.savingsHolderName).toBe("Example Bank");
+    expect(data.apyPercent).toBe(20.13);
+
+    db.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: bankId,
+      name: "Example Bank",
+      bankCharter: { status: "revoked", type: "retail", currency: "BRL", depositOffset: -2.875 },
+    });
+    const staleHolderResponse = await GET(
+      new Request("http://localhost/api/country/br/central-bank/savings"),
+      { params: Promise.resolve({ code: "br" }) }
+    );
+    const staleHolderData = await staleHolderResponse.json();
+    expect(staleHolderData.savingsHolderType).toBe("unknown");
+    expect(staleHolderData.apyPercent).toBe(0);
+    expect(staleHolderData.estimatedAccrualThisTurn).toBe(0);
+  });
 });

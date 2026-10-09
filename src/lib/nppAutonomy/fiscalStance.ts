@@ -22,6 +22,7 @@ import type { GoverningAgendaItem } from "./governingAgenda";
 import { deriveGoverningArchetype, governingArchetypeModifiers } from "./governingArchetype";
 import { internalRepressionFromReformism } from "@/lib/constants/commandEconomy";
 import { getDebtThreshold } from "@/lib/budget/debt";
+import { fiscalDeficitPressure } from "./rules/fiscalDeficitPressure";
 
 export type FiscalStance = "expansionary" | "neutral" | "austere";
 
@@ -55,6 +56,8 @@ export interface FiscalStanceInputs {
   targetInflationRate?: number;
   /** Debt as a fraction of GDP (1.0 = 100% of GDP). */
   debtToGdpRatio: number;
+  /** Annual revenue minus annual spending, divided by annual budget GDP. */
+  fiscalBalanceGdpShare?: number;
   /** Head-of-government personality → archetype spend appetite. */
   personality: NPPPersonality;
   currentTurn: number;
@@ -139,6 +142,7 @@ export function computeFiscalStance(inputs: FiscalStanceInputs): PersistedFiscal
   const inflationHot = targetInflationRate + INFLATION_HOT_MARGIN;
 
   let score = 0;
+  score -= fiscalDeficitPressure(inputs.fiscalBalanceGdpShare);
 
   // Macro headwinds toward austerity (hot inflation relative to this
   // country's own target, credit-rating-tier debt distress).
