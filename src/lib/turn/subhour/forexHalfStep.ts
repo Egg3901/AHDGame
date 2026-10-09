@@ -63,7 +63,8 @@ export type ForexHalfStepRow = Pick<
   | "monetaryRegime"
   | "monetaryRegimeSetAtTurn"
   | "subhourStep"
->;
+> &
+  Partial<Pick<ExchangeRate, "macroTarget">>;
 
 export interface ForexHalfStepWrite {
   countryId: string;
