@@ -342,16 +342,6 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
-        source: "/stockmarket/us",
-        destination: "/country/us/stockmarket",
-        permanent: true,
-      },
-      {
-        source: "/stockmarket/uk",
-        destination: "/country/uk/stockmarket",
-        permanent: true,
-      },
-      {
         source: "/national",
         destination: "/country/us/metrics",
         permanent: true,

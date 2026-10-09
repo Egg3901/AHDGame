@@ -45,8 +45,8 @@ export function ExchangeSelector({
   const { formatAmount } = useCurrency();
 
   return (
-    <div className="flex flex-col items-end gap-2">
-      <div className="flex items-center gap-2">
+    <div className="flex max-w-full min-w-0 flex-col items-end gap-2">
+      <div className="flex max-w-full min-w-0 items-center gap-2">
         {onToggleCompare && entries.length > 2 && (
           <button
             type="button"
@@ -63,20 +63,26 @@ export function ExchangeSelector({
           </button>
         )}
         {/* Desktop: inline pill row */}
-        <div className="hidden sm:flex bg-black rounded-lg p-1 border border-white/10">
-          {entries.map(([key, val]) => (
-            <button
-              key={key}
-              onClick={() => onSelect(key)}
-              className={`px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wider transition-colors ${
-                exchangeFilter === key
-                  ? "bg-primary text-white shadow-sm"
-                  : "text-white/70 hover:text-white"
-              }`}
-            >
-              {key === "global" ? "Global" : val.title}
-            </button>
-          ))}
+        <div
+          role="group"
+          aria-label="Stock exchange"
+          className="hidden max-w-full overflow-x-auto rounded-lg sm:block"
+        >
+          <div className="flex w-max bg-black rounded-lg p-1 border border-white/10">
+            {entries.map(([key, val]) => (
+              <button
+                key={key}
+                onClick={() => onSelect(key)}
+                className={`px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wider transition-colors ${
+                  exchangeFilter === key
+                    ? "bg-primary text-white shadow-sm"
+                    : "text-white/70 hover:text-white"
+                }`}
+              >
+                {key === "global" ? "Global" : val.title}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Mobile: compact chip + dropdown */}
