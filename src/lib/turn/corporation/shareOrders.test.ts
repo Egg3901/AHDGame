@@ -238,8 +238,8 @@ describe("fillPendingShareOrders", () => {
       { _id: "USD" },
       expect.objectContaining({
         $inc: expect.objectContaining({
-          cashLocal: 1_020,
-          "lifetime.purchasesIn": 1_020,
+          cashLocal: 1_010,
+          "lifetime.purchasesIn": 1_010,
         }),
       })
     );
@@ -267,11 +267,11 @@ describe("fillPendingShareOrders", () => {
 
     await fillPendingShareOrders(db as unknown as Db, new Date(), 258);
 
-    // Bid is $98, so $245 of cash can absorb two whole shares.
+    // Bid is $99, so $245 of cash can absorb two whole shares.
     expect(pool.updateOne).toHaveBeenCalledWith(
-      { _id: "USD", cashLocal: { $gte: 196 } },
+      { _id: "USD", cashLocal: { $gte: 198 } },
       expect.objectContaining({
-        $inc: expect.objectContaining({ cashLocal: -196, "lifetime.salesOut": 196 }),
+        $inc: expect.objectContaining({ cashLocal: -198, "lifetime.salesOut": 198 }),
       })
     );
     const orderUpdate = db.collection("shareOrders").bulkWrite.mock.calls[0][0][0];
@@ -374,9 +374,9 @@ describe("fillPendingShareOrders", () => {
     await fillPendingShareOrders(db as unknown as Db, new Date(), 258);
 
     expect(pool.updateOne).toHaveBeenCalledWith(
-      { _id: "USD", cashLocal: { $gte: 196 } },
+      { _id: "USD", cashLocal: { $gte: 198 } },
       expect.objectContaining({
-        $inc: expect.objectContaining({ cashLocal: -196, "lifetime.salesOut": 196 }),
+        $inc: expect.objectContaining({ cashLocal: -198, "lifetime.salesOut": 198 }),
       })
     );
     const orderOps = db.collection("shareOrders").bulkWrite.mock.calls[0][0];
