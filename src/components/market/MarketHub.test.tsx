@@ -31,6 +31,9 @@ vi.mock("@/app/country/[code]/stockmarket/components/MarketOverview", () => ({
     <div data-testid="market-chart" data-exchange={exchangeFilter} />
   ),
 }));
+vi.mock("@/app/country/[code]/stockmarket/components/WealthList", () => ({
+  WealthList: ({ entries }: { entries: unknown[] }) => <div>wealth-list-{entries.length}</div>,
+}));
 vi.mock("@/app/country/[code]/stockmarket/components/StockList", () => ({
   StockList: () => <div>stock-list</div>,
 }));
@@ -149,6 +152,17 @@ describe("MarketHub", () => {
     expect(
       calls.some((u) => u.startsWith("/api/bonds") || u.startsWith("/api/investment-funds"))
     ).toBe(false);
+  });
+
+  it("shows the wealth list tab for the selected exchange", async () => {
+    search = "tab=wealth&exchange=UK";
+    vi.mocked(fetch).mockImplementation((async (url: string) => {
+      calls.push(url);
+      return { ok: true, json: async () => ({ entries: [{ name: "a" }, { name: "b" }] }) };
+    }) as never);
+    render(<MarketHub />);
+    await waitFor(() => expect(screen.getByText("wealth-list-2")).toBeTruthy());
+    expect(calls.some((u) => u.startsWith("/api/stock-exchange/wealth-list?exchange="))).toBe(true);
   });
 
   it("syncs the tab to the url", () => {

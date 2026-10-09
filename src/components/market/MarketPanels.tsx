@@ -5,8 +5,13 @@ import { useState } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { StockList } from "@/app/country/[code]/stockmarket/components/StockList";
 import { BondTable } from "@/app/country/[code]/stockmarket/components/BondTable";
+import { WealthList } from "@/app/country/[code]/stockmarket/components/WealthList";
 import { FundTable } from "@/app/country/[code]/stockmarket/components/FundTable";
-import type { BondListing, ExchangeData } from "@/app/country/[code]/stockmarket/types";
+import type {
+  BondListing,
+  ExchangeData,
+  WealthEntry,
+} from "@/app/country/[code]/stockmarket/types";
 import type { FundListItem } from "@/components/indexFunds/types";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { PanelState, pctText, toneClass } from "./marketUi";
@@ -51,6 +56,28 @@ export function StocksPanel({ exchange = "global" }: { exchange?: string }) {
         </label>
       )}
       <StockList listings={visible} timeframe="24h" />
+    </PanelState>
+  );
+}
+
+export interface WealthResponse {
+  entries?: WealthEntry[];
+}
+
+export const wealthUrl = (exchange: string) =>
+  `/api/stock-exchange/wealth-list?exchange=${encodeURIComponent(exchange)}`;
+
+export function WealthPanel({ exchange = "global" }: { exchange?: string }) {
+  const { data, error, loading } = useMarketJson<WealthResponse>(wealthUrl(exchange));
+  const entries = data?.entries ?? [];
+  return (
+    <PanelState
+      loading={loading}
+      error={error}
+      empty={entries.length === 0}
+      emptyText="No wealth rankings yet."
+    >
+      <WealthList entries={entries} />
     </PanelState>
   );
 }
