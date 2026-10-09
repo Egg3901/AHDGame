@@ -36,6 +36,11 @@ describe("ticket intake context", () => {
       clientVersion: "1.4.2",
     });
     expect(classifySupportRuntime("Mozilla Macintosh Mobile/15 Safari").platform).toBe("ios");
+    expect(classifySupportRuntime("Mozilla Windows AHDClient-Desktop/1.0.3")).toEqual({
+      platform: "desktop",
+      device: "desktop",
+      clientVersion: "1.0.3",
+    });
     expect(classifySupportRuntime(null)).toEqual({ platform: "unknown", device: "unknown" });
   });
   it("bounds, deduplicates and excludes stale visits and non-allowlisted fields", () => {

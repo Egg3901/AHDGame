@@ -33,7 +33,9 @@ export function classifySupportRuntime(
   const tablet = /iPad|Tablet|Android(?!.*Mobile)/i.test(text);
   const mobile = ios || android || /Mobile/i.test(text);
   const desktop = /Mozilla|Chrome|Firefox|Safari|Electron/i.test(text);
-  const version = text.match(/\bAHDClient(?:-Mobile)?\/(\d+\.\d+\.\d+(?:[.+-][\w.-]+)?)/i)?.[1];
+  const version = text.match(
+    /\bAHDClient(?:-(?:Mobile|Desktop))?\/(\d+\.\d+\.\d+(?:[.+-][\w.-]+)?)/i
+  )?.[1];
   return {
     platform: ios
       ? "ios"
