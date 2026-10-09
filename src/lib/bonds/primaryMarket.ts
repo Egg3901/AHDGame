@@ -247,7 +247,13 @@ export async function placeUnsoldBondUnits(
   };
   const bonds = await db
     .collection<Bond>("bonds")
-    .find({ unsoldUnits: { $gt: 0 }, matured: false, defaulted: false })
+    // Due bonds must retain the holder snapshot that maturity settlement pays.
+    .find({
+      unsoldUnits: { $gt: 0 },
+      maturityTurn: { $gt: turn },
+      matured: false,
+      defaulted: false,
+    })
     .sort({ issuedAtTurn: 1 })
     .toArray();
   const placing = bonds.filter((bond) => (bond.unsoldUnits ?? 0) > 0 && !bond.matured);
