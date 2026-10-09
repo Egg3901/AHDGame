@@ -76,7 +76,7 @@ export async function POST(request: Request, { params }: RouteParams) {
   if (!isAdmin && !isChair && !isViceChair && !isTreasurer) {
     return errorResponse(
       403,
-      "Only the party chair, vice chair, treasurer, or an admin can set the PS investment budget"
+      "Only the party chair, vice chair, treasurer, or an admin can set the Political Strength budget"
     );
   }
 

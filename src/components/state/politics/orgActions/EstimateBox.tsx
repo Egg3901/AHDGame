@@ -64,8 +64,8 @@ export function EstimateBox({ variant, tone, cost, funds, gain }: EstimateBoxPro
           <div className="flex items-center text-body-sm font-medium text-muted">
             {costLabel}
             <Tooltip
-              label="About build org cost"
-              content="Base Political Strength (PS) cost plus a per-state pressure ladder that rises after each spend in this state. Higher pressure = more PS per click, and more money: the cash price scales with the PS cost and is billed to the same treasury tier that pays the Strength."
+              label="About the build cost"
+              content="Political Strength (PS) cost. It starts at the base cost and goes up by 1 for each recent build in this state, fading by 3 per turn once you stop. The money price rises with it and comes out of the treasury of whichever party (state or national) pays the PS."
             />
           </div>
           <div className="mt-1 text-lg font-bold tabular-nums leading-none">
@@ -74,19 +74,19 @@ export function EstimateBox({ variant, tone, cost, funds, gain }: EstimateBoxPro
           </div>
           {cost.ladderPS > 0 ? (
             <div className="mt-1 text-[10px] text-muted tabular-nums">
-              base {cost.basePS.toFixed(0)} + ladder {cost.ladderPS.toFixed(0)}
+              base {cost.basePS.toFixed(0)} + {cost.ladderPS.toFixed(0)} for recent builds
             </div>
           ) : (
-            <div className="mt-1 text-[10px] text-muted">Base cost (no ladder yet)</div>
+            <div className="mt-1 text-[10px] text-muted">Base cost (no recent builds here)</div>
           )}
         </div>
 
         <div className="rounded-md border border-card-border/30 bg-card/50 px-3 py-2">
           <div className="flex items-center text-body-sm font-medium text-muted">
-            {gain.label.includes("Effect") ? "Effect" : "Org share"}
+            {gain.label.includes("Effect") ? "Effect" : "Organization share"}
             <Tooltip
-              label="About Org share"
-              content="Expected change to your Org share after one fixed contribution unit is added to the regional bucket. Established parties keep the advantage of their accumulated units."
+              label="About Organization share"
+              content="Expected change to your party's share of this state's organization after one build. Parties that have built here for longer keep the advantage of everything they have built."
             />
           </div>
           <div className={`mt-1 text-lg font-bold tabular-nums leading-none ${gainValueColor}`}>

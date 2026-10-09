@@ -29,6 +29,7 @@ export {
   type HeroStatsStripLayout,
 } from "./HeroStatsStrip";
 export { Tooltip } from "./Tooltip";
+export { GlossaryTerm } from "./GlossaryTerm";
 export { Modal } from "./Modal";
 export {
   Badge,

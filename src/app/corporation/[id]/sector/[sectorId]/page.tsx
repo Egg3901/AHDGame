@@ -989,6 +989,7 @@ export default function SectorDetailPage() {
                 margins={margins}
                 inputLabels={commodities?.demands.map((d) => d.label) ?? []}
                 fillAdjustedMarginPct={plants?.truth?.fillAdjustedMarginPct ?? null}
+                policyStack={plants?.policyStack ?? []}
               />
             )}
             {commodities &&

@@ -55,7 +55,7 @@ export function PsStrengthCard({
       </div>
       <div
         className="relative h-2.5 overflow-hidden rounded-full bg-background"
-        title={`${(pct * 100).toFixed(0)}% of cap — ${bandLabel}`}
+        title={`${(pct * 100).toFixed(0)}% of maximum (${bandLabel})`}
       >
         <div
           className={`h-full rounded-full transition-all duration-300 ${bandColor}`}
@@ -64,9 +64,9 @@ export function PsStrengthCard({
       </div>
       <div className="mt-1.5 text-xs text-muted flex items-center justify-between gap-2">
         <span>
-          +{passive} passive/turn
+          +{passive} free per turn
           {treasuryGainPerTurn != null && treasuryGainPerTurn > 0
-            ? ` + ${treasuryGainPerTurn.toFixed(2)} spend`
+            ? ` + ${treasuryGainPerTurn.toFixed(2)} bought`
             : null}
         </span>
         <span className="text-[10px] uppercase tracking-wider opacity-70">
@@ -78,10 +78,10 @@ export function PsStrengthCard({
 }
 
 function bandLabelFor(pct: number): string {
-  if (pct >= 1) return "at cap";
-  if (pct >= 0.8) return "80–100% of cap";
-  if (pct >= 0.5) return "50–80% of cap";
-  return "under 50% of cap";
+  if (pct >= 1) return "full";
+  if (pct >= 0.8) return "80-100% full";
+  if (pct >= 0.5) return "50-80% full";
+  return "under 50% full";
 }
 
 function bandColorFor(pct: number): string {
@@ -96,19 +96,19 @@ function PsHelpTooltip() {
     <span
       className="cursor-help text-muted hover:text-foreground"
       title={[
-        "Political Strength (PS) is a reserve, not a flat-spend wallet.",
+        "Political Strength (PS) is the party's reserve for party actions: building Organization in states and campaigning for its candidates.",
         "",
-        "Reserve growth:",
-        "  • Flat passive every turn (national +20, state +5) — no treasury needed",
-        "  • Optional chair-set spend: debits treasury, up to +20 PS/turn",
-        "  • Both convert at full rate up to the hard cap — only the cap limits growth",
+        "How it grows:",
+        "  • Free every turn: national parties +20, state parties +5",
+        "  • Optional budget: the treasury buys up to 20 more per turn",
+        "  • Growth stops at the maximum",
         "",
-        "Repeated PS actions in the SAME state escalate cost:",
-        "  • +1 to effective cost per spend",
-        "  • Pressure decays −3/turn (so the ladder dissipates if you stop)",
-        "  • Caps at +8 effective cost",
+        "Building in the same state again and again costs more:",
+        "  • Each build there adds 1 PS to the next one",
+        "  • The extra cost fades by 3 per turn once you stop",
+        "  • A build never costs more than 8 PS",
         "",
-        "Acting in Arizona doesn't raise the cost in California.",
+        "Building in Arizona doesn't raise the cost in California.",
       ].join("\n")}
     >
       ⓘ

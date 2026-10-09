@@ -552,7 +552,12 @@ export default function PoliticiansClient({ initialPoliticians, initialStats }: 
                       {/* NPI rank ladder (folded into the subline on phones) */}
                       <span className="hidden min-w-0 sm:block">
                         <span className="mb-1 flex items-baseline justify-between font-mono text-[10px] text-muted">
-                          <span>NPI</span>
+                          <abbr
+                            title="National Political Influence"
+                            className="cursor-help no-underline"
+                          >
+                            NPI
+                          </abbr>
                           <span className="font-semibold text-foreground">
                             {politician.nationalInfluence.toFixed(1)}
                           </span>

@@ -405,8 +405,9 @@ export interface GameConfig {
    * and revenue. A transfer, not a sink: world totals of the two legs match.
    * Off (or unset) → nothing is computed or written, matching the shadow-price
    * behavior from before this flag existed. ENABLING IS A BALANCE CHANGE
-   * (~22M/turn world-scale bill at audit calibration) and merges only with a
-   * simulation report from scripts/sim/ per CONTRIBUTING.md.
+   * (~22M world-scale bill at audit calibration; the sourcing aggregates are
+   * DAILY money, spread over TURNS_PER_DAY when charged, ticket 1448) and
+   * merges only with a simulation report from scripts/sim/ per CONTRIBUTING.md.
    */
   canonicalFreightBillingEnabled?: boolean;
   /**

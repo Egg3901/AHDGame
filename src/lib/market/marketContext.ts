@@ -79,14 +79,17 @@ export interface MarketContext {
   /**
    * Canonical freight billing v1 (issue #897): per sector id, last turn's
    * shipping cost the sector owes for its state's inbound hauls of the
-   * commodities it consumes. Set by the corp-phase entry only while
+   * commodities it consumes, as DAILY money (the sourcing pass settles the
+   * daily commodity ledger). `resolveSectorFreightBillingLegs` spreads it over
+   * TURNS_PER_DAY before it touches the hourly cost rail. Set by the corp-phase entry only while
    * `gameConfig.canonicalFreightBillingEnabled` is on; absent everywhere else,
    * so a world with billing off computes and persists nothing.
    */
   freightBillingChargeBySectorId?: ReadonlyMap<string, number>;
   /**
    * The transfer's other half: per sector id, last turn's haul revenue the
-   * sector's freight supply earned. Same gate as the charge map.
+   * sector's freight supply earned, daily money like the charge map. Same gate
+   * as the charge map.
    */
   freightBillingCreditBySectorId?: ReadonlyMap<string, number>;
   /**

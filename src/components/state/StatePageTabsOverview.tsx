@@ -106,9 +106,11 @@ export function OverviewTab({
             Party strength
           </h2>
           <p className="mt-1 text-body text-muted">
-            Organization is a shared state pool. Each Build Org action invests Political Strength to
-            grow your party&apos;s stake over time, while inactivity here can gradually reduce it.
-            Registration is who voters have signed up with.
+            Organization (Org) is each party&apos;s share of the ground game in this state, and it
+            scales how many votes the party gets in general elections. Party officers grow it with
+            Build Organization, which spends the party&apos;s Political Strength (PS) and treasury
+            money. A party that stops building here slowly loses share. Registration is which party
+            voters have signed up with.
           </p>
           <div className="mt-6 grid grid-cols-1 gap-x-10 gap-y-8 xl:grid-cols-2">
             <PoolBreakdown

@@ -15,7 +15,7 @@ Treasury funds are spent on budget allocations (GOTV, suppression, org building)
 
 ### Political Strength
 
-Political Strength (PS) is the renamed-from-action-pool reserve a party spends on direct actions like Build Org, Influence, Recruitment, and the like. Unlike the old flat \`+5/turn\` action pool, PS is a stored reserve that grows over time:
+Political Strength (PS) is the reserve a party spends on party actions: building Organization in a state (Build Org), campaigning for its candidates, and referendum ground games. PS is stored and grows over time:
 
 - a passive flat trickle, treasury-independent: **20 PS/turn** for national parties, **5 PS/turn** for state parties
 - treasury-driven PS gains, normalized per country (state-party PS is generated at half the national rate in the same country)
@@ -33,7 +33,7 @@ Every party is either a **Major** or a **Minor** party, shown as a badge on its 
 
 - **Minor parties** (all new and custom parties start here) have a reduced national PS cap that *grows with their footprint*: the cap rises for every region where the party holds **20%+ Organization**, and falls again if a region drops below 10%.
 - A Minor party that reaches **20%+ Organization in a third of a country's regions** graduates to **Major** and unlocks the full national PS cap.
-- A **Major** party that collapses below **10% Organization across two-thirds of regions** is shown an at-risk warning with a countdown. If it doesn't recover to the graduation level in time, it is demoted back to Minor (and its cap shrinks to match its footprint). Major parties have a **240-turn grace period** (MAJOR_DEMOTION_GRACE_TURNS) before demotion takes effect.
+- A **Major** party that collapses below **10% Organization across two-thirds of regions** is shown an at-risk warning with a countdown. If it doesn't recover to the graduation level in time, it is demoted back to Minor (and its cap shrinks to match its footprint). Major parties have a **240-turn grace period** before demotion takes effect.
 
 The historic governing parties begin as Major; small and regional parties begin as Minor and must build organization to rise. (In one-party states, the ruling party is always Major.)
 

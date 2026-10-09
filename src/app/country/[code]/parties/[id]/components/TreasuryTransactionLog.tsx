@@ -55,8 +55,8 @@ const CATEGORY_LABEL: Record<TreasuryTransactionCategory, string> = {
   recruitment: "Recruitment",
   operations: "Operations",
   fund_generation: "Fund generation",
-  ps_investment: "PS investment",
-  org_building: "Org building",
+  ps_investment: "Political Strength purchase",
+  org_building: "Organization building",
   campaign_donation: "Campaign donation",
 };
 

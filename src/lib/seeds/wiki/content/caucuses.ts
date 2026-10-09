@@ -32,7 +32,7 @@ The most important diagnostic is the **at-risk member list**. The snapshot ident
 | --- | --- | --- |
 | Recent window | 12 turns | The rolling window over which churn is measured |
 | Warning buffer | 10 | Buffer applied before flagging a member as at-risk |
-| \`CAUCUS_NPP_RETENTION_MIN_RELATIONSHIP\` | From \`partyOrg\` constants | Minimum relationship with the chair required for an NPP to remain in the caucus |
+| Minimum relationship | 20 | Minimum relationship with the chair required for an NPP to remain in the caucus |
 
 ## Health labels
 
@@ -71,7 +71,7 @@ The caucus health snapshot is **integrated with the whip defiance system**. When
 ## Strategic notes
 
 - **Watch the 12-turn window.** A sudden spike in \`forced_exit\` events is the earliest sign of caucus fragmentation.
-- **Relationship with the chair is the key variable.** Most at-risk members are flagged because their \`relationshipWithChair\` has fallen below or near \`CAUCUS_NPP_RETENTION_MIN_RELATIONSHIP\`. Use [Political Capital](/wiki/political-capital) actions (especially private meetings) to repair relationships before members leave.
+- **Relationship with the chair is the key variable.** Most at-risk members are flagged because their relationship with the chair has fallen below or near the minimum of 20. Use [Political Capital](/wiki/political-capital) actions (especially private meetings) to repair relationships before members leave.
 - **Whip defiance is a leading indicator.** If members start defying whips, expect the at-risk list to grow. Address the underlying policy disagreement before it becomes a departure.
 - **Elections destabilize.** Even a healthy caucus can show a \`Strained\` label during a leadership contest. This is usually temporary.
 

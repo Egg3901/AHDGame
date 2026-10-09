@@ -227,7 +227,7 @@ export function RegionPartiesTab({
   const heading = config.headingLabel ?? `Party Organizations in ${regionName}`;
   const description =
     config.description ??
-    `Party organization reflects each party's share of accumulated ${regionNoun} Org units. Build Org adds one fixed unit, and organization can decay if a party becomes inactive here.`;
+    `Organization is each party's share of the ground game in this ${regionNoun}. Party officers grow it with Build Organization, which spends Political Strength (PS). A party that stops building here slowly loses share.`;
 
   if (partyOrg.length === 0) {
     return (

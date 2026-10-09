@@ -128,7 +128,7 @@ export function BuildOrgPanel({
       });
       const d = await r.json();
       if (!r.ok) {
-        showToast(apiErrorText(d, "Build Org failed"), "error");
+        showToast(apiErrorText(d, "Build Organization failed"), "error");
         return;
       }
       setLastResult(d as BuildOrgResult);
@@ -174,11 +174,12 @@ export function BuildOrgPanel({
   const headerPs = paysFromNationalPool
     ? (poolPS?.nationalPoolPS ?? 0)
     : (poolPS?.statePoolPS ?? ps);
-  const headerCapLabel = paysFromNationalPool ? "Nat'l" : String(effectiveCap);
-  const headerPoolLabel = paysFromNationalPool ? "National PS" : "Your PS";
+  // The national cap is not loaded here, so the national reserve shows no "/ cap".
+  const headerCapLabel = paysFromNationalPool ? null : String(effectiveCap);
+  const headerPoolLabel = paysFromNationalPool ? "National party PS" : "State party PS";
   const headerPoolTooltip = paysFromNationalPool
-    ? "National Political Strength reserve. Build Org from a national officer role spends this pool (not the state party's PS)."
-    : "Political Strength (PS) reserve for this state party. Build Org spends from the state pool (or national pool if you have that authority). Cap shown is the effective max.";
+    ? "The national party's Political Strength (PS). Building organization from a national officer role spends this reserve, not the state party's."
+    : "This state party's Political Strength (PS), out of its maximum. Building organization spends it (or the national party's PS if you hold a national role).";
 
   /**
    * Per-pool cash price for the button tooltips.
@@ -214,37 +215,37 @@ export function BuildOrgPanel({
       scopes={eligibleScopes}
       color={partyColor}
       busy={busy}
-      label="Build org"
+      label="Build organization"
       busyLabel="Building…"
       singleDisabled={!canBuildOrg || insufficientPs || noPresence}
       stateDisabled={!canBuildOrg || statePoolInsufficient || noPresence}
       nationalDisabled={!canBuildOrg || nationalPoolInsufficient || noPresence}
       singleTitle={
         !canBuildOrg
-          ? "Only the party chair, vice chair, or admin can build org"
+          ? "Only the party chair, vice chair, or admin can build organization"
           : noPresence
             ? "Establish a player or elected official in this state first"
             : insufficientPs
               ? `Need ${nextPsCost.toFixed(0)} PS for the next build, have ${ps.toFixed(0)}`
-              : "Spend PS to grow Org in this state"
+              : "Spend Political Strength to grow the party's Organization in this state"
       }
       stateTitle={
         !canBuildOrg
-          ? "Only the party chair, vice chair, or admin can build org"
+          ? "Only the party chair, vice chair, or admin can build organization"
           : noPresence
             ? "Establish a player or elected official in this state first"
             : statePoolInsufficient
-              ? `Need ${nextPsCost.toFixed(0)} PS for the next build, state pool has ${statePoolPs.toFixed(0)}`
-              : `Spend from state pool${poolPS ? ` (${poolPS.statePoolPS.toFixed(0)} PS)` : ""}${priceFor("state")}`
+              ? `Need ${nextPsCost.toFixed(0)} PS for the next build, the state party has ${statePoolPs.toFixed(0)}`
+              : `Spend the state party's PS${poolPS ? ` (has ${poolPS.statePoolPS.toFixed(0)})` : ""}${priceFor("state")}`
       }
       nationalTitle={
         !canBuildOrg
-          ? "Only the party chair, vice chair, or admin can build org"
+          ? "Only the party chair, vice chair, or admin can build organization"
           : noPresence
             ? "Establish a player or elected official in this state first"
             : nationalPoolInsufficient
-              ? `Need ${nextPsCost.toFixed(0)} PS for the next build, national pool has ${nationalPoolPs.toFixed(0)}`
-              : `Spend from national pool${poolPS ? ` (${poolPS.nationalPoolPS.toFixed(0)} PS)` : ""}${priceFor("national-targeted")}`
+              ? `Need ${nextPsCost.toFixed(0)} PS for the next build, the national party has ${nationalPoolPs.toFixed(0)}`
+              : `Spend the national party's PS${poolPS ? ` (has ${poolPS.nationalPoolPS.toFixed(0)})` : ""}${priceFor("national-targeted")}`
       }
       buttonAnim={buttonAnim}
       onSpend={handleClick}
@@ -298,7 +299,7 @@ export function BuildOrgPanel({
         <div className="text-[11px] italic text-muted">Loading projection…</div>
       ) : (
         <div className="text-[11px] italic text-muted">
-          Each successful click adds one fixed unit to this party&apos;s regional Org bucket.
+          Each successful click adds one unit to this party&apos;s Organization in this state.
         </div>
       )}
     </div>
@@ -325,16 +326,18 @@ export function BuildOrgPanel({
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            <h2 className={compact ? "text-sm font-semibold" : "font-semibold"}>Build org</h2>
+            <h2 className={compact ? "text-sm font-semibold" : "font-semibold"}>
+              Build organization
+            </h2>
             <Tooltip
-              label="About build org"
-              content="Spend Political Strength (PS) to add one fixed unit to this party's regional Org bucket. Org% is derived from each party's accumulated share of the bucket."
+              label="About building organization"
+              content="Spend Political Strength (PS) to add one unit to this party's Organization (Org) in this state. Org % is the party's share of all the organization every party has built here, and it scales the party's votes in general elections."
             />
           </div>
           {compact ? null : (
             <p className="text-xs text-muted/70 leading-relaxed max-w-lg">
-              Build durable regional organization one unit at a time. Cost rises with per-state
-              pressure, while each successful click adds the same amount to the bucket.
+              Build lasting organization in this state one unit at a time. Every click adds the same
+              amount, but the PS cost rises if you build here several times in a row.
             </p>
           )}
         </div>
@@ -349,7 +352,9 @@ export function BuildOrgPanel({
             style={{ color: partyColor, "--ps-bloom-color": partyColor } as React.CSSProperties}
           >
             {headerPs.toFixed(0)}
-            <span className="text-xs text-muted ml-1">/ {headerCapLabel}</span>
+            {headerCapLabel ? (
+              <span className="text-xs text-muted ml-1">/ {headerCapLabel}</span>
+            ) : null}
           </div>
         </div>
       </div>
@@ -365,7 +370,7 @@ export function BuildOrgPanel({
               />
             </div>
             <div className="text-[11px] text-muted/80 leading-snug">
-              Base {BUILD_ORG_BASE_PS_COST} PS · pressure ladder may raise the next cost
+              Costs {BUILD_ORG_BASE_PS_COST} PS, more if you have built here recently
             </div>
           </div>
           {buttons}
