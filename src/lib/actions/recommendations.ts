@@ -796,7 +796,7 @@ export function generateRecommendations(
         estimatedCost: { ap: 0, funds: 1_000_000 }, // Approximate founding cost
         estimatedBenefit: "Passive income, market influence",
       },
-      link: "/corporation/new",
+      link: "/market",
     });
   }
 

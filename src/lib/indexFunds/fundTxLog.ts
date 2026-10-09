@@ -241,7 +241,7 @@ export function buildIndexFundDividendTxEntry(params: {
   holder:
     | Pick<IndexFundHolderContext, "holderKind" | "holderId" | "holderName">
     | {
-        holderKind: "npp";
+        holderKind: "npp" | "corporation";
         holderId: ObjectId;
         holderName: string;
         currencyCode: CurrencyCode;
@@ -263,13 +263,18 @@ export function buildIndexFundDividendTxEntry(params: {
     type: "index_fund_dividend",
     turn: params.turn,
     createdAt,
-    subjectType: params.holder.holderKind === "npp" ? "npp" : "character",
+    subjectType:
+      params.holder.holderKind === "corporation"
+        ? "corporation"
+        : params.holder.holderKind === "npp"
+          ? "npp"
+          : "character",
     subjectId: params.holder.holderId,
     subjectName: params.holder.holderName,
     amount: params.amountNative ?? params.amountAnchor,
     anchorAmount: params.amountAnchor,
     currencyCode:
-      params.holder.holderKind === "npp"
+      params.holder.holderKind === "npp" || params.holder.holderKind === "corporation"
         ? params.holder.currencyCode
         : params.fund.anchorCurrencyCode,
     // `amountAnchor` is ₳; `amount` is the native figure the wallet moved. See

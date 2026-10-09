@@ -1,5 +1,7 @@
 "use client";
+import { FundPagination, FUND_PAGE_SIZE } from "./FundPagination";
 
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { FundBondHoldingRow } from "./types";
@@ -13,6 +15,8 @@ export function BondHoldingsPanel({
   formatAmount: (n: number, c?: CurrencyCode) => string;
   ccy: CurrencyCode;
 }) {
+  const [page, setPage] = useState(1);
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(holdings.length / FUND_PAGE_SIZE)));
   const t = useTranslations("corporations");
   return (
     <section className="overflow-hidden rounded-xl border border-card-border bg-card shadow-sm">
@@ -34,32 +38,35 @@ export function BondHoldingsPanel({
               </tr>
             </thead>
             <tbody>
-              {holdings.map((holding) => (
-                <tr key={holding.bondId} className="border-t border-card-border">
-                  <td className="px-5 py-3">
-                    {holding.sequentialId != null ? (
-                      <a
-                        className="text-primary hover:underline"
-                        href={`/corporation/${holding.sequentialId}`}
-                      >
-                        {holding.issuerName}
-                      </a>
-                    ) : (
-                      holding.issuerName
-                    )}
-                  </td>
-                  <td className="px-5 py-3 font-mono">{holding.units.toLocaleString()}</td>
-                  <td className="px-5 py-3 font-mono">{holding.couponRate.toFixed(2)}%</td>
-                  <td className="px-5 py-3 font-mono">{holding.maturityTurn}</td>
-                  <td className="px-5 py-3 text-right font-mono">
-                    {formatAmount(holding.valueAnchor, ccy)}
-                  </td>
-                </tr>
-              ))}
+              {holdings
+                .slice((currentPage - 1) * FUND_PAGE_SIZE, currentPage * FUND_PAGE_SIZE)
+                .map((holding) => (
+                  <tr key={holding.bondId} className="border-t border-card-border">
+                    <td className="px-5 py-3">
+                      {holding.sequentialId != null ? (
+                        <a
+                          className="text-primary hover:underline"
+                          href={`/corporation/${holding.sequentialId}`}
+                        >
+                          {holding.issuerName}
+                        </a>
+                      ) : (
+                        holding.issuerName
+                      )}
+                    </td>
+                    <td className="px-5 py-3 font-mono">{holding.units.toLocaleString()}</td>
+                    <td className="px-5 py-3 font-mono">{holding.couponRate.toFixed(2)}%</td>
+                    <td className="px-5 py-3 font-mono">{holding.maturityTurn}</td>
+                    <td className="px-5 py-3 text-right font-mono">
+                      {formatAmount(holding.valueAnchor, ccy)}
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>
       )}
+      <FundPagination page={currentPage} total={holdings.length} onChange={setPage} />
     </section>
   );
 }

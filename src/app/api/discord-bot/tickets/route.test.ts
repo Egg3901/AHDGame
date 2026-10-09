@@ -386,7 +386,8 @@ describe("POST /api/discord-bot/tickets filing context", () => {
     expect(created.ticketNumber).toBe(1001);
     expect(created.contextNeeded).toEqual(["discord", "page"]);
     expect(created.contextKey).toBe(creationContextKey(["discord", "page"]));
-    expect(created.contextQuestions).toHaveLength(2);
+    expect(created.contextQuestions).toHaveLength(3);
+    expect(created.contextQuestions[2]).toContain("confirm your platform");
     expect(db.collectionMocks.tickets.insertOne).toHaveBeenCalledWith(
       expect.objectContaining({
         contextRequest: expect.objectContaining({
@@ -420,8 +421,48 @@ describe("POST /api/discord-bot/tickets filing context", () => {
     await expect(response.json()).resolves.toMatchObject({
       contextNeeded: [],
       contextKey: null,
-      contextQuestions: [],
+      contextQuestions: [expect.stringContaining("confirm your platform")],
     });
+  });
+
+  it("logs recent linked visits privately and asks to confirm the likely page", async () => {
+    const recent = new Date();
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: "user-1",
+      username: "tester",
+      supportRecentVisits: [
+        {
+          path: "/corporation/9?token=secret",
+          recordedAt: recent,
+          platform: "desktop",
+          device: "desktop",
+          gameVersion: "1.2.3",
+        },
+        {
+          path: "/market",
+          recordedAt: recent,
+          platform: "android",
+          device: "mobile",
+          gameVersion: "1.2.3",
+          clientVersion: "1.4.2",
+        },
+      ],
+    });
+    const { POST } = await import("./route");
+    const response = await POST(
+      post({
+        category: "bug",
+        title: "Market button missing",
+        description: "Market does not load",
+        discordUserId: "ctx-linked-history",
+      })
+    );
+    const result = await response.json();
+    expect(result.contextQuestions.join("\n")).toContain("https://ahousedividedgame.com/market>");
+    expect(result).not.toHaveProperty("supportRecentVisits");
+    const stored = db.collectionMocks.tickets.insertOne.mock.calls[0][0];
+    expect(stored.supportRecentVisits).toHaveLength(2);
+    expect(JSON.stringify(stored.supportRecentVisits)).not.toContain("token");
   });
 
   it("still requires the bot token", async () => {
@@ -438,5 +479,27 @@ describe("POST /api/discord-bot/tickets filing context", () => {
     const { POST } = await import("./route");
     const response = await POST(post({ category: "bug", description: "missing title" }));
     expect(response.status).toBe(400);
+  });
+
+  it("refuses to bind a ticket number already owned by another Discord channel", async () => {
+    const { ObjectId } = await import("mongodb");
+    db.collectionMocks.tickets.findOne.mockResolvedValueOnce({
+      _id: new ObjectId(),
+      ticketNumber: 1435,
+      discordChannelId: "original-channel",
+    });
+    const { POST } = await import("./route");
+    const response = await POST(
+      post({
+        category: "bug",
+        title: "Another report",
+        description: "A separate channel must not take this ticket number.",
+        ticketNumber: 1435,
+        discordChannelId: "duplicate-channel",
+      })
+    );
+
+    expect(response.status).toBe(409);
+    expect(db.collectionMocks.tickets.insertOne).not.toHaveBeenCalled();
   });
 });

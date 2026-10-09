@@ -1,40 +1,38 @@
 /** @vitest-environment happy-dom */
-import { render, screen, cleanup } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
 import { BillProvisionsSection } from "./BillProvisionsSection";
+import { resolveResetLawProvision } from "@/lib/legislature/provisionEnrichment/resetLaw";
+import type { ResetLawProvision } from "@/lib/db/types/legislation";
 
-vi.mock("./BillProvisionCard", () => ({
-  BillProvisionCard: ({ index }: { index: number }) => <div>Provision {index + 1}</div>,
+vi.mock("@/components/PositionBadges", () => ({ PositionBadges: () => null }));
+vi.mock("@/components/legislation/PolicyEffectIndicators", () => ({
+  PolicyEffectIndicators: () => null,
 }));
-vi.mock("@/lib/legislature/dto/provisionView", () => ({
-  provisionToView: (value: unknown) => value,
+vi.mock("@/app/congress/bills/[id]/components/NationalizationProvisionDetailCard", () => ({
+  NationalizationProvisionDetailCard: () => null,
 }));
 
-afterEach(cleanup);
+const provision = {
+  type: "reset_law",
+  titleSnapshot: "Coverage guarantee",
+  descriptionSnapshot: "Extend coverage",
+  currentLawSnapshot: "Existing coverage",
+  currentLawDescriptionSnapshot: "Retain source obligations",
+  currentAnnualAllocationSnapshot: 1000000,
+  annualAllocationDeltaSnapshot: 250000,
+  reviewedOption: { country: "US", annualAllocation: 100000, accruedTransitionLiability: 50000 },
+} as ResetLawProvision;
 
-describe("BillProvisionsSection", () => {
-  it.each([undefined, []])(
-    "explains absent provisions without hiding the section",
-    (provisions) => {
-      render(
-        <BillProvisionsSection provisions={provisions}>
-          <div>Effects</div>
-        </BillProvisionsSection>
-      );
-      expect(screen.getByRole("heading", { name: "Provisions" })).toBeTruthy();
-      expect(screen.getByText("No policy provisions are recorded for this bill.")).toBeTruthy();
-      expect(screen.queryByText("Effects")).toBeNull();
-    }
-  );
-
-  it("renders every provision and optional regional effects", () => {
+describe("reset-law bill provision display", () => {
+  it("shows current and proposed annual costs, adverse treasury delta and separate transition", () => {
     render(
-      <BillProvisionsSection provisions={[{}, {}] as never}>
-        <div>Effects</div>
-      </BillProvisionsSection>
+      <BillProvisionsSection provisions={[resolveResetLawProvision(provision)]} billCountry="US" />
     );
-    expect(screen.getByText("Provision 1")).toBeTruthy();
-    expect(screen.getByText("Provision 2")).toBeTruthy();
-    expect(screen.getByText("Effects")).toBeTruthy();
+    expect(screen.getByText(/Cost.*1M.*1.3M.*yr/)).toBeTruthy();
+    expect(screen.getByText(/Net change.*250K.*yr to the treasury/).className).toContain(
+      "text-error"
+    );
+    expect(screen.getByText(/One-time transition cost.*50K/)).toBeTruthy();
   });
 });

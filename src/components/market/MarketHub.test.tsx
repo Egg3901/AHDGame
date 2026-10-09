@@ -5,6 +5,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, cleanup } from "@testing-library/react";
 import { clearMarketJsonCache } from "./useMarketJson";
 
+vi.mock("@/contexts/AuthDataContext", () => ({ useAuthMe: () => ({ navData: null }) }));
+vi.mock("@/hooks/useGameEvents", () => ({ useGameTurnStatus: () => null }));
+vi.mock("@/contexts/RegisteredCountriesContext", () => ({
+  useEnabledCountries: () => ["US", "UK", "JP"],
+  useCountryDisplayName: () => (id: string) => id,
+}));
+
 let search = "";
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -20,7 +27,9 @@ vi.mock("@/contexts/CurrencyContext", () => ({
   }),
 }));
 vi.mock("@/app/country/[code]/stockmarket/components/MarketOverview", () => ({
-  StockMarketChart: () => <div data-testid="market-chart" />,
+  StockMarketChart: ({ exchangeFilter }: { exchangeFilter: string }) => (
+    <div data-testid="market-chart" data-exchange={exchangeFilter} />
+  ),
 }));
 vi.mock("@/app/country/[code]/stockmarket/components/StockList", () => ({
   StockList: () => <div>stock-list</div>,
@@ -66,6 +75,7 @@ let calls: string[];
 beforeEach(() => {
   cleanup();
   clearMarketJsonCache();
+  window.localStorage.clear();
   replace.mockClear();
   calls = [];
   vi.stubGlobal(
@@ -146,6 +156,31 @@ describe("MarketHub", () => {
     render(<MarketHub />);
     fireEvent.click(screen.getByRole("tab", { name: "Bonds" }));
     expect(replace).toHaveBeenCalledWith("/market?tab=bonds", { scroll: false });
+  });
+
+  it("restores exchange selection on the chart and writes the selected venue to the URL", async () => {
+    search = "tab=stocks";
+    render(<MarketHub />);
+    expect(screen.getByTestId("market-chart").getAttribute("data-exchange")).toBe("global");
+    fireEvent.click(screen.getAllByRole("button", { name: "NYSE" })[0]);
+    expect(replace).toHaveBeenCalledWith("/market?tab=stocks&exchange=US", { scroll: false });
+    await waitFor(() => expect(screen.getByText("No listed corporations yet.")).toBeTruthy());
+  });
+
+  it("restores a selected exchange from the URL and loads compare totals only when requested", async () => {
+    search = "tab=stocks&exchange=JP";
+    render(<MarketHub />);
+    expect(screen.getByTestId("market-chart").getAttribute("data-exchange")).toBe("JP");
+    await waitFor(() => expect(screen.getByText("No listed corporations yet.")).toBeTruthy());
+    const initialNikkeiRequests = calls.filter((url) => url.includes("exchange=nikkei")).length;
+    expect(initialNikkeiRequests).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: "Compare" }));
+    await waitFor(() =>
+      expect(calls.filter((url) => url.includes("exchange=nikkei")).length).toBeGreaterThan(
+        initialNikkeiRequests
+      )
+    );
+    await waitFor(() => expect(screen.getByText("No listed corporations yet.")).toBeTruthy());
   });
 
   it("labels NPP offers and defaults the supply tab to players", async () => {

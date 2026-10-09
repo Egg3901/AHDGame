@@ -39,15 +39,11 @@ const FOUNDING_1991: TutorialWorld = {
 };
 
 describe("step links", () => {
-  it("points the market step at the actual post-redirect path", () => {
+  it("points the market step directly at the market hub", () => {
     const invest = buildChapterTour(CHARACTER, "invest").find((s) => s.id === "invest-market");
 
     expect(invest?.link).toBe(stockmarketUrl("US"));
-    // /stockmarket/[country] is a redirect shell to /country/[code]/stockmarket
-    // (see src/app/stockmarket/[country]/page.tsx). An anchored step's `link`
-    // must match the URL the browser lands on post-redirect, or `onStepPage`
-    // never becomes true and the spotlight and manual "Next" never appear.
-    expect(invest?.link).not.toMatch(/^\/stockmarket\//);
+    expect(invest?.link).toBe("/market?tab=stocks&exchange=US");
   });
 
   it("never anchors a step to a page that redirects", async () => {

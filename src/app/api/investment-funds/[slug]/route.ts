@@ -1,3 +1,4 @@
+import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -144,7 +145,29 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
       }
     }
 
-    return NextResponse.json({
+    const corporations = auth
+      ? await db
+          .collection<import("@/lib/db/types").Corporation>("corporations")
+          .find(
+            { userId: new ObjectId(auth.userId) },
+            { projection: { name: 1, liquidCapital: 1, liquidCurrencyCode: 1, countryId: 1 } }
+          )
+          .toArray()
+      : [];
+    const corporationAccounts = corporations.map((corp) => {
+      const position = positions.find(
+        (p) => p.holderKind === "corporation" && p.corporationId?.equals(corp._id)
+      );
+      return {
+        id: corp._id.toHexString(),
+        name: corp.name,
+        liquidCapital: corp.liquidCapital,
+        currencyCode: resolveCorpLiquidCurrencyCode(corp) ?? null,
+        units: position?.units ?? 0,
+      };
+    });
+    const response = NextResponse.json({
+      corporationAccounts,
       fund: {
         id: fund.slug,
         slug: fund.slug,
@@ -214,6 +237,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
         createdAt: s.createdAt,
       })),
     });
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
   } catch (error) {
     return handleRouteError(error);
   }

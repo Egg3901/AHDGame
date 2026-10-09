@@ -460,3 +460,33 @@ describe("resolveBillProvisions", () => {
     expect(vi.mocked(computeNationalizationProvisionDetail)).not.toHaveBeenCalled();
   });
 });
+
+describe("reset-law frozen fiscal display", () => {
+  it.each([250, -250, 0])("includes retained claims and treasury delta %s", async (delta) => {
+    const { resolveBillProvisions } = await import("./billEnrichment");
+    const bill = {
+      countryId: "US",
+      stateId: "federal",
+      provisions: [
+        {
+          type: "reset_law",
+          titleSnapshot: "Coverage guarantee",
+          descriptionSnapshot: "Extend coverage",
+          currentLawSnapshot: "Existing coverage",
+          currentLawDescriptionSnapshot: "Retain existing claims",
+          currentAnnualAllocationSnapshot: 1000,
+          annualAllocationDeltaSnapshot: delta,
+          reviewedOption: { country: "US", annualAllocation: 100, accruedTransitionLiability: 50 },
+        },
+      ],
+    } as Bill;
+    const { provisionsResolved } = await resolveBillProvisions(db as unknown as Db, bill);
+    expect(provisionsResolved[0]?.fiscal).toMatchObject({
+      currencyCode: "USD",
+      current: { cost: 1000, revenue: 0, net: -1000 },
+      proposed: { cost: 1000 + delta, revenue: 0, net: -(1000 + delta) },
+      netDelta: -delta,
+      transitionCost: 50,
+    });
+  });
+});

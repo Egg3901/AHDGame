@@ -1,6 +1,5 @@
 import { ALL_EXCHANGES, getExchangeApiKey } from "@/lib/constants/exchangeRegistry";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import type { ExchangeFilter } from "./types";
 
 export interface ExchangeMetaEntry {
   title: string;
@@ -94,22 +93,4 @@ export function buildRuntimeExchangeMeta(
       )
     ),
   };
-}
-
-export function getStockMarketBasePath(
-  exchangeFilter: ExchangeFilter,
-  fallbackCountryCode: string
-): string {
-  if (exchangeFilter === "global") {
-    return "/stockmarket/global";
-  }
-
-  const upperFilter = exchangeFilter.toUpperCase();
-  if (upperFilter in COUNTRY_CONFIGS) {
-    return `/country/${exchangeFilter.toLowerCase()}/stockmarket`;
-  }
-
-  return fallbackCountryCode.toLowerCase() === "global"
-    ? "/stockmarket/global"
-    : `/country/${fallbackCountryCode.toLowerCase()}/stockmarket`;
 }

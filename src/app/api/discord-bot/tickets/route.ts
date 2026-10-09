@@ -1,3 +1,4 @@
+import { recentSupportVisits, buildIntakeQuestions } from "@/lib/tickets/intakeContext";
 import { TICKET_PLATFORM_VALUES, platformFromDescriptionPrefix } from "@/lib/tickets/platform";
 import { NextResponse } from "next/server";
 import { ObjectId, type Filter } from "mongodb";
@@ -231,9 +232,12 @@ export async function POST(request: Request) {
     if (dedupeOr.length) {
       const existing = await coll.findOne(
         { $or: dedupeOr },
-        { projection: { _id: 1, ticketNumber: 1 } }
+        { projection: { _id: 1, ticketNumber: 1, discordChannelId: 1 } }
       );
       if (existing) {
+        if (body.discordChannelId && existing.discordChannelId !== body.discordChannelId) {
+          return errorResponse(409, "Ticket number already belongs to another Discord channel");
+        }
         return NextResponse.json({
           id: existing._id.toString(),
           ticketNumber: existing.ticketNumber,
@@ -245,12 +249,17 @@ export async function POST(request: Request) {
     // Resolve a linked game account (if any) for richer context.
     let userId: ObjectId | null = null;
     let reporter: Ticket["reporter"] | undefined;
+    let visits: NonNullable<Ticket["supportRecentVisits"]> = [];
     if (body.discordUserId) {
       const user = await db
         .collection<User>("users")
-        .findOne({ discordId: body.discordUserId }, { projection: { _id: 1, username: 1 } });
+        .findOne(
+          { discordId: body.discordUserId },
+          { projection: { _id: 1, username: 1, supportRecentVisits: 1 } }
+        );
       if (user) {
         userId = user._id;
+        visits = recentSupportVisits(user.supportRecentVisits, new Date());
         reporter = await resolveReporter(db, user._id, user.username);
       }
     }
@@ -289,6 +298,7 @@ export async function POST(request: Request) {
         ? { discordDisplayName: body.discordDisplayName.trim().slice(0, 128) }
         : {}),
       userId,
+      ...(visits.length ? { supportRecentVisits: visits } : {}),
       ...(reporter ? { reporter } : {}),
       category: body.category,
       ...(platform ? { platform } : {}),
@@ -333,7 +343,16 @@ export async function POST(request: Request) {
       // idempotent player-update ledger, so a later dashboard post dedupes.
       contextNeeded: contextRequest.needed,
       contextKey: contextRequest.key,
-      contextQuestions: contextRequest.needed.map((need) => CONTEXT_QUESTIONS[need]),
+      contextQuestions: [
+        ...contextRequest.needed
+          .filter((need) => need !== "page")
+          .map((need) => CONTEXT_QUESTIONS[need]),
+        ...buildIntakeQuestions(
+          `${body.title}\n${body.description}`,
+          visits,
+          contextRequest.needed.includes("page")
+        ),
+      ],
     });
   } catch (error) {
     return handleRouteError(error);

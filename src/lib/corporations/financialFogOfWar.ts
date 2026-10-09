@@ -164,6 +164,8 @@ export function applyFogToBalanceSheet(balanceSheet: BalanceSheet, factor: numbe
       })),
       totalSectorNPV: fog(a.totalSectorNPV, factor),
       bondHoldingsValue: fog(a.bondHoldingsValue, factor),
+      fundHoldingsValue: fog(a.fundHoldingsValue ?? 0, factor),
+      heldFunds: a.heldFunds?.map((h) => ({ ...h, valueAnchor: fog(h.valueAnchor, factor) })),
       stockHoldingsValue: fog(a.stockHoldingsValue, factor),
       imfFacilityReceivablesValue: fog(a.imfFacilityReceivablesValue, factor),
       imfFacilityReceivables: a.imfFacilityReceivables.map((r) => ({

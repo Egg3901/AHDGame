@@ -36,3 +36,18 @@ describe("resolveCorporation projections", () => {
     }
   );
 });
+
+describe("corporation error references", () => {
+  it.each(["new", "42"])("returns a shared code and reference for %s", async (id) => {
+    const db = {
+      collection: vi.fn().mockReturnValue({ findOne: vi.fn().mockResolvedValue(null) }),
+    };
+    const result = await resolveCorporation(db as never, id);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected an error response");
+    const body = await result.response.json();
+    expect(body.code).toBe(id === "new" ? "BAD_REQUEST" : "NOT_FOUND");
+    expect(body.ref).toEqual(expect.any(String));
+    expect(body.ref.length).toBeGreaterThan(0);
+  });
+});

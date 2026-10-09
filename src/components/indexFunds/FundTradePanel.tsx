@@ -1,4 +1,5 @@
 "use client";
+import { estimateCorpWalletSpend } from "@/lib/currency/corpWalletSpend";
 
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -35,6 +36,8 @@ export function FundTradePanel({
   myLegacyUnits,
   onSuccess,
   defaultMode = "subscribe",
+  corporation,
+  onPendingChange,
 }: {
   fundId: string;
   quotedNav: number;
@@ -50,6 +53,13 @@ export function FundTradePanel({
   myLegacyUnits: number;
   onSuccess: () => void;
   defaultMode?: Mode;
+  onPendingChange?: (pending: boolean) => void;
+  corporation?: {
+    id: string;
+    name: string;
+    liquidCapital: number;
+    currencyCode: CurrencyCode | null;
+  };
 }) {
   const {
     formatFull,
@@ -74,6 +84,7 @@ export function FundTradePanel({
     mode: Mode;
     units: number;
     payCurrency?: CurrencyCode;
+    corporationId?: string;
   } | null>(null);
   const submitting = useRef(false);
   const [error, setError] = useState("");
@@ -82,6 +93,10 @@ export function FundTradePanel({
   const [autoConvertEnabled, setAutoConvertEnabled] = useState(true);
   const [selectedPayCurrency, setSelectedPayCurrency] = useState<CurrencyCode>(fundCurrency);
   const [currencyDropdownOpen, setCurrencyDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    onPendingChange?.(!!pendingOrder);
+  }, [pendingOrder, onPendingChange]);
 
   const loadWallet = useCallback(async () => {
     try {
@@ -112,7 +127,7 @@ export function FundTradePanel({
   }, [currencyDropdownOpen]);
 
   const parsedUnits = useMemo(() => {
-    const n = parseInt(units, 10);
+    const n = Number(units);
     return Number.isInteger(n) && n >= 1 ? n : null;
   }, [units]);
 
@@ -158,7 +173,11 @@ export function FundTradePanel({
   const loadingRates = ratesLoading && !forexRates;
   const isSubscribe = mode === "subscribe";
   const showPaymentControls =
-    isSubscribe && forexEnabled && !!personalBalances && Object.keys(personalBalances).length > 0;
+    !corporation &&
+    isSubscribe &&
+    forexEnabled &&
+    !!personalBalances &&
+    Object.keys(personalBalances).length > 0;
   const shouldUseImplicitAutoConvert =
     showPaymentControls && autoConvertEnabled && selectedPayCurrency === homeCurrency;
 
@@ -231,26 +250,49 @@ export function FundTradePanel({
         )
       : (wallet?.cashOnHand ?? 0);
 
-  const fundsShort =
-    isSubscribe &&
-    parsedUnits != null &&
-    totalCostNative > 0 &&
-    (showPaymentControls
-      ? shouldUseImplicitAutoConvert
-        ? !(
-            implicitAutoConvertEstimate &&
-            implicitAutoConvertEstimate.spendableInTarget >= totalCostNative
-          )
-        : selectedPayCurrency === fundCurrency
-          ? selectedPayBalance < totalCostNative
-          : !(explicitPayEstimate && explicitPayEstimate.canAfford)
-      : totalCostAnchor > personalCashAnchor);
+  const corpSpend = corporation
+    ? estimateCorpWalletSpend({
+        union: euroMonetaryUnion,
+        spreadStrengths: forexSpreadStrengths,
+        requiredAmount: corporation.currencyCode ? totalCostNative : totalCostAnchor,
+        availableBalance: corporation.liquidCapital,
+        fromCurrency: corporation.currencyCode,
+        toCurrency: fundCurrency,
+        rates: forexEnabled
+          ? (forexRates ?? {})
+          : {
+              [fundCurrency]: 1,
+              ...(corporation.currencyCode ? { [corporation.currencyCode]: 1 } : {}),
+            },
+      })
+    : null;
+  const corpFormat = (n: number) =>
+    corporation?.currencyCode
+      ? formatCurrencyFaceAmount(n, corporation.currencyCode)
+      : formatFull(n);
+  const fundsShort = corporation
+    ? isSubscribe && (!corpSpend || !corpSpend.canAfford)
+    : isSubscribe &&
+      parsedUnits != null &&
+      totalCostNative > 0 &&
+      (showPaymentControls
+        ? shouldUseImplicitAutoConvert
+          ? !(
+              implicitAutoConvertEstimate &&
+              implicitAutoConvertEstimate.spendableInTarget >= totalCostNative
+            )
+          : selectedPayCurrency === fundCurrency
+            ? selectedPayBalance < totalCostNative
+            : !(explicitPayEstimate && explicitPayEstimate.canAfford)
+        : totalCostAnchor > personalCashAnchor);
 
-  const budgetLabel = !showPaymentControls
-    ? "Your cash"
-    : shouldUseImplicitAutoConvert
-      ? `Spendable in ${fundCurrency}`
-      : `Available in ${selectedPayCurrency}`;
+  const budgetLabel = corporation
+    ? `${corporation.name} cash`
+    : !showPaymentControls
+      ? "Your cash"
+      : shouldUseImplicitAutoConvert
+        ? `Spendable in ${fundCurrency}`
+        : `Available in ${selectedPayCurrency}`;
 
   // With wallet payment controls the budget and after-purchase lines are in
   // the fund's face currency, so the cost line must be too. Quoting the cost
@@ -260,43 +302,50 @@ export function FundTradePanel({
     ? formatCurrencyFaceAmount(totalCostNative, fundCurrency)
     : formatFull(totalCostAnchor, fundCurrency);
 
-  const budgetValue = !showPaymentControls
-    ? formatFull(personalCashAnchor)
-    : shouldUseImplicitAutoConvert
-      ? implicitAutoConvertEstimate
-        ? formatCurrencyFaceAmount(implicitAutoConvertEstimate.spendableInTarget, fundCurrency)
-        : formatCurrencyFaceAmount(personalBalances?.[fundCurrency] ?? 0, fundCurrency)
-      : formatCurrencyFaceAmount(selectedPayBalance, selectedPayCurrency);
+  const budgetValue = corporation
+    ? corpFormat(corporation.liquidCapital)
+    : !showPaymentControls
+      ? formatFull(personalCashAnchor)
+      : shouldUseImplicitAutoConvert
+        ? implicitAutoConvertEstimate
+          ? formatCurrencyFaceAmount(implicitAutoConvertEstimate.spendableInTarget, fundCurrency)
+          : formatCurrencyFaceAmount(personalBalances?.[fundCurrency] ?? 0, fundCurrency)
+        : formatCurrencyFaceAmount(selectedPayBalance, selectedPayCurrency);
 
-  const estimatedFxFeeAnchor = showPaymentControls
-    ? shouldUseImplicitAutoConvert
-      ? Object.entries(implicitAutoConvertEstimate?.spreadFees ?? {}).reduce(
-          (total, [code, fee]) => total + toInternalFrom(fee ?? 0, code as CurrencyCode),
-          0
-        )
-      : toInternalFrom(explicitPayEstimate?.spreadFee ?? 0, selectedPayCurrency)
-    : 0;
+  const estimatedFxFeeAnchor =
+    corporation && corpSpend
+      ? toInternalFrom(corpSpend.spreadFee, corporation.currencyCode ?? "USD")
+      : showPaymentControls
+        ? shouldUseImplicitAutoConvert
+          ? Object.entries(implicitAutoConvertEstimate?.spreadFees ?? {}).reduce(
+              (total, [code, fee]) => total + toInternalFrom(fee ?? 0, code as CurrencyCode),
+              0
+            )
+          : toInternalFrom(explicitPayEstimate?.spreadFee ?? 0, selectedPayCurrency)
+        : 0;
 
-  const afterPurchaseValue = !showPaymentControls
-    ? fundsShort
-      ? `Short by ${formatFull(totalCostAnchor - personalCashAnchor)}`
-      : formatFull(personalCashAnchor - totalCostAnchor)
-    : shouldUseImplicitAutoConvert
-      ? (() => {
-          const spendable = implicitAutoConvertEstimate?.spendableInTarget ?? 0;
-          return fundsShort
-            ? `Short by ${formatCurrencyFaceAmount(totalCostNative - spendable, fundCurrency)}`
-            : formatCurrencyFaceAmount(spendable - totalCostNative, fundCurrency);
-        })()
-      : (() => {
-          const requiredSpend = explicitPayEstimate?.spendAmount ?? totalCostNative;
-          return fundsShort
-            ? `Short by ${formatCurrencyFaceAmount(
-                totalCostNative - (explicitPayEstimate?.deliveredAmount ?? 0),
-                fundCurrency
-              )}`
-            : formatCurrencyFaceAmount(selectedPayBalance - requiredSpend, selectedPayCurrency);
-        })();
+  const afterPurchaseValue = corporation
+    ? corpFormat(corporation.liquidCapital - (corpSpend?.spendAmount ?? 0))
+    : !showPaymentControls
+      ? fundsShort
+        ? `Short by ${formatFull(totalCostAnchor - personalCashAnchor)}`
+        : formatFull(personalCashAnchor - totalCostAnchor)
+      : shouldUseImplicitAutoConvert
+        ? (() => {
+            const spendable = implicitAutoConvertEstimate?.spendableInTarget ?? 0;
+            return fundsShort
+              ? `Short by ${formatCurrencyFaceAmount(totalCostNative - spendable, fundCurrency)}`
+              : formatCurrencyFaceAmount(spendable - totalCostNative, fundCurrency);
+          })()
+        : (() => {
+            const requiredSpend = explicitPayEstimate?.spendAmount ?? totalCostNative;
+            return fundsShort
+              ? `Short by ${formatCurrencyFaceAmount(
+                  totalCostNative - (explicitPayEstimate?.deliveredAmount ?? 0),
+                  fundCurrency
+                )}`
+              : formatCurrencyFaceAmount(selectedPayBalance - requiredSpend, selectedPayCurrency);
+          })();
 
   const ratesNeededButMissing =
     isSubscribe &&
@@ -344,6 +393,7 @@ export function FundTradePanel({
 
       command.current = {
         operationId: crypto.randomUUID(),
+        ...(corporation ? { corporationId: corporation.id } : {}),
         fundId,
         mode,
         units: parsedUnits,
@@ -368,6 +418,7 @@ export function FundTradePanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           operationId: order.operationId,
+          ...(order.corporationId ? { corporationId: order.corporationId } : {}),
           units: order.units,
           ...(order.payCurrency ? { payCurrency: order.payCurrency } : {}),
         }),
@@ -617,7 +668,14 @@ export function FundTradePanel({
             <div className="flex justify-between gap-2">
               <span className="text-muted">Quoted payout</span>
               <span className="font-mono font-semibold tabular-nums">
-                {formatFull(redeemEstimate.payoutAnchor, fundCurrency)}
+                {corporation
+                  ? corpFormat(
+                      redeemEstimate.payoutAnchor *
+                        (forexEnabled && corporation.currencyCode
+                          ? (forexRates?.[corporation.currencyCode] ?? 1)
+                          : 1)
+                    )
+                  : formatFull(redeemEstimate.payoutAnchor, fundCurrency)}
               </span>
             </div>
             {redeemEstimate.legacyRedeemed > 0 && redeemEstimate.rate !== 1 && (

@@ -806,6 +806,14 @@ export interface BalanceSheet {
     totalOperatingNPV?: number;
     bondHoldingsValue: number;
     stockHoldingsValue: number;
+    fundHoldingsValue?: number;
+    heldFunds?: {
+      fundId: string;
+      slug?: string;
+      name: string;
+      units: number;
+      valueAnchor: number;
+    }[];
     /** Principal outstanding on IMF bailout loans this corporation is owed as lender (₳). */
     imfFacilityReceivablesValue: number;
     imfFacilityReceivables: Array<{
