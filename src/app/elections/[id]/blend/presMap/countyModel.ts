@@ -88,12 +88,30 @@ function shareByName(
   return out;
 }
 
+/**
+ * What a county's weaker margins fade toward. On a dark page, fading toward the
+ * page turns a yellow into olive and a purple into near-black, and a map of
+ * thousands of small shapes reads as mud; fading toward a light neutral reads
+ * as a clean tint instead (cream, lavender), the way printed county maps do.
+ * A light theme's own page is already light, so it is used as is.
+ */
+export const COUNTY_DARK_THEME_FADE = "#d9d9e1";
+
+export function countyFadeGround(pageGround: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(pageGround.trim());
+  if (!m) return COUNTY_DARK_THEME_FADE;
+  const n = parseInt(m[1], 16);
+  const luma = (((n >> 16) & 255) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000;
+  return luma < 128 ? COUNTY_DARK_THEME_FADE : pageGround;
+}
+
 export function buildCountyRows(
   data: CountyApiResponse,
   candidate: (id: string) => { name: string; color: string } | undefined,
   /** Page ground the tier shades fade toward; the theme's, as hex. */
   ground: string = BLEND_HEX.page
 ): CountyRow[] {
+  const countyGround = countyFadeGround(ground);
   return data.subdivisions.map((sub) => {
     const tier = classifyMarginTier(sub.margin);
     const winner = sub.winner ? resolveCandidate(data, candidate, sub.winner) : null;
@@ -106,7 +124,7 @@ export function buildCountyRows(
       winnerColor: winner?.color ?? NEUTRAL_FILL,
       margin: sub.margin,
       tier,
-      fill: winner ? shadeColorForTier(winner.color, tier, ground) : BLEND.trackAlt,
+      fill: winner ? shadeColorForTier(winner.color, tier, countyGround) : BLEND.trackAlt,
       votes: Object.values(sub.votes ?? {}).reduce((s, v) => s + v, 0),
       shareByName: shareByName(data, candidate, sub.votes ?? {}),
     };

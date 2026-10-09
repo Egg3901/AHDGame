@@ -37,7 +37,7 @@ import { loadUsStateGeo, MAP_HEIGHT, MAP_WIDTH, type StateGeo } from "./usStates
 import { usePanZoom } from "./usePanZoom";
 import { MIN_ZOOM, MAX_ZOOM, visibleBox } from "./mapView";
 import { COUNTY_ZOOM, CountyPaths, countyOpacity, useCountyRows } from "./CountyLayer";
-import type { CountyRow } from "./countyModel";
+import { countyFadeGround, type CountyRow } from "./countyModel";
 import type { CountySource } from "./countyStore";
 
 /** Container width at which the state overview sits over the map instead of rising as a sheet. */
@@ -252,7 +252,7 @@ export function PresidentialMap({
     const out: Record<string, CountyRow[]> = {};
     for (const id of countyStates) {
       const rows = countyRows[id]
-        ? applyCountyView(countyRows[id], activeView, ground, shareCand)
+        ? applyCountyView(countyRows[id], activeView, countyFadeGround(ground), shareCand)
         : null;
       if (rows) out[id] = rows;
     }
