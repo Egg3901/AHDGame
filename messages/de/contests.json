@@ -1,8 +1,8 @@
 {
   "contests": {
     "title": "Wettbewerbe",
-    "intro": "Wöchentliche Rennen zwischen Spielern. Am Ende jeder Woche gewinnt die Spitze jedes Wettbewerbs {prize} als persönliches Bargeld, und eine neue Runde beginnt. Neue Unternehmen und Charaktere steigen zu Beginn der nächsten Runde ein.",
-    "referralIntro": "Der Empfehlungswettbewerb läuft die ganze Iteration. Die drei besten Werber erhalten Supporter-Vorteile für die nächste Iteration.",
+    "intro": "Wöchentliche Rennen zwischen Spielern. Am Ende jeder Woche gewinnt die Spitze jedes Wettbewerbs den angezeigten Geldpreis, und eine neue Runde beginnt. Neue Unternehmen und Charaktere steigen zu Beginn der nächsten Runde ein.",
+    "referralIntro": "Lade Spieler mit deinem Link ein. Eine Empfehlung zählt, sobald die eingeladene Person einen Charakter erstellt.",
     "endsAt": "Runde {round} endet",
     "entrants": "{count, plural, =0 {Noch keine Teilnehmer} one {# Teilnahme} other {# Teilnahmen}}",
     "noRound": "Die nächste Runde startet nach dem kommenden Zug.",
@@ -30,9 +30,13 @@
         "title": "Regierungszustimmung",
         "rules": "Die meisten Zustimmungspunkte für eine Regierung unter Führung eines Spielers. Dieselbe Person muss die ganze Runde im Amt bleiben."
       },
-      "referrals": {
-        "title": "Empfehlungen",
-        "rules": "Spieler, die du einlädst und die einen Charakter erstellen."
+      "referrals_weekly": {
+        "title": "Empfehlungen der Woche",
+        "rules": "Die meisten neuen Spieler in dieser Woche."
+      },
+      "referrals_iteration": {
+        "title": "Diese Iteration",
+        "rules": "Die meisten neuen Spieler in dieser Iteration. Die Zählung beginnt mit jeder neuen Iteration von vorn."
       }
     },
     "scores": {
@@ -43,22 +47,25 @@
     },
     "referrals": {
       "since": "Gezählt seit",
-      "notRunning": "Der Empfehlungswettbewerb pausiert zwischen den Iterationen. Er startet bald wieder.",
       "yourCount": "{count, plural, =0 {Du hast in dieser Iteration noch keine Empfehlungen.} one {Du hast in dieser Iteration # Empfehlung.} other {Du hast in dieser Iteration # Empfehlungen.}}",
       "yourRank": "Du bist #{rank}.",
       "invite": "Dein Einladungslink",
       "copy": "Link kopieren",
       "copied": "Kopiert",
-      "none": "Noch keine Empfehlungen. Sei die erste Person."
+      "none": "Noch keine Empfehlungen. Sei die erste Person.",
+      "notRunning": "Der Empfehlungswettbewerb startet nach dem nächsten Zug."
     },
     "past": {
       "title": "Letzte Gewinner",
       "empty": "Noch ist keine Runde beendet.",
       "round": "Runde {round}",
       "prize": "{prize} gewonnen",
-      "supporter": "Supporter bis {date}",
+      "supporter": "Supporter für die nächste Iteration",
       "alreadySupporter": "Bereits Supporter",
       "formerPlayer": "Ehemaliger Spieler"
-    }
+    },
+    "prize": "Preis: {prize} für den Sieg",
+    "referralsHeading": "Empfehlungen",
+    "iterationPrize": "Preis: Die drei Besten erhalten Supporter für die gesamte nächste Iteration"
   }
 }

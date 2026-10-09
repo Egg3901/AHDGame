@@ -11,12 +11,20 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
  * - influence_gain: National Influence gained by a player character.
  * - approval_gain: approval points gained by a country whose head of
  *   government is a player and held office for the whole round.
+ * - referrals_weekly: new players a referrer brought in during the round.
  */
 export type ContestKind =
-  "corp_growth_small" | "corp_growth_large" | "influence_gain" | "approval_gain";
+  | "corp_growth_small"
+  | "corp_growth_large"
+  | "influence_gain"
+  | "approval_gain"
+  | "referrals_weekly";
 
-/** The referral leaderboard is not a weekly round; its awards are recorded here too. */
-export type ContestRecordKind = ContestKind | "referrals";
+/**
+ * The iteration referral contest is not a weekly round: it runs from one
+ * iteration change to the next, and its top three earn Supporter.
+ */
+export type ContestRecordKind = ContestKind | "referrals_iteration";
 
 export interface ContestBaseline {
   /** Corporation id, character id, or country id, depending on kind. */
@@ -51,9 +59,7 @@ export interface ContestWinner {
   prizeLocal?: number;
   currencyCode?: CurrencyCode;
   paidAt?: Date;
-  /** Referral awards: supporter tier granted until this date. */
-  supporterUntil?: Date;
-  /** Referral awards: user already had active supporter benefits, so nothing changed. */
+  /** Referral awards: user already had paid supporter benefits, so nothing changed. */
   alreadySupporter?: boolean;
   rank?: number;
 }
@@ -67,6 +73,8 @@ export interface ContestRound {
   startedAt: Date;
   endsAt: Date;
   startTurn: number;
+  /** `type:number` of the iteration the round ran in; a round from another iteration is voided. */
+  iterationKey?: string;
   /** Corp tiers: opening value boundary in ₳ between small and large. */
   tierBoundaryAnchor?: number;
   baselines: ContestBaseline[];
@@ -78,6 +86,6 @@ export interface ContestRound {
   winners: ContestWinner[];
   /** Referral awards only: who granted them. */
   awardedBy?: string;
-  /** Referral awards only: user id of each winner, for idempotent re-runs. */
+  /** Referral awards only: user id of each winner. */
   winnerUserIds?: ObjectId[];
 }

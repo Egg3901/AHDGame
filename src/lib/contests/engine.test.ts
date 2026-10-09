@@ -3,9 +3,8 @@ import { ObjectId, type Db } from "mongodb";
 import type { ContestRound } from "@/lib/db/types/contestRound";
 
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
-vi.mock("@/lib/db/collections/gameState", () => ({
-  getGameStatePreset: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("@/lib/patreon/service", () => ({ applyPatreonStatus: vi.fn() }));
+vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn() }));
 vi.mock("@/lib/api/headOfGovernment", () => ({
   getHeadOfGovernmentCharacterIds: vi.fn(),
 }));
@@ -21,6 +20,7 @@ vi.mock("./prize", () => ({
 import { runContests } from "./engine";
 import { payContestPrize } from "./prize";
 import { getHeadOfGovernmentCharacterIds } from "@/lib/api/headOfGovernment";
+import { applyPatreonStatus } from "@/lib/patreon/service";
 import { CONTEST_ROUND_MS } from "./rules";
 
 // ── A small in-memory Mongo: enough query and update operators for the engine ──
@@ -42,6 +42,7 @@ function norm(v: unknown): unknown {
 
 function matches(doc: Doc, filter: Doc): boolean {
   return Object.entries(filter).every(([key, cond]) => {
+    if (key === "$or") return (cond as Doc[]).some((sub) => matches(doc, sub));
     const value = norm(getPath(doc, key));
     if (
       cond &&
@@ -135,6 +136,13 @@ function fakeDb(seed: Record<string, Doc[]>) {
         docs.push(clone(doc));
         return { insertedId: doc._id };
       },
+      async updateMany(filter: Doc, update: { $set?: Doc }) {
+        const hits = docs.filter((d) => matches(d, filter));
+        for (const doc of hits) {
+          for (const [path, value] of Object.entries(update.$set ?? {})) setPath(doc, path, value);
+        }
+        return { matchedCount: hits.length, modifiedCount: hits.length };
+      },
       async updateOne(filter: Doc, update: { $set?: Doc }) {
         const doc = docs.find((d) => matches(d, filter));
         if (!doc) return { matchedCount: 0, modifiedCount: 0 };
@@ -189,7 +197,14 @@ function world(turn: number, caps: Record<string, number>, influence: Record<str
       },
       { _id: banned, userId: userBanned, name: "Mallory", countryId: "US", nationalInfluence: 0 },
     ],
-    users: [{ _id: userA }, { _id: userB }, { _id: userC }, { _id: userBanned, isBanned: true }],
+    users: [
+      { _id: userA, username: "a" },
+      { _id: userB, username: "b" },
+      { _id: userC, username: "c" },
+      { _id: userBanned, username: "x", isBanned: true },
+    ],
+    gameState: [{ _id: "current", iteration: { type: "Beta", number: 2 } }],
+    gameConfig: [{ _id: "default" }],
     corporations: [
       { _id: corpSmall, name: "Small Co", ceoId: alice, ceoType: "character" },
       { _id: corpMid, name: "Mid Co", ceoId: bob, ceoType: "character" },
@@ -239,7 +254,7 @@ describe("runContests: opening rounds", () => {
 
     const summary = await runContests(db, 10, now);
 
-    expect(summary.opened).toBe(4);
+    expect(summary.opened).toBe(5);
     const byKind = new Map(rounds(data).map((r) => [r.kind, r]));
     expect(byKind.get("corp_growth_small")?._id).toBe("corp_growth_small:1");
     expect(byKind.get("corp_growth_small")?.endsAt.getTime()).toBe(
@@ -287,7 +302,7 @@ describe("runContests: opening rounds", () => {
     } as unknown as Db;
 
     await expect(runContests(staleRead, 10, now)).resolves.toMatchObject({ opened: 0 });
-    expect(rounds(data)).toHaveLength(4);
+    expect(rounds(data).filter((r) => r.kind !== "referrals_iteration")).toHaveLength(5);
   });
 });
 
@@ -364,7 +379,7 @@ describe("runContests: standings and settlement", () => {
       expect.objectContaining({ round: expect.objectContaining({ _id: "influence_gain:1" }) })
     );
     expect(rounds(data).find((r) => r._id === "influence_gain:2")?.status).toBe("active");
-    expect(summary.opened).toBe(4);
+    expect(summary.opened).toBe(5);
 
     // Corporate rounds with no growth settle without a winner or a payment.
     const flat = rounds(data).find((r) => r._id === "corp_growth_large:1")!;
@@ -395,7 +410,116 @@ describe("runContests: standings and settlement", () => {
 
     const summary = await runContests(db, 3, now);
 
-    expect(summary.voided).toBe(4);
+    expect(summary.voided).toBe(5);
     expect(payContestPrize).not.toHaveBeenCalled();
+  });
+});
+
+describe("runContests: referrals", () => {
+  async function openedWorld() {
+    const seed = world(10, { small: 400_000, mid: 2e6, big: 3e7 }, { alice: 0, bob: 0, carol: 0 });
+    const { db, data } = fakeDb(seed);
+    data.gameConfig[0].referralContestStartedAt = new Date("2026-09-01T00:00:00Z");
+    await runContests(db, 10, now);
+    return { db, data };
+  }
+
+  function newPlayer(data: Record<string, Doc[]>, referrer: ObjectId, at: Date, extra: Doc = {}) {
+    const userId = new ObjectId();
+    data.users.push({
+      _id: userId,
+      username: `n${data.users.length}`,
+      referredBy: referrer,
+      ...extra,
+    });
+    data.characters.push({
+      _id: new ObjectId(),
+      userId,
+      name: "New",
+      countryId: "US",
+      createdAt: at,
+    });
+    return userId;
+  }
+
+  it("ranks the week's referrers, skipping strong alt links, and pays the leader the referral prize", async () => {
+    const { db, data } = await openedWorld();
+    const during = new Date(now.getTime() + 60_000);
+    newPlayer(data, userA, during);
+    newPlayer(data, userA, during);
+    const alt = newPlayer(data, userA, during);
+    newPlayer(data, userB, during);
+    newPlayer(data, userB, new Date(now.getTime() - 60_000)); // before the round
+    data.altLinks = [{ userA: alt, userB: userA, confidence: 0.92 }];
+
+    const later = new Date(now.getTime() + CONTEST_ROUND_MS + 1);
+    await runContests(db, 40, later);
+
+    const round = rounds(data).find((r) => r._id === "referrals_weekly:1")!;
+    expect(round.standings.map((s) => [s.subjectName, s.score])).toEqual([
+      ["Alice", 2],
+      ["Bob", 1],
+    ]);
+    expect(round.winners[0]).toMatchObject({ characterId: alice.toString(), score: 2 });
+    expect(payContestPrize).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ round: expect.objectContaining({ kind: "referrals_weekly" }) })
+    );
+  });
+
+  it("adopts the running referral window on first run, then awards it when the iteration changes", async () => {
+    const { db, data } = await openedWorld();
+    const opening = rounds(data).find((r) => r.kind === "referrals_iteration")!;
+    expect(opening).toMatchObject({
+      status: "active",
+      iterationKey: "Beta:2",
+      startedAt: new Date("2026-09-01T00:00:00Z"),
+    });
+
+    // Counts accrued over the iteration; Carol won last time and did not place now.
+    const counts: Array<[ObjectId, number]> = [
+      [userA, 6],
+      [userB, 4],
+      [userBanned, 9],
+    ];
+    for (const [id, n] of counts) {
+      data.users.find((u) => String(u._id) === id.toString())!.referralContestCount = n;
+    }
+    Object.assign(
+      data.users.find((u) => String(u._id) === userC.toString())!,
+      {
+        patreonTier: "supporter",
+        supporterProvider: "contest",
+        patreonExpiresAt: null,
+      }
+    );
+
+    // Same iteration: nothing is awarded.
+    await runContests(db, 11, new Date(now.getTime() + 3_600_000));
+    expect(applyPatreonStatus).not.toHaveBeenCalled();
+
+    data.gameState[0].iteration = { type: "Beta", number: 3 };
+    const reset = new Date(now.getTime() + 7_200_000);
+    const summary = await runContests(db, 1, reset);
+
+    expect(summary.referrals).toBe("awarded");
+    const granted = vi.mocked(applyPatreonStatus).mock.calls.map((c) => c[1]);
+    expect(granted.map((g) => g.userId.toString())).toEqual([userA, userB].map(String));
+    expect(granted[0]).toMatchObject({ tier: "supporter", expiresAt: null, provider: "contest" });
+    // Last iteration's winner loses contest Supporter; the banned leader got nothing.
+    expect(data.users.find((u) => String(u._id) === userC.toString())).toMatchObject({
+      patreonTier: null,
+      supporterProvider: null,
+    });
+    expect(data.users.every((u) => (u.referralContestCount ?? 0) === 0)).toBe(true);
+    const settled = rounds(data).find((r) => r._id === opening._id)!;
+    expect(settled.status).toBe("settled");
+    expect(settled.winners.map((w) => [w.rank, w.characterName, w.score])).toEqual([
+      [1, "Alice", 6],
+      [2, "Bob", 4],
+    ]);
+    expect(
+      rounds(data).find((r) => r.kind === "referrals_iteration" && r.status === "active")
+    ).toMatchObject({ iterationKey: "Beta:3", startedAt: reset });
   });
 });

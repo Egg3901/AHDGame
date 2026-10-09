@@ -2,10 +2,13 @@
  * Weekly contests: who grew the most in a round. Corporations score percent
  * market cap growth net of injected capital (splitCorpTiers, corpGrowthScore),
  * characters score National Influence gained, and governments score approval
- * points gained under the same head of government (gainScore). The round winner
- * with a positive score earns contestPrizeAnchor in cash.
+ * points gained under the same head of government (gainScore). Referrers score
+ * new players brought in that week (countWeeklyReferrals). The round winner
+ * with a positive score earns contestPrizeAnchor in cash; the top three
+ * referrers of an iteration earn Supporter for the next one.
  */
 import { getEraNominalAmount } from "@/lib/constants/sectorSeedEra";
+import { DEFAULT_ALT_SCORING_THRESHOLDS } from "@/lib/altDetection/config";
 import type { ContestKind, ContestStanding } from "@/lib/db/types/contestRound";
 
 export const CONTEST_KINDS: readonly ContestKind[] = [
@@ -13,6 +16,7 @@ export const CONTEST_KINDS: readonly ContestKind[] = [
   "corp_growth_large",
   "influence_gain",
   "approval_gain",
+  "referrals_weekly",
 ];
 
 export const CORP_CONTEST_KINDS: readonly ContestKind[] = [
@@ -23,8 +27,14 @@ export const CORP_CONTEST_KINDS: readonly ContestKind[] = [
 /** One week of real time per round. */
 export const CONTEST_ROUND_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Modern-era (2019) prize; scaled to the world's era by getEraNominalAmount. */
-export const CONTEST_PRIZE_MODERN = 7_500_000;
+/** Modern-era (2019) cash prize per weekly contest; scaled to the world's era by getEraNominalAmount. */
+export const CONTEST_PRIZES_MODERN: Readonly<Record<ContestKind, number>> = {
+  corp_growth_small: 7_500_000,
+  corp_growth_large: 7_500_000,
+  influence_gain: 7_500_000,
+  approval_gain: 7_500_000,
+  referrals_weekly: 10_000_000,
+};
 
 /**
  * Corporations opening below this modern-era value sit out the round. A shell
@@ -35,8 +45,8 @@ export const CORP_MIN_OPENING_MODERN = 250_000;
 /** Stored standings per round; the page shows the top of this list. */
 export const CONTEST_STANDINGS_LIMIT = 250;
 
-export function contestPrizeAnchor(preset?: string): number {
-  return getEraNominalAmount(CONTEST_PRIZE_MODERN, preset);
+export function contestPrizeAnchor(kind: ContestKind, preset?: string): number {
+  return getEraNominalAmount(CONTEST_PRIZES_MODERN[kind], preset);
 }
 
 export function corpMinOpeningAnchor(preset?: string): number {
@@ -133,10 +143,16 @@ export function contestRoundId(kind: string, roundNumber: number): string {
   return `${kind}:${roundNumber}`;
 }
 
-// ── Referral leaderboard ────────────────────────────────────────────────────
+// ── Referrals ───────────────────────────────────────────────────────────────
 
-/** Top referrers when an iteration ends earn supporter benefits for the next one. */
+/** Top referrers when an iteration ends earn Supporter for the whole next iteration. */
 export const REFERRAL_AWARD_WINNERS = 3;
+
+/**
+ * A referee linked to their referrer at this alt-detection confidence or above
+ * is treated as the same person and never counts toward a cash prize.
+ */
+export const REFERRAL_ALT_LINK_THRESHOLD = DEFAULT_ALT_SCORING_THRESHOLDS.strongLink;
 
 export interface ReferralCandidate {
   userId: string;
@@ -156,24 +172,63 @@ export function rankReferralWinners(
     .slice(0, limit);
 }
 
-export type ReferralGrantDecision = "grant" | "extend" | "already_supporter";
+export interface WeeklyReferee {
+  refereeUserId: string;
+  referrerUserId: string;
+  refereeBanned: boolean;
+}
+
+export function altPairKey(a: string, b: string): string {
+  return a < b ? `${a}:${b}` : `${b}:${a}`;
+}
 
 /**
- * A paying supporter keeps their own subscription untouched. A previous
- * contest award is extended to the new date; anyone else is granted.
+ * Referrals that count this week, per referrer. A referee counts once, only
+ * if they are not banned, the referrer is an eligible player, and the pair is
+ * not a strong alt link.
+ */
+export function countWeeklyReferrals(
+  referees: readonly WeeklyReferee[],
+  eligibleReferrers: ReadonlySet<string>,
+  altPairs: ReadonlySet<string>
+): Map<string, number> {
+  const seen = new Set<string>();
+  const counts = new Map<string, number>();
+  for (const r of referees) {
+    if (seen.has(r.refereeUserId)) continue;
+    seen.add(r.refereeUserId);
+    if (r.refereeBanned || r.refereeUserId === r.referrerUserId) continue;
+    if (!eligibleReferrers.has(r.referrerUserId)) continue;
+    if (altPairs.has(altPairKey(r.refereeUserId, r.referrerUserId))) continue;
+    counts.set(r.referrerUserId, (counts.get(r.referrerUserId) ?? 0) + 1);
+  }
+  return counts;
+}
+
+export type ReferralGrantDecision = "grant" | "already_supporter";
+
+/**
+ * A paying supporter keeps their own plan untouched. Anyone else, including an
+ * earlier contest winner, is granted contest Supporter with no end date; it is
+ * removed when the following iteration's award runs.
  */
 export function referralGrantDecision(
   current: { tier: string | null; expiresAtMs: number | null; provider: string | null },
-  nowMs: number,
-  untilMs: number
+  nowMs: number
 ): ReferralGrantDecision {
   const active =
     current.tier !== null && (current.expiresAtMs === null || current.expiresAtMs > nowMs);
-  if (!active) return "grant";
-  if (current.provider === "contest") {
-    return current.expiresAtMs !== null && current.expiresAtMs < untilMs
-      ? "extend"
-      : "already_supporter";
-  }
-  return "already_supporter";
+  return active && current.provider !== "contest" ? "already_supporter" : "grant";
+}
+
+/** The iteration referral contest closes when the world moves to a new iteration. */
+export function iterationChanged(
+  roundIterationKey: string | undefined,
+  currentIterationKey: string | undefined
+): boolean {
+  return (
+    roundIterationKey !== undefined &&
+    currentIterationKey !== undefined &&
+    roundIterationKey !== currentIterationKey
+  );
 }

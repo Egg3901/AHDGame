@@ -16,7 +16,8 @@ import type {
 } from "@/lib/db/types/contestRound";
 import type { CountryId } from "@/lib/constants/countries";
 import { getCountryDisplayName } from "@/lib/constants/countries";
-import { getGameStatePreset } from "@/lib/db/collections/gameState";
+import type { GameState } from "@/lib/db/types/gameState";
+import type { AltLink } from "@/lib/db/types/altDetection";
 import { getHeadOfGovernmentCharacterIds } from "@/lib/api/headOfGovernment";
 import {
   CONTEST_KINDS,
@@ -31,8 +32,12 @@ import {
   roundBelongsToEarlierWorld,
   roundIsDue,
   splitCorpTiers,
+  altPairKey,
+  countWeeklyReferrals,
+  REFERRAL_ALT_LINK_THRESHOLD,
   type CorpOpening,
 } from "./rules";
+import { runIterationReferrals } from "./referralAward";
 import { payContestPrize } from "./prize";
 import { getContestRoundsCollection } from "./collection";
 
@@ -45,7 +50,10 @@ interface ContestWorld {
   turn: number;
   now: Date;
   preset: string | undefined;
+  iterationKey: string | undefined;
   players: Map<string, PlayerCharacter>;
+  /** Player character by user id. */
+  playersByUser: Map<string, PlayerCharacter>;
 }
 
 const contestRounds = getContestRoundsCollection;
@@ -247,6 +255,9 @@ async function openingBaselines(
     out.set("approval_gain", { baselines });
   }
 
+  // Referral rounds count new players from the opening; there is no baseline.
+  if (kinds.includes("referrals_weekly")) out.set("referrals_weekly", { baselines: [] });
+
   return out;
 }
 
@@ -273,6 +284,7 @@ async function openRounds(db: Db, world: ContestWorld, kinds: ContestKind[]): Pr
         startedAt: world.now,
         endsAt: new Date(world.now.getTime() + CONTEST_ROUND_MS),
         startTurn: world.turn,
+        ...(world.iterationKey ? { iterationKey: world.iterationKey } : {}),
         ...(opening.tierBoundaryAnchor !== undefined
           ? { tierBoundaryAnchor: opening.tierBoundaryAnchor }
           : {}),
@@ -355,6 +367,10 @@ async function computeStandings(
     return { standings: rankStandings(standings), baselines };
   }
 
+  if (kind === "referrals_weekly") {
+    return { standings: await weeklyReferralStandings(db, world, round.startedAt), baselines };
+  }
+
   // approval_gain
   const approvals = await loadApprovals(db);
   const heads = await loadPlayerHeads(
@@ -380,6 +396,74 @@ async function computeStandings(
     });
   }
   return { standings: rankStandings(standings), baselines };
+}
+
+/**
+ * Referrers ranked by new players who created a character since the round
+ * opened. Strong alt links between referrer and referee do not count.
+ */
+async function weeklyReferralStandings(
+  db: Db,
+  world: ContestWorld,
+  since: Date
+): Promise<ContestStanding[]> {
+  const fresh = await db
+    .collection<Character>("characters")
+    .find({ createdAt: { $gte: since } }, { projection: { userId: 1 } })
+    .toArray();
+  if (fresh.length === 0) return [];
+  const referees = await db
+    .collection<User>("users")
+    .find(
+      { _id: { $in: fresh.map((c) => c.userId) }, referredBy: { $exists: true } },
+      { projection: { _id: 1, referredBy: 1, isBanned: 1 } }
+    )
+    .toArray();
+  const referrerIds = [
+    ...new Set(referees.map((r) => r.referredBy?.toString()).filter((id): id is string => !!id)),
+  ];
+  if (referrerIds.length === 0) return [];
+
+  const links = await db
+    .collection<AltLink>("altLinks")
+    .find(
+      {
+        confidence: { $gte: REFERRAL_ALT_LINK_THRESHOLD },
+        $or: [
+          { userA: { $in: referrerIds.map((id) => new ObjectId(id)) } },
+          { userB: { $in: referrerIds.map((id) => new ObjectId(id)) } },
+        ],
+      },
+      { projection: { userA: 1, userB: 1 } }
+    )
+    .toArray();
+  const altPairs = new Set(links.map((l) => altPairKey(l.userA.toString(), l.userB.toString())));
+
+  const counts = countWeeklyReferrals(
+    referees.map((r) => ({
+      refereeUserId: r._id.toString(),
+      referrerUserId: r.referredBy!.toString(),
+      refereeBanned: r.isBanned === true,
+    })),
+    new Set(world.playersByUser.keys()),
+    altPairs
+  );
+
+  const standings: ContestStanding[] = [];
+  for (const [referrerUserId, count] of counts) {
+    const character = world.playersByUser.get(referrerUserId);
+    if (!character) continue;
+    standings.push({
+      subjectId: referrerUserId,
+      subjectName: character.name,
+      characterId: character._id.toString(),
+      characterName: character.name,
+      baseline: 0,
+      current: count,
+      score: count,
+    });
+  }
+  return rankStandings(standings);
 }
 
 // ── Settlement ──────────────────────────────────────────────────────────────
@@ -452,6 +536,7 @@ export interface ContestRunSummary {
   voided: number;
   refreshed: number;
   opened: number;
+  referrals?: "opened" | "awarded" | "running" | "failed";
 }
 
 declare global {
@@ -469,11 +554,21 @@ export async function runContests(
   now: Date = new Date()
 ): Promise<ContestRunSummary> {
   const summary: ContestRunSummary = { settled: 0, voided: 0, refreshed: 0, opened: 0 };
+  const [gameState, players] = await Promise.all([
+    db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" } as never, { projection: { preset: 1, iteration: 1 } }),
+    loadPlayers(db),
+  ]);
   const world: ContestWorld = {
     turn,
     now,
-    preset: await getGameStatePreset(db),
-    players: await loadPlayers(db),
+    preset: gameState?.preset,
+    iterationKey: gameState?.iteration
+      ? `${gameState.iteration.type}:${gameState.iteration.number}`
+      : undefined,
+    players,
+    playersByUser: new Map([...players.values()].map((c) => [c.userId.toString(), c])),
   };
 
   const active = await contestRounds(db)
@@ -482,7 +577,9 @@ export async function runContests(
 
   const stillActive = new Set<string>();
   for (const round of active) {
-    if (roundBelongsToEarlierWorld(round.startTurn, turn)) {
+    const otherIteration =
+      !!round.iterationKey && !!world.iterationKey && round.iterationKey !== world.iterationKey;
+    if (otherIteration || roundBelongsToEarlierWorld(round.startTurn, turn)) {
       const res = await contestRounds(db).updateOne(
         { _id: round._id, status: "active" },
         { $set: { status: "void", settledAt: now, settledTurn: turn } }
@@ -505,6 +602,15 @@ export async function runContests(
 
   const missing = CONTEST_KINDS.filter((k) => !stillActive.has(k));
   summary.opened = await openRounds(db, world, missing);
+  // The iteration referral award is separate state: its failure must not
+  // stop the weekly rounds, which have already been written.
+  try {
+    summary.referrals = await runIterationReferrals(db, world.iterationKey, now);
+  } catch (err) {
+    summary.referrals = "failed";
+    Sentry.captureException(err, { tags: { area: "contests", step: "iterationReferrals" } });
+    console.error("[contests] iteration referral step failed", err);
+  }
   return summary;
 }
 
@@ -514,9 +620,9 @@ export async function runContestsAfterTurn(db: Db, turn: number): Promise<void> 
   globalThis._ahdContestsRunning = true;
   try {
     const summary = await runContests(db, turn);
-    if (summary.settled || summary.opened || summary.voided) {
+    if (summary.settled || summary.opened || summary.voided || summary.referrals === "awarded") {
       console.log(
-        `[contests] turn ${turn}: settled ${summary.settled}, opened ${summary.opened}, voided ${summary.voided}`
+        `[contests] turn ${turn}: settled ${summary.settled}, opened ${summary.opened}, voided ${summary.voided}, referrals ${summary.referrals}`
       );
     }
   } catch (err) {

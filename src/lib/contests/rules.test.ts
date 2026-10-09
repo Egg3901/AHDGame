@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { ContestStanding } from "@/lib/db/types/contestRound";
 import {
   approvalEntryEligible,
+  altPairKey,
   contestPrizeAnchor,
-  CONTEST_PRIZE_MODERN,
+  CONTEST_PRIZES_MODERN,
   corpGrowthScore,
+  countWeeklyReferrals,
+  iterationChanged,
   gainScore,
   pickWinner,
   rankReferralWinners,
@@ -117,11 +120,64 @@ describe("round timing", () => {
 });
 
 describe("contestPrizeAnchor", () => {
-  it("is the modern prize in the modern era and smaller in earlier eras", () => {
-    expect(contestPrizeAnchor()).toBe(CONTEST_PRIZE_MODERN);
-    const early = contestPrizeAnchor("1953-default");
+  it("pays 7.5M for the growth contests and 10M for weekly referrals at modern scale", () => {
+    expect(contestPrizeAnchor("influence_gain")).toBe(7_500_000);
+    expect(contestPrizeAnchor("corp_growth_small")).toBe(7_500_000);
+    expect(contestPrizeAnchor("referrals_weekly")).toBe(10_000_000);
+  });
+
+  it("scales to the world's era", () => {
+    const early = contestPrizeAnchor("referrals_weekly", "1953-default");
     expect(early).toBeGreaterThan(0);
-    expect(early).toBeLessThan(CONTEST_PRIZE_MODERN);
+    expect(early).toBeLessThan(CONTEST_PRIZES_MODERN.referrals_weekly);
+    // 1991 money is modern money.
+    expect(contestPrizeAnchor("referrals_weekly", "1991-default")).toBe(10_000_000);
+  });
+});
+
+describe("countWeeklyReferrals", () => {
+  const players = new Set(["alice", "bob"]);
+
+  it("counts each new player once for an eligible referrer", () => {
+    const counts = countWeeklyReferrals(
+      [
+        { refereeUserId: "n1", referrerUserId: "alice", refereeBanned: false },
+        { refereeUserId: "n2", referrerUserId: "alice", refereeBanned: false },
+        { refereeUserId: "n2", referrerUserId: "alice", refereeBanned: false },
+        { refereeUserId: "n3", referrerUserId: "bob", refereeBanned: false },
+      ],
+      players,
+      new Set()
+    );
+    expect(Object.fromEntries(counts)).toEqual({ alice: 2, bob: 1 });
+  });
+
+  it("drops banned referees, strong alt links, self referrals and referrers who are not players", () => {
+    const counts = countWeeklyReferrals(
+      [
+        { refereeUserId: "banned", referrerUserId: "alice", refereeBanned: true },
+        { refereeUserId: "alt", referrerUserId: "alice", refereeBanned: false },
+        { refereeUserId: "alice", referrerUserId: "alice", refereeBanned: false },
+        { refereeUserId: "n9", referrerUserId: "ghost", refereeBanned: false },
+        { refereeUserId: "real", referrerUserId: "alice", refereeBanned: false },
+      ],
+      players,
+      new Set([altPairKey("alice", "alt")])
+    );
+    expect(Object.fromEntries(counts)).toEqual({ alice: 1 });
+  });
+
+  it("orders alt pair keys so either direction matches", () => {
+    expect(altPairKey("b", "a")).toBe(altPairKey("a", "b"));
+  });
+});
+
+describe("iterationChanged", () => {
+  it("fires only when both iterations are known and differ", () => {
+    expect(iterationChanged("Beta:2", "Beta:3")).toBe(true);
+    expect(iterationChanged("Beta:2", "Beta:2")).toBe(false);
+    expect(iterationChanged(undefined, "Beta:3")).toBe(false);
+    expect(iterationChanged("Beta:2", undefined)).toBe(false);
   });
 });
 
@@ -141,52 +197,25 @@ describe("rankReferralWinners", () => {
 
 describe("referralGrantDecision", () => {
   const now = 1_000;
-  const until = 5_000;
 
-  it("grants to a non-supporter or a lapsed one", () => {
+  it("grants to a non-supporter, a lapsed one, or an earlier contest winner", () => {
+    expect(referralGrantDecision({ tier: null, expiresAtMs: null, provider: null }, now)).toBe(
+      "grant"
+    );
     expect(
-      referralGrantDecision({ tier: null, expiresAtMs: null, provider: null }, now, until)
+      referralGrantDecision({ tier: "supporter", expiresAtMs: 500, provider: "patreon" }, now)
     ).toBe("grant");
     expect(
-      referralGrantDecision(
-        { tier: "supporter", expiresAtMs: 500, provider: "patreon" },
-        now,
-        until
-      )
+      referralGrantDecision({ tier: "supporter", expiresAtMs: null, provider: "contest" }, now)
     ).toBe("grant");
   });
 
   it("never touches a paying supporter", () => {
     expect(
-      referralGrantDecision(
-        { tier: "supporter", expiresAtMs: null, provider: "patreon" },
-        now,
-        until
-      )
+      referralGrantDecision({ tier: "supporter", expiresAtMs: null, provider: "patreon" }, now)
     ).toBe("already_supporter");
     expect(
-      referralGrantDecision(
-        { tier: "supporter-plus", expiresAtMs: 2_000, provider: "stripe" },
-        now,
-        until
-      )
-    ).toBe("already_supporter");
-  });
-
-  it("extends an earlier contest award that ends sooner", () => {
-    expect(
-      referralGrantDecision(
-        { tier: "supporter", expiresAtMs: 2_000, provider: "contest" },
-        now,
-        until
-      )
-    ).toBe("extend");
-    expect(
-      referralGrantDecision(
-        { tier: "supporter", expiresAtMs: 9_000, provider: "contest" },
-        now,
-        until
-      )
+      referralGrantDecision({ tier: "supporter-plus", expiresAtMs: 2_000, provider: "stripe" }, now)
     ).toBe("already_supporter");
   });
 });

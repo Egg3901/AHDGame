@@ -27,7 +27,9 @@ type T = Awaited<ReturnType<typeof getTranslations<"contests">>>;
 const DATE_OPTIONS: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" };
 
 function formatScore(t: T, locale: string, kind: ContestRecordKind, score: number): string {
-  if (kind === "referrals") return t("scores.referrals", { count: score });
+  if (kind === "referrals_weekly" || kind === "referrals_iteration") {
+    return t("scores.referrals", { count: score });
+  }
   const value = new Intl.NumberFormat(locale, {
     maximumFractionDigits: kind === "influence_gain" ? 0 : 1,
     signDisplay: "exceptZero",
@@ -46,7 +48,9 @@ function entryLabel(
   s: Pick<ContestStanding, "subjectName" | "characterName">
 ) {
   // Character entries are the character; corporate and government entries name their player.
-  return kind === "influence_gain" ? s.subjectName : `${s.subjectName} · ${s.characterName}`;
+  return kind === "influence_gain" || kind === "referrals_weekly"
+    ? s.subjectName
+    : `${s.subjectName} · ${s.characterName}`;
 }
 
 function ContestCard({
@@ -73,7 +77,10 @@ function ContestCard({
           {t("entrants", { count: contest.entrants })}
         </span>
       </div>
-      <p className="mt-3 text-xs text-muted">
+      <p className="mt-3 text-sm font-medium text-foreground">
+        {t("prize", { prize: formatAnchor(locale, contest.prizeAnchor) })}
+      </p>
+      <p className="mt-1 text-xs text-muted">
         {t("endsAt", { round: contest.roundNumber })}{" "}
         <LocalTime value={contest.endsAt} options={DATE_OPTIONS} className="text-foreground" />
       </p>
@@ -138,10 +145,11 @@ function ReferralCard({
 }) {
   return (
     <section className="min-w-0 rounded-xl border border-card-border bg-card p-5">
-      <h2 className="text-lg font-semibold text-foreground">{t("kinds.referrals.title")}</h2>
-      <p className="mt-1 text-sm text-muted">
-        {t("kinds.referrals.rules")} {t("referralIntro")}
-      </p>
+      <h2 className="text-lg font-semibold text-foreground">
+        {t("kinds.referrals_iteration.title")}
+      </h2>
+      <p className="mt-1 text-sm text-muted">{t("kinds.referrals_iteration.rules")}</p>
+      <p className="mt-3 text-sm font-medium text-foreground">{t("iterationPrize")}</p>
       {!board.running ? (
         <p className="mt-4 text-sm text-muted">{t("referrals.notRunning")}</p>
       ) : (
@@ -223,7 +231,7 @@ function PastWinners({ past, t, locale }: { past: PastRoundData[]; t: T; locale:
                   className="mt-1 flex flex-wrap items-baseline justify-between gap-2 text-muted"
                 >
                   <span className="text-foreground">
-                    {round.kind === "referrals"
+                    {round.kind === "referrals_iteration"
                       ? `#${w.rank} ${w.subjectName || t("past.formerPlayer")}`
                       : entryLabel(round.kind, w)}{" "}
                     <span className="text-muted">
@@ -231,16 +239,10 @@ function PastWinners({ past, t, locale }: { past: PastRoundData[]; t: T; locale:
                     </span>
                   </span>
                   <span className="text-xs">
-                    {round.kind === "referrals"
+                    {round.kind === "referrals_iteration"
                       ? w.alreadySupporter
                         ? t("past.alreadySupporter")
-                        : w.supporterUntil
-                          ? t("past.supporter", {
-                              date: new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(
-                                new Date(w.supporterUntil)
-                              ),
-                            })
-                          : null
+                        : t("past.supporter")
                       : w.prizeAnchor
                         ? t("past.prize", { prize: formatAnchor(locale, w.prizeAnchor) })
                         : null}
@@ -266,24 +268,24 @@ export default async function ContestsPage() {
     db,
     auth ? { userId: auth.userId, characterId: auth.character?._id.toString() ?? null } : null
   );
+  const weekly = data.contests.filter((c) => c.kind !== "referrals_weekly");
+  const weeklyReferrals = data.contests.find((c) => c.kind === "referrals_weekly");
 
   return (
     <div className="min-h-screen bg-background pb-16">
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight">{t("title")}</h1>
-          <p className="mt-2 max-w-3xl text-sm text-muted">
-            {t("intro", { prize: formatAnchor(locale, data.prizeAnchor) })}
-          </p>
+          <p className="mt-2 max-w-3xl text-sm text-muted">{t("intro")}</p>
         </div>
 
-        {data.contests.length === 0 ? (
+        {weekly.length === 0 ? (
           <p className="mb-6 rounded-xl border border-dashed border-card-border p-6 text-sm text-muted">
             {t("noRound")}
           </p>
         ) : (
-          <div className="mb-6 grid gap-4 md:grid-cols-2">
-            {data.contests.map((contest) => (
+          <div className="mb-10 grid gap-4 md:grid-cols-2">
+            {weekly.map((contest) => (
               <ContestCard
                 key={contest.kind}
                 contest={contest}
@@ -295,10 +297,20 @@ export default async function ContestsPage() {
           </div>
         )}
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <h2 className="mb-1 text-xl font-semibold text-foreground">{t("referralsHeading")}</h2>
+        <p className="mb-4 max-w-3xl text-sm text-muted">{t("referralIntro")}</p>
+        <div className="mb-10 grid gap-4 md:grid-cols-2">
+          {weeklyReferrals ? (
+            <ContestCard contest={weeklyReferrals} t={t} locale={locale} signedIn={auth !== null} />
+          ) : (
+            <p className="rounded-xl border border-dashed border-card-border p-6 text-sm text-muted">
+              {t("noRound")}
+            </p>
+          )}
           <ReferralCard board={data.referrals} t={t} userId={auth?.userId ?? null} />
-          <PastWinners past={data.past} t={t} locale={locale} />
         </div>
+
+        <PastWinners past={data.past} t={t} locale={locale} />
       </div>
     </div>
   );

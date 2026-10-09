@@ -12,8 +12,6 @@ export const PRIMARY_KEY_INDEX_POLICIES: Readonly<Record<string, string>> = {
     "Turn number is _id; only the bounded 48-turn retention scan uses another key.",
   capacityDecisionFunnels:
     "Turn number is _id; only the bounded 48-turn retention scan uses another key.",
-  contestRounds:
-    "Round id is kind:roundNumber. About four rounds a week, wiped on reset, so status scans stay tiny.",
 };
 
 export function missingCollectionIndexPolicies(

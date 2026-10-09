@@ -19,6 +19,7 @@ export const CONTEST_KIND_TITLES: Record<ContestKind, string> = {
   corp_growth_large: "Big Business Growth",
   influence_gain: "National Influence",
   approval_gain: "Government Approval",
+  referrals_weekly: "Weekly Referrals",
 };
 
 export interface ContestPrizeInput {
@@ -43,7 +44,7 @@ export async function payContestPrize(
 ): Promise<ContestPrizeResult> {
   const { character, round, turn, preset, now } = input;
   const forexEnabled = await isForexEnabled();
-  const anchorAmount = contestPrizeAnchor(preset);
+  const anchorAmount = contestPrizeAnchor(round.kind, preset);
   const currencyCode = getHomeCurrency(character, preset);
   const rateDoc = forexEnabled
     ? await db

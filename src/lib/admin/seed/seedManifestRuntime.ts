@@ -49,12 +49,6 @@ export const RUNTIME: CollectionEntry[] = [
   { name: "federationSettlementApplications", category: "runtime" },
   { name: "worldEntityStates", category: "runtime" },
   {
-    name: "contestRounds",
-    category: "runtime",
-    notes:
-      "Weekly contest rounds: baselines, standings, and winners keyed to this world's characters and corporations. Wiped on reset; the first post-turn run of the new world opens fresh rounds.",
-  },
-  {
     name: "resetMetricSnapshots",
     category: "runtime",
     notes:

@@ -43,7 +43,7 @@ describe("payContestPrize", () => {
 
     const result = await payContestPrize(db as unknown as Db, input);
 
-    const anchor = contestPrizeAnchor(undefined);
+    const anchor = contestPrizeAnchor("influence_gain", undefined);
     expect(result).toEqual({
       credited: true,
       anchorAmount: anchor,

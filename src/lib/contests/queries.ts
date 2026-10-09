@@ -22,6 +22,8 @@ const REFERRAL_POOL = 25;
 
 export interface ContestCardData {
   kind: ContestKind;
+  /** Cash prize for this round's winner, in ₳. */
+  prizeAnchor: number;
   roundNumber: number;
   startedAt: string;
   endsAt: string;
@@ -48,7 +50,6 @@ export interface ReferralBoardData {
 }
 
 export interface ContestsPageData {
-  prizeAnchor: number;
   contests: ContestCardData[];
   past: PastRoundData[];
   referrals: ReferralBoardData;
@@ -89,6 +90,7 @@ export async function loadContestsPage(
       : null;
     contests.push({
       kind,
+      prizeAnchor: contestPrizeAnchor(kind, preset),
       roundNumber: round.roundNumber,
       startedAt: round.startedAt.toISOString(),
       endsAt: round.endsAt.toISOString(),
@@ -99,7 +101,6 @@ export async function loadContestsPage(
   }
 
   return {
-    prizeAnchor: contestPrizeAnchor(preset),
     contests,
     past: past.map((r) => ({
       id: r._id,

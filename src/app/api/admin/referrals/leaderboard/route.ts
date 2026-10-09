@@ -20,7 +20,6 @@ const patchSchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("award-and-restart"),
-    supporterUntil: z.string().datetime(),
   }),
 ]);
 
@@ -122,11 +121,7 @@ export async function PATCH(request: Request) {
     if (parsed.data.action === "award-and-restart") {
       let result;
       try {
-        result = await awardReferralContest(db, {
-          supporterUntil: new Date(parsed.data.supporterUntil),
-          adminUsername: auth.admin.username,
-          now,
-        });
+        result = await awardReferralContest(db, { awardedBy: auth.admin.username, now });
       } catch (err) {
         if (err instanceof ReferralAwardError) return errorResponse(400, err.message);
         throw err;
@@ -143,7 +138,7 @@ export async function PATCH(request: Request) {
         action: "referral_contest_awarded",
         username: auth.admin.username,
         adminUsername: auth.admin.username,
-        details: `Referral contest awarded: ${names || "no qualifying referrers"}. Supporter until ${parsed.data.supporterUntil}. Contest restarted.`,
+        details: `Referral contest awarded: ${names || "no qualifying referrers"}. Supporter until the next award; ${result.revoked} earlier contest grant(s) ended. Contest restarted.`,
       });
 
       return NextResponse.json({

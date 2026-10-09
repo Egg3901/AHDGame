@@ -229,6 +229,7 @@ describe("PATCH /api/admin/referrals/leaderboard", () => {
       roundId: "referrals:1",
       restartedAt,
       usernames: ["alice"],
+      revoked: 0,
       winners: [
         {
           rank: 1,
@@ -242,24 +243,21 @@ describe("PATCH /api/admin/referrals/leaderboard", () => {
       ],
     });
 
-    const res = await PATCH(
-      awardRequest({ action: "award-and-restart", supporterUntil: "2026-12-01T23:59:59.000Z" })
-    );
+    const res = await PATCH(awardRequest({ action: "award-and-restart" }));
     const data = await res.json();
 
     expect(res.status).toBe(200);
     expect(data.contestStartedAt).toBe(restartedAt.toISOString());
     expect(data.winners).toEqual([{ rank: 1, name: "alice", count: 7, alreadySupporter: false }]);
     expect(vi.mocked(awardReferralContest).mock.calls[0][1]).toMatchObject({
-      supporterUntil: new Date("2026-12-01T23:59:59.000Z"),
-      adminUsername: "admin",
+      awardedBy: "admin",
     });
     expect(createAdminLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "referral_contest_awarded" })
     );
   });
 
-  it("returns 400 for a rejected award and for a missing date", async () => {
+  it("returns 400 for a rejected award and for an unknown action", async () => {
     const { requireAdmin } = await import("@/lib/api/requireAdmin");
     const { getDb } = await import("@/lib/mongodb");
     const { awardReferralContest, ReferralAwardError } =
@@ -270,13 +268,11 @@ describe("PATCH /api/admin/referrals/leaderboard", () => {
       new ReferralAwardError("No referral contest is running")
     );
 
-    const rejected = await PATCH(
-      awardRequest({ action: "award-and-restart", supporterUntil: "2026-12-01T23:59:59.000Z" })
-    );
+    const rejected = await PATCH(awardRequest({ action: "award-and-restart" }));
     expect(rejected.status).toBe(400);
     expect((await rejected.json()).error).toBe("No referral contest is running");
 
-    const missing = await PATCH(awardRequest({ action: "award-and-restart" }));
-    expect(missing.status).toBe(400);
+    const unknown = await PATCH(awardRequest({ action: "award-everyone" }));
+    expect(unknown.status).toBe(400);
   });
 });
