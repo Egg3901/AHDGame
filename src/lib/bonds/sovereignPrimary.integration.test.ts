@@ -468,6 +468,7 @@ describe("sovereign primary settlement", () => {
         matured: false,
         defaulted: false,
         issuedAtTurn: TURN - 1,
+        maturityTurn: TURN + 96,
       },
     ]);
     const placed = await placeUnsoldBondUnits(db as unknown as Db, TURN, NOW);
@@ -481,6 +482,40 @@ describe("sovereign primary settlement", () => {
     expect((await placeUnsoldBondUnits(db as unknown as Db, TURN, NOW)).unitsPlaced).toBe(0);
     expect(cash(db)).toBe(before);
     expect(principal(db)).toBe(9000);
+  });
+
+  it("keeps due and overdue inventory unchanged while placing future bonds", async () => {
+    const db = world(100_000);
+    const bonds = [TURN - 1, TURN, TURN + 1].map((maturityTurn) => ({
+      _id: new ObjectId(),
+      issuerType: "sovereign",
+      countryId: "US",
+      currencyCode: "USD",
+      totalIssued: 0,
+      publicFloat: 0,
+      unsoldUnits: 500,
+      requestedUnits: 500,
+      couponRate: 5,
+      marketPrice: 1,
+      matured: false,
+      defaulted: false,
+      issuedAtTurn: TURN - 10,
+      maturityTurn,
+    }));
+    db.seed("bonds", bonds);
+
+    const placed = await placeUnsoldBondUnits(db as unknown as Db, TURN, NOW);
+
+    expect(placed.unitsPlaced).toBe(9);
+    for (const due of bonds.slice(0, 2)) {
+      expect(
+        db.collection("bonds").docs.find((row) => String(row._id) === String(due._id))
+      ).toEqual(due);
+    }
+    expect(db.collection("bonds").docs[2]).toMatchObject({
+      publicFloat: 9,
+      unsoldUnits: 491,
+    });
   });
 
   it("checks settlement status only for placements already recorded, and still refuses a pending one", async () => {
@@ -502,6 +537,7 @@ describe("sovereign primary settlement", () => {
         matured: false,
         defaulted: false,
         issuedAtTurn: TURN - 2 + index,
+        maturityTurn: TURN + 96,
       }))
     );
     const journal = db.collection("bankMoneyMoves");
