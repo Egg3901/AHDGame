@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CountyMap } from "@/components/CountyMap";
 import { SubdivisionMap } from "@/components/SubdivisionMap";
 import { DistrictCardGrid } from "@/components/redistricting/DistrictCardGrid";
@@ -263,6 +264,7 @@ export default function StateElectionResultsPage({
   const dbStateId = stateId.toUpperCase();
   const stateUpper = dbStateId;
   const { navData } = useAuthMe();
+  const router = useRouter();
   const viewerPartySeqId = navData?.currentParty?.id;
 
   const [election, setElection] = useState<Election | null>(null);
@@ -295,6 +297,12 @@ export default function StateElectionResultsPage({
         }
         const wrapper = await electionRes.json();
         const electionData: Election = wrapper.election;
+        // A US presidential state lives inside the race's own page now: the
+        // stage opens the state, zoomed, with its counties beside the map.
+        if (electionData.electionType === "president" && code.toUpperCase() === "US") {
+          router.replace(`/elections/${encodeURIComponent(id)}?state=${stateUpper}`);
+          return;
+        }
         setElection(electionData);
 
         const isUS = code.toUpperCase() === "US";
@@ -389,7 +397,7 @@ export default function StateElectionResultsPage({
       }
     }
     fetchData();
-  }, [id, stateUpper, code]);
+  }, [id, stateUpper, code, router]);
 
   if (loading) {
     return (

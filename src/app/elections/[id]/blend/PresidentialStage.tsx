@@ -24,6 +24,8 @@ export interface PresidentialStageProps {
   deck?: ReactNode;
   /** Strip under the masthead (the wire ticker). */
   ticker?: ReactNode;
+  /** A second strip above the map (the 270 snake). */
+  strip?: ReactNode;
   /** Previous / next cycle navigation, top of the left rail. */
   nav?: ReactNode;
   /** The scoreboard: head-to-head, college or delegate bar, the field. */
@@ -34,6 +36,37 @@ export interface PresidentialStageProps {
   map: ReactNode;
   /** The state squares board. When given, a toggle switches between it and the map. */
   squares?: ReactNode;
+}
+
+/**
+ * Height of the site's fixed bottom status bar, kept current. The stage fills
+ * the viewport between the navbar and that bar; measuring it (rather than
+ * assuming one row) matters because the bar wraps to two rows on narrower
+ * desktops and would otherwise cover the bottom of the stage.
+ */
+function useStatusBarHeight(): number {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    let ro: ResizeObserver | null = null;
+    let tries = 0;
+    const attach = () => {
+      const bar = document.querySelector<HTMLElement>("[data-statusbar]");
+      if (!bar) {
+        // The bar mounts after the page on first load; look again briefly.
+        if (tries++ < 20) window.setTimeout(attach, 250);
+        return;
+      }
+      const read = () =>
+        setHeight(getComputedStyle(bar).opacity === "0" ? 0 : bar.getBoundingClientRect().height);
+      read();
+      ro = new ResizeObserver(read);
+      ro.observe(bar);
+      bar.addEventListener("transitionend", read);
+    };
+    attach();
+    return () => ro?.disconnect();
+  }, []);
+  return Math.round(height);
 }
 
 /** Rail widths in px, kept per browser so a reader's layout survives reloads. */
@@ -158,6 +191,7 @@ export function PresidentialStage({
   kicker,
   deck,
   ticker,
+  strip,
   nav,
   left,
   right,
@@ -165,6 +199,7 @@ export function PresidentialStage({
   squares,
 }: PresidentialStageProps) {
   const [view, setView] = useState<"map" | "squares">("map");
+  const statusBar = useStatusBarHeight();
   const showSquares = view === "squares" && !!squares;
 
   // Stored widths only exist in the browser: the server renders the defaults
@@ -239,6 +274,7 @@ export function PresidentialStage({
           fontFamily: FONT.sans,
           borderBottom: `1px solid ${BLEND.hairlineStrong}`,
           "--ps-left": `${widths.left}px`,
+          "--ps-bottom": `${statusBar}px`,
           "--ps-right": `${widths.right}px`,
         } as React.CSSProperties
       }
@@ -293,6 +329,7 @@ export function PresidentialStage({
           {toggle}
         </header>
         {ticker}
+        {strip}
         {showSquares ? (
           <div className="pres-stage__board pres-stage__board--squares">{squares}</div>
         ) : (
@@ -349,7 +386,7 @@ export function PresidentialStage({
         @media (min-width: 1024px) {
           .pres-stage {
             display: grid;
-            height: calc(100dvh - 3.5rem);
+            height: calc(100dvh - 3.5rem - var(--ps-bottom, 0px));
             min-height: 640px;
             grid-template-columns: var(--ps-left) minmax(0, 1fr) var(--ps-right);
             /* One row capped at the stage's height, so a tall rail scrolls
