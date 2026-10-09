@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
 import { computeInputsCost } from "@/lib/corporations/physicalPnl";
-import { priceRealizationFactor } from "@/lib/market/priceRealization";
+import { PRICE_REALIZATION_MAX, priceRealizationFactor } from "@/lib/market/priceRealization";
 import {
   decideExtractionStrategySwitch,
   scoreStrategyExpectedRevenue,
@@ -31,7 +31,9 @@ describe("NPP recipe contribution forecasts", () => {
   const rare = { id: "rare", supply: { rare_earth: 0.72 }, demand: { energy: 0.25 } };
 
   it("corrects the audited 20x-versus-3x output ranking with the actual realization kernel", () => {
-    const prices = { rare_earth: 20, iron: 3 };
+    // Both legs sit at the realization cap, so the larger output share wins
+    // instead of the raw 20x price.
+    const prices = { rare_earth: 20, iron: 4 };
     const ctx = context({ priceRatios: prices });
     expect(
       scoreStrategyExpectedRevenue(
@@ -40,10 +42,13 @@ describe("NPP recipe contribution forecasts", () => {
         () => 1
       )
     ).toBeCloseTo(14.4);
+    expect(priceRealizationFactor(4)).toBe(PRICE_REALIZATION_MAX);
     expect(forecastStrategyContribution(rare, ctx).outputValue).toBeCloseTo(
       0.72 * priceRealizationFactor(20)
     );
-    expect(forecastStrategyContribution(iron, ctx).outputValue).toBeCloseTo(1.17);
+    expect(forecastStrategyContribution(iron, ctx).outputValue).toBeCloseTo(
+      0.78 * PRICE_REALIZATION_MAX
+    );
     expect(forecastStrategyContribution(iron, ctx).score).toBeGreaterThan(
       forecastStrategyContribution(rare, ctx).score
     );
@@ -53,7 +58,10 @@ describe("NPP recipe contribution forecasts", () => {
     expect(
       forecastStrategyContribution(rare, context({ priceRatios: { rare_earth: 20 } })).score
     ).toBe(
-      forecastStrategyContribution(rare, context({ priceRatios: { rare_earth: 2.25 } })).score
+      forecastStrategyContribution(
+        rare,
+        context({ priceRatios: { rare_earth: PRICE_REALIZATION_MAX ** 2 } })
+      ).score
     );
   });
 
@@ -87,7 +95,7 @@ describe("NPP recipe contribution forecasts", () => {
       turnsPerDay: 1,
     });
     expect(forecast.inputCost).toBeCloseTo(bill.total);
-    expect(forecast.inputCost).toBeCloseTo(0.25 * 1.5 + 0.15 * 0.7);
+    expect(forecast.inputCost).toBeCloseTo(0.25 * PRICE_REALIZATION_MAX + 0.15 * 0.7);
   });
 
   it.each(["realization", "ledger", "clearing", "capital"] as const)(
@@ -110,7 +118,7 @@ describe("NPP recipe contribution forecasts", () => {
       })
     );
     expect(result.inputCost).toBeCloseTo(0.25);
-    expect(result.outputValue).toBeCloseTo(1.17);
+    expect(result.outputValue).toBeCloseTo(0.78 * PRICE_REALIZATION_MAX);
   });
 
   it("uses sellability only from the clearing tier", () => {

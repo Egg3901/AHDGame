@@ -29,10 +29,10 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       // Matches SECTOR_SUPPLY/SECTOR_DEMAND in commodities.ts (energy output 0.65, oil 0.07, rare_earth 0.04; rare_earth covers copper).
       supply: { energy: 0.65 },
       demand: {
-        steel: 0.15,
+        steel: 0.22,
         coal: 0.15,
         oil: 0.07,
-        vehicles: 0.1,
+        vehicles: 0.03,
         construction_services: 0.05,
         rare_earth: 0.04,
         natural_gas: 0.12,

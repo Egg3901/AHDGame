@@ -309,6 +309,12 @@ export interface Margins {
   homeLocationModifier: number;
   stateSectorSpecializationModifier: number;
   sectorTypeMatchModifier: number;
+  /** State enterprise efficiency (pp, <= 0). 0 for private corps. */
+  soeEfficiencyModifier?: number;
+  /** Expropriation-risk drag from low investor confidence (pp). 0 for state enterprises. */
+  expropriationRiskModifier?: number;
+  /** Fit with the host country's economic model (pp, signed). */
+  economicModelAlignmentModifier?: number;
   sprawlModifier: number;
   inflationModifier: number;
   debtToGdpModifier: number;

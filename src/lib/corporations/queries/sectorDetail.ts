@@ -55,6 +55,11 @@ import type {
 } from "@/lib/constants/corporations";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import {
+  computeOwnershipMarginTerms,
+  roundOwnershipTerms,
+} from "@/lib/nationalization/ownershipMarginTerms";
+import { loadEconomicModelsByCountry } from "@/lib/economicModels/queries";
+import {
   eraScaledBasePrices,
   commodityMixWeight,
   COMMODITY_BASE_PRICES,
@@ -394,6 +399,8 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
               unionsBanned: 1,
               "taxRates.domesticCorporateTax": 1,
               "taxRates.foreignCorporateTax": 1,
+              investorConfidence: 1,
+              stateOwnershipConcentration: 1,
             },
           }
         ),
@@ -556,6 +563,30 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       sector.industryModel,
       sector.mediaDiscriminator
     ) as CorporationType;
+    // Ownership margin terms (SOE efficiency, expropriation risk, economic-model
+    // fit): the turn applies them inside the stack, so the breakdown names them.
+    const ownerCountryId = corporation.countryOwnerId;
+    const [economicModelByCountry, ownerBudget] = await Promise.all([
+      loadEconomicModelsByCountry(db, [sectorCountryId]),
+      ownerCountryId && ownerCountryId !== sectorCountryId
+        ? db
+            .collection<FederalBudget>("federalBudget")
+            .findOne(
+              { countryId: ownerCountryId },
+              { projection: { stateOwnershipConcentration: 1 } }
+            )
+        : Promise.resolve(federalBudget),
+    ]);
+    const ownershipTerms = computeOwnershipMarginTerms({
+      corporation,
+      sector,
+      sectorType,
+      corruptionIndex: stateMetrics?.governance?.corruptionIndex?.value ?? null,
+      governmentTransparency: stateMetrics?.governance?.governmentTransparency?.value ?? null,
+      ownerSoci: ownerBudget?.stateOwnershipConcentration ?? 0,
+      investorConfidence: federalBudget?.investorConfidence,
+      economicModel: economicModelByCountry.get(sectorCountryId),
+    });
     const metrics: StateMetricValues = {
       fullMetrics: stateMetrics ?? null,
       unemploymentRate: stateMetrics?.economic?.unemploymentRate?.value ?? null,
@@ -1174,7 +1205,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
           ? buildPolicyStackRows({
               policyCreditAnchor: sectorAmountAnchor(enginePnl.policyCredit),
               revenueAnchor: sectorAmountAnchor(enginePnl.revenue),
-              mods: { ...mods, techMarginBonus: techMarginBonusPp },
+              mods: { ...mods, ...ownershipTerms, techMarginBonus: techMarginBonusPp },
               appliedPolicyPp: enginePnl.policyPp,
             })
           : [],
@@ -1345,6 +1376,7 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
       margins: {
         base: sector.profitMargin,
         ...mods,
+        ...roundOwnershipTerms(ownershipTerms),
         // computeSectorMarginSection already folds crises into both the
         // displayed margin and the maintenance/profit calculation.
         effective: mods.effective,
