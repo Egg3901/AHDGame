@@ -291,6 +291,32 @@ describe("vitals", () => {
 });
 
 describe("operations", () => {
+  it("does not advertise a legacy linear upgrade alongside branch operations", () => {
+    const c = campaignFixture({
+      nextUpgradeCosts: {
+        fundraising: { level: 1, funds: 50000, actions: 10, effect: "+$35k/turn" },
+        oppositionResearch: null,
+        groundGame: null,
+        mediaSpending: null,
+      },
+    });
+    expect(buildCampaignBlendViewModel(input({ campaign: c })).ops[0].nextStep).toBeNull();
+  });
+  it("adjusts the current income summary to match campaign era, currency and race", () => {
+    const c = campaignFixture({ fxRate: 2, priceLevel: 0.35808 });
+    c.electionInfo!.electionType = "house";
+    const vm = buildCampaignBlendViewModel(input({ campaign: c }));
+    expect(vm.ops.find((o) => o.key === "fundraising")?.effect).toBe("+$58,063/turn income");
+  });
+  it("labels owned and next branch effects separately", () => {
+    const c = campaignFixture();
+    c.opsTrees!.fundraising.branches[0].currentEffect = "+$250,656/turn";
+    c.opsTrees!.fundraising.branches[0].next!.effect = "+$644,544/turn";
+    const vm = buildCampaignBlendViewModel(input({ campaign: c, expandedCategory: "fundraising" }));
+    expect(vm.ops.find((o) => o.key === "fundraising")?.tree?.branches[0].effect).toBe(
+      "Current: +$250,656/turn · Next: +$644,544/turn"
+    );
+  });
   it("describes each lever's current standing effect", () => {
     const vm = buildCampaignBlendViewModel(input());
     const ground = vm.ops.find((o) => o.key === "groundGame");
