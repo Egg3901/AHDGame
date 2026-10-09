@@ -275,28 +275,37 @@ async function openRounds(db: Db, world: ContestWorld, kinds: ContestKind[]): Pr
   for (const kind of kinds) {
     const roundNumber = (lastNumber.get(kind) ?? 0) + 1;
     const opening = baselines.get(kind) ?? { baselines: [] };
+    const round: ContestRound = {
+      _id: contestRoundId(kind, roundNumber),
+      kind,
+      roundNumber,
+      status: "active",
+      startedAt: world.now,
+      endsAt: new Date(world.now.getTime() + CONTEST_ROUND_MS),
+      startTurn: world.turn,
+      ...(world.iterationKey ? { iterationKey: world.iterationKey } : {}),
+      ...(opening.tierBoundaryAnchor !== undefined
+        ? { tierBoundaryAnchor: opening.tierBoundaryAnchor }
+        : {}),
+      baselines: opening.baselines,
+      standings: [],
+      winners: [],
+    };
     try {
-      await contestRounds(db).insertOne({
-        _id: contestRoundId(kind, roundNumber),
-        kind,
-        roundNumber,
-        status: "active",
-        startedAt: world.now,
-        endsAt: new Date(world.now.getTime() + CONTEST_ROUND_MS),
-        startTurn: world.turn,
-        ...(world.iterationKey ? { iterationKey: world.iterationKey } : {}),
-        ...(opening.tierBoundaryAnchor !== undefined
-          ? { tierBoundaryAnchor: opening.tierBoundaryAnchor }
-          : {}),
-        baselines: opening.baselines,
-        standings: [],
-        winners: [],
-      });
+      await contestRounds(db).insertOne(round);
       opened++;
     } catch (err) {
       // Duplicate id: another process opened this round first.
       if ((err as { code?: number }).code !== 11000) throw err;
+      continue;
     }
+    // Standings exist from the moment a round opens, so the field shows
+    // straight away instead of an empty card until the next turn.
+    const { standings } = await computeStandings(db, world, round);
+    await contestRounds(db).updateOne(
+      { _id: round._id, status: "active" },
+      { $set: { standings, standingsTurn: world.turn, refreshedAt: world.now } }
+    );
   }
   return opened;
 }
@@ -541,6 +550,7 @@ export interface ContestRunSummary {
 
 declare global {
   var _ahdContestsRunning: boolean | undefined;
+  var _ahdContestsOpenCheckedAt: number | undefined;
 }
 
 /**
@@ -628,6 +638,39 @@ export async function runContestsAfterTurn(db: Db, turn: number): Promise<void> 
   } catch (err) {
     Sentry.captureException(err, { tags: { area: "contests" } });
     console.error("[contests] post-turn run failed", err);
+  } finally {
+    globalThis._ahdContestsRunning = false;
+  }
+}
+
+/** How often one process may check for missing rounds from a page view. */
+const OPEN_CHECK_INTERVAL_MS = 60_000;
+
+/**
+ * Open any missing weekly rounds without waiting for a turn: called from the
+ * Contests page so a fresh deploy or a reset world has live contests on the
+ * first visit. Throttled per process, never throws, and shares the turn hook's
+ * in-process guard; round ids keep it safe against the turn worker.
+ */
+export async function ensureContestsOpen(db: Db, now: Date = new Date()): Promise<void> {
+  const last = globalThis._ahdContestsOpenCheckedAt ?? 0;
+  if (now.getTime() - last < OPEN_CHECK_INTERVAL_MS) return;
+  globalThis._ahdContestsOpenCheckedAt = now.getTime();
+  if (globalThis._ahdContestsRunning) return;
+  globalThis._ahdContestsRunning = true;
+  try {
+    const active = await contestRounds(db).countDocuments({
+      status: "active",
+      kind: { $in: [...CONTEST_KINDS] },
+    });
+    if (active >= CONTEST_KINDS.length) return;
+    const gameState = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" } as never, { projection: { currentTurn: 1 } });
+    await runContests(db, gameState?.currentTurn ?? 0, now);
+  } catch (err) {
+    Sentry.captureException(err, { tags: { area: "contests", step: "ensureOpen" } });
+    console.error("[contests] opening rounds from the page failed", err);
   } finally {
     globalThis._ahdContestsRunning = false;
   }
