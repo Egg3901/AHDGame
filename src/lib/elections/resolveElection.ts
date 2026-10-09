@@ -11,6 +11,7 @@
  *   resolveElections()  - batch (one round of queries, then _enrichElection)
  *   _enrichElection()   - low-level enrichment on pre-fetched data
  */
+import { oneRowPerTurn } from "@/lib/electionEngine/rules/turnSlice";
 import { usesCampaignRules } from "@/lib/campaignTargeting/rules";
 import { applyStandingAds } from "@/lib/campaignTargeting/standingAds";
 
@@ -423,9 +424,9 @@ export async function resolveElections(
         .collection<PlayerEndorsement>("playerEndorsements")
         .find({ electionId: { $in: electionIds }, isActive: true })
         .toArray(),
-      // Only the last 72 snapshots per election are kept (see snapsLimited),
+      // Only the last 72 turns per election are kept (see snapsLimited),
       // so cap the fetch in the DB instead of loading full history and
-      // slicing in JS.
+      // slicing in JS. 144 rows: a split turn holds an early and a rest row.
       db
         .collection<PrimarySnapshot>("primarySnapshots")
         .aggregate<PrimarySnapshot>([
@@ -434,7 +435,7 @@ export async function resolveElections(
           {
             $group: { _id: "$electionId", docs: { $push: "$$ROOT" } },
           },
-          { $project: { docs: { $slice: ["$docs", 72] } } },
+          { $project: { docs: { $slice: ["$docs", 144] } } },
           { $unwind: "$docs" },
           { $replaceRoot: { newRoot: "$docs" } },
           { $sort: { recordedAt: 1 } },
@@ -626,7 +627,8 @@ export async function resolveElections(
 
       const snapsForElection = snapshotsByElection.get(eid) ?? [];
       // Limit snapshot history to last 72 entries (matching single-election logic)
-      const snapsLimited = isFull ? snapsForElection.slice(-72) : [];
+      // A split turn holds an early and a rest row; keep one per turn.
+      const snapsLimited = isFull ? oneRowPerTurn(snapsForElection).slice(-72) : [];
 
       const deps: ElectionDeps = {
         apportionment: sharedApportionment,

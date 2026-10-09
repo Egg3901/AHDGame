@@ -56,6 +56,10 @@ vi.mock("@/lib/primaryScore", () => {
     effectivePartyInfluenceForPresidentialPrimary: (v: number) => Math.max(0, v),
   };
 });
+vi.mock("@/lib/electionEngine/resolvedTurnout", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/electionEngine/resolvedTurnout")>();
+  return { ...actual, resolveTurnout: vi.fn(actual.resolveTurnout) };
+});
 vi.mock("@/lib/utils/getStateApprovalForElection", () => ({
   getAllStateApprovalsForElection: vi.fn().mockResolvedValue(new Map()),
 }));
@@ -1207,6 +1211,127 @@ describe("recordPrimarySnapshots", () => {
       expect(db.collection("demographicDefaults").find).toHaveBeenCalledTimes(2);
     }
   );
+});
+
+describe("recordPrimarySnapshots: half-hour split turns", () => {
+  let db: MockDb;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { resolveTurnout } = await import("@/lib/electionEngine/resolvedTurnout");
+    vi.mocked(resolveTurnout).mockReturnValue({ totalPool: 1_000_000, byGroup: {} } as never);
+    const { calcPrimaryScore } = await import("@/lib/primaryScore");
+    vi.mocked(calcPrimaryScore).mockReturnValue(50);
+  });
+
+  const a = new ObjectId();
+  const b = new ObjectId();
+
+  async function run(
+    recorded: { turn: number; slicePart?: "early" | "rest" }[],
+    slice?: "early",
+    electionOverride: Record<string, unknown> = {}
+  ) {
+    const electionId = new ObjectId();
+    db.collection("elections").find.mockReturnValue(
+      makeCursor([
+        {
+          _id: electionId,
+          electionType: "senate",
+          status: "active",
+          countryId: "US",
+          state: "CA",
+          seatId: "US-senate-CA-1",
+          startTurn: 80,
+          primaryEndTurn: 110,
+          endTurn: 140,
+          ...electionOverride,
+        },
+      ])
+    );
+    const candidates = [a, b].map((id, i) => ({
+      _id: id,
+      electionId,
+      party: "DEM",
+      characterName: `C${i}`,
+      characterId: new ObjectId(),
+      isNPP: true,
+      status: "active",
+    }));
+    db.collection("electionCandidates").find.mockReturnValue(makeCursor(candidates));
+    db.collection("states").find.mockReturnValue(
+      makeCursor([{ _id: "CA", countryId: "US", population: 2_000_000 }])
+    );
+    db.collection("stateDemographics").find.mockReturnValue(
+      makeCursor([{ _id: "CA", countryId: "US", groups: {}, categoryWeights: {} }])
+    );
+    db.collection("demographicCategories").find.mockReturnValue(makeCursor([{ _id: "age" }]));
+    db.collection("statePartyOrg").find.mockReturnValue(
+      makeCursor([{ stateId: "CA", countryId: "US", partyId: "DEM", registration: 40 }])
+    );
+    db.collection("primarySnapshots").find.mockReturnValue(
+      makeCursor(recorded.map((r) => ({ _id: new ObjectId(), electionId, byParty: {}, ...r })))
+    );
+    const count = await recordPrimarySnapshots(NOW, 100, undefined, slice ? { slice } : {});
+    const inserted = db.collection("primarySnapshots").insertMany.mock.calls[0]?.[0];
+    const op = db.collection("electionVoteTallies").bulkWrite.mock.calls[0]?.[0]?.[0];
+    const votes = op?.updateOne.update.$set.primaryVotes as Record<string, number> | undefined;
+    return { count, snapshot: inserted?.[0], votes };
+  }
+  const sum = (votes?: Record<string, number>) =>
+    Object.values(votes ?? {}).reduce((total, v) => total + v, 0);
+
+  it("banks half the turn's ballots early and the rest on the turn", async () => {
+    const whole = await run([]);
+    db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const early = await run([], "early");
+    db = createMockDb();
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const rest = await run([{ turn: 100, slicePart: "early" }]);
+
+    expect(whole.snapshot.slicePart).toBeUndefined();
+    expect(early.snapshot).toMatchObject({ turn: 100, slicePart: "early" });
+    expect(rest.snapshot).toMatchObject({ turn: 100, slicePart: "rest" });
+    expect(sum(whole.votes)).toBeGreaterThan(0);
+    // Same shares, half the pool each; per-candidate rounding is the only gap.
+    expect(Math.abs(sum(early.votes) * 2 - sum(whole.votes))).toBeLessThanOrEqual(2);
+    expect(sum(early.votes)).toBe(sum(rest.votes));
+  });
+
+  it.each<[string, { turn: number; slicePart?: "early" | "rest" }[], "early" | undefined]>([
+    ["a second early tick", [{ turn: 100, slicePart: "early" }], "early"],
+    ["an early tick after the whole turn", [{ turn: 100 }], "early"],
+    ["the turn after it was counted whole", [{ turn: 100 }], undefined],
+    [
+      "the turn after both halves",
+      [
+        { turn: 100, slicePart: "early" },
+        { turn: 100, slicePart: "rest" },
+      ],
+      undefined,
+    ],
+  ])("counts nothing on %s", async (_label, recorded, slice) => {
+    const { count } = await run(recorded, slice);
+    expect(count).toBe(0);
+    expect(db.collection("electionVoteTallies").bulkWrite).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a score-only race", { seatId: undefined }],
+    ["a race whose ballot window has not opened", { startTurn: 60, primaryEndTurn: 140 }],
+    ["a race without turn bounds", { startTurn: undefined, primaryEndTurn: undefined }],
+    ["a presidential primary", { electionType: "president", seatId: "US-president" }],
+  ])("leaves %s to the turn", async (_label, override) => {
+    const { count } = await run([], "early", override);
+    expect(count).toBe(0);
+    expect(db.collection("primarySnapshots").insertMany).not.toHaveBeenCalled();
+    expect(db.collection("electionVoteTallies").bulkWrite).not.toHaveBeenCalled();
+  });
 });
 
 describe("accumulateGeneralElectionVotes", () => {

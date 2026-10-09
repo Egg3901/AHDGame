@@ -67,17 +67,25 @@ import {
 } from "@/lib/electionEngine/candidateEnrichment";
 import { primaryOpenFilter } from "@/lib/elections/electionDeadlineFilters";
 import { scopeFilter, type ElectionSweepScope } from "./electionSweepScope";
+import { planTurnSlice, type TurnSlicePart } from "@/lib/electionEngine/rules/turnSlice";
 
 /**
  * Record a primary standings snapshot for every election currently in primary phase.
  * Called each turn so the hourly trend graph stays populated.
+ *
+ * `slice: "early"` is the half-hour results tick: it banks half of the coming
+ * turn's primary ballots for races whose turn-bounded ballot window is open,
+ * and the turn banks the rest. Presidential primaries, score-only races and
+ * the presidential polling projection stay on the turn.
  */
 export async function recordPrimarySnapshots(
   now: Date,
   currentTurn: number,
-  scope?: ElectionSweepScope
+  scope?: ElectionSweepScope,
+  options?: { slice?: "early" }
 ): Promise<number> {
   const db = await getDb();
+  const early = options?.slice === "early";
 
   // Elections still in their primary phase — turn-first with Date fallback.
   const activeElections = await db
@@ -229,7 +237,7 @@ export async function recordPrimarySnapshots(
   // winner instead of the old calcPresidentPrimaryScore ranking (#3022).
   const presProjections = await recordPresidentialStatePollingSnapshots(
     db,
-    activeElections.filter((e) => usesLegacyPresidentialCampaign(e)),
+    early ? [] : activeElections.filter((e) => usesLegacyPresidentialCampaign(e)),
     candidatesByElection,
     charMap,
     nppMap,
@@ -350,19 +358,19 @@ export async function recordPrimarySnapshots(
   // Per-turn idempotency: a turn whose later phase stalled (a stuck
   // corporationTurn lock, cleared and re-run) runs this phase again under the
   // SAME turn number. Live turn 460 ran three times and every open general
-  // banked three slices; the primary accrual would do the same. An election
-  // already snapshotted for this turn is skipped outright.
-  const alreadyRecorded = new Set(
-    (
-      await db
-        .collection<PrimarySnapshot>("primarySnapshots")
-        .find({
-          electionId: { $in: activeElections.map((e) => e._id as ObjectId) },
-          turn: currentTurn,
-        })
-        .toArray()
-    ).map((s) => s.electionId.toString())
-  );
+  // banked three slices; the primary accrual would do the same. A split turn
+  // holds an early and a rest snapshot; each half is recorded once.
+  const recordedParts = new Map<string, (TurnSlicePart | undefined)[]>();
+  for (const s of await db
+    .collection<PrimarySnapshot>("primarySnapshots")
+    .find({
+      electionId: { $in: activeElections.map((e) => e._id as ObjectId) },
+      turn: currentTurn,
+    })
+    .toArray()) {
+    const eid = s.electionId.toString();
+    recordedParts.set(eid, [...(recordedParts.get(eid) ?? []), s.slicePart]);
+  }
 
   const snapshots: PrimarySnapshot[] = [];
 
@@ -371,9 +379,22 @@ export async function recordPrimarySnapshots(
     const candidates = candidatesByElection.get(electionObjectId.toString()) ?? [];
 
     if (candidates.length === 0) continue;
-    if (alreadyRecorded.has(electionObjectId.toString())) continue;
+    const slicePlan = planTurnSlice(
+      recordedParts.get(electionObjectId.toString()) ?? [],
+      options?.slice
+    );
+    if (!slicePlan) continue;
 
     const isPresident = usesLegacyPresidentialCampaign(election);
+    // The early half needs a turn-bounded ballot window, so the turn sees the
+    // same open window and banks the rest.
+    if (
+      early &&
+      (isPresident ||
+        typeof election.startTurn !== "number" ||
+        typeof election.primaryEndTurn !== "number")
+    )
+      continue;
 
     // Resolve state lean for state-level alignment (skip president).
     let raceStateEconLean: number | null | undefined;
@@ -576,6 +597,7 @@ export async function recordPrimarySnapshots(
     // the race's general window); before it opens the snapshot carries score
     // standings alone. See primaryBallotWindow for why.
     const ballotWindow = !isPresident ? primaryBallotWindow(election, currentTurn, now) : null;
+    let bankedBallots = false;
     if (!isPresident && election.seatId && ballotWindow?.open) {
       const accrualRegionId = parseSeatId(election.seatId).localRegionId;
       const regionKey = `${election.countryId ?? "US"}:${accrualRegionId}`;
@@ -586,7 +608,12 @@ export async function recordPrimarySnapshots(
         : undefined;
       const registration = accrualRegionId ? registrationByRegion.get(accrualRegionId) : undefined;
       if (accrualRegionId && totalPool && registration) {
-        const pools = partyPrimaryPools(totalPool, Object.keys(byParty), registration);
+        // A split turn's half carries its share of the turn's ballots.
+        const pools = partyPrimaryPools(
+          totalPool * slicePlan.fraction,
+          Object.keys(byParty),
+          registration
+        );
         if (pools.size > 0) {
           const window = resolveTurnWindow({
             startTurn: ballotWindow.startTurn,
@@ -611,6 +638,7 @@ export async function recordPrimarySnapshots(
             turnIndex: window.turnIndex,
           });
           primaryVotesByElection.set(eid, cumulative);
+          bankedBallots = true;
 
           // Display parity: the snapshot standing becomes the cumulative
           // ballot share wherever the party actually has ballots. Parties
@@ -665,11 +693,14 @@ export async function recordPrimarySnapshots(
       }
     }
 
+    // A score-only race has no ballots to split; it keeps the hourly snapshot.
+    if (early && !bankedBallots) continue;
     snapshots.push({
       _id: new ObjectId(),
       electionId: electionObjectId,
       recordedAt: now,
       turn: currentTurn,
+      ...(slicePlan.slicePart ? { slicePart: slicePlan.slicePart } : {}),
       byParty,
     });
   }

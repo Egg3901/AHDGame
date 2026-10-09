@@ -19,5 +19,10 @@ export interface PrimarySnapshot {
    * written before the guard existed.
    */
   turn?: number;
+  /**
+   * Half of a split turn: "early" is banked by the half-hour results tick
+   * ahead of the turn, "rest" by the turn itself. Absent: the whole turn.
+   */
+  slicePart?: "early" | "rest";
   byParty: Record<string, PrimarySnapshotEntry[]>;
 }
