@@ -1,5 +1,7 @@
 "use client";
 
+import { useGameEvents } from "@/hooks/useGameEvents";
+
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import Link from "next/link";
@@ -121,29 +123,33 @@ export default function CorporationPortfolioView({
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   };
 
-  const fetchPortfolio = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/corporations/${corpRouteId}/portfolio`);
-      const json = (await res.json()) as CorpPortfolioApiResponse;
-      if (!res.ok) {
-        setError(apiErrorText(json, "Failed to load portfolio"));
+  const fetchPortfolio = useCallback(
+    async (background = false) => {
+      if (!background) setLoading(true);
+      try {
+        const res = await fetch(`/api/corporations/${corpRouteId}/portfolio`);
+        const json = (await res.json()) as CorpPortfolioApiResponse;
+        if (!res.ok) {
+          setError(apiErrorText(json, "Failed to load portfolio"));
+          setData(null);
+          return;
+        }
+        setData(json);
+        setError("");
+      } catch {
+        setError("Network error");
         setData(null);
-        return;
+      } finally {
+        setLoading(false);
       }
-      setData(json);
-      setError("");
-    } catch {
-      setError("Network error");
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [corpRouteId]);
+    },
+    [corpRouteId]
+  );
 
   useEffect(() => {
     void fetchPortfolio();
   }, [fetchPortfolio]);
+  useGameEvents(() => void fetchPortfolio(true), ["turn_complete", "market_tick"]);
 
   const deltas = useMemo(() => {
     if (!data || data.history.length < 2) return null;

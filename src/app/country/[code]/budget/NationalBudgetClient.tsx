@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useGameEvents } from "@/hooks/useGameEvents";
 import { useParams } from "next/navigation";
 import { TreasuryMasthead, type BudgetLens } from "@/components/budget/treasury/TreasuryMasthead";
 import { FiscalStatStrip } from "@/components/budget/treasury/FiscalStatStrip";
@@ -56,6 +57,11 @@ export function NationalBudgetClient() {
   const [lens, setLens] = useState<BudgetLens>("public");
   const [compare, setCompare] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
+  useGameEvents(
+    () => setReloadNonce((nonce) => nonce + 1),
+    ["turn_complete", "market_tick"],
+    selectedFY === null
+  );
 
   useEffect(() => {
     let cancelled = false;

@@ -135,8 +135,11 @@ function nextPollDelay(status: TurnStatus, now: Date): number {
   }
   if (status.isProcessing) return 1500;
   if (!status.nextScheduledTurn || !status.isActive) return 120_000;
-  const diff = new Date(status.nextScheduledTurn).getTime() - now.getTime();
-  if (diff < 120_000) return 15_000; // Align near-turn polling with the API's browser cache window
+  const quarterMs = 15 * 60_000;
+  const nextMarketAt = (Math.floor(now.getTime() / quarterMs) + 1) * quarterMs;
+  const nextTurnAt = new Date(status.nextScheduledTurn).getTime();
+  const diff = Math.min(nextTurnAt, nextMarketAt) - now.getTime();
+  if (diff < 120_000) return 15_000; // Align near-update polling with the API's browser cache window
   if (diff < 600_000) return 60_000; // Normal within 10 min
   return 120_000; // Relaxed when far from turn
 }

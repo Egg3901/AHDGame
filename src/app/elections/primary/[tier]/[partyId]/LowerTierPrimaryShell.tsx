@@ -1,5 +1,6 @@
 "use client";
 
+import { useGameEvents } from "@/hooks/useGameEvents";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useMemo } from "react";
 import { TierSelector, type RaceTier } from "@/components/elections/primary/TierSelector";
@@ -89,6 +90,7 @@ export function LowerTierPrimaryShell({
   districtSlot?: React.ReactNode;
 }) {
   const router = useRouter();
+  useGameEvents(() => router.refresh(), ["turn_complete", "market_tick"]);
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
