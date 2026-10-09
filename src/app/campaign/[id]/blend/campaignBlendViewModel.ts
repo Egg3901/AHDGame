@@ -38,7 +38,7 @@ export const LEDGER_PAGE_SIZE = 10;
 /** Width of the money pane's sparkline, matching the stored history cap. */
 export const SPARKLINE_TURNS = 18;
 
-export type CampaignRail = "overview" | "ops" | "money" | "log";
+export type CampaignRail = "overview" | "ops" | "field" | "money" | "log";
 
 export interface ViewerResources {
   /** Campaign-fund balance usable for a contribution. */
@@ -342,6 +342,7 @@ export interface CampaignBlendVM {
 const PANE_TITLES: Record<CampaignRail, string> = {
   overview: "Campaign overview",
   ops: "Strategic operations",
+  field: "Field offices",
   money: "Budget & contributions",
   // Not "The ledger": BlendLedger heads itself with exactly that, and the pane
   // header sits directly above it. Naming the two tabs distinguishes them.
@@ -431,6 +432,17 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
   const railItems: CampaignBlendVM["railItems"] = [
     { id: "overview", label: "Overview" },
     { id: "ops", label: "Operations", badge: `${totalInvested}/${OPS_TOTAL_CAP}` },
+    // Field offices only exist where the country maps them (US counties, UK
+    // and JP regions). The count is public: offices are visible on the ground.
+    ...(campaign.electionInfo?.fieldOfficeScope
+      ? [
+          {
+            id: "field" as const,
+            label: "Field offices",
+            badge: String(campaign.electionInfo.fieldOfficeCount ?? 0),
+          },
+        ]
+      : []),
     { id: "money", label: "Money" },
     {
       id: "log",

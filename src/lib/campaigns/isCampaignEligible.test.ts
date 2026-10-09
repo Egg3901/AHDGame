@@ -44,14 +44,20 @@ describe("isCampaignEligibleElection — Phase 5.5 eligibility matrix", () => {
     });
   });
 
-  describe("Non-US races (deferred per Phase 5.5 D4)", () => {
-    it("returns false for JP shugiin / sangiin / governor", () => {
-      expect(isCampaignEligibleElection({ countryId: "JP", electionType: "shugiin" })).toBe(false);
-      expect(isCampaignEligibleElection({ countryId: "JP", electionType: "sangiin" })).toBe(false);
-      expect(isCampaignEligibleElection({ countryId: "JP", electionType: "governor" })).toBe(false);
+  describe("Non-US races", () => {
+    it("opts in JP shugiin / snap shugiin / sangiin / governor by name", () => {
+      for (const electionType of ["shugiin", "snap_shugiin", "sangiin", "governor"]) {
+        expect(isCampaignEligibleElection({ countryId: "JP", electionType })).toBe(true);
+      }
+      expect(isCampaignEligibleElection({ countryId: "JP", electionType: "regionalCouncil" })).toBe(
+        false
+      );
     });
-    it("returns false for UK commons / regionalCouncil", () => {
-      expect(isCampaignEligibleElection({ countryId: "UK", electionType: "commons" })).toBe(false);
+    it("opts in UK commons and by-elections, not regional councils", () => {
+      expect(isCampaignEligibleElection({ countryId: "UK", electionType: "commons" })).toBe(true);
+      expect(isCampaignEligibleElection({ countryId: "UK", electionType: "special_commons" })).toBe(
+        true
+      );
       expect(isCampaignEligibleElection({ countryId: "UK", electionType: "regionalCouncil" })).toBe(
         false
       );

@@ -132,6 +132,10 @@ export interface CampaignData {
     /** Baked LARP year on the linked election doc (null on legacy rows). */
     electionYear: number | null;
     isEnded: boolean;
+    /** Field-office granularity in this race's country; null when unavailable. */
+    fieldOfficeScope?: "county" | "region" | null;
+    /** Offices this campaign holds right now. */
+    fieldOfficeCount?: number;
   } | null;
 
   /**

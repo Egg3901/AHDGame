@@ -64,7 +64,7 @@ Alphabetical definitions of terms used throughout A House Divided and its wiki.
 
 **GOTV (Get Out The Vote)**: The party action that boosts demographic turnout modifiers. Controlled by party chair GOTV budget allocation. Stacks additively with player canvassing, subject to the ±20 cap.
 
-**Ground game**: A campaign branch tree (starter node plus Field Offices, Get-Out-The-Vote, and Volunteer Corps branches) that boosts turnout in a race's competitive areas. Costs ongoing maintenance; unaffordable branches auto-downgrade.
+**Ground game**: A campaign branch tree (starter node plus Swing Canvassing, Get-Out-The-Vote, and Volunteer Corps branches) that boosts turnout in a race's competitive areas. Costs ongoing maintenance; unaffordable branches auto-downgrade.
 
 **Home state / region**: The sub-national unit (US state, UK region, DE Land, JP prefecture, or another country's configured region) where your character is based. Determines which elections you can enter, where you can canvass, and where your in-state party org applies.
 
