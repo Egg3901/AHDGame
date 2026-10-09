@@ -58,6 +58,8 @@ function partyData(byState: Record<string, Record<string, number>>) {
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  const { clearPartyDataCache } = await import("@/lib/elections/primaryRegional/partyDataCache");
+  clearPartyDataCache();
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue({} as Db);
   const { requireBasicAuth } = await import("@/lib/api/requireAuth");

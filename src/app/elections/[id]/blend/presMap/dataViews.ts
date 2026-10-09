@@ -11,7 +11,7 @@ import { readableInk } from "@/lib/elections/marginTierShade";
 import type { CountyRow } from "./countyModel";
 import { describeTrend, type PresMapCandidate, type PresMapModel } from "./presMapModel";
 
-export type MapDataView = "margin" | "winner" | "share" | "momentum";
+export type MapDataView = "margin" | "winner" | "share" | "momentum" | "presence";
 
 export const DATA_VIEWS: { id: MapDataView; label: string }[] = [
   { id: "margin", label: "Margin" },
@@ -19,6 +19,38 @@ export const DATA_VIEWS: { id: MapDataView; label: string }[] = [
   { id: "share", label: "Vote share" },
   { id: "momentum", label: "Momentum" },
 ];
+
+/** The reader's own campaign view, offered only to a candidate in the race. */
+export const PRESENCE_VIEW = { id: "presence" as const, label: "Your campaign" };
+
+/** Presence level at which the "Your campaign" shade is full strength. */
+export const PRESENCE_FULL_LEVEL = 10;
+
+/** The model repainted by the reader's own Campaign Presence per state. */
+export function applyPresenceView(
+  model: PresMapModel,
+  ground: string,
+  presence: { levels: Readonly<Record<string, number>>; color: string }
+): PresMapModel {
+  const states: PresMapModel["states"] = {};
+  for (const [id, s] of Object.entries(model.states)) {
+    const level = presence.levels[id] ?? 0;
+    const fill = mixToward(
+      ground,
+      presence.color,
+      level > 0 ? 0.2 + 0.8 * Math.min(1, level / PRESENCE_FULL_LEVEL) : 0.06
+    );
+    states[id] = {
+      ...s,
+      fill,
+      ink: readableInk(fill),
+      caption: `Your Campaign Presence: level ${level}`,
+      evLabel: level > 0 ? `L${level}` : null,
+      overlay: undefined,
+    };
+  }
+  return { ...model, states };
+}
 
 /** Share at which the vote-share ramp starts and saturates. */
 export const SHARE_RAMP = { lo: 20, hi: 70 } as const;

@@ -17,8 +17,11 @@ import {
   DATA_VIEWS,
   MOMENTUM_FULL_PP,
   SHARE_RAMP,
+  PRESENCE_FULL_LEVEL,
+  PRESENCE_VIEW,
   applyCountyView,
   applyDataView,
+  applyPresenceView,
   hasShareData,
   mixToward,
   shareCandidates,
@@ -37,7 +40,7 @@ import { loadUsStateGeo, MAP_HEIGHT, MAP_WIDTH, type StateGeo } from "./usStates
 import { usePanZoom } from "./usePanZoom";
 import { MIN_ZOOM, MAX_ZOOM, visibleBox } from "./mapView";
 import { COUNTY_ZOOM, CountyPaths, countyOpacity, useCountyRows } from "./CountyLayer";
-import type { CountyRow } from "./countyModel";
+import { countyFadeGround, type CountyRow } from "./countyModel";
 import type { CountySource } from "./countyStore";
 
 /** Container width at which the state overview sits over the map instead of rising as a sheet. */
@@ -87,6 +90,18 @@ export interface PresidentialMapProps {
   onSelectState?: (stateId: string | null) => void;
   /** Where county results come from; defaults to the race's general tally. */
   countySource?: CountySource;
+  /**
+   * Open a state from outside the map (the 270 snake, a `?state=` link). A new
+   * nonce re-opens the same state.
+   */
+  focusRequest?: { stateId: string; nonce: number } | null;
+  /**
+   * The reader's own campaign in this race: adds a "Your campaign" colour-by
+   * view shaded by Campaign Presence. Absent for a reader not running.
+   */
+  presence?: { levels: Readonly<Record<string, number>>; color: string } | null;
+  /** Appended to the state overview (the reader's campaign actions there). */
+  panelExtra?: (stateId: string) => ReactNode;
 }
 
 type Hover = { id: string; county?: string; x: number; y: number } | null;
@@ -142,6 +157,9 @@ export function PresidentialMap({
   counties = variant === "stage",
   onSelectState,
   countySource,
+  focusRequest,
+  presence,
+  panelExtra,
 }: PresidentialMapProps) {
   const stage = variant === "stage";
   const frameRef = useRef<HTMLDivElement>(null);
@@ -195,14 +213,24 @@ export function PresidentialMap({
     frame: stage ? { frameWidth: frameW, frameHeight: frameH, maxZoom: STAGE_MAX_ZOOM } : undefined,
   });
 
-  const viewsOn = stage && hasShareData(model);
+  const shareOn = hasShareData(model);
+  const presenceOn = stage && !!presence;
+  const viewsOn = stage && (shareOn || presenceOn);
+  const viewOptions = [
+    ...(shareOn ? DATA_VIEWS : DATA_VIEWS.filter((v) => v.id === "margin")),
+    ...(presenceOn ? [PRESENCE_VIEW] : []),
+  ];
   const pickable = useMemo(() => (viewsOn ? shareCandidates(model) : []), [viewsOn, model]);
   const shareCand =
     (shareCandId ? pickable.find((c) => c.id === shareCandId) : undefined) ?? pickable[0] ?? null;
-  const activeView: MapDataView = viewsOn ? dataView : "margin";
+  const activeView: MapDataView =
+    viewsOn && viewOptions.some((v) => v.id === dataView) ? dataView : "margin";
   const viewModel = useMemo(
-    () => applyDataView(model, activeView, ground, shareCand),
-    [model, activeView, ground, shareCand]
+    () =>
+      activeView === "presence" && presence
+        ? applyPresenceView(model, ground, presence)
+        : applyDataView(model, activeView, ground, shareCand),
+    [model, activeView, ground, shareCand, presence]
   );
   const states = viewModel.states;
   const geoById = useMemo(() => new Map((geo ?? []).map((g) => [g.id, g])), [geo]);
@@ -214,8 +242,17 @@ export function PresidentialMap({
       setSelected(id);
       setHover(null);
       onSelectState?.(id);
+      // The stage's open state is in the URL (`?state=OH`), so a state view
+      // can be shared and the back button works. History is replaced, not
+      // pushed, and Next is not asked to navigate.
+      if (stage && typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        if (id) url.searchParams.set("state", id);
+        else url.searchParams.delete("state");
+        window.history.replaceState(window.history.state, "", url);
+      }
     },
-    [onSelectState]
+    [onSelectState, stage]
   );
 
   // County layer: every state in view once the zoom passes the threshold.
@@ -252,7 +289,7 @@ export function PresidentialMap({
     const out: Record<string, CountyRow[]> = {};
     for (const id of countyStates) {
       const rows = countyRows[id]
-        ? applyCountyView(countyRows[id], activeView, ground, shareCand)
+        ? applyCountyView(countyRows[id], activeView, countyFadeGround(ground), shareCand)
         : null;
       if (rows) out[id] = rows;
     }
@@ -260,7 +297,7 @@ export function PresidentialMap({
   }, [countyStates, countyRows, activeView, ground, shareCand]);
   // Momentum has no county series, so that view stays at state level.
   const countyAlpha =
-    activeView === "momentum"
+    activeView === "momentum" || activeView === "presence"
       ? 0
       : k < COUNTY_ZOOM && countyStates.length > 0
         ? 1
@@ -304,6 +341,22 @@ export function PresidentialMap({
       docked ? STAGE_PANEL_WIDTH / scale : 0
     );
   };
+  // Outside requests to open a state (the 270 snake, a `?state=` link): select
+  // it and fly to it once the geometry is in. Handled during render, once per
+  // nonce, so repeating a state re-opens it.
+  const [handledFocus, setHandledFocus] = useState<number | null>(null);
+  if (
+    focusRequest &&
+    geo &&
+    focusRequest.nonce !== handledFocus &&
+    model.states[focusRequest.stateId]
+  ) {
+    setHandledFocus(focusRequest.nonce);
+    setSelected(focusRequest.stateId);
+    setHover(null);
+    if (stage) zoomToState(focusRequest.stateId);
+  }
+
   const onDoubleClick = (e: MouseEvent<SVGSVGElement>) => {
     if (!stage) return;
     const id = stateAt(e.target);
@@ -345,17 +398,21 @@ export function PresidentialMap({
     renderPanel ? (
       <div ref={panelRef} tabIndex={-1} style={{ outline: "none" }}>
         {renderPanel(selectedState, () => select(null))}
+        {panelExtra?.(selectedState.id)}
       </div>
     ) : (
-      <StatePanel
-        ref={panelRef}
-        state={selectedState}
-        model={model}
-        electionId={electionId}
-        countryId={countryId}
-        turn={turn}
-        onClose={() => select(null)}
-      />
+      <>
+        <StatePanel
+          ref={panelRef}
+          state={selectedState}
+          model={model}
+          electionId={electionId}
+          countryId={countryId}
+          turn={turn}
+          onClose={() => select(null)}
+        />
+        {panelExtra?.(selectedState.id)}
+      </>
     )
   ) : null;
 
@@ -575,6 +632,7 @@ export function PresidentialMap({
           >
             {viewsOn ? (
               <DataViewPicker
+                options={viewOptions}
                 view={activeView}
                 onView={setDataView}
                 candidates={pickable}
@@ -591,7 +649,13 @@ export function PresidentialMap({
           {activeView === "margin" ? (
             (legend ?? <MapKey model={model} />)
           ) : (
-            <DataViewKey view={activeView} model={model} shareCand={shareCand} ground={ground} />
+            <DataViewKey
+              view={activeView}
+              model={model}
+              shareCand={shareCand}
+              ground={ground}
+              presenceColor={presence?.color ?? null}
+            />
           )}
         </div>
       ) : (
@@ -1100,12 +1164,14 @@ const chipStyle = (on: boolean): React.CSSProperties => ({
 
 /** What the map is coloured by, and for the share view, whose share. */
 function DataViewPicker({
+  options,
   view,
   onView,
   candidates,
   shareCand,
   onShareCand,
 }: {
+  options: { id: MapDataView; label: string }[];
   view: MapDataView;
   onView: (v: MapDataView) => void;
   candidates: PresMapCandidate[];
@@ -1120,7 +1186,7 @@ function DataViewPicker({
         aria-label="Colour the map by"
         style={{ display: "inline-flex", gap: 4 }}
       >
-        {DATA_VIEWS.map((v) => (
+        {options.map((v) => (
           <button
             key={v.id}
             type="button"
@@ -1173,11 +1239,13 @@ function DataViewKey({
   model,
   shareCand,
   ground,
+  presenceColor,
 }: {
   view: MapDataView;
   model: PresMapModel;
   shareCand: PresMapCandidate | null;
   ground: string;
+  presenceColor: string | null;
 }) {
   const keyStyle: React.CSSProperties = {
     display: "flex",
@@ -1191,6 +1259,25 @@ function DataViewKey({
   const swatch = (bg: string) => (
     <i aria-hidden style={{ width: 9, height: 9, display: "block", background: bg }} />
   );
+  if (view === "presence" && presenceColor) {
+    return (
+      <div style={keyStyle}>
+        <span style={{ letterSpacing: ".1em" }}>YOUR CAMPAIGN PRESENCE:</span>
+        {[0, 2, 5, 10].map((lvl) => (
+          <span key={lvl} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {swatch(
+              mixToward(
+                ground,
+                presenceColor,
+                lvl > 0 ? 0.2 + 0.8 * Math.min(1, lvl / PRESENCE_FULL_LEVEL) : 0.06
+              )
+            )}
+            {lvl === 10 ? "level 10+" : `level ${lvl}`}
+          </span>
+        ))}
+      </div>
+    );
+  }
   if (view === "winner") {
     return (
       <div style={keyStyle}>

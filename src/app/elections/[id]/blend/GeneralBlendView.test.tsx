@@ -497,13 +497,15 @@ describe("names link out and states open", () => {
     }
   });
 
-  it("opens a state overview linking to the full state page", async () => {
+  it("opens a state on the stage and puts it in the URL", async () => {
+    // The old per-state page now redirects here; the stage's open state is the
+    // state view, shareable as `?state=PA`.
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
     renderView();
     fireEvent.click((await screen.findAllByRole("button", { name: /Pennsylvania/ }))[0]);
-    const link = await screen.findByRole("link", { name: /Open full Pennsylvania page/ });
-    expect(link.getAttribute("href")).toBe("/elections/e1/country/us/region/PA");
-    expect(screen.getByText("Projected vote")).toBeTruthy();
+    expect(await screen.findByText("Projected vote")).toBeTruthy();
+    expect(new URL(window.location.href).searchParams.get("state")).toBe("PA");
+    expect(screen.queryByRole("link", { name: /Open full Pennsylvania page/ })).toBeNull();
     vi.restoreAllMocks();
   });
 

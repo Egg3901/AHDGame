@@ -22,6 +22,8 @@ import { TicketCards, TicketsTable } from "./GeneralTicketsTable";
 import { DemocraticHealthBlock } from "./DemocraticHealthBlock";
 import { PresidentialMap } from "./presMap/PresidentialMap";
 import { StateSquares } from "./presMap/StateSquares";
+import { CollegeSnake } from "./presMap/CollegeSnake";
+import { MyCampaignStateBlock, useMyCampaign } from "./useMyCampaign";
 import { PresidentialStage, presidentialTitle } from "./PresidentialStage";
 import { presidentialResultsLive } from "./liveState";
 import { buildPresMapModel } from "./presMap/presMapModel";
@@ -47,11 +49,15 @@ export function GeneralBlendView({
   onRefresh,
   stageTitle = presidentialTitle(election.electionYear),
   stageNav,
+  initialFocus,
 }: GeneralBlendViewProps) {
   // The stage shows every section at once; the rail selection only survives
   // as the view model's input.
   const rail: GeneralRail = "overview";
   const ground = useBlendGround();
+  const [focus, setFocus] = useState<{ stateId: string; nonce: number } | null>(
+    initialFocus ? { stateId: initialFocus, nonce: 0 } : null
+  );
   const [busy, setBusy] = useState<string | null>(null);
   /** Why the last endorsement was refused, or null. */
   const [endorseError, setEndorseError] = useState<string | null>(null);
@@ -71,6 +77,14 @@ export function GeneralBlendView({
     [election, wire, rail, ground]
   );
 
+  // The reader's own campaign in this race: presence by state on the map, and
+  // building it from the state overview.
+  const myCandidate = election.allCandidates.find((c) => c.isYou) ?? null;
+  const mine = useMyCampaign({
+    enabled: Boolean(myCandidate) && election.countryId === "US",
+    campaignId: myCandidate?.campaignId ?? null,
+    color: myCandidate?.campaignColor ?? myCandidate?.partyColor ?? "#4F8EF7",
+  });
   const live = presidentialResultsLive(election);
   const mapModel = useMemo(() => buildPresMapModel(election, ground), [election, ground]);
 
@@ -545,6 +559,13 @@ export function GeneralBlendView({
           }
           deck={vm.headline}
           ticker={live ? <BlendTicker tag="CALLS" items={vm.wire} /> : null}
+          strip={
+            <CollegeSnake
+              model={mapModel}
+              threshold={vm.threshold}
+              onSelect={(stateId) => setFocus({ stateId, nonce: Date.now() })}
+            />
+          }
           nav={stageNav}
           left={
             <>
@@ -632,6 +653,13 @@ export function GeneralBlendView({
               electionId={electionId}
               countryId={election.countryId}
               turn={election.gameState?.currentTurn ?? null}
+              focusRequest={focus}
+              presence={mine ? { levels: mine.levels, color: mine.color } : null}
+              panelExtra={
+                mine
+                  ? (stateId) => <MyCampaignStateBlock mine={mine} stateId={stateId} />
+                  : undefined
+              }
             />
           }
           squares={
