@@ -42,7 +42,7 @@ export function BillProvisionCard({
       {!view.fiscal && (
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-background/60 px-2.5 py-1.5 text-xs">
           <span className="text-body-sm font-medium text-muted">Budget effect</span>
-          <span className="text-muted">No direct budget effect</span>
+          <span className="text-muted">Budget effect information unavailable</span>
         </div>
       )}
       {view.metricEffects && view.metricEffects.length > 0 && (
@@ -94,7 +94,12 @@ export function BillProvisionCard({
       {(!view.effects || view.effects.length === 0) && !view.metricEffects && (
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-background/60 px-2.5 py-1.5 text-xs">
           <span className="text-body-sm font-medium text-muted">Metric effect</span>
-          <span className="text-muted">No direct metric effect</span>
+          <span className="text-muted">
+            {view.currentPolicyIndex !== undefined &&
+            view.currentPolicyIndex === view.proposedPolicyIndex
+              ? "No modeled change from current law"
+              : "Metric effect information unavailable"}
+          </span>
         </div>
       )}
       {view.effects && view.effects.length > 0 && (
@@ -114,7 +119,7 @@ export function BillProvisionCard({
                   className="inline-flex items-center gap-1 rounded-md border border-card-border px-2 py-0.5 text-[11px] text-foreground/80"
                   title={`${effect.metric} ${
                     effect.direction === "up" ? "rises" : "falls"
-                  } vs the current law — ${effect.isGood ? "beneficial" : "harmful"}`}
+                  } vs the current law: ${effect.isGood ? "beneficial" : "harmful"}`}
                 >
                   <span style={{ color: c }} aria-hidden="true">
                     {effect.direction === "up" ? "▲" : "▼"}
@@ -131,7 +136,7 @@ export function BillProvisionCard({
         view.currentPolicyIndex === view.proposedPolicyIndex && (
           <p className="text-[11px] text-muted">
             No change from current law
-            {view.current?.title ? ` — already ${view.current.title}` : ""}.
+            {view.current?.title ? `: already ${view.current.title}` : ""}.
           </p>
         )}
       {view.nationalizationDetail && (
@@ -164,24 +169,37 @@ function ProvisionFiscalRow({ fiscal }: { fiscal: NonNullable<BillProvisionView[
   const money = (amount: number) => formatLocalAmount(amount, currency);
 
   if (fiscal.proposedRate !== undefined && fiscal.currentRate !== undefined) {
-    const delta = fiscal.revenueDelta ?? 0;
+    const delta = fiscal.revenueDelta;
     return (
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-background/60 px-2.5 py-1.5 text-xs">
         <span className="text-body-sm font-medium text-muted">Budget effect</span>
         <span className="tabular-nums">
           Rate {fiscal.currentRate}% → {fiscal.proposedRate}%
         </span>
-        <span className={`font-medium tabular-nums ${delta >= 0 ? "text-success" : "text-error"}`}>
-          {delta >= 0 ? "+" : "−"}
-          {money(Math.abs(delta))}/yr revenue
-        </span>
+        {delta === undefined || !Number.isFinite(delta) ? (
+          <span className="text-muted">Revenue change information unavailable</span>
+        ) : (
+          <span
+            className={`font-medium tabular-nums ${delta > 0 ? "text-success" : delta < 0 ? "text-error" : "text-muted"}`}
+          >
+            {delta > 0 ? "+" : delta < 0 ? "−" : ""}
+            {money(Math.abs(delta))}/yr revenue
+          </span>
+        )}
       </div>
     );
   }
 
   const proposed = fiscal.proposed;
-  if (!proposed) return null;
-  const netDelta = fiscal.netDelta ?? proposed.net;
+  if (!proposed) {
+    return (
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-background/60 px-2.5 py-1.5 text-xs">
+        <span className="text-body-sm font-medium text-muted">Budget effect</span>
+        <span className="text-muted">Budget effect information unavailable</span>
+      </div>
+    );
+  }
+  const netDelta = fiscal.netDelta ?? proposed.net - (fiscal.current?.net ?? 0);
   return (
     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-background/60 px-2.5 py-1.5 text-xs">
       <span className="text-body-sm font-medium text-muted">Budget effect</span>
@@ -190,8 +208,10 @@ function ProvisionFiscalRow({ fiscal }: { fiscal: NonNullable<BillProvisionView[
         {money(proposed.cost)}/yr
         {proposed.revenue > 0 ? ` · ${money(proposed.revenue)}/yr revenue` : ""}
       </span>
-      <span className={`font-medium tabular-nums ${netDelta >= 0 ? "text-success" : "text-error"}`}>
-        Net change {netDelta >= 0 ? "+" : "−"}
+      <span
+        className={`font-medium tabular-nums ${netDelta > 0 ? "text-success" : netDelta < 0 ? "text-error" : "text-muted"}`}
+      >
+        Net change {netDelta > 0 ? "+" : netDelta < 0 ? "−" : ""}
         {money(Math.abs(netDelta))}/yr to the treasury
       </span>
       {fiscal.transitionCost !== undefined && fiscal.transitionCost > 0 && (

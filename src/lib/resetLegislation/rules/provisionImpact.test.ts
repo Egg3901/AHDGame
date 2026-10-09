@@ -41,4 +41,28 @@ describe("reviewedLawMetricEffectDeltas", () => {
       })
     ).toEqual([]);
   });
+
+  it("shows the reduction when a federal program is left to the states", () => {
+    expect(
+      reviewedLawMetricEffectDeltas({
+        currentChoice: "center_right",
+        primaryResponse,
+        proposedEffects: [{ metricId: "16", favorableNormalizedPoints: 0 }],
+      })
+    ).toEqual([{ metricId: "16", favorableNormalizedPoints: -0.49 }]);
+  });
+
+  it("preserves zero changes and omits non-finite forecasts", () => {
+    expect(
+      reviewedLawMetricEffectDeltas({
+        currentChoice: "center_right",
+        primaryResponse,
+        proposedEffects: [
+          { metricId: "16", favorableNormalizedPoints: 0.49 },
+          { metricId: "17", favorableNormalizedPoints: NaN },
+          { metricId: "19", favorableNormalizedPoints: Infinity },
+        ],
+      })
+    ).toEqual([{ metricId: "16", favorableNormalizedPoints: 0 }]);
+  });
 });

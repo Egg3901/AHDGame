@@ -1,3 +1,8 @@
+/**
+ * Bill metric effects compare the proposed law's frozen modeled pressure with
+ * the calibrated current-law choice at full implementation. See
+ * reviewedLawMetricEffectDeltas; these estimates do not change observed metrics.
+ */
 import type { LawChoice } from "./eligibility";
 
 const REVIEWED_CHOICES = [
