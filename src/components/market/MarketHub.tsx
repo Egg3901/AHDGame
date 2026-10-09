@@ -21,6 +21,8 @@ import { DEFAULT_OFFER_FILTERS, offersQuery } from "./supplyOfferUi";
 import { StockMarketChart } from "@/app/country/[code]/stockmarket/components/MarketOverview";
 import { useMarketJson } from "./useMarketJson";
 
+import { MarketCorporationAction } from "./MarketCorporationAction";
+
 const CHART_KEY = "market.chartOpen";
 
 /** Chart visibility, remembered per browser; expanded until the player hides it. */
@@ -72,11 +74,14 @@ export function MarketHub() {
   return (
     <div className="min-h-screen bg-background pb-16">
       <main className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6">
-        <div>
-          <h1 className="text-heading-lg font-bold text-foreground">The Market</h1>
-          <p className="text-sm text-muted">
-            Stocks, bonds, funds, sectors, commodities, supply deals and currencies in one place.
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-heading-lg font-bold text-foreground">The Market</h1>
+            <p className="text-sm text-muted">
+              Stocks, bonds, funds, sectors, commodities, supply deals and currencies in one place.
+            </p>
+          </div>
+          <MarketCorporationAction />
         </div>
 
         <section aria-label="Stock market chart">
