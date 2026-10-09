@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiErrorText } from "@/lib/errors/catalog";
 
@@ -77,6 +78,7 @@ export function PrimaryUnderwritingMandateControl({ corpId }: { corpId: string }
           aria-label="Underwriting bank"
           className="min-h-9 min-w-56 rounded-md border border-border bg-background px-2 text-sm"
           value={selected}
+          disabled={payload.banks.length === 0 && !payload.selectedBankId}
           onChange={(event) => setSelected(event.target.value)}
         >
           <option value="">No selected bank</option>
@@ -102,7 +104,13 @@ export function PrimaryUnderwritingMandateControl({ corpId }: { corpId: string }
       </div>
       {payload.banks.length === 0 && (
         <p className="mt-2 text-xs text-muted">
-          No active investment bank is available in this currency.
+          No investment or universal bank is chartered in this currency yet. Retail banks do not
+          underwrite placements, and shares and bonds still sell to the market without a mandate.
+          For a corporate loan, use private bank credit on the{" "}
+          <Link href="/banking" className="underline">
+            Banking page
+          </Link>
+          .
         </p>
       )}
     </section>

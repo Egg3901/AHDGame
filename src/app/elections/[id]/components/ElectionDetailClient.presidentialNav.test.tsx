@@ -60,8 +60,6 @@ vi.mock("./GeneralPhaseView", () => ({ GeneralPhaseView: () => null }));
 vi.mock("./ElectionScheduleCard", () => ({ ElectionScheduleCard: () => null }));
 vi.mock("./ElectionHeader", () => ({ ElectionHeader: () => null }));
 vi.mock("./AdminSection", () => ({ AdminSection: () => null }));
-vi.mock("./CampaignsListPanel", () => ({ CampaignsListPanel: () => null }));
-vi.mock("./CampaignManagerTab", () => ({ CampaignManagerTab: () => null }));
 vi.mock("./PrimaryMapPills", () => ({ PrimaryMapPills: () => null }));
 vi.mock("./PresidentialMapWithStateDetail", () => ({
   PresidentialMapWithStateDetail: () => null,

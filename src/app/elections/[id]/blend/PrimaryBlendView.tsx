@@ -24,6 +24,8 @@ import type { CountySource } from "./presMap/countyStore";
 import { MyCampaignStateBlock, useMyCampaign } from "./useMyCampaign";
 import { readableInk } from "@/lib/elections/marginTierShade";
 import { useBlendGround } from "@/components/blend/useBlendGround";
+import { useElectionCampaigns, type CampaignSummary } from "../components/useElectionCampaigns";
+import { FogNote, ViewCampaign, campaignFigures } from "./GeneralTicketsTable";
 import {
   buildPrimaryBlendViewModel,
   type PrimaryBlendVM,
@@ -193,6 +195,38 @@ function StateBoard({
         </div>
       ) : null}
     </>
+  );
+}
+
+/** A candidate's campaign operations under their phone field card. */
+function MobileCampaignLine({
+  campaign,
+  loading,
+}: {
+  campaign: CampaignSummary | undefined;
+  loading: boolean;
+}) {
+  if (!campaign && !loading) return null;
+  const figures = campaignFigures(campaign, loading);
+  return (
+    <div
+      style={{
+        marginTop: 8,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        fontFamily: FONT.mono,
+        fontSize: 11.5,
+        color: BLEND.muted,
+      }}
+    >
+      <span style={{ flex: 1, display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <span>{figures.funds}</span>
+        <span>{figures.actions} act.</span>
+        <span>{figures.levels} lvl</span>
+      </span>
+      {campaign ? <ViewCampaign campaign={campaign} /> : null}
+    </div>
   );
 }
 
@@ -399,6 +433,24 @@ export function PrimaryBlendView({
     color: myCandidate?.campaignColor ?? myCandidate?.partyColor ?? "#4F8EF7",
   });
   const ground = useBlendGround();
+  /**
+   * Campaign operations for the field table: funds, actions, levels and the
+   * manager, joined to each candidate. Campaign Manager is US-only. Refetched
+   * each turn, like the general's tickets table.
+   */
+  const { campaigns, loading: campaignsLoading } = useElectionCampaigns(electionId, {
+    enabled: election.countryId === "US",
+    refreshKey: election.gameState?.currentTurn ?? undefined,
+  });
+  const campaignForRow = (rowId: string): CampaignSummary | undefined => {
+    // Field rows are the party's filed candidates, so look there first.
+    const c =
+      election.byParty.flatMap((p) => p.candidates).find((x) => x.id === rowId) ??
+      election.allCandidates.find((x) => x.id === rowId);
+    if (!c) return undefined;
+    const key = c.isNPP && c.nppId ? c.nppId : c.characterId;
+    return campaigns.find((x) => x.candidateId === key);
+  };
   // The selected party's primary, by county, for the map's county layer.
   const countySource = useMemo<CountySource | undefined>(
     () =>
@@ -436,8 +488,8 @@ export function PrimaryBlendView({
   /** Shared by the header and every row, so the columns cannot drift apart. */
   const fieldGrid: React.CSSProperties = {
     display: "grid",
-    gridTemplateColumns: "30px minmax(0, 1fr) 150px 108px 96px",
-    gap: 16,
+    gridTemplateColumns: "30px minmax(0, 1fr) 130px 100px 92px 112px 56px 52px 112px",
+    gap: 14,
     alignItems: "center",
   };
 
@@ -459,111 +511,131 @@ export function PrimaryBlendView({
         <span>Outlook</span>
         <span>Vote share</span>
         <span style={{ textAlign: "right" }}>Projected del.</span>
+        <span style={{ textAlign: "right" }}>Funds</span>
+        <span style={{ textAlign: "right" }}>Actions</span>
+        <span style={{ textAlign: "right" }}>Levels</span>
+        <span className="sr-only">Campaign</span>
       </div>
-      {vm.field.map((c) => (
-        <div
-          key={c.id}
-          style={{
-            ...fieldGrid,
-            padding: "14px 0",
-            borderBottom: "1px solid rgba(42,42,61,.6)",
-            ...(c.isYou ? { background: "rgba(220,38,38,.04)" } : {}),
-          }}
-        >
-          <span style={{ fontFamily: FONT.mono, fontSize: 12, color: BLEND.mutedDimmer }}>
-            {c.rank}
-          </span>
-          <span style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
-            <i
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 99,
-                background: BLEND.track,
-                display: "block",
-                flexShrink: 0,
-                borderLeft: `3px solid ${c.color}`,
-              }}
-            />
-            <span style={{ minWidth: 0 }}>
-              <span
-                style={{
-                  display: "block",
-                  fontFamily: FONT.sans,
-                  fontSize: 17,
-                  fontWeight: 600,
-                  color: c.advancing ? BLEND.ink : BLEND.muted,
-                }}
-              >
-                {c.name}
-              </span>
-              <span
-                style={{
-                  display: "block",
-                  marginTop: 1,
-                  fontFamily: FONT.sans,
-                  fontSize: 13,
-                  color: BLEND.mutedDim,
-                }}
-              >
-                {c.blurb}
-              </span>
-            </span>
-          </span>
-          <span
+      {vm.field.map((c) => {
+        const campaign = campaignForRow(c.id);
+        const figures = campaignFigures(campaign, campaignsLoading);
+        return (
+          <div
+            key={c.id}
             style={{
-              fontFamily: FONT.sans,
-              fontSize: 13,
-              fontWeight: 600,
-              color: c.advancing ? BLEND.positive : BLEND.mutedDim,
+              ...fieldGrid,
+              padding: "14px 0",
+              borderBottom: "1px solid rgba(42,42,61,.6)",
+              ...(c.isYou ? { background: "rgba(220,38,38,.04)" } : {}),
             }}
           >
-            {c.statusText}
-          </span>
-          <span>
-            <span style={{ display: "block", height: 5, background: BLEND.hairline }}>
+            <span style={{ fontFamily: FONT.mono, fontSize: 12, color: BLEND.mutedDimmer }}>
+              {c.rank}
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
               <i
                 style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 99,
+                  background: BLEND.track,
                   display: "block",
-                  height: "100%",
-                  width: `${c.barPct}%`,
-                  background: c.color,
-                  opacity: c.advancing ? 1 : 0.5,
+                  flexShrink: 0,
+                  borderLeft: `3px solid ${c.color}`,
                 }}
               />
+              <span style={{ minWidth: 0 }}>
+                <span
+                  style={{
+                    display: "block",
+                    fontFamily: FONT.sans,
+                    fontSize: 17,
+                    fontWeight: 600,
+                    color: c.advancing ? BLEND.ink : BLEND.muted,
+                  }}
+                >
+                  {c.name}
+                </span>
+                <span
+                  style={{
+                    display: "block",
+                    marginTop: 1,
+                    fontFamily: FONT.sans,
+                    fontSize: 13,
+                    color: BLEND.mutedDim,
+                  }}
+                >
+                  {c.blurb}
+                  {campaign?.managerName ? ` · Manager: ${campaign.managerName}` : ""}
+                </span>
+              </span>
             </span>
             <span
               style={{
-                display: "block",
-                marginTop: 5,
-                fontFamily: FONT.mono,
-                fontSize: 12,
-                color: BLEND.muted,
+                fontFamily: FONT.sans,
+                fontSize: 13,
+                fontWeight: 600,
+                color: c.advancing ? BLEND.positive : BLEND.mutedDim,
               }}
             >
-              {c.pct}%
+              {c.statusText}
             </span>
-          </span>
-          <span style={{ textAlign: "right" }}>
-            <span style={{ display: "block", fontFamily: FONT.mono, fontSize: 15 }}>
-              {c.delegates ?? "—"}
-            </span>
-            {c.delegatesAwarded ? (
+            <span>
+              <span style={{ display: "block", height: 5, background: BLEND.hairline }}>
+                <i
+                  style={{
+                    display: "block",
+                    height: "100%",
+                    width: `${c.barPct}%`,
+                    background: c.color,
+                    opacity: c.advancing ? 1 : 0.5,
+                  }}
+                />
+              </span>
               <span
                 style={{
                   display: "block",
-                  marginTop: 2,
+                  marginTop: 5,
                   fontFamily: FONT.mono,
-                  fontSize: 10.5,
-                  color: BLEND.mutedDim,
+                  fontSize: 12,
+                  color: BLEND.muted,
                 }}
               >
-                {c.delegatesAwarded} won
+                {c.pct}%
               </span>
-            ) : null}
-          </span>
-        </div>
-      ))}
+            </span>
+            <span style={{ textAlign: "right" }}>
+              <span style={{ display: "block", fontFamily: FONT.mono, fontSize: 15 }}>
+                {c.delegates ?? "—"}
+              </span>
+              {c.delegatesAwarded ? (
+                <span
+                  style={{
+                    display: "block",
+                    marginTop: 2,
+                    fontFamily: FONT.mono,
+                    fontSize: 10.5,
+                    color: BLEND.mutedDim,
+                  }}
+                >
+                  {c.delegatesAwarded} won
+                </span>
+              ) : null}
+            </span>
+            <span style={{ textAlign: "right", fontFamily: FONT.mono, fontSize: 13 }}>
+              {figures.funds}
+            </span>
+            <span style={{ textAlign: "right", fontFamily: FONT.mono, fontSize: 13 }}>
+              {figures.actions}
+            </span>
+            <span style={{ textAlign: "right", fontFamily: FONT.mono, fontSize: 13 }}>
+              {figures.levels}
+            </span>
+            <span>{campaign ? <ViewCampaign campaign={campaign} /> : null}</span>
+          </div>
+        );
+      })}
+      <FogNote campaigns={campaigns} />
     </>
   );
 
@@ -902,8 +974,10 @@ export function PrimaryBlendView({
                         : ""}
                     </span>
                   </div>
+                  <MobileCampaignLine campaign={campaignForRow(c.id)} loading={campaignsLoading} />
                 </div>
               ))}
+              <FogNote campaigns={campaigns} />
             </div>
           </BlendSection>
         </div>

@@ -11,6 +11,7 @@ describe("hubTabs", () => {
     expect(legacyStockTabToMarketTab(undefined)).toBe("stocks");
     expect(legacyStockTabToMarketTab("listings")).toBe("stocks");
     expect(legacyStockTabToMarketTab("bonds")).toBe("bonds");
-    expect(legacyStockTabToMarketTab("wealth")).toBeNull();
+    expect(legacyStockTabToMarketTab("wealth")).toBe("wealth");
+    expect(legacyStockTabToMarketTab("unknown")).toBeNull();
   });
 });

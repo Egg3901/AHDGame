@@ -317,8 +317,8 @@ function formatCampaignForViewer(
     const toLocal = (anchor: number) =>
       campaignAnchorToLocal(anchor, electionCountryId, campaignRates);
     // activityHistory is deliberately NOT returned here. This is a list
-    // endpoint that serves every campaign in the election at once, and neither
-    // consumer (CampaignManagerTab, CampaignsListPanel) reads the field. Once a
+    // endpoint that serves every campaign in the election at once, and no
+    // consumer (the presidential tickets and field tables) reads the field. Once a
     // campaign keeps 200 entries instead of 10 it would carry twenty times the
     // weight for nothing. The ledger reads its history from the per-campaign
     // detail endpoint, which is the only surface that renders it.
