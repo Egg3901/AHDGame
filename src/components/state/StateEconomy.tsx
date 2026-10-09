@@ -1,5 +1,7 @@
 "use client";
 
+import { useGameEvents } from "@/hooks/useGameEvents";
+
 import { apiErrorText } from "@/lib/errors/catalog";
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import Image from "next/image";
@@ -187,42 +189,46 @@ export function StateEconomy({ stateId, countryId }: { stateId: string; countryI
   const [adjustError, setAdjustError] = useState("");
   const [participantsExpanded, setParticipantsExpanded] = useState(false);
 
-  const fetchEconomy = useCallback(() => {
-    setLoading(true);
-    fetchJson<EconomyData>(regionApiSubUrl(countryId, stateId, "economy"), {
-      feature: "state-economy",
-    })
-      .then((d) => {
-        if (d.sectors) {
-          setData(d);
-          if (!hasAppliedInitialSector.current) {
-            // URL sector param takes priority, then the user's corp sector,
-            // then the largest market on the board (matches the board's
-            // size-descending ordering).
-            const largestSector = (d.sectors as EconomySector[]).reduce<EconomySector | null>(
-              (top, s) => (top == null || s.totalMarket > top.totalMarket ? s : top),
-              null
-            );
-            const targetSector =
-              validUrlSector ?? d.userCorporationSectorType ?? largestSector?.type;
-            if (targetSector) {
-              const sectorExists = d.sectors.some((s: EconomySector) => s.type === targetSector);
-              if (sectorExists) {
-                setSelectedType(targetSector);
-              }
-            }
-            hasAppliedInitialSector.current = true;
-          }
-        }
+  const fetchEconomy = useCallback(
+    (background = false) => {
+      if (!background) setLoading(true);
+      fetchJson<EconomyData>(regionApiSubUrl(countryId, stateId, "economy"), {
+        feature: "state-economy",
       })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countryId, stateId]);
+        .then((d) => {
+          if (d.sectors) {
+            setData(d);
+            if (!hasAppliedInitialSector.current) {
+              // URL sector param takes priority, then the user's corp sector,
+              // then the largest market on the board (matches the board's
+              // size-descending ordering).
+              const largestSector = (d.sectors as EconomySector[]).reduce<EconomySector | null>(
+                (top, s) => (top == null || s.totalMarket > top.totalMarket ? s : top),
+                null
+              );
+              const targetSector =
+                validUrlSector ?? d.userCorporationSectorType ?? largestSector?.type;
+              if (targetSector) {
+                const sectorExists = d.sectors.some((s: EconomySector) => s.type === targetSector);
+                if (sectorExists) {
+                  setSelectedType(targetSector);
+                }
+              }
+              hasAppliedInitialSector.current = true;
+            }
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [countryId, stateId]
+  );
 
   useEffect(() => {
     fetchEconomy();
   }, [fetchEconomy]);
+  useGameEvents(() => void fetchEconomy(true), ["turn_complete", "market_tick"]);
 
   async function handleSplit(strength: "full" | "half" = "full") {
     setSplitting(true);

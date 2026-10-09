@@ -1,5 +1,12 @@
 import type { TurnOutcome, TurnPhaseTelemetryMap } from "@/lib/db/types/turnPhaseTelemetry";
 
+/** Market freshness uses phase telemetry's wall clock, including on a resumed turn. */
+export function completedMarketUpdateAt(phaseStatuses: TurnPhaseTelemetryMap): Date | null {
+  const phase = phaseStatuses.stockExchangeSnapshot;
+  if (phase?.status !== "completed" || !phase.completedAt) return null;
+  return Number.isFinite(phase.completedAt.getTime()) ? phase.completedAt : null;
+}
+
 export interface TurnCompletionStatus {
   success: true;
   outcome: TurnOutcome;

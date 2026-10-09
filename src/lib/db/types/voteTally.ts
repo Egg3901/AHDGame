@@ -146,6 +146,11 @@ export interface ElectionVoteTally {
    * stalled turn that is cleared and re-run cannot count the slice twice.
    */
   lastAccruedTurn?: number;
+  /**
+   * Set when `lastAccruedTurn` holds only the early half of a split turn
+   * (banked by the half-hour results tick); the turn's rest clears it.
+   */
+  lastAccruedSlice?: "early";
   createdAt: Date;
   updatedAt: Date;
 

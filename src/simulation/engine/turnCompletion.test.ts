@@ -1,7 +1,50 @@
 import { describe, expect, it } from "vitest";
 
-import type { TurnPhaseTelemetryMap } from "@/lib/db/types/turnPhaseTelemetry";
-import { completedTurnStatus } from "./turnCompletion";
+import type { TurnPhaseTelemetry, TurnPhaseTelemetryMap } from "@/lib/db/types/turnPhaseTelemetry";
+import { completedMarketUpdateAt, completedTurnStatus } from "./turnCompletion";
+
+describe("completed market update clock", () => {
+  const completed: TurnPhaseTelemetry = {
+    status: "completed",
+    startedAt: new Date("2026-10-09T05:01:00Z"),
+    completedAt: new Date("2026-10-09T05:01:05Z"),
+    updatedAt: new Date("2026-10-09T05:01:05Z"),
+    reason: null,
+    message: null,
+  };
+
+  it("uses the actual snapshot completion time, including a carried completed phase", () => {
+    expect(completedMarketUpdateAt({ stockExchangeSnapshot: completed })).toEqual(
+      completed.completedAt
+    );
+    expect(
+      completedMarketUpdateAt({
+        stockExchangeSnapshot: { ...completed, resumeCarried: "completed" },
+      })
+    ).toEqual(completed.completedAt);
+  });
+
+  it("does not advance market freshness for failed, skipped or absent snapshots", () => {
+    expect(completedMarketUpdateAt({})).toBeNull();
+    expect(
+      completedMarketUpdateAt({ stockExchangeSnapshot: { ...completed, status: "failed" } })
+    ).toBeNull();
+    expect(
+      completedMarketUpdateAt({ stockExchangeSnapshot: { ...completed, status: "skipped" } })
+    ).toBeNull();
+  });
+
+  it("does not publish missing or invalid completion times", () => {
+    expect(
+      completedMarketUpdateAt({ stockExchangeSnapshot: { ...completed, completedAt: null } })
+    ).toBeNull();
+    expect(
+      completedMarketUpdateAt({
+        stockExchangeSnapshot: { ...completed, completedAt: new Date(Number.NaN) },
+      })
+    ).toBeNull();
+  });
+});
 
 const phases = (statuses: Record<string, string>) =>
   Object.fromEntries(

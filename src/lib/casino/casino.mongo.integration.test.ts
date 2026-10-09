@@ -150,18 +150,18 @@ describe.skipIf(!uri)("Discord casino on isolated Mongo", () => {
     const limits = houseLimits(await bank());
     expect(await takeStake(db, player, 5_000, limits)).toMatchObject({ ok: false, status: 402 });
     const rich = await seedPlayer("rich", "US", 10_000_000_000);
-    expect(await takeStake(db, rich, 3_000_000, limits)).toMatchObject({ ok: false, status: 400 });
+    expect(await takeStake(db, rich, 20_000_000, limits)).toMatchObject({ ok: false, status: 400 });
     expect(await cash(rich)).toBe(10_000_000_000);
   });
 
   it("clips a win to the payout cap and voids the play when the bank is short", async () => {
     const player = await seedPlayer("us", "US", 1_000_000);
     const limits = houseLimits(await bank());
-    await takeStake(db, player, 100_000, limits);
+    await takeStake(db, player, 200_000, limits);
     const capped = await settleHouseBet(db, {
       player,
       game: "slots",
-      stakeLocal: 100_000,
+      stakeLocal: 200_000,
       multiplier: 288,
       limits,
       meta: {},

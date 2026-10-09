@@ -1,3 +1,4 @@
+import { rewindHalfTick } from "@/lib/turn/subhour/rewindHalfTick";
 import {
   withServerTurnAnalytics,
   markServerTurnAnalyticsCommitted,
@@ -78,7 +79,7 @@ import { isSingleplayer } from "@/lib/singleplayer";
 import { reconcileFederalBudgetInvariants } from "@/lib/budget/budgetInvariants";
 import { publishPlatformEvent } from "@/lib/platformEvents";
 import type { CompletedTurnPhaseObservation, TurnPhaseRuntime } from "@/simulation/engine/types";
-import { completedTurnStatus } from "@/simulation/engine/turnCompletion";
+import { completedMarketUpdateAt, completedTurnStatus } from "@/simulation/engine/turnCompletion";
 import { startTurnMemorySampler, type TurnMemoryPeak } from "@/lib/turn/turnMemory";
 import { captureTurnPosthog } from "@/lib/analytics/turnPosthog";
 import { currentTurnBuild } from "@/lib/turn/turnBuild";
@@ -559,6 +560,20 @@ async function processTurnImpl(
       }
     );
 
+    // The :30 half tick moved growth, inflation and exchange rates ahead of
+    // this turn for display and trading. Put them back to the start of the
+    // hour so every phase reads the world it would have read without the tick
+    // and the hour's step lands exactly as before (subhour/rewindHalfTick.ts).
+    // A failure is not fatal: the rewind is idempotent and a stamped value
+    // left in place only means that document moves half a step further.
+    try {
+      await withPhaseProfiling("halfTickRewind", () => rewindHalfTick(db, nextTurnNumber));
+    } catch (error) {
+      warnings.push(
+        `Half-hour tick rewind failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
     // Bracketed so its reads are attributable: turn setup runs before the
     // first phase, and was the largest single bucket in the round-trip profile
     // only because nothing named it.
@@ -639,6 +654,7 @@ async function processTurnImpl(
     lastHealth = context.phaseResults.gameHealthSnapshot?.health ?? null;
 
     const completion = completedTurnStatus(warnings, phaseStatuses);
+    const marketUpdateAt = completedMarketUpdateAt(phaseStatuses);
     const compactPhaseTimings = Object.entries(phaseStatuses)
       .flatMap(([phase, status]) => {
         if (!status.startedAt || !status.completedAt) return [];
@@ -653,6 +669,7 @@ async function processTurnImpl(
           currentTurn: context.newTurn,
           currentYear: context.currentYear,
           lastTurnProcessed: context.gameNow,
+          ...(marketUpdateAt ? { lastMarketTickAt: marketUpdateAt } : {}),
           // Local worlds are player-paced. A browser timer may request a turn,
           // but no server cron owns one, so never render a deceptive deadline.
           nextScheduledTurn: localSingleplayer

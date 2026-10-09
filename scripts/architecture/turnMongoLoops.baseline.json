@@ -286,9 +286,9 @@
     "849779deaa7e6d1e164b89f381a87eaef1e19febb3f91ec0f9ed9dd6c2378407": 1,
     "2b594c1ff476f4384f8a083de141cd16aa0573bec551dee4da493f034e8f5ac4": 1,
     "a13441262b54461661fa2a2668ea7d8abe0da0c59615a6ead6f27ce06cf48d2f": 1,
-    "8f3a62ac9eb57e5dba0f5659296bd8b40f613e65db382f296b4217b7832679d4": 1,
+    "fe5cdf9f658278908f95cdb3e67c0d8057649ef57ca66b0494af0c1892814c6f": 1,
     "dccb8eb75d42da266ea624b7bf68a5ee3e791f22f49257d3a040d0e4b43f1a05": 2,
-    "ab220783e01ccaf7a637677cfdaaa1726184f3465096bcf66aaf51d5c7d2d0d1": 1,
+    "1f2fa492608459cf49c62fb49d27bdd85d5b47cfebf7b05128b84099fd541b31": 1,
     "131efa6c530bf43d5580cac81f17c25fc912f08777ba8c1d7c6ade9982923618": 1,
     "b29534862de5c8b9d4fd2c175e5514b9a6adea226f58a1d38f2cdfdee20cd2f2": 1,
     "512925cf95f40ad69ca1fa7c82cf319e9aef684dbb16482d4e9b0d9e6b30d046": 1,
@@ -536,7 +536,7 @@
     "511b78fd180f54b581eb468f9376d64dd593cd8b3444483031ac0790db338d9b": 1,
     "e1166d622599528d1291e2d0b01563b4fd25ae6196c9339e6196521fc67a52a2": 1,
     "c7118c93282319f3e339ece6b419371a6c251b160f8bf24dee31ae664140708f": 1,
-    "6e88652e43f320adc23ac0db83c4ba1d7be395374c6a2302aaa800bb299fe00b": 1,
+    "e59f9e225e87332a00e249df5bff630605d2fb81767feb668556feb6b8fbe5ab": 1,
     "885532c6ad244690638e2840ea95c79dc7ef31e5bc087362d92986045a8fbcad": 1,
     "12703a5502aba2e2032744c0ab1a37814a8fa33da9aaecd84c82ae59c4d7b3e8": 1,
     "aa12e92ffbd99aebc87999311259805481ad72324dbfacb2aa4c8a4196dd028c": 1,
@@ -4531,11 +4531,11 @@
       "fingerprint": "b7f6372047e8b50351299fa9d3634942d1e00ff3f9fb0c1a595631e695aa2e24"
     },
     {
-      "file": "src/lib/turn/primaryResolution.ts",
+      "file": "src/lib/turn/primarySnapshots.ts",
       "operation": "updateOne",
       "owner": "recordPresidentialStatePollingSnapshots",
       "expression": "db.collection<ElectionVoteTally>(\"electionVoteTallies\").updateOne({ electionId: election._id }, { $push: { primaryStatePollingHistory: { $each: [{ turn: 0, recordedAt: now, byParty }], $slice: -24, }, } as never, $set: { updatedAt: now }, })",
-      "fingerprint": "6e88652e43f320adc23ac0db83c4ba1d7be395374c6a2302aaa800bb299fe00b"
+      "fingerprint": "e59f9e225e87332a00e249df5bff630605d2fb81767feb668556feb6b8fbe5ab"
     },
     {
       "file": "src/lib/electionEngine/singleSeatIncumbency.ts",

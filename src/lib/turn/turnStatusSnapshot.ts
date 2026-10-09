@@ -17,6 +17,7 @@ export const TURN_STATUS_PROJECTION = {
   isActive: 1,
   isProcessing: 1,
   lastTurnProcessed: 1,
+  lastMarketTickAt: 1,
   pausedAt: 1,
   pauseReason: 1,
   pauseKind: 1,

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { oneRowPerTurn } from "@/lib/electionEngine/rules/turnSlice";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { checkWikiDisabled } from "@/lib/api/wikiGuard";
 import { ObjectId } from "mongodb";
@@ -114,9 +115,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       db
         .collection<PrimarySnapshot>("primarySnapshots")
         .find({ electionId }, { sort: { recordedAt: 1 } })
-        .limit(48)
-        .project<Pick<PrimarySnapshot, "recordedAt" | "byParty">>({ recordedAt: 1, byParty: 1 })
-        .toArray(),
+        .limit(96)
+        .project<Pick<PrimarySnapshot, "recordedAt" | "byParty" | "turn" | "slicePart">>({
+          recordedAt: 1,
+          byParty: 1,
+          turn: 1,
+          slicePart: 1,
+        })
+        .toArray()
+        // A split turn holds an early and a rest row; chart one per turn.
+        .then((rows) => oneRowPerTurn(rows).slice(0, 48)),
     ]);
 
     const lastPrimarySnapshot =

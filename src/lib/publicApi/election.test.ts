@@ -978,6 +978,55 @@ describe("queryElectionDetail", () => {
     expect(snap).not.toHaveProperty("_rawDbField");
   });
 
+  it("numbers one primary snapshot per turn when a turn was split", async () => {
+    const elecId = new ObjectId();
+    db.collectionMocks.elections!.findOne.mockResolvedValueOnce({
+      _id: elecId,
+      seatId: "US-house-CA-1",
+      electionType: "house",
+      state: "CA",
+      countryId: "US",
+      cycle: 1,
+      status: "active",
+      totalSeats: 1,
+      startTime: new Date("2025-01-01"),
+      endTime: new Date("2025-01-08"),
+    });
+    db.collectionMocks.electionCandidates!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    } as never);
+    db.collectionMocks.electionVoteTallies!.findOne.mockResolvedValue(null);
+    const row = (turn: number, sharePct: number, slicePart?: "early" | "rest") => ({
+      _id: new ObjectId(),
+      electionId: elecId,
+      recordedAt: new Date(2025, 0, 5, turn),
+      turn,
+      ...(slicePart ? { slicePart } : {}),
+      byParty: { "1": [{ candidateId: "c", characterName: "Jane", party: "1", sharePct }] },
+    });
+    db.collectionMocks.primarySnapshots!.find.mockReturnValue({
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          row(1, 50),
+          row(2, 52, "early"),
+          row(2, 54, "rest"),
+          row(3, 55, "early"),
+        ]),
+    } as never);
+    db.collectionMocks.politicalParties!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    } as never);
+
+    const { queryElectionDetail } = await import("./election");
+    const result = await queryElectionDetail(db as unknown as Db, elecId.toString());
+
+    expect(result!.primarySnapshots.map((s) => s.candidates[0].sharePct)).toEqual([50, 54, 55]);
+    expect(result!.primarySnapshots.map((s) => s.turn)).toEqual([1, 2, 3]);
+  });
+
   it("omits candidates who have withdrawn from a live race", async () => {
     const elecId = new ObjectId();
     db.collectionMocks

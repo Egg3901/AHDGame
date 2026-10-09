@@ -7,6 +7,7 @@ vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn(async () => db) }));
 vi.mock("@/lib/api/requireBotToken", () => ({ requireBotToken: vi.fn(() => true) }));
 vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn(async () => "applied") }));
 
+import { MAX_STAKE_SHARE } from "@/lib/casino/house";
 import { POST as play } from "./play/route";
 import { POST as highlow } from "./highlow/route";
 import { GET as house } from "./house/route";
@@ -89,7 +90,7 @@ describe.skipIf(!uri)("Discord casino routes on isolated Mongo", () => {
     expect(h.anchorBalance).toBe(200_000_000 - net);
     expect(h.player).toMatchObject({
       currency: "USD",
-      maxStake: Math.floor((200_000_000 - net) * 0.02),
+      maxStake: Math.floor((200_000_000 - net) * MAX_STAKE_SHARE),
     });
   });
 
@@ -103,9 +104,12 @@ describe.skipIf(!uri)("Discord casino routes on isolated Mongo", () => {
   });
 
   it("refuses an over-limit stake with the limit in the body", async () => {
-    const res = await play(post({ game: "slots", discordId: "p1", stake: 5_000_000 }));
+    const res = await play(post({ game: "slots", discordId: "p1", stake: 30_000_000 }));
     expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ currency: "USD", maxStake: 4_000_000 });
+    expect(await res.json()).toMatchObject({
+      currency: "USD",
+      maxStake: 200_000_000 * MAX_STAKE_SHARE,
+    });
     expect(await cash()).toBe(10_000_000);
   });
 

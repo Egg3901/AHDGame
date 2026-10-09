@@ -16,4 +16,4 @@ areas: [backend]
 - Animal races, the lottery and poker tables pay out of a shared pot, less a small house cut.
 - Blackjack wins now pay out in any home currency. Before, a win could fail in a currency the bank held none of.
 - If the bank cannot cover a win, your stake comes back instead of being lost.
-- Table limits scale with the bank: one stake can be up to 2% of it and one payout up to 10%.
+- Table limits scale with the bank: one stake can be up to 12.5% of it and one payout up to 25%.

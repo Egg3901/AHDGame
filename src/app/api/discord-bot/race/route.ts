@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { oneRowPerTurn } from "@/lib/electionEngine/rules/turnSlice";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError, errorResponse } from "@/lib/api/errors";
 import { requireBotToken } from "@/lib/api/requireBotToken";
@@ -177,8 +178,10 @@ export async function GET(request: Request) {
         .collection<PrimarySnapshot>("primarySnapshots")
         .find({ electionId: electionOid })
         .sort({ recordedAt: 1 })
-        .limit(72)
-        .toArray(),
+        .limit(144)
+        .toArray()
+        // A split turn holds an early and a rest row; chart one per turn.
+        .then((rows) => oneRowPerTurn(rows).slice(0, 72)),
       isPresident ? db.collection<StatePartyOrg>("statePartyOrg").find({}).toArray() : [],
       db
         .collection<Campaign>("campaigns")
