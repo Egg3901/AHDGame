@@ -70,6 +70,8 @@ export interface Ticket {
   };
   /** Snapshot of recent game visits, treated as unconfirmed until the reporter replies. */
   supportRecentVisits?: import("@/lib/tickets/intakeContext").TicketVisit[];
+  /** Durable private intake card and reporter confirmation state. */
+  intake?: import("@/lib/tickets/intakeState").TicketIntake;
   category: TicketCategory;
   /** Where the reporter was playing (bot picker value), when known. */
   platform?: TicketPlatform;
