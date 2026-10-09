@@ -1,6 +1,6 @@
 /**
- * Contest cash prize: the weekly round winner is paid contestPrizeAnchor ₳ as
- * personal cash in their home currency (payContestPrize), logged as an
+ * Contest cash prize: each paid place is paid its share of the round's prize
+ * (placePrizeAnchor) as personal cash in their home currency (payContestPrize), logged as an
  * attributed `contest_prize` mint and announced by notification.
  */
 import type { Db } from "mongodb";
@@ -12,7 +12,7 @@ import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { onboardingRewardLocalAmount } from "@/lib/onboarding/rules";
 import { createNotification } from "@/lib/notifications";
-import { contestPrizeAnchor } from "./rules";
+import { placePrizeAnchor } from "./rules";
 
 export const CONTEST_KIND_TITLES: Record<ContestKind, string> = {
   corp_growth_small: "Small Business Growth",
@@ -20,12 +20,19 @@ export const CONTEST_KIND_TITLES: Record<ContestKind, string> = {
   influence_gain: "National Influence",
   approval_gain: "Government Approval",
   referrals_weekly: "Weekly Referrals",
+  legislator_bills: "Legislator of the Week",
+  wealth_growth: "Personal Wealth Growth",
+  party_growth: "Party Growth",
 };
+
+const PLACE_LABELS: Record<number, string> = { 2: "second", 3: "third" };
 
 export interface ContestPrizeInput {
   character: Pick<Character, "_id" | "userId" | "name" | "countryId" | "sequentialId">;
   round: { _id: string; kind: ContestKind; roundNumber: number };
   subjectName: string;
+  /** Finishing place, 1-based. */
+  place: number;
   turn: number;
   preset: string | undefined;
   now: Date;
@@ -44,7 +51,7 @@ export async function payContestPrize(
 ): Promise<ContestPrizeResult> {
   const { character, round, turn, preset, now } = input;
   const forexEnabled = await isForexEnabled();
-  const anchorAmount = contestPrizeAnchor(round.kind, preset);
+  const anchorAmount = placePrizeAnchor(round.kind, input.place, preset);
   const currencyCode = getHomeCurrency(character, preset);
   const rateDoc = forexEnabled
     ? await db
@@ -81,14 +88,17 @@ export async function payContestPrize(
     amount: localAmount,
     currencyCode,
     anchorAmount,
-    meta: { roundId: round._id, kind: round.kind },
+    meta: { roundId: round._id, kind: round.kind, place: input.place },
   });
 
   await createNotification({
     userId: character.userId,
     type: "system",
-    title: "You won a weekly contest",
-    message: `${input.subjectName} topped the ${CONTEST_KIND_TITLES[round.kind]} contest. Your prize has been added to your personal cash.`,
+    title: input.place === 1 ? "You won a weekly contest" : "You placed in a weekly contest",
+    message:
+      input.place === 1
+        ? `${input.subjectName} topped the ${CONTEST_KIND_TITLES[round.kind]} contest. Your prize has been added to your personal cash.`
+        : `${input.subjectName} finished ${PLACE_LABELS[input.place] ?? `#${input.place}`} in the ${CONTEST_KIND_TITLES[round.kind]} contest. Your prize has been added to your personal cash.`,
     metadata: { roundId: round._id, href: "/contests" },
   });
 

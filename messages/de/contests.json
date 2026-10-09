@@ -1,7 +1,7 @@
 {
   "contests": {
     "title": "Wettbewerbe",
-    "intro": "Wöchentliche Rennen zwischen Spielern. Am Ende jeder Woche gewinnt die Spitze jedes Wettbewerbs den angezeigten Geldpreis, und eine neue Runde beginnt. Neue Unternehmen und Charaktere steigen zu Beginn der nächsten Runde ein.",
+    "intro": "Wöchentliche Rennen zwischen Spielern. Am Ende jeder Woche teilen sich die ersten drei jedes Wettbewerbs den Geldpreis im Verhältnis 50 / 30 / 20 (bei der Regierungszustimmung erhält der Sieger alles), und eine neue Runde beginnt. Neue Unternehmen und Charaktere steigen zu Beginn der nächsten Runde ein.",
     "referralIntro": "Lade Spieler mit deinem Link ein. Eine Empfehlung zählt, sobald die eingeladene Person einen Charakter erstellt.",
     "endsAt": "Runde {round} endet",
     "entrants": "{count, plural, =0 {Noch keine Teilnehmer} one {# Teilnahme} other {# Teilnahmen}}",
@@ -37,13 +37,27 @@
       "referrals_iteration": {
         "title": "Diese Iteration",
         "rules": "Die meisten neuen Spieler in dieser Iteration. Die Zählung beginnt mit jeder neuen Iteration von vorn."
+      },
+      "legislator_bills": {
+        "title": "Gesetzgeber der Woche",
+        "rules": "Die meisten von dir eingebrachten Gesetze, die während der Runde in Kraft traten, national oder auf Landesebene."
+      },
+      "wealth_growth": {
+        "title": "Vermögenswachstum",
+        "rules": "Prozentuales Wachstum deines Nettovermögens: Bargeld, Ersparnisse, Aktien, Anleihen und Fonds. Erhaltene Überweisungen und Kreditbeträge zählen nicht."
+      },
+      "party_growth": {
+        "title": "Parteiwachstum",
+        "rules": "Die meisten neuen Mitglieder einer Partei unter einem Spieler als Vorsitz. Derselbe Vorsitz muss die Partei die ganze Runde führen."
       }
     },
     "scores": {
       "percent": "{value} %",
       "influence": "{value} NE",
       "approval": "{value} Pkt.",
-      "referrals": "{count, plural, one {# Empfehlung} other {# Empfehlungen}}"
+      "referrals": "{count, plural, one {# Empfehlung} other {# Empfehlungen}}",
+      "bills": "{count, plural, one {# Gesetz in Kraft} other {# Gesetze in Kraft}}",
+      "members": "{value} Mitglieder"
     },
     "referrals": {
       "since": "Gezählt seit",
@@ -76,6 +90,10 @@
     "countdown": "Runde {round} endet in",
     "timeLeft": "{days} T {hours} Std {minutes} Min",
     "settling": "Wird nach dem nächsten Zug abgerechnet",
-    "tiedLead": "gleichauf mit der Spitze"
+    "tiedLead": "gleichauf mit der Spitze",
+    "split": {
+      "podium": "Top 3 teilen 50 / 30 / 20",
+      "winnerTakesAll": "Der Sieger erhält alles"
+    }
   }
 }

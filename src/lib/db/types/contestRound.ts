@@ -12,13 +12,19 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
  * - approval_gain: approval points gained by a country whose head of
  *   government is a player and held office for the whole round.
  * - referrals_weekly: new players a referrer brought in during the round.
+ * - legislator_bills: bills a player sponsored that were enacted during the round.
+ * - wealth_growth: percent growth in a player's net worth, net of wires and loans.
+ * - party_growth: members gained by a party with a player chair.
  */
 export type ContestKind =
   | "corp_growth_small"
   | "corp_growth_large"
   | "influence_gain"
   | "approval_gain"
-  | "referrals_weekly";
+  | "referrals_weekly"
+  | "legislator_bills"
+  | "wealth_growth"
+  | "party_growth";
 
 /**
  * The iteration referral contest is not a weekly round: it runs from one
