@@ -273,7 +273,9 @@ describe("buildPolicyStackRows", () => {
         techMarginBonus: 4,
       },
     });
-    expect(rows).toHaveLength(5);
+    // Corruption is a reading inside the state-metric total, not a second term.
+    expect(rows).toHaveLength(4);
+    expect(rows.find((r) => r.key === "corruptionModifier")).toBeUndefined();
     expect(rows.reduce((s, r) => s + r.anchor, 0)).toBeCloseTo(420_000, 6);
     // Sign is preserved: a tariff hurts, a subsidy helps.
     expect(rows.find((r) => r.key === "subsidyModifier")!.anchor).toBeGreaterThan(0);
@@ -335,7 +337,60 @@ describe("buildPolicyStackRows", () => {
     expect(typeSwitch!.anchor).toBeLessThan(0);
     expect(tech!.pp).toBe(3.3);
     expect(tech!.anchor).toBeGreaterThan(0);
-    expect(rows.find((r) => r.key === "other")?.pp).toBeCloseTo(1.78, 6);
+    // The six state readings are inside the 7.9 total, so they are not named
+    // again; the unlisted remainder is applied minus the named terms.
+    expect(rows.find((r) => r.key === "unemploymentModifier")).toBeUndefined();
+    expect(rows.find((r) => r.key === "other")?.pp).toBeCloseTo(2.28, 6);
+  });
+
+  it("names the applied state-metric total once, not its readings too (ticket 1448)", () => {
+    // Live shape from a California vehicle plant at turn 75: the readings
+    // (unemployment +0.8 ... cost of living -0.75) sum to +0.14, the applied
+    // state-metric total is +0.4. Naming both double-counted the state and
+    // pushed the difference onto Other factors.
+    const revenueAnchor = 1_768_578.76;
+    const appliedPolicyPp = -12.77;
+    const rows = buildPolicyStackRows({
+      policyCreditAnchor: (revenueAnchor * appliedPolicyPp) / 100,
+      revenueAnchor,
+      appliedPolicyPp,
+      mods: {
+        stateMetricsModifier: 0.4,
+        unemploymentModifier: 0.8,
+        gridReliabilityModifier: 0.2,
+        workforceSkillModifier: -0.17,
+        crimeRateModifier: 0.06,
+        roadConditionModifier: 0.09,
+        carbonEmissionsModifier: -0.09,
+        costOfLivingModifier: -0.75,
+        homeLocationModifier: 2.5,
+        sectorTypeMatchModifier: -15,
+        inflationModifier: -3.6,
+        debtToGdpModifier: -1.1,
+        deficitToGdpModifier: 0.4,
+      },
+    });
+    const keys = rows.map((r) => r.key);
+    expect(keys).toContain("stateMetricsModifier");
+    for (const reading of [
+      "unemploymentModifier",
+      "gridReliabilityModifier",
+      "workforceSkillModifier",
+      "crimeRateModifier",
+      "roadConditionModifier",
+      "carbonEmissionsModifier",
+      "costOfLivingModifier",
+    ]) {
+      expect(keys).not.toContain(reading);
+    }
+    expect(rows.reduce((s, r) => s + r.pp, 0)).toBeCloseTo(appliedPolicyPp, 6);
+    expect(rows.reduce((s, r) => s + r.anchor, 0)).toBeCloseTo(
+      (revenueAnchor * appliedPolicyPp) / 100,
+      6
+    );
+    // Each row's money is its own points of revenue, so a player can add them.
+    const match = rows.find((r) => r.key === "sectorTypeMatchModifier")!;
+    expect((match.anchor / revenueAnchor) * 100).toBeCloseTo(-15, 6);
   });
 
   it("still keeps signs honest when the caller omits appliedPolicyPp (ticket 1148)", () => {

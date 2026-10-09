@@ -75,6 +75,10 @@ export default function InputsOutputsPanel({
   // What the engine actually applied, floored at THROUGHPUT_MIN, the raw
   // availability ratio on the rows above is uncapped and is not the throttle.
   const throttleApplied = commodities.throughput?.applied ?? commodities.throughput?.projected;
+  const inputBillSharePct =
+    plants.pnl && plants.pnl.revenueAnchor > 0
+      ? (plants.pnl.inputsAnchor / plants.pnl.revenueAnchor) * 100
+      : null;
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-6 shadow-card">
@@ -261,17 +265,16 @@ export default function InputsOutputsPanel({
 
       <DetailsDisclosure className="mt-4">
         <dl className="space-y-1.5 text-body-sm">
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-muted">Net effect of prices on your margin</dt>
-            <dd
-              className={`tabular-nums ${
-                commodities.commodityMarginModifier >= 0 ? "text-success" : "text-error"
-              }`}
-            >
-              {commodities.commodityMarginModifier >= 0 ? "+" : ""}
-              {commodities.commodityMarginModifier}%
-            </dd>
-          </div>
+          {/* Under plants prices reach profit as the input bill and the sale
+              price, not as a margin modifier, so the legacy "net effect of
+              prices" figure moved no money and contradicted the cost chain
+              (ticket 1448). Show what the prices actually cost instead. */}
+          {inputBillSharePct != null && (
+            <div className="flex items-center justify-between gap-3">
+              <dt className="text-muted">Your input bill, as a share of sales revenue</dt>
+              <dd className="tabular-nums text-foreground">{inputBillSharePct.toFixed(1)}%</dd>
+            </div>
+          )}
           {commodities.throughput && (
             <div className="flex items-center justify-between gap-3">
               <dt className="text-muted">Input availability applied last turn</dt>

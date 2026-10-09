@@ -155,6 +155,19 @@ const POLICY_STACK_LABELS: { key: keyof PolicyStackInput; label: string }[] = [
   { key: "economicModelAlignmentModifier", label: "Economic model fit" },
 ];
 
+/** The headline readings `stateMetricsModifier` already totals. */
+const STATE_METRIC_COMPONENT_KEYS: ReadonlySet<keyof PolicyStackInput> = new Set([
+  "unemploymentModifier",
+  "gridReliabilityModifier",
+  "corruptionModifier",
+  "workforceSkillModifier",
+  "crimeRateModifier",
+  "broadbandModifier",
+  "roadConditionModifier",
+  "carbonEmissionsModifier",
+  "costOfLivingModifier",
+]);
+
 /**
  * Split `policyCredit` across the modifiers that produced it.
  *
@@ -205,10 +218,20 @@ export function buildPolicyStackRows(args: {
   if (!finite(policyCreditAnchor) || policyCreditAnchor === 0) return [];
   if (!finite(revenueAnchor) || revenueAnchor <= 0) return [];
 
-  const named = POLICY_STACK_LABELS.map(({ key, label }) => {
-    const v = mods[key];
-    return { key: key as string, label, pp: finite(v) ? v : 0 };
-  }).filter((r) => r.pp !== 0);
+  // `stateMetricsModifier` is the state-metric TOTAL the engine applies
+  // (`computeAllMarginModifiers` adds `stateMetricTotal`, never the nine
+  // headline readings). Listing both counted the state twice and left "Other
+  // factors" to quietly cancel it (ticket 1448). When the total is present it
+  // is the row; the readings stay on the condition list as detail.
+  const useStateMetricTotal = finite(mods.stateMetricsModifier);
+  const named = POLICY_STACK_LABELS.filter(
+    ({ key }) => !(useStateMetricTotal && STATE_METRIC_COMPONENT_KEYS.has(key))
+  )
+    .map(({ key, label }) => {
+      const v = mods[key];
+      return { key: key as string, label, pp: finite(v) ? v : 0 };
+    })
+    .filter((r) => r.pp !== 0);
   const namedSum = named.reduce((s, r) => s + r.pp, 0);
   const rest = remainderPpFor({ namedSum, remainderPp, appliedPolicyPp, policyCreditAnchor });
   const rows = rest !== 0 ? [...named, { key: "other", label: "Other factors", pp: rest }] : named;

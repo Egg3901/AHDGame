@@ -127,4 +127,27 @@ describe("InputsOutputsPanel layout", () => {
     expect(screen.getByText(/Global price drivers: inflation \+10/)).toBeTruthy();
     expect(screen.getByText(/country and regional conditions set the local price/)).toBeTruthy();
   });
+
+  it("reports what prices cost through the input bill, not a margin modifier (ticket 1448)", () => {
+    // The legacy commodity modifier read +6.1% on a plant whose inputs ate 59.6%
+    // of revenue. Under plants it moves no money, so it is not shown.
+    const withPnl = {
+      ...plants,
+      pnl: { revenueAnchor: 1_768_578.76, inputsAnchor: 1_054_772.78 },
+    } as PlantsData;
+    render(
+      <InputsOutputsPanel
+        commodities={{ ...commodities, commodityMarginModifier: 6.1 }}
+        plants={withPnl}
+        countryId="US"
+        isExtraction={false}
+        forexEnabled={false}
+        exchangeRates={{}}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /details/i }));
+    expect(screen.queryByText(/Net effect of prices/)).toBeNull();
+    expect(screen.getByText("Your input bill, as a share of sales revenue")).toBeTruthy();
+    expect(screen.getByText("59.6%")).toBeTruthy();
+  });
 });
