@@ -94,7 +94,8 @@ const BETA_PARLIAMENT_CYCLES: Record<
       | "ruSupremeSoviet"
       | "ruRepublicSoviet"
       | "ddVolkskammer"
-      | "csFederalAssembly";
+      | "csFederalAssembly"
+      | "ruUnionCongress";
     periodHours: number;
   }
 > = {
@@ -136,6 +137,9 @@ const BETA_PARLIAMENT_CYCLES: Record<
   nationalitiesDeputy: { anchor: "ruSupremeSoviet", periodHours: 192 },
   // RU republic Supreme Soviets — 4-year cycle, own anchor (1955 / 1980).
   republicSupremeSoviet: { anchor: "ruRepublicSoviet", periodHours: 192 },
+  // Soviet Congress of People's Deputies (1991 start). Five-year term from the
+  // 1989 election (240 turns). Null anchor outside the 1991 preset.
+  unionCongressDeputy: { anchor: "ruUnionCongress", periodHours: 240 },
   // DD Volkskammer — single-list National Front. 4-year cycle (192 turns), the
   // GDR's early-era cadence (1950 → 1954 → 1958); matches the RU sibling's period
   // and — per the D3 note above — this row, not config termYears, drives the
@@ -319,7 +323,9 @@ export function canonicalTurnsForCycle(params: CanonicalCycleParams): CanonicalC
       ? anchors.csFederalAssembly
       : ctx.preset === "1991-default" && countryId === "HU" && electionType === "nationalAssembly"
         ? anchors.huNationalAssembly
-        : null;
+        : ctx.preset === "1991-default" && countryId === "YU" && electionType === "federalAssembly"
+          ? anchors.yuFederalAssembly
+          : null;
   if (successorAnchor != null) {
     const periodHours = electionType === "chamberOfThePeople" ? 96 : 192;
     const endTurn = successorAnchor + (cycle - 1) * periodHours;

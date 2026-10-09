@@ -811,3 +811,75 @@ describe("pickNextCanonicalCycle — pre-iteration founding branch", () => {
     expect(s?.endTurn).toBe((1992 - 1991 + 1) * 48); // 96 — the historical anchor, not a founding window
   });
 });
+
+describe("1991 Soviet Congress and SFRY Federal Chamber", () => {
+  const ctx1991 = { startingYear: 1991, preset: "1991-default" };
+
+  it("schedules the Union Congress on a five-year cycle from 1994", () => {
+    const params = { countryId: "RU" as const, electionType: "unionCongressDeputy", ctx: ctx1991 };
+    expect(canonicalTurnsForCycle({ ...params, cycle: 1 })).toEqual({
+      startTurn: 1,
+      primaryEndTurn: 168,
+      endTurn: 192,
+    });
+    expect(canonicalTurnsForCycle({ ...params, cycle: 2 })?.endTurn).toBe(432);
+    expect(
+      canonicalTurnsForCycle({ ...params, cycle: 1, ctx: { ...ctx1991, preIterationTurns: 51 } })
+        ?.endTurn
+    ).toBe(243);
+    expect(electionToLarpYear("unionCongressDeputy", 1, null, null, ctx1991, "RU")).toBe(1994);
+    expect(electionToLarpYear("unionCongressDeputy", 2, null, null, ctx1991, "RU")).toBe(1999);
+  });
+
+  it("keeps the Union Congress off outside the 1991 preset", () => {
+    for (const ctx of [
+      { startingYear: 1953, preset: "1953-default" },
+      { startingYear: 1979, preset: "1979-default" },
+      { startingYear: 2019, preset: "2019-default" },
+    ]) {
+      expect(
+        canonicalTurnsForCycle({
+          countryId: "RU",
+          electionType: "unionCongressDeputy",
+          cycle: 1,
+          ctx,
+        })
+      ).toBeNull();
+    }
+  });
+
+  it("schedules the 1991 Federal Chamber from the 1992 federal vote", () => {
+    const params = { countryId: "YU" as const, electionType: "federalAssembly", ctx: ctx1991 };
+    expect(canonicalTurnsForCycle({ ...params, cycle: 1 })).toEqual({
+      startTurn: 1,
+      primaryEndTurn: 72,
+      endTurn: 96,
+    });
+    expect(canonicalTurnsForCycle({ ...params, cycle: 2 })?.endTurn).toBe(288);
+    expect(electionToLarpYear("federalAssembly", 1, null, null, ctx1991, "YU")).toBe(1992);
+  });
+
+  it("leaves the Cold War Federal Assembly on the Volkskammer schedule", () => {
+    const ctx1953 = { startingYear: 1953, preset: "1953-default" };
+    expect(
+      canonicalTurnsForCycle({
+        countryId: "YU",
+        electionType: "federalAssembly",
+        cycle: 1,
+        ctx: ctx1953,
+      })?.endTurn
+    ).toBe(96);
+  });
+
+  it("founds both chambers during the 1991 Founding", () => {
+    const ctx = { ...ctx1991, preIterationActive: true };
+    for (const [countryId, electionType] of [
+      ["RU", "unionCongressDeputy"],
+      ["YU", "federalAssembly"],
+    ] as const) {
+      expect(
+        pickNextCanonicalCycle({ countryId, electionType, prevCycle: 0, currentTurn: 1, ctx })
+      ).toEqual({ cycle: 0, startTurn: 1, primaryEndTurn: 25, endTurn: 49 });
+    }
+  });
+});
