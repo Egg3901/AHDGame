@@ -1,4 +1,6 @@
 import type { EconomicModelState } from "@/lib/constants/economicModels";
+import type { SubhourStepStamp } from "@/lib/turn/subhour/stepFraction";
+import type { SubhourGrowthMetricBase } from "@/lib/turn/subhour/stepBase";
 
 export type MetricCategoryId =
   | "economic"
@@ -22,6 +24,10 @@ export interface StateMetricValue {
 export interface StateMetrics {
   _id: string;
   countryId?: string;
+  /** The :30 half tick's stamp (turn/subhour/stepFraction.ts). */
+  subhourStep?: SubhourStepStamp;
+  /** Start-of-hour growth rate the :30 half tick overwrote (turn/subhour/stepBase.ts). */
+  subhourBase?: { growth?: SubhourGrowthMetricBase };
   /**
    * Economic-model identity (P7) — written by the economicModel turn phase onto
    * regional + national-scope docs. NOT a metric (no bounds/approval term); a
