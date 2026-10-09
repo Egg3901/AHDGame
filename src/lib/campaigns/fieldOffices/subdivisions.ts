@@ -25,7 +25,7 @@ export interface FieldOfficeSubdivision {
   electorateShare: number;
   /** Era baseline PVI for this world (points, positive = right). */
   basePvi: number;
-  /** Baseline shifted by the world's own last presidential result. */
+  /** Era baseline plus this world's own presidential swing (see liveLean.ts). */
   livePvi: number;
 }
 
@@ -54,8 +54,8 @@ export async function loadFieldOfficeRegionMap(
     total > 0
       ? file.subdivisions.reduce((s, c) => s + (c.leanScalar ?? 0) * (c.electorate || 0), 0) / total
       : 0;
-  const regionLivePvi = live?.byState.get(regionId) ?? regionBasePvi;
-  const shift = regionLivePvi - regionBasePvi;
+  const shift = live?.shiftByState.get(regionId) ?? 0;
+  const regionLivePvi = regionBasePvi + shift;
 
   return {
     regionId,

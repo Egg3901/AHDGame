@@ -62,7 +62,7 @@ The **Field offices** tab is where the campaign puts staff on the ground.
 - How many offices a campaign can hold depends on the race: a presidential campaign can run dozens, a House campaign only a handful.
 - Office locations are public. Anyone viewing the campaign can see where it is organising.
 
-County leans start from the real county results of your world's era: a 1991 world uses 1984 and 1988, a 1953 world uses 1948 and 1952, and a 2027 world uses 2020 and 2024 plus the 2025 governor races. Once your world has held its own presidential election, every county shifts with its state's result.
+County leans start from the real county results of your world's era: a 1991 world uses 1984 and 1988, a 1953 world uses 1948 and 1952, and a 2027 world uses 2020 and 2024 plus the 2025 governor races. As your world holds its own presidential elections, every county shifts with its state's swing from one election to the next, damped so one wild cycle cannot erase the era's map.
 
 ### The ledger
 

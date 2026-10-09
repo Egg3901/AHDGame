@@ -83,8 +83,9 @@ export interface FieldOfficeView {
     regionLivePvi: number;
     subdivisions: FieldOfficeSubdivisionDto[];
   } | null;
-  /** Year of the in-world presidential race the live leans follow, if any. */
+  /** Years of the two in-world presidential races the drift is measured between. */
   liveLeanYear: number | null;
+  liveLeanPriorYear: number | null;
   liveLeanActive: boolean;
   /** Elections the county baseline comes from for this world's era. */
   leanSourceLabel: string | null;
@@ -152,6 +153,7 @@ export async function getFieldOfficeView(
     selectedRegionId: null,
     map: null,
     liveLeanYear: null,
+    liveLeanPriorYear: null,
     liveLeanActive: false,
     leanSourceLabel: null,
   };
@@ -223,6 +225,7 @@ export async function getFieldOfficeView(
     base.liveLeanActive = !!live;
     base.leanSourceLabel = countyLeanSourceLabel(preset);
     base.liveLeanYear = live?.sourceYear ?? null;
+    base.liveLeanPriorYear = live?.priorYear ?? null;
     const map = await loadFieldOfficeRegionMap(rules.scope, selected._id, live, preset);
     if (map) {
       const orientation = canManage
