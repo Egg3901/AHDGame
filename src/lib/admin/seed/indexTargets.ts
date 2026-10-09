@@ -220,6 +220,12 @@ export const INDEX_TARGETS = [
     description:
       "TTL + status indexes on nonAtomicMoneyFlowReceipts, the idempotency receipts behind crash-safe money flows. Without the TTL every keyed transfer leaves a receipt document behind forever.",
   },
+  {
+    id: "indexesCasino",
+    label: "Indexes: Discord casino",
+    description:
+      "Player and expiry lookups on casinoHighLowSessions, and the open-draw, channel listing and sweeper scans on casinoRounds.",
+  },
 ] as const satisfies readonly IndexTargetMeta[];
 
 export type IndexTargetId = (typeof INDEX_TARGETS)[number]["id"];
