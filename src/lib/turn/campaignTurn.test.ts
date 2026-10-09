@@ -612,17 +612,15 @@ describe("season multiplier", () => {
     const candidateId = new ObjectId();
     const targetId = new ObjectId();
 
-    // Phase 5.5 widened Campaign Manager eligibility to US senate / governor /
-    // house / state-senate (D2). Non-US races stay deferred per D4 (UK / JP /
-    // DE / IE country-specific finance models). This test exercises the
-    // non-eligible path using UK commons — the levels are set but the passive
-    // favorability effects must NOT fire because the country lacks the
-    // campaignManagerNonPresidentialEnabled flag.
+    // DE and IE races stay outside Campaign Manager until their list-PR and
+    // STV systems are mapped. This test exercises the non-eligible path with a
+    // DE bundestag race: the levels are set but the passive favorability
+    // effects must NOT fire because DE has not opted in.
     const endTime = new Date(Date.now() + 10 * 60 * 60 * 1000);
 
     const { db, charBulkWrite } = buildMockDb({
       electionId,
-      electionType: "commons",
+      electionType: "bundestag",
       endTime,
       candidateId,
       targetId,
@@ -632,11 +630,9 @@ describe("season multiplier", () => {
       playerEndorsementCount: 0,
     });
 
-    // Override the elections collection mock to set countryId: 'UK' so the
-    // race is non-eligible per Phase 5.5 D4. buildMockDb defaults countryId
-    // to 'US' which would make commons still ineligible (UK-only race type
-    // outside the US race-family set), but for the test to exercise the
-    // intended path we explicitly set UK.
+    // Override the elections collection mock to set countryId: 'DE'.
+    // buildMockDb defaults countryId to 'US', which would also leave bundestag
+    // ineligible, but the test exercises the country gate explicitly.
     const originalCollection = db.collection as unknown as (name: string) => unknown;
     db.collection = vi.fn((name: string) => {
       if (name === "elections") {
@@ -645,7 +641,7 @@ describe("season multiplier", () => {
             toArray: vi
               .fn()
               .mockResolvedValue([
-                { _id: electionId, endTime, electionType: "commons", countryId: "UK" },
+                { _id: electionId, endTime, electionType: "bundestag", countryId: "UK" },
               ]),
           }),
         };

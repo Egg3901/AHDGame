@@ -97,6 +97,7 @@ export type { WikiTemplate, TemplateField, TemplateFieldType } from "./wikiTempl
 export * from "./politicianOverride";
 export * from "./achievement";
 export * from "./campaign";
+export * from "./campaignFieldOffice";
 export * from "./billWhip";
 export * from "./impeachment";
 export * from "./billDiscussion";

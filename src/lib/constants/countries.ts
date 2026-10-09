@@ -380,6 +380,22 @@ export interface CountryConfig {
    */
   campaignManagerNonPresidentialEnabled?: boolean;
   /**
+   * Non-presidential race families (`Election.electionType` values) this
+   * country runs Campaign Manager for. Overrides the US default family set
+   * that `campaignManagerNonPresidentialEnabled` turns on, so a parliamentary
+   * country can opt in its own chambers (UK `commons`, JP `shugiin`) without
+   * inheriting US race names. Requires `campaignManagerNonPresidentialEnabled`.
+   */
+  campaignRaceFamilies?: readonly string[];
+  /**
+   * Geographic granularity of campaign field offices. `"county"` pins each
+   * office to a subdivision with its own committed geometry and lean (US
+   * counties); `"region"` keeps offices at the election-region level with a
+   * smaller flat bonus (UK regions, JP regions). Unset disables field offices.
+   * Rules per scope live in `src/lib/campaigns/fieldOffices/rules.ts`.
+   */
+  fieldOfficeScope?: "county" | "region";
+  /**
    * Minimum seats for an outright majority in the lower chamber.
    * US House: 218. UK Commons: 326.
    * Used by the government formation resolver.

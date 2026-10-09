@@ -19,6 +19,7 @@ import {
 } from "./campaignBlendViewModel";
 import { BlendOpsSection } from "./BlendOpsSection";
 import { BlendMoneySection } from "./BlendMoneySection";
+import { FieldOfficesSection } from "../fieldOffices/FieldOfficesSection";
 import { BlendLedger } from "./BlendLedger";
 import { BlendSidebar, ManagersBlock, RunningMateBlock, SupportBlock } from "./BlendSidebar";
 import { BlendScopeInline } from "@/components/blend/BlendScope";
@@ -244,6 +245,12 @@ export function CampaignBlendClient({
   const showOps = rail === "overview" || rail === "ops";
   const showMoney = rail === "overview" || rail === "money";
   const showLog = rail === "overview" || rail === "log";
+  const showField =
+    (rail === "overview" || rail === "field") && !!campaign.electionInfo?.fieldOfficeScope;
+  const refreshAfterField = () => {
+    onRefresh();
+    onRefreshMe();
+  };
 
   const body = (
     <>
@@ -299,6 +306,10 @@ export function CampaignBlendClient({
             setReloadOps((n) => n + 1);
           }}
         />
+      ) : null}
+
+      {showField ? (
+        <FieldOfficesSection campaignId={campaign.id} onChanged={refreshAfterField} />
       ) : null}
 
       {showMoney && vm.money ? (
@@ -591,6 +602,13 @@ export function CampaignBlendClient({
               onRefreshMe();
               setReloadOps((n) => n + 1);
             }}
+          />
+        ) : null}
+        {showField ? (
+          <FieldOfficesSection
+            campaignId={campaign.id}
+            onChanged={refreshAfterField}
+            variant="mobile"
           />
         ) : null}
         {showMoney && vm.money ? (
