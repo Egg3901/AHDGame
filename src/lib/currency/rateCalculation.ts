@@ -349,3 +349,94 @@ export function computeRateUpdate(
     cyclePressure,
   };
 }
+
+// ── Fractional step (sub-hour split) ────────────────────────────────────────
+
+/**
+ * Apply a fraction `f` of one turn's deterministic rate step.
+ *
+ * One full step is the affine map x -> m * (x + (target - x) * alpha), with
+ * m = (1 - volumePressure) * (1 - cyclePressure). Written as x -> a*x + b
+ * (a = m * (1 - alpha), b = m * alpha * target), its f-th power is
+ * a^f * x + b * (1 - a^f) / (1 - a), so a step of f followed by a step of
+ * (1 - f) with the same inputs equals one full step exactly. With no pressure
+ * (m = 1) this is drift by fractionalAlpha(alpha, f); with no drift
+ * (alpha = 0) it is the pressure factor raised to f, (1 - p)^f.
+ */
+export function fractionalRateStep(
+  currentRate: number,
+  macroTarget: number,
+  alpha: number,
+  pressureFactor: number,
+  f: number
+): number {
+  const a = pressureFactor * (1 - alpha);
+  const b = pressureFactor * alpha * macroTarget;
+  const af = Math.pow(a, f);
+  // a -> 1 only when there is neither drift nor pressure, where b is 0 too.
+  const offset = Math.abs(1 - a) < 1e-12 ? b * f : (b * (1 - af)) / (1 - a);
+  return af * currentRate + offset;
+}
+
+/**
+ * computeRateUpdate for a fraction `fraction` of one turn's step: the :30
+ * tick applies half ahead of the turn and the turn applies the remainder
+ * (see src/lib/turn/subhour/stepFraction.ts).
+ *
+ * Same macro target, volume and cycle pressure, band and drift multiplier as
+ * the full step. The deterministic part goes through fractionalRateStep, so
+ * the two halves compose to exactly one full step when their inputs match.
+ * Noise is uniform jitter scaled by sqrt(fraction), so the two halves'
+ * variances add up to one full step's. The band clamp applies at each part.
+ *
+ * `fraction >= 1` delegates to computeRateUpdate unchanged, so the hourly
+ * path with no half tick is the same call with the same arguments.
+ */
+export function computeFractionalRateUpdate(
+  currentRate: number,
+  baseRate: number,
+  countryId: CountryId,
+  macro: MacroInputs,
+  volumes: VolumeInputs,
+  fraction: number,
+  noise?: number,
+  volatilityMultiplier = 1,
+  cyclePressure = 0,
+  currentYear?: number | null,
+  band: number = 1 - RATE_FLOOR_MULTIPLIER,
+  driftMultiplier = 1
+): RateUpdateResult {
+  if (fraction >= 1) {
+    return computeRateUpdate(
+      currentRate,
+      baseRate,
+      countryId,
+      macro,
+      volumes,
+      noise,
+      volatilityMultiplier,
+      cyclePressure,
+      currentYear,
+      band,
+      driftMultiplier
+    );
+  }
+  const f = Math.max(0, fraction);
+  const macroTarget = computeMacroTarget(baseRate, macro, countryId, currentYear);
+  const volumePressure = computeVolumePressure(volumes);
+  const stepped = fractionalRateStep(
+    currentRate,
+    macroTarget,
+    DRIFT_SPEED * driftMultiplier,
+    (1 - volumePressure) * (1 - cyclePressure),
+    f
+  );
+  const scaledNoise = (noise ?? generateNoise()) * Math.sqrt(f);
+  const withNoise = applyNoise(stepped, scaledNoise, volatilityMultiplier);
+  return {
+    rate: clampRate(withNoise, baseRate, band),
+    macroTarget,
+    volumePressure,
+    cyclePressure,
+  };
+}

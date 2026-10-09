@@ -34,6 +34,7 @@ import {
   rollCyclePressureRegime,
 } from "@/lib/constants/currencies";
 import {
+  computeFractionalRateUpdate,
   computeRateUpdate,
   type MacroInputs,
   type RateUpdateResult,
@@ -56,6 +57,7 @@ import { sendSystemMail } from "@/lib/mail/systemMail";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { reconcileEuroMonetaryUnion } from "@/lib/currency/euro/service";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { remainingStepFraction } from "./subhour/stepFraction";
 import {
   processTriggeredLimitOrders,
   expireStaleOrders,
@@ -83,7 +85,7 @@ function finiteOr(value: unknown, fallback: number): number {
  * Extract macro indicators from a CentralBank document.
  * Falls back to 0 (and rejects NaN) for missing fields — safe default for rate math.
  */
-function extractMacroInputs(bank: CentralBank): MacroInputs {
+export function extractMacroInputs(bank: CentralBank): MacroInputs {
   return {
     primeRate: finiteOr(bank.primeRate, 0),
     inflationRate: finiteOr(bank.inflationHistory?.at(-1)?.rate, 0),
@@ -318,6 +320,13 @@ export async function processForexTurn(
         })
       : BW_PEGGED_BAND;
 
+    // Share of this turn's drift, pressure and noise still to apply: below 1
+    // only when the :30 half tick already applied part of it to this row
+    // (stepFraction.ts). Unstamped rows take the unchanged full-step call.
+    // Intervention, limit orders, the cycle roll and rateHistory stay hourly.
+    const stepFraction = remainingStepFraction(existingRate.subhourStep, currentTurn);
+    const driftMultiplier = bwFloats ? BW_FLOATING_DRIFT_MULTIPLIER : 1;
+
     // A pegged follower publishes the anchor's rate and macro target with no
     // independent drift, volume/cycle pressure, or intervention — its
     // per-country bank never draws reserves for a rate it does not set.
@@ -336,19 +345,34 @@ export async function processForexTurn(
               volumePressure: 0,
               cyclePressure: 0,
             }
-          : computeRateUpdate(
-              safeCurrentRate,
-              baseRate,
-              countryId,
-              macro,
-              safeVolumes,
-              undefined,
-              volatilityMultiplier,
-              cyclePressure,
-              currentYear,
-              bwBand,
-              bwFloats ? BW_FLOATING_DRIFT_MULTIPLIER : 1
-            );
+          : stepFraction < 1
+            ? computeFractionalRateUpdate(
+                safeCurrentRate,
+                baseRate,
+                countryId,
+                macro,
+                safeVolumes,
+                stepFraction,
+                undefined,
+                volatilityMultiplier,
+                cyclePressure,
+                currentYear,
+                bwBand,
+                driftMultiplier
+              )
+            : computeRateUpdate(
+                safeCurrentRate,
+                baseRate,
+                countryId,
+                macro,
+                safeVolumes,
+                undefined,
+                volatilityMultiplier,
+                cyclePressure,
+                currentYear,
+                bwBand,
+                driftMultiplier
+              );
 
     // Final sanity: if the pipeline still somehow produced NaN, fall back to the
     // current rate rather than write poison into history.
