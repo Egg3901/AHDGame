@@ -1,3 +1,4 @@
+import { loadCorporationFundPortfolio } from "@/lib/indexFunds/corporationPortfolio";
 import { ObjectId, type Db } from "mongodb";
 import type { Bond, Corporation, Shareholder } from "@/lib/db/types";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
@@ -57,6 +58,8 @@ export interface PortfolioHoldings {
   totalBondHoldingsValue: number;
   dailyCouponIncome: number;
   totalStockHoldingsValue: number;
+  totalFundHoldingsValue?: number;
+  heldFunds?: Awaited<ReturnType<typeof loadCorporationFundPortfolio>>["holdings"];
   imfReceivableRows: ImfReceivableView[];
   imfReceivablesPrincipal: number;
   imfLenderReceiptsAnchor: number;
@@ -152,6 +155,7 @@ export async function loadPortfolioHoldings(
     };
   });
 
+  const fundPortfolio = await loadCorporationFundPortfolio(db, corporation._id);
   const totalBondHoldingsValue = heldBondsSummary.reduce((sum, b) => sum + b.currentValueAnchor, 0);
   const dailyCouponIncome = heldBondsSummary.reduce((sum, b) => sum + b.dailyIncomeAnchor, 0);
 
@@ -269,6 +273,8 @@ export async function loadPortfolioHoldings(
     totalBondHoldingsValue,
     dailyCouponIncome,
     totalStockHoldingsValue,
+    totalFundHoldingsValue: fundPortfolio.valueAnchor,
+    heldFunds: fundPortfolio.holdings,
     imfReceivableRows,
     imfReceivablesPrincipal,
     imfLenderReceiptsAnchor,

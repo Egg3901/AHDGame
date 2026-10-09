@@ -31,6 +31,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
     const holders = await enrichFundPositions(db, positions, fund.quotedNav);
 
     const byKind = {
+      corporations: holders.filter((h) => h.holderKind === "corporation"),
       players: holders.filter((h) => h.holderKind === "character"),
       npps: holders.filter((h) => h.holderKind === "npp"),
       imperial: holders.filter((h) => h.holderKind === "imperial_character"),

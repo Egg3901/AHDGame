@@ -1,3 +1,4 @@
+import { migration as corporateFundPositions } from "./entries/2026-10-09-corporate-fund-positions";
 import { migration as bankFailurePoliticsIndex } from "./entries/2026-10-04-bank-failure-politics-index";
 import type { Db } from "mongodb";
 import { migration as bankPropForexFeeIndex } from "./entries/2026-10-04-bank-prop-forex-fee-index";
@@ -73,6 +74,7 @@ export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   productVentureIndexes,
   campaignFieldOfficeIndexes,
   marketCapTickIndexes,
+  corporateFundPositions,
   subhourWikiCadence,
 ];
 
@@ -90,6 +92,7 @@ export const REQUIRED_STARTUP_INDEX_MIGRATIONS: readonly Migration[] = [
   productVentureIndexes,
   campaignFieldOfficeIndexes,
   marketCapTickIndexes,
+  corporateFundPositions,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {

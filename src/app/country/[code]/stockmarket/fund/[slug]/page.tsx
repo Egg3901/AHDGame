@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { NavChangeBadge } from "@/components/indexFunds/NavChangeBadge";
 import type { FundDetail } from "@/components/indexFunds/types";
-import { FundTradePanel } from "@/components/indexFunds/FundTradePanel";
+import { FundActions, type FundCorporationAccount } from "@/components/indexFunds/FundActions";
 import FundFinancialsTab, {
   type FundFinancialsData,
   type FundBalanceSheetData,
@@ -42,6 +42,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
   const { formatAmount, formatPrice, forexEnabled, forexRates } = useCurrency();
   const [data, setData] = useState<{
     fund: FundDetail;
+    corporationAccounts?: FundCorporationAccount[];
     summary: { totalHolders: number; totalNonReserveUnits: number };
     myPosition: { units: number; legacyUnits: number; avgNavAnchor: number | null } | null;
     navHistory: {
@@ -53,7 +54,9 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [timeframe, setTimeframe] = useState<PriceChangeTimeframe>("24h");
-  const [activeTab, setActiveTab] = useState<"overview" | "financials" | "subscribers">("overview");
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "holdings" | "financials" | "subscribers"
+  >("overview");
 
   const stockMarketHref =
     code.toLowerCase() === "global"
@@ -167,6 +170,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
 
   const tabs: { key: typeof activeTab; label: string; count?: string }[] = [
     { key: "overview", label: "Overview" },
+    { key: "holdings", label: "Holdings" },
     { key: "financials", label: "Financials" },
     {
       key: "subscribers",
@@ -210,7 +214,7 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
               {fund.lastRebalancedAt ? ` · rebalances every 24 turns` : ""}
             </p>
           </div>
-          <div className="shrink-0 text-right">
+          <div className="shrink-0 text-left sm:text-right">
             <div className="text-body-sm font-medium text-muted">NAV / unit</div>
             <div className="mt-1 font-mono tabular-nums text-[28px] sm:text-[42px] font-bold leading-none">
               {formatPrice(fund.quotedNav, ccy)}
@@ -237,8 +241,19 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
           </div>
         </header>
 
+        <FundActions
+          corporations={data.corporationAccounts}
+          fundId={fund.id}
+          quotedNav={fund.quotedNav}
+          anchorCurrencyCode={fund.anchorCurrencyCode}
+          status={fund.status}
+          myUnits={myPosition?.units ?? 0}
+          myLegacyUnits={myPosition?.legacyUnits ?? myPosition?.units ?? 0}
+          onSuccess={() => void load()}
+        />
+
         {/* Stat strip — open hairline (no nested cards) */}
-        <div className="flex items-stretch gap-6 sm:gap-12 overflow-x-auto border-y border-card-border px-1 py-4">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 border-b border-card-border py-3">
           {[
             { label: "AUM", value: formatAmount(fund.aumAnchor, ccy) },
             { label: "Units outstanding", value: fund.unitSupply.toLocaleString("en-US") },
@@ -246,14 +261,6 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
             {
               label: "Backing ratio",
               value: fund.backingRatio != null ? `${(fund.backingRatio * 100).toFixed(1)}%` : "—",
-            },
-            { label: "Fund cash", value: formatAmount(fund.cashAnchor, ccy) },
-            { label: "Holdings value", value: formatAmount(holdingsValueAnchor, ccy) },
-            {
-              label: "Last rebalanced",
-              value: fund.lastRebalancedAt
-                ? `Turn ${formatTurnFromDate(fund.lastRebalancedAt)}`
-                : "—",
             },
           ].map((s) => (
             <div key={s.label} className="whitespace-nowrap">
@@ -353,7 +360,16 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
                     />
                   </div>
                 </div>
+              </div>
+            )}
 
+            {activeTab === "holdings" && (
+              <div className="space-y-5">
+                {fund.lastRebalancedAt && (
+                  <p className="text-sm text-muted">
+                    Last rebalanced: {formatRebalanceDate(fund.lastRebalancedAt)}
+                  </p>
+                )}
                 <BondHoldingsPanel
                   holdings={fund.bondHoldings ?? []}
                   formatAmount={formatAmount}
@@ -410,15 +426,6 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
               formatPrice={formatPrice}
               ccy={ccy}
             />
-            <FundTradePanel
-              fundId={fund.id}
-              quotedNav={fund.quotedNav}
-              anchorCurrencyCode={fund.anchorCurrencyCode}
-              status={fund.status}
-              myUnits={myPosition?.units ?? 0}
-              myLegacyUnits={myPosition?.legacyUnits ?? myPosition?.units ?? 0}
-              onSuccess={() => void load()}
-            />
           </div>
         </div>
       </main>
@@ -426,12 +433,8 @@ function FundDetailPageInner({ params }: { params: Promise<{ code: string; slug:
   );
 }
 
-/**
- * Best-effort turn extraction from the `lastRebalancedAt` ISO string. The
- * snapshot collection stores a real timestamp but the stat strip wants the
- * turn number — fall back to "—" if the date can't be parsed.
- */
-function formatTurnFromDate(iso: string): string {
+/** Format the rebalance timestamp for the holdings tab. */
+function formatRebalanceDate(iso: string): string {
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return "—";
   // The detail payload doesn't include a turn number for the rebalance; the

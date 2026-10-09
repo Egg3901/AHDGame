@@ -348,14 +348,6 @@ export const LEGACY_DYNAMIC_COLLECTION_SITES: readonly LegacyDynamicCollectionSi
     reason: "The persisted transaction or recovery record carries its destination collection.",
   },
   {
-    file: "src/lib/indexFunds/playerCommandAudit.ts",
-    owner: "resumeFundCommandAudit",
-    argument: "row.collection",
-    scopeHash: "99c0fb8caa0e5bd577690e74f6e2e824b7086fb4d514bb72f37b9ceb21e62cca",
-    count: 1,
-    reason: "The persisted transaction or recovery record carries its destination collection.",
-  },
-  {
     file: "src/lib/internationalOrganizations/cashLedger.ts",
     owner: "settleOrganizationFundedCashMove",
     argument: "input.destination.collection",
