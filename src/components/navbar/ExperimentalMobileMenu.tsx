@@ -235,7 +235,7 @@ export function ExperimentalMobileMenu({
             onClick={handleSignOut}
             className="w-full border-t border-card-border px-4 py-3 text-left text-sm text-muted"
           >
-            {t("userMenu.signOut")}
+            {t("common.signOut")}
           </button>
         )}
       </div>
