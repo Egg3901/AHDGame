@@ -31,7 +31,7 @@ import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 import { CAMPAIGN_STRENGTH_MAX_BONUS } from "@/lib/campaigns/campaignStrength";
 import { buildCampaignStatePresence } from "@/lib/elections/campaignStatePresence";
 import { getCampaignCopyForElection } from "@/lib/campaigns/raceFamilyCopy";
-import { getSeedCurrencyCode } from "@/lib/constants/currencies";
+import { CURRENCY_SYMBOLS, getSeedCurrencyCode } from "@/lib/constants/currencies";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import {
   campaignAnchorToLocal,
@@ -542,7 +542,13 @@ export async function getCampaignDetail(
     }
   }
 
-  const opsTrees = buildOpsTrees(campaign, electionType, isGeneralPhase, toLocal);
+  const opsTrees = buildOpsTrees(
+    campaign,
+    electionType,
+    isGeneralPhase,
+    toLocal,
+    CURRENCY_SYMBOLS[campaignCurrencyCode]
+  );
   const nextUpgradeCosts: CampaignData["nextUpgradeCosts"] = {
     fundraising: localizeUpgradeCostFunds(
       getEffectiveUpgradeCost(

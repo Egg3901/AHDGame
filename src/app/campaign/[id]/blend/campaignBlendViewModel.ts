@@ -24,7 +24,11 @@ import {
   campaignStrengthContributionCost,
 } from "@/lib/campaigns/campaignStrength";
 import { describeOpsCurrentEffect } from "@/lib/campaigns/opsCurrentEffect";
-import { OPS_MAX_BRANCH_LEVEL, type UpgradeCategory } from "@/lib/campaigns/upgradeCosts";
+import {
+  getCampaignFamilyScalar,
+  OPS_MAX_BRANCH_LEVEL,
+  type UpgradeCategory,
+} from "@/lib/campaigns/upgradeCosts";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 import { formatFundsCompact, resolveElectionYear } from "@/lib/utils/formatters";
 import { BLEND, OPS_LEVER_COLOR, blendSegments } from "@/components/blend/tokens";
@@ -516,27 +520,27 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
         const color = OPS_LEVER_COLOR[key];
         const expanded = expandedCategory === key;
 
-        const next = campaign.nextUpgradeCosts?.[key] ?? null;
-
         return {
           key,
           label: meta?.label ?? key,
           description: meta?.description ?? "",
-          effect: describeOpsCurrentEffect(key, treeStateOf(campaign, key), symbol),
+          effect: describeOpsCurrentEffect(
+            key,
+            treeStateOf(campaign, key),
+            symbol,
+            campaign.fxRate *
+              (campaign.priceLevel ?? 1) *
+              getCampaignFamilyScalar(campaign.electionInfo?.electionType)
+          ),
           color,
           invested,
           level: `${invested}/10`,
           segments: blendSegments(invested, 10, color),
           expanded,
           tree: expanded ? buildTreeVM(campaign, key, symbol) : null,
-          nextStep: next
-            ? {
-                effect: next.effect,
-                costText: `${money(next.funds, symbol)} · ${next.actions} action${
-                  next.actions === 1 ? "" : "s"
-                }`,
-              }
-            : null,
+          // Branch operations expose three separate next upgrades in the tree.
+          // The legacy linear-level preview does not describe any of them.
+          nextStep: null,
         };
       })
     : [];
@@ -568,7 +572,7 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
           level: b.level,
           maxLevel: b.maxLevel,
           segments: blendSegments(b.level, b.maxLevel, OPS_LEVER_COLOR[key]),
-          effect: b.next?.effect ?? "",
+          effect: `${b.currentEffect ? `Current: ${b.currentEffect}` : ""}${b.next ? `${b.currentEffect ? " · " : ""}Next: ${b.next.effect}` : ""}`,
           costText: b.next ? `${money(b.next.funds, sym)} · ${b.next.actions}a` : "",
           maintenanceText: b.next?.maintenance
             ? `+${money(b.next.maintenance, sym)}/turn upkeep`
